@@ -1,2 +1,14 @@
 # macOS dummy files
 .DS_Store
+
+# Node dependencies
+node_modules/
+
+# SvelteKit artifacts
+.svelte-kit/
+
+# Vitest reports
+coverage/
+
+# Personal references
+refs/

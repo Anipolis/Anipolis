@@ -1,0 +1,10 @@
+{
+	"recommendations": [
+		"biomejs.biome",
+		"editorconfig.editorconfig",
+		"davidanson.vscode-markdownlint",
+		"hverlin.mise-vscode",
+		"svelte.svelte-vscode",
+		"streetsidesoftware.code-spell-checker",
+	]
+}
