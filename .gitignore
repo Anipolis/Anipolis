@@ -10,5 +10,8 @@ node_modules/
 # Vitest reports
 coverage/
 
+# Supabase temporary metadata
+supabase/.temp/
+
 # Personal references
 refs/
