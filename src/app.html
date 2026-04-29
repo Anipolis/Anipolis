@@ -4,6 +4,13 @@
 		<meta charset="utf-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1">
 		<meta name="text-scale" content="scale">
+		<script>
+			(function(){
+				var t=localStorage.getItem('theme');
+				if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);}
+				else if(window.matchMedia('(prefers-color-scheme: light)').matches){document.documentElement.setAttribute('data-theme','light');}
+			})();
+		</script>
 		%sveltekit.head%
 	</head>
 

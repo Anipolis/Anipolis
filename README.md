@@ -37,4 +37,5 @@ pnpm test
 
 ## ライセンス
 
+
 このプロジェクトは、[MIT License](LICENSE)の下で開発されています。

@@ -19,6 +19,10 @@
 		"test:unit": "vitest --run --coverage",
 		"test": "pnpm test:unit"
 	},
+	"dependencies": {
+		"@supabase/supabase-js": "^2.49.0",
+		"@supabase/ssr": "^0.6.1"
+	},
 	"devDependencies": {
 		"@iconify-json/lucide": "^1.2.101",
 		"@sveltejs/adapter-auto": "^7.0.0",
