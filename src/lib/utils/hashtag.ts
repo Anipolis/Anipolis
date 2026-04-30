@@ -24,9 +24,8 @@ export function parseContentParts(content: string): ContentPart[] {
     const parts: ContentPart[] = [];
     const regex = new RegExp(HASHTAG_PATTERN, 'g');
     let lastIndex = 0;
-    let match: RegExpExecArray | null;
 
-    while ((match = regex.exec(content)) !== null) {
+    for (const match of content.matchAll(regex)) {
         if (match.index > lastIndex) {
             parts.push({ type: 'text', value: content.slice(lastIndex, match.index) });
         }
@@ -34,7 +33,7 @@ export function parseContentParts(content: string): ContentPart[] {
         if (tag) {
             parts.push({ type: 'hashtag', value: tag });
         }
-        lastIndex = regex.lastIndex;
+        lastIndex = match.index + match[0].length;
     }
 
     if (lastIndex < content.length) {

@@ -6,7 +6,7 @@ export default defineConfig({
 		presetUno(),
 		presetIcons({
 			collections: {
-				lucide: () => import("@iconify-json/lucide/icons.json").then((m) => m.json),
+				lucide: () => import("@iconify-json/lucide/icons.json").then((m) => m.default),
 			},
 		}),
 		presetWebFonts({

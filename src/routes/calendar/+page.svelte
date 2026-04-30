@@ -67,16 +67,16 @@
         <div class="card calendar-card">
             <!-- ヘッダー：月ナビゲーション -->
             <div class="calendar-header">
-                <button class="btn btn-ghost calendar-nav-btn" onclick={prevMonth} aria-label="前の月">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <button type="button" class="btn btn-ghost calendar-nav-btn" onclick={prevMonth} aria-label="前の月">
+                    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="15 18 9 12 15 6"/>
                     </svg>
                 </button>
                 <h2 class="calendar-title">
                     {data.year}年 {MONTH_NAMES[data.month - 1]}
                 </h2>
-                <button class="btn btn-ghost calendar-nav-btn" onclick={nextMonth} aria-label="次の月">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <button type="button" class="btn btn-ghost calendar-nav-btn" onclick={nextMonth} aria-label="次の月">
+                    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="9 18 15 12 9 6"/>
                     </svg>
                 </button>

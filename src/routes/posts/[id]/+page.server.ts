@@ -42,7 +42,8 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
     const rawAll: any[] = [rawPost, ...(rawParent ? [rawParent] : []), ...rawReplies];
     const enriched = await enrichPostsWithCounts(supabase, rawAll, user?.id ?? null);
 
-    const enrichedPost = enriched.find((p) => p.id === params.id)!;
+    const enrichedPost = enriched.find((p) => p.id === params.id);
+    if (!enrichedPost) error(404, '投稿が見つかりません');
     const enrichedParent = rawPost.parent_id
         ? (enriched.find((p) => p.id === rawPost.parent_id) ?? null)
         : null;

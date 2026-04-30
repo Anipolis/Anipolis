@@ -34,8 +34,8 @@ export const actions: Actions = {
         const hashtag = (form.get('hashtag') as string | null)?.trim() ?? '';
 
         // ハッシュタグが含まれていなければ自動付与
-        const tagPattern = new RegExp(`#${hashtag}\\b`, 'i');
-        const finalContent = tagPattern.test(content) ? content : `${content} #${hashtag}`;
+        const hasTag = content.toLowerCase().includes(`#${hashtag.toLowerCase()}`);
+        const finalContent = hasTag ? content : `${content} #${hashtag}`;
 
         return insertPostWithHashtags(supabase, user.id, finalContent);
     },

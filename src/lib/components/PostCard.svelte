@@ -36,7 +36,7 @@
     }
 
     function handleLightboxKeydown(event: KeyboardEvent) {
-        if (event.key === 'Escape') closeLightbox();
+        if (lightboxUrl && event.key === 'Escape') closeLightbox();
     }
 
     // ── オプティミスティック UI 用ローカル上書き（null = サーバー値を使用）──
@@ -96,6 +96,8 @@
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+<svelte:window onkeydown={handleLightboxKeydown} />
+
 <article
     class="post-card"
     class:deleting
@@ -178,7 +180,7 @@
     {#if lightboxUrl}
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <div class="lightbox-overlay" onclick={closeLightbox} role="dialog" aria-modal="true" aria-label="画像拡大表示" tabindex="-1">
-            <button type="button" class="lightbox-content" onkeydown={handleLightboxKeydown} onclick={(e) => e.stopPropagation()} aria-label="拡大画像">
+            <button type="button" class="lightbox-content" onclick={(e) => e.stopPropagation()} aria-label="拡大画像">
                 <img src={lightboxUrl} alt="拡大画像" class="lightbox-image" />
             </button>
             <button type="button" class="lightbox-close" onclick={closeLightbox} aria-label="閉じる">✕</button>

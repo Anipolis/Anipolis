@@ -15,3 +15,8 @@ supabase/.temp/
 
 # Personal references
 refs/
+
+# Local environment variables — never commit real secrets
+.env
+.env.local
+.env.*.local

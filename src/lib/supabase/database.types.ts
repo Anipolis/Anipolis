@@ -39,7 +39,7 @@ export type Database = {
                     created_at: string;
                     parent_id: string | null;
                     image_urls: string[];
-                    anime_id: string | null;
+                    anime_id: number | null;
                 };
                 Insert: {
                     id?: string;
@@ -48,13 +48,13 @@ export type Database = {
                     created_at?: string;
                     parent_id?: string | null;
                     image_urls?: string[];
-                    anime_id?: string | null;
+                    anime_id?: number | null;
                 };
                 Update: {
                     content?: string;
                     parent_id?: string | null;
                     image_urls?: string[];
-                    anime_id?: string | null;
+                    anime_id?: number | null;
                 };
                 Relationships: [
                     {
@@ -190,7 +190,22 @@ export type Database = {
                     follower_id?: string;
                     following_id?: string;
                 };
-                Relationships: [];
+                Relationships: [
+                    {
+                        foreignKeyName: 'follows_follower_id_fkey';
+                        columns: ['follower_id'];
+                        isOneToOne: false;
+                        referencedRelation: 'profiles';
+                        referencedColumns: ['id'];
+                    },
+                    {
+                        foreignKeyName: 'follows_following_id_fkey';
+                        columns: ['following_id'];
+                        isOneToOne: false;
+                        referencedRelation: 'profiles';
+                        referencedColumns: ['id'];
+                    },
+                ];
             };
             events: {
                 Row: {
@@ -203,6 +218,7 @@ export type Database = {
                     duration_minutes: number | null;
                     is_cancelled: boolean;
                     created_at: string;
+                    anime_id: number | null;
                 };
                 Insert: {
                     id?: string;
@@ -214,6 +230,7 @@ export type Database = {
                     duration_minutes?: number | null;
                     is_cancelled?: boolean;
                     created_at?: string;
+                    anime_id?: number | null;
                 };
                 Update: {
                     title?: string;
@@ -222,6 +239,7 @@ export type Database = {
                     scheduled_at?: string;
                     duration_minutes?: number | null;
                     is_cancelled?: boolean;
+                    anime_id?: number | null;
                 };
                 Relationships: [
                     {
@@ -231,11 +249,18 @@ export type Database = {
                         referencedRelation: 'profiles';
                         referencedColumns: ['id'];
                     },
+                    {
+                        foreignKeyName: 'events_anime_id_fkey';
+                        columns: ['anime_id'];
+                        isOneToOne: false;
+                        referencedRelation: 'anime';
+                        referencedColumns: ['id'];
+                    },
                 ];
             };
             anime: {
                 Row: {
-                    id: string;
+                    id: number;
                     title: string;
                     title_en: string | null;
                     title_romaji: string | null;
@@ -258,7 +283,6 @@ export type Database = {
                     created_at: string;
                 };
                 Insert: {
-                    id?: string;
                     title: string;
                     title_en?: string | null;
                     title_romaji?: string | null;
@@ -306,7 +330,7 @@ export type Database = {
             user_anime_list: {
                 Row: {
                     user_id: string;
-                    anime_id: string;
+                    anime_id: number;
                     status: 'watching' | 'completed' | 'plan_to_watch' | 'dropped' | 'on_hold';
                     score: number | null;
                     progress: number;
@@ -314,7 +338,7 @@ export type Database = {
                 };
                 Insert: {
                     user_id: string;
-                    anime_id: string;
+                    anime_id: number;
                     status: 'watching' | 'completed' | 'plan_to_watch' | 'dropped' | 'on_hold';
                     score?: number | null;
                     progress?: number;
@@ -344,7 +368,30 @@ export type Database = {
                 ];
             };
         };
-        Views: Record<string, never>;
+        Views: {
+            anime_popularity: {
+                Row: {
+                    anime_id: number;
+                    list_count: number;
+                };
+                Relationships: [];
+            };
+            anime_trending: {
+                Row: {
+                    anime_id: number;
+                    recent_count: number;
+                };
+                Relationships: [];
+            };
+            anime_top_rated: {
+                Row: {
+                    anime_id: number;
+                    avg_score: number;
+                    score_count: number;
+                };
+                Relationships: [];
+            };
+        };
         Functions: {
             get_trending_hashtags: {
                 Args: { limit_count?: number };
@@ -355,4 +402,3 @@ export type Database = {
         CompositeTypes: Record<string, never>;
     };
 };
-

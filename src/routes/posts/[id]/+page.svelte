@@ -20,9 +20,11 @@
 
     const handleReply: SubmitFunction = () => {
         submitting = true;
-        return async ({ update }) => {
+        return async ({ result, update }) => {
+            if (result.type === 'success') {
+                content = '';
+            }
             submitting = false;
-            content = '';
             await update();
         };
     };

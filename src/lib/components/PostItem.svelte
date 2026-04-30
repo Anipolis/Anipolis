@@ -60,13 +60,15 @@ function toggleRepost() {
 			{/if}
 
 			<!-- Related Anime -->
-			<a
-				href="/anime/{post.relatedAnime.id}"
-				class="mt-2 inline-flex items-center gap-1 rounded-full bg-purple-50 px-3 py-1 text-sm text-purple-600 no-underline transition-colors hover:bg-purple-100"
-			>
-				<span class="i-lucide-tv h-3.5 w-3.5"></span>
-				{post.relatedAnime.title}
-			</a>
+			{#if post.relatedAnime}
+				<a
+					href="/anime/{post.relatedAnime.id}"
+					class="mt-2 inline-flex items-center gap-1 rounded-full bg-purple-50 px-3 py-1 text-sm text-purple-600 no-underline transition-colors hover:bg-purple-100"
+				>
+					<span class="i-lucide-tv h-3.5 w-3.5"></span>
+					{post.relatedAnime.title}
+				</a>
+			{/if}
 
 			<!-- Actions -->
 			<div class="flex mt-4 items-center gap-4 text-gray-400">

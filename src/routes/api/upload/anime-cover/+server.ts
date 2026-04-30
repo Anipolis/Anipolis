@@ -13,11 +13,17 @@ export const POST: RequestHandler = async ({ request, locals: { supabase, safeGe
     if (user.email !== ADMIN_EMAIL) error(403, '権限がありません');
 
     const form = await request.formData();
-    const file = form.get('file') as File | null;
-    const animeId = form.get('anime_id') as string | null;
+    const fileEntry = form.get('file');
+    const animeIdEntry = form.get('anime_id');
 
-    if (!file || file.size === 0) error(400, 'ファイルが指定されていません');
-    if (!animeId) error(400, 'アニメIDが指定されていません');
+    if (!(fileEntry instanceof File) || fileEntry.size === 0) error(400, 'ファイルが指定されていません');
+    const file = fileEntry;
+
+    if (typeof animeIdEntry !== 'string') error(400, 'アニメIDが指定されていません');
+    const animeId = animeIdEntry.trim();
+    if (animeId.length === 0) error(400, 'アニメIDが指定されていません');
+    if (/[/\\:\0]/.test(animeId)) error(400, 'アニメIDに無効な文字が含まれています');
+
     if (!ALLOWED_TYPES.includes(file.type)) error(400, '対応していないファイル形式です（JPEG/PNG/WebP）');
     if (file.size > MAX_FILE_SIZE) error(400, 'ファイルサイズが大きすぎます（最大10MB）');
 
@@ -39,13 +45,21 @@ export const POST: RequestHandler = async ({ request, locals: { supabase, safeGe
         .getPublicUrl(path);
 
     const adminClient = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    const { error: updateError } = await adminClient
+    const { data: updatedRow, error: updateError } = await adminClient
         .from('anime')
         .update({ cover_url: publicUrl })
-        .eq('id', animeId);
+        .eq('id', animeId)
+        .select('id')
+        .single();
 
-    if (updateError) {
-        console.error('anime cover_url update error:', updateError);
+    if (updateError || !updatedRow) {
+        console.error('anime cover_url update error (animeId=%s):', animeId, updateError ?? 'no matching row');
+        const { error: deleteError } = await adminClient.storage
+            .from('anime-covers')
+            .remove([path]);
+        if (deleteError) {
+            console.error('anime cover storage cleanup error (path=%s):', path, deleteError);
+        }
         error(500, 'DBの更新に失敗しました');
     }
 

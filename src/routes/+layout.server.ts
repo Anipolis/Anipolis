@@ -57,11 +57,15 @@ export const load: LayoutServerLoad = async ({ locals: { supabase, safeGetSessio
         ? await getUnreadNotificationCount(supabase, user.id)
         : 0;
 
+    const filteredCookies = cookies
+        .getAll()
+        .filter(({ name }) => /^sb-.+-auth-token/.test(name));
+
     return {
         session,
         user,
         profile,
         unreadNotificationCount,
-        cookies: cookies.getAll(),
+        cookies: filteredCookies,
     };
 };

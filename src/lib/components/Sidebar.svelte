@@ -114,7 +114,7 @@
     <!-- 下部: テーマ・プロフィール・設定・ログアウト -->
     <div class="sidebar-bottom">
         <!-- テーマ切替 -->
-        <button class="sidebar-btn" onclick={toggleTheme} aria-label="テーマ切替" title={theme === 'dark' ? 'ライトモードに切替' : 'ダークモードに切替'}>
+        <button type="button" class="sidebar-btn" onclick={toggleTheme} aria-label="テーマ切替" title={theme === 'dark' ? 'ライトモードに切替' : 'ダークモードに切替'}>
             {#if theme === 'dark'}
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <circle cx="12" cy="12" r="5"/>
@@ -154,7 +154,7 @@
             </a>
 
             <!-- ログアウト -->
-            <button class="sidebar-btn danger" onclick={handleLogout} aria-label="ログアウト" title="ログアウト">
+            <button type="button" class="sidebar-btn danger" onclick={handleLogout} aria-label="ログアウト" title="ログアウト">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
                     <polyline points="16 17 21 12 16 7"/>
@@ -164,7 +164,7 @@
             </button>
         {:else}
             <!-- ログイン -->
-            <button class="sidebar-btn accent" onclick={handleLogin} aria-label="ログイン" title="Googleでログイン">
+            <button type="button" class="sidebar-btn accent" onclick={handleLogin} aria-label="ログイン" title="Googleでログイン">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
                     <polyline points="10 17 15 12 10 7"/>

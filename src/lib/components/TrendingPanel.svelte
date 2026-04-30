@@ -8,7 +8,7 @@
     let { trending }: Props = $props();
 </script>
 
-<aside class="trending-panel">
+<section class="trending-panel">
     <div class="trending-header">トレンド</div>
 
     {#if trending.length === 0}
@@ -24,4 +24,4 @@
             </a>
         {/each}
     {/if}
-</aside>
+</section>

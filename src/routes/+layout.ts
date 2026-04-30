@@ -17,13 +17,13 @@ export const load: LayoutLoad = async ({ data, depends, fetch }) => {
               },
           });
 
-    const {
-        data: { session },
-    } = await supabase.auth.getSession();
+    const session = isBrowser()
+        ? (await supabase.auth.getSession()).data.session ?? data.session
+        : data.session;
 
     return {
         supabase,
-        session: session ?? data.session,
+        session,
         user: data.user,
         profile: data.profile, // レイアウト全体でプロフィールを共有
         unreadNotificationCount: data.unreadNotificationCount ?? 0,
