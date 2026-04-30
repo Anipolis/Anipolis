@@ -26,6 +26,14 @@ export interface UserAnimeListEntry {
     };
 }
 
+export interface AnimeQuote {
+    id: string;
+    title: string;
+    cover_url: string | null;
+    /** 閲覧者自身のスコア（enrichPostsWithCounts で付加） */
+    user_score: number | null;
+}
+
 export interface Post {
     id: string;
     user_id: string;
@@ -42,6 +50,8 @@ export interface Post {
     reply_count: number;
     liked_by_me: boolean;
     reposted_by_me: boolean;
+    anime_id: string | null;
+    anime_quote: AnimeQuote | null;
 }
 
 export interface TrendingHashtag {
@@ -106,12 +116,12 @@ export interface Anime {
     aired_from: string | null;
     aired_to: string | null;
     source: string | null;
-    studio: string | null;
-    producer: string | null;
+    studio: string[] | null;
+    producer: string[] | null;
     genre: string[] | null;
     official_site_url: string | null;
     official_x_url: string | null;
-    official_hashtag: string | null;
+    official_hashtag: string[] | null;
     copyright: string | null;
     created_at: string;
     // 集計フィールド（クエリ時に付加）
@@ -133,6 +143,12 @@ export function toPost(
         content: string;
         created_at: string;
         image_urls?: string[] | null;
+        anime_id?: string | null;
+        anime?: {
+            id: string;
+            title: string;
+            cover_url: string | null;
+        } | null;
         profiles: {
             username: string;
             display_name: string | null;
@@ -168,5 +184,9 @@ export function toPost(
         reply_count: counts?.reply_count ?? 0,
         liked_by_me: counts?.liked_by_me ?? false,
         reposted_by_me: counts?.reposted_by_me ?? false,
+        anime_id: raw.anime_id ?? null,
+        anime_quote: raw.anime
+            ? { id: raw.anime.id, title: raw.anime.title, cover_url: raw.anime.cover_url, user_score: null }
+            : null,
     };
 }

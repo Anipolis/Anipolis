@@ -1161,6 +1161,52 @@ input, textarea {
 .settings-avatar-hint {
     font-size: 13px;
     color: var(--color-text-muted);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.avatar-error {
+    color: var(--color-danger, #e53935);
+    font-size: 12px;
+}
+
+.avatar-upload-btn {
+    position: relative;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.avatar-upload-btn:disabled {
+    cursor: not-allowed;
+}
+
+.avatar-overlay {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.avatar-upload-btn:hover .avatar-overlay,
+.avatar-upload-btn:disabled .avatar-overlay {
+    opacity: 1;
+}
+
+.avatar-overlay-text {
+    font-size: 12px;
+    font-weight: 600;
+    color: #fff;
+    pointer-events: none;
 }
 
 .settings-actions {
@@ -1442,6 +1488,39 @@ input, textarea {
     color: var(--color-text);
 }
 
+/* ── カレンダーページ専用レイアウト ──────────────────────────────── */
+.calendar-page-container {
+    max-width: 1600px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 0;
+    display: flex;
+    gap: 20px;
+    padding-top: calc(var(--nav-height) + 24px);
+    padding-bottom: 48px;
+    align-items: flex-start;
+}
+
+.calendar-main {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.calendar-sidebar {
+    flex: 0 0 280px;
+    position: sticky;
+    top: calc(var(--nav-height) + 24px);
+}
+
+@media (max-width: 960px) {
+    .calendar-sidebar {
+        display: none;
+    }
+    .calendar-main {
+        flex: 1;
+    }
+}
+
 /* ── カレンダーカード ────────────────────────────────────────────── */
 .calendar-card {
     padding: 0;
@@ -1485,10 +1564,10 @@ input, textarea {
     grid-template-columns: repeat(7, 1fr);
 }
 .calendar-cell {
-    min-height: 90px;
+    min-height: 130px;
     border-right: 1px solid var(--color-border);
     border-bottom: 1px solid var(--color-border);
-    padding: 6px 4px;
+    padding: 8px 6px;
     vertical-align: top;
 }
 .calendar-cell:nth-child(7n) {
@@ -1763,4 +1842,272 @@ input, textarea {
 }
 .btn-danger:hover {
     background: #dc2626;
+}
+
+/* ── アニメ引用カード（PostCard） ───────────────────────────────── */
+.anime-quote-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 8px 0 4px;
+    padding: 10px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: var(--color-surface);
+    text-decoration: none;
+    color: inherit;
+    transition: background 0.15s;
+    cursor: pointer;
+}
+.anime-quote-card:hover {
+    background: var(--color-hover);
+}
+.anime-quote-cover {
+    width: 44px;
+    height: 62px;
+    object-fit: cover;
+    border-radius: 4px;
+    flex-shrink: 0;
+    background: var(--color-border);
+}
+.anime-quote-cover-empty {
+    width: 44px;
+    height: 62px;
+    background: var(--color-border);
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+.anime-quote-body {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+.anime-quote-label {
+    font-size: 11px;
+    color: var(--color-primary);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+.anime-quote-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.anime-quote-score {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #f59e0b;
+}
+
+/* ── アニメ引用プレビュー（PostComposer） ───────────────────────── */
+.composer-anime-preview {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 6px 0 2px;
+    padding: 8px 10px;
+    border: 1px solid var(--color-primary);
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+}
+.composer-anime-thumb {
+    width: 36px;
+    height: 50px;
+    object-fit: cover;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+.composer-anime-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+}
+.composer-anime-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.composer-anime-title-en {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.composer-anime-remove {
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    padding: 2px 4px;
+    font-size: 13px;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+.composer-anime-remove:hover {
+    color: var(--color-text);
+    background: var(--color-hover);
+}
+.composer-image-btn.active {
+    color: var(--color-primary);
+}
+
+/* ── アニメ検索モーダル ─────────────────────────────────────────── */
+.anime-search-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+.anime-search-modal {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    width: 100%;
+    max-width: 480px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+}
+.anime-search-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px 10px;
+    border-bottom: 1px solid var(--color-border);
+}
+.anime-search-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--color-text);
+}
+.anime-search-close {
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    font-size: 16px;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+.anime-search-close:hover {
+    color: var(--color-text);
+    background: var(--color-hover);
+}
+.anime-search-input {
+    margin: 10px 12px;
+    padding: 8px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-size: 14px;
+    outline: none;
+}
+.anime-search-input:focus {
+    border-color: var(--color-primary);
+}
+.anime-search-results {
+    overflow-y: auto;
+    flex: 1;
+    padding: 0 0 8px;
+}
+.anime-search-empty {
+    text-align: center;
+    color: var(--color-text-muted);
+    font-size: 13px;
+    padding: 24px;
+    margin: 0;
+}
+.anime-search-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 8px 14px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.12s;
+}
+.anime-search-item:hover {
+    background: var(--color-hover);
+}
+.anime-search-thumb {
+    width: 36px;
+    height: 50px;
+    object-fit: cover;
+    border-radius: 3px;
+    flex-shrink: 0;
+    background: var(--color-border);
+}
+.anime-search-thumb-empty {
+    width: 36px;
+    height: 50px;
+    background: var(--color-border);
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+.anime-search-item-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.anime-search-item-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.anime-search-item-sub {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.quote-post-bar {
+    margin-bottom: 12px;
+}
+.btn-quote-post {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border-radius: 20px;
+    border: 1px solid var(--color-accent);
+    background: transparent;
+    color: var(--color-accent);
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+.btn-quote-post:hover {
+    background: var(--color-accent);
+    color: #fff;
 }

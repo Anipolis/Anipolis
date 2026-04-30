@@ -4,9 +4,10 @@ import { insertPostWithHashtags, deletePostAction, toggleLikeAction, toggleRepos
 import { enrichPostsWithCounts } from '$lib/server/queries';
 
 const POSTS_SELECT = `
-    id, content, created_at, user_id, parent_id, image_urls,
+    id, content, created_at, user_id, parent_id, image_urls, anime_id,
     profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
-    post_hashtags ( hashtags ( name ) )
+    post_hashtags ( hashtags ( name ) ),
+    anime:anime!posts_anime_id_fkey ( id, title, cover_url )
 ` as const;
 
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
@@ -65,9 +66,10 @@ export const actions: Actions = {
         const form = await request.formData();
         const content = (form.get('content') as string | null)?.trim() ?? '';
         const imageUrlsRaw = (form.get('image_urls') as string | null) ?? '[]';
+        const animeId = (form.get('anime_id') as string | null)?.trim() || null;
         let imageUrls: string[] = [];
         try { imageUrls = JSON.parse(imageUrlsRaw); } catch { imageUrls = []; }
-        return insertPostWithHashtags(supabase, user.id, content, params.id, imageUrls);
+        return insertPostWithHashtags(supabase, user.id, content, params.id, imageUrls, animeId);
     },
 
     deletePost: async ({ request, locals: { supabase, safeGetSession } }) => {

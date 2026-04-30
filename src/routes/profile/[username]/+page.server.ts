@@ -21,9 +21,10 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
         supabase
             .from('posts')
             .select(
-                `id, content, created_at, user_id, parent_id, image_urls,
+                `id, content, created_at, user_id, parent_id, image_urls, anime_id,
                  profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
-                 post_hashtags ( hashtags ( name ) )`,
+                 post_hashtags ( hashtags ( name ) ),
+                 anime:anime!posts_anime_id_fkey ( id, title, cover_url )`,
             )
             .eq('user_id', profile.id)
             .is('parent_id', null)

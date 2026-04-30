@@ -61,9 +61,9 @@
     <title>カレンダー — Anipolis</title>
 </svelte:head>
 
-<div class="page-container">
+<div class="calendar-page-container">
     <!-- カレンダー本体 -->
-    <div class="feed-column">
+    <div class="calendar-main">
         <div class="card calendar-card">
             <!-- ヘッダー：月ナビゲーション -->
             <div class="calendar-header">
@@ -143,7 +143,7 @@
     </div>
 
     <!-- サイドバー -->
-    <aside class="sidebar-column">
+    <aside class="calendar-sidebar">
         <div class="card">
             <h3 class="section-heading">イベントとは</h3>
             <p style="color:var(--color-muted); font-size:0.875rem; line-height:1.7;">

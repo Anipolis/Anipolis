@@ -278,7 +278,7 @@
 
 <style>
     .mylist-page {
-        padding: 24px 16px;
+        padding: calc(var(--nav-height) + 24px) 16px 24px;
         min-height: 100vh;
     }
 

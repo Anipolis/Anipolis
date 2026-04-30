@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
     import { enhance } from '$app/forms';
     import type { PageProps } from './$types';
     import type { AnimeStatus } from '$lib/types';
@@ -121,19 +121,31 @@
                 <p class="cover-error">{coverError}</p>
             {/if}
 
+            {#if data.anime.copyright}
+                <p class="copyright-notice">{data.anime.copyright}</p>
+            {/if}
+
             <!-- Production info below cover -->
-            {#if data.anime.studio || data.anime.producer || data.anime.source || data.anime.genre?.length || data.anime.official_site_url || data.anime.official_x_url || data.anime.copyright}
+            {#if data.anime.studio?.length || data.anime.producer?.length || data.anime.source || data.anime.genre?.length || data.anime.official_hashtag?.length || data.anime.official_site_url || data.anime.official_x_url}
                 <dl class="prod-info">
-                    {#if data.anime.studio}
-                        <div class="prod-row">
+                    {#if data.anime.studio?.length}
+                        <div class="prod-row prod-row--wrap">
                             <dt>スタジオ</dt>
-                            <dd><a href="/anime?studio={encodeURIComponent(data.anime.studio)}" class="filter-link">{data.anime.studio}</a></dd>
+                            <dd class="genre-list">
+                                {#each data.anime.studio as s}
+                                    <a href="/anime?studio={encodeURIComponent(s)}" class="genre-chip">{s}</a>
+                                {/each}
+                            </dd>
                         </div>
                     {/if}
-                    {#if data.anime.producer}
-                        <div class="prod-row">
+                    {#if data.anime.producer?.length}
+                        <div class="prod-row prod-row--wrap">
                             <dt>制作</dt>
-                            <dd><a href="/anime?producer={encodeURIComponent(data.anime.producer)}" class="filter-link">{data.anime.producer}</a></dd>
+                            <dd class="genre-list">
+                                {#each data.anime.producer as p}
+                                    <a href="/anime?producer={encodeURIComponent(p)}" class="genre-chip">{p}</a>
+                                {/each}
+                            </dd>
                         </div>
                     {/if}
                     {#if data.anime.source}
@@ -152,6 +164,16 @@
                             </dd>
                         </div>
                     {/if}
+                    {#if data.anime.official_hashtag?.length}
+                        <div class="prod-row prod-row--wrap">
+                            <dt>ハッシュタグ</dt>
+                            <dd class="genre-list">
+                                {#each data.anime.official_hashtag as tag}
+                                    <a href="/hashtag/{tag.replace(/^#/, '')}" class="hashtag-link">#{tag.replace(/^#/, '')}</a>
+                                {/each}
+                            </dd>
+                        </div>
+                    {/if}
                     {#if data.anime.official_site_url || data.anime.official_x_url}
                         <div class="prod-row prod-row--wrap">
                             <dt>公式</dt>
@@ -163,12 +185,6 @@
                                     <a href={data.anime.official_x_url} target="_blank" rel="noopener noreferrer" class="official-link">X (Twitter)</a>
                                 {/if}
                             </dd>
-                        </div>
-                    {/if}
-                    {#if data.anime.copyright}
-                        <div class="prod-row">
-                            <dt>©</dt>
-                            <dd class="copyright">{data.anime.copyright}</dd>
                         </div>
                     {/if}
                 </dl>
@@ -204,6 +220,18 @@
                     {/if}
                 </div>
             </div>
+
+            <!-- 引用投稿 -->
+            {#if data.user}
+                <div class="quote-post-bar">
+                    <a href="/?quote_anime={data.anime.id}" class="btn-quote-post">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                        </svg>
+                        この作品について投稿
+                    </a>
+                </div>
+            {/if}
 
             <!-- Score hero -->
             <div class="stats-grid">
@@ -448,6 +476,13 @@
     }
     .official-link:hover { background: var(--accent); color: #fff; }
     .copyright { font-size: 0.72rem; color: var(--text-muted); }
+    .copyright-notice {
+        font-size: 0.68rem;
+        color: var(--text-muted);
+        line-height: 1.4;
+        margin: 6px 0 0;
+        word-break: break-all;
+    }
     .filter-link {
         color: var(--accent);
         text-decoration: none;
