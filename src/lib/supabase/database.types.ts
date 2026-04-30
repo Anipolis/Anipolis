@@ -39,6 +39,7 @@ export type Database = {
                     created_at: string;
                     parent_id: string | null;
                     image_urls: string[];
+                    anime_id: string | null;
                 };
                 Insert: {
                     id?: string;
@@ -47,11 +48,13 @@ export type Database = {
                     created_at?: string;
                     parent_id?: string | null;
                     image_urls?: string[];
+                    anime_id?: string | null;
                 };
                 Update: {
                     content?: string;
                     parent_id?: string | null;
                     image_urls?: string[];
+                    anime_id?: string | null;
                 };
                 Relationships: [
                     {
@@ -59,6 +62,13 @@ export type Database = {
                         columns: ['user_id'];
                         isOneToOne: false;
                         referencedRelation: 'profiles';
+                        referencedColumns: ['id'];
+                    },
+                    {
+                        foreignKeyName: 'posts_anime_id_fkey';
+                        columns: ['anime_id'];
+                        isOneToOne: false;
+                        referencedRelation: 'anime';
                         referencedColumns: ['id'];
                     },
                 ];
@@ -238,12 +248,12 @@ export type Database = {
                     aired_from: string | null;
                     aired_to: string | null;
                     source: string | null;
-                    studio: string | null;
-                    producer: string | null;
+                    studio: string[] | null;
+                    producer: string[] | null;
                     genre: string[] | null;
                     official_site_url: string | null;
                     official_x_url: string | null;
-                    official_hashtag: string | null;
+                    official_hashtag: string[] | null;
                     copyright: string | null;
                     created_at: string;
                 };
@@ -261,12 +271,12 @@ export type Database = {
                     aired_from?: string | null;
                     aired_to?: string | null;
                     source?: string | null;
-                    studio?: string | null;
-                    producer?: string | null;
+                    studio?: string[] | null;
+                    producer?: string[] | null;
                     genre?: string[] | null;
                     official_site_url?: string | null;
                     official_x_url?: string | null;
-                    official_hashtag?: string | null;
+                    official_hashtag?: string[] | null;
                     copyright?: string | null;
                     created_at?: string;
                 };
@@ -283,12 +293,12 @@ export type Database = {
                     aired_from?: string | null;
                     aired_to?: string | null;
                     source?: string | null;
-                    studio?: string | null;
-                    producer?: string | null;
+                    studio?: string[] | null;
+                    producer?: string[] | null;
                     genre?: string[] | null;
                     official_site_url?: string | null;
                     official_x_url?: string | null;
-                    official_hashtag?: string | null;
+                    official_hashtag?: string[] | null;
                     copyright?: string | null;
                 };
                 Relationships: [];
@@ -345,3 +355,4 @@ export type Database = {
         CompositeTypes: Record<string, never>;
     };
 };
+

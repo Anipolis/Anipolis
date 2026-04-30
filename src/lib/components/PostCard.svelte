@@ -142,6 +142,29 @@
         {/each}
     </p>
 
+    <!-- アニメ引用カード -->
+    {#if post.anime_quote}
+        <a href="/anime/{post.anime_quote.id}" class="anime-quote-card" onclick={(e) => e.stopPropagation()}>
+            {#if post.anime_quote.cover_url}
+                <img src={post.anime_quote.cover_url} alt={post.anime_quote.title} class="anime-quote-cover" />
+            {:else}
+                <div class="anime-quote-cover anime-quote-cover-empty"></div>
+            {/if}
+            <div class="anime-quote-body">
+                <span class="anime-quote-label">アニメ</span>
+                <span class="anime-quote-title">{post.anime_quote.title}</span>
+                {#if post.anime_quote.user_score !== null}
+                    <span class="anime-quote-score">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                        </svg>
+                        {post.anime_quote.user_score.toFixed(1)}
+                    </span>
+                {/if}
+            </div>
+        </a>
+    {/if}
+
     {#if post.image_urls && post.image_urls.length > 0}
         <div class="post-images" class:post-images-single={post.image_urls.length === 1}>
             {#each post.image_urls as url, i}

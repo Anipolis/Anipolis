@@ -14,13 +14,14 @@ export async function insertPostWithHashtags(
     content: string,
     parentId: string | null = null,
     imageUrls: string[] = [],
+    animeId: string | null = null,
 ) {
-    if (!content && imageUrls.length === 0) return fail(400, { message: '内容または画像を入力してください' });
+    if (!content && imageUrls.length === 0 && !animeId) return fail(400, { message: '内容、画像、またはアニメを選択してください' });
     if (content.length > 280) return fail(400, { message: '280文字以内で入力してください' });
 
     const { data: post, error: postError } = await supabase
         .from('posts')
-        .insert({ user_id: userId, content, parent_id: parentId, image_urls: imageUrls })
+        .insert({ user_id: userId, content, parent_id: parentId, image_urls: imageUrls, anime_id: animeId || null })
         .select('id')
         .single();
 

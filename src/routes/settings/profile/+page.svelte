@@ -13,6 +13,11 @@
     let bio = $state(untrack(() => data.profile?.bio ?? ''));
     let submitting = $state(false);
 
+    let avatarUrl = $state(untrack(() => data.profile?.avatar_url ?? null));
+    let avatarUploading = $state(false);
+    let avatarError = $state<string | null>(null);
+    let fileInput: HTMLInputElement;
+
     const bioRemaining = $derived(160 - bio.length);
 
     const handleSubmit: SubmitFunction = () => {
@@ -28,6 +33,34 @@
             }
         };
     };
+
+    async function handleAvatarChange(e: Event) {
+        const file = (e.target as HTMLInputElement).files?.[0];
+        if (!file) return;
+
+        avatarError = null;
+        avatarUploading = true;
+
+        try {
+            const fd = new FormData();
+            fd.append('file', file);
+            const res = await fetch('/api/upload/avatar', { method: 'POST', body: fd });
+            if (!res.ok) {
+                const text = await res.text();
+                avatarError = text || 'アップロードに失敗しました';
+                return;
+            }
+            const { url } = await res.json();
+            avatarUrl = url;
+            // layout の profile も再読み込みで最新化
+            if (data.profile) data.profile.avatar_url = url;
+        } catch {
+            avatarError = 'アップロードに失敗しました';
+        } finally {
+            avatarUploading = false;
+            fileInput.value = '';
+        }
+    }
 </script>
 
 <svelte:head>
@@ -39,15 +72,40 @@
         <div class="settings-card">
             <h1 class="settings-title">プロフィール設定</h1>
 
-            <!-- アバター（Googleから取得、変更不可） -->
+            <!-- アバター -->
             <div class="settings-avatar-row">
-                <UserAvatar
-                    src={data.profile?.avatar_url}
-                    username={displayName || username || '?'}
-                    size="lg"
+                <button
+                    type="button"
+                    class="avatar-upload-btn"
+                    onclick={() => fileInput.click()}
+                    disabled={avatarUploading}
+                    aria-label="アイコン画像を変更"
+                >
+                    <UserAvatar
+                        src={avatarUrl}
+                        username={displayName || username || '?'}
+                        size="lg"
+                    />
+                    <div class="avatar-overlay">
+                        {#if avatarUploading}
+                            <span class="avatar-overlay-text">アップロード中…</span>
+                        {:else}
+                            <span class="avatar-overlay-text">変更</span>
+                        {/if}
+                    </div>
+                </button>
+                <input
+                    bind:this={fileInput}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    style="display:none"
+                    onchange={handleAvatarChange}
                 />
                 <div class="settings-avatar-hint">
-                    アイコンは Google アカウントの画像が使われます
+                    アイコンをクリックして画像を変更できます（JPEG / PNG / WebP、最大 2MB）
+                    {#if avatarError}
+                        <span class="avatar-error">{avatarError}</span>
+                    {/if}
                 </div>
             </div>
 

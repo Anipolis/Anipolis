@@ -54,15 +54,33 @@ export async function enrichPostsWithCounts(
     const likedSet = new Set((myLikesRes.data ?? []).map((r) => r.post_id));
     const repostedSet = new Set((myRepostsRes.data ?? []).map((r) => r.post_id));
 
-    return rawPosts.map((raw) =>
-        toPost(raw, {
+    // ── アニメ引用がある投稿のスコアを一括取得 ────────────────────
+    const animeIds = [...new Set(rawPosts.map((p) => p.anime_id).filter(Boolean))] as string[];
+    const userScoreMap = new Map<string, number | null>();
+    if (userId && animeIds.length > 0) {
+        const { data: entries } = await supabase
+            .from('user_anime_list')
+            .select('anime_id, score')
+            .eq('user_id', userId)
+            .in('anime_id', animeIds);
+        for (const e of entries ?? []) {
+            userScoreMap.set(e.anime_id, e.score);
+        }
+    }
+
+    return rawPosts.map((raw) => {
+        const post = toPost(raw, {
             like_count: likeCount.get(raw.id) ?? 0,
             repost_count: repostCount.get(raw.id) ?? 0,
             reply_count: replyCount.get(raw.id) ?? 0,
             liked_by_me: likedSet.has(raw.id),
             reposted_by_me: repostedSet.has(raw.id),
-        }),
-    );
+        });
+        if (post.anime_quote && post.anime_id) {
+            post.anime_quote.user_score = userScoreMap.get(post.anime_id) ?? null;
+        }
+        return post;
+    });
 }
 
 function countByPostId(rows: { post_id: string }[]): Map<string, number> {
@@ -243,9 +261,10 @@ export async function getEventPosts(
     const { data: rawPosts } = await supabase
         .from('posts')
         .select(
-            `id, content, created_at, user_id, parent_id, image_urls,
+            `id, content, created_at, user_id, parent_id, image_urls, anime_id,
              profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
-             post_hashtags ( hashtags ( name ) )`,
+             post_hashtags ( hashtags ( name ) ),
+             anime:anime!posts_anime_id_fkey ( id, title, cover_url )`,
         )
         .in('id', postIds)
         .is('parent_id', null)   // トップレベル投稿のみ
@@ -367,8 +386,8 @@ export async function getAnimeList(
 
     if (season) query = query.eq('season', season);
     if (genre) query = query.contains('genre', [genre]);
-    if (studio) query = query.eq('studio', studio);
-    if (producer) query = query.eq('producer', producer);
+    if (studio) query = query.contains('studio', [studio]);
+    if (producer) query = query.contains('producer', [producer]);
     if (status) query = query.eq('status', status);
     if (searchQuery) query = query.or(`title.ilike.%${searchQuery}%,title_en.ilike.%${searchQuery}%`);
 
@@ -606,3 +625,4 @@ async function enrichAnimeWithUserEntries(
 
     return animes.map((a) => ({ ...a, user_entry: entryMap.get(a.id) ?? null }));
 }
+

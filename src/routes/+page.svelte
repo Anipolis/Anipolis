@@ -14,7 +14,7 @@
 <div class="page-container">
     <main class="feed-column">
         {#if data.profile}
-            <PostComposer username={data.profile.username} avatarUrl={data.profile.avatar_url} />
+            <PostComposer username={data.profile.username} avatarUrl={data.profile.avatar_url} initialAnime={data.initialAnime} />
         {:else if data.session}
             <div class="auth-gate">
                 <p>ようこそ！<a href="/settings/profile">プロフィールを設定</a>してから投稿できます。</p>
