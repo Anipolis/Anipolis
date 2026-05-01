@@ -13,5 +13,8 @@ coverage/
 # Supabase temporary metadata
 supabase/.temp/
 
+# Environment variables
+.env
+
 # Personal references
 refs/
