@@ -62,7 +62,7 @@ function formatTime(iso: string): string {
 const grid = $derived(buildCalendarGrid(data.year, data.month));
 </script>
 
-<svelte:head> <title>カレンダー — Anipolis</title> </svelte:head>
+<svelte:head> <title>カレンダー - Anipolis</title> </svelte:head>
 
 <div class="page-container">
 	<!-- カレンダー本体 -->

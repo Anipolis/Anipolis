@@ -13,7 +13,7 @@ function notificationLabel(type: string): string {
 }
 </script>
 
-<svelte:head> <title>通知 — Anipolis</title> </svelte:head>
+<svelte:head> <title>通知 - Anipolis</title> </svelte:head>
 
 <div class="page-container">
 	<main class="notifications-column">

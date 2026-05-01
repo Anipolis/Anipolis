@@ -83,7 +83,7 @@ function formatDate(iso: string): string {
 }
 </script>
 
-<svelte:head> <title>{data.event.title} — Anipolis</title> </svelte:head>
+<svelte:head> <title>{data.event.title} - Anipolis</title> </svelte:head>
 
 <div class="page-container">
 	<div class="feed-column">

@@ -84,7 +84,7 @@ async function uploadCover(e: Event) {
 }
 </script>
 
-<svelte:head> <title>{data.anime.title} — Anipolis</title> </svelte:head>
+<svelte:head> <title>{data.anime.title} - Anipolis</title> </svelte:head>
 
 <div class="detail-page">
 	<a href="/anime" class="back-link">← アニメ一覧</a>

@@ -28,7 +28,7 @@ const handleReply: SubmitFunction = () => {
 };
 </script>
 
-<svelte:head> <title>{displayName}の投稿 — Anipolis</title> </svelte:head>
+<svelte:head> <title>{displayName}の投稿 - Anipolis</title> </svelte:head>
 
 <div class="page-container" style="justify-content: center;">
 	<main style="flex: 0 1 600px; min-width: 0;">

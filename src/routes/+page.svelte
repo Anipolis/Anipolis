@@ -7,7 +7,7 @@ import type { PageProps } from "./$types";
 let { data }: PageProps = $props();
 </script>
 
-<svelte:head> <title>Anipolis — タイムライン</title> </svelte:head>
+<svelte:head> <title>タイムライン - Anipolis</title> </svelte:head>
 
 <div class="page-container">
 	<main class="feed-column">

@@ -30,7 +30,7 @@ const handleSubmit: SubmitFunction = () => {
 };
 </script>
 
-<svelte:head> <title>プロフィール設定 — Anipolis</title> </svelte:head>
+<svelte:head> <title>プロフィール設定 - Anipolis</title> </svelte:head>
 
 <div class="page-container" style="justify-content: center;">
 	<main style="flex: 0 1 560px; min-width: 0;">

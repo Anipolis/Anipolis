@@ -7,7 +7,7 @@ import type { PageProps } from "./$types";
 let { data }: PageProps = $props();
 </script>
 
-<svelte:head> <title>{data.query ? `「${data.query}」の検索結果` : '検索'} — Anipolis</title> </svelte:head>
+<svelte:head> <title>{data.query ? `「${data.query}」の検索結果` : '検索'} - Anipolis</title> </svelte:head>
 
 <div class="page-container">
 	<main class="feed-column">

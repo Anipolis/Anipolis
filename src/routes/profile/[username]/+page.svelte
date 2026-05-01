@@ -53,7 +53,7 @@ const grouped = $derived(
 );
 </script>
 
-<svelte:head> <title>{displayName} (@{profile.username}) — Anipolis</title> </svelte:head>
+<svelte:head> <title>{displayName} (@{profile.username}) - Anipolis</title> </svelte:head>
 
 <div class="page-container">
 	<main class="feed-column">
