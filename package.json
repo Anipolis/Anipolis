@@ -20,25 +20,27 @@
 		"test": "pnpm test:unit"
 	},
 	"dependencies": {
-		"@supabase/supabase-js": "^2.49.0",
-		"@supabase/ssr": "^0.6.1"
+		"@supabase/ssr": "^0.6.1",
+		"@supabase/supabase-js": "^2.105.1"
 	},
 	"devDependencies": {
-		"@iconify-json/lucide": "^1.2.101",
-		"@sveltejs/adapter-auto": "^7.0.0",
-		"@sveltejs/kit": "^2.50.2",
+		"@iconify-json/lucide": "^1.2.105",
+		"@sveltejs/adapter-auto": "^7.0.1",
+		"@sveltejs/kit": "^2.58.0",
 		"@sveltejs/vite-plugin-svelte": "^6.2.4",
 		"@tsconfig/strictest": "^2.0.8",
 		"@tsconfig/svelte": "^5.0.8",
-		"@types/node": "^25.5.2",
-		"@unocss/preset-icons": "^66.6.7",
-		"@vitest/coverage-v8": "^4.1.2",
-		"happy-dom": "^20.8.9",
-		"svelte": "^5.54.0",
-		"svelte-check": "^4.4.2",
+		"@types/node": "^25.6.0",
+		"@unocss/preset-icons": "^66.6.8",
+		"@unocss/preset-wind3": "^66.6.8",
+		"@vitest/coverage-v8": "^4.1.5",
+		"happy-dom": "^20.9.0",
+		"scss": "^0.2.4",
+		"svelte": "^5.55.5",
+		"svelte-check": "^4.4.6",
 		"typescript": "^5.9.3",
-		"unocss": "^66.6.7",
-		"vite": "^7.3.1",
-		"vitest": "^4.1.0"
-	}
+		"unocss": "^66.6.8",
+		"vite": "^7.3.2",
+		"vitest": "^4.1.5"
+  }
 }
