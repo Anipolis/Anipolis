@@ -72,6 +72,20 @@ export const actions: Actions = {
 
         const epRaw = fd.get('episode_count') as string;
 
+        let cover_url: string | null = (fd.get('cover_url') as string)?.trim() || null;
+        const imageFile = fd.get('image_file');
+        if (imageFile instanceof File && imageFile.size > 0) {
+            const ext = imageFile.type === 'image/webp' ? 'webp' : 'jpg';
+            const path = `pending_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+            const arrayBuffer = await imageFile.arrayBuffer();
+            const { error: uploadError } = await supabase.storage
+                .from('anime-covers')
+                .upload(path, arrayBuffer, { contentType: imageFile.type, upsert: false });
+            if (!uploadError) {
+                cover_url = supabase.storage.from('anime-covers').getPublicUrl(path).data.publicUrl;
+            }
+        }
+
         const { data, error } = await supabase
             .from('anime')
             .insert({
@@ -79,6 +93,7 @@ export const actions: Actions = {
                 title_en:         (fd.get('title_en') as string)?.trim() || null,
                 title_romaji:     (fd.get('title_romaji') as string)?.trim() || null,
                 synopsis:         (fd.get('synopsis') as string)?.trim() || null,
+                cover_url,
                 season:           (fd.get('season') as string)?.trim() || null,
                 episode_count:    epRaw ? parseInt(epRaw, 10) : null,
                 type:             (fd.get('type') as string)?.trim() || null,
@@ -98,6 +113,6 @@ export const actions: Actions = {
             .single();
 
         if (error) return fail(500, { message: `登録エラー: ${error.message}` });
-        return { success: true, animeId: (data as { id: string }).id };
+        return { success: true, animeId: String((data as { id: number }).id) };
     },
 };

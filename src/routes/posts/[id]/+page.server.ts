@@ -2,9 +2,10 @@ import { fail, error } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import { insertPostWithHashtags, deletePostAction, toggleLikeAction, toggleRepostAction } from '$lib/server/actions';
 import { enrichPostsWithCounts } from '$lib/server/queries';
+import type { RawPost } from '$lib/types';
 
 const POSTS_SELECT = `
-    id, content, created_at, user_id, parent_id, image_urls, anime_id,
+    id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id,
     profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
     post_hashtags ( hashtags ( name ) ),
     anime:anime!posts_anime_id_fkey ( id, title, cover_url )
@@ -38,8 +39,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
     const rawReplies = rawRepliesRes.data ?? [];
 
     // 全投稿を一度に enrich（バッチクエリを最小化）
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const rawAll: any[] = [rawPost, ...(rawParent ? [rawParent] : []), ...rawReplies];
+    const rawAll: RawPost[] = [rawPost, ...(rawParent ? [rawParent] : []), ...rawReplies];
     const enriched = await enrichPostsWithCounts(supabase, rawAll, user?.id ?? null);
 
     const enrichedPost = enriched.find((p) => p.id === params.id);

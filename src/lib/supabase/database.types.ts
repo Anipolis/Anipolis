@@ -12,6 +12,7 @@ export type Database = {
                     bio: string | null;
                     created_at: string;
                     list_is_public: boolean;
+                    is_private: boolean;
                 };
                 Insert: {
                     id: string;
@@ -21,6 +22,7 @@ export type Database = {
                     bio?: string | null;
                     created_at?: string;
                     list_is_public?: boolean;
+                    is_private?: boolean;
                 };
                 Update: {
                     username?: string;
@@ -28,6 +30,7 @@ export type Database = {
                     avatar_url?: string | null;
                     bio?: string | null;
                     list_is_public?: boolean;
+                    is_private?: boolean;
                 };
                 Relationships: [];
             };
@@ -38,6 +41,7 @@ export type Database = {
                     content: string;
                     created_at: string;
                     parent_id: string | null;
+                    quoted_post_id: string | null;
                     image_urls: string[];
                     anime_id: number | null;
                 };
@@ -47,12 +51,14 @@ export type Database = {
                     content: string;
                     created_at?: string;
                     parent_id?: string | null;
+                    quoted_post_id?: string | null;
                     image_urls?: string[];
                     anime_id?: number | null;
                 };
                 Update: {
                     content?: string;
                     parent_id?: string | null;
+                    quoted_post_id?: string | null;
                     image_urls?: string[];
                     anime_id?: number | null;
                 };
@@ -69,6 +75,13 @@ export type Database = {
                         columns: ['anime_id'];
                         isOneToOne: false;
                         referencedRelation: 'anime';
+                        referencedColumns: ['id'];
+                    },
+                    {
+                        foreignKeyName: 'posts_quoted_post_id_fkey';
+                        columns: ['quoted_post_id'];
+                        isOneToOne: false;
+                        referencedRelation: 'posts';
                         referencedColumns: ['id'];
                     },
                 ];

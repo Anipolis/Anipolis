@@ -18,6 +18,7 @@ export const actions: Actions = {
         const username = (form.get('username') as string | null)?.trim().toLowerCase() ?? '';
         const displayName = (form.get('display_name') as string | null)?.trim() || null;
         const bio = (form.get('bio') as string | null)?.trim() || null;
+        const isPrivate = form.get('is_private') === 'on';
 
         if (!username)
             return fail(400, { field: 'username', message: 'ユーザー名を入力してください' });
@@ -32,7 +33,7 @@ export const actions: Actions = {
         const { error } = await supabase
             .from('profiles')
             .upsert(
-                { id: user.id, username, display_name: displayName, bio },
+                { id: user.id, username, display_name: displayName, bio, is_private: isPrivate },
                 { onConflict: 'id' },
             );
 

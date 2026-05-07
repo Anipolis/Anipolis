@@ -11,6 +11,7 @@
     let username = $state(untrack(() => data.profile?.username ?? ''));
     let displayName = $state(untrack(() => data.profile?.display_name ?? ''));
     let bio = $state(untrack(() => data.profile?.bio ?? ''));
+    let isPrivate = $state(untrack(() => data.profile?.is_private ?? false));
     let submitting = $state(false);
 
     let avatarUrl = $state(untrack(() => data.profile?.avatar_url ?? null));
@@ -30,6 +31,7 @@
                 username = data.profile.username;
                 displayName = data.profile.display_name ?? '';
                 bio = data.profile.bio ?? '';
+                isPrivate = data.profile.is_private ?? false;
             }
         };
     };
@@ -185,6 +187,20 @@
                             残り {bioRemaining} 文字
                         {/if}
                     </p>
+                </div>
+
+                <div class="field">
+                    <label class="privacy-toggle">
+                        <input
+                            type="checkbox"
+                            name="is_private"
+                            bind:checked={isPrivate}
+                        />
+                        <span>
+                            <strong>鍵アカウントにする</strong>
+                            <small>投稿、いいね、マイリストなどのコンテンツをフォロワーだけに表示します。</small>
+                        </span>
+                    </label>
                 </div>
 
                 <div class="settings-actions">

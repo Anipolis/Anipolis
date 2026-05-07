@@ -1,6 +1,5 @@
 <script lang="ts">
     import { enhance } from '$app/forms';
-    import { goto } from '$app/navigation';
     import type { SubmitFunction } from '@sveltejs/kit';
     import type { Post } from '$lib/types';
     import UserAvatar from './UserAvatar.svelte';
@@ -10,7 +9,6 @@
     interface Props {
         post: Post;
         currentUserId?: string | null;
-        /** 投稿詳細ページで使う場合 true にするとカードクリックナビをスキップ */
         isDetailView?: boolean;
     }
 
@@ -24,6 +22,11 @@
 
     let deleting = $state(false);
     let lightboxUrl = $state<string | null>(null);
+    let showRepostMenu = $state(false);
+    let showQuoteModal = $state(false);
+    let quoteText = $state('');
+    let quoteSubmitting = $state(false);
+    let quoteError = $state('');
 
     function openLightbox(event: MouseEvent, url: string) {
         event.preventDefault();
@@ -39,7 +42,6 @@
         if (lightboxUrl && event.key === 'Escape') closeLightbox();
     }
 
-    // ── オプティミスティック UI 用ローカル上書き（null = サーバー値を使用）──
     let likeCountLocal = $state<number | null>(null);
     let likedByMeLocal = $state<boolean | null>(null);
     let repostCountLocal = $state<number | null>(null);
@@ -49,13 +51,6 @@
     const likedByMe = $derived(likedByMeLocal ?? post.liked_by_me);
     const repostCount = $derived(repostCountLocal ?? post.repost_count);
     const repostedByMe = $derived(repostedByMeLocal ?? post.reposted_by_me);
-
-    // カード本体クリック → 投稿詳細へ
-    function handleCardClick(event: MouseEvent) {
-        if (isDetailView) return;
-        if ((event.target as HTMLElement).closest('a, button, form')) return;
-        goto(`/posts/${post.id}`);
-    }
 
     const handleDelete: SubmitFunction = ({ cancel }) => {
         if (!confirm('この投稿を削除しますか？')) return cancel();
@@ -67,13 +62,11 @@
     };
 
     const handleLike: SubmitFunction = () => {
-        // オプティミスティック更新（代入前に現在値を保存して派生値の即時更新による誤算を防ぐ）
         const wasLiked = likedByMe;
         likedByMeLocal = !wasLiked;
         likeCountLocal = wasLiked ? likeCount - 1 : likeCount + 1;
         return async ({ result, update }) => {
             if (result.type === 'failure') {
-                // ロールバック
                 likedByMeLocal = null;
                 likeCountLocal = null;
             }
@@ -82,6 +75,7 @@
     };
 
     const handleRepost: SubmitFunction = () => {
+        showRepostMenu = false;
         const wasReposted = repostedByMe;
         repostedByMeLocal = !wasReposted;
         repostCountLocal = wasReposted ? repostCount - 1 : repostCount + 1;
@@ -93,17 +87,43 @@
             await update({ reset: false });
         };
     };
+
+    async function submitQuoteRepost() {
+        if (!quoteText.trim()) return;
+        quoteSubmitting = true;
+        quoteError = '';
+        try {
+            const fd = new FormData();
+            fd.append('content', quoteText.trim());
+            fd.append('quote_post_id', post.id);
+            const res = await fetch('/api/posts', { method: 'POST', body: fd });
+            if (!res.ok) {
+                const msg = await res.text();
+                quoteError = msg || '投稿に失敗しました';
+            } else {
+                quoteText = '';
+                showQuoteModal = false;
+                repostedByMeLocal = true;
+                repostCountLocal = repostCount + 1;
+            }
+        } catch {
+            quoteError = '投稿に失敗しました';
+        }
+        quoteSubmitting = false;
+    }
 </script>
 
-<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
 <svelte:window onkeydown={handleLightboxKeydown} />
 
 <article
     class="post-card"
     class:deleting
     class:post-card-clickable={!isDetailView}
-    onclick={handleCardClick}
 >
+    {#if !isDetailView}
+        <a href="/posts/{post.id}" class="post-card-hitarea" aria-label="投稿詳細を開く"></a>
+    {/if}
+
     <a href="/profile/{post.username}" class="post-avatar-link" aria-label={displayName}>
         <UserAvatar src={post.avatar_url} username={post.username} size="md" />
     </a>
@@ -120,13 +140,7 @@
             {#if isOwn}
                 <form method="POST" action="?/deletePost" use:enhance={handleDelete}>
                     <input type="hidden" name="post_id" value={post.id} />
-                    <button
-                        type="submit"
-                        class="post-delete-btn"
-                        disabled={deleting}
-                        aria-label="投稿を削除"
-                        title="削除"
-                    >
+                    <button type="submit" class="post-delete-btn" disabled={deleting} aria-label="投稿を削除" title="削除">
                         ✕
                     </button>
                 </form>
@@ -138,13 +152,25 @@
         {#each parts as part}
             {#if part.type === 'hashtag'}
                 <a href="/hashtag/{part.value}" class="hashtag">#{part.value}</a>
+            {:else if part.type === 'mention'}
+                <a href="/profile/{part.value}" class="mention">@{part.value}</a>
             {:else}
                 {part.value}
             {/if}
         {/each}
     </p>
 
-    <!-- アニメ引用カード -->
+    {#if post.quoted_post}
+        <a href="/posts/{post.quoted_post.id}" class="quoted-post" onclick={(e) => e.stopPropagation()}>
+            <div class="quoted-post-header">
+                <UserAvatar src={post.quoted_post.avatar_url} username={post.quoted_post.username} size="sm" />
+                <span class="quoted-post-name">{post.quoted_post.display_name || post.quoted_post.username}</span>
+                <span class="quoted-post-at">@{post.quoted_post.username}</span>
+            </div>
+            <p class="quoted-post-content">{post.quoted_post.content}</p>
+        </a>
+    {/if}
+
     {#if post.anime_quote}
         <a href="/anime/{post.anime_quote.id}" class="anime-quote-card" onclick={(e) => e.stopPropagation()}>
             {#if post.anime_quote.cover_url}
@@ -177,6 +203,48 @@
         </div>
     {/if}
 
+    {#if showQuoteModal}
+        <!-- svelte-ignore a11y_no_noninteractive_element_interactions a11y_click_events_have_key_events -->
+        <div class="quote-modal-overlay" role="presentation" onclick={({ target, currentTarget }) => { if (target === currentTarget) { showQuoteModal = false; quoteText = ''; quoteError = ''; } }}>
+            <div class="quote-modal-card" role="dialog" aria-modal="true" aria-labelledby="quote-modal-title" tabindex="-1" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+                <div class="quote-modal-header">
+                    <span id="quote-modal-title" class="quote-modal-title">引用リポスト</span>
+                    <button type="button" class="quote-modal-close" aria-label="閉じる" onclick={() => { showQuoteModal = false; quoteText = ''; quoteError = ''; }}>✕</button>
+                </div>
+                <div class="quote-modal-body">
+                    <textarea
+                        class="quote-modal-textarea"
+                        placeholder="コメントを追加..."
+                        rows="3"
+                        bind:value={quoteText}
+                        disabled={quoteSubmitting}
+                    ></textarea>
+                    <div class="quote-preview">
+                        <div class="quote-preview-header">
+                            <UserAvatar src={post.avatar_url} username={post.username} size="sm" />
+                            <span class="quote-preview-name">{post.display_name || post.username}</span>
+                            <span class="quote-preview-at">@{post.username}</span>
+                        </div>
+                        <p class="quote-preview-content">{post.content}</p>
+                    </div>
+                    {#if quoteError}
+                        <p class="flash-error" style="margin-top:8px;">{quoteError}</p>
+                    {/if}
+                </div>
+                <div class="quote-modal-footer">
+                    <button
+                        type="button"
+                        class="btn btn-primary"
+                        disabled={!quoteText.trim() || quoteSubmitting}
+                        onclick={submitQuoteRepost}
+                    >
+                        {quoteSubmitting ? '投稿中…' : 'リポスト'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    {/if}
+
     {#if lightboxUrl}
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <div class="lightbox-overlay" onclick={closeLightbox} role="dialog" aria-modal="true" aria-label="画像拡大表示" tabindex="-1">
@@ -188,7 +256,6 @@
     {/if}
 
     <div class="post-footer">
-        <!-- リプライ -->
         <a href="/posts/{post.id}" class="post-action-btn post-reply-btn" aria-label="返信">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
@@ -198,16 +265,15 @@
             {/if}
         </a>
 
-        <!-- リポスト -->
-        <form method="POST" action="?/repost" use:enhance={handleRepost}>
-            <input type="hidden" name="post_id" value={post.id} />
+        <div class="post-repost-wrapper">
             <button
-                type="submit"
+                type="button"
                 class="post-action-btn post-repost-btn"
                 class:active={repostedByMe}
                 disabled={!isLoggedIn}
-                aria-label={repostedByMe ? 'リポスト取り消し' : 'リポスト'}
-                title={repostedByMe ? 'リポスト取り消し' : 'リポスト'}
+                aria-label={repostedByMe ? 'リポストメニュー' : 'リポスト'}
+                title={repostedByMe ? 'リポストメニュー' : 'リポスト'}
+                onclick={() => { if (isLoggedIn) showRepostMenu = !showRepostMenu; }}
             >
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M17 1l4 4-4 4"/>
@@ -219,9 +285,36 @@
                     <span>{repostCount}</span>
                 {/if}
             </button>
-        </form>
 
-        <!-- いいね -->
+            {#if showRepostMenu}
+                <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+                <div class="repost-backdrop" role="presentation" onclick={() => showRepostMenu = false}></div>
+                <div class="repost-dropdown">
+                    <form method="POST" action="?/repost" use:enhance={handleRepost}>
+                        <input type="hidden" name="post_id" value={post.id} />
+                        <button type="submit" class="repost-menu-item">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+                                <path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+                            </svg>
+                            {repostedByMe ? 'リポストを取り消す' : 'リポスト'}
+                        </button>
+                    </form>
+                    <button
+                        type="button"
+                        class="repost-menu-item repost-menu-item-quote"
+                        onclick={() => { showRepostMenu = false; showQuoteModal = true; }}
+                    >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                        </svg>
+                        引用リポスト
+                    </button>
+                </div>
+            {/if}
+        </div>
+
         <form method="POST" action="?/like" use:enhance={handleLike}>
             <input type="hidden" name="post_id" value={post.id} />
             <button

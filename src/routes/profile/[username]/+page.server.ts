@@ -1,9 +1,9 @@
 import { fail, error } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import { deletePostAction, toggleLikeAction, toggleRepostAction, toggleFollowAction } from '$lib/server/actions';
-import { enrichPostsWithCounts, getFollowCounts, checkIsFollowing, getUserAnimeList } from '$lib/server/queries';
+import { enrichPostsWithCounts, getFollowCounts, checkIsFollowing, getUserAnimeList, getLikedPosts } from '$lib/server/queries';
 
-export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
+export const load: PageServerLoad = async ({ params, url, locals: { supabase, safeGetSession } }) => {
     const { user } = await safeGetSession();
     const { data: profile } = await supabase
         .from('profiles')
@@ -16,40 +16,51 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
     }
 
     const isOwn = user?.id === profile.id;
+    const isFollowing = user && user.id !== profile.id
+        ? await checkIsFollowing(supabase, user.id, profile.id)
+        : false;
+    const canViewContent = isOwn || !profile.is_private || isFollowing;
 
-    const [rawPostsResult, followCounts, isFollowing, trendingResult, animeList] = await Promise.all([
-        supabase
-            .from('posts')
-            .select(
-                `id, content, created_at, user_id, parent_id, image_urls, anime_id,
-                 profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
-                 post_hashtags ( hashtags ( name ) ),
-                 anime:anime!posts_anime_id_fkey ( id, title, cover_url )`,
-            )
-            .eq('user_id', profile.id)
-            .is('parent_id', null)
-            .order('created_at', { ascending: false })
-            .limit(50),
+    const [rawPostsResult, followCounts, trendingResult, animeList] = await Promise.all([
+        canViewContent
+            ? supabase
+                  .from('posts')
+                  .select(
+                      `id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id,
+                       profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
+                       post_hashtags ( hashtags ( name ) ),
+                       anime:anime!posts_anime_id_fkey ( id, title, cover_url )`,
+                  )
+                  .eq('user_id', profile.id)
+                  .is('parent_id', null)
+                  .order('created_at', { ascending: false })
+                  .limit(50)
+            : Promise.resolve({ data: [] }),
 
         getFollowCounts(supabase, profile.id),
 
-        user && user.id !== profile.id
-            ? checkIsFollowing(supabase, user.id, profile.id)
-            : Promise.resolve(false),
-
         supabase.rpc('get_trending_hashtags', { limit_count: 10 }),
 
-        isOwn || profile.list_is_public
+        canViewContent && (isOwn || profile.list_is_public)
             ? getUserAnimeList(supabase, profile.id)
             : Promise.resolve([]),
     ]);
 
-    const posts = await enrichPostsWithCounts(supabase, rawPostsResult.data ?? [], user?.id ?? null);
+    const activeTab = url.searchParams.get('tab') ?? 'posts';
+
+    const [posts, likedPosts] = await Promise.all([
+        enrichPostsWithCounts(supabase, rawPostsResult.data ?? [], user?.id ?? null),
+        canViewContent && activeTab === 'likes'
+            ? getLikedPosts(supabase, profile.id, user?.id ?? null)
+            : Promise.resolve([]),
+    ]);
 
     return {
         profile,
         posts,
+        likedPosts,
         isOwn,
+        canViewContent,
         followCounts,
         isFollowing,
         trending: trendingResult.data ?? [],

@@ -1,6 +1,6 @@
 import { error, fail } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
-import { getAnime } from '$lib/server/queries';
+import { getAnime, getUsersWhoListedAnime } from '$lib/server/queries';
 import { upsertUserAnimeEntry, removeUserAnimeEntry } from '$lib/server/actions';
 import { ADMIN_EMAIL } from '$env/static/private';
 
@@ -10,7 +10,9 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 
     if (!anime) throw error(404, 'アニメが見つかりません');
 
-    return { anime, user, isAdmin: user?.email === ADMIN_EMAIL };
+    const listedUsers = await getUsersWhoListedAnime(supabase, params.id);
+
+    return { anime, user, isAdmin: user?.email === ADMIN_EMAIL, listedUsers };
 };
 
 export const actions: Actions = {

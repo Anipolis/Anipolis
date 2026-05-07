@@ -55,7 +55,7 @@
 
     let postContent = $state('');
     const maxLen = 280;
-    const hashtagSuffix = ` #${data.event.hashtag}`;
+    const hashtagSuffix = $derived(` #${data.event.hashtag}`);
 
     // ハッシュタグを除いた実質文字数（上限チェック用）
     const contentWithTag = $derived(

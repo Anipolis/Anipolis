@@ -24,12 +24,21 @@
         return cells;
     }
 
+    const eventsByDate = $derived(() => {
+        const map = new Map<string, Event[]>();
+        for (const e of data.events) {
+            const d = new Date(e.scheduled_at);
+            const key = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+            const bucket = map.get(key);
+            if (bucket) bucket.push(e);
+            else map.set(key, [e]);
+        }
+        return map;
+    });
+
     /** その日のイベント一覧 */
     function eventsOnDay(year: number, month: number, day: number): Event[] {
-        return data.events.filter((e) => {
-            const d = new Date(e.scheduled_at);
-            return d.getFullYear() === year && d.getMonth() + 1 === month && d.getDate() === day;
-        });
+        return eventsByDate().get(`${year}-${month}-${day}`) ?? [];
     }
 
     function isToday(year: number, month: number, day: number): boolean {

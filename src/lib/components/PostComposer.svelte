@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
     import { enhance } from '$app/forms';
     import type { SubmitFunction } from '@sveltejs/kit';
     import UserAvatar from './UserAvatar.svelte';
@@ -9,6 +9,13 @@
         title: string;
         title_en: string | null;
         cover_url: string | null;
+    }
+
+    interface UserResult {
+        id: string;
+        username: string;
+        display_name: string | null;
+        avatar_url: string | null;
     }
 
     interface Props {
@@ -42,6 +49,12 @@
     let animeSearching = $state(false);
     let selectedAnime = $state<AnimeResult | null>(null);
     let searchDebounce = $state<ReturnType<typeof setTimeout> | null>(null);
+
+    // @メンション
+    let textareaEl = $state<HTMLTextAreaElement | null>(null);
+    let mentionResults = $state<UserResult[]>([]);
+    let mentionDropdownOpen = $state(false);
+    let mentionDebounce = $state<ReturnType<typeof setTimeout> | null>(null);
 
     const remaining = $derived(MAX_LENGTH - content.length);
     const countClass = $derived(charCountClass(content.length, MAX_LENGTH));
@@ -128,6 +141,46 @@
         }, 300);
     }
 
+    function handleContentInput() {
+        if (!textareaEl) return;
+        const val = textareaEl.value;
+        const cursor = textareaEl.selectionStart ?? val.length;
+        const textBeforeCursor = val.slice(0, cursor);
+        const mentionMatch = textBeforeCursor.match(/@([a-zA-Z0-9_]*)$/);
+
+        if (mentionMatch) {
+            if (mentionDebounce) clearTimeout(mentionDebounce);
+            const q = mentionMatch[1] ?? '';
+            mentionDebounce = setTimeout(async () => {
+                if (q.length === 0) { mentionDropdownOpen = false; return; }
+                try {
+                    const res = await fetch(`/api/users/search?q=${encodeURIComponent(q)}`);
+                    mentionResults = res.ok ? await res.json() : [];
+                    mentionDropdownOpen = mentionResults.length > 0;
+                } catch {
+                    mentionResults = [];
+                    mentionDropdownOpen = false;
+                }
+            }, 200);
+        } else {
+            mentionDropdownOpen = false;
+        }
+    }
+
+    function selectMention(user: UserResult) {
+        if (!textareaEl) return;
+        const val = textareaEl.value;
+        const cursor = textareaEl.selectionStart ?? val.length;
+        const before = val.slice(0, cursor).replace(/@([a-zA-Z0-9_]*)$/, `@${user.username} `);
+        content = before + val.slice(cursor);
+        mentionDropdownOpen = false;
+        mentionResults = [];
+        setTimeout(() => {
+            textareaEl?.focus();
+            textareaEl?.setSelectionRange(before.length, before.length);
+        }, 0);
+    }
+
     const handleSubmit: SubmitFunction = () => {
         submitting = true;
         errorMessage = '';
@@ -154,14 +207,35 @@
             use:enhance={handleSubmit}
             style="flex:1; display:flex; flex-direction:column; gap:0;"
         >
-            <textarea
-                name="content"
-                class="composer-textarea"
-                placeholder="いま何してる？"
-                rows="3"
-                bind:value={content}
-                maxlength={MAX_LENGTH + 10}
-            ></textarea>
+            <div style="position:relative;">
+                <textarea
+                    bind:this={textareaEl}
+                    name="content"
+                    class="composer-textarea"
+                    placeholder="いまなにしてる？"
+                    rows="3"
+                    bind:value={content}
+                    maxlength={MAX_LENGTH + 10}
+                    oninput={handleContentInput}
+                ></textarea>
+
+                {#if mentionDropdownOpen && mentionResults.length > 0}
+                    <div class="mention-dropdown">
+                        {#each mentionResults as user}
+                            <button
+                                type="button"
+                                class="mention-dropdown-item"
+                                onmousedown={(e) => { e.preventDefault(); selectMention(user); }}
+                            >
+                                <span class="mention-dropdown-username">@{user.username}</span>
+                                {#if user.display_name}
+                                    <span class="mention-dropdown-displayname">{user.display_name}</span>
+                                {/if}
+                            </button>
+                        {/each}
+                    </div>
+                {/if}
+            </div>
 
             <!-- 選択済みアニメプレビュー -->
             {#if selectedAnime}
@@ -185,7 +259,7 @@
                 <input type="hidden" name="anime_id" value={selectedAnime.id} />
             {/if}
 
-            <!-- 画像プレビュー -->
+            <!-- 画像のプレビュー -->
             {#if imageUrls.length > 0}
                 <div class="composer-image-previews">
                     {#each imageUrls as url, i}
@@ -319,3 +393,43 @@
         </div>
     </div>
 {/if}
+
+<style>
+    .mention-dropdown {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: var(--bg-card, #1e1e2e);
+        border: 1px solid var(--border, #313244);
+        border-radius: 8px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+        z-index: 50;
+        max-height: 200px;
+        overflow-y: auto;
+    }
+    .mention-dropdown-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        padding: 8px 12px;
+        background: none;
+        border: none;
+        cursor: pointer;
+        text-align: left;
+        color: inherit;
+    }
+    .mention-dropdown-item:hover {
+        background: var(--bg-hover, #313244);
+    }
+    .mention-dropdown-username {
+        font-weight: 600;
+        font-size: 0.9rem;
+        color: var(--accent, #89b4fa);
+    }
+    .mention-dropdown-displayname {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+    }
+</style>

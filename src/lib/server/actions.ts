@@ -2,7 +2,7 @@ import { fail } from '@sveltejs/kit';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '$lib/supabase/database.types';
 import type { AnimeStatus } from '$lib/types';
-import { extractHashtags } from '$lib/utils/hashtag';
+import { extractHashtags, extractMentions } from '$lib/utils/hashtag';
 
 /**
  * 投稿（＋ハッシュタグ）を挿入する共通ロジック
@@ -15,13 +15,32 @@ export async function insertPostWithHashtags(
     parentId: string | null = null,
     imageUrls: string[] = [],
     animeId: string | null = null,
+    quotedPostId: string | null = null,
 ) {
     if (!content && imageUrls.length === 0 && !animeId) return fail(400, { message: '内容、画像、またはアニメを選択してください' });
     if (content.length > 280) return fail(400, { message: '280文字以内で入力してください' });
 
+    if (parentId) {
+        const { data: parent } = await supabase
+            .from('posts')
+            .select('id')
+            .eq('id', parentId)
+            .maybeSingle();
+        if (!parent) return fail(404, { message: '返信先の投稿を表示できません' });
+    }
+
+    if (quotedPostId) {
+        const { data: quotedPost } = await supabase
+            .from('posts')
+            .select('id')
+            .eq('id', quotedPostId)
+            .maybeSingle();
+        if (!quotedPost) return fail(404, { message: '引用元の投稿を表示できません' });
+    }
+
     const { data: post, error: postError } = await supabase
         .from('posts')
-        .insert({ user_id: userId, content, parent_id: parentId, image_urls: imageUrls, anime_id: animeId || null })
+        .insert({ user_id: userId, content, parent_id: parentId, image_urls: imageUrls, anime_id: animeId ? Number(animeId) : null, quoted_post_id: quotedPostId || null })
         .select('id')
         .single();
 
@@ -43,6 +62,27 @@ export async function insertPostWithHashtags(
             await supabase
                 .from('post_hashtags')
                 .insert({ post_id: post.id, hashtag_id: hashtag.id });
+        }
+    }
+
+    // メンション通知（エラーは無視）
+    const mentionedUsernames = extractMentions(content);
+    if (mentionedUsernames.length > 0) {
+        const { data: mentionedUsers } = await supabase
+            .from('profiles')
+            .select('id')
+            .in('username', mentionedUsernames);
+        if (mentionedUsers) {
+            for (const mentioned of mentionedUsers) {
+                if (mentioned.id !== userId) {
+                    await supabase.from('notifications').insert({
+                        recipient_id: mentioned.id,
+                        actor_id: userId,
+                        type: 'mention' as 'like',
+                        post_id: post.id,
+                    });
+                }
+            }
         }
     }
 
@@ -96,7 +136,8 @@ export async function toggleLikeAction(
         await supabase.from('likes').delete().eq('post_id', postId).eq('user_id', userId);
         return { liked: false };
     } else {
-        await supabase.from('likes').insert({ post_id: postId, user_id: userId });
+        const { error } = await supabase.from('likes').insert({ post_id: postId, user_id: userId });
+        if (error) return fail(403, { message: 'この投稿にいいねできません' });
         return { liked: true };
     }
 }
@@ -124,7 +165,8 @@ export async function toggleRepostAction(
         await supabase.from('reposts').delete().eq('post_id', postId).eq('user_id', userId);
         return { reposted: false };
     } else {
-        await supabase.from('reposts').insert({ post_id: postId, user_id: userId });
+        const { error } = await supabase.from('reposts').insert({ post_id: postId, user_id: userId });
+        if (error) return fail(403, { message: 'この投稿をリポストできません' });
         return { reposted: true };
     }
 }
@@ -272,7 +314,7 @@ export async function upsertUserAnimeEntry(
     const progress = progressRaw ? parseInt(progressRaw, 10) : 0;
 
     const { error } = await supabase.from('user_anime_list').upsert(
-        { user_id: userId, anime_id: animeId, status, score, progress },
+        { user_id: userId, anime_id: Number(animeId), status, score, progress },
         { onConflict: 'user_id,anime_id' },
     );
 
@@ -293,7 +335,7 @@ export async function removeUserAnimeEntry(
         .from('user_anime_list')
         .delete()
         .eq('user_id', userId)
-        .eq('anime_id', animeId);
+        .eq('anime_id', Number(animeId));
 
     if (error) return fail(500, { message: 'マイリストの削除に失敗しました' });
     return { success: true };

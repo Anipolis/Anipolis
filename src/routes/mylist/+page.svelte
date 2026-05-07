@@ -1,8 +1,8 @@
-<script lang="ts">
+﻿<script lang="ts">
     import { enhance } from '$app/forms';
-    import { invalidateAll } from '$app/navigation';
     import type { PageProps } from './$types';
     import type { AnimeStatus, Anime } from '$lib/types';
+    import AnimeEditRow from '$lib/components/AnimeEditRow.svelte';
 
     let { data, form }: PageProps = $props();
 
@@ -24,8 +24,12 @@
         dropped: '✕',
     };
 
-    let isPublic = $state(data.profile.list_is_public);
+    let isPublic = $state(false);
     let viewMode = $state<'list' | 'edit'>('list');
+
+    $effect(() => {
+        isPublic = data.profile.list_is_public;
+    });
 
     $effect(() => {
         if (form && 'list_is_public' in form) {
@@ -171,101 +175,12 @@
                                         </div>
                                     </a>
                                 {:else if entry}
-                                    <!-- 編集表示 -->
-                                    <div class="anime-row-edit">
-                                        <a href="/anime/{anime.id}" class="anime-cover edit-cover" tabindex="-1">
-                                            {#if anime.cover_url}
-                                                <img src={anime.cover_url} alt={anime.title} />
-                                            {:else}
-                                                <div class="anime-cover-placeholder">?</div>
-                                            {/if}
-                                        </a>
-
-                                        <form
-                                            method="POST"
-                                            action="?/upsertWatchlist"
-                                            class="edit-form"
-                                            use:enhance={() => {
-                                                return async () => {
-                                                    await invalidateAll();
-                                                };
-                                            }}
-                                        >
-                                            <input type="hidden" name="anime_id" value={anime.id} />
-                                            <div class="edit-title">{anime.title}</div>
-                                            <div class="edit-controls">
-                                                <select
-                                                    name="status"
-                                                    class="edit-select"
-                                                    bind:value={entry.status}
-                                                    aria-label="ステータス"
-                                                >
-                                                    {#each statusOrder as s}
-                                                        <option value={s}>{statusLabel[s]}</option>
-                                                    {/each}
-                                                </select>
-
-                                                <div class="progress-group">
-                                                    <button
-                                                        type="button"
-                                                        class="stepper-btn"
-                                                        onclick={() => { if (entry.progress > 0) entry.progress -= 1; }}
-                                                        aria-label="1話減らす"
-                                                    >−</button>
-                                                    <input
-                                                        type="number"
-                                                        name="progress"
-                                                        class="edit-number"
-                                                        min="0"
-                                                        max={anime.episode_count ?? 9999}
-                                                        bind:value={entry.progress}
-                                                        aria-label="進捗"
-                                                    />
-                                                    <button
-                                                        type="button"
-                                                        class="stepper-btn"
-                                                        onclick={() => {
-                                                            const max = anime.episode_count ?? 9999;
-                                                            if (entry.progress < max) entry.progress += 1;
-                                                        }}
-                                                        aria-label="1話増やす"
-                                                    >+</button>
-                                                    {#if anime.episode_count}
-                                                        <span class="progress-max">/{anime.episode_count}</span>
-                                                    {/if}
-                                                </div>
-
-                                                <select
-                                                    name="score"
-                                                    class="edit-select score-select"
-                                                    bind:value={entry.score}
-                                                    aria-label="スコア"
-                                                >
-                                                    <option value="">-</option>
-                                                    {#each [10, 9, 8, 7, 6, 5, 4, 3, 2, 1] as n}
-                                                        <option value={n.toString()}>★{n}</option>
-                                                    {/each}
-                                                </select>
-
-                                                <button type="submit" class="save-btn">保存</button>
-                                            </div>
-                                        </form>
-
-                                        <form
-                                            method="POST"
-                                            action="?/removeWatchlist"
-                                            use:enhance={() => {
-                                                return async () => {
-                                                    await invalidateAll();
-                                                };
-                                            }}
-                                        >
-                                            <input type="hidden" name="anime_id" value={anime.id} />
-                                            <button type="submit" class="remove-btn" aria-label="リストから削除" title="リストから削除">
-                                                <svg aria-hidden="true" focusable="false" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-                                            </button>
-                                        </form>
-                                    </div>
+                                    <AnimeEditRow
+                                        {anime}
+                                        bind:entry={entryStates[anime.id]!}
+                                        {statusOrder}
+                                        {statusLabel}
+                                    />
                                 {/if}
                             {/each}
                         </div>
@@ -400,11 +315,11 @@
         color: var(--fg-muted, #94a3b8);
     }
 
-    .stat-chip--watching { color: #34d399; background: color-mix(in srgb, #34d399 15%, transparent); }
+    .stat-chip--watching { color: var(--status-watching); background: color-mix(in srgb, var(--status-watching) 15%, transparent); }
     .stat-chip--completed { color: var(--accent, #6366f1); background: color-mix(in srgb, var(--accent, #6366f1) 15%, transparent); }
-    .stat-chip--plan_to_watch { color: #60a5fa; background: color-mix(in srgb, #60a5fa 15%, transparent); }
-    .stat-chip--on_hold { color: #fbbf24; background: color-mix(in srgb, #fbbf24 15%, transparent); }
-    .stat-chip--dropped { color: #f87171; background: color-mix(in srgb, #f87171 15%, transparent); }
+    .stat-chip--plan_to_watch { color: var(--status-plan); background: color-mix(in srgb, var(--status-plan) 15%, transparent); }
+    .stat-chip--on_hold { color: var(--status-on-hold); background: color-mix(in srgb, var(--status-on-hold) 15%, transparent); }
+    .stat-chip--dropped { color: var(--status-dropped); background: color-mix(in srgb, var(--status-dropped) 15%, transparent); }
 
     .mylist-empty {
         text-align: center;
@@ -432,11 +347,11 @@
         color: var(--fg, #e2e8f0);
     }
 
-    .status-section--watching .status-icon { color: #34d399; }
+    .status-section--watching .status-icon { color: var(--status-watching); }
     .status-section--completed .status-icon { color: var(--accent, #6366f1); }
-    .status-section--plan_to_watch .status-icon { color: #60a5fa; }
-    .status-section--on_hold .status-icon { color: #fbbf24; }
-    .status-section--dropped .status-icon { color: #f87171; }
+    .status-section--plan_to_watch .status-icon { color: var(--status-plan); }
+    .status-section--on_hold .status-icon { color: var(--status-on-hold); }
+    .status-section--dropped .status-icon { color: var(--status-dropped); }
 
     .status-count {
         margin-left: auto;
@@ -476,15 +391,14 @@
 
     .card-cover {
         position: relative;
-        aspect-ratio: 2 / 3;
+        aspect-ratio: 1 / 1.414;
         background: var(--bg, #0f172a);
         overflow: hidden;
     }
 
     .card-cover img {
         width: 100%;
-        height: 100%;
-        object-fit: cover;
+        display: block;
     }
 
     .anime-cover-placeholder {
@@ -502,7 +416,7 @@
         bottom: 5px;
         right: 5px;
         background: rgba(0, 0, 0, 0.72);
-        color: #fbbf24;
+        color: var(--status-score);
         font-size: 0.72rem;
         font-weight: 700;
         padding: 2px 6px;
@@ -520,6 +434,7 @@
         overflow: hidden;
         display: -webkit-box;
         -webkit-line-clamp: 2;
+        line-clamp: 2;
         -webkit-box-orient: vertical;
         line-height: 1.35;
         margin-bottom: 3px;
@@ -530,168 +445,4 @@
         color: var(--fg-muted, #94a3b8);
     }
 
-    /* ---- 編集表示 ---- */
-    .anime-cover {
-        width: 40px;
-        height: 56px;
-        border-radius: 4px;
-        overflow: hidden;
-        flex-shrink: 0;
-        background: var(--surface, #1e293b);
-    }
-
-    .anime-cover img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
-
-    .anime-row-edit {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 6px 8px;
-        border-radius: 8px;
-        background: color-mix(in srgb, var(--fg, #e2e8f0) 4%, transparent);
-        border: 1px solid var(--border, #334155);
-        margin-bottom: 4px;
-    }
-
-    .edit-cover {
-        text-decoration: none;
-        flex-shrink: 0;
-    }
-
-    .edit-form {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        flex: 1;
-        min-width: 0;
-    }
-
-    .edit-title {
-        font-size: 0.85rem;
-        font-weight: 500;
-        color: var(--fg, #e2e8f0);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        flex: 1;
-        min-width: 0;
-        max-width: 200px;
-    }
-
-    .edit-controls {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        flex-shrink: 0;
-        flex-wrap: wrap;
-    }
-
-    .edit-select {
-        background: var(--surface, #1e293b);
-        border: 1px solid var(--border, #334155);
-        color: var(--fg, #e2e8f0);
-        border-radius: 6px;
-        padding: 4px 7px;
-        font-size: 0.8rem;
-        cursor: pointer;
-    }
-
-    .edit-select:focus {
-        outline: none;
-        border-color: var(--accent, #6366f1);
-    }
-
-    .score-select {
-        min-width: 70px;
-    }
-
-    .progress-group {
-        display: flex;
-        align-items: center;
-        gap: 3px;
-    }
-
-    .stepper-btn {
-        width: 24px;
-        height: 26px;
-        border: 1px solid var(--border, #334155);
-        background: var(--surface, #1e293b);
-        color: var(--fg, #e2e8f0);
-        border-radius: 5px;
-        font-size: 0.85rem;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: background 0.1s;
-    }
-
-    .stepper-btn:hover {
-        background: color-mix(in srgb, var(--accent, #6366f1) 20%, transparent);
-        border-color: var(--accent, #6366f1);
-        color: var(--accent, #6366f1);
-    }
-
-    .edit-number {
-        width: 46px;
-        background: var(--surface, #1e293b);
-        border: 1px solid var(--border, #334155);
-        color: var(--fg, #e2e8f0);
-        border-radius: 6px;
-        padding: 4px 5px;
-        font-size: 0.8rem;
-        text-align: center;
-    }
-
-    .edit-number:focus {
-        outline: none;
-        border-color: var(--accent, #6366f1);
-    }
-
-    .progress-max {
-        font-size: 0.75rem;
-        color: var(--fg-muted, #94a3b8);
-        white-space: nowrap;
-    }
-
-    .save-btn {
-        padding: 4px 14px;
-        background: var(--accent, #6366f1);
-        color: #fff;
-        border: none;
-        border-radius: 6px;
-        font-size: 0.8rem;
-        font-weight: 600;
-        cursor: pointer;
-        transition: opacity 0.12s;
-        white-space: nowrap;
-    }
-
-    .save-btn:hover {
-        opacity: 0.85;
-    }
-
-    .remove-btn {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 28px;
-        height: 28px;
-        border: none;
-        border-radius: 6px;
-        cursor: pointer;
-        background: transparent;
-        color: var(--fg-muted, #94a3b8);
-        flex-shrink: 0;
-        transition: background 0.12s, color 0.12s;
-    }
-
-    .remove-btn:hover {
-        background: color-mix(in srgb, #f87171 20%, transparent);
-        color: #f87171;
-    }
 </style>

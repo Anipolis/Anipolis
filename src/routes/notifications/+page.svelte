@@ -9,6 +9,8 @@
         if (type === 'like') return 'があなたの投稿にいいねしました';
         if (type === 'repost') return 'があなたの投稿をリポストしました';
         if (type === 'reply') return 'があなたの投稿に返信しました';
+        if (type === 'mention') return 'があなたをメンションしました';
+        if (type === 'follow') return 'があなたをフォローしました';
         return '';
     }
 </script>
@@ -43,7 +45,7 @@
                                 </a>
                                 {notificationLabel(notif.type)}
                             </p>
-                            {#if notif.post_content}
+                            {#if notif.post_content && notif.post_id}
                                 <a href="/posts/{notif.post_id}" class="notification-post-preview">
                                     {notif.post_content.length > 80
                                         ? notif.post_content.slice(0, 80) + '…'

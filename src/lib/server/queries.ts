@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '$lib/supabase/database.types';
 import { toPost } from '$lib/types';
-import type { Post, Notification, Event, Anime, AnimeStatus, UserAnimeEntry } from '$lib/types';
+import type { Post, RawPost, Notification, Event, Anime, AnimeStatus, UserAnimeEntry } from '$lib/types';
 
 /**
  * rawPost 配列に like_count / repost_count / reply_count / liked_by_me / reposted_by_me を付加して
@@ -10,8 +10,7 @@ import type { Post, Notification, Event, Anime, AnimeStatus, UserAnimeEntry } fr
  */
 export async function enrichPostsWithCounts(
     supabase: SupabaseClient<Database>,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    rawPosts: any[],
+    rawPosts: RawPost[],
     userId: string | null,
 ): Promise<Post[]> {
     if (rawPosts.length === 0) return [];
@@ -62,13 +61,36 @@ export async function enrichPostsWithCounts(
             .from('user_anime_list')
             .select('anime_id, score')
             .eq('user_id', userId)
-            .in('anime_id', animeIds);
+            .in('anime_id', animeIds.map(Number));
         for (const e of entries ?? []) {
-            userScoreMap.set(e.anime_id, e.score);
+            userScoreMap.set(String(e.anime_id), e.score);
+        }
+    }
+
+    // ── 引用リポストの元投稿を一括取得（スキーマキャッシュの自己JOINを回避）──
+    type QuotedPostRow = {
+        id: string;
+        content: string;
+        created_at: string;
+        user_id: string;
+        profiles: { username: string; display_name: string | null; avatar_url: string | null } | null;
+    };
+    const quotedPostIds = [...new Set(rawPosts.map((p) => p.quoted_post_id).filter(Boolean))] as string[];
+    const quotedPostMap = new Map<string, QuotedPostRow>();
+    if (quotedPostIds.length > 0) {
+        const { data: quotedRaw } = await supabase
+            .from('posts')
+            .select('id, content, created_at, user_id, profiles!posts_user_id_fkey ( username, display_name, avatar_url )')
+            .in('id', quotedPostIds);
+        for (const qp of quotedRaw ?? []) {
+            quotedPostMap.set(qp.id, qp as QuotedPostRow);
         }
     }
 
     return rawPosts.map((raw) => {
+        if (raw.quoted_post_id && quotedPostMap.has(raw.quoted_post_id)) {
+            raw.quoted_post = [quotedPostMap.get(raw.quoted_post_id)!];
+        }
         const post = toPost(raw, {
             like_count: likeCount.get(raw.id) ?? 0,
             repost_count: repostCount.get(raw.id) ?? 0,
@@ -124,7 +146,7 @@ export async function getNotifications(
 
     return data.map((row) => ({
         id: row.id,
-        type: row.type as 'like' | 'repost' | 'reply',
+        type: row.type as 'like' | 'repost' | 'reply' | 'mention' | 'follow',
         post_id: row.post_id,
         read: row.read,
         created_at: row.created_at,
@@ -261,7 +283,7 @@ export async function getEventPosts(
     const { data: rawPosts } = await supabase
         .from('posts')
         .select(
-            `id, content, created_at, user_id, parent_id, image_urls, anime_id,
+            `id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id,
              profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
              post_hashtags ( hashtags ( name ) ),
              anime:anime!posts_anime_id_fkey ( id, title, cover_url )`,
@@ -353,6 +375,74 @@ export async function getFollowingIds(
     return (data ?? []).map((r) => r.following_id);
 }
 
+export interface ProfileSummary {
+    id: string;
+    username: string;
+    display_name: string | null;
+    avatar_url: string | null;
+    bio: string | null;
+}
+
+export async function getFollowerProfiles(
+    supabase: SupabaseClient<Database>,
+    profileId: string,
+): Promise<ProfileSummary[]> {
+    const { data: follows } = await supabase
+        .from('follows')
+        .select('follower_id')
+        .eq('following_id', profileId);
+    const ids = (follows ?? []).map((r) => r.follower_id);
+    if (ids.length === 0) return [];
+    const { data } = await supabase
+        .from('profiles')
+        .select('id, username, display_name, avatar_url, bio')
+        .in('id', ids);
+    return (data ?? []) as ProfileSummary[];
+}
+
+export async function getFollowingProfiles(
+    supabase: SupabaseClient<Database>,
+    profileId: string,
+): Promise<ProfileSummary[]> {
+    const { data: follows } = await supabase
+        .from('follows')
+        .select('following_id')
+        .eq('follower_id', profileId);
+    const ids = (follows ?? []).map((r) => r.following_id);
+    if (ids.length === 0) return [];
+    const { data } = await supabase
+        .from('profiles')
+        .select('id, username, display_name, avatar_url, bio')
+        .in('id', ids);
+    return (data ?? []) as ProfileSummary[];
+}
+
+export async function getLikedPosts(
+    supabase: SupabaseClient<Database>,
+    profileId: string,
+    currentUserId: string | null,
+): Promise<Post[]> {
+    const { data: likeRows } = await supabase
+        .from('likes')
+        .select('post_id')
+        .eq('user_id', profileId)
+        .order('created_at', { ascending: false })
+        .limit(50);
+    const postIds = (likeRows ?? []).map((r) => r.post_id);
+    if (postIds.length === 0) return [];
+    const { data: rawPosts } = await supabase
+        .from('posts')
+        .select(
+            `id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id,
+             profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
+             post_hashtags ( hashtags ( name ) ),
+             anime:anime!posts_anime_id_fkey ( id, title, cover_url )`,
+        )
+        .in('id', postIds)
+        .order('created_at', { ascending: false });
+    return enrichPostsWithCounts(supabase, rawPosts ?? [], currentUserId);
+}
+
 // ================================================================
 // アニメ クエリ
 // ================================================================
@@ -410,7 +500,7 @@ export async function getAnime(
     const { data, error } = await supabase
         .from('anime')
         .select('*')
-        .eq('id', animeId)
+        .eq('id', Number(animeId))
         .maybeSingle();
 
     if (error || !data) return null;
@@ -440,7 +530,7 @@ export async function getAnime(
         const { data: entry } = await supabase
             .from('user_anime_list')
             .select('status, score, progress, updated_at')
-            .eq('anime_id', animeId)
+            .eq('anime_id', Number(animeId))
             .eq('user_id', userId)
             .maybeSingle();
         anime.user_entry = entry
@@ -558,6 +648,46 @@ export async function getUserAnimeList(
     }));
 }
 
+export interface AnimeListUser {
+    user_id: string;
+    username: string;
+    display_name: string | null;
+    avatar_url: string | null;
+    status: AnimeStatus;
+    score: number | null;
+    progress: number;
+}
+
+export async function getUsersWhoListedAnime(
+    supabase: SupabaseClient<Database>,
+    animeId: string,
+    limit = 24,
+): Promise<AnimeListUser[]> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any)
+        .from('user_anime_list')
+        .select('user_id, status, score, progress, profiles!inner(username, display_name, avatar_url, list_is_public)')
+        .eq('anime_id', animeId)
+        .order('updated_at', { ascending: false })
+        .limit(limit * 2);
+
+    if (error || !data) return [];
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (data as any[])
+        .filter((row) => row.profiles?.list_is_public === true)
+        .slice(0, limit)
+        .map((row) => ({
+            user_id: row.user_id,
+            username: row.profiles.username as string,
+            display_name: row.profiles.display_name as string | null,
+            avatar_url: row.profiles.avatar_url as string | null,
+            status: row.status as AnimeStatus,
+            score: row.score as number | null,
+            progress: row.progress as number,
+        }));
+}
+
 // ── ヘルパー ──────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -592,7 +722,7 @@ async function fetchAnimesByIds(
     ids: string[],
 ): Promise<Anime[]> {
     if (ids.length === 0) return [];
-    const { data } = await supabase.from('anime').select('*').in('id', ids);
+    const { data } = await supabase.from('anime').select('*').in('id', ids.map(Number));
     if (!data) return [];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const map = new Map((data as any[]).map((a) => [a.id as string, toAnime(a)]));
@@ -609,11 +739,11 @@ async function enrichAnimeWithUserEntries(
         .from('user_anime_list')
         .select('anime_id, status, score, progress, updated_at')
         .eq('user_id', userId)
-        .in('anime_id', animeIds);
+        .in('anime_id', animeIds.map(Number));
 
     const entryMap = new Map(
         (data ?? []).map((e) => [
-            e.anime_id,
+            Number(e.anime_id),
             {
                 status: e.status as AnimeStatus,
                 score: e.score as number | null,
@@ -623,6 +753,6 @@ async function enrichAnimeWithUserEntries(
         ]),
     );
 
-    return animes.map((a) => ({ ...a, user_entry: entryMap.get(a.id) ?? null }));
+    return animes.map((a) => ({ ...a, user_entry: entryMap.get(Number(a.id)) ?? null }));
 }
 

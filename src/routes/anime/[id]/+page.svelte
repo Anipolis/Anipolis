@@ -29,13 +29,11 @@
         progress = String(data.anime.user_entry?.progress ?? 0);
     });
 
-    let coverUrl = $state(data.anime.cover_url ?? '');
+    let coverUrl = $state('');
 
-    function getCoverUrl(url: string, width: number): string {
-        if (!url) return '';
-        const height = Math.round(width * 3 / 2);
-        return url.replace('/object/public/', '/render/image/public/') + `?width=${width}&height=${height}&resize=cover&quality=85&format=webp`;
-    }
+    $effect(() => {
+        coverUrl = data.anime.cover_url ?? '';
+    });
 
     async function resizeImage(file: File, maxWidth: number): Promise<Blob> {
         return new Promise((resolve) => {
@@ -93,7 +91,7 @@
         <aside class="left-panel">
             <div class="anime-cover">
                 {#if coverUrl}
-                    <img src={getCoverUrl(coverUrl, 400)} alt={data.anime.title} />
+                    <img src={coverUrl} alt={data.anime.title} />
                 {:else}
                     <div class="anime-cover-placeholder">
                         <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
@@ -178,10 +176,10 @@
                         <div class="prod-row prod-row--wrap">
                             <dt>公式</dt>
                             <dd class="links-list">
-                                {#if data.anime.official_site_url}
+                                {#if data.anime.official_site_url?.startsWith('http')}
                                     <a href={data.anime.official_site_url} target="_blank" rel="noopener noreferrer" class="official-link">公式サイト</a>
                                 {/if}
-                                {#if data.anime.official_x_url}
+                                {#if data.anime.official_x_url?.startsWith('http')}
                                     <a href={data.anime.official_x_url} target="_blank" rel="noopener noreferrer" class="official-link">X (Twitter)</a>
                                 {/if}
                             </dd>
@@ -342,6 +340,53 @@
                     </p>
                 </section>
             {/if}
+
+            {#if data.listedUsers.length > 0}
+                <section class="listed-users-section">
+                    <h2 class="listed-users-heading">
+                        リスト登録中のユーザー
+                        <span class="listed-users-count">{data.listedUsers.length}</span>
+                    </h2>
+                    <div class="listed-users-grid">
+                        {#each data.listedUsers as u (u.user_id)}
+                            {@const statusColors: Record<string, string> = {
+                                watching: '#34d399',
+                                completed: 'var(--accent, #6366f1)',
+                                plan_to_watch: '#60a5fa',
+                                on_hold: '#fbbf24',
+                                dropped: '#f87171',
+                            }}
+                            {@const statusLabels: Record<string, string> = {
+                                watching: '視聴中',
+                                completed: '完了',
+                                plan_to_watch: '視聴予定',
+                                on_hold: '中断中',
+                                dropped: '断念',
+                            }}
+                            <a href="/profile/{u.username}" class="listed-user-card">
+                                <div class="listed-user-avatar">
+                                    {#if u.avatar_url}
+                                        <img src={u.avatar_url} alt={u.username} />
+                                    {:else}
+                                        <div class="listed-user-avatar-fallback">
+                                            {(u.display_name ?? u.username).charAt(0).toUpperCase()}
+                                        </div>
+                                    {/if}
+                                    <span
+                                        class="listed-user-status-dot"
+                                        style="background: {statusColors[u.status] ?? 'var(--fg-muted)'};"
+                                        title={statusLabels[u.status] ?? u.status}
+                                    ></span>
+                                </div>
+                                <span class="listed-user-name">{u.display_name ?? u.username}</span>
+                                {#if u.score != null}
+                                    <span class="listed-user-score">★{u.score}</span>
+                                {/if}
+                            </a>
+                        {/each}
+                    </div>
+                </section>
+            {/if}
         </div>
     </div>
 </div>
@@ -382,7 +427,7 @@
 
     .anime-cover {
         width: 100%;
-        aspect-ratio: 2/3;
+        aspect-ratio: 1 / 1.414;
         border-radius: 10px;
         overflow: hidden;
         background: var(--card-bg);
@@ -391,11 +436,10 @@
     }
     .anime-cover img {
         width: 100%;
-        height: 100%;
-        object-fit: cover;
-        object-position: top center;
+        display: block;
         -webkit-backface-visibility: hidden;
         backface-visibility: hidden;
+        image-rendering: auto;
     }
     .anime-cover-placeholder {
         width: 100%;
@@ -508,8 +552,8 @@
         border-radius: 4px;
         font-weight: 600;
     }
-    .status-airing { background: #16a34a22; color: #16a34a; }
-    .status-upcoming { background: #2563eb22; color: #2563eb; }
+    .status-airing { background: color-mix(in srgb, var(--status-watching) 15%, transparent); color: var(--status-watching); }
+    .status-upcoming { background: color-mix(in srgb, var(--status-plan) 15%, transparent); color: var(--status-plan); }
     .status-finished { background: var(--hover-bg); color: var(--text-muted); }
     .meta-chip {
         font-size: 0.78rem;
@@ -553,7 +597,7 @@
         font-weight: 700;
         line-height: 1;
     }
-    .stat-card--score .stat-card-value { color: #f59e0b; }
+    .stat-card--score .stat-card-value { color: var(--status-score); }
     .stat-card-sub { font-size: 0.75rem; color: var(--text-muted); }
 
     /* Synopsis */
@@ -658,6 +702,103 @@
         margin-right: 4px;
     }
     .login-prompt-link:hover { opacity: 0.85; }
+
+    /* Listed users */
+    .listed-users-section {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .listed-users-heading {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 1rem;
+        font-weight: 600;
+        margin: 0;
+    }
+
+    .listed-users-count {
+        font-size: 0.8rem;
+        font-weight: 400;
+        color: var(--text-muted);
+        background: var(--hover-bg);
+        padding: 1px 8px;
+        border-radius: 10px;
+    }
+
+    .listed-users-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .listed-user-card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 5px;
+        text-decoration: none;
+        color: inherit;
+        width: 64px;
+    }
+
+    .listed-user-card:hover .listed-user-name {
+        color: var(--accent);
+    }
+
+    .listed-user-avatar {
+        position: relative;
+        width: 44px;
+        height: 44px;
+        flex-shrink: 0;
+    }
+
+    .listed-user-avatar img,
+    .listed-user-avatar-fallback {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        object-fit: cover;
+    }
+
+    .listed-user-avatar-fallback {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--hover-bg);
+        color: var(--text-muted);
+        font-weight: 700;
+        font-size: 1.1rem;
+    }
+
+    .listed-user-status-dot {
+        position: absolute;
+        bottom: 1px;
+        right: 1px;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        border: 2px solid var(--bg);
+    }
+
+    .listed-user-name {
+        font-size: 0.7rem;
+        color: var(--text-muted);
+        text-align: center;
+        max-width: 64px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        transition: color 0.12s;
+    }
+
+    .listed-user-score {
+        font-size: 0.68rem;
+        color: var(--status-score);
+        font-weight: 600;
+    }
 
     /* Responsive */
     @media (max-width: 700px) {

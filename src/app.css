@@ -5,7 +5,8 @@
     --color-border: #262626;
     --color-border-hover: #333;
     --color-text: #e8e8e8;
-    --color-text-muted: #777;
+    --color-text-muted: #a3a3a3;
+    --color-text-secondary: #c7c7c7;
     --color-accent: #8b5cf6;
     --color-accent-hover: #a78bfa;
     --color-danger: #ef4444;
@@ -17,6 +18,30 @@
     --icon-bar-width: 240px;
     --radius: 12px;
     --radius-sm: 8px;
+    --color-primary: var(--color-accent);
+    --color-hover: var(--color-surface-hover);
+    --color-bg-card: var(--color-surface);
+    --color-bg-hover: var(--color-surface-hover);
+    --text: var(--color-text);
+    --text-muted: var(--color-text-muted);
+    --text-secondary: var(--color-text-secondary);
+    --fg: var(--color-text);
+    --fg-muted: var(--color-text-muted);
+    --bg: var(--color-bg);
+    --surface: var(--color-surface);
+    --card-bg: var(--color-surface);
+    --bg-card: var(--color-surface);
+    --hover-bg: var(--color-surface-hover);
+    --bg-hover: var(--color-surface-hover);
+    --border: var(--color-border);
+    --accent: var(--color-accent);
+    --accent-muted: color-mix(in srgb, var(--color-accent) 16%, transparent);
+    --danger: var(--color-danger);
+    --status-watching: #34d399;
+    --status-plan: #60a5fa;
+    --status-on-hold: #fbbf24;
+    --status-dropped: #f87171;
+    --status-score: #f59e0b;
 }
 
 [data-theme="light"] {
@@ -26,11 +51,17 @@
     --color-border: #e2e2e2;
     --color-border-hover: #c0c0c0;
     --color-text: #1a1a1a;
-    --color-text-muted: #888;
+    --color-text-muted: #5f6368;
+    --color-text-secondary: #3f3f46;
     --color-accent: #7c3aed;
     --color-accent-hover: #6d28d9;
     --color-danger: #dc2626;
     --color-nav-bg: rgba(245, 245, 245, 0.92);
+    --status-watching: #15803d;
+    --status-plan: #1d4ed8;
+    --status-on-hold: #a16207;
+    --status-dropped: #b91c1c;
+    --status-score: #a16207;
 }
 
 *, *::before, *::after {
@@ -663,7 +694,7 @@ input, textarea {
 }
 
 .char-count.warning {
-    color: #f59e0b;
+    color: var(--status-score);
 }
 
 .char-count.danger {
@@ -710,7 +741,24 @@ input, textarea {
     border-bottom: 1px solid var(--color-border);
     border-left: 3px solid var(--color-border);
     padding: 16px;
+    position: relative;
     transition: background 0.1s;
+}
+
+.post-card-hitarea {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+}
+
+.post-card-hitarea:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: -3px;
+}
+
+.post-card > *:not(.post-card-hitarea) {
+    position: relative;
+    z-index: 1;
 }
 
 .post-avatar-link {
@@ -1341,6 +1389,42 @@ input, textarea {
     color: var(--color-danger);
 }
 
+.privacy-toggle {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    cursor: pointer;
+}
+
+.privacy-toggle input {
+    width: 18px;
+    height: 18px;
+    margin-top: 2px;
+    accent-color: var(--color-accent);
+    flex-shrink: 0;
+}
+
+.privacy-toggle span {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.privacy-toggle strong {
+    color: var(--color-text);
+    font-size: 0.92rem;
+}
+
+.privacy-toggle small {
+    color: var(--color-text-muted);
+    font-size: 0.8rem;
+    line-height: 1.5;
+}
+
 .field-error-msg {
     margin-top: 5px;
     font-size: 12px;
@@ -1904,7 +1988,7 @@ input, textarea {
     gap: 3px;
     font-size: 13px;
     font-weight: 600;
-    color: #f59e0b;
+    color: var(--status-score);
 }
 
 /* ── アニメ引用プレビュー（PostComposer） ───────────────────────── */
@@ -2110,4 +2194,231 @@ input, textarea {
 .btn-quote-post:hover {
     background: var(--color-accent);
     color: #fff;
+}
+
+/* --- Repost dropdown --- */
+.post-repost-wrapper {
+    position: relative;
+    display: inline-flex;
+}
+
+.repost-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+}
+
+.repost-dropdown {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 0;
+    z-index: 101;
+    min-width: 180px;
+    background: var(--color-bg-card, #1e1e2e);
+    border: 1px solid var(--color-border, #313244);
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+}
+
+.repost-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 11px 16px;
+    background: none;
+    border: none;
+    color: var(--color-text, #cdd6f4);
+    font-size: 14px;
+    font-family: inherit;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.12s;
+}
+
+.repost-menu-item:hover {
+    background: var(--color-bg-hover, #313244);
+}
+
+.repost-menu-item + .repost-menu-item,
+form + .repost-menu-item {
+    border-top: 1px solid var(--color-border, #313244);
+}
+
+.repost-menu-item-quote {
+    color: var(--color-accent, #89b4fa);
+}
+
+/* --- Quote repost modal --- */
+.quote-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+
+.quote-modal-card {
+    width: 100%;
+    max-width: 520px;
+    background: var(--color-bg-card, #1e1e2e);
+    border: 1px solid var(--color-border, #313244);
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    overflow: hidden;
+}
+
+.quote-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--color-border, #313244);
+}
+
+.quote-modal-title {
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--color-text, #cdd6f4);
+}
+
+.quote-modal-close {
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    font-size: 16px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: background 0.12s;
+}
+
+.quote-modal-close:hover {
+    background: var(--color-bg-hover, #313244);
+}
+
+.quote-modal-body {
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.quote-modal-textarea {
+    width: 100%;
+    resize: none;
+    background: var(--color-bg, #181825);
+    border: 1px solid var(--color-border, #313244);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 14px;
+    font-family: inherit;
+    color: var(--color-text, #cdd6f4);
+    line-height: 1.5;
+    box-sizing: border-box;
+}
+
+.quote-modal-textarea:focus {
+    outline: none;
+    border-color: var(--color-accent, #89b4fa);
+}
+
+.quote-preview {
+    border: 1px solid var(--color-border, #313244);
+    border-radius: 10px;
+    padding: 10px 12px;
+}
+
+.quote-preview-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+
+.quote-preview-name {
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--color-text, #cdd6f4);
+}
+
+.quote-preview-at {
+    font-size: 12px;
+    color: var(--color-text-muted);
+}
+
+.quote-preview-content {
+    font-size: 13px;
+    color: var(--color-text-secondary);
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin: 0;
+}
+
+.quote-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    padding: 12px 16px;
+    border-top: 1px solid var(--color-border, #313244);
+}
+
+/* ----------------------------------------------------------------
+   引用リポスト — 埋め込み表示カード
+   ---------------------------------------------------------------- */
+.quoted-post {
+    display: block;
+    margin-top: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--color-border, #313244);
+    border-radius: 12px;
+    text-decoration: none;
+    color: inherit;
+    transition: background-color 0.15s;
+}
+
+.quoted-post:hover {
+    background-color: var(--color-surface-hover, rgba(255,255,255,0.04));
+}
+
+.quoted-post-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+
+.quoted-post-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text, #cdd6f4);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 120px;
+}
+
+.quoted-post-at {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+}
+
+.quoted-post-content {
+    font-size: 13px;
+    color: var(--color-text-secondary);
+    line-height: 1.4;
+    margin: 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }

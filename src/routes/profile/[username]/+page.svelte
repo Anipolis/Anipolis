@@ -1,6 +1,7 @@
 <script lang="ts">
     import type { PageProps } from './$types';
     import { enhance } from '$app/forms';
+    import { invalidateAll } from '$app/navigation';
     import { page } from '$app/state';
     import PostCard from '$lib/components/PostCard.svelte';
     import UserAvatar from '$lib/components/UserAvatar.svelte';
@@ -9,18 +10,18 @@
 
     let { data }: PageProps = $props();
 
-    const { profile, posts, isOwn } = $derived(data);
+    const { profile, posts, isOwn, canViewContent } = $derived(data);
     const displayName = $derived(profile.display_name ?? profile.username);
 
-    let isFollowing = $state(data.isFollowing);
-    let followerCount = $state(data.followCounts.followers);
+    let isFollowing = $state(false);
+    let followerCount = $state(0);
 
     $effect(() => {
         isFollowing = data.isFollowing;
         followerCount = data.followCounts.followers;
     });
 
-    const activeTab = $derived((page.url.searchParams.get('tab') ?? 'posts') as 'posts' | 'list');
+    const activeTab = $derived((page.url.searchParams.get('tab') ?? 'posts') as 'posts' | 'list' | 'likes');
 
     const statusOrder: AnimeStatus[] = ['watching', 'completed', 'plan_to_watch', 'on_hold', 'dropped'];
 
@@ -63,7 +64,12 @@
             <UserAvatar src={profile.avatar_url} username={profile.username} size="lg" />
             <div class="profile-info">
                 <div class="profile-display-name">{displayName}</div>
-                <div class="profile-username">@{profile.username}</div>
+                <div class="profile-username">
+                    @{profile.username}
+                    {#if profile.is_private}
+                        <span class="profile-lock-badge" title="鍵アカウント">鍵</span>
+                    {/if}
+                </div>
                 {#if profile.bio}
                     <p class="profile-bio">{profile.bio}</p>
                 {/if}
@@ -72,15 +78,15 @@
                         <strong>{posts.length}</strong>
                         <span>投稿</span>
                     </span>
-                    <span class="profile-stat">
+                    <a href="/profile/{profile.username}/followers" class="profile-stat profile-stat--link">
                         <strong>{followerCount}</strong>
                         <span>フォロワー</span>
-                    </span>
-                    <span class="profile-stat">
+                    </a>
+                    <a href="/profile/{profile.username}/following" class="profile-stat profile-stat--link">
                         <strong>{data.followCounts.following}</strong>
                         <span>フォロー中</span>
-                    </span>
-                    {#if profile.list_is_public || isOwn}
+                    </a>
+                    {#if canViewContent && (profile.list_is_public || isOwn)}
                         <span class="profile-stat">
                             <strong>{animeList.length}</strong>
                             <span>アニメ</span>
@@ -97,11 +103,12 @@
                         method="POST"
                         action="?/follow"
                         use:enhance={() => {
-                            return ({ result }) => {
+                            return async ({ result }) => {
                                 if (result.type === 'success' && result.data) {
                                     const followed = (result.data as { followed: boolean }).followed;
                                     isFollowing = followed;
                                     followerCount += followed ? 1 : -1;
+                                    await invalidateAll();
                                 }
                             };
                         }}
@@ -133,15 +140,24 @@
                 class:active={activeTab === 'list'}
             >
                 マイリスト
-                {#if !profile.list_is_public && !isOwn}
+                {#if !canViewContent || (!profile.list_is_public && !isOwn)}
                     <span class="tab-lock">🔒</span>
                 {/if}
             </a>
+            <a
+                href="/profile/{profile.username}?tab=likes"
+                class="profile-tab"
+                class:active={activeTab === 'likes'}
+            >いいね</a>
         </div>
 
         <!-- 投稿タブ -->
         {#if activeTab === 'posts'}
-            {#if posts.length === 0}
+            {#if !canViewContent}
+                <div class="empty-state profile-private-state">
+                    <p>このアカウントの投稿はフォロワーだけが見ることができます</p>
+                </div>
+            {:else if posts.length === 0}
                 <div class="empty-state">
                     <p>まだ投稿がありません</p>
                 </div>
@@ -154,13 +170,13 @@
 
         <!-- マイリストタブ -->
         {#if activeTab === 'list'}
-            {#if !profile.list_is_public && !isOwn}
+            {#if !canViewContent || (!profile.list_is_public && !isOwn)}
                 <div class="empty-state list-private">
                     <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-bottom:12px; color: var(--fg-muted)">
                         <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
                         <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
                     </svg>
-                    <p>このユーザーのマイリストは非公開です</p>
+                    <p>{!canViewContent ? 'このアカウントのマイリストはフォロワーだけが見ることができます' : 'このユーザーのマイリストは非公開です'}</p>
                 </div>
             {:else if animeList.length === 0}
                 <div class="empty-state">
@@ -218,6 +234,23 @@
                 {/each}
             {/if}
         {/if}
+
+        <!-- いいねタブ -->
+        {#if activeTab === 'likes'}
+            {#if !canViewContent}
+                <div class="empty-state profile-private-state">
+                    <p>このアカウントのいいねはフォロワーだけが見ることができます</p>
+                </div>
+            {:else if data.likedPosts.length === 0}
+                <div class="empty-state">
+                    <p>いいねした投稿がありません</p>
+                </div>
+            {:else}
+                {#each data.likedPosts as post (post.id)}
+                    <PostCard {post} currentUserId={data.user?.id ?? null} />
+                {/each}
+            {/if}
+        {/if}
     </main>
 
     <aside class="sidebar-column">
@@ -226,6 +259,29 @@
 </div>
 
 <style>
+    .profile-stat--link {
+        text-decoration: none;
+        color: inherit;
+        cursor: pointer;
+    }
+
+    .profile-stat--link:hover strong {
+        color: var(--accent, #6366f1);
+    }
+
+    .profile-lock-badge {
+        display: inline-flex;
+        align-items: center;
+        margin-left: 6px;
+        padding: 1px 6px;
+        border: 1px solid var(--border, #334155);
+        border-radius: 999px;
+        color: var(--fg-muted, #94a3b8);
+        font-size: 0.72rem;
+        font-weight: 700;
+        vertical-align: middle;
+    }
+
     .profile-tabs {
         display: flex;
         border-bottom: 1px solid var(--border, #334155);
@@ -311,11 +367,11 @@
         color: var(--fg, #e2e8f0);
     }
 
-    .status-section--watching .status-icon { color: #34d399; }
+    .status-section--watching .status-icon { color: var(--status-watching); }
     .status-section--completed .status-icon { color: var(--accent, #6366f1); }
-    .status-section--plan_to_watch .status-icon { color: #60a5fa; }
-    .status-section--on_hold .status-icon { color: #fbbf24; }
-    .status-section--dropped .status-icon { color: #f87171; }
+    .status-section--plan_to_watch .status-icon { color: var(--status-plan); }
+    .status-section--on_hold .status-icon { color: var(--status-on-hold); }
+    .status-section--dropped .status-icon { color: var(--status-dropped); }
 
     .status-count {
         margin-left: auto;
@@ -347,7 +403,7 @@
 
     .anime-cover {
         width: 36px;
-        height: 50px;
+        aspect-ratio: 2 / 3;
         border-radius: 3px;
         overflow: hidden;
         flex-shrink: 0;
@@ -356,8 +412,8 @@
 
     .anime-cover img {
         width: 100%;
-        height: 100%;
-        object-fit: cover;
+        height: auto;
+        image-rendering: auto;
     }
 
     .anime-cover-placeholder {
@@ -396,7 +452,7 @@
     }
 
     .meta-score {
-        color: #fbbf24;
+        color: var(--status-score);
         font-weight: 600;
     }
 

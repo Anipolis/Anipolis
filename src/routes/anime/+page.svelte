@@ -1,37 +1,14 @@
 <script lang="ts">
     import type { PageProps } from './$types';
     import type { Anime, AnimeStatus } from '$lib/types';
+    import AnimeRegisterForm from '$lib/components/AnimeRegisterForm.svelte';
     import { enhance } from '$app/forms';
 
     let { data, form }: PageProps = $props();
 
-    // ── 登録フォーム用ステート ──
     const GENRES = ['アクション','アドベンチャー','コメディ','ドラマ','ファンタジー','ホラー',
         'ミステリー','ロマンス','SF','スポーツ','日常','魔法少女','メカ','音楽','学園',
         '歴史','異世界','ハーレム','百合','心理'];
-
-    let selectedGenres = $state<string[]>([]);
-    let studios       = $state<string[]>([]);
-    let producers     = $state<string[]>([]);
-    let hashtags      = $state<string[]>([]);
-
-    let studioInput   = $state('');
-    let producerInput = $state('');
-    let hashtagInput  = $state('');
-
-    function toggleGenre(g: string) {
-        selectedGenres = selectedGenres.includes(g)
-            ? selectedGenres.filter(x => x !== g)
-            : [...selectedGenres, g];
-    }
-    function addTag(list: string[], input: string, setter: (v: string[]) => void, clearFn: () => void) {
-        const val = input.trim().replace(/^#/, '');
-        if (val && !list.includes(val)) setter([...list, val]);
-        clearFn();
-    }
-    function removeTag(list: string[], val: string, setter: (v: string[]) => void) {
-        setter(list.filter(x => x !== val));
-    }
 
     const tabs = [
         { id: 'popular',   label: '人気' },
@@ -50,17 +27,39 @@
         on_hold:       '一時停止',
     };
 
-    function getCoverUrl(url: string | null | undefined, width: number): string {
-        if (!url) return '';
-        const height = Math.round(width * 3 / 2);
-        return url.replace('/object/public/', '/render/image/public/') + `?width=${width}&height=${height}&resize=cover&quality=85&format=webp`;
-    }
-
     function animeStatusBadge(anime: Anime): string {
         if (anime.status === 'airing' || !anime.status) return '放送中';
         if (anime.status === 'upcoming') return '放送予定';
         return '放送終了';
     }
+
+    const statusOptions: { value: AnimeStatus; label: string; color: string }[] = [
+        { value: 'watching'      as AnimeStatus, label: '視聴中',   color: '#16a34a' },
+        { value: 'completed'     as AnimeStatus, label: '完了',     color: '#7c3aed' },
+        { value: 'plan_to_watch' as AnimeStatus, label: '視聴予定', color: '#2563eb' },
+        { value: 'on_hold'       as AnimeStatus, label: '中断',     color: '#d97706' },
+        { value: 'dropped'       as AnimeStatus, label: '断念',     color: '#dc2626' },
+    ];
+
+    let quickAddAnime = $state<Anime | null>(null);
+    let quickAddSubmitting = $state(false);
+
+    function openQuickAdd(e: MouseEvent, anime: Anime) {
+        e.preventDefault();
+        e.stopPropagation();
+        quickAddAnime = anime;
+    }
+
+    function closeQuickAdd() {
+        quickAddAnime = null;
+    }
+
+    $effect(() => {
+        if (!quickAddAnime) return;
+        const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') closeQuickAdd(); };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    });
 </script>
 
 <svelte:head>
@@ -72,17 +71,84 @@
         <h1 class="section-title">アニメ</h1>
 
         <form method="GET" action="/anime" class="search-form">
-            <input
-                type="text"
-                name="search"
-                class="search-input"
-                placeholder="タイトルで検索..."
-                value={data.search ?? ''}
-            />
-            <button type="submit" class="search-btn">検索</button>
-            {#if data.search}
-                <a href="/anime" class="search-clear">✕</a>
-            {/if}
+            <div class="search-row">
+                <div class="search-input-wrap">
+                    <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+                    </svg>
+                    <input
+                        type="text"
+                        name="search"
+                        class="search-input"
+                        placeholder="タイトルで検索..."
+                        value={data.search ?? ''}
+                    />
+                </div>
+                <button type="submit" class="search-btn">検索</button>
+                {#if data.search || data.genre || data.season || data.studio || data.producer}
+                    <a href="/anime" class="search-clear" title="フィルターをすべてクリア">✕</a>
+                {/if}
+            </div>
+
+            <div class="filter-row">
+                <div class="filter-group">
+                    <label for="filter-genre" class="filter-label">ジャンル</label>
+                    <select id="filter-genre" name="genre" class="filter-select">
+                        <option value="">すべて</option>
+                        {#each GENRES as g}
+                            <option value={g} selected={data.genre === g}>{g}</option>
+                        {/each}
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="filter-season" class="filter-label">シーズン</label>
+                    <input
+                        id="filter-season"
+                        name="season"
+                        type="text"
+                        class="filter-input"
+                        placeholder="例: 2025春"
+                        value={data.season ?? ''}
+                        list="season-suggestions"
+                    />
+                    <datalist id="season-suggestions">
+                        <option value="2025冬"></option>
+                        <option value="2025春"></option>
+                        <option value="2025夏"></option>
+                        <option value="2025秋"></option>
+                        <option value="2024冬"></option>
+                        <option value="2024春"></option>
+                        <option value="2024夏"></option>
+                        <option value="2024秋"></option>
+                        <option value="2023冬"></option>
+                        <option value="2023春"></option>
+                        <option value="2023夏"></option>
+                        <option value="2023秋"></option>
+                    </datalist>
+                </div>
+                <div class="filter-group">
+                    <label for="filter-studio" class="filter-label">スタジオ</label>
+                    <input
+                        id="filter-studio"
+                        name="studio"
+                        type="text"
+                        class="filter-input"
+                        placeholder="スタジオ名"
+                        value={data.studio ?? ''}
+                    />
+                </div>
+                <div class="filter-group">
+                    <label for="filter-producer" class="filter-label">制作</label>
+                    <input
+                        id="filter-producer"
+                        name="producer"
+                        type="text"
+                        class="filter-input"
+                        placeholder="制作会社名"
+                        value={data.producer ?? ''}
+                    />
+                </div>
+            </div>
         </form>
 
         <nav class="tab-nav">
@@ -113,193 +179,7 @@
         {/if}
 
         {#if data.tab === 'register'}
-            <div class="register-section">
-                <h2 class="register-title">アニメ登録</h2>
-
-                {#if form?.success}
-                    <div class="form-success">
-                        登録しました！ <a href="/anime/{form.animeId}">詳細を見る →</a>
-                    </div>
-                {/if}
-                {#if form?.message}
-                    <div class="form-error">{form.message}</div>
-                {/if}
-
-                <form method="POST" action="?/registerAnime" use:enhance class="register-form">
-                    <!-- タイトル -->
-                    <div class="form-row">
-                        <div class="form-group form-group--wide">
-                            <label for="rf-title">タイトル <span class="required">*</span></label>
-                            <input id="rf-title" name="title" type="text" required class="rf-input" />
-                        </div>
-                        <div class="form-group form-group--wide">
-                            <label for="rf-title-en">英語タイトル</label>
-                            <input id="rf-title-en" name="title_en" type="text" class="rf-input" />
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group form-group--wide">
-                            <label for="rf-romaji">ローマ字タイトル</label>
-                            <input id="rf-romaji" name="title_romaji" type="text" class="rf-input" />
-                        </div>
-                        <div class="form-group">
-                            <label for="rf-season">シーズン（例: 2025春）</label>
-                            <input id="rf-season" name="season" type="text" placeholder="2025春" class="rf-input" />
-                        </div>
-                        <div class="form-group form-group--narrow">
-                            <label for="rf-ep">話数</label>
-                            <input id="rf-ep" name="episode_count" type="number" min="1" class="rf-input" />
-                        </div>
-                    </div>
-
-                    <!-- あらすじ -->
-                    <div class="form-group">
-                        <label for="rf-synopsis">あらすじ</label>
-                        <textarea id="rf-synopsis" name="synopsis" rows="4" class="rf-textarea"></textarea>
-                    </div>
-
-                    <!-- ステータス・タイプ -->
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="rf-status">ステータス</label>
-                            <select id="rf-status" name="status" class="rf-select">
-                                <option value="">未設定</option>
-                                <option value="airing">放送中</option>
-                                <option value="upcoming">放送予定</option>
-                                <option value="finished">放送終了</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="rf-type">タイプ</label>
-                            <select id="rf-type" name="type" class="rf-select">
-                                <option value="">未設定</option>
-                                <option value="TV">TV</option>
-                                <option value="映画">映画</option>
-                                <option value="OVA">OVA</option>
-                                <option value="ONA">ONA</option>
-                                <option value="特別">特別</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="rf-source">原作</label>
-                            <select id="rf-source" name="source" class="rf-select">
-                                <option value="">未設定</option>
-                                <option value="漫画">漫画</option>
-                                <option value="ライトノベル">ライトノベル</option>
-                                <option value="小説">小説</option>
-                                <option value="ゲーム">ゲーム</option>
-                                <option value="オリジナル">オリジナル</option>
-                                <option value="その他">その他</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <!-- 放送期間 -->
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="rf-aired-from">放送開始</label>
-                            <input id="rf-aired-from" name="aired_from" type="date" class="rf-input" />
-                        </div>
-                        <div class="form-group">
-                            <label for="rf-aired-to">放送終了</label>
-                            <input id="rf-aired-to" name="aired_to" type="date" class="rf-input" />
-                        </div>
-                    </div>
-
-                    <!-- ジャンル -->
-                    <div class="form-group">
-                        <span class="field-label">ジャンル</span>
-                        <div class="tag-picker">
-                            {#each GENRES as g}
-                                <button type="button" class="tag-btn" class:selected={selectedGenres.includes(g)} onclick={() => toggleGenre(g)}>{g}</button>
-                            {/each}
-                        </div>
-                        {#each selectedGenres as g}
-                            <input type="hidden" name="genre" value={g} />
-                        {/each}
-                    </div>
-
-                    <!-- スタジオ -->
-                    <div class="form-group">
-                        <span class="field-label">スタジオ</span>
-                        <div class="tag-input-row">
-                            <input type="text" class="rf-input" placeholder="スタジオ名を入力"
-                                bind:value={studioInput}
-                                onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(studios, studioInput, v => studios = v, () => studioInput = ''); } }} />
-                            <button type="button" class="tag-add-btn" onclick={() => addTag(studios, studioInput, v => studios = v, () => studioInput = '')}>追加</button>
-                        </div>
-                        <div class="tag-chips">
-                            {#each studios as s}
-                                <span class="tag-chip">{s}<button type="button" class="chip-remove" onclick={() => removeTag(studios, s, v => studios = v)}>✕</button></span>
-                                <input type="hidden" name="studio" value={s} />
-                            {/each}
-                        </div>
-                    </div>
-
-                    <!-- プロデューサー -->
-                    <div class="form-group">
-                        <span class="field-label">プロデューサー / 制作</span>
-                        <div class="tag-input-row">
-                            <input type="text" class="rf-input" placeholder="プロデューサー名を入力"
-                                bind:value={producerInput}
-                                onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(producers, producerInput, v => producers = v, () => producerInput = ''); } }} />
-                            <button type="button" class="tag-add-btn" onclick={() => addTag(producers, producerInput, v => producers = v, () => producerInput = '')}>追加</button>
-                        </div>
-                        <div class="tag-chips">
-                            {#each producers as p}
-                                <span class="tag-chip">{p}<button type="button" class="chip-remove" onclick={() => removeTag(producers, p, v => producers = v)}>✕</button></span>
-                                <input type="hidden" name="producer" value={p} />
-                            {/each}
-                        </div>
-                    </div>
-
-                    <!-- 公式ハッシュタグ -->
-                    <div class="form-group">
-                        <span class="field-label">公式ハッシュタグ</span>
-                        <div class="tag-input-row">
-                            <input type="text" class="rf-input" placeholder="#アニメタグ"
-                                bind:value={hashtagInput}
-                                onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(hashtags, hashtagInput, v => hashtags = v, () => hashtagInput = ''); } }} />
-                            <button type="button" class="tag-add-btn" onclick={() => addTag(hashtags, hashtagInput, v => hashtags = v, () => hashtagInput = '')}>追加</button>
-                        </div>
-                        <div class="tag-chips">
-                            {#each hashtags as h}
-                                <span class="tag-chip">#{h}<button type="button" class="chip-remove" onclick={() => removeTag(hashtags, h, v => hashtags = v)}>✕</button></span>
-                                <input type="hidden" name="official_hashtag" value={h} />
-                            {/each}
-                        </div>
-                    </div>
-
-                    <!-- 公式リンク -->
-                    <div class="form-row">
-                        <div class="form-group form-group--wide">
-                            <label for="rf-site">公式サイト URL</label>
-                            <input id="rf-site" name="official_site_url" type="url" class="rf-input" placeholder="https://..." />
-                        </div>
-                        <div class="form-group form-group--wide">
-                            <label for="rf-x">公式 X (Twitter) URL</label>
-                            <input id="rf-x" name="official_x_url" type="url" class="rf-input" placeholder="https://x.com/..." />
-                        </div>
-                    </div>
-
-                    <!-- 権利表記・カバー -->
-                    <div class="form-row">
-                        <div class="form-group form-group--wide">
-                            <label for="rf-copyright">権利表記</label>
-                            <input id="rf-copyright" name="copyright" type="text" class="rf-input" />
-                        </div>
-                        <div class="form-group form-group--wide">
-                            <label for="rf-cover">カバー画像 URL</label>
-                            <input id="rf-cover" name="cover_url" type="url" class="rf-input" placeholder="https://..." />
-                        </div>
-                    </div>
-
-                    <div class="form-actions">
-                        <button type="submit" class="submit-btn">登録する</button>
-                        <a href="/anime" class="cancel-link">キャンセル</a>
-                    </div>
-                </form>
-            </div>
+            <AnimeRegisterForm {form} />
         {:else if data.tab === 'mylist' && !data.user}
             <div class="empty-state">
                 <p>マイリストを見るにはログインが必要です</p>
@@ -314,7 +194,7 @@
                     <a href="/anime/{anime.id}" class="anime-card">
                         <div class="anime-cover">
                             {#if anime.cover_url}
-                                <img src={getCoverUrl(anime.cover_url, 400)} alt={anime.title} loading="lazy" />
+                                <img src={anime.cover_url ?? ''} alt={anime.title} loading="lazy" />
                             {:else}
                                 <div class="anime-cover-placeholder">
                                     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
@@ -325,6 +205,22 @@
                             {/if}
                             {#if data.tab === 'popular' || data.tab === 'trending' || data.tab === 'top_rated'}
                                 <span class="rank-badge">#{i + 1}</span>
+                            {/if}
+                            {#if data.user}
+                                <button
+                                    type="button"
+                                    class="quick-add-btn"
+                                    class:in-list={anime.user_entry}
+                                    onclick={(e) => openQuickAdd(e, anime)}
+                                    aria-label={anime.user_entry ? statusLabels[anime.user_entry.status as AnimeStatus] : 'マイリストに追加'}
+                                    title={anime.user_entry ? statusLabels[anime.user_entry.status as AnimeStatus] : 'マイリストに追加'}
+                                >
+                                    {#if anime.user_entry}
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                                    {:else}
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                                    {/if}
+                                </button>
                             {/if}
                         </div>
                         <div class="anime-info">
@@ -347,6 +243,65 @@
             </div>
         {/if}
     </main>
+
+    {#if quickAddAnime && data.user}
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <div class="quick-add-overlay" role="presentation" onclick={closeQuickAdd}>
+            <div
+                class="quick-add-modal"
+                onclick={(e) => e.stopPropagation()}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="quick-add-title"
+                tabindex="-1"
+            >
+                <div class="quick-add-header">
+                    <div class="quick-add-cover">
+                        {#if quickAddAnime.cover_url}
+                            <img src={quickAddAnime.cover_url ?? ''} alt={quickAddAnime.title} />
+                        {/if}
+                    </div>
+                    <div class="quick-add-header-text">
+                        <h3 class="quick-add-title" id="quick-add-title">{quickAddAnime.title}</h3>
+                        <p class="quick-add-subtitle">ステータスを選択</p>
+                    </div>
+                </div>
+                <form
+                    method="POST"
+                    action="?/upsertWatchlist"
+                    use:enhance={() => {
+                        quickAddSubmitting = true;
+                        return async ({ update }) => {
+                            await update();
+                            quickAddSubmitting = false;
+                            quickAddAnime = null;
+                        };
+                    }}
+                >
+                    <input type="hidden" name="anime_id" value={quickAddAnime.id} />
+                    <div class="status-options">
+                        {#each statusOptions as opt}
+                            <button
+                                type="submit"
+                                name="status"
+                                value={opt.value}
+                                class="status-option-btn"
+                                class:current={quickAddAnime.user_entry?.status === opt.value}
+                                disabled={quickAddSubmitting}
+                            >
+                                <span class="status-dot" style="background: {opt.color}"></span>
+                                <span>{opt.label}</span>
+                                {#if quickAddAnime.user_entry?.status === opt.value}
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" class="check-icon"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                                {/if}
+                            </button>
+                        {/each}
+                    </div>
+                </form>
+                <button type="button" class="quick-add-cancel" onclick={closeQuickAdd}>キャンセル</button>
+            </div>
+        </div>
+    {/if}
 </div>
 
 <style>
@@ -361,43 +316,111 @@
 
     .search-form {
         display: flex;
-        gap: 8px;
+        flex-direction: column;
+        gap: 10px;
         margin-bottom: 16px;
+    }
+    .search-row {
+        display: flex;
+        gap: 8px;
         align-items: center;
     }
-    .search-input {
+    .search-input-wrap {
+        position: relative;
         flex: 1;
-        padding: 8px 12px;
+    }
+    .search-icon {
+        position: absolute;
+        left: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-muted);
+        pointer-events: none;
+    }
+    .search-input {
+        width: 100%;
+        padding: 9px 12px 9px 34px;
         border-radius: 8px;
         border: 1px solid var(--border);
         background: var(--card-bg);
         color: var(--text);
         font-size: 0.9rem;
         outline: none;
-        transition: border-color 0.15s;
+        transition: border-color 0.15s, box-shadow 0.15s;
+        box-sizing: border-box;
     }
-    .search-input:focus { border-color: var(--accent); }
+    .search-input:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
+    }
     .search-btn {
-        padding: 8px 16px;
+        padding: 9px 18px;
         border-radius: 8px;
         background: var(--accent);
         color: #fff;
         border: none;
         font-size: 0.85rem;
+        font-weight: 600;
         cursor: pointer;
         transition: opacity 0.15s;
+        white-space: nowrap;
     }
     .search-btn:hover { opacity: 0.85; }
     .search-clear {
-        padding: 6px 10px;
+        padding: 7px 11px;
         border-radius: 8px;
         border: 1px solid var(--border);
         color: var(--text-muted);
         text-decoration: none;
         font-size: 0.85rem;
-        transition: background 0.15s;
+        transition: background 0.15s, color 0.15s;
+        line-height: 1;
     }
-    .search-clear:hover { background: var(--hover-bg); }
+    .search-clear:hover { background: var(--hover-bg); color: var(--text); }
+
+    .filter-row {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        padding: 10px 12px;
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+    }
+    .filter-group {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        flex: 1 1 140px;
+        min-width: 120px;
+        max-width: 220px;
+    }
+    .filter-label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--text-muted);
+        letter-spacing: 0.02em;
+    }
+    .filter-select,
+    .filter-input {
+        padding: 6px 10px;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background: var(--bg, #fff);
+        color: var(--text);
+        font-size: 0.85rem;
+        outline: none;
+        transition: border-color 0.15s, box-shadow 0.15s;
+        width: 100%;
+        box-sizing: border-box;
+    }
+    .filter-select:focus,
+    .filter-input:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 15%, transparent);
+    }
+
     .filter-clear {
         margin-left: 6px;
         padding: 2px 7px;
@@ -451,15 +474,14 @@
 
     .anime-cover {
         position: relative;
-        aspect-ratio: 2/3;
+        aspect-ratio: 1 / 1.414;
         background: var(--card-bg);
         overflow: hidden;
     }
     .anime-cover img {
-        width: 100%; height: 100%;
-        object-fit: cover;
-        object-position: top center;
-        image-rendering: -webkit-optimize-contrast;
+        width: 100%;
+        display: block;
+        image-rendering: auto;
     }
     .anime-cover-placeholder {
         width: 100%; height: 100%;
@@ -519,8 +541,8 @@
         border-radius: 3px;
         font-weight: 600;
     }
-    .status-airing { background: #16a34a22; color: #16a34a; }
-    .status-upcoming { background: #2563eb22; color: #2563eb; }
+    .status-airing { background: color-mix(in srgb, var(--status-watching) 15%, transparent); color: var(--status-watching); }
+    .status-upcoming { background: color-mix(in srgb, var(--status-plan) 15%, transparent); color: var(--status-plan); }
     .status-finished { background: var(--hover-bg); color: var(--text-muted); }
 
     .anime-season { font-size: 0.72rem; color: var(--text-muted); }
@@ -543,160 +565,147 @@
     .tab-btn--add { color: var(--accent); font-weight: 600; }
     .tab-btn--add.active { background: var(--accent); color: #fff; }
 
-    /* ─── 登録フォーム ─── */
-    .register-section {
-        max-width: 760px;
-    }
-    .register-title {
-        font-size: 1.1rem;
-        font-weight: 700;
-        margin-bottom: 20px;
-        color: var(--text);
-    }
-    .form-success {
-        padding: 12px 16px;
-        border-radius: 8px;
-        background: #16a34a18;
-        color: #16a34a;
-        margin-bottom: 16px;
-        font-size: 0.9rem;
-    }
-    .form-success a { color: #16a34a; font-weight: 600; }
-    .form-error {
-        padding: 12px 16px;
-        border-radius: 8px;
-        background: #dc262618;
-        color: #dc2626;
-        margin-bottom: 16px;
-        font-size: 0.9rem;
-    }
-    .register-form {
+    /* ─── マイリスト追加ボタン（カバー上オーバーレイ） ─── */
+    .quick-add-btn {
+        position: absolute;
+        bottom: 6px; right: 6px;
+        width: 28px; height: 28px;
+        border-radius: 50%;
+        background: rgba(0,0,0,0.6);
+        color: #fff;
+        border: 1.5px solid rgba(255,255,255,0.4);
         display: flex;
-        flex-direction: column;
-        gap: 16px;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: background 0.15s, border-color 0.15s, transform 0.15s;
+        padding: 0;
+        backdrop-filter: blur(4px);
     }
-    .form-row {
+    .quick-add-btn:hover {
+        background: var(--accent);
+        border-color: var(--accent);
+        transform: scale(1.1);
+    }
+    .quick-add-btn.in-list {
+        background: rgba(124, 58, 237, 0.75);
+        border-color: rgba(124, 58, 237, 0.9);
+    }
+    .quick-add-btn.in-list:hover {
+        background: var(--accent);
+    }
+
+    /* ─── クイック追加モーダル ─── */
+    .quick-add-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.5);
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        backdrop-filter: blur(2px);
+    }
+    .quick-add-modal {
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        width: 320px;
+        max-width: calc(100vw - 32px);
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        overflow: hidden;
+    }
+    .quick-add-header {
         display: flex;
         gap: 12px;
-        flex-wrap: wrap;
+        align-items: center;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--border);
     }
-    .form-group {
+    .quick-add-cover {
+        width: 44px;
+        height: 66px;
+        border-radius: 4px;
+        overflow: hidden;
+        flex-shrink: 0;
+        background: var(--hover-bg);
+    }
+    .quick-add-cover img {
+        width: 100%; height: 100%;
+        object-fit: cover;
+        object-position: top center;
+        image-rendering: smooth;
+    }
+    .quick-add-header-text {
+        flex: 1;
+        min-width: 0;
+    }
+    .quick-add-title {
+        font-size: 0.9rem;
+        font-weight: 600;
+        margin: 0 0 4px;
+        line-height: 1.3;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+    .quick-add-subtitle {
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        margin: 0;
+    }
+    .status-options {
         display: flex;
         flex-direction: column;
-        gap: 5px;
-        flex: 1 1 180px;
+        padding: 8px;
+        gap: 4px;
     }
-    .form-group--wide  { flex: 2 1 240px; }
-    .form-group--narrow { flex: 0 1 100px; }
-    .form-group label, .field-label {
-        font-size: 0.82rem;
-        font-weight: 600;
-        color: var(--text-muted);
-    }
-    .required { color: #dc2626; }
-    .rf-input, .rf-textarea, .rf-select {
-        padding: 8px 10px;
-        border-radius: 7px;
-        border: 1px solid var(--border);
-        background: var(--card-bg);
-        color: var(--text);
-        font-size: 0.88rem;
-        outline: none;
-        transition: border-color 0.15s;
-        width: 100%;
-        box-sizing: border-box;
-    }
-    .rf-input:focus, .rf-textarea:focus, .rf-select:focus { border-color: var(--accent); }
-    .rf-textarea { resize: vertical; }
-
-    /* ─── ジャンル選択 ─── */
-    .tag-picker {
+    .status-option-btn {
         display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 12px;
+        border-radius: 8px;
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--text);
+        font-size: 0.875rem;
+        cursor: pointer;
+        text-align: left;
+        transition: background 0.12s, border-color 0.12s;
     }
-    .tag-btn {
-        padding: 4px 10px;
-        border-radius: 14px;
+    .status-option-btn:hover:not(:disabled) {
+        background: var(--hover-bg);
+        border-color: var(--border);
+    }
+    .status-option-btn.current {
+        background: color-mix(in srgb, var(--accent) 10%, transparent);
+        border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+    }
+    .status-option-btn:disabled { opacity: 0.5; cursor: wait; }
+    .status-dot {
+        width: 10px; height: 10px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+    .check-icon {
+        margin-left: auto;
+        color: var(--accent);
+    }
+    .quick-add-cancel {
+        display: block;
+        width: calc(100% - 16px);
+        margin: 0 8px 8px;
+        padding: 9px;
+        border-radius: 8px;
         border: 1px solid var(--border);
         background: transparent;
         color: var(--text-muted);
-        font-size: 0.8rem;
-        cursor: pointer;
-        transition: all 0.12s;
-    }
-    .tag-btn:hover { background: var(--hover-bg); color: var(--text); }
-    .tag-btn.selected { background: var(--accent); color: #fff; border-color: var(--accent); }
-
-    /* ─── タグ入力 ─── */
-    .tag-input-row {
-        display: flex;
-        gap: 6px;
-    }
-    .tag-input-row .rf-input { flex: 1; }
-    .tag-add-btn {
-        padding: 8px 14px;
-        border-radius: 7px;
-        border: 1px solid var(--border);
-        background: var(--hover-bg);
-        color: var(--text);
-        font-size: 0.82rem;
-        cursor: pointer;
-        white-space: nowrap;
-        transition: background 0.12s;
-    }
-    .tag-add-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
-    .tag-chips {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        margin-top: 6px;
-    }
-    .tag-chip {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        padding: 3px 10px;
-        border-radius: 14px;
-        background: var(--accent);
-        color: #fff;
-        font-size: 0.8rem;
-    }
-    .chip-remove {
-        background: none;
-        border: none;
-        color: inherit;
-        cursor: pointer;
-        padding: 0;
-        font-size: 0.75rem;
-        line-height: 1;
-        opacity: 0.7;
-    }
-    .chip-remove:hover { opacity: 1; }
-
-    /* ─── 送信ボタン ─── */
-    .form-actions {
-        display: flex;
-        align-items: center;
-        gap: 16px;
-        margin-top: 8px;
-    }
-    .submit-btn {
-        padding: 10px 28px;
-        border-radius: 8px;
-        background: var(--accent);
-        color: #fff;
-        border: none;
-        font-size: 0.9rem;
-        font-weight: 600;
-        cursor: pointer;
-        transition: opacity 0.15s;
-    }
-    .submit-btn:hover { opacity: 0.85; }
-    .cancel-link {
         font-size: 0.85rem;
-        color: var(--text-muted);
-        text-decoration: none;
+        cursor: pointer;
+        transition: background 0.12s, color 0.12s;
     }
-    .cancel-link:hover { color: var(--text); }
+    .quick-add-cancel:hover { background: var(--hover-bg); color: var(--text); }
 </style>

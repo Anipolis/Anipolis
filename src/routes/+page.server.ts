@@ -18,7 +18,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
     let postsQuery = supabase
         .from('posts')
         .select(
-            `id, content, created_at, user_id, parent_id, image_urls, anime_id,
+            `id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id,
              profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
              post_hashtags ( hashtags ( name ) ),
              anime:anime!posts_anime_id_fkey ( id, title, cover_url )`,
@@ -32,7 +32,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
             const [trendingResult, quoteAnimeResult] = await Promise.all([
                 supabase.rpc('get_trending_hashtags', { limit_count: 10 }),
                 quoteAnimeId
-                    ? supabase.from('anime').select('id, title, title_en, cover_url').eq('id', quoteAnimeId).single()
+                    ? supabase.from('anime').select('id, title, title_en, cover_url').eq('id', Number(quoteAnimeId)).single()
                     : Promise.resolve({ data: null }),
             ]);
             return {
@@ -40,7 +40,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
                 trending: trendingResult.data ?? [],
                 profile,
                 tab,
-                initialAnime: quoteAnimeResult.data ?? null,
+                initialAnime: quoteAnimeResult.data ? { ...quoteAnimeResult.data, id: String(quoteAnimeResult.data.id) } : null,
             };
         }
         postsQuery = postsQuery.in('user_id', followingIds);
@@ -50,7 +50,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
         postsQuery,
         supabase.rpc('get_trending_hashtags', { limit_count: 10 }),
         quoteAnimeId
-            ? supabase.from('anime').select('id, title, title_en, cover_url').eq('id', quoteAnimeId).single()
+            ? supabase.from('anime').select('id, title, title_en, cover_url').eq('id', Number(quoteAnimeId)).single()
             : Promise.resolve({ data: null }),
     ]);
 
@@ -61,7 +61,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
         trending: trendingResult.data ?? [],
         profile,
         tab,
-        initialAnime: quoteAnimeResult.data ?? null,
+        initialAnime: quoteAnimeResult.data ? { ...quoteAnimeResult.data, id: String(quoteAnimeResult.data.id) } : null,
     };
 };
 
