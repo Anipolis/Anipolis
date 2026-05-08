@@ -12,18 +12,26 @@
 		"dev": "vite dev",
 		"build": "vite build",
 		"preview": "vite preview",
+		"prepare": "simple-git-hooks",
 		"check:biome": "biome check --write",
 		"check:svelte": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:types": "tsc --noEmit",
 		"check": "pnpm check:biome && pnpm check:svelte && pnpm check:types",
 		"test:unit": "vitest --run --coverage",
-		"test": "pnpm test:unit"
+		"test": "pnpm test:unit",
+		"lint": "biome check .",
+		"lint:fix": "biome check . --write",
+		"format": "biome format --write ."
+	},
+	"simple-git-hooks": {
+		"pre-commit": "pnpm lint && pnpm format"
 	},
 	"dependencies": {
-		"@supabase/supabase-js": "^2.49.0",
-		"@supabase/ssr": "^0.6.1"
+		"@supabase/ssr": "^0.6.1",
+		"@supabase/supabase-js": "^2.49.0"
 	},
 	"devDependencies": {
+		"@biomejs/biome": "^2.4.14",
 		"@iconify-json/lucide": "^1.2.101",
 		"@sveltejs/adapter-auto": "^7.0.0",
 		"@sveltejs/kit": "^2.50.2",
@@ -34,6 +42,7 @@
 		"@unocss/preset-icons": "^66.6.7",
 		"@vitest/coverage-v8": "^4.1.2",
 		"happy-dom": "^20.8.9",
+		"simple-git-hooks": "^2.13.1",
 		"svelte": "^5.54.0",
 		"svelte-check": "^4.4.2",
 		"typescript": "^5.9.3",

@@ -11,7 +11,7 @@ let liked = $state(false);
 let reposted = $state(false);
 let showRepostMenu = $state(false);
 let showQuoteModal = $state(false);
-let quoteText = $state('');
+let quoteText = $state("");
 const likeCount = $derived(post.likes + (liked ? 1 : 0));
 const repostCount = $derived(post.reposts + (reposted ? 1 : 0));
 
@@ -50,18 +50,20 @@ function handleQuoteRepost() {
 function submitQuoteRepost() {
 	if (quoteText.trim()) {
 		reposted = true;
-		quoteText = '';
+		quoteText = "";
 		showQuoteModal = false;
 	}
 }
 
 function closeQuoteModal() {
 	showQuoteModal = false;
-	quoteText = '';
+	quoteText = "";
 }
 </script>
 
-<article class="border-y border-[var(--color-border)] px-4 py-3 text-[var(--color-text)] transition-colors hover:bg-[var(--color-surface-hover)]">
+<article
+	class="border-y border-[var(--color-border)] px-4 py-3 text-[var(--color-text)] transition-colors hover:bg-[var(--color-surface-hover)]"
+>
 	<div class="flex gap-3">
 		<!-- User Icon -->
 		<img src={post.user.icon} alt={post.user.name} class="h-12 w-12 shrink-0 rounded-full bg-[var(--color-border)]">
@@ -80,7 +82,10 @@ function closeQuoteModal() {
 			{#if post.hashtags.length > 0}
 				<div class="mt-2 flex flex-wrap gap-1">
 					{#each post.hashtags as hashtag}
-						<span class="text-sm text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] hover:underline"># {hashtag}</span>
+						<span
+							class="text-sm text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] hover:underline"
+							># {hashtag}</span
+						>
 					{/each}
 				</div>
 			{/if}
@@ -108,7 +113,9 @@ function closeQuoteModal() {
                         : 'hover:text-[var(--color-danger)]'}"
 				>
 					<span class="i-lucide-heart h-full w-full {liked ? 'fill-current' : ''}"></span>
-					{#if likeCount > 0}<span class="text-xs ml-1">{likeCount}</span>{/if}
+					{#if likeCount > 0}
+						<span class="text-xs ml-1">{likeCount}</span>
+					{/if}
 				</button>
 
 				<!-- Repost -->
@@ -122,11 +129,15 @@ function closeQuoteModal() {
                             : 'hover:text-[var(--status-watching)]'}"
 					>
 						<span class="i-lucide-repeat h-5 w-5 {reposted ? 'fill-current' : ''}"></span>
-						{#if repostCount > 0}<span class="text-xs">{repostCount}</span>{/if}
+						{#if repostCount > 0}
+							<span class="text-xs">{repostCount}</span>
+						{/if}
 					</button>
 
 					{#if showRepostMenu}
-						<div class="absolute bottom-8 left-0 z-20 min-w-40 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xl">
+						<div
+							class="absolute bottom-8 left-0 z-20 min-w-40 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xl"
+						>
 							<button
 								type="button"
 								onclick={handleRepost}
@@ -146,7 +157,11 @@ function closeQuoteModal() {
 						</div>
 						<!-- backdrop to close menu -->
 						<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
-						<div class="fixed inset-0 z-10" role="presentation" onclick={() => showRepostMenu = false}></div>
+						<div
+							class="fixed inset-0 z-10"
+							role="presentation"
+							onclick={() => showRepostMenu = false}
+						></div>
 					{/if}
 				</div>
 			</div>
@@ -156,11 +171,28 @@ function closeQuoteModal() {
 
 {#if showQuoteModal}
 	<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
-	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="presentation" onclick={closeQuoteModal}>
-		<div class="w-full max-w-lg rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="quote-modal-title" tabindex="-1" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+		role="presentation"
+		onclick={closeQuoteModal}
+	>
+		<div
+			class="w-full max-w-lg rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="quote-modal-title"
+			tabindex="-1"
+			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
+		>
 			<div class="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-3">
 				<h2 id="quote-modal-title" class="font-bold text-[var(--color-text)]">引用リポスト</h2>
-				<button type="button" aria-label="閉じる" onclick={closeQuoteModal} class="rounded-full p-1.5 text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)]">
+				<button
+					type="button"
+					aria-label="閉じる"
+					onclick={closeQuoteModal}
+					class="rounded-full p-1.5 text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)]"
+				>
 					<span class="i-lucide-x h-5 w-5"></span>
 				</button>
 			</div>
@@ -174,7 +206,11 @@ function closeQuoteModal() {
 				<!-- quoted post preview -->
 				<div class="mt-2 rounded-xl border border-[var(--color-border)] p-3">
 					<div class="mb-1.5 flex items-center gap-2">
-						<img src={post.user.icon} alt={post.user.name} class="h-5 w-5 rounded-full bg-[var(--color-border)]">
+						<img
+							src={post.user.icon}
+							alt={post.user.name}
+							class="h-5 w-5 rounded-full bg-[var(--color-border)]"
+						>
 						<span class="text-xs font-bold text-[var(--color-text)]">{post.user.name}</span>
 					</div>
 					<p class="line-clamp-3 text-sm text-[var(--color-text-secondary)]">{post.content}</p>
