@@ -11,6 +11,7 @@ export interface Profile {
 	created_at: string;
 	list_is_public: boolean;
 	is_private: boolean;
+	is_admin?: boolean;
 }
 
 export interface UserAnimeListEntry {
@@ -89,6 +90,7 @@ export interface Post {
 	reply_count: number;
 	liked_by_me: boolean;
 	reposted_by_me: boolean;
+	bookmarked_by_me: boolean;
 	anime_id: string | null;
 	anime_quote: AnimeQuote | null;
 	exchange_share: AnimeExchangeShare | null;
@@ -243,6 +245,7 @@ export function toPost(
 		reply_count?: number;
 		liked_by_me?: boolean;
 		reposted_by_me?: boolean;
+		bookmarked_by_me?: boolean;
 	},
 ): Post {
 	return {
@@ -277,6 +280,7 @@ export function toPost(
 		reply_count: counts?.reply_count ?? 0,
 		liked_by_me: counts?.liked_by_me ?? false,
 		reposted_by_me: counts?.reposted_by_me ?? false,
+		bookmarked_by_me: counts?.bookmarked_by_me ?? false,
 		anime_id: raw.anime_id != null ? String(raw.anime_id) : null,
 		anime_quote: raw.anime
 			? { id: String(raw.anime.id), title: raw.anime.title, cover_url: raw.anime.cover_url, user_score: null }

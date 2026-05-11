@@ -1,5 +1,11 @@
-import { fail } from "@sveltejs/kit";
-import { deletePostAction, insertPostWithHashtags, toggleLikeAction, toggleRepostAction } from "$lib/server/actions";
+﻿import { fail } from "@sveltejs/kit";
+import {
+	deletePostAction,
+	insertPostWithHashtags,
+	toggleBookmarkAction,
+	toggleLikeAction,
+	toggleRepostAction,
+} from "$lib/server/actions";
 import { enrichPostsWithCounts, getAnimeExchangeShareForUser, getFollowingIds } from "$lib/server/queries";
 import type { AnimeExchangeShare, RawPost } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
@@ -156,5 +162,10 @@ export const actions: Actions = {
 		const { user } = await safeGetSession();
 		if (!user) return fail(401, { message: "ログインが必要です" });
 		return toggleRepostAction(request, supabase, user.id);
+	},
+	bookmark: async ({ request, locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { message: "ログインが必要です" });
+		return toggleBookmarkAction(request, supabase, user.id);
 	},
 };

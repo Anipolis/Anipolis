@@ -770,6 +770,10 @@ textarea {
 	transition: background 0.1s;
 }
 
+.post-card-modal-open {
+	z-index: 1100;
+}
+
 .post-card-hitarea {
 	position: absolute;
 	inset: 0;

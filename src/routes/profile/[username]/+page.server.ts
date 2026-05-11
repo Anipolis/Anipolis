@@ -1,9 +1,16 @@
-import { error, fail } from "@sveltejs/kit";
-import { deletePostAction, toggleFollowAction, toggleLikeAction, toggleRepostAction } from "$lib/server/actions";
+﻿import { error, fail } from "@sveltejs/kit";
+import {
+	deletePostAction,
+	toggleBookmarkAction,
+	toggleFollowAction,
+	toggleLikeAction,
+	toggleRepostAction,
+} from "$lib/server/actions";
 import {
 	checkIsFollowing,
 	enrichPostsWithCounts,
 	getFollowCounts,
+	getFollowRequestStatus,
 	getLikedPosts,
 	getUserAnimeList,
 } from "$lib/server/queries";
@@ -19,6 +26,10 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 
 	const isOwn = user?.id === profile.id;
 	const isFollowing = user && user.id !== profile.id ? await checkIsFollowing(supabase, user.id, profile.id) : false;
+	const followRequestStatus =
+		user && user.id !== profile.id && !isFollowing
+			? await getFollowRequestStatus(supabase, user.id, profile.id)
+			: "none";
 	const canViewContent = isOwn || !profile.is_private || isFollowing;
 
 	const postSelect = `id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, exchange_share,
@@ -76,6 +87,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 		canViewContent,
 		followCounts,
 		isFollowing,
+		followRequestStatus,
 		trending: trendingResult.data ?? [],
 		animeList,
 		user,
@@ -137,5 +149,10 @@ export const actions: Actions = {
 		const { user } = await safeGetSession();
 		if (!user) return fail(401, { message: "ログインが必要です" });
 		return toggleRepostAction(request, supabase, user.id);
+	},
+	bookmark: async ({ request, locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { message: "ログインが必要です" });
+		return toggleBookmarkAction(request, supabase, user.id);
 	},
 };

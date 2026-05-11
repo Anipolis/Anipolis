@@ -16,6 +16,7 @@ const { profile, posts, imagePosts, isOwn, canViewContent } = $derived(data);
 const displayName = $derived(profile.display_name ?? profile.username);
 
 let isFollowing = $state(false);
+let followRequestStatus = $state<"none" | "pending">("none");
 let followerCount = $state(0);
 let editDisplayName = $state(untrack(() => data.profile.display_name ?? ""));
 let editBio = $state(untrack(() => data.profile.bio ?? ""));
@@ -23,6 +24,7 @@ let profileSubmitting = $state(false);
 
 $effect(() => {
 	isFollowing = data.isFollowing;
+	followRequestStatus = data.followRequestStatus;
 	followerCount = data.followCounts.followers;
 });
 
@@ -127,9 +129,13 @@ const grouped = $derived(
 						use:enhance={() => {
                             return async ({ result }) => {
                                 if (result.type === 'success' && result.data) {
-                                    const followed = (result.data as { followed: boolean }).followed;
+                                    const payload = result.data as { followed: boolean; requestStatus?: "none" | "pending" };
+                                    const followed = payload.followed;
                                     isFollowing = followed;
-                                    followerCount += followed ? 1 : -1;
+                                    followRequestStatus = payload.requestStatus ?? "none";
+                                    if (followed !== data.isFollowing) {
+                                        followerCount += followed ? 1 : -1;
+                                    }
                                     await invalidateAll();
                                 }
                             };
@@ -139,10 +145,11 @@ const grouped = $derived(
 						<input type="hidden" name="target_id" value={profile.id}>
 						<button
 							type="submit"
-							class="btn {isFollowing ? 'btn-outline' : 'btn-primary'}"
+							class="btn {isFollowing || followRequestStatus === 'pending' ? 'btn-outline' : 'btn-primary'}"
+							disabled={followRequestStatus === 'pending'}
 							style="font-size: 13px;"
 						>
-							{isFollowing ? 'フォロー中' : 'フォローする'}
+							{isFollowing ? 'フォロー中' : followRequestStatus === 'pending' ? '申請中' : profile.is_private ? 'フォロー申請' : 'フォローする'}
 						</button>
 					</form>
 				{/if}

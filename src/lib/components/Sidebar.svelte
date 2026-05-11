@@ -13,9 +13,10 @@ interface Props {
 	session: Session | null;
 	profile: Profile;
 	unreadNotificationCount?: number;
+	pendingFollowRequestCount?: number;
 }
 
-let { supabase, session, profile, unreadNotificationCount = 0 }: Props = $props();
+let { supabase, session, profile, unreadNotificationCount = 0, pendingFollowRequestCount = 0 }: Props = $props();
 
 let theme = $state(
 	browser ? localStorage.getItem("theme") || document.documentElement.getAttribute("data-theme") || "dark" : "dark",
@@ -126,6 +127,48 @@ function isActive(path: string): boolean {
 		</a>
 
 		{#if session}
+			{#if profile?.is_admin}
+				<a href="/admin" class="sidebar-btn" class:active={isActive('/admin')} aria-label="Admin" title="Admin">
+					<svg
+						width="22"
+						height="22"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+					</svg>
+					<span class="sidebar-btn-label">Admin</span>
+				</a>
+			{/if}
+
+			<a
+				href="/bookmarks"
+				class="sidebar-btn"
+				class:active={isActive('/bookmarks')}
+				aria-label="ブックマーク"
+				title="ブックマーク"
+			>
+				<svg
+					width="22"
+					height="22"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
+					<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+				</svg>
+				<span class="sidebar-btn-label">ブックマーク</span>
+			</a>
+
 			<a
 				href="/notifications"
 				class="sidebar-btn"
@@ -151,6 +194,37 @@ function isActive(path: string): boolean {
 					<span class="sidebar-badge">{unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}</span>
 				{/if}
 				<span class="sidebar-btn-label">通知</span>
+			</a>
+
+			<a
+				href="/follow-requests"
+				class="sidebar-btn"
+				class:active={isActive('/follow-requests')}
+				aria-label="フォロー申請"
+				title="フォロー申請"
+			>
+				<svg
+					width="22"
+					height="22"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
+					<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+					<circle cx="9" cy="7" r="4" />
+					<path d="M19 8v6" />
+					<path d="M22 11h-6" />
+				</svg>
+				{#if pendingFollowRequestCount > 0}
+					<span class="sidebar-badge"
+						>{pendingFollowRequestCount > 99 ? '99+' : pendingFollowRequestCount}</span
+					>
+				{/if}
+				<span class="sidebar-btn-label">フォロー申請</span>
 			</a>
 
 			<a

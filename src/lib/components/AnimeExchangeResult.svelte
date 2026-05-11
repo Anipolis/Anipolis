@@ -155,6 +155,36 @@ a.exchange-result-card:hover {
 	border-color: rgba(52, 211, 153, 0.42);
 }
 
+:global([data-theme="light"]) .anime-exchange-result {
+	border-color: rgba(124, 58, 237, 0.16);
+	background:
+		radial-gradient(circle at 82% 18%, rgba(52, 211, 153, 0.18), transparent 34%),
+		linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(245, 243, 255, 0.82));
+	box-shadow: 0 14px 34px rgba(124, 58, 237, 0.1);
+}
+
+:global([data-theme="light"]) .exchange-result-card {
+	border-color: rgba(124, 58, 237, 0.14);
+	background: rgba(255, 255, 255, 0.78);
+	box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
+}
+
+:global([data-theme="light"]) a.exchange-result-card:hover {
+	border-color: rgba(52, 211, 153, 0.48);
+	background: rgba(240, 253, 250, 0.92);
+}
+
+:global([data-theme="light"]) .exchange-result-card--received {
+	border-color: rgba(52, 211, 153, 0.36);
+	background: rgba(236, 253, 245, 0.82);
+}
+
+:global([data-theme="light"]) .exchange-swap-icon span {
+	border-color: rgba(124, 58, 237, 0.18);
+	background: rgba(255, 255, 255, 0.72);
+	box-shadow: 0 8px 20px rgba(124, 58, 237, 0.1);
+}
+
 .exchange-result-cover-wrap {
 	width: 74px;
 	aspect-ratio: 2 / 3;

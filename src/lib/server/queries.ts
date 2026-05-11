@@ -111,7 +111,7 @@ export async function enrichPostsWithCounts(
 	const postIds = visibleRawPosts.map((p) => p.id as string);
 
 	// ── 並列バッチクエリ ──────────────────────────────────────────
-	const [likesRes, repostsRes, repliesRes, myLikesRes, myRepostsRes] = await Promise.all([
+	const [likesRes, repostsRes, repliesRes, myLikesRes, myRepostsRes, myBookmarksRes] = await Promise.all([
 		// 各投稿のいいね数（post_id ごとにカウント）
 		supabase.from("likes").select("post_id").in("post_id", postIds),
 
@@ -130,6 +130,10 @@ export async function enrichPostsWithCounts(
 		userId
 			? supabase.from("reposts").select("post_id").eq("user_id", userId).in("post_id", postIds)
 			: Promise.resolve({ data: [] as { post_id: string }[] }),
+
+		userId
+			? supabase.from("bookmarks").select("post_id").eq("user_id", userId).in("post_id", postIds)
+			: Promise.resolve({ data: [] as { post_id: string }[] }),
 	]);
 
 	// ── JS でカウント集計 ─────────────────────────────────────────
@@ -139,6 +143,7 @@ export async function enrichPostsWithCounts(
 
 	const likedSet = new Set((myLikesRes.data ?? []).map((r) => r.post_id));
 	const repostedSet = new Set((myRepostsRes.data ?? []).map((r) => r.post_id));
+	const bookmarkedSet = new Set((myBookmarksRes.data ?? []).map((r) => r.post_id));
 
 	// ── アニメ引用がある投稿のスコアを一括取得 ────────────────────
 	const animeIds = [...new Set(visibleRawPosts.map((p) => p.anime_id).filter(Boolean))] as string[];
@@ -161,6 +166,7 @@ export async function enrichPostsWithCounts(
 			reply_count: replyCount.get(raw["id"]) ?? 0,
 			liked_by_me: likedSet.has(raw["id"]),
 			reposted_by_me: repostedSet.has(raw["id"]),
+			bookmarked_by_me: bookmarkedSet.has(raw["id"]),
 		});
 		if (post.anime_quote && post.anime_id) {
 			post.anime_quote.user_score = userScoreMap.get(post.anime_id) ?? null;
@@ -463,6 +469,308 @@ export interface ProfileSummary {
 	bio: string | null;
 }
 
+export type ReportStatus = "open" | "reviewing" | "resolved" | "rejected";
+export type ReportReason = "spam" | "harassment" | "sexual" | "violence" | "illegal" | "other";
+export type ReportTargetType = "post" | "user";
+export type ModerationStatus = "active" | "restricted" | "banned";
+
+export interface AdminReport {
+	id: string;
+	reporter_id: string;
+	reporter_username: string;
+	reporter_display_name: string | null;
+	target_type: ReportTargetType;
+	target_id: string;
+	target_user_id: string | null;
+	target_username: string | null;
+	target_display_name: string | null;
+	target_moderation_status: ModerationStatus | null;
+	target_moderation_until: string | null;
+	target_moderation_reason: string | null;
+	post_content: string | null;
+	reason: ReportReason;
+	details: string | null;
+	status: ReportStatus;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface AdminDashboardData {
+	stats: {
+		openReports: number;
+		reviewingReports: number;
+		reportsToday: number;
+		reportsThisWeek: number;
+		usersToday: number;
+		postsToday: number;
+		totalUsers: number;
+		totalPosts: number;
+		restrictedUsers: number;
+		bannedUsers: number;
+	};
+	reasonCounts: Array<{ reason: ReportReason; count: number }>;
+	recentReports: AdminReport[];
+}
+
+type AdminReportRow = Database["public"]["Tables"]["reports"]["Row"] & {
+	reporter:
+		| Pick<ProfileSummary, "username" | "display_name">
+		| Pick<ProfileSummary, "username" | "display_name">[]
+		| null;
+	target_user:
+		| Pick<ProfileSummary, "username" | "display_name">
+		| Pick<ProfileSummary, "username" | "display_name">[]
+		| null;
+};
+
+export type FollowRequestStatus = "none" | "pending";
+
+export interface PendingFollowRequest {
+	requester_id: string;
+	target_id: string;
+	created_at: string;
+	requester: ProfileSummary;
+}
+
+export async function getFollowRequestStatus(
+	supabase: SupabaseClient<Database>,
+	requesterId: string,
+	targetId: string,
+): Promise<FollowRequestStatus> {
+	const { data } = await supabase
+		.from("follow_requests")
+		.select("requester_id")
+		.eq("requester_id", requesterId)
+		.eq("target_id", targetId)
+		.eq("status", "pending")
+		.maybeSingle();
+	return data ? "pending" : "none";
+}
+
+export async function getPendingFollowRequests(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+): Promise<PendingFollowRequest[]> {
+	const { data } = await supabase
+		.from("follow_requests")
+		.select(`
+			requester_id,
+			target_id,
+			created_at,
+			requester:profiles!follow_requests_requester_id_fkey (
+				id,
+				username,
+				display_name,
+				avatar_url,
+				bio
+			)
+		`)
+		.eq("target_id", userId)
+		.eq("status", "pending")
+		.order("created_at", { ascending: false });
+
+	return (
+		(data ?? []) as unknown as Array<{
+			requester_id: string;
+			target_id: string;
+			created_at: string;
+			requester: ProfileSummary | ProfileSummary[] | null;
+		}>
+	)
+		.map((row) => {
+			const requester = Array.isArray(row.requester) ? row.requester[0] : row.requester;
+			if (!requester) return null;
+			return {
+				requester_id: row.requester_id,
+				target_id: row.target_id,
+				created_at: row.created_at,
+				requester,
+			};
+		})
+		.filter((row): row is PendingFollowRequest => row !== null);
+}
+
+export async function getPendingFollowRequestCount(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+): Promise<number> {
+	const { count } = await supabase
+		.from("follow_requests")
+		.select("requester_id", { count: "exact", head: true })
+		.eq("target_id", userId)
+		.eq("status", "pending");
+
+	return count ?? 0;
+}
+
+export async function isAdminUser(supabase: SupabaseClient<Database>, userId: string): Promise<boolean> {
+	const { data } = await supabase.from("profiles").select("is_admin").eq("id", userId).maybeSingle();
+	return data?.is_admin === true;
+}
+
+export async function getAdminDashboardData(supabase: SupabaseClient<Database>): Promise<AdminDashboardData> {
+	const now = new Date();
+	const today = new Date(now);
+	today.setHours(0, 0, 0, 0);
+	const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+	const [
+		openReports,
+		reviewingReports,
+		reportsToday,
+		reportsThisWeek,
+		usersToday,
+		postsToday,
+		totalUsers,
+		totalPosts,
+		restrictedUsers,
+		bannedUsers,
+		reasonRows,
+		recentReports,
+	] = await Promise.all([
+		countRows(supabase, "reports", (query) => query.eq("status", "open")),
+		countRows(supabase, "reports", (query) => query.eq("status", "reviewing")),
+		countRows(supabase, "reports", (query) => query.gte("created_at", today.toISOString())),
+		countRows(supabase, "reports", (query) => query.gte("created_at", weekAgo.toISOString())),
+		countRows(supabase, "profiles", (query) => query.gte("created_at", today.toISOString())),
+		countRows(supabase, "posts", (query) => query.gte("created_at", today.toISOString())),
+		countRows(supabase, "profiles"),
+		countRows(supabase, "posts"),
+		countRows(supabase, "account_moderation", (query) => query.eq("status", "restricted")),
+		countRows(supabase, "account_moderation", (query) => query.eq("status", "banned")),
+		supabase.from("reports").select("reason").gte("created_at", weekAgo.toISOString()),
+		supabase
+			.from("reports")
+			.select(`
+				id,
+				reporter_id,
+				target_type,
+				target_id,
+				target_user_id,
+				reason,
+				details,
+				status,
+				created_at,
+				updated_at,
+				reporter:profiles!reports_reporter_id_fkey (
+					username,
+					display_name
+				),
+				target_user:profiles!reports_target_user_id_fkey (
+					username,
+					display_name
+				)
+			`)
+			.order("created_at", { ascending: false })
+			.limit(25),
+	]);
+
+	const reasonMap = new Map<ReportReason, number>();
+	for (const row of reasonRows.data ?? []) {
+		const reason = row.reason as ReportReason;
+		reasonMap.set(reason, (reasonMap.get(reason) ?? 0) + 1);
+	}
+
+	const recentRows = (recentReports.data ?? []) as unknown as AdminReportRow[];
+	const postIds = recentRows.filter((row) => row.target_type === "post").map((row) => row.target_id);
+	const targetUserIds = recentRows.map((row) => row.target_user_id).filter((id): id is string => id !== null);
+	const postContentById = new Map<string, string>();
+	if (postIds.length > 0) {
+		const { data: posts } = await supabase.from("posts").select("id, content").in("id", postIds);
+		for (const post of posts ?? []) {
+			postContentById.set(post.id, post.content);
+		}
+	}
+	const moderationByUserId = new Map<
+		string,
+		{ status: ModerationStatus; restricted_until: string | null; reason: string | null }
+	>();
+	if (targetUserIds.length > 0) {
+		const { data: moderationRows } = await supabase
+			.from("account_moderation")
+			.select("user_id, status, restricted_until, reason")
+			.in("user_id", targetUserIds);
+		for (const row of moderationRows ?? []) {
+			moderationByUserId.set(row.user_id, {
+				status: row.status as ModerationStatus,
+				restricted_until: row.restricted_until,
+				reason: row.reason,
+			});
+		}
+	}
+
+	return {
+		stats: {
+			openReports,
+			reviewingReports,
+			reportsToday,
+			reportsThisWeek,
+			usersToday,
+			postsToday,
+			totalUsers,
+			totalPosts,
+			restrictedUsers,
+			bannedUsers,
+		},
+		reasonCounts: [...reasonMap.entries()].map(([reason, count]) => ({ reason, count })),
+		recentReports: recentRows.map((row) =>
+			toAdminReport(
+				row,
+				postContentById.get(row.target_id) ?? null,
+				row.target_user_id ? (moderationByUserId.get(row.target_user_id) ?? null) : null,
+			),
+		),
+	};
+}
+
+type CountableTable = "reports" | "profiles" | "posts" | "account_moderation";
+
+async function countRows(
+	supabase: SupabaseClient<Database>,
+	table: CountableTable,
+	apply?: (query: CountQuery) => CountQuery,
+): Promise<number> {
+	let query = supabase.from(table).select("*", { count: "exact", head: true }) as unknown as CountQuery;
+	if (apply) query = apply(query);
+	const { count } = await query;
+	return count ?? 0;
+}
+
+type CountQuery = {
+	eq: (column: string, value: string) => CountQuery;
+	gte: (column: string, value: string) => CountQuery;
+	then: Promise<{ count: number | null }>["then"];
+};
+
+function toAdminReport(
+	row: AdminReportRow,
+	postContent: string | null,
+	moderation: { status: ModerationStatus; restricted_until: string | null; reason: string | null } | null,
+): AdminReport {
+	const reporter = Array.isArray(row.reporter) ? row.reporter[0] : row.reporter;
+	const targetUser = Array.isArray(row.target_user) ? row.target_user[0] : row.target_user;
+	return {
+		id: row.id,
+		reporter_id: row.reporter_id,
+		reporter_username: reporter?.username ?? "unknown",
+		reporter_display_name: reporter?.display_name ?? null,
+		target_type: row.target_type,
+		target_id: row.target_id,
+		target_user_id: row.target_user_id,
+		target_username: targetUser?.username ?? null,
+		target_display_name: targetUser?.display_name ?? null,
+		target_moderation_status: moderation?.status ?? "active",
+		target_moderation_until: moderation?.restricted_until ?? null,
+		target_moderation_reason: moderation?.reason ?? null,
+		post_content: postContent,
+		reason: row.reason,
+		details: row.details,
+		status: row.status,
+		created_at: row.created_at,
+		updated_at: row.updated_at,
+	};
+}
+
 export async function getFollowerProfiles(
 	supabase: SupabaseClient<Database>,
 	profileId: string,
@@ -489,6 +797,30 @@ export async function getFollowingProfiles(
 		.select("id, username, display_name, avatar_url, bio")
 		.in("id", ids);
 	return (data ?? []) as ProfileSummary[];
+}
+
+export async function getBookmarkedPosts(supabase: SupabaseClient<Database>, userId: string): Promise<Post[]> {
+	const { data: bookmarkRows } = await supabase
+		.from("bookmarks")
+		.select("post_id")
+		.eq("user_id", userId)
+		.order("created_at", { ascending: false })
+		.limit(50);
+	const postIds = (bookmarkRows ?? []).map((r) => r["post_id"]);
+	if (postIds.length === 0) return [];
+	const { data: rawPosts } = await supabase
+		.from("posts")
+		.select(
+			`id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, exchange_share,
+             profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
+             post_hashtags ( hashtags ( name ) ),
+             anime:anime!posts_anime_id_fkey ( id, title, cover_url )`,
+		)
+		.in("id", postIds);
+	// ブックマーク保存順を維持するため postIds の順序に並べ直す
+	const orderMap = new Map(postIds.map((id, i) => [id, i]));
+	const sorted = (rawPosts ?? []).sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
+	return enrichPostsWithCounts(supabase, sorted, userId);
 }
 
 export async function getLikedPosts(

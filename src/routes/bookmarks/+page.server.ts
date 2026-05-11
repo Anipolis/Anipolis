@@ -1,45 +1,14 @@
-﻿import { fail } from "@sveltejs/kit";
+import { error, fail } from "@sveltejs/kit";
 import { deletePostAction, toggleBookmarkAction, toggleLikeAction, toggleRepostAction } from "$lib/server/actions";
-import { enrichPostsWithCounts } from "$lib/server/queries";
+import { getBookmarkedPosts } from "$lib/server/queries";
 import type { Actions, PageServerLoad } from "./$types";
 
-export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {
+export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
-	const query = url.searchParams.get("q")?.trim() ?? "";
+	if (!user) error(401, "ログインが必要です");
 
-	if (!query) {
-		return { query: "", posts: [], users: [] };
-	}
-
-	const pattern = `%${query}%`;
-
-	const [postsResult, usersResult] = await Promise.all([
-		supabase
-			.from("posts")
-			.select(
-				`id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, exchange_share,
-                 profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
-                 post_hashtags ( hashtags ( name ) ),
-                 anime:anime!posts_anime_id_fkey ( id, title, cover_url )`,
-			)
-			.ilike("content", pattern)
-			.order("created_at", { ascending: false })
-			.limit(30),
-
-		supabase
-			.from("profiles")
-			.select("id, username, display_name, avatar_url")
-			.or(`username.ilike.${pattern},display_name.ilike.${pattern}`)
-			.limit(10),
-	]);
-
-	const posts = await enrichPostsWithCounts(supabase, postsResult.data ?? [], user?.id ?? null);
-
-	return {
-		query,
-		posts,
-		users: usersResult.data ?? [],
-	};
+	const posts = await getBookmarkedPosts(supabase, user.id);
+	return { posts, userId: user.id };
 };
 
 export const actions: Actions = {
@@ -60,6 +29,7 @@ export const actions: Actions = {
 		if (!user) return fail(401, { message: "ログインが必要です" });
 		return toggleRepostAction(request, supabase, user.id);
 	},
+
 	bookmark: async ({ request, locals: { supabase, safeGetSession } }) => {
 		const { user } = await safeGetSession();
 		if (!user) return fail(401, { message: "ログインが必要です" });

@@ -4,6 +4,50 @@ import type { Database, Json } from "$lib/supabase/database.types";
 import type { AnimeExchangeShare, AnimeStatus } from "$lib/types";
 import { extractHashtags, extractMentions } from "$lib/utils/hashtag";
 
+const reportStatuses = new Set(["open", "reviewing", "resolved", "rejected"]);
+const moderationStatuses = new Set(["active", "restricted", "banned"]);
+
+export type ModerationStatus = "active" | "restricted" | "banned";
+
+type ModerationProfile = {
+	moderation_status: ModerationStatus;
+	moderation_until: string | null;
+};
+
+export async function getCurrentModerationStatus(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+): Promise<ModerationProfile> {
+	const { data } = await supabase
+		.from("account_moderation")
+		.select("status, restricted_until")
+		.eq("user_id", userId)
+		.maybeSingle();
+	const status = (data?.status ?? "active") as ModerationStatus;
+	const until = data?.restricted_until ?? null;
+
+	if (status === "restricted" && until && new Date(until).getTime() <= Date.now()) {
+		return { moderation_status: "active", moderation_until: until };
+	}
+
+	return { moderation_status: status, moderation_until: until };
+}
+
+export async function ensureAccountCanWrite(supabase: SupabaseClient<Database>, userId: string) {
+	const profile = await getCurrentModerationStatus(supabase, userId);
+	if (profile.moderation_status === "banned") {
+		return fail(403, { message: "このアカウントはBANされています" });
+	}
+	if (profile.moderation_status === "restricted") {
+		return fail(403, {
+			message: profile.moderation_until
+				? `このアカウントは${new Date(profile.moderation_until).toLocaleString("ja-JP")}まで制限されています`
+				: "このアカウントは制限されています",
+		});
+	}
+	return null;
+}
+
 /**
  * 投稿（＋ハッシュタグ）を挿入する共通ロジック
  * タイムラインの createPost とリプライの reply で使い回す
@@ -18,6 +62,9 @@ export async function insertPostWithHashtags(
 	quotedPostId: string | null = null,
 	exchangeShare: AnimeExchangeShare | null = null,
 ) {
+	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
+	if (moderationFailure) return moderationFailure;
+
 	if (!content && imageUrls.length === 0 && !animeId && !exchangeShare) {
 		return fail(400, { message: "本文、画像、アニメ引用、または交換結果を追加してください" });
 	}
@@ -105,6 +152,9 @@ export async function deletePostAction(request: Request, supabase: SupabaseClien
  * いいねのトグル — 既にいいね済みなら削除、未いいねなら挿入
  */
 export async function toggleLikeAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
+	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
+	if (moderationFailure) return moderationFailure;
+
 	const form = await request.formData();
 	const postId = (form.get("post_id") as string | null)?.trim() ?? "";
 	if (!postId) return fail(400, { message: "投稿IDが不正です" });
@@ -129,7 +179,35 @@ export async function toggleLikeAction(request: Request, supabase: SupabaseClien
 /**
  * リポストのトグル — 既にリポスト済みなら削除、未リポストなら挿入
  */
+export async function toggleBookmarkAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
+	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
+	if (moderationFailure) return moderationFailure;
+
+	const form = await request.formData();
+	const postId = (form.get("post_id") as string | null)?.trim() ?? "";
+	if (!postId) return fail(400, { message: "投稿IDが不正です" });
+
+	const { data: existing } = await supabase
+		.from("bookmarks")
+		.select("post_id")
+		.eq("post_id", postId)
+		.eq("user_id", userId)
+		.maybeSingle();
+
+	if (existing) {
+		await supabase.from("bookmarks").delete().eq("post_id", postId).eq("user_id", userId);
+		return { bookmarked: false };
+	}
+
+	const { error } = await supabase.from("bookmarks").insert({ post_id: postId, user_id: userId });
+	if (error) return fail(403, { message: "この投稿をブックマークできません" });
+	return { bookmarked: true };
+}
+
 export async function toggleRepostAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
+	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
+	if (moderationFailure) return moderationFailure;
+
 	const form = await request.formData();
 	const postId = (form.get("post_id") as string | null)?.trim() ?? "";
 	if (!postId) return fail(400, { message: "投稿IDが不正です" });
@@ -156,6 +234,111 @@ export async function toggleRepostAction(request: Request, supabase: SupabaseCli
  */
 export async function markAllNotificationsRead(supabase: SupabaseClient<Database>, userId: string) {
 	await supabase.from("notifications").update({ read: true }).eq("recipient_id", userId).eq("read", false);
+}
+
+export async function updateReportStatusAction(request: Request, supabase: SupabaseClient<Database>, adminId: string) {
+	const form = await request.formData();
+	const reportId = (form.get("report_id") as string | null)?.trim() ?? "";
+	const status = (form.get("status") as string | null)?.trim() ?? "";
+
+	if (!reportId) return fail(400, { message: "通報IDが不正です" });
+	if (!reportStatuses.has(status)) return fail(400, { message: "ステータスが不正です" });
+
+	const { data: report } = await supabase.from("reports").select("status").eq("id", reportId).maybeSingle();
+	if (!report) return fail(404, { message: "通報が見つかりません" });
+
+	const { error } = await supabase
+		.from("reports")
+		.update({ status: status as "open" | "reviewing" | "resolved" | "rejected" })
+		.eq("id", reportId);
+	if (error) return fail(500, { message: "通報ステータスの更新に失敗しました" });
+
+	await supabase.from("admin_audit_logs").insert({
+		admin_id: adminId,
+		action: "report_status_update",
+		target_type: "report",
+		target_id: reportId,
+		metadata: { from: report.status, to: status },
+	});
+
+	return { updated: true };
+}
+
+export async function updateAccountModerationAction(
+	request: Request,
+	supabase: SupabaseClient<Database>,
+	adminId: string,
+) {
+	const form = await request.formData();
+	const targetUserId = (form.get("target_user_id") as string | null)?.trim() ?? "";
+	const reportId = (form.get("report_id") as string | null)?.trim() || null;
+	const status = (form.get("moderation_status") as string | null)?.trim() ?? "";
+	const reason = ((form.get("moderation_reason") as string | null)?.trim() || null)?.slice(0, 500) ?? null;
+	const untilRaw = (form.get("moderation_until") as string | null)?.trim() ?? "";
+	const moderationUntil = status === "restricted" && untilRaw ? new Date(untilRaw).toISOString() : null;
+
+	if (!targetUserId) return fail(400, { message: "対象ユーザーIDが不正です" });
+	if (targetUserId === adminId) return fail(400, { message: "自分自身を制限することはできません" });
+	if (!moderationStatuses.has(status)) return fail(400, { message: "措置の種類が不正です" });
+	if (status === "restricted" && untilRaw && Number.isNaN(new Date(untilRaw).getTime())) {
+		return fail(400, { message: "制限期限が不正です" });
+	}
+
+	const { data: target } = await supabase
+		.from("profiles")
+		.select("id, username, is_admin")
+		.eq("id", targetUserId)
+		.maybeSingle();
+	if (!target) return fail(404, { message: "対象ユーザーが見つかりません" });
+	if (target.is_admin) return fail(403, { message: "管理者アカウントはこの画面から制限できません" });
+
+	const { data: currentModeration } = await supabase
+		.from("account_moderation")
+		.select("status, restricted_until")
+		.eq("user_id", targetUserId)
+		.maybeSingle();
+
+	const payload = {
+		user_id: targetUserId,
+		status: status as ModerationStatus,
+		restricted_until: status === "restricted" ? moderationUntil : null,
+		reason: status === "active" ? null : reason,
+		moderated_by: status === "active" ? null : adminId,
+		moderated_at: status === "active" ? null : new Date().toISOString(),
+	};
+
+	const { error } = await supabase.from("account_moderation").upsert(payload, { onConflict: "user_id" });
+	if (error) return fail(500, { message: "アカウント措置の更新に失敗しました" });
+
+	await supabase.from("admin_audit_logs").insert({
+		admin_id: adminId,
+		action: "account_moderation_update",
+		target_type: "user",
+		target_id: targetUserId,
+		metadata: {
+			report_id: reportId,
+			username: target.username,
+			from: {
+				status: currentModeration?.status ?? "active",
+				until: currentModeration?.restricted_until ?? null,
+			},
+			to: {
+				status,
+				until: payload.restricted_until,
+				reason: payload.reason,
+			},
+		},
+	});
+
+	if (reportId && status !== "active") {
+		await supabase
+			.from("reports")
+			.update({ status: "resolved" })
+			.eq("id", reportId)
+			.in("status", ["open", "reviewing"]);
+	}
+
+	return { moderated: true };
 }
 
 // ================================================================
@@ -235,6 +418,9 @@ export async function cancelEventAction(request: Request, supabase: SupabaseClie
  * フォローのトグル — フォロー済みなら解除、未フォローなら追加
  */
 export async function toggleFollowAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
+	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
+	if (moderationFailure) return moderationFailure;
+
 	const form = await request.formData();
 	const targetId = (form.get("target_id") as string | null)?.trim() ?? "";
 	if (!targetId) return fail(400, { message: "ユーザーIDが不正です" });
@@ -249,14 +435,91 @@ export async function toggleFollowAction(request: Request, supabase: SupabaseCli
 
 	if (existing) {
 		await supabase.from("follows").delete().eq("follower_id", userId).eq("following_id", targetId);
-		return { followed: false };
+		await supabase.from("follow_requests").delete().eq("requester_id", userId).eq("target_id", targetId);
+		return { followed: false, requestStatus: "none" };
 	}
 
-	await supabase.from("follows").insert({ follower_id: userId, following_id: targetId });
-	return { followed: true };
+	const { data: target } = await supabase.from("profiles").select("id, is_private").eq("id", targetId).maybeSingle();
+	if (!target) return fail(404, { message: "ユーザーが見つかりません" });
+
+	if (target.is_private) {
+		const { data: pendingRequest } = await supabase
+			.from("follow_requests")
+			.select("requester_id")
+			.eq("requester_id", userId)
+			.eq("target_id", targetId)
+			.maybeSingle();
+
+		if (pendingRequest) {
+			await supabase.from("follow_requests").delete().eq("requester_id", userId).eq("target_id", targetId);
+			return { followed: false, requestStatus: "none" };
+		}
+
+		const { error } = await supabase.from("follow_requests").insert({ requester_id: userId, target_id: targetId });
+		if (error) return fail(403, { message: "フォロー申請を送信できませんでした" });
+		return { followed: false, requestStatus: "pending" };
+	}
+
+	await supabase.from("follow_requests").delete().eq("requester_id", userId).eq("target_id", targetId);
+
+	const { error } = await supabase.from("follows").insert({ follower_id: userId, following_id: targetId });
+	if (error) return fail(403, { message: "フォローできませんでした" });
+	return { followed: true, requestStatus: "none" };
+}
+
+export async function approveFollowRequestAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
+	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
+	if (moderationFailure) return moderationFailure;
+
+	const form = await request.formData();
+	const requesterId = (form.get("requester_id") as string | null)?.trim() ?? "";
+	if (!requesterId) return fail(400, { message: "申請者IDが不正です" });
+	if (requesterId === userId) return fail(400, { message: "自分からの申請は承認できません" });
+
+	const { data: followRequest } = await supabase
+		.from("follow_requests")
+		.select("requester_id")
+		.eq("requester_id", requesterId)
+		.eq("target_id", userId)
+		.eq("status", "pending")
+		.maybeSingle();
+
+	if (!followRequest) return fail(404, { message: "フォロー申請が見つかりません" });
+
+	const { data: existingFollow } = await supabase
+		.from("follows")
+		.select("follower_id")
+		.eq("follower_id", requesterId)
+		.eq("following_id", userId)
+		.maybeSingle();
+
+	const { error: followError } = existingFollow
+		? { error: null }
+		: await supabase.from("follows").insert({ follower_id: requesterId, following_id: userId });
+	if (followError) return fail(500, { message: "フォロー申請の承認に失敗しました" });
+
+	await supabase.from("follow_requests").delete().eq("requester_id", requesterId).eq("target_id", userId);
+	return { approved: true };
+}
+
+export async function rejectFollowRequestAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
+	const form = await request.formData();
+	const requesterId = (form.get("requester_id") as string | null)?.trim() ?? "";
+	if (!requesterId) return fail(400, { message: "申請者IDが不正です" });
+
+	const { error } = await supabase
+		.from("follow_requests")
+		.delete()
+		.eq("requester_id", requesterId)
+		.eq("target_id", userId);
+	if (error) return fail(500, { message: "フォロー申請の拒否に失敗しました" });
+	return { rejected: true };
 }
 
 export async function upsertUserAnimeEntry(supabase: SupabaseClient<Database>, request: Request, userId: string) {
+	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
+	if (moderationFailure) return moderationFailure;
+
 	const form = await request.formData();
 	const animeId = (form.get("anime_id") as string | null)?.trim() ?? "";
 	const status = (form.get("status") as string | null)?.trim() as AnimeStatus | null;
@@ -296,6 +559,9 @@ export async function removeUserAnimeEntry(supabase: SupabaseClient<Database>, r
 }
 
 export async function recommendAnimeAction(supabase: SupabaseClient<Database>, request: Request, userId: string) {
+	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
+	if (moderationFailure) return moderationFailure;
+
 	const form = await request.formData();
 	const animeId = (form.get("anime_id") as string | null)?.trim() ?? "";
 	const recipientId = (form.get("recipient_id") as string | null)?.trim() ?? "";
@@ -325,6 +591,9 @@ export async function recommendAnimeAction(supabase: SupabaseClient<Database>, r
 }
 
 export async function exchangeAnimeAction(supabase: SupabaseClient<Database>, request: Request, userId: string) {
+	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
+	if (moderationFailure) return moderationFailure;
+
 	const form = await request.formData();
 	const animeId = (form.get("anime_id") as string | null)?.trim() ?? "";
 

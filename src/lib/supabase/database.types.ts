@@ -13,6 +13,7 @@ export type Database = {
 					created_at: string;
 					list_is_public: boolean;
 					is_private: boolean;
+					is_admin: boolean;
 				};
 				Insert: {
 					id: string;
@@ -23,6 +24,7 @@ export type Database = {
 					created_at?: string;
 					list_is_public?: boolean;
 					is_private?: boolean;
+					is_admin?: boolean;
 				};
 				Update: {
 					username?: string;
@@ -31,8 +33,53 @@ export type Database = {
 					bio?: string | null;
 					list_is_public?: boolean;
 					is_private?: boolean;
+					is_admin?: boolean;
 				};
 				Relationships: [];
+			};
+			account_moderation: {
+				Row: {
+					user_id: string;
+					status: "active" | "restricted" | "banned";
+					restricted_until: string | null;
+					reason: string | null;
+					moderated_by: string | null;
+					moderated_at: string | null;
+					updated_at: string;
+				};
+				Insert: {
+					user_id: string;
+					status?: "active" | "restricted" | "banned";
+					restricted_until?: string | null;
+					reason?: string | null;
+					moderated_by?: string | null;
+					moderated_at?: string | null;
+					updated_at?: string;
+				};
+				Update: {
+					status?: "active" | "restricted" | "banned";
+					restricted_until?: string | null;
+					reason?: string | null;
+					moderated_by?: string | null;
+					moderated_at?: string | null;
+					updated_at?: string;
+				};
+				Relationships: [
+					{
+						foreignKeyName: "account_moderation_user_id_fkey";
+						columns: ["user_id"];
+						isOneToOne: true;
+						referencedRelation: "profiles";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "account_moderation_moderated_by_fkey";
+						columns: ["moderated_by"];
+						isOneToOne: false;
+						referencedRelation: "profiles";
+						referencedColumns: ["id"];
+					},
+				];
 			};
 			posts: {
 				Row: {
@@ -166,6 +213,153 @@ export type Database = {
 					user_id?: string;
 				};
 				Relationships: [];
+			};
+			bookmarks: {
+				Row: {
+					post_id: string;
+					user_id: string;
+					created_at: string;
+				};
+				Insert: {
+					post_id: string;
+					user_id: string;
+					created_at?: string;
+				};
+				Update: {
+					post_id?: string;
+					user_id?: string;
+				};
+				Relationships: [];
+			};
+			follow_requests: {
+				Row: {
+					requester_id: string;
+					target_id: string;
+					status: "pending";
+					created_at: string;
+				};
+				Insert: {
+					requester_id: string;
+					target_id: string;
+					status?: "pending";
+					created_at?: string;
+				};
+				Update: {
+					status?: "pending";
+				};
+				Relationships: [
+					{
+						foreignKeyName: "follow_requests_requester_id_fkey";
+						columns: ["requester_id"];
+						isOneToOne: false;
+						referencedRelation: "profiles";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "follow_requests_target_id_fkey";
+						columns: ["target_id"];
+						isOneToOne: false;
+						referencedRelation: "profiles";
+						referencedColumns: ["id"];
+					},
+				];
+			};
+			reports: {
+				Row: {
+					id: string;
+					reporter_id: string;
+					target_type: "post" | "user";
+					target_id: string;
+					target_user_id: string | null;
+					reason: "spam" | "harassment" | "sexual" | "violence" | "illegal" | "other";
+					details: string | null;
+					status: "open" | "reviewing" | "resolved" | "rejected";
+					resolved_by: string | null;
+					resolved_at: string | null;
+					created_at: string;
+					updated_at: string;
+				};
+				Insert: {
+					id?: string;
+					reporter_id: string;
+					target_type: "post" | "user";
+					target_id: string;
+					target_user_id?: string | null;
+					reason: "spam" | "harassment" | "sexual" | "violence" | "illegal" | "other";
+					details?: string | null;
+					status?: "open" | "reviewing" | "resolved" | "rejected";
+					resolved_by?: string | null;
+					resolved_at?: string | null;
+					created_at?: string;
+					updated_at?: string;
+				};
+				Update: {
+					target_user_id?: string | null;
+					reason?: "spam" | "harassment" | "sexual" | "violence" | "illegal" | "other";
+					details?: string | null;
+					status?: "open" | "reviewing" | "resolved" | "rejected";
+					resolved_by?: string | null;
+					resolved_at?: string | null;
+					updated_at?: string;
+				};
+				Relationships: [
+					{
+						foreignKeyName: "reports_reporter_id_fkey";
+						columns: ["reporter_id"];
+						isOneToOne: false;
+						referencedRelation: "profiles";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "reports_target_user_id_fkey";
+						columns: ["target_user_id"];
+						isOneToOne: false;
+						referencedRelation: "profiles";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "reports_resolved_by_fkey";
+						columns: ["resolved_by"];
+						isOneToOne: false;
+						referencedRelation: "profiles";
+						referencedColumns: ["id"];
+					},
+				];
+			};
+			admin_audit_logs: {
+				Row: {
+					id: string;
+					admin_id: string;
+					action: string;
+					target_type: string;
+					target_id: string;
+					metadata: Json;
+					created_at: string;
+				};
+				Insert: {
+					id?: string;
+					admin_id: string;
+					action: string;
+					target_type: string;
+					target_id: string;
+					metadata?: Json;
+					created_at?: string;
+				};
+				Update: {
+					action?: string;
+					target_type?: string;
+					target_id?: string;
+					metadata?: Json;
+				};
+				Relationships: [
+					{
+						foreignKeyName: "admin_audit_logs_admin_id_fkey";
+						columns: ["admin_id"];
+						isOneToOne: false;
+						referencedRelation: "profiles";
+						referencedColumns: ["id"];
+					},
+				];
 			};
 			notifications: {
 				Row: {

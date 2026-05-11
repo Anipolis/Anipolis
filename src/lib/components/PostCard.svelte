@@ -26,9 +26,14 @@ let lightboxUrl = $state<string | null>(null);
 let showRepostMenu = $state(false);
 let showQuoteModal = $state(false);
 let showExchangeModal = $state(false);
+let showReportModal = $state(false);
 let quoteText = $state("");
 let quoteSubmitting = $state(false);
 let quoteError = $state("");
+let reportReason = $state("spam");
+let reportDetails = $state("");
+let reportSubmitting = $state(false);
+let reportMessage = $state("");
 
 function openLightbox(event: MouseEvent, url: string) {
 	event.preventDefault();
@@ -43,6 +48,7 @@ function closeLightbox() {
 function handleLightboxKeydown(event: KeyboardEvent) {
 	if (lightboxUrl && event.key === "Escape") closeLightbox();
 	if (showExchangeModal && event.key === "Escape") showExchangeModal = false;
+	if (showReportModal && event.key === "Escape") showReportModal = false;
 }
 
 function openExchangeModal(event: MouseEvent) {
@@ -62,11 +68,13 @@ let likeCountLocal = $state<number | null>(null);
 let likedByMeLocal = $state<boolean | null>(null);
 let repostCountLocal = $state<number | null>(null);
 let repostedByMeLocal = $state<boolean | null>(null);
+let bookmarkedByMeLocal = $state<boolean | null>(null);
 
 const likeCount = $derived(likeCountLocal ?? post.like_count);
 const likedByMe = $derived(likedByMeLocal ?? post.liked_by_me);
 const repostCount = $derived(repostCountLocal ?? post.repost_count);
 const repostedByMe = $derived(repostedByMeLocal ?? post.reposted_by_me);
+const bookmarkedByMe = $derived(bookmarkedByMeLocal ?? post.bookmarked_by_me);
 
 const handleDelete: SubmitFunction = ({ cancel }) => {
 	if (!confirm("この投稿を削除しますか？")) return cancel();
@@ -85,6 +93,17 @@ const handleLike: SubmitFunction = () => {
 		if (result.type === "failure") {
 			likedByMeLocal = null;
 			likeCountLocal = null;
+		}
+		await update({ reset: false });
+	};
+};
+
+const handleBookmark: SubmitFunction = () => {
+	const wasBookmarked = bookmarkedByMe;
+	bookmarkedByMeLocal = !wasBookmarked;
+	return async ({ result, update }) => {
+		if (result.type === "failure") {
+			bookmarkedByMeLocal = null;
 		}
 		await update({ reset: false });
 	};
@@ -127,11 +146,44 @@ async function submitQuoteRepost() {
 	}
 	quoteSubmitting = false;
 }
+
+async function submitReport() {
+	reportSubmitting = true;
+	reportMessage = "";
+	try {
+		const fd = new FormData();
+		fd.append("target_type", "post");
+		fd.append("target_id", post.id);
+		fd.append("reason", reportReason);
+		fd.append("details", reportDetails.trim());
+
+		const res = await fetch("/api/reports", { method: "POST", body: fd });
+		const body = (await res.json().catch(() => ({}))) as { message?: string };
+		if (!res.ok) {
+			reportMessage = body.message ?? "通報の送信に失敗しました";
+		} else {
+			reportMessage = "通報を受け付けました";
+			reportDetails = "";
+			setTimeout(() => {
+				showReportModal = false;
+				reportMessage = "";
+			}, 900);
+		}
+	} catch {
+		reportMessage = "通報の送信に失敗しました";
+	}
+	reportSubmitting = false;
+}
 </script>
 
 <svelte:window onkeydown={handleLightboxKeydown} />
 
-<article class="post-card" class:deleting class:post-card-clickable={!isDetailView}>
+<article
+	class="post-card"
+	class:deleting
+	class:post-card-clickable={!isDetailView}
+	class:post-card-modal-open={showExchangeModal || showQuoteModal || showReportModal || !!lightboxUrl}
+>
 	{#if !isDetailView}
 		<a href="/posts/{post.id}" class="post-card-hitarea" aria-label="投稿詳細を開く"></a>
 	{/if}
@@ -362,6 +414,62 @@ async function submitQuoteRepost() {
 			</div>
 		{/if}
 
+		{#if showReportModal}
+			<!-- svelte-ignore a11y_click_events_have_key_events -->
+			<div class="report-modal-overlay" role="presentation" onclick={() => (showReportModal = false)}>
+				<div
+					class="report-modal-card"
+					role="dialog"
+					aria-modal="true"
+					aria-labelledby="report-modal-title"
+					tabindex="-1"
+					onclick={(e) => e.stopPropagation()}
+				>
+					<div class="report-modal-header">
+						<span id="report-modal-title" class="report-modal-title">投稿を通報</span>
+						<button
+							type="button"
+							class="report-modal-close"
+							aria-label="閉じる"
+							onclick={() => (showReportModal = false)}
+						>
+							✕
+						</button>
+					</div>
+					<div class="report-modal-body">
+						<label class="report-field">
+							<span>理由</span>
+							<select bind:value={reportReason}>
+								<option value="spam">スパム</option>
+								<option value="harassment">嫌がらせ</option>
+								<option value="sexual">性的コンテンツ</option>
+								<option value="violence">暴力的コンテンツ</option>
+								<option value="illegal">違法・危険行為</option>
+								<option value="other">その他</option>
+							</select>
+						</label>
+						<label class="report-field">
+							<span>補足</span>
+							<textarea rows="3" maxlength="500" bind:value={reportDetails}></textarea>
+						</label>
+						{#if reportMessage}
+							<p class="report-message">{reportMessage}</p>
+						{/if}
+					</div>
+					<div class="report-modal-footer">
+						<button
+							type="button"
+							class="btn btn-primary"
+							disabled={reportSubmitting}
+							onclick={submitReport}
+						>
+							{reportSubmitting ? '送信中...' : '送信'}
+						</button>
+					</div>
+				</div>
+			</div>
+		{/if}
+
 		<div class="post-footer">
 			<a href="/posts/{post.id}" class="post-action-btn post-reply-btn" aria-label="返信">
 				<svg
@@ -494,6 +602,155 @@ async function submitQuoteRepost() {
 					{/if}
 				</button>
 			</form>
+
+			<form method="POST" action="?/bookmark" use:enhance={handleBookmark}>
+				<input type="hidden" name="post_id" value={post.id}>
+				<button
+					type="submit"
+					class="post-action-btn post-bookmark-btn"
+					class:active={bookmarkedByMe}
+					disabled={!isLoggedIn}
+					aria-label={bookmarkedByMe ? 'ブックマーク解除' : 'ブックマーク'}
+					title={bookmarkedByMe ? 'ブックマーク解除' : 'ブックマーク'}
+				>
+					<svg
+						width="15"
+						height="15"
+						viewBox="0 0 24 24"
+						fill={bookmarkedByMe ? 'currentColor' : 'none'}
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+					</svg>
+				</button>
+			</form>
+
+			<button
+				type="button"
+				class="post-action-btn post-report-btn"
+				disabled={!isLoggedIn || isOwn}
+				aria-label="通報"
+				title="通報"
+				onclick={(e) => { e.preventDefault(); e.stopPropagation(); showReportModal = true; }}
+			>
+				<svg
+					width="15"
+					height="15"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
+					<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+					<line x1="4" y1="22" x2="4" y2="15" />
+				</svg>
+			</button>
 		</div>
 	</div>
 </article>
+
+<style>
+.report-modal-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 1000;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 16px;
+	background: rgba(0, 0, 0, 0.58);
+	backdrop-filter: blur(3px);
+}
+
+.report-modal-card {
+	width: min(420px, 100%);
+	border: 1px solid var(--color-border);
+	border-radius: 12px;
+	background: var(--color-bg-card);
+	box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
+}
+
+.report-modal-header,
+.report-modal-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 14px 16px;
+	border-bottom: 1px solid var(--color-border);
+}
+
+.report-modal-footer {
+	justify-content: flex-end;
+	border-top: 1px solid var(--color-border);
+	border-bottom: 0;
+}
+
+.report-modal-title {
+	font-size: 15px;
+	font-weight: 800;
+}
+
+.report-modal-close {
+	display: grid;
+	place-items: center;
+	width: 32px;
+	height: 32px;
+	border-radius: 8px;
+	color: var(--color-text-muted);
+}
+
+.report-modal-close:hover {
+	background: var(--color-bg-hover);
+	color: var(--color-text);
+}
+
+.report-modal-body {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 16px;
+}
+
+.report-field {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	color: var(--color-text-muted);
+	font-size: 13px;
+	font-weight: 700;
+}
+
+.report-field select,
+.report-field textarea {
+	width: 100%;
+	border: 1px solid var(--color-border);
+	border-radius: 8px;
+	background: var(--color-bg);
+	color: var(--color-text);
+	padding: 9px 10px;
+	font-weight: 400;
+}
+
+.report-field textarea {
+	resize: vertical;
+}
+
+.report-message {
+	margin: 0;
+	color: var(--color-text-secondary);
+	font-size: 13px;
+}
+
+.post-report-btn:disabled {
+	opacity: 0.35;
+	cursor: not-allowed;
+}
+</style>

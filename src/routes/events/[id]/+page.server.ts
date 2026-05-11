@@ -1,5 +1,11 @@
-import { error, fail } from "@sveltejs/kit";
-import { deletePostAction, insertPostWithHashtags, toggleLikeAction, toggleRepostAction } from "$lib/server/actions";
+﻿import { error, fail } from "@sveltejs/kit";
+import {
+	deletePostAction,
+	insertPostWithHashtags,
+	toggleBookmarkAction,
+	toggleLikeAction,
+	toggleRepostAction,
+} from "$lib/server/actions";
 import { getEvent, getEventPosts } from "$lib/server/queries";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -51,5 +57,10 @@ export const actions: Actions = {
 		const { user } = await safeGetSession();
 		if (!user) return fail(401, { message: "ログインが必要です" });
 		return toggleRepostAction(request, supabase, user.id);
+	},
+	bookmark: async ({ request, locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { message: "ログインが必要です" });
+		return toggleBookmarkAction(request, supabase, user.id);
 	},
 };
