@@ -22,9 +22,9 @@ const statusLabels = {
 };
 
 const moderationLabels = {
-	active: "Active",
-	restricted: "Restricted",
-	banned: "Banned",
+	active: "制限なし",
+	restricted: "制限",
+	banned: "BAN",
 };
 
 function toDateTimeLocal(value: string | null) {
@@ -82,11 +82,11 @@ const dashboard = $derived(data.dashboard);
 			<strong>{dashboard.stats.totalUsers}</strong>
 		</div>
 		<div class="admin-stat">
-			<span>Restricted</span>
+			<span>制限中</span>
 			<strong>{dashboard.stats.restrictedUsers}</strong>
 		</div>
 		<div class="admin-stat admin-stat-alert">
-			<span>Banned</span>
+			<span>BAN中</span>
 			<strong>{dashboard.stats.bannedUsers}</strong>
 		</div>
 	</section>
@@ -170,7 +170,7 @@ const dashboard = $derived(data.dashboard);
 							>
 								<input type="hidden" name="report_id" value={report.id}>
 								<input type="hidden" name="target_user_id" value={report.target_user_id}>
-								<select name="moderation_status" aria-label="Account moderation">
+								<select name="moderation_status" aria-label="アカウント措置">
 									{#each Object.entries(moderationLabels) as [ value, label ]}
 										<option
 											{value}
@@ -183,17 +183,17 @@ const dashboard = $derived(data.dashboard);
 								<input
 									type="datetime-local"
 									name="moderation_until"
-									aria-label="Restricted until"
+									aria-label="制限期限"
 									value={toDateTimeLocal(report.target_moderation_until)}
 								>
 								<input
 									type="text"
 									name="moderation_reason"
 									maxlength="500"
-									placeholder="Reason"
+									placeholder="措置理由"
 									value={report.target_moderation_reason ?? ''}
 								>
-								<button type="submit" class="btn btn-danger">Apply</button>
+								<button type="submit" class="btn btn-danger">適用</button>
 							</form>
 						{/if}
 					</article>
