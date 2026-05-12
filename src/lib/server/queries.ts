@@ -303,12 +303,32 @@ export async function getEventsByMonth(
 	const { data, error } = await supabase
 		.from("events")
 		.select(`
-            id, creator_id, title, description, hashtag,
+            id, creator_id, title, description, hashtag, anime_id,
             scheduled_at, duration_minutes, is_cancelled, created_at,
             profiles!events_creator_id_fkey ( username, display_name, avatar_url )
         `)
 		.gte("scheduled_at", startOfMonth)
 		.lte("scheduled_at", endOfMonth)
+		.order("scheduled_at", { ascending: true });
+
+	if (error || !data) return [];
+	return data.map(toEvent);
+}
+
+export async function getEventsByRange(
+	supabase: SupabaseClient<Database>,
+	startIso: string,
+	endIso: string,
+): Promise<Event[]> {
+	const { data, error } = await supabase
+		.from("events")
+		.select(`
+            id, creator_id, title, description, hashtag, anime_id,
+            scheduled_at, duration_minutes, is_cancelled, created_at,
+            profiles!events_creator_id_fkey ( username, display_name, avatar_url )
+        `)
+		.gte("scheduled_at", startIso)
+		.lte("scheduled_at", endIso)
 		.order("scheduled_at", { ascending: true });
 
 	if (error || !data) return [];
@@ -324,7 +344,7 @@ export async function getUpcomingEvents(supabase: SupabaseClient<Database>, limi
 	const { data, error } = await supabase
 		.from("events")
 		.select(`
-            id, creator_id, title, description, hashtag,
+            id, creator_id, title, description, hashtag, anime_id,
             scheduled_at, duration_minutes, is_cancelled, created_at,
             profiles!events_creator_id_fkey ( username, display_name, avatar_url )
         `)
@@ -344,7 +364,7 @@ export async function getEvent(supabase: SupabaseClient<Database>, eventId: stri
 	const { data, error } = await supabase
 		.from("events")
 		.select(`
-            id, creator_id, title, description, hashtag,
+            id, creator_id, title, description, hashtag, anime_id,
             scheduled_at, duration_minutes, is_cancelled, created_at,
             profiles!events_creator_id_fkey ( username, display_name, avatar_url )
         `)

@@ -120,9 +120,9 @@ function isActive(path: string): boolean {
 		<a
 			href="/schedule"
 			class="sidebar-btn"
-			class:active={isActive('/schedule')}
-			aria-label="放送スケジュール"
-			title="放送スケジュール"
+			class:active={isActive('/schedule') || isActive('/events')}
+			aria-label="週間スケジュール"
+			title="週間スケジュール"
 		>
 			<svg
 				width="22"
@@ -138,33 +138,7 @@ function isActive(path: string): boolean {
 				<rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
 				<path d="M16 2l-4 5-4-5" />
 			</svg>
-			<span class="sidebar-btn-label">放送</span>
-		</a>
-
-		<a
-			href="/calendar"
-			class="sidebar-btn"
-			class:active={isActive('/calendar') || isActive('/events')}
-			aria-label="カレンダー"
-			title="イベントカレンダー"
-		>
-			<svg
-				width="22"
-				height="22"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-				aria-hidden="true"
-			>
-				<rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-				<line x1="16" y1="2" x2="16" y2="6" />
-				<line x1="8" y1="2" x2="8" y2="6" />
-				<line x1="3" y1="10" x2="21" y2="10" />
-			</svg>
-			<span class="sidebar-btn-label">カレンダー</span>
+			<span class="sidebar-btn-label">予定</span>
 		</a>
 
 		{#if session}
