@@ -12,6 +12,7 @@ function notificationLabel(type: string): string {
 	if (type === "mention") return "があなたをメンションしました";
 	if (type === "follow") return "があなたをフォローしました";
 	if (type === "anime_recommendation") return "が作品を推薦しました";
+	if (type === "follow_request") return "さんからフォロー申請が届きました";
 	return "";
 }
 </script>
@@ -57,6 +58,9 @@ function notificationLabel(type: string): string {
 									{/if}
 									<span> <strong>{notif.recommendation_anime_title ?? '推薦作品'}</strong> </span>
 								</a>
+							{/if}
+							{#if notif.type === 'follow_request'}
+								<a href="/settings/follow-requests" class="notification-action-link">申請を確認</a>
 							{/if}
 							<span class="notification-time">{formatRelativeTime(notif.created_at)}</span>
 						</div>
@@ -179,6 +183,18 @@ function notificationLabel(type: string): string {
 
 .notification-anime-preview strong {
 	font-size: 13px;
+}
+
+.notification-action-link {
+	width: fit-content;
+	font-size: 13px;
+	font-weight: 700;
+	color: var(--accent, #6366f1);
+	text-decoration: none;
+}
+
+.notification-action-link:hover {
+	text-decoration: underline;
 }
 
 .notification-time {

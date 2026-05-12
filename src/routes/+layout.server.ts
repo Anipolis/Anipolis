@@ -1,6 +1,6 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import type { ServerLoad } from "@sveltejs/kit";
-import { getPendingFollowRequestCount, getUnreadNotificationCount } from "$lib/server/queries";
+import { getUnreadNotificationCount } from "$lib/server/queries";
 import type { Database } from "$lib/supabase/database.types";
 
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
@@ -48,12 +48,7 @@ export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, c
 	const { session, user } = await safeGetSession();
 
 	const profile = user ? await getOrCreateProfile(supabase, user) : null;
-	const [unreadNotificationCount, pendingFollowRequestCount] = user
-		? await Promise.all([
-				getUnreadNotificationCount(supabase, user.id),
-				getPendingFollowRequestCount(supabase, user.id),
-			])
-		: [0, 0];
+	const unreadNotificationCount = user ? await getUnreadNotificationCount(supabase, user.id) : 0;
 
 	const filteredCookies = cookies.getAll().filter(({ name }) => /^sb-.+-auth-token/.test(name));
 
@@ -62,7 +57,6 @@ export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, c
 		user,
 		profile,
 		unreadNotificationCount,
-		pendingFollowRequestCount,
 		cookies: filteredCookies,
 	};
 };

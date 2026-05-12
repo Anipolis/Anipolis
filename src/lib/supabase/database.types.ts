@@ -366,7 +366,14 @@ export type Database = {
 					id: string;
 					recipient_id: string;
 					actor_id: string;
-					type: "like" | "repost" | "reply" | "mention" | "follow" | "anime_recommendation";
+					type:
+						| "like"
+						| "repost"
+						| "reply"
+						| "mention"
+						| "follow"
+						| "follow_request"
+						| "anime_recommendation";
 					post_id: string | null;
 					anime_recommendation_id: string | null;
 					read: boolean;
@@ -376,7 +383,14 @@ export type Database = {
 					id?: string;
 					recipient_id: string;
 					actor_id: string;
-					type: "like" | "repost" | "reply" | "mention" | "follow" | "anime_recommendation";
+					type:
+						| "like"
+						| "repost"
+						| "reply"
+						| "mention"
+						| "follow"
+						| "follow_request"
+						| "anime_recommendation";
 					post_id?: string | null;
 					anime_recommendation_id?: string | null;
 					read?: boolean;

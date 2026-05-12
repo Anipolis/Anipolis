@@ -23,6 +23,5 @@ export const load: LayoutLoad = async ({ data, depends, fetch }) => {
 		user: data.user,
 		profile: data.profile,
 		unreadNotificationCount: data.unreadNotificationCount ?? 0,
-		pendingFollowRequestCount: data.pendingFollowRequestCount ?? 0,
 	};
 };

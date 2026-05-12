@@ -24,7 +24,6 @@ onMount(() => {
 		session={data.session}
 		profile={data.profile}
 		unreadNotificationCount={data.unreadNotificationCount}
-		pendingFollowRequestCount={data.pendingFollowRequestCount}
 	/>
 	<div class="app-main">
 		<Nav />

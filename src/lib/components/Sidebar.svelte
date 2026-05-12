@@ -13,10 +13,9 @@ interface Props {
 	session: Session | null;
 	profile: Profile;
 	unreadNotificationCount?: number;
-	pendingFollowRequestCount?: number;
 }
 
-let { supabase, session, profile, unreadNotificationCount = 0, pendingFollowRequestCount = 0 }: Props = $props();
+let { supabase, session, profile, unreadNotificationCount = 0 }: Props = $props();
 
 let theme = $state(
 	browser ? localStorage.getItem("theme") || document.documentElement.getAttribute("data-theme") || "dark" : "dark",
@@ -194,37 +193,6 @@ function isActive(path: string): boolean {
 					<span class="sidebar-badge">{unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}</span>
 				{/if}
 				<span class="sidebar-btn-label">通知</span>
-			</a>
-
-			<a
-				href="/follow-requests"
-				class="sidebar-btn"
-				class:active={isActive('/follow-requests')}
-				aria-label="フォロー申請"
-				title="フォロー申請"
-			>
-				<svg
-					width="22"
-					height="22"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-					<circle cx="9" cy="7" r="4" />
-					<path d="M19 8v6" />
-					<path d="M22 11h-6" />
-				</svg>
-				{#if pendingFollowRequestCount > 0}
-					<span class="sidebar-badge"
-						>{pendingFollowRequestCount > 99 ? '99+' : pendingFollowRequestCount}</span
-					>
-				{/if}
-				<span class="sidebar-btn-label">フォロー申請</span>
 			</a>
 
 			<a
