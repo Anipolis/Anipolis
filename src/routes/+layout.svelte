@@ -1,7 +1,6 @@
 <script lang="ts">
 import { onMount } from "svelte";
 import { invalidate } from "$app/navigation";
-import Nav from "$lib/components/Nav.svelte";
 import Sidebar from "$lib/components/Sidebar.svelte";
 import type { LayoutProps } from "./$types";
 import "../app.css";
@@ -26,7 +25,6 @@ onMount(() => {
 		unreadNotificationCount={data.unreadNotificationCount}
 	/>
 	<div class="app-main">
-		<Nav />
 		{@render children()}
 	</div>
 </div>

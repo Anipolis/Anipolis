@@ -8,7 +8,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	const query = url.searchParams.get("q")?.trim() ?? "";
 
 	if (!query) {
-		return { query: "", posts: [], users: [] };
+		return { query: "", posts: [], users: [], user };
 	}
 
 	const pattern = `%${query}%`;
@@ -39,6 +39,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		query,
 		posts,
 		users: usersResult.data ?? [],
+		user,
 	};
 };
 
