@@ -118,6 +118,30 @@ function isActive(path: string): boolean {
 		</a>
 
 		<a
+			href="/schedule"
+			class="sidebar-btn"
+			class:active={isActive('/schedule')}
+			aria-label="放送スケジュール"
+			title="放送スケジュール"
+		>
+			<svg
+				width="22"
+				height="22"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				aria-hidden="true"
+			>
+				<rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+				<path d="M16 2l-4 5-4-5" />
+			</svg>
+			<span class="sidebar-btn-label">放送</span>
+		</a>
+
+		<a
 			href="/calendar"
 			class="sidebar-btn"
 			class:active={isActive('/calendar') || isActive('/events')}

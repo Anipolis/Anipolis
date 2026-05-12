@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
 import { enhance } from "$app/forms";
 
 type FormResult = { success?: boolean; animeId?: string | number; message?: string } | null | undefined;
@@ -200,6 +200,37 @@ async function handleFileChange(e: Event) {
 				<label for="rf-aired-to">放送終了</label>
 				<input id="rf-aired-to" name="aired_to" type="date" class="rf-input">
 			</div>
+		</div>
+
+		<div class="form-row">
+			<div class="form-group">
+				<label for="rf-broadcast-day">放送曜日</label>
+				<select id="rf-broadcast-day" name="broadcast_day" class="rf-select">
+					<option value="">未設定</option>
+					<option value="0">日曜日</option>
+					<option value="1">月曜日</option>
+					<option value="2">火曜日</option>
+					<option value="3">水曜日</option>
+					<option value="4">木曜日</option>
+					<option value="5">金曜日</option>
+					<option value="6">土曜日</option>
+				</select>
+			</div>
+			<div class="form-group">
+				<label for="rf-broadcast-time">放送時刻 (JST)</label>
+				<input id="rf-broadcast-time" name="broadcast_time" type="time" class="rf-input">
+			</div>
+		</div>
+
+		<div class="form-group">
+			<label for="rf-broadcast-station">放送局</label>
+			<input
+				id="rf-broadcast-station"
+				type="text"
+				name="broadcast_station"
+				class="rf-input"
+				placeholder="複数の場合はカンマ区切り（例: TBS, MX, AT-X）"
+			>
 		</div>
 
 		<div class="form-group">

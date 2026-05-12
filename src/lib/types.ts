@@ -167,6 +167,9 @@ export interface Anime {
 	official_x_url: string | null;
 	official_hashtag: string[] | null;
 	copyright: string | null;
+	broadcast_day: number | null;
+	broadcast_time: string | null;
+	broadcast_station: string[] | null;
 	created_at: string;
 	// 集計フィールド（クエリ時に付加）
 	list_count?: number;

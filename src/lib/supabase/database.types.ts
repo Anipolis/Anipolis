@@ -630,6 +630,9 @@ export type Database = {
 					official_x_url: string | null;
 					official_hashtag: string[] | null;
 					copyright: string | null;
+					broadcast_day: number | null;
+					broadcast_time: string | null;
+					broadcast_station: string[] | null;
 					created_at: string;
 				};
 				Insert: {
@@ -652,6 +655,9 @@ export type Database = {
 					official_x_url?: string | null;
 					official_hashtag?: string[] | null;
 					copyright?: string | null;
+					broadcast_day?: number | null;
+					broadcast_time?: string | null;
+					broadcast_station?: string[] | null;
 					created_at?: string;
 				};
 				Update: {
@@ -674,6 +680,9 @@ export type Database = {
 					official_x_url?: string | null;
 					official_hashtag?: string[] | null;
 					copyright?: string | null;
+					broadcast_day?: number | null;
+					broadcast_time?: string | null;
+					broadcast_station?: string[] | null;
 				};
 				Relationships: [];
 			};

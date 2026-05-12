@@ -1243,6 +1243,9 @@ function toAnime(raw: Record<string, unknown>): Anime {
 		official_x_url: (raw["official_x_url"] as string | null) ?? null,
 		official_hashtag: (raw["official_hashtag"] as string[] | null) ?? null,
 		copyright: (raw["copyright"] as string | null) ?? null,
+		broadcast_day: (raw["broadcast_day"] as number | null) ?? null,
+		broadcast_time: (raw["broadcast_time"] as string | null) ?? null,
+		broadcast_station: (raw["broadcast_station"] as string[] | null) ?? null,
 		created_at: String(raw["created_at"]),
 	};
 }
