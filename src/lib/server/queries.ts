@@ -875,6 +875,8 @@ export async function getLikedPosts(
 
 export interface AnimeListOptions {
 	season?: string;
+	broadcastYear?: string;
+	broadcastSeason?: string;
 	genre?: string;
 	studio?: string;
 	producer?: string;
@@ -891,11 +893,24 @@ export async function getAnimeList(
 	supabase: SupabaseClient<Database>,
 	options: AnimeListOptions = {},
 ): Promise<Anime[]> {
-	const { season, genre, studio, producer, status, limit = 20, userId, query: searchQuery } = options;
+	const {
+		season,
+		broadcastYear,
+		broadcastSeason,
+		genre,
+		studio,
+		producer,
+		status,
+		limit = 20,
+		userId,
+		query: searchQuery,
+	} = options;
 
 	let query = supabase.from("anime").select("*").order("created_at", { ascending: false }).limit(limit);
 
 	if (season) query = query.eq("season", season);
+	const seasonFilter = buildSeasonFilter(broadcastYear, broadcastSeason);
+	if (seasonFilter) query = query.or(seasonFilter);
 	if (genre) query = query.contains("genre", [genre]);
 	if (studio) query = query.contains("studio", [studio]);
 	if (producer) query = query.contains("producer", [producer]);
@@ -908,6 +923,40 @@ export async function getAnimeList(
 	const animes: Anime[] = (data as Record<string, unknown>[]).map(toAnime);
 	if (userId) return enrichAnimeWithUserEntries(supabase, animes, userId);
 	return animes;
+}
+
+function buildSeasonFilter(year: string | undefined, season: string | undefined): string | null {
+	const normalizedYear = year?.trim();
+	const normalizedSeason = season?.trim();
+	if (!normalizedYear && !normalizedSeason) return null;
+
+	if (normalizedYear && normalizedSeason) {
+		return seasonSearchTerms(normalizedSeason)
+			.map((term) => `season.ilike.${normalizedYear}%${term}`)
+			.join(",");
+	}
+
+	if (normalizedYear) return `season.ilike.${normalizedYear}%`;
+
+	return seasonSearchTerms(normalizedSeason ?? "")
+		.flatMap((term) => [`season.ilike.%${term}`, `season.ilike.%-${term}`])
+		.join(",");
+}
+
+function seasonSearchTerms(season: string): string[] {
+	const aliases: Record<string, string[]> = {
+		春: ["春", "spring"],
+		夏: ["夏", "summer"],
+		秋: ["秋", "autumn", "fall"],
+		冬: ["冬", "winter"],
+		spring: ["spring", "春"],
+		summer: ["summer", "夏"],
+		autumn: ["autumn", "fall", "秋"],
+		fall: ["fall", "autumn", "秋"],
+		winter: ["winter", "冬"],
+	};
+
+	return [...new Set(aliases[season.toLowerCase()] ?? [season])];
 }
 
 /**

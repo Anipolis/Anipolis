@@ -33,6 +33,12 @@ function toDateInputValue(date: Date) {
 	return `${y}-${m}-${d}`;
 }
 
+function broadcastTimeSortValue(value: string | null) {
+	const match = value?.match(/^(\d{1,2}):([0-5]\d)/);
+	if (!match) return Number.POSITIVE_INFINITY;
+	return Number(match[1]) * 60 + Number(match[2]);
+}
+
 export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 
@@ -62,7 +68,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	}
 
 	for (const day of days) {
-		day.anime.sort((a, b) => (a.broadcast_time ?? "").localeCompare(b.broadcast_time ?? ""));
+		day.anime.sort((a, b) => broadcastTimeSortValue(a.broadcast_time) - broadcastTimeSortValue(b.broadcast_time));
 		day.events.sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
 	}
 

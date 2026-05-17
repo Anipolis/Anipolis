@@ -218,7 +218,15 @@ async function handleFileChange(e: Event) {
 			</div>
 			<div class="form-group">
 				<label for="rf-broadcast-time">放送時刻 (JST)</label>
-				<input id="rf-broadcast-time" name="broadcast_time" type="time" class="rf-input">
+				<input
+					id="rf-broadcast-time"
+					name="broadcast_time"
+					type="text"
+					inputmode="numeric"
+					pattern="([01]?[0-9]|2[0-9]|3[0-5]|4[0-7]):[0-5][0-9]"
+					placeholder="例: 24:30 / 26:00"
+					class="rf-input"
+				>
 			</div>
 		</div>
 

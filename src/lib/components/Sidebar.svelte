@@ -138,7 +138,7 @@ function isActive(path: string): boolean {
 				<rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
 				<path d="M16 2l-4 5-4-5" />
 			</svg>
-			<span class="sidebar-btn-label">予定</span>
+			<span class="sidebar-btn-label">カレンダー</span>
 		</a>
 
 		{#if session}
@@ -234,7 +234,13 @@ function isActive(path: string): boolean {
 				<span class="sidebar-btn-label">マイリスト</span>
 			</a>
 
-			<a href="/exchange" class="sidebar-btn" class:active={isActive('/exchange')} aria-label="交換" title="交換">
+			<a
+				href="/exchange"
+				class="sidebar-btn"
+				class:active={isActive('/exchange')}
+				aria-label="トレード"
+				title="トレード"
+			>
 				<svg
 					width="22"
 					height="22"
@@ -251,7 +257,7 @@ function isActive(path: string): boolean {
 					<path d="M7 7v4" />
 					<path d="M17 17h-4" />
 				</svg>
-				<span class="sidebar-btn-label">交換</span>
+				<span class="sidebar-btn-label">トレード</span>
 			</a>
 		{/if}
 	</nav>

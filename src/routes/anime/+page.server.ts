@@ -11,27 +11,49 @@ import type { Actions, PageServerLoad } from "./$types";
 
 type Tab = "popular" | "trending" | "top_rated" | "mylist" | "airing" | "upcoming" | "register";
 
+function normalizeBroadcastTime(value: string | null | undefined) {
+	const raw = value?.trim();
+	if (!raw) return null;
+
+	const match = raw.match(/^(\d{1,2}):([0-5]\d)$/);
+	if (!match) return undefined;
+
+	const hour = Number(match[1]);
+	if (!Number.isInteger(hour) || hour < 0 || hour > 47) return undefined;
+
+	return `${String(hour).padStart(2, "0")}:${match[2]}`;
+}
+
 export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 	const tab = (url.searchParams.get("tab") as Tab) ?? "popular";
 	const search = url.searchParams.get("search")?.trim() ?? "";
 	const genre = url.searchParams.get("genre")?.trim() ?? "";
 	const season = url.searchParams.get("season")?.trim() ?? "";
+	const broadcastYearParam = url.searchParams.get("broadcastYear")?.trim() ?? "";
+	const broadcastYear = /^\d{4}$/.test(broadcastYearParam) ? broadcastYearParam : "";
+	const broadcastSeason = url.searchParams.get("broadcastSeason")?.trim() ?? "";
 	const studio = url.searchParams.get("studio")?.trim() ?? "";
 	const producer = url.searchParams.get("producer")?.trim() ?? "";
 
 	let animes: Anime[];
+	const hasSearchFilters = Boolean(
+		search || genre || season || broadcastYear || broadcastSeason || studio || producer,
+	);
 
-	if (search) {
-		animes = await getAnimeList(supabase, { query: search, limit: 1000, userId: user?.id ?? null });
-	} else if (genre) {
-		animes = await getAnimeList(supabase, { genre, limit: 1000, userId: user?.id ?? null });
-	} else if (season) {
-		animes = await getAnimeList(supabase, { season, limit: 1000, userId: user?.id ?? null });
-	} else if (studio) {
-		animes = await getAnimeList(supabase, { studio, limit: 1000, userId: user?.id ?? null });
-	} else if (producer) {
-		animes = await getAnimeList(supabase, { producer, limit: 1000, userId: user?.id ?? null });
+	if (hasSearchFilters) {
+		const filters: NonNullable<Parameters<typeof getAnimeList>[1]> = {
+			limit: 1000,
+			userId: user?.id ?? null,
+		};
+		if (search) filters.query = search;
+		if (genre) filters.genre = genre;
+		if (season) filters.season = season;
+		if (broadcastYear) filters.broadcastYear = broadcastYear;
+		if (broadcastSeason) filters.broadcastSeason = broadcastSeason;
+		if (studio) filters.studio = studio;
+		if (producer) filters.producer = producer;
+		animes = await getAnimeList(supabase, filters);
 	} else if (tab === "mylist") {
 		animes = user ? await getUserAnimeList(supabase, user.id) : [];
 	} else if (tab === "trending") {
@@ -57,7 +79,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		}
 	}
 
-	return { animes, tab, search, genre, season, studio, producer, user };
+	return { animes, tab, search, genre, season, broadcastYear, broadcastSeason, studio, producer, user };
 };
 
 export const actions: Actions = {
@@ -79,6 +101,10 @@ export const actions: Actions = {
 		const toArr = (vals: FormDataEntryValue[]) => vals.map((v) => (v as string).trim()).filter(Boolean);
 
 		const epRaw = fd.get("episode_count") as string;
+		const broadcastTime = normalizeBroadcastTime(fd.get("broadcast_time") as string | null);
+		if (broadcastTime === undefined) {
+			return fail(400, { message: "放送時刻は 23:30 や 26:00 の形式で入力してください" });
+		}
 
 		let cover_url: string | null = (fd.get("cover_url") as string)?.trim() || null;
 		const imageFile = fd.get("image_file");
@@ -120,7 +146,7 @@ export const actions: Actions = {
 					const v = (fd.get("broadcast_day") as string)?.trim();
 					return v !== "" && v != null ? parseInt(v, 10) : null;
 				})(),
-				broadcast_time: (fd.get("broadcast_time") as string)?.trim() || null,
+				broadcast_time: broadcastTime,
 				broadcast_station: (() => {
 					const v = (fd.get("broadcast_station") as string)?.trim();
 					if (!v) return null;

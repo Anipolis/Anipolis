@@ -41,6 +41,11 @@ const listedUserStatusLabels: Record<string, string> = {
 	dropped: "断念",
 };
 
+function formatAiredPeriod(airedFrom: string | null, airedTo: string | null): string | null {
+	if (!airedFrom) return null;
+	return `${airedFrom.slice(0, 10)} 〜 ${airedTo ? airedTo.slice(0, 10) : "未定"}`;
+}
+
 let selectedStatus = $state<AnimeStatus>("plan_to_watch");
 let score = $state<string>("");
 let progress = $state<string>("0");
@@ -339,8 +344,7 @@ const handleRecommendSubmit: SubmitFunction = () => {
 					{/if}
 					{#if data.anime.aired_from}
 						<span class="meta-chip aired">
-							{data.anime.aired_from.slice(0, 10)}
-							{data.anime.aired_to ? ` 〜 ${data.anime.aired_to.slice(0, 10)}` : ""}
+							{formatAiredPeriod(data.anime.aired_from, data.anime.aired_to)}
 						</span>
 					{/if}
 				</div>
