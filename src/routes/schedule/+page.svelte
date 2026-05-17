@@ -7,7 +7,7 @@ let { data, form }: PageProps & { form: ActionData } = $props();
 let showEventDialog = $state(false);
 
 const DAY_BG = ["#fff1f0", "#f4f7ff", "#f4f7ff", "#f4f7ff", "#f4f7ff", "#f4f7ff", "#eff8ff"];
-const DAY_COLOR = ["#dc2626", "var(--text)", "var(--text)", "var(--text)", "var(--text)", "var(--text)", "#2563eb"];
+const DAY_COLOR = ["#dc2626", "#334155", "#334155", "#334155", "#334155", "#334155", "#2563eb"];
 
 $effect(() => {
 	if (form && "message" in form) showEventDialog = true;
@@ -271,7 +271,7 @@ function formatTime(iso: string) {
 }
 .day-heading time {
 	font-size: 0.7rem;
-	color: var(--text-muted);
+	color: color-mix(in srgb, currentColor 72%, transparent);
 }
 .day-slots {
 	border: 1px solid var(--border);
