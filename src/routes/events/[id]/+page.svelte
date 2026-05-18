@@ -57,7 +57,7 @@ const timerLabel = $derived.by<string>(() => {
 
 let postContent = $state("");
 const maxLen = 280;
-const hashtagSuffix = ` #${data.event.hashtag}`;
+const hashtagSuffix = $derived(` #${data.event.hashtag}`);
 
 // ハッシュタグを除いた実質文字数（上限チェック用）
 const contentWithTag = $derived(
@@ -83,7 +83,7 @@ function formatDate(iso: string): string {
 }
 </script>
 
-<svelte:head> <title>{data.event.title} - Anipolis</title> </svelte:head>
+<svelte:head> <title>{data.event.title} — Anipolis</title> </svelte:head>
 
 <div class="page-container">
 	<div class="feed-column">
@@ -155,7 +155,9 @@ function formatDate(iso: string): string {
 		{/if}
 
 		<!-- ── 投稿フィード ── -->
-		<div class="event-posts-header"><span class="event-posts-count">{data.posts.length}件の実況</span></div>
+		<div class="event-posts-header">
+			<span class="event-posts-count">{data.posts.length}件の実況</span>
+		</div>
 
 		{#if data.posts.length === 0}
 			<div class="card" style="text-align:center; color:var(--color-muted); padding:32px;">

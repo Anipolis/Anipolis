@@ -5,9 +5,7 @@ let searchQuery = $state("");
 
 function handleSearch(event: Event) {
 	event.preventDefault();
-	const form = event.currentTarget as HTMLFormElement | null;
-	const formData = form ? new FormData(form) : null;
-	const query = ((formData?.get("q")?.toString() ?? searchQuery) || "").trim();
+	const query = searchQuery.trim();
 	if (query) goto(`/search?q=${encodeURIComponent(query)}`);
 }
 </script>
@@ -16,9 +14,9 @@ function handleSearch(event: Event) {
 	<div class="nav-inner">
 		<a href="/" class="nav-logo">Anipolis</a>
 
-		<form class="nav-search" action="/search" method="get" onsubmit={handleSearch}>
+		<form class="nav-search" onsubmit={handleSearch}>
 			<span class="nav-search-icon">🔍</span>
-			<input type="search" name="q" placeholder="検索" bind:value={searchQuery} aria-label="検索">
+			<input type="search" placeholder="検索" bind:value={searchQuery} aria-label="検索">
 		</form>
 	</div>
 </nav>

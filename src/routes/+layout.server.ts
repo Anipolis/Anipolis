@@ -1,23 +1,28 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
-import { getUnreadNotificationCount } from "$lib/server/queries";
+import type { ServerLoad } from "@sveltejs/kit";
+import { getPendingFollowRequestCount, getUnreadNotificationCount } from "$lib/server/queries";
 import type { Database } from "$lib/supabase/database.types";
-import type { LayoutServerLoad } from "./$types";
 
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 
 /**
- * プロフィールを取得、なければ Google メタデータから自動作成する
+ * プロフィールを取得し、なければ Google メタデータから自動作成する
  */
 async function getOrCreateProfile(supabase: SupabaseClient<Database>, user: User): Promise<Profile | null> {
 	const { data: existing } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
 
 	if (existing) return existing;
 
+	const metadata = user.user_metadata as {
+		user_name?: string;
+		full_name?: string | null;
+		avatar_url?: string | null;
+	};
+
 	// Google ログイン後にトリガーが未実行の場合に備えて手動作成
 	const rawBase =
-		((user.user_metadata?.["user_name"] as string | undefined) || user.email?.split("@")[0] || "user")
-			.replace(/[^a-zA-Z0-9_]/g, "")
-			.slice(0, 14) || "user";
+		(metadata.user_name || user.email?.split("@")[0] || "user").replace(/[^a-zA-Z0-9_]/g, "").slice(0, 14) ||
+		"user";
 
 	// user.id の先頭5文字を付けて一意性を保証
 	const username = `${rawBase}_${user.id.slice(0, 5)}`;
@@ -28,8 +33,8 @@ async function getOrCreateProfile(supabase: SupabaseClient<Database>, user: User
 			{
 				id: user.id,
 				username,
-				display_name: (user.user_metadata?.["full_name"] as string | null) ?? null,
-				avatar_url: (user.user_metadata?.["avatar_url"] as string | null) ?? null,
+				display_name: metadata.full_name ?? null,
+				avatar_url: metadata.avatar_url ?? null,
 			},
 			{ onConflict: "id" },
 		)
@@ -39,17 +44,25 @@ async function getOrCreateProfile(supabase: SupabaseClient<Database>, user: User
 	return created;
 }
 
-export const load: LayoutServerLoad = async ({ locals: { supabase, safeGetSession }, cookies }) => {
+export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, cookies }) => {
 	const { session, user } = await safeGetSession();
 
 	const profile = user ? await getOrCreateProfile(supabase, user) : null;
-	const unreadNotificationCount = user ? await getUnreadNotificationCount(supabase, user.id) : 0;
+	const [unreadNotificationCount, pendingFollowRequestCount] = user
+		? await Promise.all([
+				getUnreadNotificationCount(supabase, user.id),
+				getPendingFollowRequestCount(supabase, user.id),
+			])
+		: [0, 0];
+
+	const filteredCookies = cookies.getAll().filter(({ name }) => /^sb-.+-auth-token/.test(name));
 
 	return {
 		session,
 		user,
 		profile,
 		unreadNotificationCount,
-		cookies: cookies.getAll(),
+		pendingFollowRequestCount,
+		cookies: filteredCookies,
 	};
 };

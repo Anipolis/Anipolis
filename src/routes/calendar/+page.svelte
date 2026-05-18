@@ -21,18 +21,27 @@ function buildCalendarGrid(year: number, month: number): (number | null)[] {
 	return cells;
 }
 
+const eventsByDate = $derived(() => {
+	const map = new Map<string, Event[]>();
+	for (const e of data.events) {
+		const d = new Date(e.scheduled_at);
+		const key = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+		const bucket = map.get(key);
+		if (bucket) bucket.push(e);
+		else map.set(key, [e]);
+	}
+	return map;
+});
+
 /** その日のイベント一覧 */
 function eventsOnDay(year: number, month: number, day: number): Event[] {
-	return data.events.filter((e) => {
-		const d = new Date(e.scheduled_at);
-		return d.getFullYear() === year && d.getMonth() + 1 === month && d.getDate() === day;
-	});
+	return eventsByDate().get(`${year}-${month}-${day}`) ?? [];
 }
 
-function isToday(year: number, month: number, day: number): boolean {
-	const now = new Date();
-	return now.getFullYear() === year && now.getMonth() + 1 === month && now.getDate() === day;
-}
+const today = new Date();
+const todayYear = today.getFullYear();
+const todayMonth = today.getMonth() + 1;
+const todayDate = today.getDate();
 
 function prevMonth() {
 	let y = data.year,
@@ -62,16 +71,17 @@ function formatTime(iso: string): string {
 const grid = $derived(buildCalendarGrid(data.year, data.month));
 </script>
 
-<svelte:head> <title>カレンダー - Anipolis</title> </svelte:head>
+<svelte:head> <title>カレンダー — Anipolis</title> </svelte:head>
 
-<div class="page-container">
+<div class="calendar-page-container">
 	<!-- カレンダー本体 -->
-	<div class="feed-column">
+	<div class="calendar-main">
 		<div class="card calendar-card">
 			<!-- ヘッダー：月ナビゲーション -->
 			<div class="calendar-header">
-				<button class="btn btn-ghost calendar-nav-btn" onclick={prevMonth} aria-label="前の月">
+				<button type="button" class="btn btn-ghost calendar-nav-btn" onclick={prevMonth} aria-label="前の月">
 					<svg
+						aria-hidden="true"
 						width="16"
 						height="16"
 						viewBox="0 0 24 24"
@@ -85,8 +95,9 @@ const grid = $derived(buildCalendarGrid(data.year, data.month));
 					</svg>
 				</button>
 				<h2 class="calendar-title">{data.year}年 {MONTH_NAMES[data.month - 1]}</h2>
-				<button class="btn btn-ghost calendar-nav-btn" onclick={nextMonth} aria-label="次の月">
+				<button type="button" class="btn btn-ghost calendar-nav-btn" onclick={nextMonth} aria-label="次の月">
 					<svg
+						aria-hidden="true"
 						width="16"
 						height="16"
 						viewBox="0 0 24 24"
@@ -112,7 +123,7 @@ const grid = $derived(buildCalendarGrid(data.year, data.month));
 			<div class="calendar-grid">
 				{#each grid as cell}
 					<div
-						class="calendar-cell {cell ? '' : 'calendar-cell--empty'} {cell && isToday(data.year, data.month, cell) ? 'calendar-cell--today' : ''}"
+						class="calendar-cell {cell ? '' : 'calendar-cell--empty'} {cell && data.year === todayYear && data.month === todayMonth && cell === todayDate ? 'calendar-cell--today' : ''}"
 					>
 						{#if cell}
 							<span class="calendar-day-num">{cell}</span>
@@ -167,7 +178,7 @@ const grid = $derived(buildCalendarGrid(data.year, data.month));
 	</div>
 
 	<!-- サイドバー -->
-	<aside class="sidebar-column">
+	<aside class="calendar-sidebar">
 		<div class="card">
 			<h3 class="section-heading">イベントとは</h3>
 			<p style="color:var(--color-muted); font-size:0.875rem; line-height:1.7;">

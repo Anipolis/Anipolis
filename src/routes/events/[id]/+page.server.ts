@@ -1,5 +1,11 @@
-import { error, fail } from "@sveltejs/kit";
-import { deletePostAction, insertPostWithHashtags, toggleLikeAction, toggleRepostAction } from "$lib/server/actions";
+﻿import { error, fail } from "@sveltejs/kit";
+import {
+	deletePostAction,
+	insertPostWithHashtags,
+	toggleBookmarkAction,
+	toggleLikeAction,
+	toggleRepostAction,
+} from "$lib/server/actions";
 import { getEvent, getEventPosts } from "$lib/server/queries";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -29,8 +35,8 @@ export const actions: Actions = {
 		const hashtag = (form.get("hashtag") as string | null)?.trim() ?? "";
 
 		// ハッシュタグが含まれていなければ自動付与
-		const tagPattern = new RegExp(`#${hashtag}\\b`, "i");
-		const finalContent = tagPattern.test(content) ? content : `${content} #${hashtag}`;
+		const hasTag = content.toLowerCase().includes(`#${hashtag.toLowerCase()}`);
+		const finalContent = hasTag ? content : `${content} #${hashtag}`;
 
 		return insertPostWithHashtags(supabase, user.id, finalContent);
 	},
@@ -51,5 +57,10 @@ export const actions: Actions = {
 		const { user } = await safeGetSession();
 		if (!user) return fail(401, { message: "ログインが必要です" });
 		return toggleRepostAction(request, supabase, user.id);
+	},
+	bookmark: async ({ request, locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { message: "ログインが必要です" });
+		return toggleBookmarkAction(request, supabase, user.id);
 	},
 };

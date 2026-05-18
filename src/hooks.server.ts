@@ -18,17 +18,16 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	event.locals.safeGetSession = async () => {
 		const {
-			data: { session },
-		} = await event.locals.supabase.auth.getSession();
-
-		if (!session) return { session: null, user: null };
-
-		const {
 			data: { user },
 			error,
 		} = await event.locals.supabase.auth.getUser();
 
-		if (error) return { session: null, user: null };
+		if (error || !user) return { session: null, user: null };
+
+		// getSession() is called after getUser() validation; session.user must not be trusted directly
+		const {
+			data: { session },
+		} = await event.locals.supabase.auth.getSession();
 
 		return { session, user };
 	};

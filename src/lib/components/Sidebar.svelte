@@ -1,7 +1,7 @@
 <script lang="ts">
-import type { Session, SupabaseClient } from "@supabase/supabase-js";
+import type { Session } from "@supabase/supabase-js";
 import { browser } from "$app/environment";
-import { goto } from "$app/navigation";
+import { goto, invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
 import type { Database } from "$lib/supabase/database.types";
 import UserAvatar from "./UserAvatar.svelte";
@@ -9,14 +9,14 @@ import UserAvatar from "./UserAvatar.svelte";
 type Profile = Database["public"]["Tables"]["profiles"]["Row"] | null;
 
 interface Props {
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	supabase: SupabaseClient<any>;
+	supabase: { auth: { signOut: () => Promise<unknown> } };
 	session: Session | null;
 	profile: Profile;
 	unreadNotificationCount?: number;
+	pendingFollowRequestCount?: number;
 }
 
-let { supabase, session, profile, unreadNotificationCount = 0 }: Props = $props();
+let { supabase, session, profile, unreadNotificationCount = 0, pendingFollowRequestCount = 0 }: Props = $props();
 
 let theme = $state(
 	browser ? localStorage.getItem("theme") || document.documentElement.getAttribute("data-theme") || "dark" : "dark",
@@ -30,17 +30,10 @@ function toggleTheme() {
 
 const displayName = $derived(profile?.display_name || profile?.username || session?.user?.email?.split("@")[0] || "");
 
-async function handleLogin() {
-	const { error } = await supabase.auth.signInWithOAuth({
-		provider: "google",
-		options: { redirectTo: `${window.location.origin}/auth/callback` },
-	});
-	if (error) alert(`ログインエラー: ${error.message}`);
-}
-
 async function handleLogout() {
 	await supabase.auth.signOut();
-	goto("/");
+	await invalidateAll();
+	await goto("/", { invalidateAll: true });
 }
 
 function isActive(path: string): boolean {
@@ -50,7 +43,6 @@ function isActive(path: string): boolean {
 </script>
 
 <aside class="icon-sidebar">
-	<!-- ロゴ -->
 	<a href="/" class="sidebar-logo" aria-label="Anipolis ホーム" title="Anipolis">
 		<svg
 			width="28"
@@ -70,9 +62,7 @@ function isActive(path: string): boolean {
 		<span class="sidebar-logo-text">Anipolis</span>
 	</a>
 
-	<!-- ナビゲーションアイコン -->
 	<nav class="sidebar-nav">
-		<!-- ホーム -->
 		<a href="/" class="sidebar-btn" class:active={isActive('/')} aria-label="ホーム" title="ホーム">
 			<svg
 				width="22"
@@ -91,8 +81,94 @@ function isActive(path: string): boolean {
 			<span class="sidebar-btn-label">ホーム</span>
 		</a>
 
+		<a href="/anime" class="sidebar-btn" class:active={isActive('/anime')} aria-label="アニメ" title="アニメ">
+			<svg
+				width="22"
+				height="22"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				aria-hidden="true"
+			>
+				<polygon
+					points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"
+				/>
+			</svg>
+			<span class="sidebar-btn-label">アニメ</span>
+		</a>
+
+		<a
+			href="/calendar"
+			class="sidebar-btn"
+			class:active={isActive('/calendar') || isActive('/events')}
+			aria-label="カレンダー"
+			title="イベントカレンダー"
+		>
+			<svg
+				width="22"
+				height="22"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				aria-hidden="true"
+			>
+				<rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+				<line x1="16" y1="2" x2="16" y2="6" />
+				<line x1="8" y1="2" x2="8" y2="6" />
+				<line x1="3" y1="10" x2="21" y2="10" />
+			</svg>
+			<span class="sidebar-btn-label">カレンダー</span>
+		</a>
+
 		{#if session}
-			<!-- 通知 -->
+			{#if profile?.is_admin}
+				<a href="/admin" class="sidebar-btn" class:active={isActive('/admin')} aria-label="Admin" title="Admin">
+					<svg
+						width="22"
+						height="22"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+					</svg>
+					<span class="sidebar-btn-label">Admin</span>
+				</a>
+			{/if}
+
+			<a
+				href="/bookmarks"
+				class="sidebar-btn"
+				class:active={isActive('/bookmarks')}
+				aria-label="ブックマーク"
+				title="ブックマーク"
+			>
+				<svg
+					width="22"
+					height="22"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
+					<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+				</svg>
+				<span class="sidebar-btn-label">ブックマーク</span>
+			</a>
+
 			<a
 				href="/notifications"
 				class="sidebar-btn"
@@ -120,8 +196,13 @@ function isActive(path: string): boolean {
 				<span class="sidebar-btn-label">通知</span>
 			</a>
 
-			<!-- アニメ -->
-			<a href="/anime" class="sidebar-btn" class:active={isActive('/anime')} aria-label="アニメ" title="アニメ">
+			<a
+				href="/follow-requests"
+				class="sidebar-btn"
+				class:active={isActive('/follow-requests')}
+				aria-label="フォロー申請"
+				title="フォロー申請"
+			>
 				<svg
 					width="22"
 					height="22"
@@ -133,14 +214,19 @@ function isActive(path: string): boolean {
 					stroke-linejoin="round"
 					aria-hidden="true"
 				>
-					<polygon
-						points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"
-					/>
+					<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+					<circle cx="9" cy="7" r="4" />
+					<path d="M19 8v6" />
+					<path d="M22 11h-6" />
 				</svg>
-				<span class="sidebar-btn-label">アニメ</span>
+				{#if pendingFollowRequestCount > 0}
+					<span class="sidebar-badge"
+						>{pendingFollowRequestCount > 99 ? '99+' : pendingFollowRequestCount}</span
+					>
+				{/if}
+				<span class="sidebar-btn-label">フォロー申請</span>
 			</a>
 
-			<!-- マイリスト -->
 			<a
 				href="/mylist"
 				class="sidebar-btn"
@@ -164,14 +250,7 @@ function isActive(path: string): boolean {
 				<span class="sidebar-btn-label">マイリスト</span>
 			</a>
 
-			<!-- カレンダー -->
-			<a
-				href="/calendar"
-				class="sidebar-btn"
-				class:active={isActive('/calendar') || isActive('/events')}
-				aria-label="カレンダー"
-				title="イベントカレンダー"
-			>
+			<a href="/exchange" class="sidebar-btn" class:active={isActive('/exchange')} aria-label="交換" title="交換">
 				<svg
 					width="22"
 					height="22"
@@ -183,22 +262,19 @@ function isActive(path: string): boolean {
 					stroke-linejoin="round"
 					aria-hidden="true"
 				>
-					<rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-					<line x1="16" y1="2" x2="16" y2="6" />
-					<line x1="8" y1="2" x2="8" y2="6" />
-					<line x1="3" y1="10" x2="21" y2="10" />
+					<path d="M7 7h10v10" />
+					<path d="M17 7L7 17" />
+					<path d="M7 7v4" />
+					<path d="M17 17h-4" />
 				</svg>
-				<span class="sidebar-btn-label">カレンダー</span>
+				<span class="sidebar-btn-label">交換</span>
 			</a>
 		{/if}
 	</nav>
 
-	<!-- 下部: テーマ・プロフィール・設定・ログアウト -->
 	<div class="sidebar-bottom">
-		<!-- テーマ切替 -->
 		<button
 			type="button"
-			name="theme-toggle"
 			class="sidebar-btn"
 			onclick={toggleTheme}
 			aria-label="テーマ切替"
@@ -245,7 +321,6 @@ function isActive(path: string): boolean {
 		</button>
 
 		{#if session}
-			<!-- プロフィール -->
 			{#if profile}
 				<a
 					href="/profile/{profile.username}"
@@ -259,14 +334,7 @@ function isActive(path: string): boolean {
 				</a>
 			{/if}
 
-			<!-- 設定 -->
-			<a
-				href="/settings/profile"
-				class="sidebar-btn"
-				class:active={isActive('/settings')}
-				aria-label="設定"
-				title="プロフィール設定"
-			>
+			<a href="/settings" class="sidebar-btn" class:active={isActive('/settings')} aria-label="設定" title="設定">
 				<svg
 					width="22"
 					height="22"
@@ -286,13 +354,12 @@ function isActive(path: string): boolean {
 				<span class="sidebar-btn-label">設定</span>
 			</a>
 
-			<!-- ログアウト -->
 			<button
+				type="button"
 				class="sidebar-btn danger"
 				onclick={handleLogout}
 				aria-label="ログアウト"
 				title="ログアウト"
-				type="button"
 			>
 				<svg
 					width="22"
@@ -312,14 +379,7 @@ function isActive(path: string): boolean {
 				<span class="sidebar-btn-label">ログアウト</span>
 			</button>
 		{:else}
-			<!-- ログイン -->
-			<button
-				class="sidebar-btn accent"
-				onclick={handleLogin}
-				aria-label="ログイン"
-				title="Googleでログイン"
-				type="button"
-			>
+			<a href="/auth" class="sidebar-btn accent" aria-label="ログイン" title="ログイン / アカウント作成">
 				<svg
 					width="22"
 					height="22"
@@ -336,7 +396,7 @@ function isActive(path: string): boolean {
 					<line x1="15" y1="12" x2="3" y2="12" />
 				</svg>
 				<span class="sidebar-btn-label">ログイン</span>
-			</button>
+			</a>
 		{/if}
 	</div>
 </aside>

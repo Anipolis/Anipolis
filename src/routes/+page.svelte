@@ -7,15 +7,22 @@ import type { PageProps } from "./$types";
 let { data }: PageProps = $props();
 </script>
 
-<svelte:head> <title>タイムライン - Anipolis</title> </svelte:head>
+<svelte:head> <title>Anipolis — タイムライン</title> </svelte:head>
 
 <div class="page-container">
 	<main class="feed-column">
 		{#if data.profile}
-			<PostComposer username={data.profile.username} avatarUrl={data.profile.avatar_url} />
+			<PostComposer
+				username={data.profile.username}
+				avatarUrl={data.profile.avatar_url}
+				initialAnime={data.initialAnime}
+				initialContent={data.initialContent}
+				initialExchangeId={data.initialExchangeId}
+				initialExchangeShare={data.initialExchangeShare}
+			/>
 		{:else if data.session}
 			<div class="auth-gate">
-				<p>ようこそ！<a href="/settings/profile">プロフィールを設定</a>してから投稿できます。</p>
+				<p>ようこそ！<a href="/settings">設定</a>を確認してから投稿できます。</p>
 			</div>
 		{:else}
 			<div class="auth-gate">
@@ -45,5 +52,7 @@ let { data }: PageProps = $props();
 		{/if}
 	</main>
 
-	<aside class="sidebar-column"><TrendingPanel trending={data.trending} /></aside>
+	<aside class="sidebar-column">
+		<TrendingPanel trending={data.trending} />
+	</aside>
 </div>

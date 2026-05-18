@@ -3,40 +3,18 @@ DROP VIEW IF EXISTS anime_top_rated;
 DROP VIEW IF EXISTS anime_trending;
 DROP VIEW IF EXISTS anime_popularity;
 
--- Rebuild anime table with type and source columns
-DROP TABLE IF EXISTS anime CASCADE;
+-- Add type and source columns without dropping the table
+ALTER TABLE anime ADD COLUMN IF NOT EXISTS type   text;
+ALTER TABLE anime ADD COLUMN IF NOT EXISTS source text;
 
-CREATE TABLE anime (
-  id            bigint generated always as identity primary key,
-  title         text not null,
-  title_en      text,
-  title_romaji  text,
-  cover_url     text,
-  synopsis      text,
-  episode_count integer,
-  type          text,
-  aired_from    date,
-  aired_to      date,
-  status        text,
-  season        text,
-  source        text,
-  studio        text,
-  producer      text,
-  genre         text[],
-  official_site_url  text,
-  official_x_url     text,
-  official_hashtag   text,
-  copyright     text,
-  created_at    timestamptz default now()
-);
-
-CREATE INDEX anime_season_idx     ON anime (season);
-CREATE INDEX anime_status_idx     ON anime (status);
-CREATE INDEX anime_created_idx    ON anime (created_at DESC);
-CREATE INDEX anime_romaji_idx     ON anime (title_romaji);
-CREATE INDEX anime_genre_idx      ON anime USING GIN (genre);
+CREATE INDEX IF NOT EXISTS anime_season_idx  ON anime (season);
+CREATE INDEX IF NOT EXISTS anime_status_idx  ON anime (status);
+CREATE INDEX IF NOT EXISTS anime_created_idx ON anime (created_at DESC);
+CREATE INDEX IF NOT EXISTS anime_romaji_idx  ON anime (title_romaji);
+CREATE INDEX IF NOT EXISTS anime_genre_idx   ON anime USING GIN (genre);
 
 ALTER TABLE anime ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "anime: 誰でも読める" ON anime;
 CREATE POLICY "anime: 誰でも読める" ON anime FOR SELECT USING (true);
 
 -- Recreate ranking views

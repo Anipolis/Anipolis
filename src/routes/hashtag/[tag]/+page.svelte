@@ -6,7 +6,7 @@ import type { PageProps } from "./$types";
 let { data }: PageProps = $props();
 </script>
 
-<svelte:head> <title>#{data.tag} - Anipolis</title> </svelte:head>
+<svelte:head> <title>#{data.tag} — Anipolis</title> </svelte:head>
 
 <div class="page-container">
 	<main class="feed-column">
@@ -26,5 +26,7 @@ let { data }: PageProps = $props();
 		{/if}
 	</main>
 
-	<aside class="sidebar-column"><TrendingPanel trending={data.trending} /></aside>
+	<aside class="sidebar-column">
+		<TrendingPanel trending={data.trending} />
+	</aside>
 </div>

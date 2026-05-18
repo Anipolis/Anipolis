@@ -10,4 +10,8 @@ ALTER TABLE events
     ADD CONSTRAINT events_creator_id_fkey
         FOREIGN KEY (creator_id)
         REFERENCES public.profiles(id)
-        ON DELETE CASCADE;
+        ON DELETE CASCADE
+        NOT VALID;
+
+ALTER TABLE events
+    VALIDATE CONSTRAINT events_creator_id_fkey;

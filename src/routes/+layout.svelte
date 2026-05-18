@@ -19,12 +19,12 @@ onMount(() => {
 </script>
 
 <div class="app-layout">
-	<!-- eslint-disable-next-line @typescript-eslint/no-explicit-any -->
 	<Sidebar
-		supabase={data.supabase as any}
+		supabase={data.supabase}
 		session={data.session}
 		profile={data.profile}
 		unreadNotificationCount={data.unreadNotificationCount}
+		pendingFollowRequestCount={data.pendingFollowRequestCount}
 	/>
 	<div class="app-main">
 		<Nav />

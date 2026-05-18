@@ -20,15 +20,17 @@ const displayName = $derived(data.post.display_name || data.post.username);
 
 const handleReply: SubmitFunction = () => {
 	submitting = true;
-	return async ({ update }) => {
+	return async ({ result, update }) => {
+		if (result.type === "success") {
+			content = "";
+		}
 		submitting = false;
-		content = "";
 		await update();
 	};
 };
 </script>
 
-<svelte:head> <title>{displayName}の投稿 - Anipolis</title> </svelte:head>
+<svelte:head> <title>{displayName}の投稿 — Anipolis</title> </svelte:head>
 
 <div class="page-container" style="justify-content: center;">
 	<main style="flex: 0 1 600px; min-width: 0;">
@@ -41,7 +43,9 @@ const handleReply: SubmitFunction = () => {
 		{/if}
 
 		<!-- メイン投稿 -->
-		<div class="thread-main"><PostCard post={data.post} currentUserId={data.currentUserId} isDetailView /></div>
+		<div class="thread-main">
+			<PostCard post={data.post} currentUserId={data.currentUserId} isDetailView />
+		</div>
 
 		<!-- リプライ入力フォーム -->
 		{#if data.profile}
@@ -76,7 +80,7 @@ const handleReply: SubmitFunction = () => {
 			</div>
 		{:else if data.session}
 			<div class="auth-gate">
-				<p>返信するには<a href="/settings/profile">プロフィールを設定</a>してください</p>
+				<p>返信するには<a href="/settings">設定</a>を確認してください</p>
 			</div>
 		{:else}
 			<div class="auth-gate">

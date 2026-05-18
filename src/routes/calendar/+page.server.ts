@@ -6,8 +6,11 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	const { user } = await safeGetSession();
 
 	const now = new Date();
-	const year = Math.max(2020, Math.min(2099, parseInt(url.searchParams.get("year") ?? String(now.getFullYear()))));
-	const month = Math.max(1, Math.min(12, parseInt(url.searchParams.get("month") ?? String(now.getMonth() + 1))));
+	const year = Math.max(
+		2020,
+		Math.min(2099, parseInt(url.searchParams.get("year") ?? String(now.getFullYear()), 10)),
+	);
+	const month = Math.max(1, Math.min(12, parseInt(url.searchParams.get("month") ?? String(now.getMonth() + 1), 10)));
 
 	const events = await getEventsByMonth(supabase, year, month);
 
@@ -36,7 +39,7 @@ export const actions: Actions = {
 		if (hashtag.length > 50) return fail(400, { message: "ハッシュタグは50文字以内で入力してください" });
 
 		const durationMinutes = durationRaw ? parseInt(durationRaw, 10) : null;
-		if (durationMinutes !== null && (isNaN(durationMinutes) || durationMinutes <= 0)) {
+		if (durationMinutes !== null && (Number.isNaN(durationMinutes) || durationMinutes <= 0)) {
 			return fail(400, { message: "配信時間は正の整数で入力してください" });
 		}
 

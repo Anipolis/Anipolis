@@ -1,12 +1,20 @@
-import { error, fail } from "@sveltejs/kit";
-import { deletePostAction, insertPostWithHashtags, toggleLikeAction, toggleRepostAction } from "$lib/server/actions";
+﻿import { error, fail } from "@sveltejs/kit";
+import {
+	deletePostAction,
+	insertPostWithHashtags,
+	toggleBookmarkAction,
+	toggleLikeAction,
+	toggleRepostAction,
+} from "$lib/server/actions";
 import { enrichPostsWithCounts } from "$lib/server/queries";
+import type { RawPost } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
 const POSTS_SELECT = `
-    id, content, created_at, user_id, parent_id, image_urls,
+    id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, exchange_share,
     profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
-    post_hashtags ( hashtags ( name ) )
+    post_hashtags ( hashtags ( name ) ),
+    anime:anime!posts_anime_id_fkey ( id, title, cover_url )
 ` as const;
 
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
@@ -29,11 +37,11 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 	const rawReplies = rawRepliesRes.data ?? [];
 
 	// 全投稿を一度に enrich（バッチクエリを最小化）
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	const rawAll: any[] = [rawPost, ...(rawParent ? [rawParent] : []), ...rawReplies];
+	const rawAll: RawPost[] = [rawPost, ...(rawParent ? [rawParent] : []), ...rawReplies];
 	const enriched = await enrichPostsWithCounts(supabase, rawAll, user?.id ?? null);
 
-	const enrichedPost = enriched.find((p) => p.id === params.id)!;
+	const enrichedPost = enriched.find((p) => p.id === params.id);
+	if (!enrichedPost) error(404, "投稿が見つかりません");
 	const enrichedParent = rawPost.parent_id ? (enriched.find((p) => p.id === rawPost.parent_id) ?? null) : null;
 	const enrichedReplies = enriched.filter((p) => p.id !== params.id && p.id !== rawPost.parent_id);
 
@@ -53,13 +61,14 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const content = (form.get("content") as string | null)?.trim() ?? "";
 		const imageUrlsRaw = (form.get("image_urls") as string | null) ?? "[]";
+		const animeId = (form.get("anime_id") as string | null)?.trim() || null;
 		let imageUrls: string[] = [];
 		try {
 			imageUrls = JSON.parse(imageUrlsRaw);
 		} catch {
 			imageUrls = [];
 		}
-		return insertPostWithHashtags(supabase, user.id, content, params.id, imageUrls);
+		return insertPostWithHashtags(supabase, user.id, content, params.id, imageUrls, animeId);
 	},
 
 	deletePost: async ({ request, locals: { supabase, safeGetSession } }) => {
@@ -78,5 +87,10 @@ export const actions: Actions = {
 		const { user } = await safeGetSession();
 		if (!user) return fail(401, { message: "ログインが必要です" });
 		return toggleRepostAction(request, supabase, user.id);
+	},
+	bookmark: async ({ request, locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { message: "ログインが必要です" });
+		return toggleBookmarkAction(request, supabase, user.id);
 	},
 };

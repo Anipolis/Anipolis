@@ -1,7 +1,15 @@
 <script lang="ts">
+import type { SubmitFunction } from "@sveltejs/kit";
 import { enhance } from "$app/forms";
 import type { AnimeStatus } from "$lib/types";
 import type { PageProps } from "./$types";
+
+interface UserResult {
+	id: string;
+	username: string;
+	display_name: string | null;
+	avatar_url: string | null;
+}
 
 let { data, form }: PageProps = $props();
 
@@ -18,6 +26,20 @@ const broadcastLabels: Record<string, string> = {
 	upcoming: "放送予定",
 	finished: "放送終了",
 };
+const listedUserStatusColors: Record<string, string> = {
+	watching: "#34d399",
+	completed: "var(--accent, #6366f1)",
+	plan_to_watch: "#60a5fa",
+	on_hold: "#fbbf24",
+	dropped: "#f87171",
+};
+const listedUserStatusLabels: Record<string, string> = {
+	watching: "視聴中",
+	completed: "完了",
+	plan_to_watch: "視聴予定",
+	on_hold: "中断中",
+	dropped: "断念",
+};
 
 let selectedStatus = $state<AnimeStatus>("plan_to_watch");
 let score = $state<string>("");
@@ -29,16 +51,11 @@ $effect(() => {
 	progress = String(data.anime.user_entry?.progress ?? 0);
 });
 
-let coverUrl = $state(data.anime.cover_url ?? "");
+let coverUrl = $state("");
 
-function getCoverUrl(url: string, width: number): string {
-	if (!url) return "";
-	const height = Math.round((width * 3) / 2);
-	return (
-		url.replace("/object/public/", "/render/image/public/") +
-		`?width=${width}&height=${height}&resize=cover&quality=85&format=webp`
-	);
-}
+$effect(() => {
+	coverUrl = data.anime.cover_url ?? "";
+});
 
 async function resizeImage(file: File, maxWidth: number): Promise<Blob> {
 	return new Promise((resolve) => {
@@ -50,8 +67,13 @@ async function resizeImage(file: File, maxWidth: number): Promise<Blob> {
 			const canvas = document.createElement("canvas");
 			canvas.width = Math.round(img.width * ratio);
 			canvas.height = Math.round(img.height * ratio);
-			canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
-			canvas.toBlob((blob) => resolve(blob!), "image/jpeg", 0.95);
+			const ctx = canvas.getContext("2d");
+			if (!ctx) {
+				resolve(file);
+				return;
+			}
+			ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+			canvas.toBlob((blob) => resolve(blob ?? file), "image/jpeg", 0.95);
 		};
 		img.src = url;
 	});
@@ -82,9 +104,71 @@ async function uploadCover(e: Event) {
 	coverUploading = false;
 	input.value = "";
 }
+let recipientQuery = $state("");
+let recipientResults = $state<UserResult[]>([]);
+let selectedRecipient = $state<UserResult | null>(null);
+let recipientSearching = $state(false);
+let recipientDebounce = $state<ReturnType<typeof setTimeout> | null>(null);
+let recommendSubmitting = $state(false);
+let recommendFeedback = $state("");
+let recommendError = $state("");
+
+function handleRecipientInput() {
+	selectedRecipient = null;
+	recommendFeedback = "";
+	recommendError = "";
+	if (recipientDebounce) clearTimeout(recipientDebounce);
+	const q = recipientQuery.trim().replace(/^@/, "");
+	if (q.length === 0) {
+		recipientResults = [];
+		return;
+	}
+	recipientDebounce = setTimeout(async () => {
+		recipientSearching = true;
+		try {
+			const res = await fetch(`/api/users/search?q=${encodeURIComponent(q)}`);
+			const users: UserResult[] = res.ok ? await res.json() : [];
+			recipientResults = users.filter((user) => user.id !== data.user?.id);
+		} catch {
+			recipientResults = [];
+		}
+		recipientSearching = false;
+	}, 250);
+}
+
+function selectRecipient(user: UserResult) {
+	selectedRecipient = user;
+	recipientQuery = `@${user.username}`;
+	recipientResults = [];
+	recommendFeedback = "";
+	recommendError = "";
+}
+
+function clearRecipient() {
+	selectedRecipient = null;
+	recipientQuery = "";
+	recipientResults = [];
+}
+
+const handleRecommendSubmit: SubmitFunction = () => {
+	recommendSubmitting = true;
+	recommendFeedback = "";
+	recommendError = "";
+	return async ({ result, update }) => {
+		recommendSubmitting = false;
+		if (result.type === "failure") {
+			recommendError =
+				(result.data as { recommendMessage?: string })?.recommendMessage ?? "推薦の送信に失敗しました";
+		} else {
+			recommendFeedback = "推薦を送信しました";
+			clearRecipient();
+			await update();
+		}
+	};
+};
 </script>
 
-<svelte:head> <title>{data.anime.title} - Anipolis</title> </svelte:head>
+<svelte:head> <title>{data.anime.title} — Anipolis</title> </svelte:head>
 
 <div class="detail-page">
 	<a href="/anime" class="back-link">← アニメ一覧</a>
@@ -94,7 +178,7 @@ async function uploadCover(e: Event) {
 		<aside class="left-panel">
 			<div class="anime-cover">
 				{#if coverUrl}
-					<img src={getCoverUrl(coverUrl, 400)} alt={data.anime.title}>
+					<img src={coverUrl} alt={data.anime.title}>
 				{:else}
 					<div class="anime-cover-placeholder">
 						<svg
@@ -143,26 +227,30 @@ async function uploadCover(e: Event) {
 				<p class="cover-error">{coverError}</p>
 			{/if}
 
+			{#if data.anime.copyright}
+				<p class="copyright-notice">{data.anime.copyright}</p>
+			{/if}
+
 			<!-- Production info below cover -->
-			{#if data.anime.studio || data.anime.producer || data.anime.source || data.anime.genre?.length || data.anime.official_site_url || data.anime.official_x_url || data.anime.copyright}
+			{#if data.anime.studio?.length || data.anime.producer?.length || data.anime.source || data.anime.genre?.length || data.anime.official_hashtag?.length || data.anime.official_site_url || data.anime.official_x_url}
 				<dl class="prod-info">
-					{#if data.anime.studio}
-						<div class="prod-row">
+					{#if data.anime.studio?.length}
+						<div class="prod-row prod-row--wrap">
 							<dt>スタジオ</dt>
-							<dd>
-								<a href="/anime?studio={encodeURIComponent(data.anime.studio)}" class="filter-link"
-									>{data.anime.studio}</a
-								>
+							<dd class="genre-list">
+								{#each data.anime.studio as s}
+									<a href="/anime?studio={encodeURIComponent(s)}" class="genre-chip">{s}</a>
+								{/each}
 							</dd>
 						</div>
 					{/if}
-					{#if data.anime.producer}
-						<div class="prod-row">
+					{#if data.anime.producer?.length}
+						<div class="prod-row prod-row--wrap">
 							<dt>制作</dt>
-							<dd>
-								<a href="/anime?producer={encodeURIComponent(data.anime.producer)}" class="filter-link"
-									>{data.anime.producer}</a
-								>
+							<dd class="genre-list">
+								{#each data.anime.producer as p}
+									<a href="/anime?producer={encodeURIComponent(p)}" class="genre-chip">{p}</a>
+								{/each}
 							</dd>
 						</div>
 					{/if}
@@ -182,11 +270,23 @@ async function uploadCover(e: Event) {
 							</dd>
 						</div>
 					{/if}
+					{#if data.anime.official_hashtag?.length}
+						<div class="prod-row prod-row--wrap">
+							<dt>ハッシュタグ</dt>
+							<dd class="genre-list">
+								{#each data.anime.official_hashtag as tag}
+									<a href="/hashtag/{tag.replace(/^#/, '')}" class="hashtag-link"
+										>#{tag.replace(/^#/, '')}</a
+									>
+								{/each}
+							</dd>
+						</div>
+					{/if}
 					{#if data.anime.official_site_url || data.anime.official_x_url}
 						<div class="prod-row prod-row--wrap">
 							<dt>公式</dt>
 							<dd class="links-list">
-								{#if data.anime.official_site_url}
+								{#if data.anime.official_site_url?.startsWith('http')}
 									<a
 										href={data.anime.official_site_url}
 										target="_blank"
@@ -195,7 +295,7 @@ async function uploadCover(e: Event) {
 										>公式サイト</a
 									>
 								{/if}
-								{#if data.anime.official_x_url}
+								{#if data.anime.official_x_url?.startsWith('http')}
 									<a
 										href={data.anime.official_x_url}
 										target="_blank"
@@ -205,12 +305,6 @@ async function uploadCover(e: Event) {
 									>
 								{/if}
 							</dd>
-						</div>
-					{/if}
-					{#if data.anime.copyright}
-						<div class="prod-row">
-							<dt>©</dt>
-							<dd class="copyright">{data.anime.copyright}</dd>
 						</div>
 					{/if}
 				</dl>
@@ -246,11 +340,33 @@ async function uploadCover(e: Event) {
 					{#if data.anime.aired_from}
 						<span class="meta-chip aired">
 							{data.anime.aired_from.slice(0, 10)}
-							{data.anime.aired_to ? ' 〜 ' + data.anime.aired_to.slice(0, 10) : ''}
+							{data.anime.aired_to ? ` 〜 ${data.anime.aired_to.slice(0, 10)}` : ""}
 						</span>
 					{/if}
 				</div>
 			</div>
+
+			<!-- 引用投稿 -->
+			{#if data.user}
+				<div class="quote-post-bar">
+					<a href="/?quote_anime={data.anime.id}" class="btn-quote-post">
+						<svg
+							width="15"
+							height="15"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+						>
+							<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+						</svg>
+						この作品について投稿
+					</a>
+				</div>
+			{/if}
 
 			<!-- Score hero -->
 			<div class="stats-grid">
@@ -340,6 +456,7 @@ async function uploadCover(e: Event) {
 							>
 								{#if data.anime.user_entry}
 									<svg
+										aria-hidden="true"
 										xmlns="http://www.w3.org/2000/svg"
 										width="16"
 										height="16"
@@ -355,6 +472,7 @@ async function uploadCover(e: Event) {
 									更新
 								{:else}
 									<svg
+										aria-hidden="true"
 										xmlns="http://www.w3.org/2000/svg"
 										width="16"
 										height="16"
@@ -390,6 +508,120 @@ async function uploadCover(e: Event) {
 			{:else}
 				<section class="watchlist-section watchlist-section--guest">
 					<p class="login-prompt"><a href="/" class="login-prompt-link">ログイン</a>してマイリストに追加</p>
+				</section>
+			{/if}
+
+			{#if data.user}
+				<section class="recommend-section">
+					<h2>作品を推薦</h2>
+
+					{#if form?.recommendMessage || recommendError}
+						<p class="form-error">{recommendError || form?.recommendMessage}</p>
+					{/if}
+					{#if form?.recommendSuccess || recommendFeedback}
+						<p class="form-success">{recommendFeedback || '推薦を送信しました'}</p>
+					{/if}
+
+					<form
+						method="POST"
+						action="?/recommendAnime"
+						use:enhance={handleRecommendSubmit}
+						class="recommend-form"
+					>
+						<input type="hidden" name="anime_id" value={data.anime.id}>
+						<input type="hidden" name="recipient_id" value={selectedRecipient?.id ?? ''}>
+
+						<div class="recommend-recipient-field">
+							<label class="form-label">
+								相手
+								<input
+									type="search"
+									class="form-input recommend-user-input"
+									placeholder="@username"
+									bind:value={recipientQuery}
+									oninput={handleRecipientInput}
+									autocomplete="off"
+								>
+							</label>
+
+							{#if selectedRecipient}
+								<div class="selected-recipient">
+									{#if selectedRecipient.avatar_url}
+										<img src={selectedRecipient.avatar_url} alt={selectedRecipient.username}>
+									{/if}
+									<span>{selectedRecipient.display_name ?? selectedRecipient.username}</span>
+									<button type="button" onclick={clearRecipient} aria-label="相手をクリア">×</button>
+								</div>
+							{/if}
+
+							{#if recipientResults.length > 0}
+								<div class="recommend-user-results">
+									{#each recipientResults as user (user.id)}
+										<button
+											type="button"
+											class="recommend-user-result"
+											onclick={() => selectRecipient(user)}
+										>
+											{#if user.avatar_url}
+												<img src={user.avatar_url} alt={user.username}>
+											{:else}
+												<span class="recommend-user-avatar-fallback">
+													{(user.display_name ?? user.username).charAt(0).toUpperCase()}
+												</span>
+											{/if}
+											<span>
+												<strong>{user.display_name ?? user.username}</strong>
+												<small>@{user.username}</small>
+											</span>
+										</button>
+									{/each}
+								</div>
+							{:else if recipientSearching}
+								<p class="recommend-search-hint">検索中…</p>
+							{/if}
+						</div>
+
+						<button
+							type="submit"
+							class="btn-primary recommend-submit"
+							disabled={!selectedRecipient || recommendSubmitting}
+						>
+							{recommendSubmitting ? '送信中…' : '推薦する'}
+						</button>
+					</form>
+				</section>
+			{/if}
+
+			{#if data.listedUsers.length > 0}
+				<section class="listed-users-section">
+					<h2 class="listed-users-heading">
+						リスト登録中のユーザー
+						<span class="listed-users-count">{data.listedUsers.length}</span>
+					</h2>
+					<div class="listed-users-grid">
+						{#each data.listedUsers as u (u.user_id)}
+							<a href="/profile/{u.username}" class="listed-user-card">
+								<div class="listed-user-avatar">
+									{#if u.avatar_url}
+										<img src={u.avatar_url} alt={u.username}>
+									{:else}
+										<div class="listed-user-avatar-fallback">
+											{(u.display_name ?? u.username).charAt(0).toUpperCase()}
+										</div>
+									{/if}
+									<span
+										class="listed-user-status-dot"
+										style="background: {listedUserStatusColors[u.status] ?? 'var(--fg-muted)'};"
+										title={listedUserStatusLabels[u.status] ?? u.status}
+									></span>
+								</div>
+								<span class="listed-user-name">{u.display_name ?? u.username}</span>
+								{#if u.score != null}
+									<span class="listed-user-score">★{u.score}</span>
+								{/if}
+							</a>
+						{/each}
+					</div>
 				</section>
 			{/if}
 		</div>
@@ -434,7 +666,7 @@ async function uploadCover(e: Event) {
 
 .anime-cover {
 	width: 100%;
-	aspect-ratio: 2 / 3;
+	aspect-ratio: 1 / 1.414;
 	border-radius: 10px;
 	overflow: hidden;
 	background: var(--card-bg);
@@ -443,11 +675,10 @@ async function uploadCover(e: Event) {
 }
 .anime-cover img {
 	width: 100%;
-	height: 100%;
-	object-fit: cover;
-	object-position: top center;
+	display: block;
 	-webkit-backface-visibility: hidden;
 	backface-visibility: hidden;
+	image-rendering: auto;
 }
 .anime-cover-placeholder {
 	width: 100%;
@@ -563,6 +794,13 @@ async function uploadCover(e: Event) {
 	font-size: 0.72rem;
 	color: var(--text-muted);
 }
+.copyright-notice {
+	font-size: 0.68rem;
+	color: var(--text-muted);
+	line-height: 1.4;
+	margin: 6px 0 0;
+	word-break: break-all;
+}
 .filter-link {
 	color: var(--accent);
 	text-decoration: none;
@@ -609,12 +847,12 @@ async function uploadCover(e: Event) {
 	font-weight: 600;
 }
 .status-airing {
-	background: #16a34a22;
-	color: #16a34a;
+	background: color-mix(in srgb, var(--status-watching) 15%, transparent);
+	color: var(--status-watching);
 }
 .status-upcoming {
-	background: #2563eb22;
-	color: #2563eb;
+	background: color-mix(in srgb, var(--status-plan) 15%, transparent);
+	color: var(--status-plan);
 }
 .status-finished {
 	background: var(--hover-bg);
@@ -670,7 +908,7 @@ async function uploadCover(e: Event) {
 	line-height: 1;
 }
 .stat-card--score .stat-card-value {
-	color: #f59e0b;
+	color: var(--status-score);
 }
 .stat-card-sub {
 	font-size: 0.75rem;
@@ -800,6 +1038,11 @@ async function uploadCover(e: Event) {
 	font-size: 0.85rem;
 	margin-bottom: 10px;
 }
+.form-success {
+	color: var(--status-watching);
+	font-size: 0.85rem;
+	margin: 0 0 10px;
+}
 .watchlist-section--guest {
 	border-color: var(--border);
 	box-shadow: none;
@@ -822,6 +1065,238 @@ async function uploadCover(e: Event) {
 	opacity: 0.85;
 }
 
+.recommend-section {
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	padding: 18px;
+	background: var(--card-bg);
+}
+
+.recommend-section h2 {
+	font-size: 1rem;
+	font-weight: 700;
+	margin: 0 0 14px;
+}
+
+.recommend-form {
+	display: grid;
+	grid-template-columns: minmax(180px, 320px) auto;
+	gap: 12px;
+	align-items: end;
+}
+
+.recommend-recipient-field {
+	position: relative;
+	min-width: 0;
+}
+
+.recommend-user-input {
+	width: 100%;
+	min-width: 0;
+}
+
+.selected-recipient {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	margin-top: 8px;
+	padding: 4px 8px;
+	border: 1px solid var(--border);
+	border-radius: 999px;
+	font-size: 0.78rem;
+	color: var(--text);
+	background: var(--hover-bg);
+	max-width: 100%;
+}
+
+.selected-recipient img,
+.recommend-user-result img,
+.recommend-user-avatar-fallback {
+	width: 24px;
+	height: 24px;
+	border-radius: 50%;
+	object-fit: cover;
+	flex-shrink: 0;
+}
+
+.selected-recipient button {
+	border: none;
+	background: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+	font-size: 1rem;
+	line-height: 1;
+}
+
+.recommend-user-results {
+	position: absolute;
+	z-index: 20;
+	top: calc(100% + 6px);
+	left: 0;
+	right: 0;
+	background: var(--card-bg);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+	max-height: 240px;
+	overflow-y: auto;
+}
+
+.recommend-user-result {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	padding: 9px 10px;
+	border: none;
+	background: transparent;
+	color: var(--text);
+	text-align: left;
+	cursor: pointer;
+}
+
+.recommend-user-result:hover {
+	background: var(--hover-bg);
+}
+
+.recommend-user-result span:last-child {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.recommend-user-result strong,
+.recommend-user-result small {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.recommend-user-result small,
+.recommend-search-hint {
+	color: var(--text-muted);
+	font-size: 0.74rem;
+}
+
+.recommend-user-avatar-fallback {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: var(--hover-bg);
+	color: var(--text-muted);
+	font-weight: 700;
+}
+
+.recommend-submit {
+	min-width: 96px;
+	justify-content: center;
+	padding: 9px 16px;
+	font-size: 0.9rem;
+}
+
+.recommend-submit:disabled {
+	opacity: 0.55;
+	cursor: not-allowed;
+	transform: none;
+}
+
+/* Listed users */
+.listed-users-section {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.listed-users-heading {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 1rem;
+	font-weight: 600;
+	margin: 0;
+}
+
+.listed-users-count {
+	font-size: 0.8rem;
+	font-weight: 400;
+	color: var(--text-muted);
+	background: var(--hover-bg);
+	padding: 1px 8px;
+	border-radius: 10px;
+}
+
+.listed-users-grid {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+}
+
+.listed-user-card {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 5px;
+	text-decoration: none;
+	color: inherit;
+	width: 64px;
+}
+
+.listed-user-avatar {
+	position: relative;
+	width: 44px;
+	height: 44px;
+	flex-shrink: 0;
+}
+
+.listed-user-avatar img,
+.listed-user-avatar-fallback {
+	width: 44px;
+	height: 44px;
+	border-radius: 50%;
+	object-fit: cover;
+}
+
+.listed-user-avatar-fallback {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: var(--hover-bg);
+	color: var(--text-muted);
+	font-weight: 700;
+	font-size: 1.1rem;
+}
+
+.listed-user-status-dot {
+	position: absolute;
+	bottom: 1px;
+	right: 1px;
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	border: 2px solid var(--bg);
+}
+
+.listed-user-name {
+	font-size: 0.7rem;
+	color: var(--text-muted);
+	text-align: center;
+	max-width: 64px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	transition: color 0.12s;
+}
+
+.listed-user-card:hover .listed-user-name {
+	color: var(--accent);
+}
+
+.listed-user-score {
+	font-size: 0.68rem;
+	color: var(--status-score);
+	font-weight: 600;
+}
+
 /* Responsive */
 @media (max-width: 700px) {
 	.anime-layout {
@@ -833,6 +1308,13 @@ async function uploadCover(e: Event) {
 	.detail-page {
 		padding-left: 14px;
 		padding-right: 14px;
+	}
+	.recommend-form {
+		grid-template-columns: 1fr;
+		align-items: stretch;
+	}
+	.recommend-submit {
+		width: 100%;
 	}
 }
 </style>

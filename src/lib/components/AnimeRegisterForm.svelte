@@ -1,0 +1,641 @@
+<script lang="ts">
+import { enhance } from "$app/forms";
+
+type FormResult = { success?: boolean; animeId?: string | number; message?: string } | null | undefined;
+let { form }: { form: FormResult } = $props();
+
+const GENRES = [
+	"アクション",
+	"アドベンチャー",
+	"コメディ",
+	"ドラマ",
+	"ファンタジー",
+	"ホラー",
+	"ミステリー",
+	"ロマンス",
+	"SF",
+	"スポーツ",
+	"日常",
+	"魔法少女",
+	"メカ",
+	"音楽",
+	"学園",
+	"歴史",
+	"異世界",
+	"ハーレム",
+	"百合",
+	"心理",
+];
+
+let selectedGenres = $state<string[]>([]);
+let studios = $state<string[]>([]);
+let producers = $state<string[]>([]);
+let hashtags = $state<string[]>([]);
+let studioInput = $state("");
+let producerInput = $state("");
+let hashtagInput = $state("");
+
+function toggleGenre(g: string) {
+	selectedGenres = selectedGenres.includes(g) ? selectedGenres.filter((x) => x !== g) : [...selectedGenres, g];
+}
+function addTag(list: string[], input: string, setter: (v: string[]) => void, clearFn: () => void) {
+	const val = input.trim().replace(/^#/, "");
+	if (val && !list.includes(val)) setter([...list, val]);
+	clearFn();
+}
+function removeTag(list: string[], val: string, setter: (v: string[]) => void) {
+	setter(list.filter((x) => x !== val));
+}
+
+let imageFile = $state<File | null>(null);
+let imagePreview = $state<string | null>(null);
+let resizedBlob = $state<Blob | null>(null);
+let imageProcessing = $state(false);
+
+async function resizeImage(file: File, maxWidth = 800): Promise<Blob> {
+	return new Promise((resolve, reject) => {
+		const img = new Image();
+		const blobUrl = URL.createObjectURL(file);
+		img.onload = () => {
+			URL.revokeObjectURL(blobUrl);
+			const scale = Math.min(1, maxWidth / img.width);
+			const canvas = document.createElement("canvas");
+			canvas.width = Math.round(img.width * scale);
+			canvas.height = Math.round(img.height * scale);
+			const ctx = canvas.getContext("2d");
+			if (!ctx) {
+				reject(new Error("2d context not available"));
+				return;
+			}
+			ctx.imageSmoothingEnabled = true;
+			ctx.imageSmoothingQuality = "high";
+			ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+			canvas.toBlob(
+				(blob) => {
+					if (blob) resolve(blob);
+					else reject(new Error("toBlob failed"));
+				},
+				"image/jpeg",
+				0.88,
+			);
+		};
+		img.onerror = () => reject(new Error("Image load error"));
+		img.src = blobUrl;
+	});
+}
+
+async function handleFileChange(e: Event) {
+	const file = (e.target as HTMLInputElement).files?.[0];
+	if (!file) {
+		imageFile = null;
+		imagePreview = null;
+		resizedBlob = null;
+		return;
+	}
+	imageFile = file;
+	imageProcessing = true;
+	try {
+		const blob = await resizeImage(file);
+		resizedBlob = blob;
+		if (imagePreview) URL.revokeObjectURL(imagePreview);
+		imagePreview = URL.createObjectURL(blob);
+	} catch {
+		resizedBlob = null;
+		imagePreview = null;
+	}
+	imageProcessing = false;
+}
+</script>
+
+<div class="register-section">
+	<h2 class="register-title">アニメ登録</h2>
+
+	{#if form?.success}
+		<div class="form-success">登録しました！ <a href="/anime/{form.animeId}">詳細を見る →</a></div>
+	{/if}
+	{#if form?.message}
+		<div class="form-error">{form.message}</div>
+	{/if}
+
+	<form
+		method="POST"
+		action="?/registerAnime"
+		use:enhance={async ({ formData }) => {
+        if (resizedBlob) formData.set('image_file', resizedBlob, `cover_${Date.now()}.jpg`);
+        return async ({ update }) => { await update(); };
+    }}
+		class="register-form"
+	>
+		<div class="form-row">
+			<div class="form-group form-group--wide">
+				<label for="rf-title">タイトル <span class="required">*</span></label>
+				<input id="rf-title" name="title" type="text" required class="rf-input">
+			</div>
+			<div class="form-group form-group--wide">
+				<label for="rf-title-en">英語タイトル</label>
+				<input id="rf-title-en" name="title_en" type="text" class="rf-input">
+			</div>
+		</div>
+		<div class="form-row">
+			<div class="form-group form-group--wide">
+				<label for="rf-romaji">ローマ字タイトル</label>
+				<input id="rf-romaji" name="title_romaji" type="text" class="rf-input">
+			</div>
+			<div class="form-group">
+				<label for="rf-season">シーズン（例: 2025春）</label>
+				<input id="rf-season" name="season" type="text" placeholder="2025春" class="rf-input">
+			</div>
+			<div class="form-group form-group--narrow">
+				<label for="rf-ep">話数</label>
+				<input id="rf-ep" name="episode_count" type="number" min="1" class="rf-input">
+			</div>
+		</div>
+
+		<div class="form-group">
+			<label for="rf-synopsis">あらすじ</label>
+			<textarea id="rf-synopsis" name="synopsis" rows="4" class="rf-textarea"></textarea>
+		</div>
+
+		<div class="form-row">
+			<div class="form-group">
+				<label for="rf-status">ステータス</label>
+				<select id="rf-status" name="status" class="rf-select">
+					<option value="">未設定</option>
+					<option value="airing">放送中</option>
+					<option value="upcoming">放送予定</option>
+					<option value="finished">放送終了</option>
+				</select>
+			</div>
+			<div class="form-group">
+				<label for="rf-type">タイプ</label>
+				<select id="rf-type" name="type" class="rf-select">
+					<option value="">未設定</option>
+					<option value="TV">TV</option>
+					<option value="映画">映画</option>
+					<option value="OVA">OVA</option>
+					<option value="ONA">ONA</option>
+					<option value="特別">特別</option>
+				</select>
+			</div>
+			<div class="form-group">
+				<label for="rf-source">原作</label>
+				<select id="rf-source" name="source" class="rf-select">
+					<option value="">未設定</option>
+					<option value="漫画">漫画</option>
+					<option value="ライトノベル">ライトノベル</option>
+					<option value="小説">小説</option>
+					<option value="ゲーム">ゲーム</option>
+					<option value="オリジナル">オリジナル</option>
+					<option value="その他">その他</option>
+				</select>
+			</div>
+		</div>
+
+		<div class="form-row">
+			<div class="form-group">
+				<label for="rf-aired-from">放送開始</label>
+				<input id="rf-aired-from" name="aired_from" type="date" class="rf-input">
+			</div>
+			<div class="form-group">
+				<label for="rf-aired-to">放送終了</label>
+				<input id="rf-aired-to" name="aired_to" type="date" class="rf-input">
+			</div>
+		</div>
+
+		<div class="form-group">
+			<span class="field-label">ジャンル</span>
+			<div class="tag-picker">
+				{#each GENRES as g}
+					<button
+						type="button"
+						class="tag-btn"
+						class:selected={selectedGenres.includes(g)}
+						onclick={() => toggleGenre(g)}
+					>
+						{g}
+					</button>
+				{/each}
+			</div>
+			{#each selectedGenres as g}
+				<input type="hidden" name="genre" value={g}>
+			{/each}
+		</div>
+
+		<div class="form-group">
+			<span class="field-label">スタジオ</span>
+			<div class="tag-input-row">
+				<input
+					type="text"
+					class="rf-input"
+					placeholder="スタジオ名を入力"
+					bind:value={studioInput}
+					onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(studios, studioInput, v => studios = v, () => studioInput = ''); } }}
+				>
+				<button
+					type="button"
+					class="tag-add-btn"
+					onclick={() => addTag(studios, studioInput, v => studios = v, () => studioInput = '')}
+				>
+					追加
+				</button>
+			</div>
+			<div class="tag-chips">
+				{#each studios as s}
+					<span class="tag-chip"
+						>{s}
+						<button
+							type="button"
+							class="chip-remove"
+							onclick={() => removeTag(studios, s, v => studios = v)}
+						>
+							✕
+						</button></span
+					>
+					<input type="hidden" name="studio" value={s}>
+				{/each}
+			</div>
+		</div>
+
+		<div class="form-group">
+			<span class="field-label">プロデューサー / 制作</span>
+			<div class="tag-input-row">
+				<input
+					type="text"
+					class="rf-input"
+					placeholder="プロデューサー名を入力"
+					bind:value={producerInput}
+					onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(producers, producerInput, v => producers = v, () => producerInput = ''); } }}
+				>
+				<button
+					type="button"
+					class="tag-add-btn"
+					onclick={() => addTag(producers, producerInput, v => producers = v, () => producerInput = '')}
+				>
+					追加
+				</button>
+			</div>
+			<div class="tag-chips">
+				{#each producers as p}
+					<span class="tag-chip"
+						>{p}
+						<button
+							type="button"
+							class="chip-remove"
+							onclick={() => removeTag(producers, p, v => producers = v)}
+						>
+							✕
+						</button></span
+					>
+					<input type="hidden" name="producer" value={p}>
+				{/each}
+			</div>
+		</div>
+
+		<div class="form-group">
+			<span class="field-label">公式ハッシュタグ</span>
+			<div class="tag-input-row">
+				<input
+					type="text"
+					class="rf-input"
+					placeholder="#アニメタグ"
+					bind:value={hashtagInput}
+					onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(hashtags, hashtagInput, v => hashtags = v, () => hashtagInput = ''); } }}
+				>
+				<button
+					type="button"
+					class="tag-add-btn"
+					onclick={() => addTag(hashtags, hashtagInput, v => hashtags = v, () => hashtagInput = '')}
+				>
+					追加
+				</button>
+			</div>
+			<div class="tag-chips">
+				{#each hashtags as h}
+					<span class="tag-chip"
+						>#{h}
+						<button
+							type="button"
+							class="chip-remove"
+							onclick={() => removeTag(hashtags, h, v => hashtags = v)}
+						>
+							✕
+						</button></span
+					>
+					<input type="hidden" name="official_hashtag" value={h}>
+				{/each}
+			</div>
+		</div>
+
+		<div class="form-row">
+			<div class="form-group form-group--wide">
+				<label for="rf-site">公式サイト URL</label>
+				<input id="rf-site" name="official_site_url" type="url" class="rf-input" placeholder="https://...">
+			</div>
+			<div class="form-group form-group--wide">
+				<label for="rf-x">公式 X (Twitter) URL</label>
+				<input id="rf-x" name="official_x_url" type="url" class="rf-input" placeholder="https://x.com/...">
+			</div>
+		</div>
+
+		<div class="form-row">
+			<div class="form-group form-group--wide">
+				<label for="rf-copyright">権利表記</label>
+				<input id="rf-copyright" name="copyright" type="text" class="rf-input">
+			</div>
+			<div class="form-group form-group--wide">
+				<span class="field-label">カバー画像</span>
+				<label class="cover-upload-label" class:has-preview={!!imagePreview}>
+					{#if imagePreview}
+						<img src={imagePreview} alt="カバープレビュー" class="cover-preview">
+						<span class="cover-change-hint">クリックして変更</span>
+					{:else}
+						<svg
+							width="22"
+							height="22"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="1.5"
+							aria-hidden="true"
+						>
+							<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+							<polyline points="17 8 12 3 7 8" />
+							<line x1="12" y1="3" x2="12" y2="15" />
+						</svg>
+						<span class="cover-upload-hint"
+							>{imageProcessing ? '処理中...' : '画像をアップロード（JPEG/PNG/WebP）'}</span
+						>
+					{/if}
+					<input
+						type="file"
+						accept="image/jpeg,image/png,image/webp"
+						onchange={handleFileChange}
+						disabled={imageProcessing}
+						class="cover-file-input"
+					>
+				</label>
+				{#if !imageFile}
+					<input
+						id="rf-cover"
+						name="cover_url"
+						type="url"
+						class="rf-input"
+						style="margin-top:6px"
+						placeholder="または画像 URL を直接入力..."
+					>
+				{/if}
+			</div>
+		</div>
+
+		<div class="form-actions">
+			<button type="submit" class="submit-btn">登録する</button>
+			<a href="/anime" class="cancel-link">キャンセル</a>
+		</div>
+	</form>
+</div>
+
+<style>
+.register-section {
+	max-width: 760px;
+}
+.register-title {
+	font-size: 1.1rem;
+	font-weight: 700;
+	margin-bottom: 20px;
+	color: var(--text);
+}
+.form-success {
+	padding: 12px 16px;
+	border-radius: 8px;
+	background: #16a34a18;
+	color: var(--status-watching);
+	margin-bottom: 16px;
+	font-size: 0.9rem;
+}
+.form-success a {
+	color: var(--status-watching);
+	font-weight: 600;
+}
+.form-error {
+	padding: 12px 16px;
+	border-radius: 8px;
+	background: #dc262618;
+	color: #dc2626;
+	margin-bottom: 16px;
+	font-size: 0.9rem;
+}
+.register-form {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+.form-row {
+	display: flex;
+	gap: 12px;
+	flex-wrap: wrap;
+}
+.form-group {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+	flex: 1 1 180px;
+}
+.form-group--wide {
+	flex: 2 1 240px;
+}
+.form-group--narrow {
+	flex: 0 1 100px;
+}
+.form-group label,
+.field-label {
+	font-size: 0.82rem;
+	font-weight: 600;
+	color: var(--text-muted);
+}
+.required {
+	color: #dc2626;
+}
+.rf-input,
+.rf-textarea,
+.rf-select {
+	padding: 8px 10px;
+	border-radius: 7px;
+	border: 1px solid var(--border);
+	background: var(--card-bg);
+	color: var(--text);
+	font-size: 0.88rem;
+	outline: none;
+	transition: border-color 0.15s;
+	width: 100%;
+	box-sizing: border-box;
+}
+.rf-input:focus,
+.rf-textarea:focus,
+.rf-select:focus {
+	border-color: var(--accent);
+}
+.rf-textarea {
+	resize: vertical;
+}
+
+.tag-picker {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+.tag-btn {
+	padding: 4px 10px;
+	border-radius: 14px;
+	border: 1px solid var(--border);
+	background: transparent;
+	color: var(--text-muted);
+	font-size: 0.8rem;
+	cursor: pointer;
+	transition: all 0.12s;
+}
+.tag-btn:hover {
+	background: var(--hover-bg);
+	color: var(--text);
+}
+.tag-btn.selected {
+	background: var(--accent);
+	color: #fff;
+	border-color: var(--accent);
+}
+
+.tag-input-row {
+	display: flex;
+	gap: 6px;
+}
+.tag-input-row .rf-input {
+	flex: 1;
+}
+.tag-add-btn {
+	padding: 8px 14px;
+	border-radius: 7px;
+	border: 1px solid var(--border);
+	background: var(--hover-bg);
+	color: var(--text);
+	font-size: 0.82rem;
+	cursor: pointer;
+	white-space: nowrap;
+	transition: background 0.12s;
+}
+.tag-add-btn:hover {
+	background: var(--accent);
+	color: #fff;
+	border-color: var(--accent);
+}
+.tag-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-top: 6px;
+}
+.tag-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 3px 10px;
+	border-radius: 14px;
+	background: var(--accent);
+	color: #fff;
+	font-size: 0.8rem;
+}
+.chip-remove {
+	background: none;
+	border: none;
+	color: inherit;
+	cursor: pointer;
+	padding: 0;
+	font-size: 0.75rem;
+	line-height: 1;
+	opacity: 0.7;
+}
+.chip-remove:hover {
+	opacity: 1;
+}
+
+.form-actions {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	margin-top: 8px;
+}
+.submit-btn {
+	padding: 10px 28px;
+	border-radius: 8px;
+	background: var(--accent);
+	color: #fff;
+	border: none;
+	font-size: 0.9rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition: opacity 0.15s;
+}
+.submit-btn:hover {
+	opacity: 0.85;
+}
+.cancel-link {
+	font-size: 0.85rem;
+	color: var(--text-muted);
+	text-decoration: none;
+}
+.cancel-link:hover {
+	color: var(--text);
+}
+
+.cover-upload-label {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	width: 100%;
+	height: 110px;
+	border: 2px dashed var(--border);
+	border-radius: 8px;
+	cursor: pointer;
+	transition:
+		border-color 0.15s,
+		background 0.15s;
+	color: var(--text-muted);
+	font-size: 0.82rem;
+	overflow: hidden;
+	position: relative;
+}
+.cover-upload-label:hover {
+	border-color: var(--accent);
+	background: var(--hover-bg);
+}
+.cover-upload-label.has-preview {
+	height: 160px;
+	border-style: solid;
+	padding: 0;
+}
+.cover-preview {
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+	object-position: center;
+}
+.cover-change-hint {
+	position: absolute;
+	bottom: 0;
+	left: 0;
+	right: 0;
+	text-align: center;
+	font-size: 0.75rem;
+	color: #fff;
+	background: rgba(0, 0, 0, 0.5);
+	padding: 4px 0;
+}
+.cover-file-input {
+	display: none;
+}
+.cover-upload-hint {
+	text-align: center;
+	padding: 0 8px;
+	line-height: 1.4;
+}
+</style>

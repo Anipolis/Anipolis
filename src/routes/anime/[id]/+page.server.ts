@@ -1,7 +1,7 @@
 import { error, fail } from "@sveltejs/kit";
 import { ADMIN_EMAIL } from "$env/static/private";
-import { removeUserAnimeEntry, upsertUserAnimeEntry } from "$lib/server/actions";
-import { getAnime } from "$lib/server/queries";
+import { recommendAnimeAction, removeUserAnimeEntry, upsertUserAnimeEntry } from "$lib/server/actions";
+import { getAnime, getUsersWhoListedAnime } from "$lib/server/queries";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
@@ -10,7 +10,9 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 
 	if (!anime) throw error(404, "アニメが見つかりません");
 
-	return { anime, user, isAdmin: user?.email === ADMIN_EMAIL };
+	const listedUsers = await getUsersWhoListedAnime(supabase, params.id);
+
+	return { anime, user, isAdmin: user?.email === ADMIN_EMAIL, listedUsers };
 };
 
 export const actions: Actions = {
@@ -24,5 +26,11 @@ export const actions: Actions = {
 		const { user } = await safeGetSession();
 		if (!user) return fail(401, { message: "ログインが必要です" });
 		return removeUserAnimeEntry(supabase, request, user.id);
+	},
+
+	recommendAnime: async ({ request, locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { recommendMessage: "ログインが必要です" });
+		return recommendAnimeAction(supabase, request, user.id);
 	},
 };
