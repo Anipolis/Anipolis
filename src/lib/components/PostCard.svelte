@@ -11,15 +11,21 @@ interface Props {
 	post: Post;
 	currentUserId?: string | null;
 	isDetailView?: boolean;
+	roomContext?: { href: string; title: string } | null;
+	insideRoom?: boolean;
 }
 
-let { post, currentUserId = null, isDetailView = false }: Props = $props();
+let { post, currentUserId = null, isDetailView = false, roomContext = null, insideRoom = false }: Props = $props();
 
 const parts = $derived(parseContentParts(post.content));
 const relativeTime = $derived(formatRelativeTime(post.created_at));
 const displayName = $derived(post.display_name || post.username);
 const isOwn = $derived(!!currentUserId && currentUserId === post.user_id);
 const isLoggedIn = $derived(!!currentUserId);
+const effectiveRoomContext = $derived(
+	roomContext ??
+		(post.anime_quote?.room_href ? { href: post.anime_quote.room_href, title: post.anime_quote.title } : null),
+);
 
 let deleting = $state(false);
 let lightboxUrl = $state<string | null>(null);
@@ -183,9 +189,17 @@ async function submitReport() {
 	class:deleting
 	class:post-card-clickable={!isDetailView}
 	class:post-card-modal-open={showExchangeModal || showQuoteModal || showReportModal || !!lightboxUrl}
+	class:post-card--with-room={!!effectiveRoomContext && !insideRoom}
 >
 	{#if !isDetailView}
 		<a href="/posts/{post.id}" class="post-card-hitarea" aria-label="投稿詳細を開く"></a>
+	{/if}
+
+	{#if effectiveRoomContext && !insideRoom}
+		<a href={effectiveRoomContext.href} class="post-room-link" onclick={(e) => e.stopPropagation()}>
+			<span class="i-lucide-door-open" aria-hidden="true"></span>
+			<span>{effectiveRoomContext.title}</span>
+		</a>
 	{/if}
 
 	<a href="/profile/{post.username}" class="post-avatar-link" aria-label={displayName}>
@@ -257,7 +271,7 @@ async function submitReport() {
 					linkCards={false}
 				/>
 			</div>
-		{:else if post.anime_quote}
+		{:else if post.anime_quote && !effectiveRoomContext}
 			<a href="/anime/{post.anime_quote.id}" class="anime-quote-card" onclick={(e) => e.stopPropagation()}>
 				{#if post.anime_quote.cover_url}
 					<img src={post.anime_quote.cover_url} alt={post.anime_quote.title} class="anime-quote-cover">
@@ -657,6 +671,42 @@ async function submitReport() {
 </article>
 
 <style>
+.post-card--with-room {
+	flex-wrap: wrap;
+}
+
+.post-room-link {
+	flex: 0 0 100%;
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	width: fit-content;
+	max-width: calc(100% - 50px);
+	margin: -4px 0 -2px 50px;
+	color: var(--color-accent);
+	font-size: 12px;
+	font-weight: 700;
+	line-height: 1.2;
+	text-decoration: none;
+}
+
+.post-room-link:hover {
+	color: var(--color-accent-hover);
+	text-decoration: underline;
+}
+
+.post-room-link span:last-child {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.post-room-link [class^="i-lucide"] {
+	flex-shrink: 0;
+	width: 13px;
+	height: 13px;
+}
+
 .report-modal-overlay {
 	position: fixed;
 	inset: 0;
