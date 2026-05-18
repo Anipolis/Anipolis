@@ -50,6 +50,8 @@ function formatAiredPeriod(airedFrom: string | null, airedTo: string | null): st
 let selectedStatus = $state<AnimeStatus>("plan_to_watch");
 let score = $state<string>("");
 let progress = $state<string>("0");
+let showRemoveWatchlistModal = $state(false);
+let removeWatchlistFormEl = $state<HTMLFormElement | null>(null);
 
 $effect(() => {
 	selectedStatus = data.anime.user_entry?.status ?? "plan_to_watch";
@@ -504,18 +506,67 @@ const handleRecommendSubmit: SubmitFunction = () => {
 
 							{#if data.anime.user_entry}
 								<button
-									type="submit"
-									formaction="?/removeWatchlist"
+									type="button"
 									class="btn-danger"
-									onclick={(e) => {
-                                        if (!confirm('マイリストから削除しますか？')) e.preventDefault();
-                                    }}
+									onclick={() => (showRemoveWatchlistModal = true)}
 								>
 									削除
 								</button>
 							{/if}
 						</div>
 					</form>
+
+					<form
+						method="POST"
+						action="?/removeWatchlist"
+						bind:this={removeWatchlistFormEl}
+						style="display:none"
+					>
+						<input type="hidden" name="anime_id" value={data.anime.id}>
+					</form>
+
+					{#if showRemoveWatchlistModal}
+						<!-- svelte-ignore a11y_click_events_have_key_events -->
+						<div
+							class="remove-watchlist-modal-overlay"
+							role="presentation"
+							onclick={() => (showRemoveWatchlistModal = false)}
+						>
+							<div
+								class="remove-watchlist-modal-card"
+								role="dialog"
+								aria-modal="true"
+								aria-labelledby="remove-watchlist-modal-title"
+								tabindex="-1"
+								onclick={(e) => e.stopPropagation()}
+							>
+								<div class="remove-watchlist-modal-header">
+									<span id="remove-watchlist-modal-title" class="remove-watchlist-modal-title"
+										>マイリストから削除</span
+									>
+								</div>
+								<div class="remove-watchlist-modal-body">
+									<p>このアニメをマイリストから削除しますか？</p>
+								</div>
+								<div class="remove-watchlist-modal-footer">
+									<button
+										type="button"
+										class="btn btn-ghost"
+										onclick={() => (showRemoveWatchlistModal = false)}
+									>
+										キャンセル
+									</button>
+									<button
+										type="button"
+										class="btn btn-danger"
+										onclick={() => { showRemoveWatchlistModal = false; removeWatchlistFormEl?.requestSubmit(); }}
+									>
+										削除する
+									</button>
+								</div>
+							</div>
+						</div>
+					{/if}
 				</section>
 			{:else}
 				<section class="watchlist-section watchlist-section--guest">
@@ -641,6 +692,54 @@ const handleRecommendSubmit: SubmitFunction = () => {
 </div>
 
 <style>
+.remove-watchlist-modal-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 1000;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 16px;
+	background: rgba(0, 0, 0, 0.58);
+	backdrop-filter: blur(3px);
+}
+
+.remove-watchlist-modal-card {
+	width: min(360px, 100%);
+	border: 1px solid var(--color-border);
+	border-radius: 12px;
+	background: var(--color-bg-card);
+	box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
+}
+
+.remove-watchlist-modal-header {
+	padding: 16px 16px 0;
+}
+
+.remove-watchlist-modal-title {
+	font-size: 15px;
+	font-weight: 800;
+}
+
+.remove-watchlist-modal-body {
+	padding: 12px 16px 16px;
+	color: var(--color-text-secondary);
+	font-size: 14px;
+}
+
+.remove-watchlist-modal-body p {
+	margin: 0;
+}
+
+.remove-watchlist-modal-footer {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 8px;
+	padding: 12px 16px;
+	border-top: 1px solid var(--color-border);
+}
+
 .detail-page {
 	padding-top: calc(var(--nav-height) + 24px);
 	padding-bottom: 48px;
