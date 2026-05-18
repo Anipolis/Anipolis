@@ -530,7 +530,8 @@ export interface AdminDashboardData {
 		bannedUsers: number;
 	};
 	reasonCounts: Array<{ reason: ReportReason; count: number }>;
-	recentReports: AdminReport[];
+	postReports: AdminReport[];
+	accountReports: AdminReport[];
 }
 
 type AdminReportRow = Database["public"]["Tables"]["reports"]["Row"] & {
@@ -647,7 +648,8 @@ export async function getAdminDashboardData(supabase: SupabaseClient<Database>):
 		restrictedUsers,
 		bannedUsers,
 		reasonRows,
-		recentReports,
+		postReports,
+		accountReports,
 	] = await Promise.all([
 		countRows(supabase, "reports", (query) => query.eq("status", "open")),
 		countRows(supabase, "reports", (query) => query.eq("status", "reviewing")),
@@ -660,64 +662,14 @@ export async function getAdminDashboardData(supabase: SupabaseClient<Database>):
 		countRows(supabase, "account_moderation", (query) => query.eq("status", "restricted")),
 		countRows(supabase, "account_moderation", (query) => query.eq("status", "banned")),
 		supabase.from("reports").select("reason").gte("created_at", weekAgo.toISOString()),
-		supabase
-			.from("reports")
-			.select(`
-				id,
-				reporter_id,
-				target_type,
-				target_id,
-				target_user_id,
-				reason,
-				details,
-				status,
-				created_at,
-				updated_at,
-				reporter:profiles!reports_reporter_id_fkey (
-					username,
-					display_name
-				),
-				target_user:profiles!reports_target_user_id_fkey (
-					username,
-					display_name
-				)
-			`)
-			.order("created_at", { ascending: false })
-			.limit(25),
+		getAdminReportsByTargetType(supabase, "post"),
+		getAdminReportsByTargetType(supabase, "user"),
 	]);
 
 	const reasonMap = new Map<ReportReason, number>();
 	for (const row of reasonRows.data ?? []) {
 		const reason = row.reason as ReportReason;
 		reasonMap.set(reason, (reasonMap.get(reason) ?? 0) + 1);
-	}
-
-	const recentRows = (recentReports.data ?? []) as unknown as AdminReportRow[];
-	const postIds = recentRows.filter((row) => row.target_type === "post").map((row) => row.target_id);
-	const targetUserIds = recentRows.map((row) => row.target_user_id).filter((id): id is string => id !== null);
-	const postContentById = new Map<string, string>();
-	if (postIds.length > 0) {
-		const { data: posts } = await supabase.from("posts").select("id, content").in("id", postIds);
-		for (const post of posts ?? []) {
-			postContentById.set(post.id, post.content);
-		}
-	}
-	const moderationByUserId = new Map<
-		string,
-		{ status: ModerationStatus; restricted_until: string | null; reason: string | null }
-	>();
-	if (targetUserIds.length > 0) {
-		const { data: moderationRows } = await supabase
-			.from("account_moderation")
-			.select("user_id, status, restricted_until, reason")
-			.in("user_id", targetUserIds);
-		for (const row of moderationRows ?? []) {
-			moderationByUserId.set(row.user_id, {
-				status: row.status as ModerationStatus,
-				restricted_until: row.restricted_until,
-				reason: row.reason,
-			});
-		}
 	}
 
 	return {
@@ -734,14 +686,93 @@ export async function getAdminDashboardData(supabase: SupabaseClient<Database>):
 			bannedUsers,
 		},
 		reasonCounts: [...reasonMap.entries()].map(([reason, count]) => ({ reason, count })),
-		recentReports: recentRows.map((row) =>
-			toAdminReport(
-				row,
-				postContentById.get(row.target_id) ?? null,
-				row.target_user_id ? (moderationByUserId.get(row.target_user_id) ?? null) : null,
-			),
-		),
+		postReports,
+		accountReports,
 	};
+}
+
+async function getAdminReportsByTargetType(
+	supabase: SupabaseClient<Database>,
+	targetType: ReportTargetType,
+	limit = 25,
+): Promise<AdminReport[]> {
+	const { data } = await supabase
+		.from("reports")
+		.select(`
+			id,
+			reporter_id,
+			target_type,
+			target_id,
+			target_user_id,
+			reason,
+			details,
+			status,
+			created_at,
+			updated_at,
+			reporter:profiles!reports_reporter_id_fkey (
+				username,
+				display_name
+			),
+			target_user:profiles!reports_target_user_id_fkey (
+				username,
+				display_name
+			)
+		`)
+		.eq("target_type", targetType)
+		.order("created_at", { ascending: false })
+		.limit(limit);
+
+	const rows = (data ?? []) as unknown as AdminReportRow[];
+	const postContentById = await getReportedPostContentById(supabase, rows);
+	const moderationByUserId = await getModerationByUserId(supabase, rows);
+
+	return rows.map((row) =>
+		toAdminReport(
+			row,
+			postContentById.get(row.target_id) ?? null,
+			row.target_user_id ? (moderationByUserId.get(row.target_user_id) ?? null) : null,
+		),
+	);
+}
+
+async function getReportedPostContentById(
+	supabase: SupabaseClient<Database>,
+	rows: AdminReportRow[],
+): Promise<Map<string, string>> {
+	const postIds = rows.filter((row) => row.target_type === "post").map((row) => row.target_id);
+	const postContentById = new Map<string, string>();
+	if (postIds.length === 0) return postContentById;
+
+	const { data: posts } = await supabase.from("posts").select("id, content").in("id", postIds);
+	for (const post of posts ?? []) {
+		postContentById.set(post.id, post.content);
+	}
+	return postContentById;
+}
+
+async function getModerationByUserId(
+	supabase: SupabaseClient<Database>,
+	rows: AdminReportRow[],
+): Promise<Map<string, { status: ModerationStatus; restricted_until: string | null; reason: string | null }>> {
+	const targetUserIds = [...new Set(rows.map((row) => row.target_user_id).filter((id): id is string => id !== null))];
+	const moderationByUserId = new Map<
+		string,
+		{ status: ModerationStatus; restricted_until: string | null; reason: string | null }
+	>();
+	if (targetUserIds.length === 0) return moderationByUserId;
+
+	const { data: moderationRows } = await supabase
+		.from("account_moderation")
+		.select("user_id, status, restricted_until, reason")
+		.in("user_id", targetUserIds);
+	for (const row of moderationRows ?? []) {
+		moderationByUserId.set(row.user_id, {
+			status: row.status as ModerationStatus,
+			restricted_until: row.restricted_until,
+			reason: row.reason,
+		});
+	}
+	return moderationByUserId;
 }
 
 type CountableTable = "reports" | "profiles" | "posts" | "account_moderation";
