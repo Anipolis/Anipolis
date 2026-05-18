@@ -183,7 +183,7 @@ export async function toggleLikeAction(request: Request, supabase: SupabaseClien
 }
 
 /**
- * リポストのトグル — 既にリポスト済みなら削除、未リポストなら挿入
+ * ブックマークのトグル — 既にブックマーク済みなら削除、未ブックマークなら挿入
  */
 export async function toggleBookmarkAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
 	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
