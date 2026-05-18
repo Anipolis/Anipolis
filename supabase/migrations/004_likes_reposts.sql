@@ -12,7 +12,6 @@ CREATE TABLE public.likes (
     PRIMARY KEY (post_id, user_id)
 );
 
-CREATE INDEX idx_likes_post_id ON public.likes (post_id);
 CREATE INDEX idx_likes_user_id ON public.likes (user_id);
 
 -- ----------------------------------------------------------------
@@ -25,7 +24,6 @@ CREATE TABLE public.reposts (
     PRIMARY KEY (post_id, user_id)
 );
 
-CREATE INDEX idx_reposts_post_id ON public.reposts (post_id);
 CREATE INDEX idx_reposts_user_id ON public.reposts (user_id);
 
 -- ----------------------------------------------------------------

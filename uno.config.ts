@@ -1,12 +1,13 @@
 import presetIcons from "@unocss/preset-icons";
-import { defineConfig, presetUno, presetWebFonts } from "unocss";
+import { presetWind3 } from "@unocss/preset-wind3";
+import { defineConfig, presetWebFonts } from "unocss";
 
 export default defineConfig({
 	presets: [
-		presetUno(),
+		presetWind3(),
 		presetIcons({
 			collections: {
-				lucide: () => import("@iconify-json/lucide/icons.json").then((m) => m.json),
+				lucide: () => import("@iconify-json/lucide/icons.json").then((m) => m.default),
 			},
 		}),
 		presetWebFonts({

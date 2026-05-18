@@ -1,8 +1,8 @@
 {
-	"$schema": "https://biomejs.dev/schemas/2.4.10/schema.json",
+	"$schema": "https://biomejs.dev/schemas/2.4.15/schema.json",
 	"files": {
-		"ignoreUnknown": false,
-		"includes": ["**", "!**/package.json"]
+		"ignoreUnknown": true,
+		"includes": ["**", "!**/package.json", "!supabase"]
 	},
 	"vcs": {
 		"enabled": true,
@@ -10,12 +10,23 @@
 		"useIgnoreFile": true
 	},
 	"formatter": {
+		"enabled": true,
 		"indentWidth": 4,
 		"lineWidth": 120
 	},
 	"linter": {
+		"enabled": true,
 		"rules": {
-			"recommended": true
+			"recommended": true,
+			"suspicious": {
+				"noExplicitAny": "warn"
+			},
+			"style": {
+				"noNonNullAssertion": "warn"
+			},
+			"complexity": {
+				"useLiteralKeys": "off"
+			}
 		}
 	},
 	"assist": {

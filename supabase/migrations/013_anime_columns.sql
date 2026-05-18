@@ -2,7 +2,7 @@
 ALTER TABLE public.anime
   ADD COLUMN IF NOT EXISTS studio text,
   ADD COLUMN IF NOT EXISTS producer text,
-  ADD COLUMN IF NOT EXISTS genre text[] DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS genre text[] NOT NULL DEFAULT '{}',
   ADD COLUMN IF NOT EXISTS official_site_url text,
   ADD COLUMN IF NOT EXISTS official_x_url text,
   ADD COLUMN IF NOT EXISTS official_hashtag text,
