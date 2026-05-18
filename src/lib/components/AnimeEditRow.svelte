@@ -133,8 +133,8 @@ let {
 	gap: 10px;
 	padding: 6px 8px;
 	border-radius: 8px;
-	background: color-mix(in srgb, var(--fg, #e2e8f0) 4%, transparent);
-	border: 1px solid var(--border, #334155);
+	background: color-mix(in srgb, var(--color-text) 4%, transparent);
+	border: 1px solid var(--color-border);
 	margin-bottom: 4px;
 }
 .edit-cover {
@@ -158,8 +158,8 @@ let {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	background: var(--surface, #1e293b);
-	color: var(--fg-muted, #94a3b8);
+	background: var(--color-surface);
+	color: var(--color-text-muted);
 	font-size: 1.1rem;
 }
 .edit-form {
@@ -172,7 +172,7 @@ let {
 .edit-title {
 	font-size: 0.85rem;
 	font-weight: 500;
-	color: var(--fg, #e2e8f0);
+	color: var(--color-text);
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -188,9 +188,9 @@ let {
 	flex-wrap: wrap;
 }
 .edit-select {
-	background: var(--surface, #1e293b);
-	border: 1px solid var(--border, #334155);
-	color: var(--fg, #e2e8f0);
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
+	color: var(--color-text);
 	border-radius: 6px;
 	padding: 4px 7px;
 	font-size: 0.8rem;
@@ -198,7 +198,7 @@ let {
 }
 .edit-select:focus {
 	outline: none;
-	border-color: var(--accent, #6366f1);
+	border-color: var(--color-accent);
 }
 .score-select {
 	min-width: 70px;
@@ -211,9 +211,9 @@ let {
 .stepper-btn {
 	width: 24px;
 	height: 26px;
-	border: 1px solid var(--border, #334155);
-	background: var(--surface, #1e293b);
-	color: var(--fg, #e2e8f0);
+	border: 1px solid var(--color-border);
+	background: var(--color-surface);
+	color: var(--color-text);
 	border-radius: 5px;
 	font-size: 0.85rem;
 	cursor: pointer;
@@ -223,15 +223,15 @@ let {
 	transition: background 0.1s;
 }
 .stepper-btn:hover {
-	background: color-mix(in srgb, var(--accent, #6366f1) 20%, transparent);
-	border-color: var(--accent, #6366f1);
-	color: var(--accent, #6366f1);
+	background: color-mix(in srgb, var(--color-accent) 20%, transparent);
+	border-color: var(--color-accent);
+	color: var(--color-accent);
 }
 .edit-number {
 	width: 46px;
-	background: var(--surface, #1e293b);
-	border: 1px solid var(--border, #334155);
-	color: var(--fg, #e2e8f0);
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
+	color: var(--color-text);
 	border-radius: 6px;
 	padding: 4px 5px;
 	font-size: 0.8rem;
@@ -239,16 +239,16 @@ let {
 }
 .edit-number:focus {
 	outline: none;
-	border-color: var(--accent, #6366f1);
+	border-color: var(--color-accent);
 }
 .progress-max {
 	font-size: 0.75rem;
-	color: var(--fg-muted, #94a3b8);
+	color: var(--color-text-muted);
 	white-space: nowrap;
 }
 .save-btn {
 	padding: 4px 14px;
-	background: var(--accent, #6366f1);
+	background: var(--color-accent);
 	color: #fff;
 	border: none;
 	border-radius: 6px;
@@ -271,14 +271,14 @@ let {
 	border-radius: 6px;
 	cursor: pointer;
 	background: transparent;
-	color: var(--fg-muted, #94a3b8);
+	color: var(--color-text-muted);
 	flex-shrink: 0;
 	transition:
 		background 0.12s,
 		color 0.12s;
 }
 .remove-btn:hover {
-	background: color-mix(in srgb, #f87171 20%, transparent);
+	background: color-mix(in srgb, var(--color-danger) 20%, transparent);
 	color: var(--color-danger);
 }
 </style>
