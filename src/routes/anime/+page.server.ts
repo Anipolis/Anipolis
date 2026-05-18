@@ -72,16 +72,16 @@ export const actions: Actions = {
 		const { user } = await safeGetSession();
 		if (!user) return fail(401, { message: "ログインが必要です" });
 
-		const fd = await request.formData();
-		const title = (fd.get("title") as string)?.trim();
+		const form = await request.formData();
+		const title = (form.get("title") as string)?.trim();
 		if (!title) return fail(400, { message: "タイトルは必須です" });
 
-		const toArr = (vals: FormDataEntryValue[]) => vals.map((v) => (v as string).trim()).filter(Boolean);
+		const toArr = (vals: FormDataEntryValue[]) => vals.map((val) => (val as string).trim()).filter(Boolean);
 
-		const epRaw = fd.get("episode_count") as string;
+		const episodeCountRaw = form.get("episode_count") as string;
 
-		let cover_url: string | null = (fd.get("cover_url") as string)?.trim() || null;
-		const imageFile = fd.get("image_file");
+		let coverUrl: string | null = (form.get("cover_url") as string)?.trim() || null;
+		const imageFile = form.get("image_file");
 		if (imageFile instanceof File && imageFile.size > 0) {
 			const ext = imageFile.type === "image/webp" ? "webp" : "jpg";
 			const path = `pending_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
@@ -90,7 +90,7 @@ export const actions: Actions = {
 				.from("anime-covers")
 				.upload(path, arrayBuffer, { contentType: imageFile.type, upsert: false });
 			if (!uploadError) {
-				cover_url = supabase.storage.from("anime-covers").getPublicUrl(path).data.publicUrl;
+				coverUrl = supabase.storage.from("anime-covers").getPublicUrl(path).data.publicUrl;
 			}
 		}
 
@@ -98,24 +98,24 @@ export const actions: Actions = {
 			.from("anime")
 			.insert({
 				title,
-				title_en: (fd.get("title_en") as string)?.trim() || null,
-				title_romaji: (fd.get("title_romaji") as string)?.trim() || null,
-				synopsis: (fd.get("synopsis") as string)?.trim() || null,
-				cover_url,
-				season: (fd.get("season") as string)?.trim() || null,
-				episode_count: epRaw ? parseInt(epRaw, 10) : null,
-				type: (fd.get("type") as string)?.trim() || null,
-				status: (fd.get("status") as string)?.trim() || null,
-				aired_from: (fd.get("aired_from") as string)?.trim() || null,
-				aired_to: (fd.get("aired_to") as string)?.trim() || null,
-				source: (fd.get("source") as string)?.trim() || null,
-				genre: toArr(fd.getAll("genre")),
-				studio: toArr(fd.getAll("studio")),
-				producer: toArr(fd.getAll("producer")),
-				official_hashtag: toArr(fd.getAll("official_hashtag")),
-				official_site_url: (fd.get("official_site_url") as string)?.trim() || null,
-				official_x_url: (fd.get("official_x_url") as string)?.trim() || null,
-				copyright: (fd.get("copyright") as string)?.trim() || null,
+				title_en: (form.get("title_en") as string)?.trim() || null,
+				title_romaji: (form.get("title_romaji") as string)?.trim() || null,
+				synopsis: (form.get("synopsis") as string)?.trim() || null,
+				cover_url: coverUrl,
+				season: (form.get("season") as string)?.trim() || null,
+				episode_count: episodeCountRaw ? parseInt(episodeCountRaw, 10) : null,
+				type: (form.get("type") as string)?.trim() || null,
+				status: (form.get("status") as string)?.trim() || null,
+				aired_from: (form.get("aired_from") as string)?.trim() || null,
+				aired_to: (form.get("aired_to") as string)?.trim() || null,
+				source: (form.get("source") as string)?.trim() || null,
+				genre: toArr(form.getAll("genre")),
+				studio: toArr(form.getAll("studio")),
+				producer: toArr(form.getAll("producer")),
+				official_hashtag: toArr(form.getAll("official_hashtag")),
+				official_site_url: (form.get("official_site_url") as string)?.trim() || null,
+				official_x_url: (form.get("official_x_url") as string)?.trim() || null,
+				copyright: (form.get("copyright") as string)?.trim() || null,
 			})
 			.select("id")
 			.single();
