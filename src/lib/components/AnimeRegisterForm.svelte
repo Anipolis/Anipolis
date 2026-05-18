@@ -407,20 +407,20 @@ async function handleFileChange(e: Event) {
 .form-success {
 	padding: 12px 16px;
 	border-radius: 8px;
-	background: #16a34a18;
-	color: var(--status-watching);
+	background: color-mix(in srgb, var(--color-success) 10%, transparent);
+	color: var(--color-success);
 	margin-bottom: 16px;
 	font-size: 0.9rem;
 }
 .form-success a {
-	color: var(--status-watching);
+	color: var(--color-success);
 	font-weight: 600;
 }
 .form-error {
 	padding: 12px 16px;
 	border-radius: 8px;
-	background: #dc262618;
-	color: #dc2626;
+	background: color-mix(in srgb, var(--color-danger) 10%, transparent);
+	color: var(--color-danger);
 	margin-bottom: 16px;
 	font-size: 0.9rem;
 }
@@ -453,7 +453,7 @@ async function handleFileChange(e: Event) {
 	color: var(--text-muted);
 }
 .required {
-	color: #dc2626;
+	color: var(--color-danger);
 }
 .rf-input,
 .rf-textarea,
