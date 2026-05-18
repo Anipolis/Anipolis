@@ -25,6 +25,7 @@ const broadcastLabels: Record<string, string> = {
 	airing: "放送中",
 	upcoming: "放送予定",
 	finished: "放送終了",
+	unknown: "未定",
 };
 const listedUserStatusColors: Record<string, string> = {
 	watching: "#34d399",
@@ -324,11 +325,9 @@ const handleRecommendSubmit: SubmitFunction = () => {
 					<p class="anime-title-en">{data.anime.title_en}</p>
 				{/if}
 				<div class="meta-row">
-					{#if data.anime.status}
-						<span class="status-badge status-{data.anime.status}">
-							{broadcastLabels[data.anime.status] ?? data.anime.status}
-						</span>
-					{/if}
+					<span class="status-badge status-{data.anime.computed_broadcast_status}">
+						{broadcastLabels[data.anime.computed_broadcast_status] ?? data.anime.computed_broadcast_status}
+					</span>
 					{#if data.anime.type}
 						<span class="meta-chip">{data.anime.type}</span>
 					{/if}
@@ -449,7 +448,16 @@ const handleRecommendSubmit: SubmitFunction = () => {
 									>
 								</label>
 							{:else}
-								<input type="hidden" name="progress" value={progress}>
+								<label class="form-label">
+									進捗
+									<input
+										type="number"
+										name="progress"
+										min="0"
+										bind:value={progress}
+										class="form-input"
+									>
+								</label>
 							{/if}
 						</div>
 
@@ -859,6 +867,10 @@ const handleRecommendSubmit: SubmitFunction = () => {
 	color: var(--status-plan);
 }
 .status-finished {
+	background: var(--hover-bg);
+	color: var(--text-muted);
+}
+.status-unknown {
 	background: var(--hover-bg);
 	color: var(--text-muted);
 }

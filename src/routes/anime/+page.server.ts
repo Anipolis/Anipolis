@@ -24,6 +24,16 @@ function normalizeBroadcastTime(value: string | null | undefined) {
 	return `${String(hour).padStart(2, "0")}:${match[2]}`;
 }
 
+function normalizeEpisodeCount(value: string | null | undefined) {
+	const raw = value?.trim();
+	if (!raw) return null;
+
+	const episodeCount = Number(raw);
+	if (!Number.isInteger(episodeCount) || episodeCount < 1) return undefined;
+
+	return raw;
+}
+
 export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 	const tab = (url.searchParams.get("tab") as Tab) ?? "popular";
@@ -67,9 +77,9 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 			animes = await getAnimeList(supabase, { limit: 1000, userId: user?.id ?? null });
 		}
 	} else if (tab === "airing") {
-		animes = await getAnimeList(supabase, { status: "airing", limit: 1000, userId: user?.id ?? null });
+		animes = await getAnimeList(supabase, { broadcastStatus: "airing", limit: 1000, userId: user?.id ?? null });
 	} else if (tab === "upcoming") {
-		animes = await getAnimeList(supabase, { status: "upcoming", limit: 1000, userId: user?.id ?? null });
+		animes = await getAnimeList(supabase, { broadcastStatus: "upcoming", limit: 1000, userId: user?.id ?? null });
 	} else if (tab === "register") {
 		animes = [];
 	} else {
@@ -100,7 +110,11 @@ export const actions: Actions = {
 
 		const toArr = (vals: FormDataEntryValue[]) => vals.map((v) => (v as string).trim()).filter(Boolean);
 
-		const epRaw = fd.get("episode_count") as string;
+		const episodeCount = normalizeEpisodeCount(fd.get("episode_count") as string | null);
+		if (episodeCount === undefined) {
+			return fail(400, { message: "話数は1以上の整数で入力してください" });
+		}
+
 		const broadcastTime = normalizeBroadcastTime(fd.get("broadcast_time") as string | null);
 		if (broadcastTime === undefined) {
 			return fail(400, { message: "放送時刻は 23:30 や 26:00 の形式で入力してください" });
@@ -129,9 +143,8 @@ export const actions: Actions = {
 				synopsis: (fd.get("synopsis") as string)?.trim() || null,
 				cover_url,
 				season: (fd.get("season") as string)?.trim() || null,
-				episode_count: epRaw ? parseInt(epRaw, 10) : null,
+				episode_count: episodeCount,
 				type: (fd.get("type") as string)?.trim() || null,
-				status: (fd.get("status") as string)?.trim() || null,
 				aired_from: (fd.get("aired_from") as string)?.trim() || null,
 				aired_to: (fd.get("aired_to") as string)?.trim() || null,
 				source: (fd.get("source") as string)?.trim() || null,

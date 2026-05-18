@@ -158,15 +158,6 @@ async function handleFileChange(e: Event) {
 
 		<div class="form-row">
 			<div class="form-group">
-				<label for="rf-status">ステータス</label>
-				<select id="rf-status" name="status" class="rf-select">
-					<option value="">未設定</option>
-					<option value="airing">放送中</option>
-					<option value="upcoming">放送予定</option>
-					<option value="finished">放送終了</option>
-				</select>
-			</div>
-			<div class="form-group">
 				<label for="rf-type">タイプ</label>
 				<select id="rf-type" name="type" class="rf-select">
 					<option value="">未設定</option>

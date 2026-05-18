@@ -47,9 +47,10 @@ const statusLabels: Record<AnimeStatus, string> = {
 };
 
 function animeStatusBadge(anime: Anime): string {
-	if (anime.status === "airing" || !anime.status) return "放送中";
-	if (anime.status === "upcoming") return "放送予定";
-	return "放送終了";
+	if (anime.computed_broadcast_status === "airing") return "放送中";
+	if (anime.computed_broadcast_status === "upcoming") return "放送予定";
+	if (anime.computed_broadcast_status === "finished") return "放送終了";
+	return "未定";
 }
 
 const statusOptions: { value: AnimeStatus; label: string; color: string }[] = [
@@ -296,7 +297,9 @@ $effect(() => {
 								<p class="anime-title-en">{anime.title_en}</p>
 							{/if}
 							<div class="anime-meta">
-								<span class="anime-status-badge status-{anime.status}">{animeStatusBadge(anime)}</span>
+								<span class="anime-status-badge status-{anime.computed_broadcast_status}"
+									>{animeStatusBadge(anime)}</span
+								>
 								{#if anime.season}
 									<span class="anime-season">{anime.season}</span>
 								{/if}
@@ -656,6 +659,10 @@ $effect(() => {
 	color: var(--status-plan);
 }
 .status-finished {
+	background: var(--hover-bg);
+	color: var(--text-muted);
+}
+.status-unknown {
 	background: var(--hover-bg);
 	color: var(--text-muted);
 }

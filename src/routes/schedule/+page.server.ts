@@ -61,7 +61,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	weekEnd.setMilliseconds(-1);
 
 	const [animeList, events] = await Promise.all([
-		getAnimeList(supabase, { status: "airing", limit: 1000, userId: user?.id ?? null }),
+		getAnimeList(supabase, { limit: 1000, userId: user?.id ?? null }),
 		getEventsByRange(supabase, weekStart.toISOString(), weekEnd.toISOString()),
 	]);
 

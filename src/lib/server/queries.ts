@@ -5,6 +5,7 @@ import type {
 	AnimeExchangeItem,
 	AnimeExchangeShare,
 	AnimeStatus,
+	BroadcastStatus,
 	Event,
 	Notification,
 	Post,
@@ -880,7 +881,7 @@ export interface AnimeListOptions {
 	genre?: string;
 	studio?: string;
 	producer?: string;
-	status?: "airing" | "finished" | "upcoming";
+	broadcastStatus?: Exclude<BroadcastStatus, "unknown">;
 	limit?: number;
 	userId?: string | null;
 	query?: string;
@@ -900,13 +901,17 @@ export async function getAnimeList(
 		genre,
 		studio,
 		producer,
-		status,
+		broadcastStatus,
 		limit = 20,
 		userId,
 		query: searchQuery,
 	} = options;
 
-	let query = supabase.from("anime").select("*").order("created_at", { ascending: false }).limit(limit);
+	let query = supabase
+		.from("anime_with_computed_broadcast_status")
+		.select("*")
+		.order("created_at", { ascending: false })
+		.limit(limit);
 
 	if (season) query = query.eq("season", season);
 	const seasonFilter = buildSeasonFilter(broadcastYear, broadcastSeason);
@@ -914,15 +919,38 @@ export async function getAnimeList(
 	if (genre) query = query.contains("genre", [genre]);
 	if (studio) query = query.contains("studio", [studio]);
 	if (producer) query = query.contains("producer", [producer]);
-	if (status) query = query.eq("status", status);
+	if (broadcastStatus) query = query.eq("computed_broadcast_status", broadcastStatus);
 	if (searchQuery) query = query.or(`title.ilike.%${searchQuery}%,title_en.ilike.%${searchQuery}%`);
 
 	const { data, error } = await query;
-	if (error || !data) return [];
+	const rows = error || !data ? await getAnimeListRowsFromBaseTable(supabase, options, seasonFilter) : data;
+	if (rows.length === 0) return [];
 
-	const animes: Anime[] = (data as Record<string, unknown>[]).map(toAnime);
+	const animes: Anime[] = (rows as Record<string, unknown>[])
+		.map(toAnime)
+		.filter((anime) => !broadcastStatus || anime.computed_broadcast_status === broadcastStatus);
 	if (userId) return enrichAnimeWithUserEntries(supabase, animes, userId);
 	return animes;
+}
+
+async function getAnimeListRowsFromBaseTable(
+	supabase: SupabaseClient<Database>,
+	options: AnimeListOptions,
+	seasonFilter: string | null,
+): Promise<Record<string, unknown>[]> {
+	const { season, genre, studio, producer, limit = 20, query: searchQuery } = options;
+
+	let query = supabase.from("anime").select("*").order("created_at", { ascending: false }).limit(limit);
+
+	if (season) query = query.eq("season", season);
+	if (seasonFilter) query = query.or(seasonFilter);
+	if (genre) query = query.contains("genre", [genre]);
+	if (studio) query = query.contains("studio", [studio]);
+	if (producer) query = query.contains("producer", [producer]);
+	if (searchQuery) query = query.or(`title.ilike.%${searchQuery}%,title_en.ilike.%${searchQuery}%`);
+
+	const { data } = await query;
+	return (data ?? []) as Record<string, unknown>[];
 }
 
 function buildSeasonFilter(year: string | undefined, season: string | undefined): string | null {
@@ -967,11 +995,18 @@ export async function getAnime(
 	animeId: string,
 	userId?: string | null,
 ): Promise<Anime | null> {
-	const { data, error } = await supabase.from("anime").select("*").eq("id", Number(animeId)).maybeSingle();
+	const { data, error } = await supabase
+		.from("anime_with_computed_broadcast_status")
+		.select("*")
+		.eq("id", Number(animeId))
+		.maybeSingle();
 
-	if (error || !data) return null;
+	const animeRow =
+		error || !data ? (await supabase.from("anime").select("*").eq("id", Number(animeId)).maybeSingle()).data : data;
 
-	const anime = toAnime(data as Record<string, unknown>);
+	if (!animeRow) return null;
+
+	const anime = toAnime(animeRow as Record<string, unknown>);
 
 	const [popularityRes, trendingRes, topRatedRes] = await Promise.all([
 		supabase
@@ -1299,9 +1334,10 @@ function toAnime(raw: Record<string, unknown>): Anime {
 		synopsis: (raw["synopsis"] as string | null) ?? null,
 		cover_url: (raw["cover_url"] as string | null) ?? null,
 		season: (raw["season"] as string | null) ?? null,
-		episode_count: (raw["episode_count"] as number | null) ?? null,
+		episode_count: (raw["episode_count"] as string | null) || null,
 		type: (raw["type"] as string | null) ?? null,
 		status: (raw["status"] as string | null) ?? null,
+		computed_broadcast_status: toBroadcastStatus(raw),
 		aired_from: (raw["aired_from"] as string | null) ?? null,
 		aired_to: (raw["aired_to"] as string | null) ?? null,
 		source: (raw["source"] as string | null) ?? null,
@@ -1346,9 +1382,13 @@ function toAnimeExchangeItem(raw: Record<string, unknown>): AnimeExchangeItem | 
 
 async function fetchAnimesByIds(supabase: SupabaseClient<Database>, ids: string[]): Promise<Anime[]> {
 	if (ids.length === 0) return [];
-	const { data } = await supabase.from("anime").select("*").in("id", ids.map(Number));
-	if (!data) return [];
-	const map = new Map((data as Record<string, unknown>[]).map((a) => [String(a["id"]), toAnime(a)]));
+	const { data, error } = await supabase
+		.from("anime_with_computed_broadcast_status")
+		.select("*")
+		.in("id", ids.map(Number));
+	const rows = error || !data ? (await supabase.from("anime").select("*").in("id", ids.map(Number))).data : data;
+	if (!rows) return [];
+	const map = new Map((rows as Record<string, unknown>[]).map((a) => [String(a["id"]), toAnime(a)]));
 	return ids.map((id) => map.get(id)).filter((a): a is Anime => a !== undefined);
 }
 
@@ -1377,4 +1417,21 @@ async function enrichAnimeWithUserEntries(
 	);
 
 	return animes.map((a) => ({ ...a, user_entry: entryMap.get(Number(a.id)) ?? null }));
+}
+
+function toBroadcastStatus(raw: Record<string, unknown>): BroadcastStatus {
+	const computed = raw["computed_broadcast_status"];
+	if (computed === "airing" || computed === "finished" || computed === "upcoming" || computed === "unknown") {
+		return computed;
+	}
+
+	const today = new Date();
+	const jstToday = new Date(today.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+	const airedFrom = typeof raw["aired_from"] === "string" ? raw["aired_from"].slice(0, 10) : null;
+	const airedTo = typeof raw["aired_to"] === "string" ? raw["aired_to"].slice(0, 10) : null;
+
+	if (airedFrom && airedFrom > jstToday) return "upcoming";
+	if (airedTo && airedTo < jstToday) return "finished";
+	if (airedFrom && airedFrom <= jstToday && (!airedTo || airedTo >= jstToday)) return "airing";
+	return "unknown";
 }

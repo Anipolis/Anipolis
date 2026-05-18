@@ -617,7 +617,7 @@ export type Database = {
 					synopsis: string | null;
 					cover_url: string | null;
 					season: string | null;
-					episode_count: number | null;
+					episode_count: string | null;
 					type: string | null;
 					status: string | null;
 					aired_from: string | null;
@@ -642,7 +642,7 @@ export type Database = {
 					synopsis?: string | null;
 					cover_url?: string | null;
 					season?: string | null;
-					episode_count?: number | null;
+					episode_count?: string | null;
 					type?: string | null;
 					status?: string | null;
 					aired_from?: string | null;
@@ -667,7 +667,7 @@ export type Database = {
 					synopsis?: string | null;
 					cover_url?: string | null;
 					season?: string | null;
-					episode_count?: number | null;
+					episode_count?: string | null;
 					type?: string | null;
 					status?: string | null;
 					aired_from?: string | null;
@@ -747,6 +747,36 @@ export type Database = {
 					anime_id: number;
 					avg_score: number;
 					score_count: number;
+				};
+				Relationships: [];
+			};
+			anime_with_computed_broadcast_status: {
+				Row: {
+					id: number;
+					title: string;
+					title_en: string | null;
+					title_romaji: string | null;
+					synopsis: string | null;
+					cover_url: string | null;
+					season: string | null;
+					episode_count: string | null;
+					type: string | null;
+					status: string | null;
+					computed_broadcast_status: "airing" | "finished" | "upcoming" | "unknown";
+					aired_from: string | null;
+					aired_to: string | null;
+					source: string | null;
+					studio: string[] | null;
+					producer: string[] | null;
+					genre: string[] | null;
+					official_site_url: string | null;
+					official_x_url: string | null;
+					official_hashtag: string[] | null;
+					copyright: string | null;
+					broadcast_day: number | null;
+					broadcast_time: string | null;
+					broadcast_station: string[] | null;
+					created_at: string;
 				};
 				Relationships: [];
 			};

@@ -24,7 +24,7 @@ export interface UserAnimeListEntry {
 		id: string;
 		title: string;
 		cover_url: string | null;
-		episode_count: number | null;
+		episode_count: string | null;
 	};
 }
 
@@ -139,6 +139,7 @@ export interface Event {
 // ----------------------------------------------------------------
 
 export type AnimeStatus = "watching" | "completed" | "plan_to_watch" | "dropped" | "on_hold";
+export type BroadcastStatus = "airing" | "finished" | "upcoming" | "unknown";
 
 export interface UserAnimeEntry {
 	status: AnimeStatus;
@@ -155,9 +156,10 @@ export interface Anime {
 	synopsis: string | null;
 	cover_url: string | null;
 	season: string | null;
-	episode_count: number | null;
+	episode_count: string | null;
 	type: string | null;
 	status: string | null;
+	computed_broadcast_status: BroadcastStatus;
 	aired_from: string | null;
 	aired_to: string | null;
 	source: string | null;
