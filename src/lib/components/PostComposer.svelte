@@ -485,8 +485,8 @@ const handleSubmit: SubmitFunction = () => {
 	top: 100%;
 	left: 0;
 	right: 0;
-	background: var(--bg-card, #1e1e2e);
-	border: 1px solid var(--border, #313244);
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
 	border-radius: 8px;
 	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 	z-index: 50;
@@ -506,16 +506,16 @@ const handleSubmit: SubmitFunction = () => {
 	color: inherit;
 }
 .mention-dropdown-item:hover {
-	background: var(--bg-hover, #313244);
+	background: var(--color-surface-hover);
 }
 .mention-dropdown-username {
 	font-weight: 600;
 	font-size: 0.9rem;
-	color: var(--accent, #89b4fa);
+	color: var(--color-accent);
 }
 .mention-dropdown-displayname {
 	font-size: 0.8rem;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 }
 .composer-exchange-preview {
 	position: relative;
