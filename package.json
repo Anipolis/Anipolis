@@ -21,7 +21,7 @@
 		"test": "pnpm test:unit"
 	},
 	"simple-git-hooks": {
-		"pre-commit": "pnpm lint && pnpm format"
+		"pre-commit": "pnpm check:biome"
 	},
 	"dependencies": {
 		"@supabase/ssr": "^0.6.1",

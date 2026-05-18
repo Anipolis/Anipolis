@@ -167,7 +167,12 @@ export async function toggleLikeAction(request: Request, supabase: SupabaseClien
 		.maybeSingle();
 
 	if (existing) {
-		await supabase.from("likes").delete().eq("post_id", postId).eq("user_id", userId);
+		const { error: deleteError } = await supabase
+			.from("likes")
+			.delete()
+			.eq("post_id", postId)
+			.eq("user_id", userId);
+		if (deleteError) return fail(500, { message: "いいねの解除に失敗しました" });
 		return { liked: false };
 	}
 
@@ -195,7 +200,12 @@ export async function toggleBookmarkAction(request: Request, supabase: SupabaseC
 		.maybeSingle();
 
 	if (existing) {
-		await supabase.from("bookmarks").delete().eq("post_id", postId).eq("user_id", userId);
+		const { error: deleteError } = await supabase
+			.from("bookmarks")
+			.delete()
+			.eq("post_id", postId)
+			.eq("user_id", userId);
+		if (deleteError) return fail(500, { message: "ブックマークの解除に失敗しました" });
 		return { bookmarked: false };
 	}
 
@@ -220,7 +230,12 @@ export async function toggleRepostAction(request: Request, supabase: SupabaseCli
 		.maybeSingle();
 
 	if (existing) {
-		await supabase.from("reposts").delete().eq("post_id", postId).eq("user_id", userId);
+		const { error: deleteError } = await supabase
+			.from("reposts")
+			.delete()
+			.eq("post_id", postId)
+			.eq("user_id", userId);
+		if (deleteError) return fail(500, { message: "リポストの解除に失敗しました" });
 		return { reposted: false };
 	}
 
@@ -434,7 +449,12 @@ export async function toggleFollowAction(request: Request, supabase: SupabaseCli
 		.maybeSingle();
 
 	if (existing) {
-		await supabase.from("follows").delete().eq("follower_id", userId).eq("following_id", targetId);
+		const { error: deleteError } = await supabase
+			.from("follows")
+			.delete()
+			.eq("follower_id", userId)
+			.eq("following_id", targetId);
+		if (deleteError) return fail(500, { message: "フォロー解除に失敗しました" });
 		await supabase.from("follow_requests").delete().eq("requester_id", userId).eq("target_id", targetId);
 		return { followed: false, requestStatus: "none" };
 	}
