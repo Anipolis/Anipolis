@@ -27,6 +27,8 @@ export async function getCurrentModerationStatus(
 	const until = data?.restricted_until ?? null;
 
 	if (status === "restricted" && until && new Date(until).getTime() <= Date.now()) {
+		// 期限切れのため DB を非同期更新（管理ダッシュボードの統計に古い制限が混入するのを防ぐ）
+		supabase.from("account_moderation").update({ status: "active" }).eq("user_id", userId);
 		return { moderation_status: "active", moderation_until: until };
 	}
 
