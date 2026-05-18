@@ -147,7 +147,9 @@ export async function enrichPostsWithCounts(
 
 	// ── アニメ引用がある投稿のスコアを一括取得 ────────────────────
 	const animeIds = [
-		...new Set(visibleRawPosts.map((rawPost) => rawPost.anime_id).filter((id): id is string | number => id != null)),
+		...new Set(
+			visibleRawPosts.map((rawPost) => rawPost.anime_id).filter((id): id is string | number => id != null),
+		),
 	];
 	const userScoreMap = new Map<string, number | null>();
 	if (userId && animeIds.length > 0) {

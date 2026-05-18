@@ -15,7 +15,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 
 			const { data: links } = await supabase.from("post_hashtags").select("post_id").eq("hashtag_id", hashtag.id);
 
-			const postIds = (links ?? []).map((l) => l.post_id);
+			const postIds = (links ?? []).map((link) => link.post_id);
 			if (postIds.length === 0) return { data: [] };
 
 			return supabase

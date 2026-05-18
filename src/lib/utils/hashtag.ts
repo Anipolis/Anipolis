@@ -11,9 +11,9 @@ export function extractHashtags(content: string): string[] {
 	const regex = new RegExp(HASHTAG_PATTERN, "g");
 	const matches = [...content.matchAll(regex)];
 	const tags = matches
-		.map((m) => m[1] ?? "")
+		.map((match) => match[1] ?? "")
 		.filter(Boolean)
-		.map((t) => t.toLowerCase());
+		.map((tag) => tag.toLowerCase());
 	return [...new Set(tags)];
 }
 
@@ -25,9 +25,9 @@ export function extractMentions(content: string): string[] {
 	const regex = new RegExp(MENTION_PATTERN, "g");
 	const matches = [...content.matchAll(regex)];
 	const mentions = matches
-		.map((m) => m[1] ?? "")
+		.map((match) => match[1] ?? "")
 		.filter(Boolean)
-		.map((m) => m.toLowerCase());
+		.map((username) => username.toLowerCase());
 	return [...new Set(mentions)];
 }
 

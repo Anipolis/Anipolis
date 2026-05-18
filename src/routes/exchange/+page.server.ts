@@ -93,10 +93,10 @@ async function getExchangeEntries(supabase: SupabaseClient<Database>, userId: st
 	if (error || !data) return [];
 	const entries = (data as unknown as ExchangeRow[])
 		.map((row) => toExchangeItem(row))
-		.filter((v: ExchangeItem | null): v is ExchangeItem => v !== null);
+		.filter((item): item is ExchangeItem => item !== null);
 
 	const receivedEntryIds = [
-		...new Set(entries.map((entry) => entry.received_entry_id).filter((v): v is string => Boolean(v))),
+		...new Set(entries.map((entry) => entry.received_entry_id).filter((id): id is string => Boolean(id))),
 	];
 	if (receivedEntryIds.length === 0) return entries;
 
