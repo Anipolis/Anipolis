@@ -618,7 +618,6 @@ export async function exchangeAnimeAction(supabase: SupabaseClient<Database>, re
 	const form = await request.formData();
 	const animeId = (form.get("anime_id") as string | null)?.trim() ?? "";
 
-	if (!userId) return fail(401, { exchangeMessage: "ログインが必要です" });
 	if (!animeId || Number.isNaN(Number(animeId))) {
 		return fail(400, { exchangeMessage: "アニメを選択してください" });
 	}

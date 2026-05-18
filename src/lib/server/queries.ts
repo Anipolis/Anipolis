@@ -146,7 +146,9 @@ export async function enrichPostsWithCounts(
 	const bookmarkedSet = new Set((myBookmarksRes.data ?? []).map((r) => r.post_id));
 
 	// ── アニメ引用がある投稿のスコアを一括取得 ────────────────────
-	const animeIds = [...new Set(visibleRawPosts.map((p) => p.anime_id).filter(Boolean))] as string[];
+	const animeIds = [
+		...new Set(visibleRawPosts.map((p) => p.anime_id).filter((id): id is string | number => id != null)),
+	];
 	const userScoreMap = new Map<string, number | null>();
 	if (userId && animeIds.length > 0) {
 		const { data: entries } = await supabase
