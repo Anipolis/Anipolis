@@ -730,6 +730,27 @@ textarea {
 	color: var(--color-danger);
 }
 
+/* --- Page header standard --- */
+
+.page-header {
+	padding: 16px 0 12px;
+	border-bottom: 1px solid var(--color-border);
+	margin-bottom: 8px;
+}
+
+.page-title {
+	font-size: 1.25rem;
+	font-weight: 700;
+	color: var(--color-text);
+	margin: 0;
+}
+
+.page-subtitle {
+	font-size: 0.82rem;
+	color: var(--color-text-muted);
+	margin: 2px 0 0;
+}
+
 /* --- Timeline Tabs --- */
 
 .timeline-tabs {

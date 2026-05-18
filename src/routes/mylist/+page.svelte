@@ -478,7 +478,7 @@ $effect(() => {
 .card-cover {
 	position: relative;
 	aspect-ratio: 1 / 1.414;
-	background: var(--bg, #0f172a);
+	background: var(--color-surface);
 	overflow: hidden;
 }
 
@@ -529,5 +529,40 @@ $effect(() => {
 .card-progress {
 	font-size: 0.7rem;
 	color: var(--color-text-muted);
+}
+
+@media (max-width: 900px) {
+	.anime-list {
+		grid-template-columns: repeat(4, 1fr);
+	}
+}
+
+@media (max-width: 640px) {
+	.mylist-container {
+		padding: 0 12px;
+	}
+
+	.mylist-title-row {
+		gap: 8px;
+	}
+
+	.header-actions {
+		flex-wrap: wrap;
+	}
+
+	.anime-list {
+		grid-template-columns: repeat(3, 1fr);
+		gap: 8px;
+	}
+
+	.stat-chips {
+		gap: 4px;
+	}
+}
+
+@media (max-width: 400px) {
+	.anime-list {
+		grid-template-columns: repeat(2, 1fr);
+	}
 }
 </style>

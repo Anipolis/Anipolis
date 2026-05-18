@@ -20,7 +20,9 @@ function notificationLabel(type: string): string {
 
 <div class="page-container">
 	<main class="notifications-column">
-		<h1 class="notifications-title">通知</h1>
+		<header class="page-header">
+			<h1 class="page-title">通知</h1>
+		</header>
 
 		{#if data.notifications.length === 0}
 			<div class="empty-state">
@@ -72,14 +74,6 @@ function notificationLabel(type: string): string {
 	max-width: 600px;
 	margin: 0 auto;
 	padding: 0 16px;
-}
-
-.notifications-title {
-	font-size: 20px;
-	font-weight: 700;
-	padding: 16px 0;
-	border-bottom: 1px solid var(--color-border);
-	margin: 0 0 8px;
 }
 
 .notification-list {

@@ -11,9 +11,9 @@ let { data, form }: PageProps = $props();
 
 <div class="page-container">
 	<main class="feed-column">
-		<header class="requests-header">
-			<h1>フォロー申請</h1>
-			<p>{data.requests.length}件の未対応申請</p>
+		<header class="page-header requests-header">
+			<h1 class="page-title">フォロー申請</h1>
+			<p class="page-subtitle">{data.requests.length}件の未対応申請</p>
 		</header>
 
 		{#if form && "message" in form}
@@ -67,25 +67,6 @@ let { data, form }: PageProps = $props();
 </div>
 
 <style>
-.requests-header {
-	padding: 16px 0 12px;
-	border-bottom: 1px solid var(--color-border);
-	margin-bottom: 4px;
-}
-
-.requests-header h1 {
-	font-size: 1.1rem;
-	font-weight: 700;
-	margin: 0 0 2px;
-	color: var(--color-text);
-}
-
-.requests-header p {
-	font-size: 0.8rem;
-	color: var(--color-text-muted);
-	margin: 0;
-}
-
 .request-list {
 	display: flex;
 	flex-direction: column;
