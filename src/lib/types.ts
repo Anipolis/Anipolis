@@ -32,6 +32,7 @@ export interface AnimeQuote {
 	id: string;
 	title: string;
 	cover_url: string | null;
+	room_href: string | null;
 	/** 閲覧者自身のスコア（enrichPostsWithCounts で付加） */
 	user_score: number | null;
 }
@@ -215,6 +216,8 @@ export interface RawPost {
 		id: string | number;
 		title: string;
 		cover_url: string | null;
+		broadcast_day?: number | null;
+		broadcast_time?: string | null;
 	} | null;
 	profiles: {
 		username: string;
@@ -286,10 +289,53 @@ export function toPost(
 		bookmarked_by_me: counts?.bookmarked_by_me ?? false,
 		anime_id: raw.anime_id != null ? String(raw.anime_id) : null,
 		anime_quote: raw.anime
-			? { id: String(raw.anime.id), title: raw.anime.title, cover_url: raw.anime.cover_url, user_score: null }
+			? {
+					id: String(raw.anime.id),
+					title: raw.anime.title,
+					cover_url: raw.anime.cover_url,
+					room_href: buildAnimeRoomHref(raw.anime, raw.created_at),
+					user_score: null,
+				}
 			: null,
 		exchange_share: toAnimeExchangeShare(raw.exchange_share),
 	};
+}
+
+function buildAnimeRoomHref(anime: NonNullable<RawPost["anime"]>, createdAt: string): string | null {
+	if (anime.broadcast_day == null) return null;
+	const roomDate = getRoomDateKeyForPost(createdAt, anime.broadcast_day);
+	if (!roomDate) return null;
+	if (!isWithinBroadcastWindow(createdAt, roomDate, anime.broadcast_time ?? null)) return null;
+	return `/rooms/anime/${String(anime.id)}/${roomDate}`;
+}
+
+function isWithinBroadcastWindow(createdAt: string, roomDate: string, broadcastTime: string | null): boolean {
+	if (!broadcastTime) return false;
+	const match = broadcastTime.match(/^(\d{1,2}):([0-5]\d)/);
+	if (!match) return false;
+	const [year, month, day] = roomDate.split("-").map(Number);
+	if (year == null || month == null || day == null) return false;
+	const hour = Number(match[1]);
+	const minute = Number(match[2]);
+	// hour≥24（深夜帯: "25:30"など）でも Date.UTC の算術オーバーフローで正しく翌日に繰り越される
+	const scheduledMs = Date.UTC(year, month - 1, day, hour - 9, minute);
+	const createdMs = new Date(createdAt).getTime();
+	if (Number.isNaN(createdMs)) return false;
+	return createdMs >= scheduledMs && createdMs <= scheduledMs + 30 * 60 * 1000;
+}
+
+function getRoomDateKeyForPost(createdAt: string, broadcastDay: number): string | null {
+	const createdDate = new Date(createdAt);
+	if (Number.isNaN(createdDate.getTime())) return null;
+
+	const jstDate = new Date(createdDate.getTime() + 9 * 60 * 60 * 1000);
+	const dayOffset = (jstDate.getUTCDay() - broadcastDay + 7) % 7;
+	jstDate.setUTCDate(jstDate.getUTCDate() - dayOffset);
+
+	const year = jstDate.getUTCFullYear();
+	const month = String(jstDate.getUTCMonth() + 1).padStart(2, "0");
+	const day = String(jstDate.getUTCDate()).padStart(2, "0");
+	return `${year}-${month}-${day}`;
 }
 
 function toAnimeExchangeShare(value: unknown): AnimeExchangeShare | null {

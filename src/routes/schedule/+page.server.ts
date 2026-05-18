@@ -33,6 +33,20 @@ function toDateInputValue(date: Date) {
 	return `${y}-${m}-${d}`;
 }
 
+function toDateKey(value: string | null) {
+	return value?.slice(0, 10) ?? null;
+}
+
+function isAnimeOnAirDate(anime: Anime, date: string) {
+	const airedFrom = toDateKey(anime.aired_from);
+	if (airedFrom && date < airedFrom) return false;
+
+	const airedTo = toDateKey(anime.aired_to);
+	if (airedTo && date > airedTo) return false;
+
+	return true;
+}
+
 function broadcastTimeSortValue(value: string | null) {
 	const match = value?.match(/^(\d{1,2}):([0-5]\d)/);
 	if (!match) return Number.POSITIVE_INFINITY;
@@ -59,7 +73,10 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	}));
 
 	for (const anime of animeList.filter((a): a is Anime & { broadcast_day: number } => a.broadcast_day != null)) {
-		days[anime.broadcast_day]?.anime.push(anime);
+		const day = days[anime.broadcast_day];
+		if (day && isAnimeOnAirDate(anime, day.date)) {
+			day.anime.push(anime);
+		}
 	}
 
 	for (const event of events) {

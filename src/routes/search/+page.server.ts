@@ -20,7 +20,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 				`id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, exchange_share,
                  profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
                  post_hashtags ( hashtags ( name ) ),
-                 anime:anime!posts_anime_id_fkey ( id, title, cover_url )`,
+                 anime:anime!posts_anime_id_fkey ( id, title, cover_url, broadcast_day, broadcast_time )`,
 			)
 			.ilike("content", pattern)
 			.order("created_at", { ascending: false })

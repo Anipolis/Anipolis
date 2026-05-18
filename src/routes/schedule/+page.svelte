@@ -79,14 +79,14 @@ function formatTime(iso: string) {
 						{/each}
 
 						{#each day.anime as anime (anime.id)}
-							<a href="/anime/{anime.id}" class="anime-slot">
+							<a href="/rooms/anime/{anime.id}/{day.date}" class="anime-slot">
 								{#if anime.cover_url}
 									<img src={anime.cover_url} alt={anime.title} class="slot-cover">
 								{:else}
 									<div class="slot-cover slot-cover--placeholder"></div>
 								{/if}
 								<div class="slot-info">
-									<span class="slot-kind">ON AIR</span>
+									<span class="slot-kind">ROOM</span>
 									{#if anime.broadcast_time}
 										<span class="slot-time">{anime.broadcast_time.slice(0, 5)}</span>
 									{/if}

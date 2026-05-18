@@ -405,7 +405,7 @@ export async function getEventPosts(
 			`id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, exchange_share,
              profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
              post_hashtags ( hashtags ( name ) ),
-             anime:anime!posts_anime_id_fkey ( id, title, cover_url )`,
+             anime:anime!posts_anime_id_fkey ( id, title, cover_url, broadcast_day, broadcast_time )`,
 		)
 		.in("id", postIds)
 		.is("parent_id", null) // トップレベル投稿のみ
@@ -834,7 +834,7 @@ export async function getBookmarkedPosts(supabase: SupabaseClient<Database>, use
 			`id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, exchange_share,
              profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
              post_hashtags ( hashtags ( name ) ),
-             anime:anime!posts_anime_id_fkey ( id, title, cover_url )`,
+             anime:anime!posts_anime_id_fkey ( id, title, cover_url, broadcast_day, broadcast_time )`,
 		)
 		.in("id", postIds);
 	// ブックマーク保存順を維持するため postIds の順序に並べ直す
@@ -862,7 +862,7 @@ export async function getLikedPosts(
 			`id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, exchange_share,
              profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
              post_hashtags ( hashtags ( name ) ),
-             anime:anime!posts_anime_id_fkey ( id, title, cover_url )`,
+             anime:anime!posts_anime_id_fkey ( id, title, cover_url, broadcast_day, broadcast_time )`,
 		)
 		.in("id", postIds)
 		.order("created_at", { ascending: false });
