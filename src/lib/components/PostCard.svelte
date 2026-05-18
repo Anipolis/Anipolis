@@ -29,10 +29,12 @@ const effectiveRoomContext = $derived(
 
 let deleting = $state(false);
 let lightboxUrl = $state<string | null>(null);
+let showDeleteModal = $state(false);
 let showRepostMenu = $state(false);
 let showQuoteModal = $state(false);
 let showExchangeModal = $state(false);
 let showReportModal = $state(false);
+let deleteFormEl = $state<HTMLFormElement | null>(null);
 let quoteText = $state("");
 let quoteSubmitting = $state(false);
 let quoteError = $state("");
@@ -53,6 +55,7 @@ function closeLightbox() {
 
 function handleLightboxKeydown(event: KeyboardEvent) {
 	if (lightboxUrl && event.key === "Escape") closeLightbox();
+	if (showDeleteModal && event.key === "Escape") showDeleteModal = false;
 	if (showExchangeModal && event.key === "Escape") showExchangeModal = false;
 	if (showReportModal && event.key === "Escape") showReportModal = false;
 }
@@ -82,8 +85,7 @@ const repostCount = $derived(repostCountLocal ?? post.repost_count);
 const repostedByMe = $derived(repostedByMeLocal ?? post.reposted_by_me);
 const bookmarkedByMe = $derived(bookmarkedByMeLocal ?? post.bookmarked_by_me);
 
-const handleDelete: SubmitFunction = ({ cancel }) => {
-	if (!confirm("この投稿を削除しますか？")) return cancel();
+const handleDelete: SubmitFunction = () => {
 	deleting = true;
 	return async ({ update }) => {
 		await update();
@@ -188,7 +190,7 @@ async function submitReport() {
 	class="post-card"
 	class:deleting
 	class:post-card-clickable={!isDetailView}
-	class:post-card-modal-open={showExchangeModal || showQuoteModal || showReportModal || !!lightboxUrl}
+	class:post-card-modal-open={showDeleteModal || showExchangeModal || showQuoteModal || showReportModal || !!lightboxUrl}
 	class:post-card--with-room={!!effectiveRoomContext && !insideRoom}
 >
 	{#if !isDetailView}
@@ -216,14 +218,15 @@ async function submitReport() {
 					<time datetime={post.created_at}>{relativeTime}</time>
 				</a>
 				{#if isOwn}
-					<form method="POST" action="?/deletePost" use:enhance={handleDelete}>
+					<form method="POST" action="?/deletePost" use:enhance={handleDelete} bind:this={deleteFormEl}>
 						<input type="hidden" name="post_id" value={post.id}>
 						<button
-							type="submit"
+							type="button"
 							class="post-delete-btn"
 							disabled={deleting}
 							aria-label="投稿を削除"
 							title="削除"
+							onclick={(e) => { e.stopPropagation(); showDeleteModal = true; }}
 						>
 							✕
 						</button>
@@ -484,6 +487,39 @@ async function submitReport() {
 			</div>
 		{/if}
 
+		{#if showDeleteModal}
+			<!-- svelte-ignore a11y_click_events_have_key_events -->
+			<div class="delete-modal-overlay" role="presentation" onclick={() => (showDeleteModal = false)}>
+				<div
+					class="delete-modal-card"
+					role="dialog"
+					aria-modal="true"
+					aria-labelledby="delete-modal-title"
+					tabindex="-1"
+					onclick={(e) => e.stopPropagation()}
+				>
+					<div class="delete-modal-header">
+						<span id="delete-modal-title" class="delete-modal-title">投稿を削除</span>
+					</div>
+					<div class="delete-modal-body">
+						<p>この投稿を削除しますか？この操作は取り消せません。</p>
+					</div>
+					<div class="delete-modal-footer">
+						<button type="button" class="btn btn-ghost" onclick={() => (showDeleteModal = false)}>
+							キャンセル
+						</button>
+						<button
+							type="button"
+							class="btn btn-danger"
+							onclick={() => { showDeleteModal = false; deleteFormEl?.requestSubmit(); }}
+						>
+							削除する
+						</button>
+					</div>
+				</div>
+			</div>
+		{/if}
+
 		<div class="post-footer">
 			<a href="/posts/{post.id}" class="post-action-btn post-reply-btn" aria-label="返信">
 				<svg
@@ -705,6 +741,54 @@ async function submitReport() {
 	flex-shrink: 0;
 	width: 13px;
 	height: 13px;
+}
+
+.delete-modal-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 1000;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 16px;
+	background: rgba(0, 0, 0, 0.58);
+	backdrop-filter: blur(3px);
+}
+
+.delete-modal-card {
+	width: min(360px, 100%);
+	border: 1px solid var(--color-border);
+	border-radius: 12px;
+	background: var(--color-bg-card);
+	box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
+}
+
+.delete-modal-header {
+	padding: 16px 16px 0;
+}
+
+.delete-modal-title {
+	font-size: 15px;
+	font-weight: 800;
+}
+
+.delete-modal-body {
+	padding: 12px 16px 16px;
+	color: var(--color-text-secondary);
+	font-size: 14px;
+}
+
+.delete-modal-body p {
+	margin: 0;
+}
+
+.delete-modal-footer {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 8px;
+	padding: 12px 16px;
+	border-top: 1px solid var(--color-border);
 }
 
 .report-modal-overlay {
