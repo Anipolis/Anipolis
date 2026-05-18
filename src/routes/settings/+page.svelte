@@ -53,11 +53,11 @@ let { data }: PageProps = $props();
 	padding: 14px 0;
 	color: inherit;
 	text-decoration: none;
-	border-bottom: 1px solid var(--border, #334155);
+	border-bottom: 1px solid var(--color-border);
 }
 
 .settings-category-link:first-child {
-	border-top: 1px solid var(--border, #334155);
+	border-top: 1px solid var(--color-border);
 }
 
 .settings-category-link strong,
@@ -71,16 +71,16 @@ let { data }: PageProps = $props();
 
 .settings-category-link small {
 	margin-top: 4px;
-	color: var(--fg-muted, #94a3b8);
+	color: var(--color-text-muted);
 	font-size: 0.82rem;
 }
 
 .settings-category-link:hover strong {
-	color: var(--accent, #6366f1);
+	color: var(--color-accent);
 }
 
 .settings-category-arrow {
-	color: var(--fg-muted, #94a3b8);
+	color: var(--color-text-muted);
 	font-size: 1.4rem;
 }
 </style>

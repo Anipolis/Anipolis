@@ -28,7 +28,7 @@ const broadcastLabels: Record<string, string> = {
 };
 const listedUserStatusColors: Record<string, string> = {
 	watching: "#34d399",
-	completed: "var(--accent, #6366f1)",
+	completed: "var(--color-accent)",
 	plan_to_watch: "#60a5fa",
 	on_hold: "#fbbf24",
 	dropped: "#f87171",
@@ -930,17 +930,17 @@ const handleRecommendSubmit: SubmitFunction = () => {
 
 /* Watchlist */
 .watchlist-section {
-	border: 1px solid var(--accent, #6366f1);
+	border: 1px solid var(--color-accent);
 	border-radius: 12px;
 	padding: 20px;
 	background: var(--card-bg);
-	box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #6366f1) 12%, transparent);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 12%, transparent);
 }
 .watchlist-section h2 {
 	font-size: 1rem;
 	font-weight: 700;
 	margin: 0 0 14px;
-	color: var(--accent, #6366f1);
+	color: var(--color-accent);
 	display: flex;
 	align-items: center;
 	gap: 6px;
@@ -1001,7 +1001,7 @@ const handleRecommendSubmit: SubmitFunction = () => {
 		background 0.15s,
 		transform 0.1s,
 		box-shadow 0.15s;
-	box-shadow: 0 2px 8px color-mix(in srgb, var(--accent, #6366f1) 40%, transparent);
+	box-shadow: 0 2px 8px color-mix(in srgb, var(--color-accent) 40%, transparent);
 }
 .btn-primary--add {
 	background: var(--accent);
@@ -1009,12 +1009,12 @@ const handleRecommendSubmit: SubmitFunction = () => {
 	justify-content: center;
 }
 .btn-primary--update {
-	background: color-mix(in srgb, var(--accent, #6366f1) 75%, #000);
+	background: color-mix(in srgb, var(--color-accent) 75%, #000);
 }
 .btn-primary:hover {
 	opacity: 0.92;
 	transform: translateY(-1px);
-	box-shadow: 0 4px 14px color-mix(in srgb, var(--accent, #6366f1) 50%, transparent);
+	box-shadow: 0 4px 14px color-mix(in srgb, var(--color-accent) 50%, transparent);
 }
 .btn-primary:active {
 	transform: translateY(0);

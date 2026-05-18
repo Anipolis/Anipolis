@@ -130,13 +130,13 @@ const muteSubmit: SubmitFunction = () => {
 .settings-section {
 	padding-top: 18px;
 	margin-top: 18px;
-	border-top: 1px solid var(--border, #334155);
+	border-top: 1px solid var(--color-border);
 }
 
 .settings-section-title {
 	margin: 0 0 16px;
 	font-size: 1rem;
 	font-weight: 700;
-	color: var(--fg, #e2e8f0);
+	color: var(--color-text);
 }
 </style>

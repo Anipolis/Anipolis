@@ -69,7 +69,7 @@ let { data, form }: PageProps = $props();
 <style>
 .requests-header {
 	padding: 16px 0 12px;
-	border-bottom: 1px solid var(--border, #334155);
+	border-bottom: 1px solid var(--color-border);
 	margin-bottom: 4px;
 }
 
@@ -77,12 +77,12 @@ let { data, form }: PageProps = $props();
 	font-size: 1.1rem;
 	font-weight: 700;
 	margin: 0 0 2px;
-	color: var(--fg, #e2e8f0);
+	color: var(--color-text);
 }
 
 .requests-header p {
 	font-size: 0.8rem;
-	color: var(--fg-muted, #94a3b8);
+	color: var(--color-text-muted);
 	margin: 0;
 }
 
@@ -96,7 +96,7 @@ let { data, form }: PageProps = $props();
 	align-items: flex-start;
 	gap: 12px;
 	padding: 14px 4px;
-	border-bottom: 1px solid var(--border, #334155);
+	border-bottom: 1px solid var(--color-border);
 }
 
 .request-avatar {
@@ -112,7 +112,7 @@ let { data, form }: PageProps = $props();
 	display: inline-block;
 	font-size: 0.95rem;
 	font-weight: 700;
-	color: var(--fg, #e2e8f0);
+	color: var(--color-text);
 	text-decoration: none;
 }
 
@@ -122,13 +122,13 @@ let { data, form }: PageProps = $props();
 
 .request-meta {
 	font-size: 0.82rem;
-	color: var(--fg-muted, #94a3b8);
+	color: var(--color-text-muted);
 	margin-bottom: 4px;
 }
 
 .request-body p {
 	font-size: 0.85rem;
-	color: var(--fg-muted, #94a3b8);
+	color: var(--color-text-muted);
 	margin: 0;
 	display: -webkit-box;
 	-webkit-line-clamp: 2;

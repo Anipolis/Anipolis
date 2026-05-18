@@ -396,9 +396,9 @@ const grouped = $derived(
 	align-items: center;
 	margin-left: 6px;
 	padding: 1px 6px;
-	border: 1px solid var(--border, #334155);
+	border: 1px solid var(--color-border);
 	border-radius: 999px;
-	color: var(--fg-muted, #94a3b8);
+	color: var(--color-text-muted);
 	font-size: 0.72rem;
 	font-weight: 700;
 	vertical-align: middle;
@@ -406,7 +406,7 @@ const grouped = $derived(
 
 .profile-tabs {
 	display: flex;
-	border-bottom: 1px solid var(--border, #334155);
+	border-bottom: 1px solid var(--color-border);
 	margin: 16px 0 0;
 }
 
@@ -414,7 +414,7 @@ const grouped = $derived(
 	padding: 10px 20px;
 	font-size: 0.9rem;
 	font-weight: 500;
-	color: var(--fg-muted, #94a3b8);
+	color: var(--color-text-muted);
 	text-decoration: none;
 	border-bottom: 2px solid transparent;
 	margin-bottom: -1px;
@@ -427,12 +427,12 @@ const grouped = $derived(
 }
 
 .profile-tab:hover {
-	color: var(--fg, #e2e8f0);
+	color: var(--color-text);
 }
 
 .profile-tab.active {
-	color: var(--accent, #6366f1);
-	border-bottom-color: var(--accent, #6366f1);
+	color: var(--color-accent);
+	border-bottom-color: var(--color-accent);
 	font-weight: 700;
 }
 
@@ -454,7 +454,7 @@ const grouped = $derived(
 .empty-state {
 	text-align: center;
 	padding: 48px 0;
-	color: var(--fg-muted, #94a3b8);
+	color: var(--color-text-muted);
 }
 
 .list-private {
@@ -469,20 +469,20 @@ const grouped = $derived(
 	justify-content: space-between;
 	padding: 12px 4px;
 	font-size: 0.85rem;
-	color: var(--fg-muted, #94a3b8);
+	color: var(--color-text-muted);
 }
 
 .list-summary strong {
-	color: var(--fg, #e2e8f0);
+	color: var(--color-text);
 }
 
 .profile-stat--link:hover strong {
-	color: var(--accent, #6366f1);
+	color: var(--color-accent);
 }
 
 .list-manage-link {
 	font-size: 0.8rem;
-	color: var(--accent, #6366f1);
+	color: var(--color-accent);
 	text-decoration: none;
 }
 
@@ -502,15 +502,15 @@ const grouped = $derived(
 	font-weight: 700;
 	padding: 8px 4px;
 	margin: 0 0 4px;
-	border-bottom: 1px solid var(--border, #334155);
-	color: var(--fg, #e2e8f0);
+	border-bottom: 1px solid var(--color-border);
+	color: var(--color-text);
 }
 
 .status-section--watching .status-icon {
 	color: var(--status-watching);
 }
 .status-section--completed .status-icon {
-	color: var(--accent, #6366f1);
+	color: var(--color-accent);
 }
 .status-section--plan_to_watch .status-icon {
 	color: var(--status-plan);
@@ -525,7 +525,7 @@ const grouped = $derived(
 .status-count {
 	margin-left: auto;
 	font-size: 0.75rem;
-	color: var(--fg-muted, #94a3b8);
+	color: var(--color-text-muted);
 	font-weight: 400;
 }
 
@@ -547,7 +547,7 @@ const grouped = $derived(
 }
 
 .anime-row:hover {
-	background: color-mix(in srgb, var(--fg, #e2e8f0) 6%, transparent);
+	background: color-mix(in srgb, var(--color-text) 6%, transparent);
 }
 
 .anime-cover {
@@ -556,7 +556,7 @@ const grouped = $derived(
 	border-radius: 3px;
 	overflow: hidden;
 	flex-shrink: 0;
-	background: var(--surface, #1e293b);
+	background: var(--color-surface);
 }
 
 .anime-cover img {
@@ -571,7 +571,7 @@ const grouped = $derived(
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	color: var(--fg-muted, #94a3b8);
+	color: var(--color-text-muted);
 }
 
 .anime-info {
@@ -582,7 +582,7 @@ const grouped = $derived(
 .anime-title {
 	font-size: 0.85rem;
 	font-weight: 500;
-	color: var(--fg, #e2e8f0);
+	color: var(--color-text);
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -597,7 +597,7 @@ const grouped = $derived(
 }
 
 .meta-progress {
-	color: var(--fg-muted, #94a3b8);
+	color: var(--color-text-muted);
 }
 
 .meta-score {
@@ -607,7 +607,7 @@ const grouped = $derived(
 
 .anime-updated {
 	font-size: 0.72rem;
-	color: var(--fg-muted, #94a3b8);
+	color: var(--color-text-muted);
 	flex-shrink: 0;
 	white-space: nowrap;
 }

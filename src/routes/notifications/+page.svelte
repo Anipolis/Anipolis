@@ -149,11 +149,11 @@ function notificationLabel(type: string): string {
 	border-radius: 8px;
 	color: inherit;
 	text-decoration: none;
-	background: var(--card-bg, transparent);
+	background: var(--color-surface);
 }
 
 .notification-anime-preview:hover {
-	border-color: var(--accent, #6366f1);
+	border-color: var(--color-accent);
 }
 
 .notification-anime-preview img {
