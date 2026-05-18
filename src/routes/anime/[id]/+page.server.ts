@@ -1,7 +1,6 @@
 import { error, fail } from "@sveltejs/kit";
-import { ADMIN_EMAIL } from "$env/static/private";
 import { recommendAnimeAction, removeUserAnimeEntry, upsertUserAnimeEntry } from "$lib/server/actions";
-import { getAnime, getUsersWhoListedAnime } from "$lib/server/queries";
+import { getAnime, getUsersWhoListedAnime, isAdminUser } from "$lib/server/queries";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
@@ -10,9 +9,12 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 
 	if (!anime) throw error(404, "アニメが見つかりません");
 
-	const listedUsers = await getUsersWhoListedAnime(supabase, params.id);
+	const [listedUsers, isAdmin] = await Promise.all([
+		getUsersWhoListedAnime(supabase, params.id),
+		user ? isAdminUser(supabase, user.id) : Promise.resolve(false),
+	]);
 
-	return { anime, user, isAdmin: user?.email === ADMIN_EMAIL, listedUsers };
+	return { anime, user, isAdmin, listedUsers };
 };
 
 export const actions: Actions = {
