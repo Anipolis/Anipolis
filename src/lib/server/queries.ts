@@ -81,7 +81,7 @@ export async function enrichPostsWithCounts(
 		user_id: string;
 		profiles: { username: string; display_name: string | null; avatar_url: string | null } | null;
 	};
-	const quotedPostIds = [...new Set(rawPosts.map((p) => p.quoted_post_id).filter(Boolean))] as string[];
+	const quotedPostIds = [...new Set(rawPosts.map((rawPost) => rawPost.quoted_post_id).filter(Boolean))] as string[];
 	const quotedPostMap = new Map<string, QuotedPostRow>();
 	if (quotedPostIds.length > 0) {
 		const { data: quotedRaw } = await supabase
@@ -90,8 +90,8 @@ export async function enrichPostsWithCounts(
 				"id, content, created_at, user_id, profiles!posts_user_id_fkey ( username, display_name, avatar_url )",
 			)
 			.in("id", quotedPostIds);
-		for (const qp of quotedRaw ?? []) {
-			quotedPostMap.set(qp.id, qp as QuotedPostRow);
+		for (const quotedPostRow of quotedRaw ?? []) {
+			quotedPostMap.set(quotedPostRow.id, quotedPostRow as QuotedPostRow);
 		}
 	}
 
@@ -108,7 +108,7 @@ export async function enrichPostsWithCounts(
 
 	if (visibleRawPosts.length === 0) return [];
 
-	const postIds = visibleRawPosts.map((p) => p.id as string);
+	const postIds = visibleRawPosts.map((rawPost) => rawPost.id as string);
 
 	// ── 並列バッチクエリ ──────────────────────────────────────────
 	const [likesRes, repostsRes, repliesRes, myLikesRes, myRepostsRes, myBookmarksRes] = await Promise.all([
@@ -139,15 +139,15 @@ export async function enrichPostsWithCounts(
 	// ── JS でカウント集計 ─────────────────────────────────────────
 	const likeCount = countByPostId(likesRes.data ?? []);
 	const repostCount = countByPostId(repostsRes.data ?? []);
-	const replyCount = countByPostId((repliesRes.data ?? []).map((r) => ({ post_id: r.parent_id as string })));
+	const replyCount = countByPostId((repliesRes.data ?? []).map((reply) => ({ post_id: reply.parent_id as string })));
 
-	const likedSet = new Set((myLikesRes.data ?? []).map((r) => r.post_id));
-	const repostedSet = new Set((myRepostsRes.data ?? []).map((r) => r.post_id));
-	const bookmarkedSet = new Set((myBookmarksRes.data ?? []).map((r) => r.post_id));
+	const likedSet = new Set((myLikesRes.data ?? []).map((like) => like.post_id));
+	const repostedSet = new Set((myRepostsRes.data ?? []).map((repost) => repost.post_id));
+	const bookmarkedSet = new Set((myBookmarksRes.data ?? []).map((bookmark) => bookmark.post_id));
 
 	// ── アニメ引用がある投稿のスコアを一括取得 ────────────────────
 	const animeIds = [
-		...new Set(visibleRawPosts.map((p) => p.anime_id).filter((id): id is string | number => id != null)),
+		...new Set(visibleRawPosts.map((rawPost) => rawPost.anime_id).filter((id): id is string | number => id != null)),
 	];
 	const userScoreMap = new Map<string, number | null>();
 	if (userId && animeIds.length > 0) {
@@ -156,8 +156,8 @@ export async function enrichPostsWithCounts(
 			.select("anime_id, score")
 			.eq("user_id", userId)
 			.in("anime_id", animeIds.map(Number));
-		for (const e of entries ?? []) {
-			userScoreMap.set(String(e.anime_id), e.score);
+		for (const entry of entries ?? []) {
+			userScoreMap.set(String(entry.anime_id), entry.score);
 		}
 	}
 
