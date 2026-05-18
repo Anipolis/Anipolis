@@ -641,7 +641,7 @@ const handleRecommendSubmit: SubmitFunction = () => {
 .back-link {
 	display: inline-block;
 	margin-bottom: 20px;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 	text-decoration: none;
 	font-size: 0.9rem;
 }
@@ -669,8 +669,8 @@ const handleRecommendSubmit: SubmitFunction = () => {
 	aspect-ratio: 1 / 1.414;
 	border-radius: 10px;
 	overflow: hidden;
-	background: var(--card-bg);
-	border: 1px solid var(--border);
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
 	position: relative;
 }
 .anime-cover img {
@@ -686,8 +686,8 @@ const handleRecommendSubmit: SubmitFunction = () => {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	color: var(--text-muted);
-	background: var(--hover-bg);
+	color: var(--color-text-muted);
+	background: var(--color-surface-hover);
 }
 
 .cover-upload-btn {
@@ -729,8 +729,8 @@ const handleRecommendSubmit: SubmitFunction = () => {
 	gap: 10px;
 	margin: 0;
 	padding: 14px;
-	background: var(--card-bg);
-	border: 1px solid var(--border);
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
 	border-radius: 8px;
 }
 .prod-row {
@@ -740,7 +740,7 @@ const handleRecommendSubmit: SubmitFunction = () => {
 	font-size: 0.8rem;
 }
 .prod-row dt {
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 	font-weight: 600;
 	font-size: 0.72rem;
 	text-transform: uppercase;
@@ -760,9 +760,9 @@ const handleRecommendSubmit: SubmitFunction = () => {
 	font-size: 0.72rem;
 	padding: 2px 7px;
 	border-radius: 10px;
-	background: var(--hover-bg);
-	color: var(--text-muted);
-	border: 1px solid var(--border);
+	background: var(--color-surface-hover);
+	color: var(--color-text-muted);
+	border: 1px solid var(--color-border);
 	text-decoration: none;
 	transition:
 		background 0.15s,
@@ -792,11 +792,11 @@ const handleRecommendSubmit: SubmitFunction = () => {
 }
 .copyright {
 	font-size: 0.72rem;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 }
 .copyright-notice {
 	font-size: 0.68rem;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 	line-height: 1.4;
 	margin: 6px 0 0;
 	word-break: break-all;
@@ -830,7 +830,7 @@ const handleRecommendSubmit: SubmitFunction = () => {
 }
 .anime-title-en {
 	font-size: 0.88rem;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 	margin: 0;
 }
 
@@ -855,15 +855,15 @@ const handleRecommendSubmit: SubmitFunction = () => {
 	color: var(--status-plan);
 }
 .status-finished {
-	background: var(--hover-bg);
-	color: var(--text-muted);
+	background: var(--color-surface-hover);
+	color: var(--color-text-muted);
 }
 .meta-chip {
 	font-size: 0.78rem;
 	padding: 3px 9px;
 	border-radius: 4px;
-	background: var(--hover-bg);
-	color: var(--text-muted);
+	background: var(--color-surface-hover);
+	color: var(--color-text-muted);
 }
 .meta-chip.aired {
 	font-size: 0.75rem;
@@ -890,8 +890,8 @@ const handleRecommendSubmit: SubmitFunction = () => {
 	flex-direction: column;
 	gap: 4px;
 	padding: 16px 24px;
-	background: var(--card-bg);
-	border: 1px solid var(--border);
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
 	border-radius: 10px;
 	min-width: 120px;
 }
@@ -900,7 +900,7 @@ const handleRecommendSubmit: SubmitFunction = () => {
 	font-weight: 600;
 	text-transform: uppercase;
 	letter-spacing: 0.05em;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 }
 .stat-card-value {
 	font-size: 1.8rem;
@@ -912,7 +912,7 @@ const handleRecommendSubmit: SubmitFunction = () => {
 }
 .stat-card-sub {
 	font-size: 0.75rem;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 }
 
 /* Synopsis */
@@ -933,7 +933,7 @@ const handleRecommendSubmit: SubmitFunction = () => {
 	border: 1px solid var(--color-accent);
 	border-radius: 12px;
 	padding: 20px;
-	background: var(--card-bg);
+	background: var(--color-surface);
 	box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 12%, transparent);
 }
 .watchlist-section h2 {
@@ -961,14 +961,14 @@ const handleRecommendSubmit: SubmitFunction = () => {
 	flex-direction: column;
 	gap: 4px;
 	font-size: 0.82rem;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 	font-weight: 500;
 }
 .form-select,
 .form-input {
 	padding: 6px 10px;
 	border-radius: 6px;
-	border: 1px solid var(--border);
+	border: 1px solid var(--color-border);
 	background: var(--bg);
 	color: var(--text);
 	font-size: 0.9rem;
@@ -1044,11 +1044,11 @@ const handleRecommendSubmit: SubmitFunction = () => {
 	margin: 0 0 10px;
 }
 .watchlist-section--guest {
-	border-color: var(--border);
+	border-color: var(--color-border);
 	box-shadow: none;
 }
 .login-prompt {
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 	font-size: 0.9rem;
 	margin: 0;
 }
@@ -1066,10 +1066,10 @@ const handleRecommendSubmit: SubmitFunction = () => {
 }
 
 .recommend-section {
-	border: 1px solid var(--border);
+	border: 1px solid var(--color-border);
 	border-radius: 8px;
 	padding: 18px;
-	background: var(--card-bg);
+	background: var(--color-surface);
 }
 
 .recommend-section h2 {
@@ -1101,11 +1101,11 @@ const handleRecommendSubmit: SubmitFunction = () => {
 	gap: 6px;
 	margin-top: 8px;
 	padding: 4px 8px;
-	border: 1px solid var(--border);
+	border: 1px solid var(--color-border);
 	border-radius: 999px;
 	font-size: 0.78rem;
 	color: var(--text);
-	background: var(--hover-bg);
+	background: var(--color-surface-hover);
 	max-width: 100%;
 }
 
@@ -1122,7 +1122,7 @@ const handleRecommendSubmit: SubmitFunction = () => {
 .selected-recipient button {
 	border: none;
 	background: transparent;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 	cursor: pointer;
 	font-size: 1rem;
 	line-height: 1;
@@ -1134,8 +1134,8 @@ const handleRecommendSubmit: SubmitFunction = () => {
 	top: calc(100% + 6px);
 	left: 0;
 	right: 0;
-	background: var(--card-bg);
-	border: 1px solid var(--border);
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
 	border-radius: 8px;
 	box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
 	max-height: 240px;
@@ -1156,7 +1156,7 @@ const handleRecommendSubmit: SubmitFunction = () => {
 }
 
 .recommend-user-result:hover {
-	background: var(--hover-bg);
+	background: var(--color-surface-hover);
 }
 
 .recommend-user-result span:last-child {
@@ -1174,7 +1174,7 @@ const handleRecommendSubmit: SubmitFunction = () => {
 
 .recommend-user-result small,
 .recommend-search-hint {
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 	font-size: 0.74rem;
 }
 
@@ -1182,8 +1182,8 @@ const handleRecommendSubmit: SubmitFunction = () => {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	background: var(--hover-bg);
-	color: var(--text-muted);
+	background: var(--color-surface-hover);
+	color: var(--color-text-muted);
 	font-weight: 700;
 }
 
@@ -1219,8 +1219,8 @@ const handleRecommendSubmit: SubmitFunction = () => {
 .listed-users-count {
 	font-size: 0.8rem;
 	font-weight: 400;
-	color: var(--text-muted);
-	background: var(--hover-bg);
+	color: var(--color-text-muted);
+	background: var(--color-surface-hover);
 	padding: 1px 8px;
 	border-radius: 10px;
 }
@@ -1260,8 +1260,8 @@ const handleRecommendSubmit: SubmitFunction = () => {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	background: var(--hover-bg);
-	color: var(--text-muted);
+	background: var(--color-surface-hover);
+	color: var(--color-text-muted);
 	font-weight: 700;
 	font-size: 1.1rem;
 }
@@ -1278,7 +1278,7 @@ const handleRecommendSubmit: SubmitFunction = () => {
 
 .listed-user-name {
 	font-size: 0.7rem;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 	text-align: center;
 	max-width: 64px;
 	overflow: hidden;

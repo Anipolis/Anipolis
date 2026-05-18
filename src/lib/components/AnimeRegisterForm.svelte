@@ -402,7 +402,7 @@ async function handleFileChange(e: Event) {
 	font-size: 1.1rem;
 	font-weight: 700;
 	margin-bottom: 20px;
-	color: var(--text);
+	color: var(--color-text);
 }
 .form-success {
 	padding: 12px 16px;
@@ -450,7 +450,7 @@ async function handleFileChange(e: Event) {
 .field-label {
 	font-size: 0.82rem;
 	font-weight: 600;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 }
 .required {
 	color: var(--color-danger);
@@ -459,10 +459,10 @@ async function handleFileChange(e: Event) {
 .rf-textarea,
 .rf-select {
 	padding: 8px 10px;
-	border-radius: 7px;
-	border: 1px solid var(--border);
-	background: var(--card-bg);
-	color: var(--text);
+	border-radius: 8px;
+	border: 1px solid var(--color-border);
+	background: var(--color-surface);
+	color: var(--color-text);
 	font-size: 0.88rem;
 	outline: none;
 	transition: border-color 0.15s;
@@ -472,7 +472,7 @@ async function handleFileChange(e: Event) {
 .rf-input:focus,
 .rf-textarea:focus,
 .rf-select:focus {
-	border-color: var(--accent);
+	border-color: var(--color-accent);
 }
 .rf-textarea {
 	resize: vertical;
@@ -486,21 +486,21 @@ async function handleFileChange(e: Event) {
 .tag-btn {
 	padding: 4px 10px;
 	border-radius: 14px;
-	border: 1px solid var(--border);
+	border: 1px solid var(--color-border);
 	background: transparent;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 	font-size: 0.8rem;
 	cursor: pointer;
 	transition: all 0.12s;
 }
 .tag-btn:hover {
-	background: var(--hover-bg);
-	color: var(--text);
+	background: var(--color-surface-hover);
+	color: var(--color-text);
 }
 .tag-btn.selected {
-	background: var(--accent);
+	background: var(--color-accent);
 	color: #fff;
-	border-color: var(--accent);
+	border-color: var(--color-accent);
 }
 
 .tag-input-row {
@@ -512,19 +512,19 @@ async function handleFileChange(e: Event) {
 }
 .tag-add-btn {
 	padding: 8px 14px;
-	border-radius: 7px;
-	border: 1px solid var(--border);
-	background: var(--hover-bg);
-	color: var(--text);
+	border-radius: 8px;
+	border: 1px solid var(--color-border);
+	background: var(--color-surface-hover);
+	color: var(--color-text);
 	font-size: 0.82rem;
 	cursor: pointer;
 	white-space: nowrap;
 	transition: background 0.12s;
 }
 .tag-add-btn:hover {
-	background: var(--accent);
+	background: var(--color-accent);
 	color: #fff;
-	border-color: var(--accent);
+	border-color: var(--color-accent);
 }
 .tag-chips {
 	display: flex;
@@ -538,7 +538,7 @@ async function handleFileChange(e: Event) {
 	gap: 4px;
 	padding: 3px 10px;
 	border-radius: 14px;
-	background: var(--accent);
+	background: var(--color-accent);
 	color: #fff;
 	font-size: 0.8rem;
 }
@@ -565,7 +565,7 @@ async function handleFileChange(e: Event) {
 .submit-btn {
 	padding: 10px 28px;
 	border-radius: 8px;
-	background: var(--accent);
+	background: var(--color-accent);
 	color: #fff;
 	border: none;
 	font-size: 0.9rem;
@@ -578,11 +578,11 @@ async function handleFileChange(e: Event) {
 }
 .cancel-link {
 	font-size: 0.85rem;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 	text-decoration: none;
 }
 .cancel-link:hover {
-	color: var(--text);
+	color: var(--color-text);
 }
 
 .cover-upload-label {
@@ -593,20 +593,20 @@ async function handleFileChange(e: Event) {
 	gap: 6px;
 	width: 100%;
 	height: 110px;
-	border: 2px dashed var(--border);
+	border: 2px dashed var(--color-border);
 	border-radius: 8px;
 	cursor: pointer;
 	transition:
 		border-color 0.15s,
 		background 0.15s;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 	font-size: 0.82rem;
 	overflow: hidden;
 	position: relative;
 }
 .cover-upload-label:hover {
-	border-color: var(--accent);
-	background: var(--hover-bg);
+	border-color: var(--color-accent);
+	background: var(--color-surface-hover);
 }
 .cover-upload-label.has-preview {
 	height: 160px;

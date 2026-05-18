@@ -408,16 +408,16 @@ $effect(() => {
 	left: 10px;
 	top: 50%;
 	transform: translateY(-50%);
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 	pointer-events: none;
 }
 .search-input {
 	width: 100%;
 	padding: 9px 12px 9px 34px;
 	border-radius: 8px;
-	border: 1px solid var(--border);
-	background: var(--card-bg);
-	color: var(--text);
+	border: 1px solid var(--color-border);
+	background: var(--color-surface);
+	color: var(--color-text);
 	font-size: 0.9rem;
 	outline: none;
 	transition:
@@ -426,13 +426,13 @@ $effect(() => {
 	box-sizing: border-box;
 }
 .search-input:focus {
-	border-color: var(--accent);
-	box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
+	border-color: var(--color-accent);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 15%, transparent);
 }
 .search-btn {
 	padding: 9px 18px;
 	border-radius: 8px;
-	background: var(--accent);
+	background: var(--color-accent);
 	color: #fff;
 	border: none;
 	font-size: 0.85rem;
@@ -447,8 +447,8 @@ $effect(() => {
 .search-clear {
 	padding: 7px 11px;
 	border-radius: 8px;
-	border: 1px solid var(--border);
-	color: var(--text-muted);
+	border: 1px solid var(--color-border);
+	color: var(--color-text-muted);
 	text-decoration: none;
 	font-size: 0.85rem;
 	transition:
@@ -457,8 +457,8 @@ $effect(() => {
 	line-height: 1;
 }
 .search-clear:hover {
-	background: var(--hover-bg);
-	color: var(--text);
+	background: var(--color-surface-hover);
+	color: var(--color-text);
 }
 
 .filter-row {
@@ -467,8 +467,8 @@ $effect(() => {
 	flex-wrap: wrap;
 	align-items: flex-end;
 	padding: 10px 12px;
-	background: var(--card-bg);
-	border: 1px solid var(--border);
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
 	border-radius: 8px;
 }
 .filter-group {
@@ -482,16 +482,16 @@ $effect(() => {
 .filter-label {
 	font-size: 0.75rem;
 	font-weight: 600;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 	letter-spacing: 0.02em;
 }
 .filter-select,
 .filter-input {
-	padding: 6px 10px;
-	border-radius: 6px;
-	border: 1px solid var(--border);
-	background: var(--bg, #fff);
-	color: var(--text);
+	padding: 7px 10px;
+	border-radius: 8px;
+	border: 1px solid var(--color-border);
+	background: var(--color-bg);
+	color: var(--color-text);
 	font-size: 0.85rem;
 	outline: none;
 	transition:
@@ -502,25 +502,25 @@ $effect(() => {
 }
 .filter-select:focus,
 .filter-input:focus {
-	border-color: var(--accent);
-	box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 15%, transparent);
+	border-color: var(--color-accent);
+	box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 15%, transparent);
 }
 
 .filter-clear {
 	margin-left: 6px;
 	padding: 2px 7px;
 	border-radius: 6px;
-	border: 1px solid var(--border);
-	color: var(--text-muted);
+	border: 1px solid var(--color-border);
+	color: var(--color-text-muted);
 	text-decoration: none;
 	font-size: 0.8rem;
 }
 .filter-clear:hover {
-	background: var(--hover-bg);
+	background: var(--color-surface-hover);
 }
 .search-label {
 	font-size: 0.85rem;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 	margin-bottom: 12px;
 }
 
@@ -534,19 +534,19 @@ $effect(() => {
 	padding: 6px 14px;
 	border-radius: 20px;
 	font-size: 0.85rem;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 	text-decoration: none;
-	border: 1px solid var(--border);
+	border: 1px solid var(--color-border);
 	transition: all 0.15s;
 }
 .tab-btn:hover {
-	background: var(--hover-bg);
-	color: var(--text);
+	background: var(--color-surface-hover);
+	color: var(--color-text);
 }
 .tab-btn.active {
-	background: var(--accent);
+	background: var(--color-accent);
 	color: #fff;
-	border-color: var(--accent);
+	border-color: var(--color-accent);
 }
 
 .anime-grid {
@@ -558,23 +558,23 @@ $effect(() => {
 	display: flex;
 	flex-direction: column;
 	text-decoration: none;
-	color: var(--text);
+	color: var(--color-text);
 	border-radius: 8px;
 	overflow: hidden;
-	border: 1px solid var(--border);
+	border: 1px solid var(--color-border);
 	transition:
 		border-color 0.15s,
 		transform 0.15s;
 }
 .anime-card:hover {
-	border-color: var(--accent);
+	border-color: var(--color-accent);
 	transform: translateY(-2px);
 }
 
 .anime-cover {
 	position: relative;
 	aspect-ratio: 1 / 1.414;
-	background: var(--card-bg);
+	background: var(--color-surface);
 	overflow: hidden;
 }
 .anime-cover img {
@@ -588,8 +588,8 @@ $effect(() => {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	color: var(--text-muted);
-	background: var(--hover-bg);
+	color: var(--color-text-muted);
+	background: var(--color-surface-hover);
 }
 .rank-badge {
 	position: absolute;
@@ -623,7 +623,7 @@ $effect(() => {
 }
 .anime-title-en {
 	font-size: 0.72rem;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 	margin: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -651,36 +651,36 @@ $effect(() => {
 	color: var(--status-plan);
 }
 .status-finished {
-	background: var(--hover-bg);
-	color: var(--text-muted);
+	background: var(--color-surface-hover);
+	color: var(--color-text-muted);
 }
 
 .anime-season {
 	font-size: 0.72rem;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 }
 .mylist-badge {
 	font-size: 0.7rem;
 	padding: 1px 5px;
 	border-radius: 3px;
 	background: var(--accent-muted, #7c3aed22);
-	color: var(--accent);
+	color: var(--color-accent);
 	width: fit-content;
 }
 
 .empty-state {
 	text-align: center;
 	padding: 60px 20px;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 }
 
 /* ─── 登録タブ ─── */
 .tab-btn--add {
-	color: var(--accent);
+	color: var(--color-accent);
 	font-weight: 600;
 }
 .tab-btn--add.active {
-	background: var(--accent);
+	background: var(--color-accent);
 	color: #fff;
 }
 
@@ -707,8 +707,8 @@ $effect(() => {
 	backdrop-filter: blur(4px);
 }
 .quick-add-btn:hover {
-	background: var(--accent);
-	border-color: var(--accent);
+	background: var(--color-accent);
+	border-color: var(--color-accent);
 	transform: scale(1.1);
 }
 .quick-add-btn.in-list {
@@ -716,7 +716,7 @@ $effect(() => {
 	border-color: rgba(124, 58, 237, 0.9);
 }
 .quick-add-btn.in-list:hover {
-	background: var(--accent);
+	background: var(--color-accent);
 }
 
 /* ─── クイック追加モーダル ─── */
@@ -731,8 +731,8 @@ $effect(() => {
 	backdrop-filter: blur(2px);
 }
 .quick-add-modal {
-	background: var(--card-bg);
-	border: 1px solid var(--border);
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
 	border-radius: 12px;
 	width: 320px;
 	max-width: calc(100vw - 32px);
@@ -744,7 +744,7 @@ $effect(() => {
 	gap: 12px;
 	align-items: center;
 	padding: 14px 16px;
-	border-bottom: 1px solid var(--border);
+	border-bottom: 1px solid var(--color-border);
 }
 .quick-add-cover {
 	width: 44px;
@@ -752,7 +752,7 @@ $effect(() => {
 	border-radius: 4px;
 	overflow: hidden;
 	flex-shrink: 0;
-	background: var(--hover-bg);
+	background: var(--color-surface-hover);
 }
 .quick-add-cover img {
 	width: 100%;
@@ -778,7 +778,7 @@ $effect(() => {
 }
 .quick-add-subtitle {
 	font-size: 0.75rem;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 	margin: 0;
 }
 .status-options {
@@ -795,7 +795,7 @@ $effect(() => {
 	border-radius: 8px;
 	border: 1px solid transparent;
 	background: transparent;
-	color: var(--text);
+	color: var(--color-text);
 	font-size: 0.875rem;
 	cursor: pointer;
 	text-align: left;
@@ -804,12 +804,12 @@ $effect(() => {
 		border-color 0.12s;
 }
 .status-option-btn:hover:not(:disabled) {
-	background: var(--hover-bg);
-	border-color: var(--border);
+	background: var(--color-surface-hover);
+	border-color: var(--color-border);
 }
 .status-option-btn.current {
-	background: color-mix(in srgb, var(--accent) 10%, transparent);
-	border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+	background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+	border-color: color-mix(in srgb, var(--color-accent) 30%, transparent);
 }
 .status-option-btn:disabled {
 	opacity: 0.5;
@@ -823,7 +823,7 @@ $effect(() => {
 }
 .check-icon {
 	margin-left: auto;
-	color: var(--accent);
+	color: var(--color-accent);
 }
 .quick-add-cancel {
 	display: block;
@@ -831,9 +831,9 @@ $effect(() => {
 	margin: 0 8px 8px;
 	padding: 9px;
 	border-radius: 8px;
-	border: 1px solid var(--border);
+	border: 1px solid var(--color-border);
 	background: transparent;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 	font-size: 0.85rem;
 	cursor: pointer;
 	transition:
@@ -841,7 +841,7 @@ $effect(() => {
 		color 0.12s;
 }
 .quick-add-cancel:hover {
-	background: var(--hover-bg);
-	color: var(--text);
+	background: var(--color-surface-hover);
+	color: var(--color-text);
 }
 </style>
