@@ -1861,6 +1861,26 @@ textarea {
 	text-overflow: ellipsis;
 }
 
+@media (max-width: 640px) {
+	.calendar-page-container {
+		padding-left: 12px;
+		padding-right: 12px;
+	}
+
+	.calendar-cell {
+		min-height: 72px;
+		padding: 4px 3px;
+	}
+
+	.calendar-event-chip {
+		padding: 2px 3px;
+	}
+
+	.calendar-event-time {
+		display: none;
+	}
+}
+
 /* ── イベント一覧 ───────────────────────────────────────────────── */
 .section-heading {
 	font-size: 15px;

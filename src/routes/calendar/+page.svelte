@@ -171,7 +171,7 @@ const grid = $derived(buildCalendarGrid(data.year, data.month));
 				</div>
 			</div>
 		{:else}
-			<div class="card" style="margin-top:16px; text-align:center; color:var(--color-muted); padding:32px;">
+			<div class="card" style="margin-top:16px; text-align:center; color:var(--color-text-muted); padding:32px;">
 				今月のイベントはありません
 			</div>
 		{/if}
@@ -181,10 +181,10 @@ const grid = $derived(buildCalendarGrid(data.year, data.month));
 	<aside class="calendar-sidebar">
 		<div class="card">
 			<h3 class="section-heading">イベントとは</h3>
-			<p style="color:var(--color-muted); font-size:0.875rem; line-height:1.7;">
+			<p style="color:var(--color-text-muted); font-size:0.875rem; line-height:1.7;">
 				Anipolisのスタッフがアニメの放送・配信に合わせて実況イベントを企画します。
 			</p>
-			<p style="color:var(--color-muted); font-size:0.875rem; line-height:1.7; margin-top:8px;">
+			<p style="color:var(--color-text-muted); font-size:0.875rem; line-height:1.7; margin-top:8px;">
 				イベント当日にハッシュタグ投稿すると、みんなの実況が一か所に集まります。
 			</p>
 		</div>
@@ -192,7 +192,7 @@ const grid = $derived(buildCalendarGrid(data.year, data.month));
 		<!-- 検証用：即時開始イベント作成 -->
 		{#if data.user}
 			<div class="card" style="margin-top:16px; border: 1px dashed var(--color-border);">
-				<h3 class="section-heading" style="font-size:0.8rem; color:var(--color-muted);">
+				<h3 class="section-heading" style="font-size:0.8rem; color:var(--color-text-muted);">
 					🧪 テスト用イベント作成
 				</h3>
 				{#if form && 'message' in form}
@@ -228,7 +228,7 @@ const grid = $derived(buildCalendarGrid(data.year, data.month));
 						>
 						<button type="submit" class="btn btn-primary btn-sm">今すぐ作成してルームへ入る</button>
 					</div>
-					<p style="color:var(--color-muted); font-size:0.75rem; margin-top:6px;">
+					<p style="color:var(--color-text-muted); font-size:0.75rem; margin-top:6px;">
 						作成と同時にタイマーがスタートします
 					</p>
 				</form>
