@@ -27,6 +27,9 @@ const effectiveRoomContext = $derived(
 		(post.anime_quote?.room_href ? { href: post.anime_quote.room_href, title: post.anime_quote.title } : null),
 );
 
+const isLong = $derived(post.content.length > 300 || (post.content.match(/\n/g)?.length ?? 0) >= 5);
+let collapsed = $state(true);
+
 let deleting = $state(false);
 let lightboxUrl = $state<string | null>(null);
 let showDeleteModal = $state(false);
@@ -235,17 +238,30 @@ async function submitReport() {
 			</div>
 		</div>
 
-		<p class="post-content">
-			{#each parts as part}
-				{#if part.type === 'hashtag'}
-					<a href="/hashtag/{part.value}" class="hashtag">#{part.value}</a>
-				{:else if part.type === 'mention'}
-					<a href="/profile/{part.value}" class="mention">@{part.value}</a>
-				{:else}
-					{part.value}
-				{/if}
-			{/each}
-		</p>
+		<div class="post-content-outer">
+			<div class="post-content-inner" class:post-content-clipped={isLong && collapsed && !isDetailView}>
+				<p class="post-content">
+					{#each parts as part}
+						{#if part.type === 'hashtag'}
+							<a href="/hashtag/{part.value}" class="hashtag">#{part.value}</a>
+						{:else if part.type === 'mention'}
+							<a href="/profile/{part.value}" class="mention">@{part.value}</a>
+						{:else}
+							{part.value}
+						{/if}
+					{/each}
+				</p>
+			</div>
+			{#if isLong && !isDetailView}
+				<button
+					type="button"
+					class="post-content-toggle"
+					onclick={(e) => { e.stopPropagation(); collapsed = !collapsed; }}
+				>
+					{collapsed ? 'もっと見る' : '閉じる'}
+				</button>
+			{/if}
+		</div>
 
 		{#if post.quoted_post}
 			<a href="/posts/{post.quoted_post.id}" class="quoted-post" onclick={(e) => e.stopPropagation()}>
@@ -886,5 +902,41 @@ async function submitReport() {
 .post-report-btn:disabled {
 	opacity: 0.35;
 	cursor: not-allowed;
+}
+
+.post-content-inner {
+	position: relative;
+}
+
+.post-content-clipped {
+	max-height: 200px;
+	overflow: hidden;
+}
+
+.post-content-clipped::after {
+	content: "";
+	position: absolute;
+	bottom: 0;
+	left: 0;
+	right: 0;
+	height: 80px;
+	background: linear-gradient(to bottom, transparent, var(--color-bg-card));
+	pointer-events: none;
+}
+
+.post-content-toggle {
+	display: block;
+	padding: 4px 0 0;
+	color: var(--color-accent);
+	font-size: 13px;
+	font-weight: 700;
+	background: none;
+	border: none;
+	cursor: pointer;
+	text-align: left;
+}
+
+.post-content-toggle:hover {
+	text-decoration: underline;
 }
 </style>
