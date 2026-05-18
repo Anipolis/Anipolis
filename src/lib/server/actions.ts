@@ -100,10 +100,9 @@ export async function insertPostWithHashtags(
 		return fail(500, { message: exchangeShare ? "交換結果つき投稿の保存に失敗しました" : "投稿に失敗しました" });
 	}
 
-	// ハッシュタグを処理（重複エラーは無視）
 	const tags = extractHashtags(postContent);
 	for (const tag of tags) {
-		await supabase.from("hashtags").insert({ name: tag });
+		await supabase.from("hashtags").upsert({ name: tag }, { onConflict: "name", ignoreDuplicates: true });
 		const { data: hashtag } = await supabase.from("hashtags").select("id").eq("name", tag).maybeSingle();
 		if (hashtag) {
 			await supabase.from("post_hashtags").insert({ post_id: post.id, hashtag_id: hashtag.id });
