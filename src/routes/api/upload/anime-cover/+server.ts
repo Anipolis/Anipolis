@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { error, json } from "@sveltejs/kit";
-import { ADMIN_EMAIL, SUPABASE_SERVICE_ROLE_KEY } from "$env/static/private";
+import { ADMIN_EMAIL, SUPABASE_SECRET_KEY } from "$env/static/private";
 import { PUBLIC_SUPABASE_URL } from "$env/static/public";
 import type { RequestHandler } from "./$types";
 
@@ -44,7 +44,7 @@ export const POST: RequestHandler = async ({ request, locals: { supabase, safeGe
 		data: { publicUrl },
 	} = supabase.storage.from("anime-covers").getPublicUrl(path);
 
-	const adminClient = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+	const adminClient = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SECRET_KEY);
 	const { data: updatedRow, error: updateError } = await adminClient
 		.from("anime")
 		.update({ cover_url: publicUrl })
