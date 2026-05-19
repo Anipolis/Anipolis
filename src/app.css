@@ -396,6 +396,31 @@ html.sidebar-collapsed .nav {
 	color: var(--color-text);
 }
 
+.sidebar-toggle::before,
+.sidebar-toggle::after {
+	content: "";
+	position: absolute;
+	left: -1px;
+	width: 8px;
+	height: 8px;
+	background: var(--color-surface);
+	pointer-events: none;
+}
+
+.sidebar-toggle::before {
+	bottom: 100%;
+	border-bottom-right-radius: 8px;
+	border-bottom: 1px solid var(--color-border);
+	border-right: 1px solid var(--color-border);
+}
+
+.sidebar-toggle::after {
+	top: 100%;
+	border-top-right-radius: 8px;
+	border-top: 1px solid var(--color-border);
+	border-right: 1px solid var(--color-border);
+}
+
 html.sidebar-collapsed .sidebar-toggle {
 	left: calc(var(--icon-bar-collapsed) - 1px);
 }
