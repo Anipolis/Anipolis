@@ -19,6 +19,7 @@
 	--feed-width: 600px;
 	--sidebar-width: 260px;
 	--icon-bar-width: 240px;
+	--icon-bar-collapsed: 52px;
 	--radius: 12px;
 	--radius-sm: 8px;
 	--color-primary: var(--color-accent);
@@ -356,6 +357,52 @@ textarea {
 	z-index: 200;
 	overflow-y: auto;
 	overflow-x: hidden;
+	transition: width 0.2s ease;
+}
+
+html.sidebar-collapsed .app-main {
+	padding-left: var(--icon-bar-collapsed);
+}
+
+html.sidebar-collapsed .nav {
+	left: var(--icon-bar-collapsed);
+}
+
+.sidebar-toggle {
+	position: fixed;
+	left: var(--icon-bar-width);
+	top: 50%;
+	transform: translate(-50%, -50%);
+	z-index: 201;
+	width: 24px;
+	height: 40px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
+	border-radius: 9999px;
+	color: var(--color-text-muted);
+	cursor: pointer;
+	transition:
+		left 0.2s ease,
+		color 0.15s,
+		background 0.15s;
+}
+
+.sidebar-toggle:hover {
+	background: var(--color-surface-hover);
+	color: var(--color-text);
+}
+
+html.sidebar-collapsed .sidebar-toggle {
+	left: var(--icon-bar-collapsed);
+}
+
+@media (max-width: 640px) {
+	.sidebar-toggle {
+		display: none;
+	}
 }
 
 .sidebar-logo {
@@ -477,6 +524,21 @@ textarea {
 	line-height: 16px;
 	text-align: center;
 	pointer-events: none;
+}
+
+.icon-sidebar.collapsed {
+	width: var(--icon-bar-collapsed);
+}
+
+.icon-sidebar.collapsed .sidebar-btn-label,
+.icon-sidebar.collapsed .sidebar-logo-text {
+	display: none;
+}
+
+.icon-sidebar.collapsed .sidebar-logo,
+.icon-sidebar.collapsed .sidebar-btn {
+	justify-content: center;
+	padding: 0 4px;
 }
 
 @media (max-width: 640px) {

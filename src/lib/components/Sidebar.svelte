@@ -14,9 +14,17 @@ interface Props {
 	profile: Profile;
 	unreadNotificationCount?: number;
 	pendingFollowRequestCount?: number;
+	sidebarOpen?: boolean;
 }
 
-let { supabase, session, profile, unreadNotificationCount = 0, pendingFollowRequestCount = 0 }: Props = $props();
+let {
+	supabase,
+	session,
+	profile,
+	unreadNotificationCount = 0,
+	pendingFollowRequestCount = 0,
+	sidebarOpen = true,
+}: Props = $props();
 
 let theme = $state(
 	browser ? localStorage.getItem("theme") || document.documentElement.getAttribute("data-theme") || "dark" : "dark",
@@ -42,7 +50,7 @@ function isActive(path: string): boolean {
 }
 </script>
 
-<aside class="icon-sidebar">
+<aside class="icon-sidebar" class:collapsed={!sidebarOpen}>
 	<a href="/" class="sidebar-logo" aria-label="Anipolis ホーム" title="Anipolis">
 		<svg
 			width="28"
