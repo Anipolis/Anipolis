@@ -372,16 +372,17 @@ html.sidebar-collapsed .nav {
 	position: fixed;
 	left: var(--icon-bar-width);
 	top: 50%;
-	transform: translate(-50%, -50%);
+	transform: translateY(-50%);
 	z-index: 201;
-	width: 24px;
-	height: 40px;
+	width: 18px;
+	height: 44px;
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	background: var(--color-surface);
 	border: 1px solid var(--color-border);
-	border-radius: 9999px;
+	border-left: none;
+	border-radius: 0 9999px 9999px 0;
 	color: var(--color-text-muted);
 	cursor: pointer;
 	transition:
