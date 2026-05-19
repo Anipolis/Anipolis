@@ -47,7 +47,16 @@ async function getOrCreateProfile(supabase: SupabaseClient<Database>, user: User
 export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, cookies }) => {
 	const { session, user } = await safeGetSession();
 
-	const profile = user ? await getOrCreateProfile(supabase, user) : null;
+	// profile取得と通知数取得を並列化（profileは通知数取得に不要）
+	const [profile, [unreadNotificationCount, pendingFollowRequestCount]] = user
+		? await Promise.all([
+				getOrCreateProfile(supabase, user),
+				Promise.all([
+					getUnreadNotificationCount(supabase, user.id),
+					getPendingFollowRequestCount(supabase, user.id),
+				]),
+			])
+		: ([null, [0, 0]] as const);
 
 	const filteredCookies = cookies.getAll().filter(({ name }) => /^sb-.+-auth-token/.test(name));
 
