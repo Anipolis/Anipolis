@@ -33,11 +33,35 @@ function formatTime(iso: string) {
 		<div class="schedule-actions">
 			<div class="week-nav">
 				<a class="week-nav-btn" href="/schedule?week={data.prevWeek}" aria-label="前の週">
-					<span class="i-lucide-chevron-left" aria-hidden="true"></span>
+					<svg
+						aria-hidden="true"
+						width="18"
+						height="18"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2.5"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<polyline points="15 18 9 12 15 6"></polyline>
+					</svg>
 				</a>
 				<span class="week-range">{formatDate(data.weekStart)} の週</span>
 				<a class="week-nav-btn" href="/schedule?week={data.nextWeek}" aria-label="次の週">
-					<span class="i-lucide-chevron-right" aria-hidden="true"></span>
+					<svg
+						aria-hidden="true"
+						width="18"
+						height="18"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2.5"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<polyline points="9 18 15 12 9 6"></polyline>
+					</svg>
 				</a>
 			</div>
 			{#if data.user}

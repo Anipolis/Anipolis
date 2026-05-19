@@ -947,8 +947,8 @@ export async function getAnimeList(
 	if (season) query = query.eq("season", season);
 	const seasonFilter = buildSeasonFilter(broadcastYear, broadcastSeason);
 	if (seasonFilter) query = query.or(seasonFilter);
-	if (genre) query = query.contains("genre", [genre]);
-	if (studio) query = query.contains("studio", [studio]);
+	if (genre) query = query.or(arrayContainsAny(["genre", "genre_en", "genre_ja"], genre));
+	if (studio) query = query.or(arrayContainsAny(["studio", "studio_en", "studio_ja"], studio));
 	if (producer) query = query.contains("producer", [producer]);
 	if (broadcastStatus) query = query.eq("computed_broadcast_status", broadcastStatus);
 	if (searchQuery) query = query.or(`title.ilike.%${searchQuery}%,title_en.ilike.%${searchQuery}%`);
@@ -975,8 +975,8 @@ async function getAnimeListRowsFromBaseTable(
 
 	if (season) query = query.eq("season", season);
 	if (seasonFilter) query = query.or(seasonFilter);
-	if (genre) query = query.contains("genre", [genre]);
-	if (studio) query = query.contains("studio", [studio]);
+	if (genre) query = query.or(arrayContainsAny(["genre", "genre_en", "genre_ja"], genre));
+	if (studio) query = query.or(arrayContainsAny(["studio", "studio_en", "studio_ja"], studio));
 	if (producer) query = query.contains("producer", [producer]);
 	if (searchQuery) query = query.or(`title.ilike.%${searchQuery}%,title_en.ilike.%${searchQuery}%`);
 
@@ -1000,6 +1000,12 @@ function buildSeasonFilter(year: string | undefined, season: string | undefined)
 	return seasonSearchTerms(normalizedSeason ?? "")
 		.flatMap((term) => [`season.ilike.%${term}`, `season.ilike.%-${term}`])
 		.join(",");
+}
+
+function arrayContainsAny(columns: string[], value: string) {
+	const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+	const literal = `{"${escaped}"}`;
+	return columns.map((column) => `${column}.cs.${literal}`).join(",");
 }
 
 function seasonSearchTerms(season: string): string[] {
@@ -1373,8 +1379,12 @@ function toAnime(raw: Record<string, unknown>): Anime {
 		aired_to: (raw["aired_to"] as string | null) ?? null,
 		source: (raw["source"] as string | null) ?? null,
 		studio: (raw["studio"] as string[] | null) ?? null,
+		studio_en: (raw["studio_en"] as string[] | null) ?? null,
+		studio_ja: (raw["studio_ja"] as string[] | null) ?? null,
 		producer: (raw["producer"] as string[] | null) ?? null,
 		genre: (raw["genre"] as string[] | null) ?? null,
+		genre_en: (raw["genre_en"] as string[] | null) ?? null,
+		genre_ja: (raw["genre_ja"] as string[] | null) ?? null,
 		official_site_url: (raw["official_site_url"] as string | null) ?? null,
 		official_x_url: (raw["official_x_url"] as string | null) ?? null,
 		official_hashtag: (raw["official_hashtag"] as string[] | null) ?? null,
@@ -1460,9 +1470,13 @@ function toBroadcastStatus(raw: Record<string, unknown>): BroadcastStatus {
 	const jstToday = new Date(today.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
 	const airedFrom = typeof raw["aired_from"] === "string" ? raw["aired_from"].slice(0, 10) : null;
 	const airedTo = typeof raw["aired_to"] === "string" ? raw["aired_to"].slice(0, 10) : null;
+	const rawType = typeof raw["type"] === "string" ? raw["type"] : null;
+	const normalizedType = rawType?.toLowerCase().replace(/[^a-z0-9]/g, "") ?? "";
+	const isFiniteReleaseType = ["movie", "ona", "ova", "tvspecial", "special"].includes(normalizedType);
 
 	if (airedFrom && airedFrom > jstToday) return "upcoming";
 	if (airedTo && airedTo < jstToday) return "finished";
+	if (airedFrom && airedFrom <= jstToday && !airedTo && isFiniteReleaseType) return "finished";
 	if (airedFrom && airedFrom <= jstToday && (!airedTo || airedTo >= jstToday)) return "airing";
 	return "unknown";
 }

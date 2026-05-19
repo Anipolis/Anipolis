@@ -724,18 +724,19 @@ async function submitReport() {
 
 <style>
 .post-card--with-room {
+	--post-content-offset: 50px;
 	flex-wrap: wrap;
 }
 
 .post-room-link {
-	flex: 0 0 100%;
+	flex: 0 0 calc(100% - var(--post-content-offset));
 	display: inline-flex;
 	align-items: center;
 	gap: 5px;
 	width: fit-content;
-	max-width: calc(100% - 50px);
-	margin: -4px 0 -2px 50px;
-	color: var(--color-accent);
+	max-width: calc(100% - var(--post-content-offset));
+	margin: -4px 0 -2px var(--post-content-offset);
+	color: var(--color-text-muted);
 	font-size: 12px;
 	font-weight: 700;
 	line-height: 1.2;
@@ -743,7 +744,7 @@ async function submitReport() {
 }
 
 .post-room-link:hover {
-	color: var(--color-accent-hover);
+	color: var(--color-text-secondary);
 	text-decoration: underline;
 }
 

@@ -611,6 +611,7 @@ export type Database = {
 			anime: {
 				Row: {
 					id: number;
+					mal_id: number | null;
 					title: string;
 					title_en: string | null;
 					title_romaji: string | null;
@@ -624,8 +625,12 @@ export type Database = {
 					aired_to: string | null;
 					source: string | null;
 					studio: string[] | null;
+					studio_en: string[] | null;
+					studio_ja: string[] | null;
 					producer: string[] | null;
 					genre: string[] | null;
+					genre_en: string[] | null;
+					genre_ja: string[] | null;
 					official_site_url: string | null;
 					official_x_url: string | null;
 					official_hashtag: string[] | null;
@@ -637,6 +642,7 @@ export type Database = {
 				};
 				Insert: {
 					title: string;
+					mal_id?: number | null;
 					title_en?: string | null;
 					title_romaji?: string | null;
 					synopsis?: string | null;
@@ -649,8 +655,12 @@ export type Database = {
 					aired_to?: string | null;
 					source?: string | null;
 					studio?: string[] | null;
+					studio_en?: string[] | null;
+					studio_ja?: string[] | null;
 					producer?: string[] | null;
 					genre?: string[] | null;
+					genre_en?: string[] | null;
+					genre_ja?: string[] | null;
 					official_site_url?: string | null;
 					official_x_url?: string | null;
 					official_hashtag?: string[] | null;
@@ -662,6 +672,7 @@ export type Database = {
 				};
 				Update: {
 					title?: string;
+					mal_id?: number | null;
 					title_en?: string | null;
 					title_romaji?: string | null;
 					synopsis?: string | null;
@@ -674,8 +685,12 @@ export type Database = {
 					aired_to?: string | null;
 					source?: string | null;
 					studio?: string[] | null;
+					studio_en?: string[] | null;
+					studio_ja?: string[] | null;
 					producer?: string[] | null;
 					genre?: string[] | null;
+					genre_en?: string[] | null;
+					genre_ja?: string[] | null;
 					official_site_url?: string | null;
 					official_x_url?: string | null;
 					official_hashtag?: string[] | null;
@@ -753,6 +768,7 @@ export type Database = {
 			anime_with_computed_broadcast_status: {
 				Row: {
 					id: number;
+					mal_id: number | null;
 					title: string;
 					title_en: string | null;
 					title_romaji: string | null;
@@ -767,8 +783,12 @@ export type Database = {
 					aired_to: string | null;
 					source: string | null;
 					studio: string[] | null;
+					studio_en: string[] | null;
+					studio_ja: string[] | null;
 					producer: string[] | null;
 					genre: string[] | null;
+					genre_en: string[] | null;
+					genre_ja: string[] | null;
 					official_site_url: string | null;
 					official_x_url: string | null;
 					official_hashtag: string[] | null;

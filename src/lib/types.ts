@@ -164,8 +164,12 @@ export interface Anime {
 	aired_to: string | null;
 	source: string | null;
 	studio: string[] | null;
+	studio_en: string[] | null;
+	studio_ja: string[] | null;
 	producer: string[] | null;
 	genre: string[] | null;
+	genre_en: string[] | null;
+	genre_ja: string[] | null;
 	official_site_url: string | null;
 	official_x_url: string | null;
 	official_hashtag: string[] | null;

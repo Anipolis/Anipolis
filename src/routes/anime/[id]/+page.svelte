@@ -13,6 +13,9 @@ interface UserResult {
 
 let { data, form }: PageProps = $props();
 
+const displayStudios = $derived(data.anime.studio_ja?.length ? data.anime.studio_ja : (data.anime.studio ?? []));
+const displayGenres = $derived(data.anime.genre_ja?.length ? data.anime.genre_ja : (data.anime.genre ?? []));
+
 const statusOptions: { value: AnimeStatus; label: string }[] = [
 	{ value: "watching", label: "視聴中" },
 	{ value: "completed", label: "完了" },
@@ -240,13 +243,13 @@ const handleRecommendSubmit: SubmitFunction = () => {
 			{/if}
 
 			<!-- Production info below cover -->
-			{#if data.anime.studio?.length || data.anime.producer?.length || data.anime.source || data.anime.genre?.length || data.anime.official_hashtag?.length || data.anime.official_site_url || data.anime.official_x_url}
+			{#if displayStudios.length || data.anime.producer?.length || data.anime.source || displayGenres.length || data.anime.official_hashtag?.length || data.anime.official_site_url || data.anime.official_x_url}
 				<dl class="prod-info">
-					{#if data.anime.studio?.length}
+					{#if displayStudios.length}
 						<div class="prod-row prod-row--wrap">
 							<dt>スタジオ</dt>
 							<dd class="genre-list">
-								{#each data.anime.studio as s}
+								{#each displayStudios as s}
 									<a href="/anime?studio={encodeURIComponent(s)}" class="genre-chip">{s}</a>
 								{/each}
 							</dd>
@@ -268,11 +271,11 @@ const handleRecommendSubmit: SubmitFunction = () => {
 							<dd>{data.anime.source}</dd>
 						</div>
 					{/if}
-					{#if data.anime.genre?.length}
+					{#if displayGenres.length}
 						<div class="prod-row prod-row--wrap">
 							<dt>ジャンル</dt>
 							<dd class="genre-list">
-								{#each data.anime.genre as g}
+								{#each displayGenres as g}
 									<a href="/anime?genre={encodeURIComponent(g)}" class="genre-chip">{g}</a>
 								{/each}
 							</dd>
