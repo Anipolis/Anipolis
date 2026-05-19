@@ -403,7 +403,7 @@ async function submitReport() {
 					onclick={(e) => e.stopPropagation()}
 					aria-label="拡大画像"
 				>
-					<img src={lightboxUrl} alt="拡大画像" class="lightbox-image">
+					<img src={lightboxUrl} alt="拡大画像" class="lightbox-image" decoding="async">
 				</button>
 				<button type="button" class="lightbox-close" onclick={closeLightbox} aria-label="閉じる">✕</button>
 			</div>

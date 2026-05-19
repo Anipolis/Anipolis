@@ -1,7 +1,6 @@
 <script lang="ts">
 import type { SubmitFunction } from "@sveltejs/kit";
 import { enhance } from "$app/forms";
-import UserCardSkeleton from "$lib/components/UserCardSkeleton.svelte";
 import type { AnimeStatus } from "$lib/types";
 import type { PageProps } from "./$types";
 
@@ -179,7 +178,7 @@ const handleRecommendSubmit: SubmitFunction = () => {
 		<aside class="left-panel">
 			<div class="anime-cover">
 				{#if coverUrl}
-					<img src={coverUrl} alt={data.anime.title}>
+					<img src={coverUrl} alt={data.anime.title} decoding="async">
 				{:else}
 					<div class="anime-cover-placeholder">
 						<svg
@@ -548,7 +547,12 @@ const handleRecommendSubmit: SubmitFunction = () => {
 							{#if selectedRecipient}
 								<div class="selected-recipient">
 									{#if selectedRecipient.avatar_url}
-										<img src={selectedRecipient.avatar_url} alt={selectedRecipient.username}>
+										<img
+											src={selectedRecipient.avatar_url}
+											alt={selectedRecipient.username}
+											loading="lazy"
+											decoding="async"
+										>
 									{/if}
 									<span>{selectedRecipient.display_name ?? selectedRecipient.username}</span>
 									<button type="button" onclick={clearRecipient} aria-label="相手をクリア">×</button>
@@ -564,7 +568,12 @@ const handleRecommendSubmit: SubmitFunction = () => {
 											onclick={() => selectRecipient(user)}
 										>
 											{#if user.avatar_url}
-												<img src={user.avatar_url} alt={user.username}>
+												<img
+													src={user.avatar_url}
+													alt={user.username}
+													loading="lazy"
+													decoding="async"
+												>
 											{:else}
 												<span class="recommend-user-avatar-fallback">
 													{(user.display_name ?? user.username).charAt(0).toUpperCase()}
@@ -593,49 +602,38 @@ const handleRecommendSubmit: SubmitFunction = () => {
 				</section>
 			{/if}
 
-			{#await data.listedUsers}
+			{#if data.listedUsers.length > 0}
 				<section class="listed-users-section">
-					<h2 class="listed-users-heading">リスト登録中のユーザー</h2>
-					<div class="listed-users-grid listed-users-grid--skeleton">
-						{#each { length: 4 } as _, i (i)}
-							<UserCardSkeleton />
+					<h2 class="listed-users-heading">
+						リスト登録中のユーザー
+						<span class="listed-users-count">{data.listedUsers.length}</span>
+					</h2>
+					<div class="listed-users-grid">
+						{#each data.listedUsers as u (u.user_id)}
+							<a href="/profile/{u.username}" class="listed-user-card">
+								<div class="listed-user-avatar">
+									{#if u.avatar_url}
+										<img src={u.avatar_url} alt={u.username} loading="lazy" decoding="async">
+									{:else}
+										<div class="listed-user-avatar-fallback">
+											{(u.display_name ?? u.username).charAt(0).toUpperCase()}
+										</div>
+									{/if}
+									<span
+										class="listed-user-status-dot"
+										style="background: {listedUserStatusColors[u.status] ?? 'var(--fg-muted)'};"
+										title={listedUserStatusLabels[u.status] ?? u.status}
+									></span>
+								</div>
+								<span class="listed-user-name">{u.display_name ?? u.username}</span>
+								{#if u.score != null}
+									<span class="listed-user-score">★{u.score}</span>
+								{/if}
+							</a>
 						{/each}
 					</div>
 				</section>
-			{:then listedUsers}
-				{#if listedUsers.length > 0}
-					<section class="listed-users-section">
-						<h2 class="listed-users-heading">
-							リスト登録中のユーザー
-							<span class="listed-users-count">{listedUsers.length}</span>
-						</h2>
-						<div class="listed-users-grid">
-							{#each listedUsers as u (u.user_id)}
-								<a href="/profile/{u.username}" class="listed-user-card">
-									<div class="listed-user-avatar">
-										{#if u.avatar_url}
-											<img src={u.avatar_url} alt={u.username}>
-										{:else}
-											<div class="listed-user-avatar-fallback">
-												{(u.display_name ?? u.username).charAt(0).toUpperCase()}
-											</div>
-										{/if}
-										<span
-											class="listed-user-status-dot"
-											style="background: {listedUserStatusColors[u.status] ?? 'var(--fg-muted)'};"
-											title={listedUserStatusLabels[u.status] ?? u.status}
-										></span>
-									</div>
-									<span class="listed-user-name">{u.display_name ?? u.username}</span>
-									{#if u.score != null}
-										<span class="listed-user-score">★{u.score}</span>
-									{/if}
-								</a>
-							{/each}
-						</div>
-					</section>
-				{/if}
-			{/await}
+			{/if}
 		</div>
 	</div>
 </div>

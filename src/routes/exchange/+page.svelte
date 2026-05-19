@@ -141,189 +141,191 @@ const handleExchangeSubmit: SubmitFunction = () => {
 			<a href="/anime" class="exchange-link">作品を探す</a>
 		</header>
 
-		{#await data.exchangeData}
-			<div class="posts-loading-spinner" aria-label="読み込み中">
-				<div class="spinner" aria-hidden="true"></div>
-				<span>読み込み中…</span>
+		<section class="exchange-panel">
+			<div class="exchange-copy">
+				<h2>1作品を渡して、1作品を受け取る</h2>
+				<p>あなたのおすすめは匿名でプールに入り、先に入っていた誰かのおすすめが返ってきます。</p>
 			</div>
-		{:then exchangeData}
-			<section class="exchange-panel">
-				<div class="exchange-copy">
-					<h2>1作品を渡して、1作品を受け取る</h2>
-					<p>あなたのおすすめは匿名でプールに入り、先に入っていた誰かのおすすめが返ってきます。</p>
+
+			{#if data.waitingExchange}
+				<div class="waiting-strip">
+					<span class="waiting-dot"></span>
+					<span>「{data.waitingExchange.offered_anime.title}」は次の交換相手を待機中です</span>
 				</div>
-
-				{#if exchangeData.waitingExchange}
-					<div class="waiting-strip">
-						<span class="waiting-dot"></span>
-						<span>「{exchangeData.waitingExchange.offered_anime.title}」は次の交換相手を待機中です</span>
-					</div>
-				{/if}
-
-				{#if form?.exchangeMessage || exchangeError}
-					<p class="form-error">{exchangeError || form?.exchangeMessage}</p>
-				{/if}
-				{#if form?.exchangeSuccess || exchangeFeedback}
-					<p class="form-success">{exchangeFeedback || "交換を受け付けました"}</p>
-				{/if}
-				{#if listError}
-					<p class="form-error">{listError}</p>
-				{/if}
-				{#if listFeedback}
-					<p class="form-success">{listFeedback}</p>
-				{/if}
-
-				{#if latestReceived}
-					<div class="instant-result">
-						{#if latestReceived.cover_url}
-							<img src={latestReceived.cover_url} alt={latestReceived.title}>
-						{:else}
-							<div class="received-cover-empty"></div>
-						{/if}
-						<div>
-							<span class="history-label">今回返ってきた作品</span>
-							<a href="/anime/{latestReceived.id}" class="received-title">{latestReceived.title}</a>
-						</div>
-					</div>
-				{/if}
-
-				<form method="POST" action="?/exchangeAnime" use:enhance={handleExchangeSubmit} class="exchange-form">
-					<div class="anime-picker">
-						<label for="anime-query">渡したいアニメ</label>
-						<input
-							id="anime-query"
-							class="exchange-input"
-							type="search"
-							placeholder="タイトルで検索"
-							bind:value={animeQuery}
-							oninput={handleAnimeQueryInput}
-						>
-						{#if animeResults.length > 0}
-							<div class="anime-results">
-								{#each animeResults as anime (anime.id)}
-									<button type="button" class="anime-result" onclick={() => selectAnime(anime)}>
-										{#if anime.cover_url}
-											<img src={anime.cover_url} alt={anime.title}>
-										{:else}
-											<span class="anime-result-cover"></span>
-										{/if}
-										<span>
-											<strong>{anime.title}</strong>
-											{#if anime.title_en}
-												<small>{anime.title_en}</small>
-											{/if}
-										</span>
-									</button>
-								{/each}
-							</div>
-						{:else if animeSearching}
-							<p class="search-hint">検索中…</p>
-						{/if}
-					</div>
-
-					{#if selectedAnime}
-						<div class="selected-anime">
-							{#if selectedAnime.cover_url}
-								<img src={selectedAnime.cover_url} alt={selectedAnime.title}>
-							{/if}
-							<span>{selectedAnime.title}</span>
-							<button type="button" onclick={clearAnime} aria-label="選択を解除">×</button>
-						</div>
-						<input type="hidden" name="anime_id" value={selectedAnime.id}>
-					{/if}
-
-					<button type="submit" class="exchange-submit" disabled={!canExchange}>
-						{exchangeSubmitting ? "交換中…" : "交換する"}
-					</button>
-				</form>
-			</section>
-
-			{#if exchangeData.latestMatchedExchange}
-				{@const latestMatchedExchange = exchangeData.latestMatchedExchange}
-				{#if latestMatchedExchange.received_anime}
-					{@const receivedAnime = latestMatchedExchange.received_anime}
-					<section class="received-section">
-						<div class="received-section-header">
-							<div>
-								<span class="received-label">交換完了</span>
-								<h2>最近の交換結果</h2>
-							</div>
-						</div>
-						<AnimeExchangeResult offeredAnime={latestMatchedExchange.offered_anime} {receivedAnime}>
-							{#snippet actions()}
-								<a
-									href="/?share_exchange={latestMatchedExchange.id}"
-									class="btn-action btn-action--ghost"
-								>
-									結果をシェアする
-								</a>
-								<form
-									class="received-action-push"
-									method="POST"
-									action="?/addToMyList"
-									use:enhance={handleAddToMyListSubmit}
-								>
-									<input type="hidden" name="anime_id" value={receivedAnime.id}>
-									<input type="hidden" name="status" value="plan_to_watch">
-									<input type="hidden" name="progress" value="0">
-									<button type="submit" class="btn-action" disabled={listSubmitting}>
-										{listSubmitting ? "追加中…" : "マイリストに追加"}
-									</button>
-								</form>
-							{/snippet}
-						</AnimeExchangeResult>
-					</section>
-				{/if}
 			{/if}
 
-			<section class="history-section">
-				<h2>交換履歴</h2>
-				{#if exchangeData.exchanges.length === 0}
-					<p class="empty-history">まだ交換履歴はありません。</p>
-				{:else}
-					<div class="history-list">
-						{#each exchangeData.exchanges as exchange (exchange.id)}
-							<article class="history-item">
-								<div class="history-anime">
-									{#if exchange.offered_anime.cover_url}
-										<img src={exchange.offered_anime.cover_url} alt={exchange.offered_anime.title}>
-									{:else}
-										<span class="history-cover-empty"></span>
-									{/if}
-									<div>
-										<span class="history-label">渡した作品</span>
-										<a href="/anime/{exchange.offered_anime.id}">{exchange.offered_anime.title}</a>
-									</div>
-								</div>
-								<div class="history-arrow">→</div>
-								<div class="history-anime">
-									{#if exchange.received_anime?.cover_url}
-										<img
-											src={exchange.received_anime.cover_url}
-											alt={exchange.received_anime.title}
-										>
-									{:else}
-										<span class="history-cover-empty"></span>
-									{/if}
-									<div>
-										<span class="history-label"
-											>{exchange.status === "waiting" ? "待機中" : "届いたおすすめ"}</span
-										>
-										{#if exchange.received_anime}
-											<a href="/anime/{exchange.received_anime.id}"
-												>{exchange.received_anime.title}</a
-											>
-										{:else}
-											<span class="history-muted">次の交換相手を待っています</span>
-										{/if}
-									</div>
-								</div>
-							</article>
-						{/each}
+			{#if form?.exchangeMessage || exchangeError}
+				<p class="form-error">{exchangeError || form?.exchangeMessage}</p>
+			{/if}
+			{#if form?.exchangeSuccess || exchangeFeedback}
+				<p class="form-success">{exchangeFeedback || "交換を受け付けました"}</p>
+			{/if}
+			{#if listError}
+				<p class="form-error">{listError}</p>
+			{/if}
+			{#if listFeedback}
+				<p class="form-success">{listFeedback}</p>
+			{/if}
+
+			{#if latestReceived}
+				<div class="instant-result">
+					{#if latestReceived.cover_url}
+						<img src={latestReceived.cover_url} alt={latestReceived.title} decoding="async">
+					{:else}
+						<div class="received-cover-empty"></div>
+					{/if}
+					<div>
+						<span class="history-label">今回返ってきた作品</span>
+						<a href="/anime/{latestReceived.id}" class="received-title">{latestReceived.title}</a>
 					</div>
+				</div>
+			{/if}
+
+			<form method="POST" action="?/exchangeAnime" use:enhance={handleExchangeSubmit} class="exchange-form">
+				<div class="anime-picker">
+					<label for="anime-query">渡したいアニメ</label>
+					<input
+						id="anime-query"
+						class="exchange-input"
+						type="search"
+						placeholder="タイトルで検索"
+						bind:value={animeQuery}
+						oninput={handleAnimeQueryInput}
+					>
+					{#if animeResults.length > 0}
+						<div class="anime-results">
+							{#each animeResults as anime (anime.id)}
+								<button type="button" class="anime-result" onclick={() => selectAnime(anime)}>
+									{#if anime.cover_url}
+										<img src={anime.cover_url} alt={anime.title} loading="lazy" decoding="async">
+									{:else}
+										<span class="anime-result-cover"></span>
+									{/if}
+									<span>
+										<strong>{anime.title}</strong>
+										{#if anime.title_en}
+											<small>{anime.title_en}</small>
+										{/if}
+									</span>
+								</button>
+							{/each}
+						</div>
+					{:else if animeSearching}
+						<p class="search-hint">検索中…</p>
+					{/if}
+				</div>
+
+				{#if selectedAnime}
+					<div class="selected-anime">
+						{#if selectedAnime.cover_url}
+							<img
+								src={selectedAnime.cover_url}
+								alt={selectedAnime.title}
+								loading="lazy"
+								decoding="async"
+							>
+						{/if}
+						<span>{selectedAnime.title}</span>
+						<button type="button" onclick={clearAnime} aria-label="選択を解除">×</button>
+					</div>
+					<input type="hidden" name="anime_id" value={selectedAnime.id}>
 				{/if}
-			</section>
-		{/await}
+
+				<button type="submit" class="exchange-submit" disabled={!canExchange}>
+					{exchangeSubmitting ? "交換中…" : "交換する"}
+				</button>
+			</form>
+		</section>
+
+		{#if data.latestMatchedExchange}
+			{@const latestMatchedExchange = data.latestMatchedExchange}
+			{#if latestMatchedExchange.received_anime}
+				{@const receivedAnime = latestMatchedExchange.received_anime}
+				<section class="received-section">
+					<div class="received-section-header">
+						<div>
+							<span class="received-label">交換完了</span>
+							<h2>最近の交換結果</h2>
+						</div>
+					</div>
+					<AnimeExchangeResult offeredAnime={latestMatchedExchange.offered_anime} {receivedAnime}>
+						{#snippet actions()}
+							<a href="/?share_exchange={latestMatchedExchange.id}" class="btn-action btn-action--ghost">
+								結果をシェアする
+							</a>
+							<form
+								class="received-action-push"
+								method="POST"
+								action="?/addToMyList"
+								use:enhance={handleAddToMyListSubmit}
+							>
+								<input type="hidden" name="anime_id" value={receivedAnime.id}>
+								<input type="hidden" name="status" value="plan_to_watch">
+								<input type="hidden" name="progress" value="0">
+								<button type="submit" class="btn-action" disabled={listSubmitting}>
+									{listSubmitting ? "追加中…" : "マイリストに追加"}
+								</button>
+							</form>
+						{/snippet}
+					</AnimeExchangeResult>
+				</section>
+			{/if}
+		{/if}
+
+		<section class="history-section">
+			<h2>交換履歴</h2>
+			{#if data.exchanges.length === 0}
+				<p class="empty-history">まだ交換履歴はありません。</p>
+			{:else}
+				<div class="history-list">
+					{#each data.exchanges as exchange (exchange.id)}
+						<article class="history-item">
+							<div class="history-anime">
+								{#if exchange.offered_anime.cover_url}
+									<img
+										src={exchange.offered_anime.cover_url}
+										alt={exchange.offered_anime.title}
+										loading="lazy"
+										decoding="async"
+									>
+								{:else}
+									<span class="history-cover-empty"></span>
+								{/if}
+								<div>
+									<span class="history-label">渡した作品</span>
+									<a href="/anime/{exchange.offered_anime.id}">{exchange.offered_anime.title}</a>
+								</div>
+							</div>
+							<div class="history-arrow">→</div>
+							<div class="history-anime">
+								{#if exchange.received_anime?.cover_url}
+									<img
+										src={exchange.received_anime.cover_url}
+										alt={exchange.received_anime.title}
+										loading="lazy"
+										decoding="async"
+									>
+								{:else}
+									<span class="history-cover-empty"></span>
+								{/if}
+								<div>
+									<span class="history-label"
+										>{exchange.status === "waiting" ? "待機中" : "届いたおすすめ"}</span
+									>
+									{#if exchange.received_anime}
+										<a href="/anime/{exchange.received_anime.id}"
+											>{exchange.received_anime.title}</a
+										>
+									{:else}
+										<span class="history-muted">次の交換相手を待っています</span>
+									{/if}
+								</div>
+							</div>
+						</article>
+					{/each}
+				</div>
+			{/if}
+		</section>
 	</div>
 </div>
 

@@ -21,7 +21,7 @@ let {
 <div class="anime-row-edit">
 	<a href="/anime/{anime.id}" class="anime-cover edit-cover" tabindex="-1">
 		{#if anime.cover_url}
-			<img src={anime.cover_url} alt={anime.title}>
+			<img src={anime.cover_url} alt={anime.title} loading="lazy" decoding="async">
 		{:else}
 			<div class="anime-cover-placeholder">?</div>
 		{/if}

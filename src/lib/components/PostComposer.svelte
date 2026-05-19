@@ -267,7 +267,12 @@ const handleSubmit: SubmitFunction = () => {
 			{#if selectedAnime}
 				<div class="composer-anime-preview">
 					{#if selectedAnime.cover_url}
-						<img src={selectedAnime.cover_url} alt={selectedAnime.title} class="composer-anime-thumb">
+						<img
+							src={selectedAnime.cover_url}
+							alt={selectedAnime.title}
+							class="composer-anime-thumb"
+							decoding="async"
+						>
 					{/if}
 					<div class="composer-anime-info">
 						<span class="composer-anime-title">{selectedAnime.title}</span>
@@ -463,7 +468,13 @@ const handleSubmit: SubmitFunction = () => {
 					{#each animeResults as anime}
 						<button type="button" class="anime-search-item" onclick={() => selectAnime(anime)}>
 							{#if anime.cover_url}
-								<img src={anime.cover_url} alt={anime.title} class="anime-search-thumb">
+								<img
+									src={anime.cover_url}
+									alt={anime.title}
+									class="anime-search-thumb"
+									loading="lazy"
+									decoding="async"
+								>
 							{:else}
 								<div class="anime-search-thumb anime-search-thumb-empty"></div>
 							{/if}
