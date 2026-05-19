@@ -72,8 +72,6 @@ export async function enrichPostsWithCounts(
 ): Promise<Post[]> {
 	if (rawPosts.length === 0) return [];
 
-	const mutedWordsPromise = getMutedWords(supabase, userId);
-
 	type QuotedPostRow = {
 		id: string;
 		content: string;
@@ -81,18 +79,38 @@ export async function enrichPostsWithCounts(
 		user_id: string;
 		profiles: { username: string; display_name: string | null; avatar_url: string | null } | null;
 	};
+
 	const quotedPostIds = [...new Set(rawPosts.map((rawPost) => rawPost.quoted_post_id).filter(Boolean))] as string[];
+	// アニメIDもミュートフィルター前に全件取得（フィルター後に絞り込む必要なし）
+	const allAnimeIds = [
+		...new Set(rawPosts.map((rawPost) => rawPost.anime_id).filter((id): id is string | number => id != null)),
+	];
+
+	// ── 全プリフェッチを並列実行 ──────────────────────────────────
+	const [mutedWords, quotedRaw, userScoreEntries] = await Promise.all([
+		getMutedWords(supabase, userId),
+		quotedPostIds.length > 0
+			? supabase
+					.from("posts")
+					.select(
+						"id, content, created_at, user_id, profiles!posts_user_id_fkey ( username, display_name, avatar_url )",
+					)
+					.in("id", quotedPostIds)
+					.then((r) => r.data ?? [])
+			: Promise.resolve([] as QuotedPostRow[]),
+		userId && allAnimeIds.length > 0
+			? supabase
+					.from("user_anime_list")
+					.select("anime_id, score")
+					.eq("user_id", userId)
+					.in("anime_id", allAnimeIds.map(Number))
+					.then((r) => r.data ?? [])
+			: Promise.resolve([] as { anime_id: number; score: number | null }[]),
+	]);
+
 	const quotedPostMap = new Map<string, QuotedPostRow>();
-	if (quotedPostIds.length > 0) {
-		const { data: quotedRaw } = await supabase
-			.from("posts")
-			.select(
-				"id, content, created_at, user_id, profiles!posts_user_id_fkey ( username, display_name, avatar_url )",
-			)
-			.in("id", quotedPostIds);
-		for (const quotedPostRow of quotedRaw ?? []) {
-			quotedPostMap.set(quotedPostRow.id, quotedPostRow as QuotedPostRow);
-		}
+	for (const quotedPostRow of quotedRaw) {
+		quotedPostMap.set(quotedPostRow.id, quotedPostRow as QuotedPostRow);
 	}
 
 	for (const raw of rawPosts) {
@@ -102,7 +120,6 @@ export async function enrichPostsWithCounts(
 		}
 	}
 
-	const mutedWords = await mutedWordsPromise;
 	const visibleRawPosts =
 		mutedWords.length > 0 ? rawPosts.filter((post) => !containsMutedWord(post, mutedWords)) : rawPosts;
 
@@ -110,72 +127,55 @@ export async function enrichPostsWithCounts(
 
 	const postIds = visibleRawPosts.map((rawPost) => rawPost.id as string);
 
-	// ── アニメIDを事前収集（userScoreMap クエリに必要）────────────
-	const animeIds = [
-		...new Set(
-			visibleRawPosts.map((rawPost) => rawPost.anime_id).filter((id): id is string | number => id != null),
-		),
-	];
-
 	// ── 並列バッチクエリ ──────────────────────────────────────────
-	// get_post_counts RPC: DB側で GROUP BY 集計し、ユーザー状態も含めて1往復で返す
-	// （旧: likes/reposts/replies を全行フェッチして JS で countByPostId → 多量データ転送）
-	// 注: get_post_counts は migration 040 で追加した関数のため database.types.ts に
-	//     未登録。型生成後は as unknown キャストを除去できる。
-	type PostCountRow = {
-		post_id: string;
-		like_count: number;
-		repost_count: number;
-		reply_count: number;
-		liked_by_me: boolean;
-		reposted_by_me: boolean;
-		bookmarked_by_me: boolean;
-	};
+	const [likesRes, repostsRes, repliesRes, myLikesRes, myRepostsRes, myBookmarksRes] = await Promise.all([
+		// 各投稿のいいね数（post_id ごとにカウント）
+		supabase.from("likes").select("post_id").in("post_id", postIds),
 
-	const [countsRes, userAnimeScoresRes] = await Promise.all([
-		(
-			supabase as unknown as {
-				rpc: (
-					fn: "get_post_counts",
-					args: { p_post_ids: string[]; p_user_id: string | null },
-				) => Promise<{ data: PostCountRow[] | null; error: unknown }>;
-			}
-		).rpc("get_post_counts", {
-			p_post_ids: postIds,
-			p_user_id: userId ?? null,
-		}),
+		// 各投稿のリポスト数
+		supabase.from("reposts").select("post_id").in("post_id", postIds),
 
-		// アニメ引用がある投稿のユーザースコアを同時取得
-		userId && animeIds.length > 0
-			? supabase
-					.from("user_anime_list")
-					.select("anime_id, score")
-					.eq("user_id", userId)
-					.in("anime_id", animeIds.map(Number))
-			: Promise.resolve({ data: [] as { anime_id: number; score: number | null }[] }),
+		// 各投稿のリプライ数（parent_id が投稿IDに一致するもの）
+		supabase.from("posts").select("parent_id").in("parent_id", postIds),
+
+		// ログイン中ユーザーのいいね一覧
+		userId
+			? supabase.from("likes").select("post_id").eq("user_id", userId).in("post_id", postIds)
+			: Promise.resolve({ data: [] as { post_id: string }[] }),
+
+		// ログイン中ユーザーのリポスト一覧
+		userId
+			? supabase.from("reposts").select("post_id").eq("user_id", userId).in("post_id", postIds)
+			: Promise.resolve({ data: [] as { post_id: string }[] }),
+
+		userId
+			? supabase.from("bookmarks").select("post_id").eq("user_id", userId).in("post_id", postIds)
+			: Promise.resolve({ data: [] as { post_id: string }[] }),
 	]);
 
-	// ── RPC 結果をマップに変換 ────────────────────────────────────
-	const countMap = new Map<string, PostCountRow>();
-	for (const row of countsRes.data ?? []) {
-		countMap.set(row.post_id, row);
-	}
+	// ── JS でカウント集計 ─────────────────────────────────────────
+	const likeCount = countByPostId(likesRes.data ?? []);
+	const repostCount = countByPostId(repostsRes.data ?? []);
+	const replyCount = countByPostId((repliesRes.data ?? []).map((reply) => ({ post_id: reply.parent_id as string })));
 
-	// ── アニメスコアマップを構築 ───────────────────────────────────
+	const likedSet = new Set((myLikesRes.data ?? []).map((like) => like.post_id));
+	const repostedSet = new Set((myRepostsRes.data ?? []).map((repost) => repost.post_id));
+	const bookmarkedSet = new Set((myBookmarksRes.data ?? []).map((bookmark) => bookmark.post_id));
+
+	// ── アニメスコアマップ（並列取得済み） ────────────────────────
 	const userScoreMap = new Map<string, number | null>();
-	for (const entry of userAnimeScoresRes.data ?? []) {
+	for (const entry of userScoreEntries) {
 		userScoreMap.set(String(entry.anime_id), entry.score);
 	}
 
 	return visibleRawPosts.map((raw) => {
-		const counts = countMap.get(raw["id"]);
 		const post = toPost(raw, {
-			like_count: counts?.like_count ?? 0,
-			repost_count: counts?.repost_count ?? 0,
-			reply_count: counts?.reply_count ?? 0,
-			liked_by_me: counts?.liked_by_me ?? false,
-			reposted_by_me: counts?.reposted_by_me ?? false,
-			bookmarked_by_me: counts?.bookmarked_by_me ?? false,
+			like_count: likeCount.get(raw["id"]) ?? 0,
+			repost_count: repostCount.get(raw["id"]) ?? 0,
+			reply_count: replyCount.get(raw["id"]) ?? 0,
+			liked_by_me: likedSet.has(raw["id"]),
+			reposted_by_me: repostedSet.has(raw["id"]),
+			bookmarked_by_me: bookmarkedSet.has(raw["id"]),
 		});
 		if (post.anime_quote && post.anime_id) {
 			post.anime_quote.user_score = userScoreMap.get(post.anime_id) ?? null;
@@ -210,6 +210,14 @@ function containsMutedWord(post: RawPost, mutedWords: string[]): boolean {
 
 function normalizeMutedWord(word: string): string {
 	return word.trim().toLocaleLowerCase();
+}
+
+function countByPostId(rows: { post_id: string }[]): Map<string, number> {
+	const map = new Map<string, number>();
+	for (const row of rows) {
+		map.set(row.post_id, (map.get(row.post_id) ?? 0) + 1);
+	}
+	return map;
 }
 
 /**
@@ -1211,98 +1219,14 @@ export async function getAnimeExchangeShareForUser(
 	userId: string,
 	exchangeId: string,
 ): Promise<AnimeExchangeShare | null> {
-	// exchangeId と userId を直接指定して1件だけ取得する
-	// 旧実装: getAnimeExchangeEntries(userId, 50) で最大50件フェッチ後に JS で線形探索
-	// → 2往復（エントリ + received_entries）+ 不要データ転送
-	type ExchangeRow = {
-		id: string;
-		user_id: string;
-		received_entry_id: string | null;
-		anime: { id: number; title: string; title_en: string | null; cover_url: string | null } | null;
-	};
-	const supabaseAny = supabase as unknown as {
-		from: (table: "anime_exchange_entries") => {
-			select: (columns: string) => {
-				eq: (
-					col: string,
-					val: string,
-				) => {
-					eq: (
-						col: string,
-						val: string,
-					) => {
-						maybeSingle: () => Promise<{ data: ExchangeRow | null; error: unknown }>;
-					};
-				};
-			};
-		};
-	};
-
-	// 対象エントリを exchangeId + userId で直接取得（所有権チェックを兼ねる）
-	const { data: entry } = await supabaseAny
-		.from("anime_exchange_entries")
-		.select(`
-			id,
-			user_id,
-			received_entry_id,
-			anime:anime_exchange_entries_anime_id_fkey (
-				id, title, title_en, cover_url
-			)
-		`)
-		.eq("id", exchangeId)
-		.eq("user_id", userId)
-		.maybeSingle();
-
-	if (!entry || !entry.received_entry_id || !entry.anime) return null;
-
-	// received_entry_id で受け取ったアニメを取得
-	type ReceivedRow = {
-		id: string;
-		anime: { id: number; title: string; title_en: string | null; cover_url: string | null } | null;
-	};
-	const supabaseAny2 = supabase as unknown as {
-		from: (table: "anime_exchange_entries") => {
-			select: (columns: string) => {
-				eq: (
-					col: string,
-					val: string,
-				) => {
-					maybeSingle: () => Promise<{ data: ReceivedRow | null; error: unknown }>;
-				};
-			};
-		};
-	};
-
-	const { data: receivedEntry } = await supabaseAny2
-		.from("anime_exchange_entries")
-		.select(`
-			id,
-			anime:anime_exchange_entries_anime_id_fkey (
-				id, title, title_en, cover_url
-			)
-		`)
-		.eq("id", entry.received_entry_id)
-		.maybeSingle();
-
-	if (!receivedEntry?.anime) return null;
-
-	const offeredAnime = entry.anime;
-	const receivedAnime = receivedEntry.anime;
+	const entries = await getAnimeExchangeEntries(supabase, userId, 50);
+	const exchange = entries.find((entry) => entry.id === exchangeId && entry.received_anime);
+	if (!exchange?.received_anime) return null;
 
 	return {
 		type: "anime_exchange",
-		offered_anime: {
-			id: String(offeredAnime.id),
-			title: offeredAnime.title,
-			title_en: offeredAnime.title_en,
-			cover_url: offeredAnime.cover_url,
-		},
-		received_anime: {
-			id: String(receivedAnime.id),
-			title: receivedAnime.title,
-			title_en: receivedAnime.title_en,
-			cover_url: receivedAnime.cover_url,
-		},
+		offered_anime: exchange.offered_anime,
+		received_anime: exchange.received_anime,
 	};
 }
 
