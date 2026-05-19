@@ -211,6 +211,7 @@ async function handleFileChange(e: Event) {
 						class="tag-btn"
 						class:selected={selectedGenres.includes(g)}
 						onclick={() => toggleGenre(g)}
+						aria-pressed={selectedGenres.includes(g)}
 					>
 						{g}
 					</button>

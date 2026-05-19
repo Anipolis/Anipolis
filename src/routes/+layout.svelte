@@ -41,7 +41,7 @@ onMount(() => {
 		unreadNotificationCount={resolvedUnreadCount}
 		pendingFollowRequestCount={resolvedPendingCount}
 	/>
-	<div class="app-main">
+	<div class="app-main" id="main-content" tabindex="-1">
 		<Nav />
 		{@render children()}
 	</div>

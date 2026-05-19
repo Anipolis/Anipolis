@@ -57,13 +57,6 @@ function openExchangeModal(event: MouseEvent) {
 	showExchangeModal = true;
 }
 
-function handleExchangePreviewKeydown(event: KeyboardEvent) {
-	if (event.key !== "Enter" && event.key !== " ") return;
-	event.preventDefault();
-	event.stopPropagation();
-	showExchangeModal = true;
-}
-
 let likeCountLocal = $state<number | null>(null);
 let likedByMeLocal = $state<boolean | null>(null);
 let repostCountLocal = $state<number | null>(null);
@@ -242,21 +235,14 @@ async function submitReport() {
 		{/if}
 
 		{#if post.exchange_share}
-			<div
-				class="exchange-share-inline"
-				role="button"
-				tabindex="0"
-				aria-label="交換結果を見る"
-				onclick={openExchangeModal}
-				onkeydown={handleExchangePreviewKeydown}
-			>
+			<button type="button" class="exchange-share-inline" aria-label="交換結果を見る" onclick={openExchangeModal}>
 				<AnimeExchangeResult
 					offeredAnime={post.exchange_share.offered_anime}
 					receivedAnime={post.exchange_share.received_anime}
 					mode="timeline"
 					linkCards={false}
 				/>
-			</div>
+			</button>
 		{:else if post.anime_quote}
 			<a href="/anime/{post.anime_quote.id}" class="anime-quote-card" onclick={(e) => e.stopPropagation()}>
 				{#if post.anime_quote.cover_url}
@@ -330,6 +316,7 @@ async function submitReport() {
 							rows="3"
 							bind:value={quoteText}
 							disabled={quoteSubmitting}
+							aria-label="引用コメント"
 						></textarea>
 						<div class="quote-preview">
 							<div class="quote-preview-header">
@@ -340,7 +327,7 @@ async function submitReport() {
 							<p class="quote-preview-content">{post.content}</p>
 						</div>
 						{#if quoteError}
-							<p class="flash-error" style="margin-top:8px;">{quoteError}</p>
+							<p class="flash-error" role="alert" style="margin-top:8px;">{quoteError}</p>
 						{/if}
 					</div>
 					<div class="quote-modal-footer">
@@ -498,6 +485,8 @@ async function submitReport() {
 					disabled={!isLoggedIn}
 					aria-label={repostedByMe ? 'リポストメニュー' : 'リポスト'}
 					title={repostedByMe ? 'リポストメニュー' : 'リポスト'}
+					aria-haspopup="true"
+					aria-expanded={showRepostMenu}
 					onclick={() => { if (isLoggedIn) showRepostMenu = !showRepostMenu; }}
 				>
 					<svg
@@ -581,6 +570,7 @@ async function submitReport() {
 					disabled={!isLoggedIn}
 					aria-label={likedByMe ? 'いいね取り消し' : 'いいね'}
 					title={likedByMe ? 'いいね取り消し' : 'いいね'}
+					aria-pressed={likedByMe}
 				>
 					<svg
 						width="15"
@@ -612,6 +602,7 @@ async function submitReport() {
 					disabled={!isLoggedIn}
 					aria-label={bookmarkedByMe ? 'ブックマーク解除' : 'ブックマーク'}
 					title={bookmarkedByMe ? 'ブックマーク解除' : 'ブックマーク'}
+					aria-pressed={bookmarkedByMe}
 				>
 					<svg
 						width="15"

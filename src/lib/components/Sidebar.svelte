@@ -62,7 +62,7 @@ function isActive(path: string): boolean {
 		<span class="sidebar-logo-text">Anipolis</span>
 	</a>
 
-	<nav class="sidebar-nav">
+	<nav class="sidebar-nav" aria-label="メインナビゲーション">
 		<a href="/" class="sidebar-btn" class:active={isActive('/')} aria-label="ホーム" title="ホーム">
 			<svg
 				width="22"

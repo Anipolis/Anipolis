@@ -140,7 +140,7 @@ const statusIcon: Record<AnimeStatus, string> = {
 		</div>
 
 		<!-- タブ -->
-		<div class="profile-tabs">
+		<nav class="profile-tabs" aria-label="プロフィールタブ">
 			<a href="/profile/{profile.username}" class="profile-tab" class:active={activeTab === 'posts'}>投稿</a>
 			<a href="/profile/{profile.username}?tab=images" class="profile-tab" class:active={activeTab === 'images'}
 				>画像</a
@@ -159,7 +159,7 @@ const statusIcon: Record<AnimeStatus, string> = {
 					>編集</a
 				>
 			{/if}
-		</div>
+		</nav>
 
 		<!-- 編集タブ（同期データのみ使用） -->
 		{#if activeTab === 'edit' && isOwn}

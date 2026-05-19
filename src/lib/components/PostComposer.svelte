@@ -242,6 +242,7 @@ const handleSubmit: SubmitFunction = () => {
 					bind:value={content}
 					maxlength={MAX_LENGTH + 10}
 					oninput={handleContentInput}
+					aria-label="投稿内容"
 				></textarea>
 
 				{#if mentionDropdownOpen && mentionResults.length > 0}
@@ -451,8 +452,9 @@ const handleSubmit: SubmitFunction = () => {
 				placeholder="タイトルで検索…"
 				bind:value={animeQuery}
 				oninput={handleAnimeQueryInput}
+				aria-label="アニメタイトルで検索"
 			>
-			<div class="anime-search-results">
+			<div class="anime-search-results" aria-live="polite" aria-busy={animeSearching}>
 				{#if animeSearching}
 					<p class="anime-search-empty">検索中…</p>
 				{:else if animeQuery.trim().length > 0 && animeResults.length === 0}

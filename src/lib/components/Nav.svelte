@@ -10,12 +10,12 @@ function handleSearch(event: Event) {
 }
 </script>
 
-<nav class="nav">
+<nav class="nav" aria-label="サイト検索">
 	<div class="nav-inner">
 		<a href="/" class="nav-logo">Anipolis</a>
 
-		<form class="nav-search" onsubmit={handleSearch}>
-			<span class="nav-search-icon">🔍</span>
+		<form class="nav-search" onsubmit={handleSearch} role="search" aria-label="サイト内検索">
+			<span class="nav-search-icon" aria-hidden="true">🔍</span>
 			<input type="search" placeholder="検索" bind:value={searchQuery} aria-label="検索">
 		</form>
 	</div>
