@@ -25,11 +25,13 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 	}
 
 	const isOwn = user?.id === profile.id;
-	const isFollowing = user && user.id !== profile.id ? await checkIsFollowing(supabase, user.id, profile.id) : false;
-	const followRequestStatus =
-		user && user.id !== profile.id && !isFollowing
-			? await getFollowRequestStatus(supabase, user.id, profile.id)
-			: "none";
+	const myId = user?.id;
+
+	const [isFollowing, rawFollowRequestStatus] = await Promise.all([
+		myId && !isOwn ? checkIsFollowing(supabase, myId, profile.id) : Promise.resolve(false),
+		myId && !isOwn ? getFollowRequestStatus(supabase, myId, profile.id) : Promise.resolve("none" as const),
+	]);
+	const followRequestStatus = isFollowing ? ("none" as const) : rawFollowRequestStatus;
 	const canViewContent = isOwn || !profile.is_private || isFollowing;
 
 	const [followCounts, trendingResult] = await Promise.all([

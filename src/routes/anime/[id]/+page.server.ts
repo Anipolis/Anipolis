@@ -6,18 +6,16 @@ import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
-	const anime = await getAnime(supabase, params.id, user?.id ?? null);
+
+	const [anime, listedUsers, isAdmin] = await Promise.all([
+		getAnime(supabase, params.id, user?.id ?? null),
+		getUsersWhoListedAnime(supabase, params.id),
+		user ? isAdminUser(supabase, user.id) : Promise.resolve(false),
+	]);
 
 	if (!anime) throw error(404, "アニメが見つかりません");
 
-	const isAdmin = user ? await isAdminUser(supabase, user.id) : false;
-
-	const listedUsersPromise: Promise<AnimeListUser[]> = getUsersWhoListedAnime(supabase, params.id).catch((err) => {
-		console.error("[anime/[id]] listedUsers fetch error:", err);
-		return [] as AnimeListUser[];
-	});
-
-	return { anime, user, isAdmin, listedUsers: listedUsersPromise };
+	return { anime, user, isAdmin, listedUsers };
 };
 
 export const actions: Actions = {

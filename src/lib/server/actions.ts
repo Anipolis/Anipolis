@@ -101,33 +101,43 @@ export async function insertPostWithHashtags(
 	}
 
 	const tags = extractHashtags(postContent);
-	for (const tag of tags) {
-		await supabase.from("hashtags").upsert({ name: tag }, { onConflict: "name", ignoreDuplicates: true });
-		const { data: hashtag } = await supabase.from("hashtags").select("id").eq("name", tag).maybeSingle();
-		if (hashtag) {
-			await supabase.from("post_hashtags").insert({ post_id: post.id, hashtag_id: hashtag.id });
+	const mentionedUsernames = extractMentions(postContent);
+
+	// ハッシュタグとメンションユーザーを並列取得
+	const [, mentionedUsersResult] = await Promise.all([
+		tags.length > 0
+			? supabase.from("hashtags").upsert(
+					tags.map((t) => ({ name: t })),
+					{ onConflict: "name", ignoreDuplicates: true },
+				)
+			: Promise.resolve(null),
+		mentionedUsernames.length > 0
+			? supabase.from("profiles").select("id").in("username", mentionedUsernames)
+			: Promise.resolve({ data: [] as { id: string }[] }),
+	]);
+
+	// ハッシュタグIDを一括取得してpost_hashtagsを一括挿入
+	if (tags.length > 0) {
+		const { data: hashtagRows } = await supabase.from("hashtags").select("id, name").in("name", tags);
+		if (hashtagRows && hashtagRows.length > 0) {
+			await supabase
+				.from("post_hashtags")
+				.insert(hashtagRows.map((h) => ({ post_id: post.id, hashtag_id: h.id })));
 		}
 	}
 
-	// メンション通知（エラーは無視）
-	const mentionedUsernames = extractMentions(postContent);
-	if (mentionedUsernames.length > 0) {
-		const { data: mentionedUsers } = await supabase
-			.from("profiles")
-			.select("id")
-			.in("username", mentionedUsernames);
-		if (mentionedUsers) {
-			for (const mentioned of mentionedUsers) {
-				if (mentioned.id !== userId) {
-					await supabase.from("notifications").insert({
-						recipient_id: mentioned.id,
-						actor_id: userId,
-						type: "mention",
-						post_id: post.id,
-					});
-				}
-			}
-		}
+	// メンション通知を一括挿入（エラーは無視）
+	const mentionedUsers = mentionedUsersResult?.data ?? [];
+	const toNotify = mentionedUsers.filter((u) => u.id !== userId);
+	if (toNotify.length > 0) {
+		await supabase.from("notifications").insert(
+			toNotify.map((u) => ({
+				recipient_id: u.id,
+				actor_id: userId,
+				type: "mention" as const,
+				post_id: post.id,
+			})),
+		);
 	}
 
 	return { success: true, postId: post.id };

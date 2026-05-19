@@ -246,7 +246,15 @@ async function submitReport() {
 		{:else if post.anime_quote}
 			<a href="/anime/{post.anime_quote.id}" class="anime-quote-card" onclick={(e) => e.stopPropagation()}>
 				{#if post.anime_quote.cover_url}
-					<img src={post.anime_quote.cover_url} alt={post.anime_quote.title} class="anime-quote-cover">
+					<img
+						src={post.anime_quote.cover_url}
+						alt={post.anime_quote.title}
+						class="anime-quote-cover"
+						width="44"
+						height="62"
+						loading="lazy"
+						decoding="async"
+					>
 				{:else}
 					<div class="anime-quote-cover anime-quote-cover-empty"></div>
 				{/if}
@@ -276,7 +284,7 @@ async function submitReport() {
 						aria-label="画像 {i + 1} を拡大"
 						onclick={(e) => openLightbox(e, url)}
 					>
-						<img src={url} alt="投稿画像 {i + 1}" class="post-image" loading="lazy">
+						<img src={url} alt="投稿画像 {i + 1}" class="post-image" loading="lazy" decoding="async">
 					</button>
 				{/each}
 			</div>

@@ -23,7 +23,15 @@ function animeHref(animeId: string) {
 			<a href={animeHref(offeredAnime.id)} class="exchange-result-card exchange-result-card--offered">
 				<div class="exchange-result-cover-wrap">
 					{#if offeredAnime.cover_url}
-						<img src={offeredAnime.cover_url} alt={offeredAnime.title} class="exchange-result-cover">
+						<img
+							src={offeredAnime.cover_url}
+							alt={offeredAnime.title}
+							class="exchange-result-cover"
+							width="74"
+							height="111"
+							loading="lazy"
+							decoding="async"
+						>
 					{:else}
 						<div class="exchange-result-cover exchange-result-cover--empty"></div>
 					{/if}
@@ -40,7 +48,15 @@ function animeHref(animeId: string) {
 			<div class="exchange-result-card exchange-result-card--offered">
 				<div class="exchange-result-cover-wrap">
 					{#if offeredAnime.cover_url}
-						<img src={offeredAnime.cover_url} alt={offeredAnime.title} class="exchange-result-cover">
+						<img
+							src={offeredAnime.cover_url}
+							alt={offeredAnime.title}
+							class="exchange-result-cover"
+							width="74"
+							height="111"
+							loading="lazy"
+							decoding="async"
+						>
 					{:else}
 						<div class="exchange-result-cover exchange-result-cover--empty"></div>
 					{/if}
@@ -62,7 +78,15 @@ function animeHref(animeId: string) {
 				<span class="exchange-new-badge">New!</span>
 				<div class="exchange-result-cover-wrap">
 					{#if receivedAnime.cover_url}
-						<img src={receivedAnime.cover_url} alt={receivedAnime.title} class="exchange-result-cover">
+						<img
+							src={receivedAnime.cover_url}
+							alt={receivedAnime.title}
+							class="exchange-result-cover"
+							width="74"
+							height="111"
+							loading="lazy"
+							decoding="async"
+						>
 					{:else}
 						<div class="exchange-result-cover exchange-result-cover--empty"></div>
 					{/if}
@@ -80,7 +104,15 @@ function animeHref(animeId: string) {
 				<span class="exchange-new-badge">New!</span>
 				<div class="exchange-result-cover-wrap">
 					{#if receivedAnime.cover_url}
-						<img src={receivedAnime.cover_url} alt={receivedAnime.title} class="exchange-result-cover">
+						<img
+							src={receivedAnime.cover_url}
+							alt={receivedAnime.title}
+							class="exchange-result-cover"
+							width="74"
+							height="111"
+							loading="lazy"
+							decoding="async"
+						>
 					{:else}
 						<div class="exchange-result-cover exchange-result-cover--empty"></div>
 					{/if}

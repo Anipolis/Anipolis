@@ -30,53 +30,48 @@ function notificationLabel(type: string): string {
 				<div class="spinner" aria-hidden="true"></div>
 				<span>読み込み中…</span>
 			</div>
-			{#each { length: 5 } as _, i (i)}
-				<NotificationSkeleton />
-			{/each}
-		{:then notifications}
-			{#if notifications.length === 0}
-				<div class="empty-state">
-					<p>通知はありません</p>
-				</div>
-			{:else}
-				<ul class="notification-list">
-					{#each notifications as notif (notif.id)}
-						<li class="notification-item">
-							<a href="/profile/{notif.actor_username}" class="notification-avatar">
-								<UserAvatar src={notif.actor_avatar_url} username={notif.actor_username} size="md" />
-							</a>
-							<div class="notification-body">
-								<p class="notification-text">
-									<a href="/profile/{notif.actor_username}" class="notification-actor">
-										{notif.actor_display_name ?? notif.actor_username}
-									</a>
-									{notificationLabel(notif.type)}
-								</p>
-								{#if notif.post_content && notif.post_id}
-									<a href="/posts/{notif.post_id}" class="notification-post-preview">
-										{notif.post_content.length > 80
-											? `${notif.post_content.slice(0, 80)}…`
-											: notif.post_content}
-									</a>
-								{/if}
-								{#if notif.type === 'anime_recommendation' && notif.recommendation_anime_id}
-									<a href="/anime/{notif.recommendation_anime_id}" class="notification-anime-preview">
-										{#if notif.recommendation_anime_cover_url}
-											<img
-												src={notif.recommendation_anime_cover_url}
-												alt={notif.recommendation_anime_title ?? '推薦作品'}
-											>
-										{/if}
-										<span> <strong>{notif.recommendation_anime_title ?? '推薦作品'}</strong> </span>
-									</a>
-								{/if}
-								<span class="notification-time">{formatRelativeTime(notif.created_at)}</span>
-							</div>
-						</li>
-					{/each}
-				</ul>
-			{/if}
-		{/await}
+		{:else}
+			<ul class="notification-list">
+				{#each data.notifications as notif (notif.id)}
+					<li class="notification-item">
+						<a href="/profile/{notif.actor_username}" class="notification-avatar">
+							<UserAvatar src={notif.actor_avatar_url} username={notif.actor_username} size="md" />
+						</a>
+						<div class="notification-body">
+							<p class="notification-text">
+								<a href="/profile/{notif.actor_username}" class="notification-actor">
+									{notif.actor_display_name ?? notif.actor_username}
+								</a>
+								{notificationLabel(notif.type)}
+							</p>
+							{#if notif.post_content && notif.post_id}
+								<a href="/posts/{notif.post_id}" class="notification-post-preview">
+									{notif.post_content.length > 80
+										? `${notif.post_content.slice(0, 80)}…`
+										: notif.post_content}
+								</a>
+							{/if}
+							{#if notif.type === 'anime_recommendation' && notif.recommendation_anime_id}
+								<a href="/anime/{notif.recommendation_anime_id}" class="notification-anime-preview">
+									{#if notif.recommendation_anime_cover_url}
+										<img
+											src={notif.recommendation_anime_cover_url}
+											alt={notif.recommendation_anime_title ?? '推薦作品'}
+											width="34"
+											height="48"
+											loading="lazy"
+											decoding="async"
+										>
+									{/if}
+									<span> <strong>{notif.recommendation_anime_title ?? '推薦作品'}</strong> </span>
+								</a>
+							{/if}
+							<span class="notification-time">{formatRelativeTime(notif.created_at)}</span>
+						</div>
+					</li>
+				{/each}
+			</ul>
+		{/if}
 	</main>
 </div>
 
