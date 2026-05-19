@@ -370,7 +370,7 @@ html.sidebar-collapsed .nav {
 
 .sidebar-toggle {
 	position: fixed;
-	left: var(--icon-bar-width);
+	left: calc(var(--icon-bar-width) - 1px);
 	top: 50%;
 	transform: translateY(-50%);
 	z-index: 201;
@@ -397,7 +397,7 @@ html.sidebar-collapsed .nav {
 }
 
 html.sidebar-collapsed .sidebar-toggle {
-	left: var(--icon-bar-collapsed);
+	left: calc(var(--icon-bar-collapsed) - 1px);
 }
 
 @media (max-width: 640px) {
