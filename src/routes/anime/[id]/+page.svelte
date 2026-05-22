@@ -13,8 +13,19 @@ interface UserResult {
 
 let { data, form }: PageProps = $props();
 
-const displayStudios = $derived(data.anime.studio_ja?.length ? data.anime.studio_ja : (data.anime.studio ?? []));
-const displayGenres = $derived(data.anime.genre_ja?.length ? data.anime.genre_ja : (data.anime.genre ?? []));
+const displayStudios = $derived(data.anime.studio ?? []);
+const displayGenres = $derived(data.anime.genre ?? []);
+const displayOfficialLinks = $derived(
+	buildDisplayOfficialLinks(data.anime.official_site_url, data.anime.official_x_url),
+);
+const displayResources = $derived(
+	buildDisplayResources(
+		data.anime.resources,
+		data.anime.mal_id,
+		data.anime.official_site_url,
+		data.anime.official_x_url,
+	),
+);
 
 const statusOptions: { value: AnimeStatus; label: string }[] = [
 	{ value: "watching", label: "視聴中" },
@@ -48,6 +59,66 @@ const listedUserStatusLabels: Record<string, string> = {
 function formatAiredPeriod(airedFrom: string | null, airedTo: string | null): string | null {
 	if (!airedFrom) return null;
 	return `${airedFrom.slice(0, 10)} 〜 ${airedTo ? airedTo.slice(0, 10) : "未定"}`;
+}
+
+function isHttpUrl(url: string | null | undefined): url is string {
+	return typeof url === "string" && /^https?:\/\//i.test(url);
+}
+
+function buildDisplayOfficialLinks(officialSiteUrl: string | null, officialXUrl: string | null) {
+	const links: { name: string; url: string }[] = [];
+
+	if (isHttpUrl(officialSiteUrl)) links.push({ name: "公式サイト", url: officialSiteUrl });
+	if (isHttpUrl(officialXUrl)) links.push({ name: "X (Twitter)", url: officialXUrl });
+
+	return dedupeLinks(links);
+}
+
+function buildDisplayResources(
+	resources: { name: string; url: string }[],
+	malId: number | null,
+	officialSiteUrl: string | null,
+	officialXUrl: string | null,
+) {
+	const links: { name: string; url: string }[] = [];
+
+	if (malId) links.push({ name: "MAL", url: "https://myanimelist.net/" });
+	links.push(
+		...resources
+			.filter((resource) => resource.name && isHttpUrl(resource.url))
+			.map((resource) => {
+				if (isMalUrl(resource.url) || resource.name.toLowerCase() === "mal") {
+					return { name: "MAL", url: "https://myanimelist.net/" };
+				}
+				if (resource.name === "Home" || resource.name.toLowerCase() === "official site") {
+					return null;
+				}
+				if (resource.url === officialSiteUrl || resource.url === officialXUrl) return null;
+				return resource;
+			})
+			.filter((resource): resource is { name: string; url: string } => resource !== null),
+	);
+
+	return dedupeLinks(links);
+}
+
+function dedupeLinks(links: { name: string; url: string }[]) {
+	const seen = new Set<string>();
+	return links.filter((link) => {
+		const key = link.url.toLowerCase();
+		if (seen.has(key)) return false;
+		seen.add(key);
+		return true;
+	});
+}
+
+function isMalUrl(url: string) {
+	try {
+		const hostname = new URL(url).hostname.toLowerCase();
+		return hostname === "myanimelist.net" || hostname.endsWith(".myanimelist.net");
+	} catch {
+		return false;
+	}
 }
 
 let selectedStatus = $state<AnimeStatus>("plan_to_watch");
@@ -243,7 +314,7 @@ const handleRecommendSubmit: SubmitFunction = () => {
 			{/if}
 
 			<!-- Production info below cover -->
-			{#if displayStudios.length || data.anime.producer?.length || data.anime.source || displayGenres.length || data.anime.official_hashtag?.length || data.anime.official_site_url || data.anime.official_x_url}
+			{#if displayStudios.length || data.anime.producer?.length || data.anime.source || displayGenres.length || data.anime.official_hashtag?.length || displayOfficialLinks.length}
 				<dl class="prod-info">
 					{#if displayStudios.length}
 						<div class="prod-row prod-row--wrap">
@@ -293,32 +364,40 @@ const handleRecommendSubmit: SubmitFunction = () => {
 							</dd>
 						</div>
 					{/if}
-					{#if data.anime.official_site_url || data.anime.official_x_url}
+					{#if displayOfficialLinks.length}
 						<div class="prod-row prod-row--wrap">
-							<dt>公式</dt>
+							<dt>公式リンク</dt>
 							<dd class="links-list">
-								{#if data.anime.official_site_url?.startsWith('http')}
+								{#each displayOfficialLinks as resource (resource.url)}
 									<a
-										href={data.anime.official_site_url}
+										href={resource.url}
 										target="_blank"
 										rel="noopener noreferrer"
 										class="official-link"
-										>公式サイト</a
+										>{resource.name}</a
 									>
-								{/if}
-								{#if data.anime.official_x_url?.startsWith('http')}
-									<a
-										href={data.anime.official_x_url}
-										target="_blank"
-										rel="noopener noreferrer"
-										class="official-link"
-										>X (Twitter)</a
-									>
-								{/if}
+								{/each}
 							</dd>
 						</div>
 					{/if}
 				</dl>
+			{/if}
+			{#if displayResources.length}
+				<div class="resource-links">
+					<div class="resource-links-title">Resources</div>
+					<div class="links-list">
+						{#each displayResources as resource (resource.url)}
+							<a
+								href={resource.url}
+								target="_blank"
+								rel="noopener noreferrer"
+								class:resource-link--muted={resource.name === 'MAL'}
+								class="official-link resource-link"
+								>{resource.name}</a
+							>
+						{/each}
+					</div>
+				</div>
 			{/if}
 		</aside>
 
@@ -903,6 +982,28 @@ const handleRecommendSubmit: SubmitFunction = () => {
 .official-link:hover {
 	background: var(--accent);
 	color: #fff;
+}
+.resource-link--muted {
+	border-color: var(--border);
+	color: var(--text-muted);
+}
+.resource-link--muted:hover {
+	background: var(--hover-bg);
+	border-color: var(--border);
+	color: var(--text);
+}
+.resource-links {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 0 14px;
+}
+.resource-links-title {
+	color: var(--text-muted);
+	font-size: 0.72rem;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
 }
 .copyright {
 	font-size: 0.72rem;

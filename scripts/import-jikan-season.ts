@@ -9,12 +9,18 @@ type ExternalLink = {
 	url?: string | null;
 };
 
+type AnimeResourceLink = {
+	name: string;
+	url: string;
+};
+
 type NamedResource = {
 	name?: string | null;
 };
 
 type JikanAnime = {
 	mal_id: number;
+	url?: string | null;
 	titles?: {
 		type?: string | null;
 		title?: string | null;
@@ -87,14 +93,13 @@ type AnimeImportRow = {
 	source: string | null;
 	studio: string[];
 	studio_en: string[];
-	studio_ja: string[];
 	genre: string[];
 	genre_en: string[];
-	genre_ja: string[];
 	broadcast_day: number | null;
 	broadcast_time: string | null;
 	official_site_url: string | null;
 	official_x_url: string | null;
+	resources: AnimeResourceLink[];
 	cover_url: string | null;
 };
 
@@ -113,7 +118,10 @@ type ImportDatabase = {
 	};
 };
 
-type ExistingAnimeLinks = Pick<AnimeImportRow, "mal_id" | "official_site_url" | "official_x_url">;
+type ExistingAnimeValues = Pick<
+	AnimeImportRow,
+	"mal_id" | "official_site_url" | "official_x_url" | "resources" | "cover_url"
+>;
 
 const BASE_URL = "https://api.jikan.moe/v4";
 const VALID_SEASONS = new Set<SeasonName>(["winter", "spring", "summer", "fall"]);
@@ -122,6 +130,7 @@ const REQUEST_WAIT_MAX_MS = 1_000;
 const RETRY_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
 const MAX_RETRIES = 5;
 const UPSERT_BATCH_SIZE = 100;
+const MAL_HOME_URL = "https://myanimelist.net/";
 const BLOCKED_RESOURCE_KEYWORDS = ["namuwiki", "bangumi"];
 const BLOCKED_TYPES = new Set(["music", "pv", "cm"]);
 const FINITE_RELEASE_TYPES = new Set(["movie", "ona", "ova", "tvspecial", "special"]);
@@ -211,24 +220,24 @@ const STUDIO_JA_BY_EN: Record<string, string> = {
 	AIC: "AIC",
 	"Ajia-do": "亜細亜堂",
 	Artland: "アートランド",
-	"Bandai Namco Pictures": "バンダイナムコピクチャーズ",
+	"Bandai Namco Pictures": "BN Pictures",
 	Bones: "ボンズ",
 	"Brain's Base": "ブレインズ・ベース",
 	CloverWorks: "CloverWorks",
 	"CoMix Wave Films": "コミックス・ウェーブ・フィルム",
 	"Doga Kobo": "動画工房",
-	"David Production": "デイヴィッドプロダクション",
+	"David Production": "david production",
 	Diomedéa: "ディオメディア",
 	ENGI: "ENGI",
 	Fanworks: "ファンワークス",
 	"Felix Film": "FelixFilm",
-	Gaina: "ガイナ",
-	Gonzo: "ゴンゾ",
+	Gaina: "BENTEN Film",
+	Gonzo: "GONZO",
 	Graphinica: "グラフィニカ",
 	"J.C.Staff": "J.C.STAFF",
 	"Kyoto Animation": "京都アニメーション",
 	LIDENFILMS: "ライデンフィルム",
-	Lerche: "ラルケ",
+	Lerche: "Lerche",
 	"M.S.C": "エム・エス・シー",
 	MAPPA: "MAPPA",
 	Madhouse: "マッドハウス",
@@ -236,7 +245,7 @@ const STUDIO_JA_BY_EN: Record<string, string> = {
 	Orange: "オレンジ",
 	"P.A. Works": "P.A.WORKS",
 	Passione: "パッショーネ",
-	Pierrot: "ぴえろ",
+	Pierrot: "スタジオぴえろ",
 	"Production I.G": "Production I.G",
 	SANZIGEN: "サンジゲン",
 	"SILVER LINK.": "SILVER LINK.",
@@ -278,6 +287,63 @@ const STUDIO_JA_BY_EN: Record<string, string> = {
 	Nomad: "ノーマッド",
 	NUT: "NUT",
 	"Polygon Pictures": "ポリゴン・ピクチュアズ",
+	"Lapin Track": "ラパントラック",
+	Shuka: "朱夏",
+	"animation studio42": "animation studio42",
+	"Hayabusa Film": "ハヤブサフィルム",
+	Gekkou: "月虹",
+	"Studio Chromato": "スタジオクロマト",
+	"Bones Film": "ボンズ",
+	"East Fish Studio": "イーストフィッシュスタジオ",
+	"Atelier Peuplier": "アトリエププリエ",
+	CompTown: "CompTown",
+	"Platinum Vision": "プラチナビジョン",
+	"Ashi Productions": "葦プロダクション",
+	Millepensee: "ミルパンセ",
+	"Tezuka Productions": "手塚プロダクション",
+	"Bellnox Films": "ベルノックスフィルムズ",
+	"EMT Squared": "EMTスクエアード",
+	"Ga-Crew": "画狂",
+	HORNETS: "HORNETS",
+	"Okuruto Noboru": "オクルトノボル",
+	"Signal.MD": "シグナル・エムディ",
+	"studio MOTHER": "studio MOTHER",
+	"asread.": "アスリード",
+	"PINE JAM": "パインジャム",
+	"Nyan Pollution": "Nyan Pollution-ω-",
+	"Maho Film": "MAHO FILM",
+	"Studio Outrigger": "スタジオアウトリガー",
+	"Imagica Infos": "Imagica Infos",
+	"Imageworks Studio": "Imageworks Studio",
+	Khara: "スタジオカラー",
+	"Arvo Animation": "アルボアニメーション",
+	Seven: "アニメーションスタジオ・セブン",
+	"Psyde Kick Studio": "サイドキックスタジオ",
+	"Studio Hokiboshi": "studio HōKIBOSHI",
+	"Studio Dotou": "STUDIO DOTOU",
+	Doraku: "動楽",
+	"Nothing New": "NOTHING NEW",
+	"Blue bread": "Blue bread",
+	"Studio Gohan": "スタジオごはん",
+	"Kinema Citrus": "キネマシトラス",
+	"Gift-o’-Animation": "ぎふとアニメーション",
+	"Studio Jemi": "STUDIO JEMI",
+	Actas: "アクタス",
+	Shirogumi: "白組",
+	Shion: "Shion",
+	Majin: "Majin",
+	Nur: "Nur",
+	"Miyu Productions": "MIYUプロダクション",
+	"ame pippin": "ame pippin",
+	"Shogakukan Music & Digital Entertainment": "SMDE",
+	"Dongwoo A&E": "同友A&E",
+	"Uguisu Kobo": "うぐいす工房",
+	"Toon Harbor Works": "トゥーンハーバーワークス",
+	"ETERNA Animation": "ETERNA Animation",
+	"Studio G-1Neo": "Studio G-1NEO",
+	Contrail: "コントレール",
+	Lesprit: "レスプリ",
+	"Nippon Animation": "日本アニメーション",
 };
 
 function parseArgs(argv: string[]) {
@@ -625,14 +691,63 @@ function findOfficialXUrl(external: ExternalLink[] | null | undefined) {
 	);
 }
 
-function selectCoverUrl(anime: JikanAnime) {
-	return (
-		anime.images?.webp?.large_image_url ??
-		anime.images?.jpg?.large_image_url ??
-		anime.images?.webp?.image_url ??
-		anime.images?.jpg?.image_url ??
-		null
-	);
+function isHttpUrl(value: string | null | undefined) {
+	if (!value) return false;
+
+	try {
+		const protocol = new URL(value).protocol;
+		return protocol === "http:" || protocol === "https:";
+	} catch {
+		return false;
+	}
+}
+
+function normalizeResourceLink(link: ExternalLink): AnimeResourceLink | null {
+	const url = link.url?.trim();
+	if (!isHttpUrl(url)) return null;
+	if (isMalUrl(url)) return null;
+
+	const name = (link.name ?? link.title ?? link.type ?? "").trim();
+	if (!name) return null;
+	if (name.toLowerCase() === "mal" || name.toLowerCase().includes("myanimelist")) return null;
+
+	return { name, url: url as string };
+}
+
+function isMalUrl(value: string) {
+	try {
+		const hostname = new URL(value).hostname.toLowerCase();
+		return hostname === "myanimelist.net" || hostname.endsWith(".myanimelist.net");
+	} catch {
+		return false;
+	}
+}
+
+function dedupeResourceLinks(resources: AnimeResourceLink[]) {
+	const seen = new Set<string>();
+	const deduped: AnimeResourceLink[] = [];
+
+	for (const resource of resources) {
+		const key = resource.url.toLowerCase();
+		if (seen.has(key)) continue;
+		seen.add(key);
+		deduped.push(resource);
+	}
+
+	return deduped;
+}
+
+function buildAnimeResources(anime: JikanAnime) {
+	const resources: AnimeResourceLink[] = [];
+
+	if (anime.mal_id) resources.push({ name: "MAL", url: MAL_HOME_URL });
+
+	for (const link of anime.resources ?? []) {
+		const normalized = normalizeResourceLink(link);
+		if (normalized) resources.push(normalized);
+	}
+
+	return dedupeResourceLinks(resources);
 }
 
 function findTitleByType(anime: JikanAnime, type: string) {
@@ -649,6 +764,7 @@ function mapJikanAnime(anime: JikanAnime, year: number, season: SeasonName): Ani
 	const studioJa = translateNameList(studioEn, STUDIO_JA_BY_EN);
 	const genreEn = normalizeNameList(anime.genres);
 	const genreJa = translateNameList(genreEn, GENRE_JA_BY_EN);
+	const officialSiteUrl = findOfficialSiteUrl(anime.external);
 
 	return {
 		mal_id: anime.mal_id,
@@ -664,15 +780,14 @@ function mapJikanAnime(anime: JikanAnime, year: number, season: SeasonName): Ani
 		source: anime.source ?? null,
 		studio: studioJa,
 		studio_en: studioEn,
-		studio_ja: studioJa,
 		genre: genreJa,
 		genre_en: genreEn,
-		genre_ja: genreJa,
 		broadcast_day: normalizeBroadcastDay(anime.broadcast?.day),
 		broadcast_time: normalizeBroadcastTime(anime.broadcast?.time),
-		official_site_url: findOfficialSiteUrl(anime.external),
+		official_site_url: officialSiteUrl,
 		official_x_url: findOfficialXUrl(anime.external),
-		cover_url: selectCoverUrl(anime),
+		resources: buildAnimeResources(anime),
+		cover_url: null,
 	};
 }
 
@@ -684,6 +799,10 @@ function preferPresent<T>(next: T | null, previous: T | null) {
 	return next ?? previous;
 }
 
+function preferNonEmptyArray<T>(next: T[], previous: T[]) {
+	return next.length > 0 ? next : previous;
+}
+
 function mergeAnimeRows(previous: AnimeImportRow, next: AnimeImportRow): AnimeImportRow {
 	return {
 		...previous,
@@ -691,10 +810,8 @@ function mergeAnimeRows(previous: AnimeImportRow, next: AnimeImportRow): AnimeIm
 		title: next.title || previous.title,
 		studio: mergeUniqueStrings(previous.studio, next.studio),
 		studio_en: mergeUniqueStrings(previous.studio_en, next.studio_en),
-		studio_ja: mergeUniqueStrings(previous.studio_ja, next.studio_ja),
 		genre: mergeUniqueStrings(previous.genre, next.genre),
 		genre_en: mergeUniqueStrings(previous.genre_en, next.genre_en),
-		genre_ja: mergeUniqueStrings(previous.genre_ja, next.genre_ja),
 		title_en: preferPresent(next.title_en, previous.title_en),
 		title_romaji: preferPresent(next.title_romaji, previous.title_romaji),
 		episode_count: preferPresent(next.episode_count, previous.episode_count),
@@ -706,6 +823,7 @@ function mergeAnimeRows(previous: AnimeImportRow, next: AnimeImportRow): AnimeIm
 		broadcast_time: preferPresent(next.broadcast_time, previous.broadcast_time),
 		official_site_url: preferPresent(next.official_site_url, previous.official_site_url),
 		official_x_url: preferPresent(next.official_x_url, previous.official_x_url),
+		resources: preferNonEmptyArray(next.resources, previous.resources),
 		cover_url: preferPresent(next.cover_url, previous.cover_url),
 	};
 }
@@ -751,45 +869,55 @@ function getSupabaseClient() {
 	});
 }
 
-async function preserveExistingLinksOnPartialFailures(
+async function preserveExistingValuesOnPartialFailures(
 	supabase: ReturnType<typeof getSupabaseClient>,
 	batch: AnimeImportRow[],
 ) {
-	const malIdsNeedingLinks = batch
-		.filter((row) => row.official_site_url === null || row.official_x_url === null)
+	const malIdsNeedingExistingValues = batch
+		.filter(
+			(row) =>
+				row.official_site_url === null ||
+				row.official_x_url === null ||
+				row.resources.length === 0 ||
+				row.cover_url === null,
+		)
 		.map((row) => row.mal_id);
 
-	if (malIdsNeedingLinks.length === 0) return batch;
+	if (malIdsNeedingExistingValues.length === 0) return batch;
 
 	const { data, error } = await supabase
 		.from("anime")
-		.select("mal_id, official_site_url, official_x_url")
-		.in("mal_id", malIdsNeedingLinks);
+		.select("mal_id, official_site_url, official_x_url, resources, cover_url")
+		.in("mal_id", malIdsNeedingExistingValues);
 
 	if (error) {
-		console.warn(`Could not read existing official links before upsert: ${error.message}`);
+		console.warn(`Could not read existing anime values before upsert: ${error.message}`);
 		return batch;
 	}
 
-	const existingLinksByMalId = new Map(
-		((data ?? []) as ExistingAnimeLinks[]).map((row) => [
+	const existingValuesByMalId = new Map(
+		((data ?? []) as ExistingAnimeValues[]).map((row) => [
 			row.mal_id,
 			{
 				official_site_url: row.official_site_url,
 				official_x_url: row.official_x_url,
+				resources: row.resources ?? [],
+				cover_url: row.cover_url,
 			},
 		]),
 	);
 
 	return batch.map((row) => {
-		const existingLinks = existingLinksByMalId.get(row.mal_id);
+		const existingValues = existingValuesByMalId.get(row.mal_id);
 
-		if (!existingLinks) return row;
+		if (!existingValues) return row;
 
 		return {
 			...row,
-			official_site_url: row.official_site_url ?? existingLinks.official_site_url,
-			official_x_url: row.official_x_url ?? existingLinks.official_x_url,
+			official_site_url: row.official_site_url ?? existingValues.official_site_url,
+			official_x_url: row.official_x_url ?? existingValues.official_x_url,
+			resources: row.resources.length > 0 ? row.resources : existingValues.resources,
+			cover_url: row.cover_url ?? existingValues.cover_url,
 		};
 	});
 }
@@ -799,7 +927,7 @@ async function upsertAnimeRows(rows: AnimeImportRow[]) {
 	let saved = 0;
 
 	for (let start = 0; start < rows.length; start += UPSERT_BATCH_SIZE) {
-		const batch = await preserveExistingLinksOnPartialFailures(
+		const batch = await preserveExistingValuesOnPartialFailures(
 			supabase,
 			rows.slice(start, start + UPSERT_BATCH_SIZE),
 		);

@@ -148,8 +148,14 @@ export interface UserAnimeEntry {
 	updated_at: string;
 }
 
+export interface AnimeResourceLink {
+	name: string;
+	url: string;
+}
+
 export interface Anime {
 	id: string;
+	mal_id: number | null;
 	title: string;
 	title_en: string | null;
 	title_romaji: string | null;
@@ -165,14 +171,13 @@ export interface Anime {
 	source: string | null;
 	studio: string[] | null;
 	studio_en: string[] | null;
-	studio_ja: string[] | null;
 	producer: string[] | null;
 	genre: string[] | null;
 	genre_en: string[] | null;
-	genre_ja: string[] | null;
 	official_site_url: string | null;
 	official_x_url: string | null;
 	official_hashtag: string[] | null;
+	resources: AnimeResourceLink[];
 	copyright: string | null;
 	broadcast_day: number | null;
 	broadcast_time: string | null;

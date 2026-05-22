@@ -4,6 +4,7 @@ import type {
 	Anime,
 	AnimeExchangeItem,
 	AnimeExchangeShare,
+	AnimeResourceLink,
 	AnimeStatus,
 	BroadcastStatus,
 	Event,
@@ -947,8 +948,8 @@ export async function getAnimeList(
 	if (season) query = query.eq("season", season);
 	const seasonFilter = buildSeasonFilter(broadcastYear, broadcastSeason);
 	if (seasonFilter) query = query.or(seasonFilter);
-	if (genre) query = query.or(arrayContainsAny(["genre", "genre_en", "genre_ja"], genre));
-	if (studio) query = query.or(arrayContainsAny(["studio", "studio_en", "studio_ja"], studio));
+	if (genre) query = query.or(arrayContainsAny(["genre", "genre_en"], genre));
+	if (studio) query = query.or(arrayContainsAny(["studio", "studio_en"], studio));
 	if (producer) query = query.contains("producer", [producer]);
 	if (broadcastStatus) query = query.eq("computed_broadcast_status", broadcastStatus);
 	if (searchQuery) query = query.or(`title.ilike.%${searchQuery}%,title_en.ilike.%${searchQuery}%`);
@@ -975,8 +976,8 @@ async function getAnimeListRowsFromBaseTable(
 
 	if (season) query = query.eq("season", season);
 	if (seasonFilter) query = query.or(seasonFilter);
-	if (genre) query = query.or(arrayContainsAny(["genre", "genre_en", "genre_ja"], genre));
-	if (studio) query = query.or(arrayContainsAny(["studio", "studio_en", "studio_ja"], studio));
+	if (genre) query = query.or(arrayContainsAny(["genre", "genre_en"], genre));
+	if (studio) query = query.or(arrayContainsAny(["studio", "studio_en"], studio));
 	if (producer) query = query.contains("producer", [producer]);
 	if (searchQuery) query = query.or(`title.ilike.%${searchQuery}%,title_en.ilike.%${searchQuery}%`);
 
@@ -1363,8 +1364,16 @@ export async function getAnimeExchangeShareForUser(
 }
 
 function toAnime(raw: Record<string, unknown>): Anime {
+	const rawMalId = raw["mal_id"];
+
 	return {
 		id: String(raw["id"]),
+		mal_id:
+			typeof rawMalId === "number"
+				? rawMalId
+				: typeof rawMalId === "string"
+					? Number.parseInt(rawMalId, 10) || null
+					: null,
 		title: String(raw["title"]),
 		title_en: (raw["title_en"] as string | null) ?? null,
 		title_romaji: (raw["title_romaji"] as string | null) ?? null,
@@ -1380,20 +1389,34 @@ function toAnime(raw: Record<string, unknown>): Anime {
 		source: (raw["source"] as string | null) ?? null,
 		studio: (raw["studio"] as string[] | null) ?? null,
 		studio_en: (raw["studio_en"] as string[] | null) ?? null,
-		studio_ja: (raw["studio_ja"] as string[] | null) ?? null,
 		producer: (raw["producer"] as string[] | null) ?? null,
 		genre: (raw["genre"] as string[] | null) ?? null,
 		genre_en: (raw["genre_en"] as string[] | null) ?? null,
-		genre_ja: (raw["genre_ja"] as string[] | null) ?? null,
 		official_site_url: (raw["official_site_url"] as string | null) ?? null,
 		official_x_url: (raw["official_x_url"] as string | null) ?? null,
 		official_hashtag: (raw["official_hashtag"] as string[] | null) ?? null,
+		resources: toAnimeResourceLinks(raw["resources"]),
 		copyright: (raw["copyright"] as string | null) ?? null,
 		broadcast_day: (raw["broadcast_day"] as number | null) ?? null,
 		broadcast_time: (raw["broadcast_time"] as string | null) ?? null,
 		broadcast_station: (raw["broadcast_station"] as string[] | null) ?? null,
 		created_at: String(raw["created_at"]),
 	};
+}
+
+function toAnimeResourceLinks(value: unknown): AnimeResourceLink[] {
+	if (!Array.isArray(value)) return [];
+
+	return value
+		.map((item) => {
+			if (!item || typeof item !== "object") return null;
+			const resource = item as Record<string, unknown>;
+			const name = typeof resource["name"] === "string" ? resource["name"].trim() : "";
+			const url = typeof resource["url"] === "string" ? resource["url"].trim() : "";
+			if (!name || !url) return null;
+			return { name, url };
+		})
+		.filter((item): item is AnimeResourceLink => item !== null);
 }
 
 function toAnimeExchangeItem(raw: Record<string, unknown>): AnimeExchangeItem | null {
