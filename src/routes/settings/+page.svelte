@@ -17,6 +17,13 @@ let { data }: PageProps = $props();
 			</div>
 
 			<nav class="settings-category-list" aria-label="設定カテゴリ">
+				<a href="/settings/notifications" class="settings-category-link">
+					<span>
+						<strong>通知</strong>
+						<small>放送前通知のタイミングを設定します。</small>
+					</span>
+					<span class="settings-category-arrow" aria-hidden="true">›</span>
+				</a>
 				<a href="/settings/account" class="settings-category-link">
 					<span>
 						<strong>アカウント</strong>

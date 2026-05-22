@@ -636,3 +636,42 @@ export async function exchangeAnimeAction(supabase: SupabaseClient<Database>, re
 		receivedAnime,
 	};
 }
+
+export async function toggleBroadcastSubscription(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+	animeId: string,
+): Promise<{ subscribed: boolean }> {
+	const { data: existing } = await supabase
+		.from("broadcast_notification_subscriptions")
+		.select("anime_id")
+		.eq("user_id", userId)
+		.eq("anime_id", Number(animeId))
+		.maybeSingle();
+
+	if (existing) {
+		await supabase
+			.from("broadcast_notification_subscriptions")
+			.delete()
+			.eq("user_id", userId)
+			.eq("anime_id", Number(animeId));
+		return { subscribed: false };
+	}
+
+	await supabase.from("broadcast_notification_subscriptions").insert({ user_id: userId, anime_id: Number(animeId) });
+	return { subscribed: true };
+}
+
+export async function updateBroadcastNotificationSettings(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+	settings: import("$lib/types").BroadcastNotificationSettings,
+): Promise<void> {
+	await supabase.from("broadcast_notification_settings").upsert({
+		user_id: userId,
+		notify_1min: settings.notify_1min,
+		notify_5min: settings.notify_5min,
+		notify_30min: settings.notify_30min,
+		updated_at: new Date().toISOString(),
+	});
+}

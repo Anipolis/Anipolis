@@ -1,7 +1,12 @@
 import { fail, redirect } from "@sveltejs/kit";
-import { createEventAction } from "$lib/server/actions";
-import { getAnimeList, getEventsByRange } from "$lib/server/queries";
-import type { Anime, Event } from "$lib/types";
+import { createEventAction, toggleBroadcastSubscription } from "$lib/server/actions";
+import {
+	getAnimeList,
+	getBroadcastNotificationSettings,
+	getBroadcastSubscriptions,
+	getEventsByRange,
+} from "$lib/server/queries";
+import type { Anime, BroadcastNotificationSettings, Event } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
 const DAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"] as const;
@@ -60,9 +65,17 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	const weekEnd = addDays(weekStart, 7);
 	weekEnd.setMilliseconds(-1);
 
-	const [animeList, events] = await Promise.all([
+	const [animeList, events, subscriptions, notificationSettings] = await Promise.all([
 		getAnimeList(supabase, { limit: 1000, userId: user?.id ?? null }),
 		getEventsByRange(supabase, weekStart.toISOString(), weekEnd.toISOString()),
+		user ? getBroadcastSubscriptions(supabase, user.id) : Promise.resolve([] as string[]),
+		user
+			? getBroadcastNotificationSettings(supabase, user.id)
+			: Promise.resolve({
+					notify_1min: true,
+					notify_5min: true,
+					notify_30min: false,
+				} as BroadcastNotificationSettings),
 	]);
 
 	const days: { date: string; label: string; anime: Anime[]; events: Event[] }[] = DAY_LABELS.map((label, index) => ({
@@ -94,6 +107,8 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		dayLabels: DAY_LABELS,
 		events,
 		user,
+		subscriptions,
+		notificationSettings,
 		weekStart: toDateInputValue(weekStart),
 		prevWeek: toDateInputValue(addDays(weekStart, -7)),
 		nextWeek: toDateInputValue(addDays(weekStart, 7)),
@@ -111,5 +126,17 @@ export const actions: Actions = {
 			redirect(303, `/events/${result.eventId}`);
 		}
 		return result;
+	},
+
+	toggleBroadcastNotification: async ({ request, locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { message: "ログインが必要です" });
+
+		const form = await request.formData();
+		const animeId = (form.get("anime_id") as string | null)?.trim() ?? "";
+		if (!animeId) return fail(400, { message: "anime_idが必要です" });
+
+		const result = await toggleBroadcastSubscription(supabase, user.id, animeId);
+		return { toggleSuccess: true, subscribed: result.subscribed, animeId };
 	},
 };

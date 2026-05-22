@@ -1503,3 +1503,23 @@ function toBroadcastStatus(raw: Record<string, unknown>): BroadcastStatus {
 	if (airedFrom && airedFrom <= jstToday && (!airedTo || airedTo >= jstToday)) return "airing";
 	return "unknown";
 }
+
+export async function getBroadcastSubscriptions(supabase: SupabaseClient<Database>, userId: string): Promise<string[]> {
+	const { data } = await supabase
+		.from("broadcast_notification_subscriptions")
+		.select("anime_id")
+		.eq("user_id", userId);
+	return (data ?? []).map((row) => String(row.anime_id));
+}
+
+export async function getBroadcastNotificationSettings(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+): Promise<import("$lib/types").BroadcastNotificationSettings> {
+	const { data } = await supabase
+		.from("broadcast_notification_settings")
+		.select("notify_1min, notify_5min, notify_30min")
+		.eq("user_id", userId)
+		.maybeSingle();
+	return data ?? { notify_1min: true, notify_5min: true, notify_30min: false };
+}

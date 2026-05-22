@@ -738,6 +738,70 @@ export type Database = {
 					},
 				];
 			};
+			broadcast_notification_subscriptions: {
+				Row: {
+					user_id: string;
+					anime_id: number;
+					created_at: string;
+				};
+				Insert: {
+					user_id: string;
+					anime_id: number;
+					created_at?: string;
+				};
+				Update: {
+					user_id?: string;
+					anime_id?: number;
+					created_at?: string;
+				};
+				Relationships: [
+					{
+						foreignKeyName: "broadcast_notification_subscriptions_user_id_fkey";
+						columns: ["user_id"];
+						isOneToOne: false;
+						referencedRelation: "profiles";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "broadcast_notification_subscriptions_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime";
+						referencedColumns: ["id"];
+					},
+				];
+			};
+			broadcast_notification_settings: {
+				Row: {
+					user_id: string;
+					notify_1min: boolean;
+					notify_5min: boolean;
+					notify_30min: boolean;
+					updated_at: string;
+				};
+				Insert: {
+					user_id: string;
+					notify_1min?: boolean;
+					notify_5min?: boolean;
+					notify_30min?: boolean;
+					updated_at?: string;
+				};
+				Update: {
+					notify_1min?: boolean;
+					notify_5min?: boolean;
+					notify_30min?: boolean;
+					updated_at?: string;
+				};
+				Relationships: [
+					{
+						foreignKeyName: "broadcast_notification_settings_user_id_fkey";
+						columns: ["user_id"];
+						isOneToOne: true;
+						referencedRelation: "profiles";
+						referencedColumns: ["id"];
+					},
+				];
+			};
 		};
 		Views: {
 			anime_popularity: {

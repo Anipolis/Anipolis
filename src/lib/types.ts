@@ -374,3 +374,9 @@ function toAnimeExchangeShareAnime(value: unknown): AnimeExchangeShareAnime | nu
 		cover_url: typeof raw.cover_url === "string" ? raw.cover_url : null,
 	};
 }
+
+export interface BroadcastNotificationSettings {
+	notify_1min: boolean;
+	notify_5min: boolean;
+	notify_30min: boolean;
+}

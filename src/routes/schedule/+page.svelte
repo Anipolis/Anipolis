@@ -1,16 +1,32 @@
 <script lang="ts">
+import type { SubmitFunction } from "@sveltejs/kit";
 import { enhance } from "$app/forms";
+import type { Anime } from "$lib/types";
 import type { ActionData, PageProps } from "./$types";
 
 let { data, form }: PageProps & { form: ActionData } = $props();
 
 let showEventDialog = $state(false);
 
+// Notification subscription state — optimistic, keyed by anime.id
+let subscribedIds = $state(new Set<string>(data.subscriptions));
+
+// Which anime are currently in their notification window (client-side highlight)
+let notifyingIds = $state(new Set<string>());
+
+// Prevent re-firing browser notification for same anime within a session
+const notifiedThisSession = new Set<string>();
+
 const DAY_BG = ["#fff1f0", "#f4f7ff", "#f4f7ff", "#f4f7ff", "#f4f7ff", "#f4f7ff", "#eff8ff"];
 const DAY_COLOR = ["#dc2626", "#334155", "#334155", "#334155", "#334155", "#334155", "#2563eb"];
 
 $effect(() => {
 	if (form && "message" in form) showEventDialog = true;
+});
+
+// Sync subscriptions when server data refreshes
+$effect(() => {
+	subscribedIds = new Set<string>(data.subscriptions);
 });
 
 function formatDate(value: string) {
@@ -20,15 +36,116 @@ function formatDate(value: string) {
 function formatTime(iso: string) {
 	return new Date(iso).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
 }
+
+// Returns minutes until broadcast from now, or null if not applicable today.
+// Handles late-night times ≥ 24:00 (e.g. "25:30" = 1:30am next calendar day).
+function minutesUntilBroadcast(anime: Anime, now: Date): number | null {
+	if (!anime.broadcast_time || anime.broadcast_day == null) return null;
+	const match = anime.broadcast_time.match(/^(\d{1,2}):(\d{2})/);
+	if (!match) return null;
+
+	const broadcastHour = Number(match[1]);
+	const broadcastMin = Number(match[2]);
+	const todayDay = now.getDay();
+	const currentMin = now.getHours() * 60 + now.getMinutes();
+
+	if (broadcastHour < 24) {
+		if (todayDay !== anime.broadcast_day) return null;
+		return broadcastHour * 60 + broadcastMin - currentMin;
+	}
+	// Late night: broadcast_day is the "schedule day", actual calendar day is +1
+	const actualDay = (anime.broadcast_day + 1) % 7;
+	if (todayDay !== actualDay) return null;
+	return (broadcastHour - 24) * 60 + broadcastMin - currentMin;
+}
+
+function getMaxNotifyWindow(): number {
+	const s = data.notificationSettings;
+	return Math.max(s.notify_1min ? 1 : 0, s.notify_5min ? 5 : 0, s.notify_30min ? 30 : 0);
+}
+
+function refreshNotifyingIds() {
+	const now = new Date();
+	const maxWindow = getMaxNotifyWindow();
+	if (maxWindow === 0) {
+		notifyingIds = new Set();
+		return;
+	}
+
+	const next = new Set<string>();
+	for (const day of data.days) {
+		for (const anime of day.anime) {
+			if (!subscribedIds.has(anime.id)) continue;
+			const mins = minutesUntilBroadcast(anime, now);
+			if (mins !== null && mins >= 0 && mins <= maxWindow) {
+				next.add(anime.id);
+				if (!notifiedThisSession.has(anime.id)) {
+					notifiedThisSession.add(anime.id);
+					if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+						new Notification(`まもなく放送：${anime.title}`, {
+							body: anime.broadcast_time ? `${anime.broadcast_time.slice(0, 5)} 放送開始` : "放送開始",
+							...(anime.cover_url ? { icon: anime.cover_url } : {}),
+						});
+					}
+				}
+			} else {
+				notifiedThisSession.delete(anime.id);
+			}
+		}
+	}
+	notifyingIds = next;
+}
+
+// Check every 30 seconds
+$effect(() => {
+	refreshNotifyingIds();
+	const id = setInterval(refreshNotifyingIds, 30_000);
+	return () => clearInterval(id);
+});
+
+// Optimistic toggle — update local state before server responds
+const notifySubmit: SubmitFunction = ({ formData }) => {
+	const animeId = formData.get("anime_id") as string;
+	const wasSubscribed = subscribedIds.has(animeId);
+	if (wasSubscribed) {
+		subscribedIds.delete(animeId);
+		subscribedIds = new Set(subscribedIds);
+	} else {
+		subscribedIds.add(animeId);
+		subscribedIds = new Set(subscribedIds);
+		// Request browser notification permission on first subscribe
+		if (typeof Notification !== "undefined" && Notification.permission === "default") {
+			Notification.requestPermission();
+		}
+	}
+	return async ({ result, update }) => {
+		if (result.type === "failure") {
+			// Rollback on failure
+			if (wasSubscribed) {
+				subscribedIds.add(animeId);
+			} else {
+				subscribedIds.delete(animeId);
+			}
+			subscribedIds = new Set(subscribedIds);
+		}
+		await update({ reset: false });
+	};
+};
+
+// Check if anime status allows notifications (airing or upcoming only)
+function canSubscribe(anime: Anime): boolean {
+	const s = anime.computed_broadcast_status ?? anime.status;
+	return s === "airing" || s === "upcoming";
+}
 </script>
 
-<svelte:head> <title>週間スケジュール - Anipolis</title> </svelte:head>
+<svelte:head> <title>放送スケジュール - Anipolis</title> </svelte:head>
 
 <div class="schedule-page">
 	<header class="schedule-header">
 		<div>
-			<h1>週間スケジュール</h1>
-			<p class="schedule-subtitle">放送予定と同時視聴イベントをまとめて確認できます（JST）</p>
+			<h1>放送スケジュール</h1>
+			<p class="schedule-subtitle">放送中のアニメと同時視聴イベントをまとめて確認できます。</p>
 		</div>
 		<div class="schedule-actions">
 			<div class="week-nav">
@@ -87,7 +204,7 @@ function formatTime(iso: string) {
 				</div>
 				<div class="day-slots">
 					{#if day.events.length === 0 && day.anime.length === 0}
-						<p class="empty-day">予定なし</p>
+						<p class="empty-day">なし</p>
 					{:else}
 						{#each day.events as event (event.id)}
 							<a
@@ -103,23 +220,75 @@ function formatTime(iso: string) {
 						{/each}
 
 						{#each day.anime as anime (anime.id)}
-							<a href="/rooms/anime/{anime.id}/{day.date}" class="anime-slot">
-								{#if anime.cover_url}
-									<img src={anime.cover_url} alt={anime.title} class="slot-cover">
-								{:else}
-									<div class="slot-cover slot-cover--placeholder"></div>
+							{@const isSubscribed = subscribedIds.has(anime.id)}
+							{@const isNotifying = notifyingIds.has(anime.id)}
+							{@const subscribable = canSubscribe(anime)}
+							<div class="anime-slot-wrap" class:anime-slot-wrap--notifying={isNotifying}>
+								<a href="/rooms/anime/{anime.id}/{day.date}" class="anime-slot">
+									{#if anime.cover_url}
+										<img src={anime.cover_url} alt={anime.title} class="slot-cover">
+									{:else}
+										<div class="slot-cover slot-cover--placeholder"></div>
+									{/if}
+									<div class="slot-info">
+										<span class="slot-kind">ROOM</span>
+										{#if anime.broadcast_time}
+											<span class="slot-time">{anime.broadcast_time.slice(0, 5)}</span>
+										{/if}
+										<span class="slot-title">{anime.title}</span>
+										{#if anime.broadcast_station?.length}
+											<span class="slot-station">{anime.broadcast_station.join(" / ")}</span>
+										{/if}
+									</div>
+								</a>
+								{#if data.user && subscribable}
+									<form
+										method="POST"
+										action="?/toggleBroadcastNotification"
+										use:enhance={notifySubmit}
+										class="notify-form"
+									>
+										<input type="hidden" name="anime_id" value={anime.id}>
+										<button
+											type="submit"
+											class="notify-btn"
+											class:notify-btn--active={isSubscribed}
+											title={isSubscribed ? "通知登録済み（クリックで解除）" : "放送通知を登録"}
+											aria-label={isSubscribed ? "通知を解除" : "通知を登録"}
+										>
+											{#if isSubscribed}
+												<svg
+													width="13"
+													height="13"
+													viewBox="0 0 24 24"
+													fill="currentColor"
+													stroke="currentColor"
+													stroke-width="1"
+													aria-hidden="true"
+												>
+													<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+													<path d="M13.73 21a2 2 0 0 1-3.46 0" />
+												</svg>
+											{:else}
+												<svg
+													width="13"
+													height="13"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													aria-hidden="true"
+												>
+													<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+													<path d="M13.73 21a2 2 0 0 1-3.46 0" />
+												</svg>
+											{/if}
+										</button>
+									</form>
 								{/if}
-								<div class="slot-info">
-									<span class="slot-kind">ROOM</span>
-									{#if anime.broadcast_time}
-										<span class="slot-time">{anime.broadcast_time.slice(0, 5)}</span>
-									{/if}
-									<span class="slot-title">{anime.title}</span>
-									{#if anime.broadcast_station?.length}
-										<span class="slot-station">{anime.broadcast_station.join(" / ")}</span>
-									{/if}
-								</div>
-							</a>
+							</div>
 						{/each}
 					{/if}
 				</div>
@@ -201,11 +370,11 @@ function formatTime(iso: string) {
 				</label>
 				<label>
 					<span>ハッシュタグ</span>
-					<input class="input" type="text" name="hashtag" required maxlength="50" placeholder="Anipolis実況">
+					<input class="input" type="text" name="hashtag" required maxlength="50" placeholder="Anipolis視聴">
 				</label>
 				<label>
 					<span>説明</span>
-					<textarea class="input" name="description" rows="3" placeholder="集合時間や見る話数など"></textarea>
+					<textarea class="input" name="description" rows="3" placeholder="放映時間や対象話数など"></textarea>
 				</label>
 				<label>
 					<span>所要時間（分）</span>
@@ -314,6 +483,29 @@ function formatTime(iso: string) {
 	padding: 8px 0;
 	margin: 0;
 }
+
+/* Anime slot wrapper — holds the card + notify button */
+.anime-slot-wrap {
+	position: relative;
+	border-radius: 6px;
+}
+.anime-slot-wrap--notifying {
+	animation: notify-pulse 1.8s ease-in-out infinite;
+	outline: 2px solid var(--accent, #6366f1);
+	outline-offset: 1px;
+}
+@keyframes notify-pulse {
+	0%,
+	100% {
+		outline-color: var(--accent, #6366f1);
+		box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent, #6366f1) 40%, transparent);
+	}
+	50% {
+		outline-color: var(--accent, #6366f1);
+		box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent, #6366f1) 0%, transparent);
+	}
+}
+
 .anime-slot,
 .event-slot {
 	display: flex;
@@ -326,6 +518,11 @@ function formatTime(iso: string) {
 	text-decoration: none;
 	color: var(--text);
 	transition: background 0.12s;
+	width: 100%;
+	box-sizing: border-box;
+}
+.anime-slot-wrap .anime-slot {
+	border: none;
 }
 .anime-slot:hover,
 .event-slot:hover {
@@ -387,6 +584,41 @@ function formatTime(iso: string) {
 	text-overflow: ellipsis;
 	max-width: 100%;
 }
+
+/* Notification bell button */
+.notify-form {
+	position: absolute;
+	top: 4px;
+	right: 4px;
+	z-index: 2;
+}
+.notify-btn {
+	width: 22px;
+	height: 22px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 4px;
+	background: var(--card-bg);
+	border: 1px solid var(--border);
+	color: var(--text-muted);
+	cursor: pointer;
+	transition:
+		background 0.1s,
+		color 0.1s,
+		border-color 0.1s;
+	padding: 0;
+}
+.notify-btn:hover {
+	background: var(--hover-bg);
+	color: var(--text);
+}
+.notify-btn--active {
+	background: color-mix(in srgb, var(--accent) 15%, var(--card-bg));
+	border-color: var(--accent);
+	color: var(--accent);
+}
+
 .event-strip {
 	margin-top: 14px;
 	border: 1px solid var(--border);
