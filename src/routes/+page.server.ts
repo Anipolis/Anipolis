@@ -10,12 +10,9 @@ import { enrichPostsWithCounts, getAnimeExchangeShareForUser, getFollowingIds } 
 import type { AnimeExchangeShare, RawPost } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
-const POSTS_SELECT_WITH_EXCHANGE = `id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, exchange_share,
-	profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
-	post_hashtags ( hashtags ( name ) ),
-	anime:anime!posts_anime_id_fkey ( id, title, cover_url )`;
-
-const POSTS_SELECT_BASE = `id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id,
+// exchange_share カラムは migration 034 で追加済み（IF NOT EXISTS付き）。
+// カラムは確実に存在するため、フォールバック用の POSTS_SELECT_BASE は不要。
+const POSTS_SELECT = `id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, exchange_share,
 	profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
 	post_hashtags ( hashtags ( name ) ),
 	anime:anime!posts_anime_id_fkey ( id, title, cover_url )`;
@@ -63,31 +60,18 @@ export const load: PageServerLoad = async ({ url, locals: { supabase }, parent }
 	}
 
 	// ── Stage 2: 投稿クエリ（followingIds が確定してから実行）──────
-	const buildPostsQuery = (select: string) => {
-		let query = supabase
-			.from("posts")
-			.select(select)
-			.is("parent_id", null)
-			.order("created_at", { ascending: false })
-			.limit(50);
+	let postsQuery = supabase
+		.from("posts")
+		.select(POSTS_SELECT)
+		.is("parent_id", null)
+		.order("created_at", { ascending: false })
+		.limit(50);
 
-		if (tab === "following" && followingIds !== null) {
-			query = query.in("user_id", followingIds);
-		}
+	if (tab === "following" && followingIds !== null) {
+		postsQuery = postsQuery.in("user_id", followingIds);
+	}
 
-		return query;
-	};
-
-	const fetchPosts = async () => {
-		const result = await buildPostsQuery(POSTS_SELECT_WITH_EXCHANGE);
-		if (!result.error) return result;
-
-		const fallback = await buildPostsQuery(POSTS_SELECT_BASE);
-		if (fallback.error) console.error("home posts query failed:", fallback.error);
-		return fallback;
-	};
-
-	const postsResult = await fetchPosts();
+	const postsResult = await postsQuery;
 
 	const posts = await enrichPostsWithCounts(
 		supabase,
