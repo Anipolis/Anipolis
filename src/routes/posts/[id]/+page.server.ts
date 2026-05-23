@@ -1,4 +1,4 @@
-﻿import { error, fail } from "@sveltejs/kit";
+import { error, fail } from "@sveltejs/kit";
 import {
 	deletePostAction,
 	insertPostWithHashtags,
@@ -7,7 +7,7 @@ import {
 	toggleRepostAction,
 } from "$lib/server/actions";
 import { enrichPostsWithCounts } from "$lib/server/queries";
-import type { RawPost } from "$lib/types";
+import type { Post, RawPost } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
 const POSTS_SELECT = `
@@ -24,32 +24,40 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 
 	if (!rawPost) error(404, "投稿が見つかりません");
 
-	// 親投稿・リプライを並列取得
-	const [rawParentRes, rawRepliesRes] = await Promise.all([
-		rawPost.parent_id
-			? supabase.from("posts").select(POSTS_SELECT).eq("id", rawPost.parent_id).maybeSingle()
-			: Promise.resolve({ data: null }),
+	const enrichedDataPromise = (async () => {
+		const [rawParentRes, rawRepliesRes] = await Promise.all([
+			rawPost.parent_id
+				? supabase.from("posts").select(POSTS_SELECT).eq("id", rawPost.parent_id).maybeSingle()
+				: Promise.resolve({ data: null }),
 
-		supabase.from("posts").select(POSTS_SELECT).eq("parent_id", params.id).order("created_at", { ascending: true }),
-	]);
+			supabase.from("posts").select(POSTS_SELECT).eq("parent_id", params.id).order("created_at", { ascending: true }),
+		]);
 
-	const rawParent = rawParentRes.data;
-	const rawReplies = rawRepliesRes.data ?? [];
+		const rawParent = rawParentRes.data;
+		const rawReplies = rawRepliesRes.data ?? [];
 
-	// 全投稿を一度に enrich（バッチクエリを最小化）
-	const rawAll: RawPost[] = [rawPost, ...(rawParent ? [rawParent] : []), ...rawReplies];
-	const enriched = await enrichPostsWithCounts(supabase, rawAll, user?.id ?? null);
+		const rawAll: RawPost[] = [rawPost, ...(rawParent ? [rawParent] : []), ...rawReplies];
+		const enriched = await enrichPostsWithCounts(supabase, rawAll, user?.id ?? null);
 
-	const enrichedPost = enriched.find((post) => post.id === params.id);
-	if (!enrichedPost) error(404, "投稿が見つかりません");
-	const enrichedParent = rawPost.parent_id ? (enriched.find((post) => post.id === rawPost.parent_id) ?? null) : null;
-	const enrichedReplies = enriched.filter((post) => post.id !== params.id && post.id !== rawPost.parent_id);
+		const enrichedPost = enriched.find((post) => post.id === params.id);
+		if (!enrichedPost) throw new Error("post not found after enrich");
+		const enrichedParent = rawPost.parent_id ? (enriched.find((post) => post.id === rawPost.parent_id) ?? null) : null;
+		const enrichedReplies = enriched.filter((post) => post.id !== params.id && post.id !== rawPost.parent_id);
+
+		return {
+			post: enrichedPost,
+			parentPost: enrichedParent,
+			replies: enrichedReplies,
+		};
+	})().catch((err) => {
+		console.error("[posts/id] enrich error:", err);
+		return { post: null as unknown as Post, parentPost: null, replies: [] as Post[] };
+	});
 
 	return {
-		post: enrichedPost,
-		parentPost: enrichedParent,
-		replies: enrichedReplies,
+		enrichedData: enrichedDataPromise,
 		currentUserId: user?.id ?? null,
+		rawPostId: params.id,
 	};
 };
 

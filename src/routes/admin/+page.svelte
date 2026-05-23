@@ -34,8 +34,6 @@ function toDateTimeLocal(value: string | null) {
 	const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
 	return local.toISOString().slice(0, 16);
 }
-
-const dashboard = $derived(data.dashboard);
 </script>
 
 <svelte:head> <title>Admin - Anipolis</title> </svelte:head>
@@ -48,159 +46,166 @@ const dashboard = $derived(data.dashboard);
 		</div>
 	</header>
 
-	<section class="admin-stats" aria-label="運営指標">
-		<div class="admin-stat admin-stat-alert">
-			<span>未対応</span>
-			<strong>{dashboard.stats.openReports}</strong>
+	{#await data.dashboard}
+		<div class="posts-loading-spinner" aria-label="読み込み中">
+			<div class="spinner" aria-hidden="true"></div>
+			<span>ダッシュボードを読み込み中…</span>
 		</div>
-		<div class="admin-stat">
-			<span>確認中</span>
-			<strong>{dashboard.stats.reviewingReports}</strong>
-		</div>
-		<div class="admin-stat">
-			<span>今日の通報</span>
-			<strong>{dashboard.stats.reportsToday}</strong>
-		</div>
-		<div class="admin-stat">
-			<span>7日間の通報</span>
-			<strong>{dashboard.stats.reportsThisWeek}</strong>
-		</div>
-		<div class="admin-stat">
-			<span>今日の投稿</span>
-			<strong>{dashboard.stats.postsToday}</strong>
-		</div>
-		<div class="admin-stat">
-			<span>今日の新規ユーザー</span>
-			<strong>{dashboard.stats.usersToday}</strong>
-		</div>
-		<div class="admin-stat">
-			<span>総投稿数</span>
-			<strong>{dashboard.stats.totalPosts}</strong>
-		</div>
-		<div class="admin-stat">
-			<span>総ユーザー数</span>
-			<strong>{dashboard.stats.totalUsers}</strong>
-		</div>
-		<div class="admin-stat">
-			<span>Restricted</span>
-			<strong>{dashboard.stats.restrictedUsers}</strong>
-		</div>
-		<div class="admin-stat admin-stat-alert">
-			<span>Banned</span>
-			<strong>{dashboard.stats.bannedUsers}</strong>
-		</div>
-	</section>
-
-	<section class="admin-section">
-		<div class="admin-section-header">
-			<h2>通報理由 7日間</h2>
-		</div>
-		{#if dashboard.reasonCounts.length === 0}
-			<p class="admin-empty">直近7日間の通報はありません。</p>
-		{:else}
-			<div class="reason-list">
-				{#each dashboard.reasonCounts as item}
-					<div class="reason-row">
-						<span>{reasonLabels[item.reason]}</span>
-						<strong>{item.count}</strong>
-					</div>
-				{/each}
+	{:then dashboard}
+		<section class="admin-stats" aria-label="運営指標">
+			<div class="admin-stat admin-stat-alert">
+				<span>未対応</span>
+				<strong>{dashboard.stats.openReports}</strong>
 			</div>
-		{/if}
-	</section>
+			<div class="admin-stat">
+				<span>確認中</span>
+				<strong>{dashboard.stats.reviewingReports}</strong>
+			</div>
+			<div class="admin-stat">
+				<span>今日の通報</span>
+				<strong>{dashboard.stats.reportsToday}</strong>
+			</div>
+			<div class="admin-stat">
+				<span>7日間の通報</span>
+				<strong>{dashboard.stats.reportsThisWeek}</strong>
+			</div>
+			<div class="admin-stat">
+				<span>今日の投稿</span>
+				<strong>{dashboard.stats.postsToday}</strong>
+			</div>
+			<div class="admin-stat">
+				<span>今日の新規ユーザー</span>
+				<strong>{dashboard.stats.usersToday}</strong>
+			</div>
+			<div class="admin-stat">
+				<span>総投稿数</span>
+				<strong>{dashboard.stats.totalPosts}</strong>
+			</div>
+			<div class="admin-stat">
+				<span>総ユーザー数</span>
+				<strong>{dashboard.stats.totalUsers}</strong>
+			</div>
+			<div class="admin-stat">
+				<span>Restricted</span>
+				<strong>{dashboard.stats.restrictedUsers}</strong>
+			</div>
+			<div class="admin-stat admin-stat-alert">
+				<span>Banned</span>
+				<strong>{dashboard.stats.bannedUsers}</strong>
+			</div>
+		</section>
 
-	<section class="admin-section">
-		<div class="admin-section-header">
-			<h2>直近の通報</h2>
-		</div>
-
-		{#if dashboard.recentReports.length === 0}
-			<p class="admin-empty">通報はまだありません。</p>
-		{:else}
-			<div class="report-list">
-				{#each dashboard.recentReports as report}
-					<article class="report-item">
-						<div class="report-main">
-							<div class="report-topline">
-								<span class="status-pill status-{report.status}">{statusLabels[report.status]}</span>
-								<span>{reasonLabels[report.reason]}</span>
-								<time datetime={report.created_at}>{formatRelativeTime(report.created_at)}</time>
-							</div>
-							<div class="report-target">
-								{#if report.target_type === 'post'}
-									<a href="/posts/{report.target_id}">投稿 #{report.target_id.slice(0, 8)}</a>
-								{:else if report.target_username}
-									<a href="/profile/{report.target_username}">@{report.target_username}</a>
-								{:else}
-									<span>ユーザー #{report.target_id.slice(0, 8)}</span>
-								{/if}
-								<span>報告者 @{report.reporter_username}</span>
-								{#if report.target_username}
-									<span>対象 @{report.target_username}</span>
-								{/if}
-								{#if report.target_moderation_status}
-									<span class="moderation-pill moderation-{report.target_moderation_status}">
-										{moderationLabels[report.target_moderation_status]}
-									</span>
-								{/if}
-							</div>
-							{#if report.post_content}
-								<p class="report-content">{report.post_content}</p>
-							{/if}
-							{#if report.details}
-								<p class="report-details">{report.details}</p>
-							{/if}
+		<section class="admin-section">
+			<div class="admin-section-header">
+				<h2>通報理由 7日間</h2>
+			</div>
+			{#if dashboard.reasonCounts.length === 0}
+				<p class="admin-empty">直近7日間の通報はありません。</p>
+			{:else}
+				<div class="reason-list">
+					{#each dashboard.reasonCounts as item}
+						<div class="reason-row">
+							<span>{reasonLabels[item.reason]}</span>
+							<strong>{item.count}</strong>
 						</div>
+					{/each}
+				</div>
+			{/if}
+		</section>
 
-						<form method="POST" action="?/updateReportStatus" class="report-actions" use:enhance>
-							<input type="hidden" name="report_id" value={report.id}>
-							<select name="status" aria-label="ステータス">
-								{#each Object.entries(statusLabels) as [ value, label ]}
-									<option {value} selected={value === report.status}>{label}</option>
-								{/each}
-							</select>
-							<button type="submit" class="btn btn-primary">更新</button>
-						</form>
-						{#if report.target_user_id}
-							<form
-								method="POST"
-								action="?/updateAccountModeration"
-								class="moderation-actions"
-								use:enhance
-							>
+		<section class="admin-section">
+			<div class="admin-section-header">
+				<h2>直近の通報</h2>
+			</div>
+
+			{#if dashboard.recentReports.length === 0}
+				<p class="admin-empty">通報はまだありません。</p>
+			{:else}
+				<div class="report-list">
+					{#each dashboard.recentReports as report}
+						<article class="report-item">
+							<div class="report-main">
+								<div class="report-topline">
+									<span class="status-pill status-{report.status}">{statusLabels[report.status]}</span>
+									<span>{reasonLabels[report.reason]}</span>
+									<time datetime={report.created_at}>{formatRelativeTime(report.created_at)}</time>
+								</div>
+								<div class="report-target">
+									{#if report.target_type === 'post'}
+										<a href="/posts/{report.target_id}">投稿 #{report.target_id.slice(0, 8)}</a>
+									{:else if report.target_username}
+										<a href="/profile/{report.target_username}">@{report.target_username}</a>
+									{:else}
+										<span>ユーザー #{report.target_id.slice(0, 8)}</span>
+									{/if}
+									<span>報告者 @{report.reporter_username}</span>
+									{#if report.target_username}
+										<span>対象 @{report.target_username}</span>
+									{/if}
+									{#if report.target_moderation_status}
+										<span class="moderation-pill moderation-{report.target_moderation_status}">
+											{moderationLabels[report.target_moderation_status]}
+										</span>
+									{/if}
+								</div>
+								{#if report.post_content}
+									<p class="report-content">{report.post_content}</p>
+								{/if}
+								{#if report.details}
+									<p class="report-details">{report.details}</p>
+								{/if}
+							</div>
+
+							<form method="POST" action="?/updateReportStatus" class="report-actions" use:enhance>
 								<input type="hidden" name="report_id" value={report.id}>
-								<input type="hidden" name="target_user_id" value={report.target_user_id}>
-								<select name="moderation_status" aria-label="Account moderation">
-									{#each Object.entries(moderationLabels) as [ value, label ]}
-										<option
-											{value}
-											selected={value === (report.target_moderation_status ?? 'active')}
-										>
-											{label}
-										</option>
+								<select name="status" aria-label="ステータス">
+									{#each Object.entries(statusLabels) as [ value, label ]}
+										<option {value} selected={value === report.status}>{label}</option>
 									{/each}
 								</select>
-								<input
-									type="datetime-local"
-									name="moderation_until"
-									aria-label="Restricted until"
-									value={toDateTimeLocal(report.target_moderation_until)}
-								>
-								<input
-									type="text"
-									name="moderation_reason"
-									maxlength="500"
-									placeholder="Reason"
-									value={report.target_moderation_reason ?? ''}
-								>
-								<button type="submit" class="btn btn-danger">Apply</button>
+								<button type="submit" class="btn btn-primary">更新</button>
 							</form>
-						{/if}
-					</article>
-				{/each}
-			</div>
-		{/if}
-	</section>
+							{#if report.target_user_id}
+								<form
+									method="POST"
+									action="?/updateAccountModeration"
+									class="moderation-actions"
+									use:enhance
+								>
+									<input type="hidden" name="report_id" value={report.id}>
+									<input type="hidden" name="target_user_id" value={report.target_user_id}>
+									<select name="moderation_status" aria-label="Account moderation">
+										{#each Object.entries(moderationLabels) as [ value, label ]}
+											<option
+												{value}
+												selected={value === (report.target_moderation_status ?? 'active')}
+											>
+												{label}
+											</option>
+										{/each}
+									</select>
+									<input
+										type="datetime-local"
+										name="moderation_until"
+										aria-label="Restricted until"
+										value={toDateTimeLocal(report.target_moderation_until)}
+									>
+									<input
+										type="text"
+										name="moderation_reason"
+										maxlength="500"
+										placeholder="Reason"
+										value={report.target_moderation_reason ?? ''}
+									>
+									<button type="submit" class="btn btn-danger">Apply</button>
+								</form>
+							{/if}
+						</article>
+					{/each}
+				</div>
+			{/if}
+		</section>
+	{/await}
 </main>
 
 <style>
