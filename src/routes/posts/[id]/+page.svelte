@@ -12,6 +12,7 @@ let { data, form }: PageProps = $props();
 const MAX_LENGTH = 280;
 let content = $state("");
 let submitting = $state(false);
+let pageTitle = $state("投稿 — Anipolis");
 
 const remaining = $derived(MAX_LENGTH - content.length);
 const countClass = $derived(charCountClass(content.length, MAX_LENGTH));
@@ -27,9 +28,18 @@ const handleReply: SubmitFunction = () => {
 		await update();
 	};
 };
+
+// Update title once data resolves
+$effect(() => {
+	const promise = data.enrichedData;
+	promise.then((enriched) => {
+		const name = enriched.post?.display_name || enriched.post?.username;
+		if (name) pageTitle = `${name}の投稿 — Anipolis`;
+	});
+});
 </script>
 
-<svelte:head> <title>投稿 — Anipolis</title> </svelte:head>
+<svelte:head> <title>{pageTitle}</title> </svelte:head>
 
 <div class="page-container" style="justify-content: center;">
 	<main style="flex: 0 1 600px; min-width: 0;">
@@ -42,8 +52,6 @@ const handleReply: SubmitFunction = () => {
 				<PostCardSkeleton />
 			{/each}
 		{:then enriched}
-			<svelte:head> <title>{enriched.post?.display_name || enriched.post?.username || ''}の投稿 — Anipolis</title> </svelte:head>
-
 			<!-- 親投稿（このポストがリプライの場合） -->
 			{#if enriched.parentPost}
 				<div class="thread-parent">
@@ -53,7 +61,9 @@ const handleReply: SubmitFunction = () => {
 			{/if}
 
 			<!-- メイン投稿 -->
-			<div class="thread-main"><PostCard post={enriched.post} currentUserId={data.currentUserId} isDetailView /></div>
+			<div class="thread-main">
+				<PostCard post={enriched.post} currentUserId={data.currentUserId} isDetailView />
+			</div>
 
 			<!-- リプライ入力フォーム -->
 			{#if data.profile}

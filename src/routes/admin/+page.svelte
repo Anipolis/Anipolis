@@ -126,7 +126,9 @@ function toDateTimeLocal(value: string | null) {
 						<article class="report-item">
 							<div class="report-main">
 								<div class="report-topline">
-									<span class="status-pill status-{report.status}">{statusLabels[report.status]}</span>
+									<span class="status-pill status-{report.status}"
+										>{statusLabels[report.status]}</span
+									>
 									<span>{reasonLabels[report.reason]}</span>
 									<time datetime={report.created_at}>{formatRelativeTime(report.created_at)}</time>
 								</div>

@@ -30,7 +30,11 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 				? supabase.from("posts").select(POSTS_SELECT).eq("id", rawPost.parent_id).maybeSingle()
 				: Promise.resolve({ data: null }),
 
-			supabase.from("posts").select(POSTS_SELECT).eq("parent_id", params.id).order("created_at", { ascending: true }),
+			supabase
+				.from("posts")
+				.select(POSTS_SELECT)
+				.eq("parent_id", params.id)
+				.order("created_at", { ascending: true }),
 		]);
 
 		const rawParent = rawParentRes.data;
@@ -41,7 +45,9 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 
 		const enrichedPost = enriched.find((post) => post.id === params.id);
 		if (!enrichedPost) throw new Error("post not found after enrich");
-		const enrichedParent = rawPost.parent_id ? (enriched.find((post) => post.id === rawPost.parent_id) ?? null) : null;
+		const enrichedParent = rawPost.parent_id
+			? (enriched.find((post) => post.id === rawPost.parent_id) ?? null)
+			: null;
 		const enrichedReplies = enriched.filter((post) => post.id !== params.id && post.id !== rawPost.parent_id);
 
 		return {
