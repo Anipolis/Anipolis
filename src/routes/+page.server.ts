@@ -20,9 +20,8 @@ const POSTS_SELECT_BASE = `id, content, created_at, user_id, parent_id, quoted_p
 	post_hashtags ( hashtags ( name ) ),
 	anime:anime!posts_anime_id_fkey ( id, title, cover_url )`;
 
-export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession }, parent }) => {
-	const { profile } = await parent();
-	const { user } = await safeGetSession();
+export const load: PageServerLoad = async ({ url, locals: { supabase }, parent }) => {
+	const { profile, user } = await parent();
 
 	const tab = url.searchParams.get("tab") === "following" && user ? "following" : "all";
 	const quoteAnimeId = url.searchParams.get("quote_anime");
