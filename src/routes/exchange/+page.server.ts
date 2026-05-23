@@ -136,13 +136,19 @@ export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession 
 	const { user } = await safeGetSession();
 	if (!user) throw redirect(302, "/");
 
-	const exchanges = await getExchangeEntries(supabase, user.id);
-	return {
-		user,
-		exchanges,
-		waitingExchange: exchanges.find((entry) => entry.status === "waiting") ?? null,
-		latestMatchedExchange: exchanges.find((entry) => entry.status === "matched" && entry.received_anime) ?? null,
-	};
+	const exchangeDataPromise = (async () => {
+		const exchanges = await getExchangeEntries(supabase, user.id);
+		return {
+			exchanges,
+			waitingExchange: exchanges.find((e) => e.status === "waiting") ?? null,
+			latestMatchedExchange: exchanges.find((e) => e.status === "matched" && e.received_anime) ?? null,
+		};
+	})().catch((err) => {
+		console.error("[exchange] error:", err);
+		return { exchanges: [], waitingExchange: null, latestMatchedExchange: null };
+	});
+
+	return { user, exchangeData: exchangeDataPromise };
 };
 
 export const actions: Actions = {

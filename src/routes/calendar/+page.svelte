@@ -21,9 +21,9 @@ function buildCalendarGrid(year: number, month: number): (number | null)[] {
 	return cells;
 }
 
-const eventsByDate = $derived(() => {
+function buildEventsByDate(events: Event[]) {
 	const map = new Map<string, Event[]>();
-	for (const e of data.events) {
+	for (const e of events) {
 		const d = new Date(e.scheduled_at);
 		const key = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 		const bucket = map.get(key);
@@ -31,11 +31,6 @@ const eventsByDate = $derived(() => {
 		else map.set(key, [e]);
 	}
 	return map;
-});
-
-/** その日のイベント一覧 */
-function eventsOnDay(year: number, month: number, day: number): Event[] {
-	return eventsByDate().get(`${year}-${month}-${day}`) ?? [];
 }
 
 const today = new Date();
@@ -120,61 +115,74 @@ const grid = $derived(buildCalendarGrid(data.year, data.month));
 			</div>
 
 			<!-- 日グリッド -->
-			<div class="calendar-grid">
-				{#each grid as cell}
-					<div
-						class="calendar-cell {cell ? '' : 'calendar-cell--empty'} {cell && data.year === todayYear && data.month === todayMonth && cell === todayDate ? 'calendar-cell--today' : ''}"
-					>
-						{#if cell}
-							<span class="calendar-day-num">{cell}</span>
-							<div class="calendar-events">
-								{#each eventsOnDay(data.year, data.month, cell) as event}
-									<a
-										href="/events/{event.id}"
-										class="calendar-event-chip {event.is_cancelled ? 'calendar-event-chip--cancelled' : ''}"
-										title="{event.title} ({formatTime(event.scheduled_at)})"
-									>
-										<span class="calendar-event-time">{formatTime(event.scheduled_at)}</span>
-										<span class="calendar-event-title">{event.title}</span>
-									</a>
-								{/each}
-							</div>
-						{/if}
-					</div>
-				{/each}
-			</div>
+			{#await data.events}
+				<div class="posts-loading-spinner" aria-label="読み込み中">
+					<div class="spinner" aria-hidden="true"></div>
+					<span>読み込み中…</span>
+				</div>
+			{:then events}
+				{@const eventsByDate = buildEventsByDate(events)}
+				<div class="calendar-grid">
+					{#each grid as cell}
+						<div
+							class="calendar-cell {cell ? '' : 'calendar-cell--empty'} {cell && data.year === todayYear && data.month === todayMonth && cell === todayDate ? 'calendar-cell--today' : ''}"
+						>
+							{#if cell}
+								<span class="calendar-day-num">{cell}</span>
+								<div class="calendar-events">
+									{#each (eventsByDate.get(`${data.year}-${data.month}-${cell}`) ?? []) as event}
+										<a
+											href="/events/{event.id}"
+											class="calendar-event-chip {event.is_cancelled ? 'calendar-event-chip--cancelled' : ''}"
+											title="{event.title} ({formatTime(event.scheduled_at)})"
+										>
+											<span class="calendar-event-time">{formatTime(event.scheduled_at)}</span>
+											<span class="calendar-event-title">{event.title}</span>
+										</a>
+									{/each}
+								</div>
+							{/if}
+						</div>
+					{/each}
+				</div>
+			{/await}
 		</div>
 
 		<!-- イベント一覧（今月） -->
-		{#if data.events.length > 0}
-			<div class="card" style="margin-top: 16px;">
-				<h3 class="section-heading">今月のイベント</h3>
-				<div class="event-list">
-					{#each data.events as event}
-						<a
-							href="/events/{event.id}"
-							class="event-list-item {event.is_cancelled ? 'event-list-item--cancelled' : ''}"
-						>
-							<div class="event-list-meta">
-								<time class="event-list-date">
-									{new Date(event.scheduled_at).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric', weekday: 'short' })}
-									{formatTime(event.scheduled_at)}
-								</time>
-								{#if event.is_cancelled}
-									<span class="event-badge event-badge--cancelled">キャンセル</span>
-								{/if}
-							</div>
-							<div class="event-list-title">{event.title}</div>
-							<div class="event-list-hashtag">#{event.hashtag}</div>
-						</a>
-					{/each}
+		{#await data.events then events}
+			{#if events.length > 0}
+				<div class="card" style="margin-top: 16px;">
+					<h3 class="section-heading">今月のイベント</h3>
+					<div class="event-list">
+						{#each events as event}
+							<a
+								href="/events/{event.id}"
+								class="event-list-item {event.is_cancelled ? 'event-list-item--cancelled' : ''}"
+							>
+								<div class="event-list-meta">
+									<time class="event-list-date">
+										{new Date(event.scheduled_at).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric', weekday: 'short' })}
+										{formatTime(event.scheduled_at)}
+									</time>
+									{#if event.is_cancelled}
+										<span class="event-badge event-badge--cancelled">キャンセル</span>
+									{/if}
+								</div>
+								<div class="event-list-title">{event.title}</div>
+								<div class="event-list-hashtag">#{event.hashtag}</div>
+							</a>
+						{/each}
+					</div>
 				</div>
-			</div>
-		{:else}
-			<div class="card" style="margin-top:16px; text-align:center; color:var(--color-text-muted); padding:32px;">
-				今月のイベントはありません
-			</div>
-		{/if}
+			{:else}
+				<div
+					class="card"
+					style="margin-top:16px; text-align:center; color:var(--color-text-muted); padding:32px;"
+				>
+					今月のイベントはありません
+				</div>
+			{/if}
+		{/await}
 	</div>
 
 	<!-- サイドバー -->
