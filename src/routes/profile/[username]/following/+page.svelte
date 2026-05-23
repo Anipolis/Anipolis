@@ -1,9 +1,10 @@
 <script lang="ts">
 import UserAvatar from "$lib/components/UserAvatar.svelte";
+import UserCardSkeleton from "$lib/components/UserCardSkeleton.svelte";
 import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();
-const { profile, following } = $derived(data);
+const { profile } = $derived(data);
 const displayName = $derived(profile.display_name ?? profile.username);
 </script>
 
@@ -32,26 +33,36 @@ const displayName = $derived(profile.display_name ?? profile.username);
 			<p class="page-subtitle">{data.followCounts.following}人</p>
 		</div>
 
-		{#if following.length === 0}
-			<div class="empty-state">
-				<p>まだフォローしているユーザーがいません</p>
+		{#await data.following}
+			<div class="posts-loading-spinner" aria-label="読み込み中">
+				<div class="spinner" aria-hidden="true"></div>
+				<span>読み込み中…</span>
 			</div>
-		{:else}
-			<div class="user-list">
-				{#each following as user (user.id)}
-					<a href="/profile/{user.username}" class="user-card">
-						<UserAvatar src={user.avatar_url} username={user.username} size="md" />
-						<div class="user-info">
-							<div class="user-display-name">{user.display_name ?? user.username}</div>
-							<div class="user-username">@{user.username}</div>
-							{#if user.bio}
-								<p class="user-bio">{user.bio}</p>
-							{/if}
-						</div>
-					</a>
-				{/each}
-			</div>
-		{/if}
+			{#each { length: 5 } as _, i (i)}
+				<UserCardSkeleton />
+			{/each}
+		{:then following}
+			{#if following.length === 0}
+				<div class="empty-state">
+					<p>まだフォローしているユーザーがいません</p>
+				</div>
+			{:else}
+				<div class="user-list">
+					{#each following as user (user.id)}
+						<a href="/profile/{user.username}" class="user-card">
+							<UserAvatar src={user.avatar_url} username={user.username} size="md" />
+							<div class="user-info">
+								<div class="user-display-name">{user.display_name ?? user.username}</div>
+								<div class="user-username">@{user.username}</div>
+								{#if user.bio}
+									<p class="user-bio">{user.bio}</p>
+								{/if}
+							</div>
+						</a>
+					{/each}
+				</div>
+			{/if}
+		{/await}
 	</main>
 </div>
 
