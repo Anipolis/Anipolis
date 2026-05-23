@@ -2796,3 +2796,75 @@ form + .repost-menu-item {
 		transform: rotate(360deg);
 	}
 }
+
+/* ── 通知スケルトン ──────────────────────────────────────────────── */
+.skeleton-notification-item {
+	display: flex;
+	gap: 12px;
+	padding: 14px 0;
+	border-bottom: 1px solid var(--color-border);
+}
+
+.skeleton-notification-body {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+/* ── ユーザーカードスケルトン ────────────────────────────────────── */
+.skeleton-user-card-item {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	padding: 14px 4px;
+	border-bottom: 1px solid var(--color-border);
+}
+
+.skeleton-user-card-info {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+}
+
+/* ── アニメカードスケルトン ──────────────────────────────────────── */
+.skeleton-anime-grid {
+	display: grid;
+	grid-template-columns: repeat(5, 1fr);
+	gap: 14px;
+}
+
+@media (max-width: 900px) {
+	.skeleton-anime-grid {
+		grid-template-columns: repeat(3, 1fr);
+	}
+}
+
+@media (max-width: 560px) {
+	.skeleton-anime-grid {
+		grid-template-columns: repeat(2, 1fr);
+	}
+}
+
+.skeleton-anime-card {
+	display: flex;
+	flex-direction: column;
+	border-radius: 8px;
+	border: 1px solid var(--color-border);
+	overflow: hidden;
+}
+
+.skeleton-anime-cover {
+	aspect-ratio: 1 / 1.414;
+	width: 100%;
+}
+
+.skeleton-anime-info {
+	padding: 8px;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
