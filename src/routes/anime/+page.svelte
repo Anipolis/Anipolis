@@ -1,5 +1,6 @@
 <script lang="ts">
 import { enhance } from "$app/forms";
+import AnimeCardSkeleton from "$lib/components/AnimeCardSkeleton.svelte";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
 import type { Anime, AnimeStatus } from "$lib/types";
 import type { PageProps } from "./$types";
@@ -193,119 +194,159 @@ $effect(() => {
 			{/if}
 		</nav>
 
-		{#if data.search}
-			<p class="search-label">「{data.search}」の検索結果 — {data.animes.length}件</p>
-		{:else if data.genre}
-			<p class="search-label">
-				ジャンル：<strong>{data.genre}</strong>
-				— {data.animes.length}件 <a href="/anime" class="filter-clear">✕</a>
-			</p>
-		{:else if data.season}
-			<p class="search-label">
-				シーズン：<strong>{data.season}</strong>
-				— {data.animes.length}件 <a href="/anime" class="filter-clear">✕</a>
-			</p>
-		{:else if data.studio}
-			<p class="search-label">
-				スタジオ：<strong>{data.studio}</strong>
-				— {data.animes.length}件 <a href="/anime" class="filter-clear">✕</a>
-			</p>
-		{:else if data.producer}
-			<p class="search-label">
-				制作：<strong>{data.producer}</strong>
-				— {data.animes.length}件 <a href="/anime" class="filter-clear">✕</a>
-			</p>
-		{/if}
-
 		{#if data.tab === 'register'}
 			<AnimeRegisterForm {form} />
 		{:else if data.tab === 'mylist' && !data.user}
 			<div class="empty-state">
 				<p>マイリストを見るにはログインが必要です</p>
 			</div>
-		{:else if data.animes.length === 0}
-			<div class="empty-state">
-				<p>アニメが見つかりません</p>
-			</div>
 		{:else}
-			<div class="anime-grid">
-				{#each data.animes as anime, i}
-					<a href="/anime/{anime.id}" class="anime-card">
-						<div class="anime-cover">
-							{#if anime.cover_url}
-								<img src={anime.cover_url ?? ''} alt={anime.title} loading="lazy">
-							{:else}
-								<div class="anime-cover-placeholder">
-									<svg
-										width="32"
-										height="32"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="1.5"
-										aria-hidden="true"
-									>
-										<rect x="2" y="2" width="20" height="20" rx="2" />
-										<path d="M10 8l6 4-6 4V8z" />
-									</svg>
-								</div>
-							{/if}
-							{#if data.tab === 'popular' || data.tab === 'trending' || data.tab === 'top_rated'}
-								<span class="rank-badge">#{i + 1}</span>
-							{/if}
-							{#if data.user}
-								<button
-									type="button"
-									class="quick-add-btn"
-									class:in-list={anime.user_entry}
-									onclick={(e) => openQuickAdd(e, anime)}
-									aria-label={anime.user_entry ? statusLabels[anime.user_entry.status as AnimeStatus] : 'マイリストに追加'}
-									title={anime.user_entry ? statusLabels[anime.user_entry.status as AnimeStatus] : 'マイリストに追加'}
-								>
-									{#if anime.user_entry}
-										<svg
-											width="13"
-											height="13"
-											viewBox="0 0 24 24"
-											fill="currentColor"
-											aria-hidden="true"
-										>
-											<path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
-										</svg>
+			{#await data.animes}
+				{#if data.search}
+					<p class="search-label">「{data.search}」の検索結果 — 読み込み中…</p>
+				{:else if data.genre}
+					<p class="search-label">
+						ジャンル：<strong>{data.genre}</strong>
+						— 読み込み中… <a href="/anime" class="filter-clear">✕</a>
+					</p>
+				{:else if data.season}
+					<p class="search-label">
+						シーズン：<strong>{data.season}</strong>
+						— 読み込み中… <a href="/anime" class="filter-clear">✕</a>
+					</p>
+				{:else if data.studio}
+					<p class="search-label">
+						スタジオ：<strong>{data.studio}</strong>
+						— 読み込み中… <a href="/anime" class="filter-clear">✕</a>
+					</p>
+				{:else if data.producer}
+					<p class="search-label">
+						制作：<strong>{data.producer}</strong>
+						— 読み込み中… <a href="/anime" class="filter-clear">✕</a>
+					</p>
+				{/if}
+				<div class="posts-loading-spinner" aria-label="読み込み中">
+					<div class="spinner" aria-hidden="true"></div>
+					<span>読み込み中…</span>
+				</div>
+				<div class="skeleton-anime-grid">
+					{#each { length: 10 } as _, i (i)}
+						<AnimeCardSkeleton />
+					{/each}
+				</div>
+			{:then animes}
+				{#if data.search}
+					<p class="search-label">「{data.search}」の検索結果 — {animes.length}件</p>
+				{:else if data.genre}
+					<p class="search-label">
+						ジャンル：<strong>{data.genre}</strong>
+						— {animes.length}件 <a href="/anime" class="filter-clear">✕</a>
+					</p>
+				{:else if data.season}
+					<p class="search-label">
+						シーズン：<strong>{data.season}</strong>
+						— {animes.length}件 <a href="/anime" class="filter-clear">✕</a>
+					</p>
+				{:else if data.studio}
+					<p class="search-label">
+						スタジオ：<strong>{data.studio}</strong>
+						— {animes.length}件 <a href="/anime" class="filter-clear">✕</a>
+					</p>
+				{:else if data.producer}
+					<p class="search-label">
+						制作：<strong>{data.producer}</strong>
+						— {animes.length}件 <a href="/anime" class="filter-clear">✕</a>
+					</p>
+				{/if}
+				{#if animes.length === 0}
+					<div class="empty-state">
+						<p>アニメが見つかりません</p>
+					</div>
+				{:else}
+					<div class="anime-grid">
+						{#each animes as anime, i}
+							<a href="/anime/{anime.id}" class="anime-card">
+								<div class="anime-cover">
+									{#if anime.cover_url}
+										<img src={anime.cover_url ?? ''} alt={anime.title} loading="lazy">
 									{:else}
-										<svg
-											width="13"
-											height="13"
-											viewBox="0 0 24 24"
-											fill="none"
-											stroke="currentColor"
-											stroke-width="2.5"
-											aria-hidden="true"
-										>
-											<path d="M12 5v14M5 12h14" />
-										</svg>
+										<div class="anime-cover-placeholder">
+											<svg
+												width="32"
+												height="32"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="1.5"
+												aria-hidden="true"
+											>
+												<rect x="2" y="2" width="20" height="20" rx="2" />
+												<path d="M10 8l6 4-6 4V8z" />
+											</svg>
+										</div>
 									{/if}
-								</button>
-							{/if}
-						</div>
-						<div class="anime-info">
-							<p class="anime-title">{anime.title}</p>
-							{#if anime.title_en}
-								<p class="anime-title-en">{anime.title_en}</p>
-							{/if}
-							<div class="anime-meta">
-								<span class="anime-status-badge status-{anime.status}">{animeStatusBadge(anime)}</span>
-								{#if anime.season}
-									<span class="anime-season">{anime.season}</span>
-								{/if}
-							</div>
-							{#if anime.user_entry}
-								<span class="mylist-badge">{statusLabels[anime.user_entry.status as AnimeStatus]}</span>
-							{/if}
-						</div>
-					</a>
-				{/each}
-			</div>
+									{#if data.tab === 'popular' || data.tab === 'trending' || data.tab === 'top_rated'}
+										<span class="rank-badge">#{i + 1}</span>
+									{/if}
+									{#if data.user}
+										<button
+											type="button"
+											class="quick-add-btn"
+											class:in-list={anime.user_entry}
+											onclick={(e) => openQuickAdd(e, anime)}
+											aria-label={anime.user_entry ? statusLabels[anime.user_entry.status as AnimeStatus] : 'マイリストに追加'}
+											title={anime.user_entry ? statusLabels[anime.user_entry.status as AnimeStatus] : 'マイリストに追加'}
+										>
+											{#if anime.user_entry}
+												<svg
+													width="13"
+													height="13"
+													viewBox="0 0 24 24"
+													fill="currentColor"
+													aria-hidden="true"
+												>
+													<path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+												</svg>
+											{:else}
+												<svg
+													width="13"
+													height="13"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2.5"
+													aria-hidden="true"
+												>
+													<path d="M12 5v14M5 12h14" />
+												</svg>
+											{/if}
+										</button>
+									{/if}
+								</div>
+								<div class="anime-info">
+									<p class="anime-title">{anime.title}</p>
+									{#if anime.title_en}
+										<p class="anime-title-en">{anime.title_en}</p>
+									{/if}
+									<div class="anime-meta">
+										<span class="anime-status-badge status-{anime.status}"
+											>{animeStatusBadge(anime)}</span
+										>
+										{#if anime.season}
+											<span class="anime-season">{anime.season}</span>
+										{/if}
+									</div>
+									{#if anime.user_entry}
+										<span class="mylist-badge"
+											>{statusLabels[anime.user_entry.status as AnimeStatus]}</span
+										>
+									{/if}
+								</div>
+							</a>
+						{/each}
+					</div>
+				{/if}
+			{/await}
 		{/if}
 	</main>
 

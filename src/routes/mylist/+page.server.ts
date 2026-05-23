@@ -1,6 +1,7 @@
 import { fail, redirect } from "@sveltejs/kit";
 import { removeUserAnimeEntry, upsertUserAnimeEntry } from "$lib/server/actions";
 import { getUserAnimeList } from "$lib/server/queries";
+import type { Anime } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession } }) => {
@@ -15,9 +16,12 @@ export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession 
 
 	if (!profile) redirect(302, "/");
 
-	const animeList = await getUserAnimeList(supabase, user.id);
+	const animeListPromise: Promise<Anime[]> = getUserAnimeList(supabase, user.id).catch((err) => {
+		console.error("[mylist] animeList fetch error:", err);
+		return [] as Anime[];
+	});
 
-	return { animeList, profile, user };
+	return { animeList: animeListPromise, profile, user };
 };
 
 export const actions: Actions = {
