@@ -1211,14 +1211,98 @@ export async function getAnimeExchangeShareForUser(
 	userId: string,
 	exchangeId: string,
 ): Promise<AnimeExchangeShare | null> {
-	const entries = await getAnimeExchangeEntries(supabase, userId, 50);
-	const exchange = entries.find((entry) => entry.id === exchangeId && entry.received_anime);
-	if (!exchange?.received_anime) return null;
+	// exchangeId と userId を直接指定して1件だけ取得する
+	// 旧実装: getAnimeExchangeEntries(userId, 50) で最大50件フェッチ後に JS で線形探索
+	// → 2往復（エントリ + received_entries）+ 不要データ転送
+	type ExchangeRow = {
+		id: string;
+		user_id: string;
+		received_entry_id: string | null;
+		anime: { id: number; title: string; title_en: string | null; cover_url: string | null } | null;
+	};
+	const supabaseAny = supabase as unknown as {
+		from: (table: "anime_exchange_entries") => {
+			select: (columns: string) => {
+				eq: (
+					col: string,
+					val: string,
+				) => {
+					eq: (
+						col: string,
+						val: string,
+					) => {
+						maybeSingle: () => Promise<{ data: ExchangeRow | null; error: unknown }>;
+					};
+				};
+			};
+		};
+	};
+
+	// 対象エントリを exchangeId + userId で直接取得（所有権チェックを兼ねる）
+	const { data: entry } = await supabaseAny
+		.from("anime_exchange_entries")
+		.select(`
+			id,
+			user_id,
+			received_entry_id,
+			anime:anime_exchange_entries_anime_id_fkey (
+				id, title, title_en, cover_url
+			)
+		`)
+		.eq("id", exchangeId)
+		.eq("user_id", userId)
+		.maybeSingle();
+
+	if (!entry || !entry.received_entry_id || !entry.anime) return null;
+
+	// received_entry_id で受け取ったアニメを取得
+	type ReceivedRow = {
+		id: string;
+		anime: { id: number; title: string; title_en: string | null; cover_url: string | null } | null;
+	};
+	const supabaseAny2 = supabase as unknown as {
+		from: (table: "anime_exchange_entries") => {
+			select: (columns: string) => {
+				eq: (
+					col: string,
+					val: string,
+				) => {
+					maybeSingle: () => Promise<{ data: ReceivedRow | null; error: unknown }>;
+				};
+			};
+		};
+	};
+
+	const { data: receivedEntry } = await supabaseAny2
+		.from("anime_exchange_entries")
+		.select(`
+			id,
+			anime:anime_exchange_entries_anime_id_fkey (
+				id, title, title_en, cover_url
+			)
+		`)
+		.eq("id", entry.received_entry_id)
+		.maybeSingle();
+
+	if (!receivedEntry?.anime) return null;
+
+	const offeredAnime = entry.anime;
+	const receivedAnime = receivedEntry.anime;
 
 	return {
 		type: "anime_exchange",
-		offered_anime: exchange.offered_anime,
-		received_anime: exchange.received_anime,
+		offered_anime: {
+			id: String(offeredAnime.id),
+			title: offeredAnime.title,
+			title_en: offeredAnime.title_en,
+			cover_url: offeredAnime.cover_url,
+		},
+		received_anime: {
+			id: String(receivedAnime.id),
+			title: receivedAnime.title,
+			title_en: receivedAnime.title_en,
+			cover_url: receivedAnime.cover_url,
+		},
 	};
 }
 
