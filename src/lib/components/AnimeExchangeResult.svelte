@@ -55,9 +55,7 @@ function animeHref(animeId: string) {
 			</div>
 		{/if}
 
-		<div class="exchange-swap-icon" aria-hidden="true">
-			<span>→</span>
-		</div>
+		<div class="exchange-swap-icon" aria-hidden="true"><span>→</span></div>
 
 		{#if linkCards}
 			<a href={animeHref(receivedAnime.id)} class="exchange-result-card exchange-result-card--received">
@@ -98,9 +96,7 @@ function animeHref(animeId: string) {
 		{/if}
 	</div>
 	{#if actions}
-		<div class="exchange-result-actions">
-			{@render actions()}
-		</div>
+		<div class="exchange-result-actions">{@render actions()}</div>
 	{/if}
 </div>
 

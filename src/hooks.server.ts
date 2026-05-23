@@ -1,9 +1,9 @@
-import { dev } from "$app/environment";
-import { env } from "$env/dynamic/private";
-import { PUBLIC_SUPABASE_PUBLISHABLE_KEY, PUBLIC_SUPABASE_URL } from "$env/static/public";
 import { createServerClient } from "@supabase/ssr";
 import type { Session, User } from "@supabase/supabase-js";
 import type { Handle } from "@sveltejs/kit";
+import { dev } from "$app/environment";
+import { env } from "$env/dynamic/private";
+import { PUBLIC_SUPABASE_PUBLISHABLE_KEY, PUBLIC_SUPABASE_URL } from "$env/static/public";
 
 // dev サーバーのライフタイム中に保持するセッションキャッシュ
 let devCache: { session: Session; user: User; expiresAt: number } | null = null;
