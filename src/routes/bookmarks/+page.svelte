@@ -1,5 +1,6 @@
 <script lang="ts">
 import PostCard from "$lib/components/PostCard.svelte";
+import PostCardSkeleton from "$lib/components/PostCardSkeleton.svelte";
 import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();
@@ -10,15 +11,25 @@ let { data }: PageProps = $props();
 		<h1 class="page-title">ブックマーク</h1>
 	</header>
 
-	{#if data.posts.length === 0}
-		<p class="empty">保存した投稿はまだありません</p>
-	{:else}
-		<div class="post-list">
-			{#each data.posts as post (post.id)}
-				<PostCard {post} currentUserId={data.userId} />
-			{/each}
+	{#await data.posts}
+		<div class="posts-loading-spinner" aria-label="投稿を読み込み中">
+			<div class="spinner" aria-hidden="true"></div>
+			<span>読み込み中…</span>
 		</div>
-	{/if}
+		{#each { length: 5 } as _, i (i)}
+			<PostCardSkeleton />
+		{/each}
+	{:then posts}
+		{#if posts.length === 0}
+			<p class="empty">保存した投稿はまだありません</p>
+		{:else}
+			<div class="post-list">
+				{#each posts as post (post.id)}
+					<PostCard {post} currentUserId={data.userId} />
+				{/each}
+			</div>
+		{/if}
+	{/await}
 </div>
 
 <style>
