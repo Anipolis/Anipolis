@@ -26,8 +26,43 @@ export const load: PageServerLoad = async ({ url, locals: { supabase }, parent }
 	const tab = url.searchParams.get("tab") === "following" && user ? "following" : "all";
 	const quoteAnimeId = url.searchParams.get("quote_anime");
 	const shareExchangeId = url.searchParams.get("share_exchange");
-	const followingIds = tab === "following" && user ? await getFollowingIds(supabase, user.id) : null;
 
+	const buildExchangeInitialContent = (exchangeShare: AnimeExchangeShare | null) =>
+		exchangeShare?.received_anime.title
+			? `アニメ交換で「${exchangeShare.received_anime.title}」がおすすめとして届きました！ #アニメ交換`
+			: "アニメ交換でおすすめが届きました！ #アニメ交換";
+
+	// ── Stage 1: 全独立クエリを並列実行 ────────────────────────────
+	// followingIds・trending・quoteAnime・exchangeShare は互いに依存しないため
+	// 同一 Promise.all でまとめて発火し、ウォーターフォールを排除する
+	const [followingIds, trendingResult, quoteAnimeResult, exchangeShare] = await Promise.all([
+		tab === "following" && user ? getFollowingIds(supabase, user.id) : Promise.resolve(null),
+		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
+		quoteAnimeId
+			? supabase.from("anime").select("id, title, title_en, cover_url").eq("id", Number(quoteAnimeId)).single()
+			: Promise.resolve({ data: null }),
+		user && shareExchangeId
+			? getAnimeExchangeShareForUser(supabase, user.id, shareExchangeId)
+			: Promise.resolve(null),
+	]);
+
+	// フォロー中タブで誰もフォローしていない場合は投稿クエリをスキップ
+	if (tab === "following" && followingIds !== null && followingIds.length === 0) {
+		return {
+			posts: [],
+			trending: trendingResult.data ?? [],
+			profile,
+			tab,
+			initialAnime: quoteAnimeResult.data
+				? { ...quoteAnimeResult.data, id: String(quoteAnimeResult.data.id) }
+				: null,
+			initialExchangeId: exchangeShare ? shareExchangeId : null,
+			initialExchangeShare: exchangeShare,
+			initialContent: exchangeShare ? buildExchangeInitialContent(exchangeShare) : "",
+		};
+	}
+
+	// ── Stage 2: 投稿クエリ（followingIds が確定してから実行）──────
 	const buildPostsQuery = (select: string) => {
 		let query = supabase
 			.from("posts")
@@ -52,49 +87,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase }, parent }
 		return fallback;
 	};
 
-	const buildExchangeInitialContent = (exchangeShare: AnimeExchangeShare | null) =>
-		exchangeShare?.received_anime.title
-			? `アニメ交換で「${exchangeShare.received_anime.title}」がおすすめとして届きました！ #アニメ交換`
-			: "アニメ交換でおすすめが届きました！ #アニメ交換";
-
-	if (tab === "following" && followingIds !== null && followingIds.length === 0) {
-		const [trendingResult, quoteAnimeResult, exchangeShare] = await Promise.all([
-			supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
-			quoteAnimeId
-				? supabase
-						.from("anime")
-						.select("id, title, title_en, cover_url")
-						.eq("id", Number(quoteAnimeId))
-						.single()
-				: Promise.resolve({ data: null }),
-			user && shareExchangeId
-				? getAnimeExchangeShareForUser(supabase, user.id, shareExchangeId)
-				: Promise.resolve(null),
-		]);
-		return {
-			posts: [],
-			trending: trendingResult.data ?? [],
-			profile,
-			tab,
-			initialAnime: quoteAnimeResult.data
-				? { ...quoteAnimeResult.data, id: String(quoteAnimeResult.data.id) }
-				: null,
-			initialExchangeId: exchangeShare ? shareExchangeId : null,
-			initialExchangeShare: exchangeShare,
-			initialContent: exchangeShare ? buildExchangeInitialContent(exchangeShare) : "",
-		};
-	}
-
-	const [postsResult, trendingResult, quoteAnimeResult, exchangeShare] = await Promise.all([
-		fetchPosts(),
-		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
-		quoteAnimeId
-			? supabase.from("anime").select("id, title, title_en, cover_url").eq("id", Number(quoteAnimeId)).single()
-			: Promise.resolve({ data: null }),
-		user && shareExchangeId
-			? getAnimeExchangeShareForUser(supabase, user.id, shareExchangeId)
-			: Promise.resolve(null),
-	]);
+	const postsResult = await fetchPosts();
 
 	const posts = await enrichPostsWithCounts(
 		supabase,
