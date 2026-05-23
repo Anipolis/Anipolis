@@ -7,7 +7,7 @@ import {
 	toggleRepostAction,
 } from "$lib/server/actions";
 import { enrichPostsWithCounts, getAnimeExchangeShareForUser, getFollowingIds } from "$lib/server/queries";
-import type { AnimeExchangeShare, RawPost } from "$lib/types";
+import type { AnimeExchangeShare, Post, RawPost } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
 // exchange_share カラムは migration 034 で追加済み（IF NOT EXISTS付き）。
@@ -43,44 +43,40 @@ export const load: PageServerLoad = async ({ url, locals: { supabase }, parent }
 			: Promise.resolve(null),
 	]);
 
-	// フォロー中タブで誰もフォローしていない場合は投稿クエリをスキップ
-	if (tab === "following" && followingIds !== null && followingIds.length === 0) {
-		return {
-			posts: [],
-			trending: trendingResult.data ?? [],
-			profile,
-			tab,
-			initialAnime: quoteAnimeResult.data
-				? { ...quoteAnimeResult.data, id: String(quoteAnimeResult.data.id) }
-				: null,
-			initialExchangeId: exchangeShare ? shareExchangeId : null,
-			initialExchangeShare: exchangeShare,
-			initialContent: exchangeShare ? buildExchangeInitialContent(exchangeShare) : "",
-		};
-	}
+	// ── Stage 2: 投稿クエリを deferred Promise として返す ──────────
+	// await しないことで SvelteKit のストリーミング機能を利用する。
+	// サーバーはページ HTML を即時送信し、投稿データは解決次第チャンクで流す。
+	// クライアント側では {#await data.posts} でスケルトン → 実データに切り替える。
+	// フォロー中タブで誰もフォローしていない場合は即時空配列
+	const postsPromise: Promise<Post[]> =
+		tab === "following" && followingIds !== null && followingIds.length === 0
+			? Promise.resolve([])
+			: (async () => {
+					let postsQuery = supabase
+						.from("posts")
+						.select(POSTS_SELECT)
+						.is("parent_id", null)
+						.order("created_at", { ascending: false })
+						.limit(50);
 
-	// ── Stage 2: 投稿クエリ（followingIds が確定してから実行）──────
-	let postsQuery = supabase
-		.from("posts")
-		.select(POSTS_SELECT)
-		.is("parent_id", null)
-		.order("created_at", { ascending: false })
-		.limit(50);
+					if (tab === "following" && followingIds !== null) {
+						postsQuery = postsQuery.in("user_id", followingIds);
+					}
 
-	if (tab === "following" && followingIds !== null) {
-		postsQuery = postsQuery.in("user_id", followingIds);
-	}
-
-	const postsResult = await postsQuery;
-
-	const posts = await enrichPostsWithCounts(
-		supabase,
-		(postsResult.data ?? []) as unknown as RawPost[],
-		user?.id ?? null,
-	);
+					const postsResult = await postsQuery;
+					return enrichPostsWithCounts(
+						supabase,
+						(postsResult.data ?? []) as unknown as RawPost[],
+						user?.id ?? null,
+					);
+				})().catch((err) => {
+					// 投稿取得に失敗しても page crash を防ぐ。エラーはサーバーログに記録。
+					console.error("[home] posts fetch error:", err);
+					return [] as Post[];
+				});
 
 	return {
-		posts,
+		posts: postsPromise,
 		trending: trendingResult.data ?? [],
 		profile,
 		tab,
