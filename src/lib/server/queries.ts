@@ -110,31 +110,49 @@ export async function enrichPostsWithCounts(
 
 	const postIds = visibleRawPosts.map((rawPost) => rawPost.id as string);
 
-	// ── 並列バッチクエリ ──────────────────────────────────────────
-	const [likesRes, repostsRes, repliesRes, myLikesRes, myRepostsRes, myBookmarksRes] = await Promise.all([
-		// 各投稿のいいね数（post_id ごとにカウント）
-		supabase.from("likes").select("post_id").in("post_id", postIds),
+	// ── アニメIDを事前収集（userScoreMap クエリに必要）────────────
+	const animeIds = [
+		...new Set(
+			visibleRawPosts.map((rawPost) => rawPost.anime_id).filter((id): id is string | number => id != null),
+		),
+	];
 
-		// 各投稿のリポスト数
-		supabase.from("reposts").select("post_id").in("post_id", postIds),
+	// ── 並列バッチクエリ（カウント・ユーザー状態・アニメスコアをまとめて取得）──
+	const [likesRes, repostsRes, repliesRes, myLikesRes, myRepostsRes, myBookmarksRes, userAnimeScoresRes] =
+		await Promise.all([
+			// 各投稿のいいね数（post_id ごとにカウント）
+			supabase.from("likes").select("post_id").in("post_id", postIds),
 
-		// 各投稿のリプライ数（parent_id が投稿IDに一致するもの）
-		supabase.from("posts").select("parent_id").in("parent_id", postIds),
+			// 各投稿のリポスト数
+			supabase.from("reposts").select("post_id").in("post_id", postIds),
 
-		// ログイン中ユーザーのいいね一覧
-		userId
-			? supabase.from("likes").select("post_id").eq("user_id", userId).in("post_id", postIds)
-			: Promise.resolve({ data: [] as { post_id: string }[] }),
+			// 各投稿のリプライ数（parent_id が投稿IDに一致するもの）
+			supabase.from("posts").select("parent_id").in("parent_id", postIds),
 
-		// ログイン中ユーザーのリポスト一覧
-		userId
-			? supabase.from("reposts").select("post_id").eq("user_id", userId).in("post_id", postIds)
-			: Promise.resolve({ data: [] as { post_id: string }[] }),
+			// ログイン中ユーザーのいいね一覧
+			userId
+				? supabase.from("likes").select("post_id").eq("user_id", userId).in("post_id", postIds)
+				: Promise.resolve({ data: [] as { post_id: string }[] }),
 
-		userId
-			? supabase.from("bookmarks").select("post_id").eq("user_id", userId).in("post_id", postIds)
-			: Promise.resolve({ data: [] as { post_id: string }[] }),
-	]);
+			// ログイン中ユーザーのリポスト一覧
+			userId
+				? supabase.from("reposts").select("post_id").eq("user_id", userId).in("post_id", postIds)
+				: Promise.resolve({ data: [] as { post_id: string }[] }),
+
+			// ログイン中ユーザーのブックマーク一覧
+			userId
+				? supabase.from("bookmarks").select("post_id").eq("user_id", userId).in("post_id", postIds)
+				: Promise.resolve({ data: [] as { post_id: string }[] }),
+
+			// アニメ引用がある投稿のユーザースコアを一括取得（直列ではなく並列で実行）
+			userId && animeIds.length > 0
+				? supabase
+						.from("user_anime_list")
+						.select("anime_id, score")
+						.eq("user_id", userId)
+						.in("anime_id", animeIds.map(Number))
+				: Promise.resolve({ data: [] as { anime_id: number; score: number | null }[] }),
+		]);
 
 	// ── JS でカウント集計 ─────────────────────────────────────────
 	const likeCount = countByPostId(likesRes.data ?? []);
@@ -145,22 +163,10 @@ export async function enrichPostsWithCounts(
 	const repostedSet = new Set((myRepostsRes.data ?? []).map((repost) => repost.post_id));
 	const bookmarkedSet = new Set((myBookmarksRes.data ?? []).map((bookmark) => bookmark.post_id));
 
-	// ── アニメ引用がある投稿のスコアを一括取得 ────────────────────
-	const animeIds = [
-		...new Set(
-			visibleRawPosts.map((rawPost) => rawPost.anime_id).filter((id): id is string | number => id != null),
-		),
-	];
+	// ── アニメスコアマップを構築 ───────────────────────────────────
 	const userScoreMap = new Map<string, number | null>();
-	if (userId && animeIds.length > 0) {
-		const { data: entries } = await supabase
-			.from("user_anime_list")
-			.select("anime_id, score")
-			.eq("user_id", userId)
-			.in("anime_id", animeIds.map(Number));
-		for (const entry of entries ?? []) {
-			userScoreMap.set(String(entry.anime_id), entry.score);
-		}
+	for (const entry of userAnimeScoresRes.data ?? []) {
+		userScoreMap.set(String(entry.anime_id), entry.score);
 	}
 
 	return visibleRawPosts.map((raw) => {
