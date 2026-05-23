@@ -48,21 +48,21 @@ export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, c
 	const { session, user } = await safeGetSession();
 
 	const profile = user ? await getOrCreateProfile(supabase, user) : null;
-	const [unreadNotificationCount, pendingFollowRequestCount] = user
-		? await Promise.all([
-				getUnreadNotificationCount(supabase, user.id),
-				getPendingFollowRequestCount(supabase, user.id),
-			])
-		: [0, 0];
 
 	const filteredCookies = cookies.getAll().filter(({ name }) => /^sb-.+-auth-token/.test(name));
 
+	// ── 通知カウントを deferred Promise として返す ─────────────────
+	// await せずに Promise のまま返すことで SvelteKit のストリーミング機能を
+	// 利用し、子ルートの load（page.server.ts）が parent() を await した際に
+	// これらのカウント取得を待たずに開始できるようにする。
+	// バッジ表示はページコンテンツより後から描画されてよい副次情報のため
+	// ストリーミングが適切。
 	return {
 		session,
 		user,
 		profile,
-		unreadNotificationCount,
-		pendingFollowRequestCount,
 		cookies: filteredCookies,
+		unreadNotificationCount: user ? getUnreadNotificationCount(supabase, user.id) : Promise.resolve(0),
+		pendingFollowRequestCount: user ? getPendingFollowRequestCount(supabase, user.id) : Promise.resolve(0),
 	};
 };
