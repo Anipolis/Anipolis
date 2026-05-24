@@ -1093,24 +1093,17 @@ export async function getAnime(
  * 人気ランキング（総マイリスト登録数順）
  */
 export async function getAnimeRankingPopularity(supabase: SupabaseClient<Database>, limit = 20): Promise<Anime[]> {
-	const { data, error } = await supabase.from("user_anime_list").select("anime_id");
+	const { data, error } = await supabase
+		.from("anime_popularity")
+		.select("anime_id, list_count")
+		.gt("list_count", 0)
+		.order("list_count", { ascending: false })
+		.order("anime_id", { ascending: true })
+		.limit(limit);
 	if (error || !data || data.length === 0) return [];
 
-	const countMap = new Map<string, number>();
-	for (const row of data) {
-		const animeId = String(row.anime_id);
-		countMap.set(animeId, (countMap.get(animeId) ?? 0) + 1);
-	}
-
-	const rankedIds = [...countMap.entries()]
-		.sort((a, b) => {
-			if (b[1] !== a[1]) return b[1] - a[1];
-			return Number(a[0]) - Number(b[0]);
-		})
-		.slice(0, limit)
-		.map(([animeId]) => animeId);
-
-	if (rankedIds.length === 0) return [];
+	const rankedIds = data.map((row) => String(row.anime_id));
+	const countMap = new Map(data.map((row) => [String(row.anime_id), Number(row.list_count)]));
 	const animes = await fetchAnimesByIds(supabase, rankedIds);
 	return animes.map((a) => ({ ...a, list_count: countMap.get(a.id) ?? 0 }));
 }
@@ -1119,25 +1112,17 @@ export async function getAnimeRankingPopularity(supabase: SupabaseClient<Databas
  * トレンドランキング（直近7日間のアクティビティ順）
  */
 export async function getAnimeRankingTrending(supabase: SupabaseClient<Database>, limit = 20): Promise<Anime[]> {
-	const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-	const { data, error } = await supabase.from("user_anime_list").select("anime_id").gte("updated_at", since);
+	const { data, error } = await supabase
+		.from("anime_trending")
+		.select("anime_id, recent_count")
+		.gt("recent_count", 0)
+		.order("recent_count", { ascending: false })
+		.order("anime_id", { ascending: true })
+		.limit(limit);
 	if (error || !data || data.length === 0) return [];
 
-	const countMap = new Map<string, number>();
-	for (const row of data) {
-		const animeId = String(row.anime_id);
-		countMap.set(animeId, (countMap.get(animeId) ?? 0) + 1);
-	}
-
-	const rankedIds = [...countMap.entries()]
-		.sort((a, b) => {
-			if (b[1] !== a[1]) return b[1] - a[1];
-			return Number(a[0]) - Number(b[0]);
-		})
-		.slice(0, limit)
-		.map(([animeId]) => animeId);
-
-	if (rankedIds.length === 0) return [];
+	const rankedIds = data.map((row) => String(row.anime_id));
+	const countMap = new Map(data.map((row) => [String(row.anime_id), Number(row.recent_count)]));
 	const animes = await fetchAnimesByIds(supabase, rankedIds);
 	return animes.map((a) => ({ ...a, recent_count: countMap.get(a.id) ?? 0 }));
 }
@@ -1146,35 +1131,20 @@ export async function getAnimeRankingTrending(supabase: SupabaseClient<Database>
  * 高評価ランキング（平均スコア順）
  */
 export async function getAnimeRankingTopRated(supabase: SupabaseClient<Database>, limit = 20): Promise<Anime[]> {
-	const { data, error } = await supabase.from("user_anime_list").select("anime_id, score").not("score", "is", null);
+	const { data, error } = await supabase
+		.from("anime_top_rated")
+		.select("anime_id, avg_score, score_count")
+		.gt("score_count", 0)
+		.order("avg_score", { ascending: false })
+		.order("score_count", { ascending: false })
+		.order("anime_id", { ascending: true })
+		.limit(limit);
 	if (error || !data || data.length === 0) return [];
 
-	const totals = new Map<string, { sum: number; count: number }>();
-	for (const row of data) {
-		if (row.score == null) continue;
-		const animeId = String(row.anime_id);
-		const current = totals.get(animeId) ?? { sum: 0, count: 0 };
-		current.sum += Number(row.score);
-		current.count += 1;
-		totals.set(animeId, current);
-	}
-	if (totals.size === 0) return [];
-
-	const ranked = [...totals.entries()]
-		.map(([animeId, v]) => ({ anime_id: animeId, avg_score: v.sum / v.count, score_count: v.count }))
-		.sort((a, b) => {
-			if (b.avg_score !== a.avg_score) return b.avg_score - a.avg_score;
-			if (b.score_count !== a.score_count) return b.score_count - a.score_count;
-			return Number(a.anime_id) - Number(b.anime_id);
-		})
-		.slice(0, limit);
-
-	const avgMap = new Map(ranked.map((r) => [r.anime_id, r.avg_score]));
-	const cntMap = new Map(ranked.map((r) => [r.anime_id, r.score_count]));
-	const animes = await fetchAnimesByIds(
-		supabase,
-		ranked.map((r) => r.anime_id),
-	);
+	const rankedIds = data.map((row) => String(row.anime_id));
+	const avgMap = new Map(data.map((row) => [String(row.anime_id), Number(row.avg_score)]));
+	const cntMap = new Map(data.map((row) => [String(row.anime_id), Number(row.score_count)]));
+	const animes = await fetchAnimesByIds(supabase, rankedIds);
 	return animes.map((a) => ({
 		...a,
 		avg_score: avgMap.get(a.id) ?? null,
