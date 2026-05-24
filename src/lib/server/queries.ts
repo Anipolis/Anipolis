@@ -910,6 +910,7 @@ export interface AnimeListOptions {
 	season?: string;
 	broadcastYear?: string;
 	broadcastSeason?: string;
+	scheduleRange?: { start: string; end: string };
 	genre?: string;
 	studio?: string;
 	producer?: string;
@@ -930,6 +931,7 @@ export async function getAnimeList(
 		season,
 		broadcastYear,
 		broadcastSeason,
+		scheduleRange,
 		genre,
 		studio,
 		producer,
@@ -948,6 +950,12 @@ export async function getAnimeList(
 	if (season) query = query.eq("season", season);
 	const seasonFilter = buildSeasonFilter(broadcastYear, broadcastSeason);
 	if (seasonFilter) query = query.or(seasonFilter);
+	if (scheduleRange) {
+		query = query
+			.not("broadcast_day", "is", null)
+			.or(`aired_from.is.null,aired_from.lte.${scheduleRange.end}`)
+			.or(`aired_to.is.null,aired_to.gte.${scheduleRange.start}`);
+	}
 	if (genre) query = query.or(arrayContainsAny(["genre", "genre_en"], genre));
 	if (studio) query = query.or(arrayContainsAny(["studio", "studio_en"], studio));
 	if (producer) query = query.contains("producer", [producer]);
@@ -970,12 +978,18 @@ async function getAnimeListRowsFromBaseTable(
 	options: AnimeListOptions,
 	seasonFilter: string | null,
 ): Promise<Record<string, unknown>[]> {
-	const { season, genre, studio, producer, limit = 20, query: searchQuery } = options;
+	const { season, scheduleRange, genre, studio, producer, limit = 20, query: searchQuery } = options;
 
 	let query = supabase.from("anime").select("*").order("created_at", { ascending: false }).limit(limit);
 
 	if (season) query = query.eq("season", season);
 	if (seasonFilter) query = query.or(seasonFilter);
+	if (scheduleRange) {
+		query = query
+			.not("broadcast_day", "is", null)
+			.or(`aired_from.is.null,aired_from.lte.${scheduleRange.end}`)
+			.or(`aired_to.is.null,aired_to.gte.${scheduleRange.start}`);
+	}
 	if (genre) query = query.or(arrayContainsAny(["genre", "genre_en"], genre));
 	if (studio) query = query.or(arrayContainsAny(["studio", "studio_en"], studio));
 	if (producer) query = query.contains("producer", [producer]);

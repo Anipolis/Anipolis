@@ -64,9 +64,13 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	const weekStart = parseWeekStart(url.searchParams.get("week"));
 	const weekEnd = addDays(weekStart, 7);
 	weekEnd.setMilliseconds(-1);
+	const scheduleRange = {
+		start: toDateInputValue(weekStart),
+		end: toDateInputValue(addDays(weekStart, 6)),
+	};
 
 	const [animeList, events, subscriptions, notificationSettings] = await Promise.all([
-		getAnimeList(supabase, { limit: 1000, userId: user?.id ?? null }),
+		getAnimeList(supabase, { scheduleRange, limit: 1000, userId: user?.id ?? null }),
 		getEventsByRange(supabase, weekStart.toISOString(), weekEnd.toISOString()),
 		user ? getBroadcastSubscriptions(supabase, user.id) : Promise.resolve([] as string[]),
 		user
