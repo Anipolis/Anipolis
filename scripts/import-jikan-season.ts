@@ -134,6 +134,7 @@ const MAL_HOME_URL = "https://myanimelist.net/";
 const BLOCKED_RESOURCE_KEYWORDS = ["namuwiki", "bangumi"];
 const BLOCKED_TYPES = new Set(["music", "pv", "cm"]);
 const FINITE_RELEASE_TYPES = new Set(["movie", "ona", "ova", "tvspecial", "special"]);
+const LATE_NIGHT_EXTENSION_END_HOUR = 4;
 
 const GENRE_JA_BY_EN: Record<string, string> = {
 	Action: "アクション",
@@ -626,6 +627,25 @@ function normalizeBroadcastTime(time: string | null | undefined) {
 	return `${String(hour).padStart(2, "0")}:${match[2]}`;
 }
 
+function normalizeBroadcastSchedule(broadcast: JikanAnime["broadcast"]) {
+	const broadcastDay = normalizeBroadcastDay(broadcast?.day);
+	const broadcastTime = normalizeBroadcastTime(broadcast?.time);
+
+	if (broadcastDay === null || broadcastTime === null) {
+		return { broadcast_day: broadcastDay, broadcast_time: broadcastTime };
+	}
+
+	const hour = Number.parseInt(broadcastTime.slice(0, 2), 10);
+	if (hour >= LATE_NIGHT_EXTENSION_END_HOUR) {
+		return { broadcast_day: broadcastDay, broadcast_time: broadcastTime };
+	}
+
+	return {
+		broadcast_day: (broadcastDay + 6) % 7,
+		broadcast_time: `${String(hour + 24).padStart(2, "0")}${broadcastTime.slice(2)}`,
+	};
+}
+
 function normalizeAnimeType(type: string | null | undefined) {
 	return type?.toLowerCase().replace(/[^a-z0-9]/g, "") ?? "";
 }
@@ -765,6 +785,7 @@ function mapJikanAnime(anime: JikanAnime, year: number, season: SeasonName): Ani
 	const genreEn = normalizeNameList(anime.genres);
 	const genreJa = translateNameList(genreEn, GENRE_JA_BY_EN);
 	const officialSiteUrl = findOfficialSiteUrl(anime.external);
+	const broadcastSchedule = normalizeBroadcastSchedule(anime.broadcast);
 
 	return {
 		mal_id: anime.mal_id,
@@ -782,8 +803,8 @@ function mapJikanAnime(anime: JikanAnime, year: number, season: SeasonName): Ani
 		studio_en: studioEn,
 		genre: genreJa,
 		genre_en: genreEn,
-		broadcast_day: normalizeBroadcastDay(anime.broadcast?.day),
-		broadcast_time: normalizeBroadcastTime(anime.broadcast?.time),
+		broadcast_day: broadcastSchedule.broadcast_day,
+		broadcast_time: broadcastSchedule.broadcast_time,
 		official_site_url: officialSiteUrl,
 		official_x_url: findOfficialXUrl(anime.external),
 		resources: buildAnimeResources(anime),
