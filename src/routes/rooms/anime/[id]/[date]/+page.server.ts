@@ -32,17 +32,17 @@ function animeIsScheduledForDate(anime: Anime, dateKey: string) {
 	return true;
 }
 
-function fallbackRoomHashtag(animeId: string, dateKey: string) {
-	return `anime${animeId}_${dateKey.replaceAll("-", "")}`;
+function fallbackRoomHashtag(title: string) {
+	return title.replace(/\s+/g, "").replace(/[^\p{L}\p{N}_]/gu, "");
 }
 
 function normalizeHashtag(value: string) {
 	return value.trim().replace(/^#+/, "").toLowerCase();
 }
 
-function roomHashtag(anime: Anime, dateKey: string) {
+function roomHashtag(anime: Anime) {
 	const officialHashtag = anime.official_hashtag?.map(normalizeHashtag).find((tag) => tag.length > 0);
-	return officialHashtag ?? fallbackRoomHashtag(anime.id, dateKey);
+	return officialHashtag ?? fallbackRoomHashtag(anime.title);
 }
 
 function scheduledAtIso(dateKey: string, time: string | null) {
@@ -64,7 +64,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 	if (!anime) throw error(404, "アニメが見つかりません");
 	if (!animeIsScheduledForDate(anime, params.date)) throw error(404, "放送ルームが見つかりません");
 
-	const hashtag = roomHashtag(anime, params.date);
+	const hashtag = roomHashtag(anime);
 	const [posts, trending] = await Promise.all([
 		getEventPosts(supabase, hashtag, user?.id ?? null),
 		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
@@ -96,7 +96,7 @@ export const actions: Actions = {
 
 		const form = await request.formData();
 		const content = (form.get("content") as string | null)?.trim() ?? "";
-		const hashtag = roomHashtag(anime, params.date);
+		const hashtag = roomHashtag(anime);
 		const hasTag = content.toLowerCase().includes(`#${hashtag.toLowerCase()}`);
 		const finalContent = hasTag ? content : `${content} #${hashtag}`;
 
