@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
 import type { SubmitFunction } from "@sveltejs/kit";
 import { untrack } from "svelte";
 import { enhance } from "$app/forms";
@@ -138,6 +138,24 @@ function canSubscribe(anime: Anime): boolean {
 	const s = anime.computed_broadcast_status ?? anime.status;
 	return s === "airing" || s === "upcoming";
 }
+
+function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
+	if (!anime.aired_from) return null;
+	const airedFrom = new Date(`${anime.aired_from.slice(0, 10)}T00:00:00`);
+	const slotDate = new Date(`${dateStr}T00:00:00`);
+	// Late-night broadcasts (≥ 24:00) actually air on the next calendar day
+	const broadcastHour = anime.broadcast_time ? Number(anime.broadcast_time.split(":")[0]) : 0;
+	if (broadcastHour >= 24) slotDate.setDate(slotDate.getDate() + 1);
+	const msDiff = slotDate.getTime() - airedFrom.getTime();
+	if (msDiff < 0) return null;
+	const weeksElapsed = Math.floor(Math.round(msDiff / 86_400_000) / 7);
+	const ep = weeksElapsed + 1;
+	if (anime.episode_count) {
+		const maxEp = parseInt(anime.episode_count, 10);
+		if (!Number.isNaN(maxEp) && ep > maxEp) return maxEp;
+	}
+	return ep;
+}
 </script>
 
 <svelte:head> <title>放送スケジュール - Anipolis</title> </svelte:head>
@@ -150,37 +168,73 @@ function canSubscribe(anime: Anime): boolean {
 		</div>
 		<div class="schedule-actions">
 			<div class="week-nav">
-				<a class="week-nav-btn" href="/schedule?week={data.prevWeek}" aria-label="前の週">
-					<svg
-						aria-hidden="true"
-						width="18"
-						height="18"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2.5"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					>
-						<polyline points="15 18 9 12 15 6"></polyline>
-					</svg>
-				</a>
+				{#if data.canGoPrev}
+					<a class="week-nav-btn" href="/schedule?week={data.prevWeek}" aria-label="前の週">
+						<svg
+							aria-hidden="true"
+							width="18"
+							height="18"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<polyline points="15 18 9 12 15 6"></polyline>
+						</svg>
+					</a>
+				{:else}
+					<span class="week-nav-btn week-nav-btn--disabled" aria-disabled="true">
+						<svg
+							aria-hidden="true"
+							width="18"
+							height="18"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<polyline points="15 18 9 12 15 6"></polyline>
+						</svg>
+					</span>
+				{/if}
 				<span class="week-range">{formatDate(data.weekStart)} の週</span>
-				<a class="week-nav-btn" href="/schedule?week={data.nextWeek}" aria-label="次の週">
-					<svg
-						aria-hidden="true"
-						width="18"
-						height="18"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2.5"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					>
-						<polyline points="9 18 15 12 9 6"></polyline>
-					</svg>
-				</a>
+				{#if data.canGoNext}
+					<a class="week-nav-btn" href="/schedule?week={data.nextWeek}" aria-label="次の週">
+						<svg
+							aria-hidden="true"
+							width="18"
+							height="18"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<polyline points="9 18 15 12 9 6"></polyline>
+						</svg>
+					</a>
+				{:else}
+					<span class="week-nav-btn week-nav-btn--disabled" aria-disabled="true">
+						<svg
+							aria-hidden="true"
+							width="18"
+							height="18"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<polyline points="9 18 15 12 9 6"></polyline>
+						</svg>
+					</span>
+				{/if}
 			</div>
 			{#if data.user}
 				<button type="button" class="btn btn-primary create-event-btn" onclick={() => (showEventDialog = true)}>
@@ -224,13 +278,21 @@ function canSubscribe(anime: Anime): boolean {
 							{@const isSubscribed = subscribedIds.has(anime.id)}
 							{@const isNotifying = notifyingIds.has(anime.id)}
 							{@const subscribable = canSubscribe(anime)}
+							{@const ep = currentEpisodeForSlot(anime, day.date)}
 							<div class="anime-slot-wrap" class:anime-slot-wrap--notifying={isNotifying}>
 								<a href="/rooms/anime/{anime.id}/{day.date}" class="anime-slot">
-									{#if anime.cover_url}
-										<img src={anime.cover_url} alt={anime.title} class="slot-cover">
-									{:else}
-										<div class="slot-cover slot-cover--placeholder"></div>
-									{/if}
+									<div class="slot-cover-wrap">
+										{#if anime.cover_url}
+											<img src={anime.cover_url} alt={anime.title} class="slot-cover">
+										{:else}
+											<div class="slot-cover slot-cover--placeholder"></div>
+										{/if}
+										{#if ep !== null}
+											<span class="slot-ep-badge"
+												>{ep}{anime.episode_count ? `/${anime.episode_count}` : ""}</span
+											>
+										{/if}
+									</div>
 									<div class="slot-info">
 										<span class="slot-kind">ROOM</span>
 										{#if anime.broadcast_time}
@@ -441,6 +503,10 @@ function canSubscribe(anime: Anime): boolean {
 	background: var(--card-bg);
 	text-decoration: none;
 }
+.week-nav-btn--disabled {
+	opacity: 0.3;
+	cursor: default;
+}
 .create-event-btn {
 	border-radius: 8px;
 	white-space: nowrap;
@@ -539,15 +605,35 @@ function canSubscribe(anime: Anime): boolean {
 	opacity: 0.55;
 	text-decoration: line-through;
 }
+.slot-cover-wrap {
+	position: relative;
+	width: 36px;
+	height: 52px;
+	flex-shrink: 0;
+	border-radius: 3px;
+	overflow: hidden;
+}
 .slot-cover {
 	width: 36px;
 	height: 52px;
 	object-fit: cover;
 	border-radius: 3px;
-	flex-shrink: 0;
 }
 .slot-cover--placeholder {
 	background: var(--border);
+}
+.slot-ep-badge {
+	position: absolute;
+	bottom: 0;
+	left: 0;
+	right: 0;
+	text-align: center;
+	font-size: 0.58rem;
+	font-weight: 700;
+	color: #fff;
+	background: rgba(0, 0, 0, 0.62);
+	padding: 1px 2px 2px;
+	line-height: 1.4;
 }
 .slot-info {
 	display: flex;

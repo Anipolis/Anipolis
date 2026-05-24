@@ -61,7 +61,11 @@ function broadcastTimeSortValue(value: string | null) {
 export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 
-	const weekStart = parseWeekStart(url.searchParams.get("week"));
+	const today = startOfWeek(new Date());
+	const minWeek = addDays(today, -35);
+	const maxWeek = addDays(today, 35);
+	const rawWeek = parseWeekStart(url.searchParams.get("week"));
+	const weekStart = rawWeek < minWeek ? minWeek : rawWeek > maxWeek ? maxWeek : rawWeek;
 	const weekEnd = addDays(weekStart, 7);
 	weekEnd.setMilliseconds(-1);
 	const scheduleRange = {
@@ -116,6 +120,8 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		weekStart: toDateInputValue(weekStart),
 		prevWeek: toDateInputValue(addDays(weekStart, -7)),
 		nextWeek: toDateInputValue(addDays(weekStart, 7)),
+		canGoPrev: weekStart > minWeek,
+		canGoNext: weekStart < maxWeek,
 		defaultScheduledAt: `${toDateInputValue(new Date())}T20:00`,
 	};
 };
