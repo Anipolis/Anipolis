@@ -113,16 +113,8 @@ export async function enrichPostsWithCounts(
 	const postIds = visibleRawPosts.map((p) => p.id as string);
 
 	// ── 並列バッチクエリ ──────────────────────────────────────────
-	const [likesRes, repostsRes, repliesRes, myLikesRes, myRepostsRes, myBookmarksRes] = await Promise.all([
-		// 各投稿のいいね数（post_id ごとにカウント）
-		supabase.from("likes").select("post_id").in("post_id", postIds),
-
-		// 各投稿のリポスト数
-		supabase.from("reposts").select("post_id").in("post_id", postIds),
-
-		// 各投稿のリプライ数（parent_id が投稿IDに一致するもの）
-		supabase.from("posts").select("parent_id").in("parent_id", postIds),
-
+	const [countsRes, myLikesRes, myRepostsRes, myBookmarksRes] = await Promise.all([
+		supabase.rpc("get_post_engagement_counts", { target_post_ids: postIds }),
 		// ログイン中ユーザーのいいね一覧
 		userId
 			? supabase.from("likes").select("post_id").eq("user_id", userId).in("post_id", postIds)
@@ -138,10 +130,7 @@ export async function enrichPostsWithCounts(
 			: Promise.resolve({ data: [] as { post_id: string }[] }),
 	]);
 
-	// ── JS でカウント集計 ─────────────────────────────────────────
-	const likeCount = countByPostId(likesRes.data ?? []);
-	const repostCount = countByPostId(repostsRes.data ?? []);
-	const replyCount = countByPostId((repliesRes.data ?? []).map((r) => ({ post_id: r.parent_id as string })));
+	const countsByPostId = new Map((countsRes.data ?? []).map((row) => [row.post_id, row]));
 
 	const likedSet = new Set((myLikesRes.data ?? []).map((r) => r.post_id));
 	const repostedSet = new Set((myRepostsRes.data ?? []).map((r) => r.post_id));
@@ -163,9 +152,9 @@ export async function enrichPostsWithCounts(
 
 	return visibleRawPosts.map((raw) => {
 		const post = toPost(raw, {
-			like_count: likeCount.get(raw["id"]) ?? 0,
-			repost_count: repostCount.get(raw["id"]) ?? 0,
-			reply_count: replyCount.get(raw["id"]) ?? 0,
+			like_count: countsByPostId.get(raw["id"])?.like_count ?? 0,
+			repost_count: countsByPostId.get(raw["id"])?.repost_count ?? 0,
+			reply_count: countsByPostId.get(raw["id"])?.reply_count ?? 0,
 			liked_by_me: likedSet.has(raw["id"]),
 			reposted_by_me: repostedSet.has(raw["id"]),
 			bookmarked_by_me: bookmarkedSet.has(raw["id"]),
@@ -203,14 +192,6 @@ function containsMutedWord(post: RawPost, mutedWords: string[]): boolean {
 
 function normalizeMutedWord(word: string): string {
 	return word.trim().toLocaleLowerCase();
-}
-
-function countByPostId(rows: { post_id: string }[]): Map<string, number> {
-	const map = new Map<string, number>();
-	for (const row of rows) {
-		map.set(row.post_id, (map.get(row.post_id) ?? 0) + 1);
-	}
-	return map;
 }
 
 /**

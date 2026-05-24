@@ -866,6 +866,15 @@ export type Database = {
 				Args: { limit_count?: number };
 				Returns: { name: string; post_count: number }[];
 			};
+			get_post_engagement_counts: {
+				Args: { target_post_ids: string[] };
+				Returns: {
+					post_id: string;
+					like_count: number;
+					repost_count: number;
+					reply_count: number;
+				}[];
+			};
 			create_anime_exchange: {
 				Args: { p_anime_id: number };
 				Returns: {
