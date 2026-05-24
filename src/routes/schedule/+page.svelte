@@ -1,5 +1,6 @@
 <script lang="ts">
 import type { SubmitFunction } from "@sveltejs/kit";
+import { untrack } from "svelte";
 import { enhance } from "$app/forms";
 import type { Anime } from "$lib/types";
 import type { ActionData, PageProps } from "./$types";
@@ -9,7 +10,7 @@ let { data, form }: PageProps & { form: ActionData } = $props();
 let showEventDialog = $state(false);
 
 // Notification subscription state — optimistic, keyed by anime.id
-let subscribedIds = $state(new Set<string>(data.subscriptions));
+let subscribedIds = $state(new Set<string>(untrack(() => data.subscriptions)));
 
 // Which anime are currently in their notification window (client-side highlight)
 let notifyingIds = $state(new Set<string>());
