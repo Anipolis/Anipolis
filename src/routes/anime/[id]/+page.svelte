@@ -769,6 +769,22 @@ const handleRecommendSubmit: SubmitFunction = () => {
 					</div>
 				</section>
 			{/if}
+
+			{#if data.episodes.length > 0}
+				<section class="room-log-section">
+					<h2 class="room-log-heading">ルームログ</h2>
+					<ol class="room-log-list">
+						{#each data.episodes as ep (ep.date)}
+							<li>
+								<a href="/rooms/anime/{data.anime.id}/{ep.date}" class="room-log-item">
+									<span class="room-log-ep">第{ep.number}話</span>
+									<span class="room-log-date">{ep.date}</span>
+								</a>
+							</li>
+						{/each}
+					</ol>
+				</section>
+			{/if}
 		</div>
 	</div>
 </div>
@@ -1514,6 +1530,50 @@ const handleRecommendSubmit: SubmitFunction = () => {
 	font-size: 0.68rem;
 	color: var(--status-score);
 	font-weight: 600;
+}
+
+/* Room log */
+.room-log-section {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+.room-log-heading {
+	font-size: 1rem;
+	font-weight: 600;
+	margin: 0;
+}
+.room-log-list {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+.room-log-item {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 6px 10px;
+	border-radius: 6px;
+	text-decoration: none;
+	color: var(--text);
+	border: 1px solid var(--border);
+	background: var(--card-bg);
+	font-size: 0.85rem;
+	transition: background 0.12s;
+}
+.room-log-item:hover {
+	background: var(--hover-bg);
+}
+.room-log-ep {
+	font-weight: 600;
+	min-width: 60px;
+}
+.room-log-date {
+	color: var(--text-muted);
+	font-size: 0.8rem;
 }
 
 /* Responsive */
