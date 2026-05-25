@@ -82,6 +82,8 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 			})
 		: Promise.resolve({ posts: [], imagePosts: [], likedPosts: [], animeList: [] });
 
+	const profileContent = await profileContentPromise;
+
 	return {
 		profile,
 		isOwn,
@@ -91,7 +93,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 		followRequestStatus,
 		trending: trendingResult.data ?? [],
 		user,
-		profileContent: profileContentPromise,
+		...profileContent,
 	};
 };
 

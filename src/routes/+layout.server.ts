@@ -49,15 +49,7 @@ export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, c
 	const { session, user } = await safeGetSession();
 
 	// profile取得と通知数取得を並列化（profileは通知数取得に不要）
-	const [profile, [unreadNotificationCount, pendingFollowRequestCount]] = user
-		? await Promise.all([
-				getOrCreateProfile(supabase, user),
-				Promise.all([
-					getUnreadNotificationCount(supabase, user.id),
-					getPendingFollowRequestCount(supabase, user.id),
-				]),
-			])
-		: ([null, [0, 0]] as const);
+	const [profile] = user ? await Promise.all([getOrCreateProfile(supabase, user)]) : ([null] as const);
 
 	const filteredCookies = cookies.getAll().filter(({ name }) => /^sb-.+-auth-token/.test(name));
 	const extraAccounts = user ? getExtraAccounts(cookies) : [];

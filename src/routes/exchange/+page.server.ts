@@ -148,7 +148,9 @@ export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession 
 		return { exchanges: [], waitingExchange: null, latestMatchedExchange: null };
 	});
 
-	return { user, exchangeData: exchangeDataPromise };
+	const { exchanges, waitingExchange, latestMatchedExchange } = await exchangeDataPromise;
+
+	return { user, exchanges, waitingExchange, latestMatchedExchange };
 };
 
 export const actions: Actions = {

@@ -1,5 +1,4 @@
 <script lang="ts">
-import NotificationSkeleton from "$lib/components/NotificationSkeleton.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
 import { formatRelativeTime } from "$lib/utils/format";
 import type { PageProps } from "./$types";
@@ -31,9 +30,9 @@ function notificationLabel(type: string): string {
 				<div class="spinner" aria-hidden="true"></div>
 				<span>読み込み中…</span>
 			</div>
-		{:else}
+		{:then notifications}
 			<ul class="notification-list">
-				{#each data.notifications as notif (notif.id)}
+				{#each notifications as notif (notif.id)}
 					<li class="notification-item">
 						<a href="/profile/{notif.actor_username}" class="notification-avatar">
 							<UserAvatar src={notif.actor_avatar_url} username={notif.actor_username} size="md" />
@@ -75,7 +74,7 @@ function notificationLabel(type: string): string {
 					</li>
 				{/each}
 			</ul>
-		{/if}
+		{/await}
 	</main>
 </div>
 

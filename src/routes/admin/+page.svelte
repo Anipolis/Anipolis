@@ -36,8 +36,8 @@ function toDateTimeLocal(value: string | null) {
 }
 
 const dashboard = $derived(data.dashboard);
-const postReports = $derived(dashboard.postReports);
-const accountReports = $derived(dashboard.accountReports);
+const postReports = $derived(dashboard?.postReports ?? []);
+const accountReports = $derived(dashboard?.accountReports ?? []);
 </script>
 
 <svelte:head> <title>Admin - Anipolis</title> </svelte:head>

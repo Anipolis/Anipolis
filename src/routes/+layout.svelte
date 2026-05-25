@@ -37,7 +37,6 @@ onMount(() => {
 		session={data.session}
 		profile={data.profile}
 		unreadNotificationCount={data.unreadNotificationCount}
-		pendingFollowRequestCount={data.pendingFollowRequestCount}
 		{sidebarOpen}
 		extraAccounts={data.extraAccounts}
 	/>

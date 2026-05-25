@@ -9,7 +9,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	const query = url.searchParams.get("q")?.trim() ?? "";
 
 	if (!query) {
-		return { query: "", posts: Promise.resolve([] as Post[]), users: [], user };
+		return { query: "", posts: [] as Post[], users: [], user };
 	}
 
 	// PostgREST の .or() フィルター文字列にカンマを含む入力を補間すると
@@ -37,7 +37,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 			.limit(10),
 	]);
 
-	const posts = enrichPostsWithCounts(supabase, postsResult.data ?? [], user?.id ?? null).catch((err) => {
+	const posts = await enrichPostsWithCounts(supabase, postsResult.data ?? [], user?.id ?? null).catch((err) => {
 		console.error("[search] posts fetch error:", err);
 		return [] as Post[];
 	});

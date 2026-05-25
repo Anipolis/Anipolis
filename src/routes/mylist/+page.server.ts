@@ -16,12 +16,12 @@ export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession 
 
 	if (!profile) redirect(302, "/");
 
-	const animeListPromise: Promise<Anime[]> = getUserAnimeList(supabase, user.id).catch((err) => {
+	const animeList = await getUserAnimeList(supabase, user.id).catch((err) => {
 		console.error("[mylist] animeList fetch error:", err);
 		return [] as Anime[];
 	});
 
-	return { animeList: animeListPromise, profile, user };
+	return { animeList, profile, user };
 };
 
 export const actions: Actions = {
