@@ -339,7 +339,8 @@ function isWithinBroadcastWindow(createdAt: string, roomDate: string, broadcastT
 	if (year == null || month == null || day == null) return false;
 	const hour = Number(match[1]);
 	const minute = Number(match[2]);
-	// hour≥24（深夜帯: "25:30"など）でも Date.UTC の算術オーバーフローで正しく翌日に繰り越される
+	// Timezone adjustment: hour is parsed from broadcastTime (may be >=24 for late-night labels like "25:30").
+	// hour - 9 converts JST → UTC. Date.UTC correctly rolls over days for values >=24.
 	const scheduledMs = Date.UTC(year, month - 1, day, hour - 9, minute);
 	const createdMs = new Date(createdAt).getTime();
 	if (Number.isNaN(createdMs)) return false;

@@ -17,7 +17,10 @@ let {
 	statusLabel: Record<AnimeStatus, string>;
 } = $props();
 
-const episodeMax = $derived(anime.episode_count ? Number(anime.episode_count) : 9999);
+const episodeMax = $derived.by(() => {
+	const parsed = parseInt(String(anime.episode_count), 10);
+	return !Number.isNaN(parsed) ? parsed : 9999;
+});
 </script>
 
 <div class="anime-row-edit">

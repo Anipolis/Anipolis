@@ -14,8 +14,11 @@ let saving = $state(false);
 const settingsSubmit: SubmitFunction = () => {
 	saving = true;
 	return async ({ update }) => {
-		saving = false;
-		await update({ reset: false });
+		try {
+			await update({ reset: false });
+		} finally {
+			saving = false;
+		}
 	};
 };
 </script>

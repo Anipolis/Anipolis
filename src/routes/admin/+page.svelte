@@ -50,66 +50,68 @@ const accountReports = $derived(dashboard?.accountReports ?? []);
 		</div>
 	</header>
 
-	<section class="admin-stats" aria-label="運営指標">
-		<div class="admin-stat admin-stat-alert">
-			<span>未対応</span>
-			<strong>{dashboard.stats.openReports}</strong>
-		</div>
-		<div class="admin-stat">
-			<span>確認中</span>
-			<strong>{dashboard.stats.reviewingReports}</strong>
-		</div>
-		<div class="admin-stat">
-			<span>今日の通報</span>
-			<strong>{dashboard.stats.reportsToday}</strong>
-		</div>
-		<div class="admin-stat">
-			<span>7日間の通報</span>
-			<strong>{dashboard.stats.reportsThisWeek}</strong>
-		</div>
-		<div class="admin-stat">
-			<span>今日の投稿</span>
-			<strong>{dashboard.stats.postsToday}</strong>
-		</div>
-		<div class="admin-stat">
-			<span>今日の新規ユーザー</span>
-			<strong>{dashboard.stats.usersToday}</strong>
-		</div>
-		<div class="admin-stat">
-			<span>総投稿数</span>
-			<strong>{dashboard.stats.totalPosts}</strong>
-		</div>
-		<div class="admin-stat">
-			<span>総ユーザー数</span>
-			<strong>{dashboard.stats.totalUsers}</strong>
-		</div>
-		<div class="admin-stat">
-			<span>制限中</span>
-			<strong>{dashboard.stats.restrictedUsers}</strong>
-		</div>
-		<div class="admin-stat admin-stat-alert">
-			<span>BAN中</span>
-			<strong>{dashboard.stats.bannedUsers}</strong>
-		</div>
-	</section>
-
-	<section class="admin-section">
-		<div class="admin-section-header">
-			<h2>通報理由 7日間</h2>
-		</div>
-		{#if dashboard.reasonCounts.length === 0}
-			<p class="admin-empty">直近7日間の通報はありません。</p>
-		{:else}
-			<div class="reason-list">
-				{#each dashboard.reasonCounts as item}
-					<div class="reason-row">
-						<span>{reasonLabels[item.reason]}</span>
-						<strong>{item.count}</strong>
-					</div>
-				{/each}
+	{#if dashboard}
+		<section class="admin-stats" aria-label="運営指標">
+			<div class="admin-stat admin-stat-alert">
+				<span>未対応</span>
+				<strong>{dashboard.stats.openReports}</strong>
 			</div>
-		{/if}
-	</section>
+			<div class="admin-stat">
+				<span>確認中</span>
+				<strong>{dashboard.stats.reviewingReports}</strong>
+			</div>
+			<div class="admin-stat">
+				<span>今日の通報</span>
+				<strong>{dashboard.stats.reportsToday}</strong>
+			</div>
+			<div class="admin-stat">
+				<span>7日間の通報</span>
+				<strong>{dashboard.stats.reportsThisWeek}</strong>
+			</div>
+			<div class="admin-stat">
+				<span>今日の投稿</span>
+				<strong>{dashboard.stats.postsToday}</strong>
+			</div>
+			<div class="admin-stat">
+				<span>今日の新規ユーザー</span>
+				<strong>{dashboard.stats.usersToday}</strong>
+			</div>
+			<div class="admin-stat">
+				<span>総投稿数</span>
+				<strong>{dashboard.stats.totalPosts}</strong>
+			</div>
+			<div class="admin-stat">
+				<span>総ユーザー数</span>
+				<strong>{dashboard.stats.totalUsers}</strong>
+			</div>
+			<div class="admin-stat">
+				<span>制限中</span>
+				<strong>{dashboard.stats.restrictedUsers}</strong>
+			</div>
+			<div class="admin-stat admin-stat-alert">
+				<span>BAN中</span>
+				<strong>{dashboard.stats.bannedUsers}</strong>
+			</div>
+		</section>
+
+		<section class="admin-section">
+			<div class="admin-section-header">
+				<h2>通報理由 7日間</h2>
+			</div>
+			{#if dashboard.reasonCounts.length === 0}
+				<p class="admin-empty">直近7日間の通報はありません。</p>
+			{:else}
+				<div class="reason-list">
+					{#each dashboard.reasonCounts as item}
+						<div class="reason-row">
+							<span>{reasonLabels[item.reason]}</span>
+							<strong>{item.count}</strong>
+						</div>
+					{/each}
+				</div>
+			{/if}
+		</section>
+	{/if}
 
 	<section class="admin-section">
 		<div class="admin-section-header">

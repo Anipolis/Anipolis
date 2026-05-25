@@ -74,7 +74,7 @@ let { data, form }: PageProps = $props();
 <style>
 .settings-subtitle {
 	margin: 4px 0 0;
-	color: var(--fg-muted, #94a3b8);
+	color: var(--color-text-muted);
 	font-size: 0.84rem;
 }
 
@@ -89,11 +89,11 @@ let { data, form }: PageProps = $props();
 	align-items: flex-start;
 	gap: 12px;
 	padding: 14px 0;
-	border-bottom: 1px solid var(--border, #334155);
+	border-bottom: 1px solid var(--color-border);
 }
 
 .request-card:first-child {
-	border-top: 1px solid var(--border, #334155);
+	border-top: 1px solid var(--color-border);
 }
 
 .request-avatar {
@@ -109,7 +109,7 @@ let { data, form }: PageProps = $props();
 	display: inline-block;
 	font-size: 0.95rem;
 	font-weight: 700;
-	color: var(--fg, #e2e8f0);
+	color: var(--color-text);
 	text-decoration: none;
 }
 
@@ -119,13 +119,13 @@ let { data, form }: PageProps = $props();
 
 .request-meta {
 	font-size: 0.82rem;
-	color: var(--fg-muted, #94a3b8);
+	color: var(--color-text-muted);
 	margin-bottom: 4px;
 }
 
 .request-body p {
 	font-size: 0.85rem;
-	color: var(--fg-muted, #94a3b8);
+	color: var(--color-text-muted);
 	margin: 0;
 	display: -webkit-box;
 	-webkit-line-clamp: 2;

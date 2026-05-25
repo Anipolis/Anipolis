@@ -1,7 +1,6 @@
 import { fail, redirect } from "@sveltejs/kit";
+import { setPasswordAction } from "$lib/server/actions";
 import type { Actions, PageServerLoad } from "./$types";
-
-const MIN_PASSWORD_LENGTH = 6;
 
 export const load: PageServerLoad = async ({ locals: { safeGetSession } }) => {
 	const { user } = await safeGetSession();
@@ -22,30 +21,13 @@ export const actions: Actions = {
 			return fail(400, { action: "setPassword", message: "すでにパスワードが設定されています" });
 		}
 
-		const form = await request.formData();
-		const password = (form.get("password") as string | null) ?? "";
-		const confirm = (form.get("confirm") as string | null) ?? "";
-
-		if (password.length < MIN_PASSWORD_LENGTH) {
+		const result = await setPasswordAction(request, supabase, user.id);
+		if ("error" in result) {
 			return fail(400, {
 				action: "setPassword",
-				field: "password",
-				message: `パスワードは${MIN_PASSWORD_LENGTH}文字以上で入力してください`,
+				field: result.field,
+				message: result.error,
 			});
-		}
-		if (password !== confirm) {
-			return fail(400, {
-				action: "setPassword",
-				field: "confirm",
-				message: "パスワードが一致しません",
-			});
-		}
-
-		// admin API ではなくユーザー自身のセッションクライアントで更新する。
-		// admin.updateUserById はセッションを無効化するが、updateUser はセッションを維持したまま更新できる。
-		const { error } = await supabase.auth.updateUser({ password });
-		if (error) {
-			return fail(500, { action: "setPassword", message: "パスワードの設定に失敗しました" });
 		}
 
 		return { action: "setPassword", success: true };

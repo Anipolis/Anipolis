@@ -63,9 +63,10 @@ async function submitUserReport() {
 		fd.append("details", reportDetails.trim());
 
 		const res = await fetch("/api/reports", { method: "POST", body: fd });
-		const body = await res.json().catch(() => ({}));
+		const body: Record<string, unknown> = await res.json().catch(() => ({}));
 		if (!res.ok) {
-			reportMessage = body.message ?? "通報の送信に失敗しました";
+			reportMessage =
+				(typeof body["message"] === "string" ? body["message"] : null) ?? "通報の送信に失敗しました";
 		} else {
 			reportMessage = "通報を受け付けました";
 			reportDetails = "";
@@ -79,6 +80,12 @@ async function submitUserReport() {
 	}
 
 	reportSubmitting = false;
+}
+
+function handleReportModalKeydown(event: KeyboardEvent) {
+	if (showUserReportModal && event.key === "Escape") {
+		showUserReportModal = false;
+	}
 }
 
 const statusOrder: AnimeStatus[] = ["watching", "completed", "plan_to_watch", "on_hold", "dropped"];
@@ -113,6 +120,8 @@ const grouped = $derived(
 </script>
 
 <svelte:head> <title>{displayName} (@{profile.username}) — Anipolis</title> </svelte:head>
+
+<svelte:window onkeydown={handleReportModalKeydown} />
 
 <div class="page-container">
 	<main class="feed-column">

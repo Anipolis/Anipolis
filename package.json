@@ -32,6 +32,7 @@
 		"@supabase/supabase-js": "^2.105.4"
 	},
 	"devDependencies": {
+		"@biomejs/biome": "^2.4.15",
 		"@iconify-json/lucide": "^1.2.108",
 		"@sveltejs/adapter-auto": "^7.0.1",
 		"@sveltejs/adapter-cloudflare": "^7.2.8",

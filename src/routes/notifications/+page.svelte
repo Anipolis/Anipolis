@@ -31,49 +31,55 @@ function notificationLabel(type: string): string {
 				<span>読み込み中…</span>
 			</div>
 		{:then notifications}
-			<ul class="notification-list">
-				{#each notifications as notif (notif.id)}
-					<li class="notification-item">
-						<a href="/profile/{notif.actor_username}" class="notification-avatar">
-							<UserAvatar src={notif.actor_avatar_url} username={notif.actor_username} size="md" />
-						</a>
-						<div class="notification-body">
-							<p class="notification-text">
-								<a href="/profile/{notif.actor_username}" class="notification-actor">
-									{notif.actor_display_name ?? notif.actor_username}
-								</a>
-								{notificationLabel(notif.type)}
-							</p>
-							{#if notif.post_content && notif.post_id}
-								<a href="/posts/{notif.post_id}" class="notification-post-preview">
-									{notif.post_content.length > 80
+			{#if notifications.length === 0}
+				<div class="notification-empty">
+					<p>通知はありません</p>
+				</div>
+			{:else}
+				<ul class="notification-list">
+					{#each notifications as notif (notif.id)}
+						<li class="notification-item">
+							<a href="/profile/{notif.actor_username}" class="notification-avatar">
+								<UserAvatar src={notif.actor_avatar_url} username={notif.actor_username} size="md" />
+							</a>
+							<div class="notification-body">
+								<p class="notification-text">
+									<a href="/profile/{notif.actor_username}" class="notification-actor">
+										{notif.actor_display_name ?? notif.actor_username}
+									</a>
+									{notificationLabel(notif.type)}
+								</p>
+								{#if notif.post_content && notif.post_id}
+									<a href="/posts/{notif.post_id}" class="notification-post-preview">
+										{notif.post_content.length > 80
 										? `${notif.post_content.slice(0, 80)}…`
 										: notif.post_content}
-								</a>
-							{/if}
-							{#if notif.type === 'anime_recommendation' && notif.recommendation_anime_id}
-								<a href="/anime/{notif.recommendation_anime_id}" class="notification-anime-preview">
-									{#if notif.recommendation_anime_cover_url}
-										<img
-											src={notif.recommendation_anime_cover_url}
-											alt={notif.recommendation_anime_title ?? '推薦作品'}
-											width="34"
-											height="48"
-											loading="lazy"
-											decoding="async"
-										>
-									{/if}
-									<span> <strong>{notif.recommendation_anime_title ?? '推薦作品'}</strong> </span>
-								</a>
-							{/if}
-							{#if notif.type === 'follow_request'}
-								<a href="/settings/follow-requests" class="notification-action-link">申請を確認</a>
-							{/if}
-							<span class="notification-time">{formatRelativeTime(notif.created_at)}</span>
-						</div>
-					</li>
-				{/each}
-			</ul>
+									</a>
+								{/if}
+								{#if notif.type === 'anime_recommendation' && notif.recommendation_anime_id}
+									<a href="/anime/{notif.recommendation_anime_id}" class="notification-anime-preview">
+										{#if notif.recommendation_anime_cover_url}
+											<img
+												src={notif.recommendation_anime_cover_url}
+												alt={notif.recommendation_anime_title ?? '推薦作品'}
+												width="34"
+												height="48"
+												loading="lazy"
+												decoding="async"
+											>
+										{/if}
+										<span> <strong>{notif.recommendation_anime_title ?? '推薦作品'}</strong> </span>
+									</a>
+								{/if}
+								{#if notif.type === 'follow_request'}
+									<a href="/settings/follow-requests" class="notification-action-link">申請を確認</a>
+								{/if}
+								<span class="notification-time">{formatRelativeTime(notif.created_at)}</span>
+							</div>
+						</li>
+					{/each}
+				</ul>
+			{/if}
 		{/await}
 	</main>
 </div>
@@ -188,7 +194,7 @@ function notificationLabel(type: string): string {
 	width: fit-content;
 	font-size: 13px;
 	font-weight: 700;
-	color: var(--accent, #6366f1);
+	color: var(--color-accent, #6366f1);
 	text-decoration: none;
 }
 
@@ -198,6 +204,12 @@ function notificationLabel(type: string): string {
 
 .notification-time {
 	font-size: 12px;
+	color: var(--color-text-muted);
+}
+
+.notification-empty {
+	padding: 2rem 1rem;
+	text-align: center;
 	color: var(--color-text-muted);
 }
 </style>

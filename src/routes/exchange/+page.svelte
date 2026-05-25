@@ -226,7 +226,9 @@ const handleExchangeSubmit: SubmitFunction = () => {
 							>
 						{/if}
 						<span>{selectedAnime.title}</span>
-						<button type="button" onclick={clearAnime} aria-label="選択を解除">×</button>
+						<button type="button" onclick={clearAnime} aria-label="選択を解除">
+							<i class="i-lucide-x"></i>
+						</button>
 					</div>
 					<input type="hidden" name="anime_id" value={selectedAnime.id}>
 				{/if}

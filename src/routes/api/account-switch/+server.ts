@@ -37,6 +37,13 @@ export const POST: RequestHandler = async ({ request, cookies, locals: { supabas
 
 	const currentRefreshToken = currentSession.refresh_token;
 
+	// 現在のユーザーのプロフィールを取得して Cookie に保存
+	const { data: currentProfile } = await supabase
+		.from("profiles")
+		.select("username, display_name, avatar_url")
+		.eq("id", currentUser.id)
+		.single();
+
 	// 対象アカウントのセッションに切り替え
 	const { data: newSessionData, error: refreshError } = await supabase.auth.refreshSession({
 		refresh_token: targetAccount.refreshToken,
@@ -50,13 +57,6 @@ export const POST: RequestHandler = async ({ request, cookies, locals: { supabas
 		);
 		error(400, "REFRESH_EXPIRED");
 	}
-
-	// 現在のユーザーのプロフィールを取得して Cookie に保存
-	const { data: currentProfile } = await supabase
-		.from("profiles")
-		.select("username, display_name, avatar_url")
-		.eq("id", currentUser.id)
-		.single();
 
 	setExtraAccounts(cookies, [
 		...extraAccounts.filter((a) => a.userId !== targetUserId),

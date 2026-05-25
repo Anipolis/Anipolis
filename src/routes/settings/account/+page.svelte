@@ -154,7 +154,7 @@ const submitPassword: SubmitFunction = () => {
 .settings-section {
 	padding-top: 18px;
 	margin-top: 18px;
-	border-top: 1px solid var(--border, #334155);
+	border-top: 1px solid var(--color-border);
 }
 
 .settings-section-title {
@@ -165,7 +165,7 @@ const submitPassword: SubmitFunction = () => {
 
 .settings-divider {
 	border: none;
-	border-top: 1px solid var(--border, #334155);
+	border-top: 1px solid var(--color-border);
 	margin: 22px 0 0;
 }
 </style>

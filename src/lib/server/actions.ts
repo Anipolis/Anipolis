@@ -672,23 +672,34 @@ export async function toggleBroadcastSubscription(
 	userId: string,
 	animeId: string,
 ): Promise<{ subscribed: boolean }> {
-	const { data: existing } = await supabase
+	const numericAnimeId = Number(animeId);
+	if (!Number.isFinite(numericAnimeId)) {
+		throw new Error("Invalid anime_id");
+	}
+
+	const { data: existing, error: selectError } = await supabase
 		.from("broadcast_notification_subscriptions")
 		.select("anime_id")
 		.eq("user_id", userId)
-		.eq("anime_id", Number(animeId))
+		.eq("anime_id", numericAnimeId)
 		.maybeSingle();
 
+	if (selectError) throw selectError;
+
 	if (existing) {
-		await supabase
+		const { error: deleteError } = await supabase
 			.from("broadcast_notification_subscriptions")
 			.delete()
 			.eq("user_id", userId)
-			.eq("anime_id", Number(animeId));
+			.eq("anime_id", numericAnimeId);
+		if (deleteError) throw deleteError;
 		return { subscribed: false };
 	}
 
-	await supabase.from("broadcast_notification_subscriptions").insert({ user_id: userId, anime_id: Number(animeId) });
+	const { error: insertError } = await supabase
+		.from("broadcast_notification_subscriptions")
+		.insert({ user_id: userId, anime_id: numericAnimeId });
+	if (insertError) throw insertError;
 	return { subscribed: true };
 }
 
@@ -697,13 +708,61 @@ export async function updateBroadcastNotificationSettings(
 	userId: string,
 	settings: import("$lib/types").BroadcastNotificationSettings,
 ): Promise<void> {
-	await supabase.from("broadcast_notification_settings").upsert({
+	const { error } = await supabase.from("broadcast_notification_settings").upsert({
 		user_id: userId,
 		notify_1min: settings.notify_1min,
 		notify_5min: settings.notify_5min,
 		notify_30min: settings.notify_30min,
 		updated_at: new Date().toISOString(),
 	});
+	if (error) throw error;
+}
+
+export async function setPasswordAction(
+	request: Request,
+	supabase: SupabaseClient<Database>,
+	_userId: string,
+): Promise<{ success: true } | { error: string; field?: string }> {
+	const form = await request.formData();
+	const password = (form.get("password") as string | null) ?? "";
+	const confirm = (form.get("confirm") as string | null) ?? "";
+
+	const MIN_PASSWORD_LENGTH = 6;
+
+	if (password.length < MIN_PASSWORD_LENGTH) {
+		return {
+			error: `パスワードは${MIN_PASSWORD_LENGTH}文字以上で入力してください`,
+			field: "password",
+		};
+	}
+	if (password !== confirm) {
+		return {
+			error: "パスワードが一致しません",
+			field: "confirm",
+		};
+	}
+
+	const { error } = await supabase.auth.updateUser({ password });
+	if (error) {
+		return { error: "パスワードの設定に失敗しました" };
+	}
+
+	return { success: true };
+}
+
+export async function updateNotificationSettingsAction(
+	request: Request,
+	supabase: SupabaseClient<Database>,
+	userId: string,
+): Promise<void> {
+	const form = await request.formData();
+	const settings = {
+		notify_1min: form.get("notify_1min") === "on",
+		notify_5min: form.get("notify_5min") === "on",
+		notify_30min: form.get("notify_30min") === "on",
+	};
+
+	await updateBroadcastNotificationSettings(supabase, userId, settings);
 }
 
 // linked_accounts は自動生成型未収録のためテーブル名のみ型アサーション使用

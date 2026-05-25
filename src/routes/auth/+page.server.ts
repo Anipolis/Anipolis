@@ -161,7 +161,7 @@ export const actions: Actions = {
 		if ((count ?? 0) >= 2) {
 			return fail(400, {
 				mode: "add_account",
-				message: "アカウントは最大3つまで追加できます",
+				message: "追加アカウントは最大2つまでです",
 			});
 		}
 
@@ -206,11 +206,17 @@ export const actions: Actions = {
 		}
 
 		// アカウント B のプロフィールを取得
-		const { data: targetProfile } = await supabase
+		const { data: targetProfile, error: profileError } = await supabase
 			.from("profiles")
 			.select("username, display_name, avatar_url")
 			.eq("id", targetUserId)
-			.single();
+			.maybeSingle();
+
+		if (profileError || !targetProfile) {
+			// プロフィール取得失敗 — アカウント A のセッションを復元
+			await supabase.auth.refreshSession({ refresh_token: ownerRefreshToken });
+			return fail(400, { mode: "add_account", message: "プロフィールの取得に失敗しました" });
+		}
 
 		// アカウント A のセッションを復元
 		const { error: restoreError } = await supabase.auth.refreshSession({

@@ -138,14 +138,14 @@ export async function enrichPostsWithCounts(
 	const bookmarkedSet = new Set((myBookmarksRes.data ?? []).map((r) => r.post_id));
 
 	// ── アニメ引用がある投稿のスコアを一括取得 ────────────────────
-	const animeIds = [...new Set(visibleRawPosts.map((p) => p.anime_id).filter(Boolean))] as string[];
+	const animeIds = Array.from(new Set(visibleRawPosts.map((p) => p.anime_id).filter((n): n is number => n != null)));
 	const userScoreMap = new Map<string, number | null>();
 	if (userId && animeIds.length > 0) {
 		const { data: entries } = await supabase
 			.from("user_anime_list")
 			.select("anime_id, score")
 			.eq("user_id", userId)
-			.in("anime_id", animeIds.map(Number));
+			.in("anime_id", animeIds);
 		for (const e of entries ?? []) {
 			userScoreMap.set(String(e.anime_id), e.score);
 		}
@@ -942,7 +942,11 @@ export async function getAnimeList(
 	if (studio) query = query.or(arrayContainsAny(["studio", "studio_en"], studio));
 	if (producer) query = query.contains("producer", [producer]);
 	if (broadcastStatus) query = query.eq("computed_broadcast_status", broadcastStatus);
-	if (searchQuery) query = query.or(`title.ilike.%${searchQuery}%,title_en.ilike.%${searchQuery}%`);
+	if (searchQuery) {
+		// Escape SQL LIKE metacharacters % and _
+		const escaped = searchQuery.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+		query = query.or(`title.ilike.%${escaped}%,title_en.ilike.%${escaped}%`);
+	}
 
 	const { data, error } = await query;
 	const rows = error || !data ? await getAnimeListRowsFromBaseTable(supabase, options, seasonFilter) : data;

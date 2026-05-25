@@ -21,7 +21,7 @@ const next = $derived(data.next ?? "/");
 				<h1 class="settings-title">
 					{activeMode === 'register' ? 'アカウント作成' : activeMode === 'add_account' ? 'アカウントを追加' : 'ログイン'}
 				</h1>
-				<a href={activeMode === 'add_account' ? '/' : '/'} class="btn btn-ghost">戻る</a>
+				<a href="/" class="btn btn-ghost">戻る</a>
 			</div>
 
 			{#if activeMode !== 'add_account'}

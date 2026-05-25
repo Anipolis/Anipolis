@@ -57,10 +57,17 @@ function closeLightbox() {
 }
 
 function handleLightboxKeydown(event: KeyboardEvent) {
-	if (lightboxUrl && event.key === "Escape") closeLightbox();
-	if (showDeleteModal && event.key === "Escape") showDeleteModal = false;
-	if (showExchangeModal && event.key === "Escape") showExchangeModal = false;
-	if (showReportModal && event.key === "Escape") showReportModal = false;
+	if (event.key === "Escape") {
+		if (lightboxUrl) {
+			closeLightbox();
+		} else if (showDeleteModal) {
+			showDeleteModal = false;
+		} else if (showExchangeModal) {
+			showExchangeModal = false;
+		} else if (showReportModal) {
+			showReportModal = false;
+		}
+	}
 }
 
 function openExchangeModal(event: MouseEvent) {

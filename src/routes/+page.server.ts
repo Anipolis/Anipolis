@@ -101,11 +101,10 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		parentPromise,
 	]);
 
-	const posts = await enrichPostsWithCounts(
-		supabase,
-		(postsResult.data ?? []) as unknown as RawPost[],
-		user?.id ?? null,
-	);
+	// Cast to RawPost[] - postsResult.data is expected to be an array of raw post objects
+	// with nested joins from Supabase (posts + profiles + anime + quoted_post via enrichPostsWithCounts)
+	const rawPosts = Array.isArray(postsResult.data) ? (postsResult.data as unknown as RawPost[]) : [];
+	const posts = await enrichPostsWithCounts(supabase, rawPosts, user?.id ?? null);
 
 	return {
 		posts,

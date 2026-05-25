@@ -11,6 +11,6 @@
 	margin: 4rem auto;
 	padding: 1rem;
 	text-align: center;
-	color: var(--text);
+	color: var(--color-text);
 }
 </style>

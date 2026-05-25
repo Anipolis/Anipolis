@@ -66,9 +66,7 @@ function formatAiredPeriod(airedFrom: string | null, airedTo: string | null): st
 	return `${airedFrom.slice(0, 10)} 〜 ${airedTo ? airedTo.slice(0, 10) : "未定"}`;
 }
 
-function isHttpUrl(url: string | null | undefined): url is string {
-	return typeof url === "string" && /^https?:\/\//i.test(url);
-}
+import { isHttpUrl, isMalUrl } from "$lib/utils/url";
 
 function buildDisplayOfficialLinks(officialSiteUrl: string | null, officialXUrl: string | null) {
 	const links: { name: string; url: string }[] = [];
@@ -115,15 +113,6 @@ function dedupeLinks(links: { name: string; url: string }[]) {
 		seen.add(key);
 		return true;
 	});
-}
-
-function isMalUrl(url: string) {
-	try {
-		const hostname = new URL(url).hostname.toLowerCase();
-		return hostname === "myanimelist.net" || hostname.endsWith(".myanimelist.net");
-	} catch {
-		return false;
-	}
 }
 
 let selectedStatus = $state<AnimeStatus>("plan_to_watch");

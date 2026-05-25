@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { isHttpUrl as isHttpUrlUtil, isMalUrl } from "../src/lib/utils/url.js";
 
 type SeasonName = "winter" | "spring" | "summer" | "fall";
 
@@ -156,7 +157,7 @@ const REQUEST_WAIT_MAX_MS = 1_000;
 const RETRY_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
 const MAX_RETRIES = 5;
 const UPSERT_BATCH_SIZE = 100;
-const MAL_HOME_URL = "https://myanimelist.net/";
+const _MAL_HOME_URL = "https://myanimelist.net/";
 const BLOCKED_RESOURCE_KEYWORDS = ["namuwiki", "bangumi"];
 const BLOCKED_TYPES = new Set(["music", "pv", "cm"]);
 const FINITE_RELEASE_TYPES = new Set(["movie", "ona", "ova", "tvspecial", "special"]);
@@ -738,20 +739,9 @@ function findOfficialXUrl(external: ExternalLink[] | null | undefined) {
 	);
 }
 
-function isHttpUrl(value: string | null | undefined) {
-	if (!value) return false;
-
-	try {
-		const protocol = new URL(value).protocol;
-		return protocol === "http:" || protocol === "https:";
-	} catch {
-		return false;
-	}
-}
-
 function normalizeResourceLink(link: ExternalLink): AnimeResourceLink | null {
 	const url = link.url?.trim();
-	if (!isHttpUrl(url)) return null;
+	if (!isHttpUrlUtil(url)) return null;
 	if (isMalUrl(url)) return null;
 
 	const name = (link.name ?? link.title ?? link.type ?? "").trim();
@@ -759,15 +749,6 @@ function normalizeResourceLink(link: ExternalLink): AnimeResourceLink | null {
 	if (name.toLowerCase() === "mal" || name.toLowerCase().includes("myanimelist")) return null;
 
 	return { name, url: url as string };
-}
-
-function isMalUrl(value: string) {
-	try {
-		const hostname = new URL(value).hostname.toLowerCase();
-		return hostname === "myanimelist.net" || hostname.endsWith(".myanimelist.net");
-	} catch {
-		return false;
-	}
 }
 
 function dedupeResourceLinks(resources: AnimeResourceLink[]) {
@@ -787,7 +768,7 @@ function dedupeResourceLinks(resources: AnimeResourceLink[]) {
 function buildAnimeResources(anime: JikanAnime) {
 	const resources: AnimeResourceLink[] = [];
 
-	if (anime.mal_id) resources.push({ name: "MAL", url: MAL_HOME_URL });
+	if (anime.mal_id) resources.push({ name: "MAL", url: `https://myanimelist.net/anime/${anime.mal_id}` });
 
 	for (const link of anime.resources ?? []) {
 		const normalized = normalizeResourceLink(link);

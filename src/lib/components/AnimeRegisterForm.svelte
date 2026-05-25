@@ -1,4 +1,4 @@
-﻿<script lang="ts">
+<script lang="ts">
 import { enhance } from "$app/forms";
 
 type FormResult = { success?: boolean; animeId?: string | number; message?: string } | null | undefined;
@@ -214,7 +214,7 @@ async function handleFileChange(e: Event) {
 					name="broadcast_time"
 					type="text"
 					inputmode="numeric"
-					pattern="([01]?[0-9]|2[0-9]|3[0-5]|4[0-7]):[0-5][0-9]"
+					pattern="([0-3]?[0-9]|4[0-7]):[0-5][0-9]"
 					placeholder="例: 24:30 / 26:00"
 					class="rf-input"
 				>

@@ -1,4 +1,4 @@
-﻿import { fail } from "@sveltejs/kit";
+import { fail } from "@sveltejs/kit";
 import {
 	getAnimeList,
 	getAnimeRankingPopularity,
@@ -157,7 +157,10 @@ export const actions: Actions = {
 				copyright: (fd.get("copyright") as string)?.trim() || null,
 				broadcast_day: (() => {
 					const v = (fd.get("broadcast_day") as string)?.trim();
-					return v !== "" && v != null ? parseInt(v, 10) : null;
+					if (!v) return null;
+					const parsed = parseInt(v, 10);
+					if (!Number.isFinite(parsed) || parsed < 0 || parsed > 6) return null;
+					return parsed;
 				})(),
 				broadcast_time: broadcastTime,
 				broadcast_station: (() => {
