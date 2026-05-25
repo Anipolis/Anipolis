@@ -18,6 +18,17 @@ type NamedResource = {
 	name?: string | null;
 };
 
+type JikanRelationEntry = {
+	mal_id?: number | null;
+	type?: string | null;
+	name?: string | null;
+};
+
+type JikanRelation = {
+	relation?: string | null;
+	entry?: JikanRelationEntry[];
+};
+
 type JikanAnime = {
 	mal_id: number;
 	url?: string | null;
@@ -59,6 +70,7 @@ type JikanAnime = {
 		string?: string | null;
 	};
 	external?: ExternalLink[];
+	relations?: JikanRelation[];
 };
 
 type JikanSeasonResponse = {
@@ -103,6 +115,13 @@ type AnimeImportRow = {
 	cover_url: string | null;
 };
 
+type AnimeRelationImportRow = {
+	anime_mal_id: number;
+	related_anime_mal_id: number;
+	relation_type: string;
+	related_title: string;
+};
+
 type ImportDatabase = {
 	public: {
 		Tables: {
@@ -111,6 +130,13 @@ type ImportDatabase = {
 				Update: Partial<AnimeImportRow>;
 				Row: AnimeImportRow & {
 					id: number;
+					created_at: string;
+				};
+			};
+			anime_relations: {
+				Insert: AnimeRelationImportRow;
+				Update: Partial<AnimeRelationImportRow>;
+				Row: AnimeRelationImportRow & {
 					created_at: string;
 				};
 			};
@@ -507,6 +533,7 @@ async function enrichAnimeLinks(animes: JikanAnime[]) {
 			...anime,
 			external: fullAnime.external ?? anime.external,
 			resources: fullAnime.resources ?? anime.resources,
+			relations: fullAnime.relations ?? [],
 		});
 	}
 
@@ -812,6 +839,29 @@ function mapJikanAnime(anime: JikanAnime, year: number, season: SeasonName): Ani
 	};
 }
 
+function mapAnimeRelations(anime: JikanAnime): AnimeRelationImportRow[] {
+	return (anime.relations ?? []).flatMap((relation) => {
+		const relationType = relation.relation?.trim();
+		if (!relationType) return [];
+
+		return (relation.entry ?? [])
+			.filter(
+				(entry): entry is JikanRelationEntry & { mal_id: number; name: string } =>
+					entry.type === "anime" &&
+					typeof entry.mal_id === "number" &&
+					entry.mal_id !== anime.mal_id &&
+					typeof entry.name === "string" &&
+					entry.name.trim().length > 0,
+			)
+			.map((entry) => ({
+				anime_mal_id: anime.mal_id,
+				related_anime_mal_id: entry.mal_id,
+				relation_type: relationType,
+				related_title: entry.name.trim(),
+			}));
+	});
+}
+
 function mergeUniqueStrings(left: string[], right: string[]) {
 	return [...new Set([...left, ...right])];
 }
@@ -945,6 +995,7 @@ async function preserveExistingValuesOnPartialFailures(
 
 async function upsertAnimeRows(rows: AnimeImportRow[]) {
 	const supabase = getSupabaseClient();
+	const savedMalIds = new Set<number>();
 	let saved = 0;
 
 	for (let start = 0; start < rows.length; start += UPSERT_BATCH_SIZE) {
@@ -959,9 +1010,40 @@ async function upsertAnimeRows(rows: AnimeImportRow[]) {
 			continue;
 		}
 
+		for (const row of batch) savedMalIds.add(row.mal_id);
 		saved += batch.length;
 		console.log(`Supabase upserted ${saved}/${rows.length} rows`);
 	}
+
+	return savedMalIds;
+}
+
+async function syncAnimeRelations(animes: JikanAnime[], savedMalIds: Set<number>) {
+	const supabase = getSupabaseClient();
+	let synced = 0;
+
+	for (const anime of animes) {
+		if (!savedMalIds.has(anime.mal_id) || anime.relations === undefined) continue;
+
+		const { error: deleteError } = await supabase.from("anime_relations").delete().eq("anime_mal_id", anime.mal_id);
+		if (deleteError) {
+			console.error(`Could not replace anime relations for MAL ${anime.mal_id}: ${deleteError.message}`);
+			continue;
+		}
+
+		const relationRows = mapAnimeRelations(anime);
+		if (relationRows.length > 0) {
+			const { error: insertError } = await supabase.from("anime_relations").insert(relationRows);
+			if (insertError) {
+				console.error(`Could not save anime relations for MAL ${anime.mal_id}: ${insertError.message}`);
+				continue;
+			}
+		}
+
+		synced += relationRows.length;
+	}
+
+	console.log(`Synced ${synced} anime relations.`);
 }
 
 async function main() {
@@ -981,7 +1063,8 @@ async function main() {
 		return;
 	}
 
-	await upsertAnimeRows(rows);
+	const savedMalIds = await upsertAnimeRows(rows);
+	await syncAnimeRelations(filteredAnimes, savedMalIds);
 	console.log(`Import complete: ${rows.length} rows processed.`);
 }
 

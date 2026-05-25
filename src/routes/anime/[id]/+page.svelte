@@ -26,6 +26,11 @@ const displayResources = $derived(
 		data.anime.official_x_url,
 	),
 );
+const prequelRelations = $derived(data.relations.filter((relation) => relation.relation_type === "Prequel"));
+const sequelRelations = $derived(data.relations.filter((relation) => relation.relation_type === "Sequel"));
+const otherRelations = $derived(
+	data.relations.filter((relation) => relation.relation_type !== "Prequel" && relation.relation_type !== "Sequel"),
+);
 
 const statusOptions: { value: AnimeStatus; label: string }[] = [
 	{ value: "watching", label: "視聴中" },
@@ -480,6 +485,49 @@ const handleRecommendSubmit: SubmitFunction = () => {
 				<section class="synopsis">
 					<h2>あらすじ</h2>
 					<p>{data.anime.synopsis}</p>
+				</section>
+			{/if}
+
+			{#if data.relations.length > 0}
+				<section class="relations-section">
+					<h2>関連作品</h2>
+					{#each [
+						{ label: '前作', relations: prequelRelations },
+						{ label: '続編', relations: sequelRelations },
+						{ label: '関連作品', relations: otherRelations },
+					] as group (group.label)}
+						{#if group.relations.length > 0}
+							<div class="relation-group">
+								<h3>{group.label}</h3>
+								<div class="relation-list">
+									{#each group.relations as relation (`${relation.relation_type}-${relation.related_anime_mal_id}`)}
+										{#if relation.anime}
+											<a href="/anime/{relation.anime.id}" class="relation-card">
+												{#if relation.anime.cover_url}
+													<img src={relation.anime.cover_url} alt="">
+												{/if}
+												<span>
+													<strong>{relation.anime.title}</strong>
+													{#if group.label === '関連作品'}
+														<small>{relation.relation_type}</small>
+													{/if}
+												</span>
+											</a>
+										{:else}
+											<div class="relation-card relation-card--unavailable">
+												<span>
+													<strong>{relation.related_title}</strong>
+													<small>
+														{group.label === '関連作品' ? relation.relation_type : '未登録'}
+													</small>
+												</span>
+											</div>
+										{/if}
+									{/each}
+								</div>
+							</div>
+						{/if}
+					{/each}
 				</section>
 			{/if}
 
@@ -1161,6 +1209,76 @@ const handleRecommendSubmit: SubmitFunction = () => {
 	line-height: 1.7;
 	color: var(--text-secondary, var(--text));
 	margin: 0;
+}
+
+/* Related anime */
+.relations-section {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+.relations-section h2 {
+	font-size: 1rem;
+	font-weight: 600;
+	margin: 0;
+}
+.relation-group {
+	display: flex;
+	flex-direction: column;
+	gap: 7px;
+}
+.relation-group h3 {
+	font-size: 0.76rem;
+	color: var(--text-muted);
+	margin: 0;
+	font-weight: 600;
+}
+.relation-list {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+.relation-card {
+	display: flex;
+	gap: 9px;
+	align-items: center;
+	min-height: 52px;
+	max-width: 290px;
+	padding: 7px 10px 7px 7px;
+	background: var(--card-bg);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	color: var(--text);
+	text-decoration: none;
+}
+a.relation-card:hover {
+	border-color: var(--accent);
+	background: var(--hover-bg);
+}
+.relation-card img {
+	width: 34px;
+	height: 48px;
+	object-fit: cover;
+	border-radius: 4px;
+	flex-shrink: 0;
+}
+.relation-card span {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+.relation-card strong {
+	font-size: 0.84rem;
+	line-height: 1.35;
+	font-weight: 600;
+}
+.relation-card small {
+	font-size: 0.72rem;
+	color: var(--text-muted);
+}
+.relation-card--unavailable {
+	color: var(--text-muted);
 }
 
 /* Watchlist */

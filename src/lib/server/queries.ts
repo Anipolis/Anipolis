@@ -4,6 +4,7 @@ import type {
 	Anime,
 	AnimeExchangeItem,
 	AnimeExchangeShare,
+	AnimeRelation,
 	AnimeResourceLink,
 	AnimeStatus,
 	BroadcastStatus,
@@ -1082,6 +1083,40 @@ export async function getAnime(
 	}
 
 	return anime;
+}
+
+export async function getAnimeRelations(
+	supabase: SupabaseClient<Database>,
+	malId: number | null,
+): Promise<AnimeRelation[]> {
+	if (malId == null) return [];
+
+	const { data, error } = await supabase
+		.from("anime_relations" as never)
+		.select("relation_type, related_anime_mal_id, related_title")
+		.eq("anime_mal_id", malId);
+
+	if (error || !data) return [];
+
+	const rows = data as unknown as Omit<AnimeRelation, "anime">[];
+	const relatedMalIds = [...new Set(rows.map((row) => row.related_anime_mal_id))];
+	const { data: relatedAnimes } =
+		relatedMalIds.length > 0
+			? await supabase.from("anime").select("id, mal_id, title, cover_url").in("mal_id", relatedMalIds)
+			: { data: [] };
+	const animesByMalId = new Map(
+		(relatedAnimes ?? [])
+			.filter((anime) => anime.mal_id != null)
+			.map((anime) => [
+				anime.mal_id as number,
+				{ id: String(anime.id), title: anime.title, cover_url: anime.cover_url },
+			]),
+	);
+
+	return rows.map((row) => ({
+		...row,
+		anime: animesByMalId.get(row.related_anime_mal_id) ?? null,
+	}));
 }
 
 /**
