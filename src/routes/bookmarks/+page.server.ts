@@ -1,14 +1,22 @@
 import { error, fail } from "@sveltejs/kit";
 import { deletePostAction, toggleBookmarkAction, toggleLikeAction, toggleRepostAction } from "$lib/server/actions";
 import { getBookmarkedPosts } from "$lib/server/queries";
+import type { Post } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 	if (!user) error(401, "ログインが必要です");
 
-	const posts = await getBookmarkedPosts(supabase, user.id);
-	return { posts, userId: user.id };
+	return {
+		userId: user.id,
+		posts: (async () => {
+			return getBookmarkedPosts(supabase, user.id);
+		})().catch((err) => {
+			console.error("[bookmarks] posts fetch error:", err);
+			return [] as Post[];
+		}),
+	};
 };
 
 export const actions: Actions = {

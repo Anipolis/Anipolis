@@ -1,6 +1,7 @@
 <script lang="ts">
 import { enhance } from "$app/forms";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
+import UserCardSkeleton from "$lib/components/UserCardSkeleton.svelte";
 import { formatRelativeTime } from "$lib/utils/format";
 import type { PageProps } from "./$types";
 
@@ -13,60 +14,77 @@ let { data, form }: PageProps = $props();
 	<main class="feed-column">
 		<header class="page-header requests-header">
 			<h1 class="page-title">フォロー申請</h1>
-			<p class="page-subtitle">{data.requests.length}件の未対応申請</p>
 		</header>
 
 		{#if form && "message" in form}
 			<div class="flash-error">{form.message}</div>
 		{/if}
 
-		{#if data.requests.length === 0}
-			<div class="empty-state">
-				<p>未対応のフォロー申請はありません</p>
+		{#await data.requests}
+			<div class="posts-loading-spinner" aria-label="読み込み中">
+				<div class="spinner" aria-hidden="true"></div>
+				<span>読み込み中…</span>
 			</div>
-		{:else}
-			<div class="request-list">
-				{#each data.requests as request (request.requester_id)}
-					<article class="request-card">
-						<a href="/profile/{request.requester.username}" class="request-avatar">
-							<UserAvatar
-								src={request.requester.avatar_url}
-								username={request.requester.username}
-								size="md"
-							/>
-						</a>
+			{#each { length: 5 } as _, i (i)}
+				<UserCardSkeleton />
+			{/each}
+		{:then requests}
+			<p class="page-subtitle">{requests.length}件の未対応申請</p>
 
-						<div class="request-body">
-							<a href="/profile/{request.requester.username}" class="request-name">
-								{request.requester.display_name ?? request.requester.username}
+			{#if requests.length === 0}
+				<div class="empty-state">
+					<p>未対応のフォロー申請はありません</p>
+				</div>
+			{:else}
+				<div class="request-list">
+					{#each requests as request (request.requester_id)}
+						<article class="request-card">
+							<a href="/profile/{request.requester.username}" class="request-avatar">
+								<UserAvatar
+									src={request.requester.avatar_url}
+									username={request.requester.username}
+									size="md"
+								/>
 							</a>
-							<div class="request-meta">
-								@{request.requester.username}
-								・ {formatRelativeTime(request.created_at)}
-							</div>
-							{#if request.requester.bio}
-								<p>{request.requester.bio}</p>
-							{/if}
-						</div>
 
-						<div class="request-actions">
-							<form method="POST" action="?/approve" use:enhance>
-								<input type="hidden" name="requester_id" value={request.requester_id}>
-								<button type="submit" class="btn btn-primary">承認</button>
-							</form>
-							<form method="POST" action="?/reject" use:enhance>
-								<input type="hidden" name="requester_id" value={request.requester_id}>
-								<button type="submit" class="btn btn-outline">拒否</button>
-							</form>
-						</div>
-					</article>
-				{/each}
-			</div>
-		{/if}
+							<div class="request-body">
+								<a href="/profile/{request.requester.username}" class="request-name">
+									{request.requester.display_name ?? request.requester.username}
+								</a>
+								<div class="request-meta">
+									@{request.requester.username}
+									・ {formatRelativeTime(request.created_at)}
+								</div>
+								{#if request.requester.bio}
+									<p>{request.requester.bio}</p>
+								{/if}
+							</div>
+
+							<div class="request-actions">
+								<form method="POST" action="?/approve" use:enhance>
+									<input type="hidden" name="requester_id" value={request.requester_id}>
+									<button type="submit" class="btn btn-primary">承認</button>
+								</form>
+								<form method="POST" action="?/reject" use:enhance>
+									<input type="hidden" name="requester_id" value={request.requester_id}>
+									<button type="submit" class="btn btn-outline">拒否</button>
+								</form>
+							</div>
+						</article>
+					{/each}
+				</div>
+			{/if}
+		{/await}
 	</main>
 </div>
 
 <style>
+.page-subtitle {
+	font-size: 0.8rem;
+	color: var(--color-text-muted);
+	margin: 0 0 8px;
+}
+
 .request-list {
 	display: flex;
 	flex-direction: column;

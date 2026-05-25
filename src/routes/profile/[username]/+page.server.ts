@@ -1,4 +1,4 @@
-﻿import { error, fail } from "@sveltejs/kit";
+import { error, fail } from "@sveltejs/kit";
 import {
 	deletePostAction,
 	toggleBookmarkAction,
@@ -32,65 +32,64 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 			: "none";
 	const canViewContent = isOwn || !profile.is_private || isFollowing;
 
+	const [followCounts, trendingResult] = await Promise.all([
+		getFollowCounts(supabase, profile.id),
+		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
+	]);
+
 	const postSelect = `id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, exchange_share,
                        profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
                        post_hashtags ( hashtags ( name ) ),
                        anime:anime!posts_anime_id_fkey ( id, title, cover_url )`;
 
-	const [rawPostsResult, rawImagePostsResult, followCounts, trendingResult, animeList] = await Promise.all([
-		canViewContent
-			? supabase
-					.from("posts")
-					.select(postSelect)
-					.eq("user_id", profile.id)
-					.is("parent_id", null)
-					.order("created_at", { ascending: false })
-					.limit(50)
-			: Promise.resolve({ data: [] }),
-
-		canViewContent
-			? supabase
-					.from("posts")
-					.select(postSelect)
-					.eq("user_id", profile.id)
-					.is("parent_id", null)
-					.not("image_urls", "eq", "{}")
-					.order("created_at", { ascending: false })
-					.limit(50)
-			: Promise.resolve({ data: [] }),
-
-		getFollowCounts(supabase, profile.id),
-
-		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
-
-		canViewContent && (isOwn || profile.list_is_public)
-			? getUserAnimeList(supabase, profile.id)
-			: Promise.resolve([]),
-	]);
-
 	const activeTab = url.searchParams.get("tab") ?? "posts";
 
-	const [posts, imagePosts, likedPosts] = await Promise.all([
-		enrichPostsWithCounts(supabase, rawPostsResult.data ?? [], user?.id ?? null),
-		enrichPostsWithCounts(supabase, rawImagePostsResult.data ?? [], user?.id ?? null),
-		canViewContent && activeTab === "likes"
-			? getLikedPosts(supabase, profile.id, user?.id ?? null)
-			: Promise.resolve([]),
-	]);
+	const profileContentPromise = canViewContent
+		? (async () => {
+				const [rawPostsResult, rawImagePostsResult, animeListResult] = await Promise.all([
+					supabase
+						.from("posts")
+						.select(postSelect)
+						.eq("user_id", profile.id)
+						.is("parent_id", null)
+						.order("created_at", { ascending: false })
+						.limit(50),
+
+					supabase
+						.from("posts")
+						.select(postSelect)
+						.eq("user_id", profile.id)
+						.is("parent_id", null)
+						.not("image_urls", "eq", "{}")
+						.order("created_at", { ascending: false })
+						.limit(50),
+
+					isOwn || profile.list_is_public ? getUserAnimeList(supabase, profile.id) : Promise.resolve([]),
+				]);
+
+				const [posts, imagePosts, likedPosts] = await Promise.all([
+					enrichPostsWithCounts(supabase, rawPostsResult.data ?? [], user?.id ?? null),
+					enrichPostsWithCounts(supabase, rawImagePostsResult.data ?? [], user?.id ?? null),
+					activeTab === "likes" ? getLikedPosts(supabase, profile.id, user?.id ?? null) : Promise.resolve([]),
+				]);
+
+				return { posts, imagePosts, likedPosts, animeList: animeListResult };
+			})().catch((err) => {
+				console.error("[profile] content fetch error:", err);
+				return { posts: [], imagePosts: [], likedPosts: [], animeList: [] };
+			})
+		: Promise.resolve({ posts: [], imagePosts: [], likedPosts: [], animeList: [] });
 
 	return {
 		profile,
-		posts,
-		imagePosts,
-		likedPosts,
 		isOwn,
 		canViewContent,
 		followCounts,
 		isFollowing,
 		followRequestStatus,
 		trending: trendingResult.data ?? [],
-		animeList,
 		user,
+		profileContent: profileContentPromise,
 	};
 };
 

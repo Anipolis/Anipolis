@@ -12,9 +12,12 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	);
 	const month = Math.max(1, Math.min(12, parseInt(url.searchParams.get("month") ?? String(now.getMonth() + 1), 10)));
 
-	const events = await getEventsByMonth(supabase, year, month);
+	const eventsPromise = getEventsByMonth(supabase, year, month).catch((err) => {
+		console.error("[calendar] error:", err);
+		return [] as Awaited<ReturnType<typeof getEventsByMonth>>;
+	});
 
-	return { year, month, events, user };
+	return { year, month, events: eventsPromise, user };
 };
 
 export const actions: Actions = {

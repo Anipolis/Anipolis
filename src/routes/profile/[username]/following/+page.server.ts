@@ -15,10 +15,12 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 		error(404, "ユーザーが見つかりません");
 	}
 
-	const [following, followCounts] = await Promise.all([
-		getFollowingProfiles(supabase, profile.id),
-		getFollowCounts(supabase, profile.id),
-	]);
+	const followCounts = await getFollowCounts(supabase, profile.id);
 
-	return { profile, following, followCounts, user };
+	const followingPromise = getFollowingProfiles(supabase, profile.id).catch((err) => {
+		console.error("[profile/following] error:", err);
+		return [] as Awaited<ReturnType<typeof getFollowingProfiles>>;
+	});
+
+	return { profile, following: followingPromise, followCounts, user };
 };

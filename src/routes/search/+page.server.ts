@@ -1,6 +1,7 @@
 ﻿import { fail } from "@sveltejs/kit";
 import { deletePostAction, toggleBookmarkAction, toggleLikeAction, toggleRepostAction } from "$lib/server/actions";
 import { enrichPostsWithCounts } from "$lib/server/queries";
+import type { Post } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {
@@ -8,7 +9,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	const query = url.searchParams.get("q")?.trim() ?? "";
 
 	if (!query) {
-		return { query: "", posts: [], users: [] };
+		return { query: "", posts: Promise.resolve([] as Post[]), users: [] };
 	}
 
 	// PostgREST の .or() フィルター文字列にカンマを含む入力を補間すると
@@ -36,7 +37,10 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 			.limit(10),
 	]);
 
-	const posts = await enrichPostsWithCounts(supabase, postsResult.data ?? [], user?.id ?? null);
+	const posts = enrichPostsWithCounts(supabase, postsResult.data ?? [], user?.id ?? null).catch((err) => {
+		console.error("[search] posts fetch error:", err);
+		return [] as Post[];
+	});
 
 	return {
 		query,

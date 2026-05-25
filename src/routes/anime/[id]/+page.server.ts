@@ -1,5 +1,6 @@
 import { error, fail } from "@sveltejs/kit";
 import { recommendAnimeAction, removeUserAnimeEntry, upsertUserAnimeEntry } from "$lib/server/actions";
+import type { AnimeListUser } from "$lib/server/queries";
 import { getAnime, getUsersWhoListedAnime, isAdminUser } from "$lib/server/queries";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -9,12 +10,14 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 
 	if (!anime) throw error(404, "アニメが見つかりません");
 
-	const [listedUsers, isAdmin] = await Promise.all([
-		getUsersWhoListedAnime(supabase, params.id),
-		user ? isAdminUser(supabase, user.id) : Promise.resolve(false),
-	]);
+	const isAdmin = user ? await isAdminUser(supabase, user.id) : false;
 
-	return { anime, user, isAdmin, listedUsers };
+	const listedUsersPromise: Promise<AnimeListUser[]> = getUsersWhoListedAnime(supabase, params.id).catch((err) => {
+		console.error("[anime/[id]] listedUsers fetch error:", err);
+		return [] as AnimeListUser[];
+	});
+
+	return { anime, user, isAdmin, listedUsers: listedUsersPromise };
 };
 
 export const actions: Actions = {

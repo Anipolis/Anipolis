@@ -20,44 +20,50 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	const studio = url.searchParams.get("studio")?.trim() ?? "";
 	const producer = url.searchParams.get("producer")?.trim() ?? "";
 
-	let animes: Anime[];
+	const animesPromise: Promise<Anime[]> = (async () => {
+		if (search) {
+			return getAnimeList(supabase, { query: search, limit: 1000, userId: user?.id ?? null });
+		} else if (genre) {
+			return getAnimeList(supabase, { genre, limit: 1000, userId: user?.id ?? null });
+		} else if (season) {
+			return getAnimeList(supabase, { season, limit: 1000, userId: user?.id ?? null });
+		} else if (studio) {
+			return getAnimeList(supabase, { studio, limit: 1000, userId: user?.id ?? null });
+		} else if (producer) {
+			return getAnimeList(supabase, { producer, limit: 1000, userId: user?.id ?? null });
+		} else if (tab === "mylist") {
+			return user ? getUserAnimeList(supabase, user.id) : [];
+		} else if (tab === "trending") {
+			const animes = await getAnimeRankingTrending(supabase, 1000);
+			if (animes.length === 0) {
+				return getAnimeList(supabase, { limit: 1000, userId: user?.id ?? null });
+			}
+			return animes;
+		} else if (tab === "top_rated") {
+			const animes = await getAnimeRankingTopRated(supabase, 1000);
+			if (animes.length === 0) {
+				return getAnimeList(supabase, { limit: 1000, userId: user?.id ?? null });
+			}
+			return animes;
+		} else if (tab === "airing") {
+			return getAnimeList(supabase, { status: "airing", limit: 1000, userId: user?.id ?? null });
+		} else if (tab === "upcoming") {
+			return getAnimeList(supabase, { status: "upcoming", limit: 1000, userId: user?.id ?? null });
+		} else if (tab === "register") {
+			return [];
+		} else {
+			const animes = await getAnimeRankingPopularity(supabase, 1000);
+			if (animes.length === 0) {
+				return getAnimeList(supabase, { limit: 1000, userId: user?.id ?? null });
+			}
+			return animes;
+		}
+	})().catch((err) => {
+		console.error("[anime] animes fetch error:", err);
+		return [] as Anime[];
+	});
 
-	if (search) {
-		animes = await getAnimeList(supabase, { query: search, limit: 1000, userId: user?.id ?? null });
-	} else if (genre) {
-		animes = await getAnimeList(supabase, { genre, limit: 1000, userId: user?.id ?? null });
-	} else if (season) {
-		animes = await getAnimeList(supabase, { season, limit: 1000, userId: user?.id ?? null });
-	} else if (studio) {
-		animes = await getAnimeList(supabase, { studio, limit: 1000, userId: user?.id ?? null });
-	} else if (producer) {
-		animes = await getAnimeList(supabase, { producer, limit: 1000, userId: user?.id ?? null });
-	} else if (tab === "mylist") {
-		animes = user ? await getUserAnimeList(supabase, user.id) : [];
-	} else if (tab === "trending") {
-		animes = await getAnimeRankingTrending(supabase, 1000);
-		if (animes.length === 0) {
-			animes = await getAnimeList(supabase, { limit: 1000, userId: user?.id ?? null });
-		}
-	} else if (tab === "top_rated") {
-		animes = await getAnimeRankingTopRated(supabase, 1000);
-		if (animes.length === 0) {
-			animes = await getAnimeList(supabase, { limit: 1000, userId: user?.id ?? null });
-		}
-	} else if (tab === "airing") {
-		animes = await getAnimeList(supabase, { status: "airing", limit: 1000, userId: user?.id ?? null });
-	} else if (tab === "upcoming") {
-		animes = await getAnimeList(supabase, { status: "upcoming", limit: 1000, userId: user?.id ?? null });
-	} else if (tab === "register") {
-		animes = [];
-	} else {
-		animes = await getAnimeRankingPopularity(supabase, 1000);
-		if (animes.length === 0) {
-			animes = await getAnimeList(supabase, { limit: 1000, userId: user?.id ?? null });
-		}
-	}
-
-	return { animes, tab, search, genre, season, studio, producer, user };
+	return { animes: animesPromise, tab, search, genre, season, studio, producer, user };
 };
 
 export const actions: Actions = {

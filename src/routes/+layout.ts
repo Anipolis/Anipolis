@@ -22,7 +22,9 @@ export const load: LayoutLoad = async ({ data, depends, fetch }) => {
 		session: data.session,
 		user: data.user,
 		profile: data.profile,
-		unreadNotificationCount: data.unreadNotificationCount ?? 0,
-		pendingFollowRequestCount: data.pendingFollowRequestCount ?? 0,
+		// deferred Promise をそのまま通過させる
+		// layout.svelte 側で $effect を使って非同期解決する
+		unreadNotificationCount: data.unreadNotificationCount ?? Promise.resolve(0),
+		pendingFollowRequestCount: data.pendingFollowRequestCount ?? Promise.resolve(0),
 	};
 };
