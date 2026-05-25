@@ -15,9 +15,6 @@ let subscribedIds = $state(new Set<string>(untrack(() => data.subscriptions)));
 // Which anime are currently in their notification window (client-side highlight)
 let notifyingIds = $state(new Set<string>());
 
-// Prevent re-firing browser notification for same anime within a session
-const notifiedThisSession = new Set<string>();
-
 const DAY_BG = ["#fff1f0", "#f4f7ff", "#f4f7ff", "#f4f7ff", "#f4f7ff", "#f4f7ff", "#eff8ff"];
 const DAY_COLOR = ["#dc2626", "#334155", "#334155", "#334155", "#334155", "#334155", "#2563eb"];
 
@@ -80,17 +77,6 @@ function refreshNotifyingIds() {
 			const mins = minutesUntilBroadcast(anime, now);
 			if (mins !== null && mins >= 0 && mins <= maxWindow) {
 				next.add(anime.id);
-				if (!notifiedThisSession.has(anime.id)) {
-					notifiedThisSession.add(anime.id);
-					if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-						new Notification(`まもなく放送：${anime.title}`, {
-							body: anime.broadcast_time ? `${anime.broadcast_time.slice(0, 5)} 放送開始` : "放送開始",
-							...(anime.cover_url ? { icon: anime.cover_url } : {}),
-						});
-					}
-				}
-			} else {
-				notifiedThisSession.delete(anime.id);
 			}
 		}
 	}
@@ -114,10 +100,6 @@ const notifySubmit: SubmitFunction = ({ formData }) => {
 	} else {
 		subscribedIds.add(animeId);
 		subscribedIds = new Set(subscribedIds);
-		// Request browser notification permission on first subscribe
-		if (typeof Notification !== "undefined" && Notification.permission === "default") {
-			Notification.requestPermission();
-		}
 	}
 	return async ({ result, update }) => {
 		if (result.type === "failure") {
@@ -316,8 +298,8 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 											type="submit"
 											class="notify-btn"
 											class:notify-btn--active={isSubscribed}
-											title={isSubscribed ? "通知登録済み（クリックで解除）" : "放送通知を登録"}
-											aria-label={isSubscribed ? "通知を解除" : "通知を登録"}
+											title={isSubscribed ? "アプリ内通知登録済み（クリックで解除）" : "アプリ内通知を登録"}
+											aria-label={isSubscribed ? "アプリ内通知を解除" : "アプリ内通知を登録"}
 										>
 											{#if isSubscribed}
 												<svg

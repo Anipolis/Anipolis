@@ -104,9 +104,12 @@ export interface TrendingHashtag {
 
 export interface Notification {
 	id: string;
-	type: "like" | "repost" | "reply" | "mention" | "follow" | "follow_request" | "anime_recommendation";
+	type: "like" | "repost" | "reply" | "mention" | "follow" | "follow_request" | "anime_recommendation" | "broadcast";
 	post_id: string | null;
 	anime_recommendation_id: string | null;
+	broadcast_anime_id: string | null;
+	broadcast_scheduled_at: string | null;
+	broadcast_room_date: string | null;
 	read: boolean;
 	created_at: string;
 	actor_username: string;
@@ -116,6 +119,8 @@ export interface Notification {
 	recommendation_anime_id: string | null;
 	recommendation_anime_title: string | null;
 	recommendation_anime_cover_url: string | null;
+	broadcast_anime_title: string | null;
+	broadcast_anime_cover_url: string | null;
 }
 
 export interface Event {

@@ -14,10 +14,18 @@ interface Props {
 	session: Session | null;
 	profile: Profile;
 	unreadNotificationCount?: number;
+	unreadBroadcastNotificationCount?: number;
 	extraAccounts?: StoredAccount[];
 }
 
-let { supabase, session, profile, unreadNotificationCount = 0, extraAccounts = [] }: Props = $props();
+let {
+	supabase,
+	session,
+	profile,
+	unreadNotificationCount = 0,
+	unreadBroadcastNotificationCount = 0,
+	extraAccounts = [],
+}: Props = $props();
 
 let theme = $state(
 	browser ? localStorage.getItem("theme") || document.documentElement.getAttribute("data-theme") || "dark" : "dark",
@@ -171,6 +179,9 @@ function isActive(path: string): boolean {
 				<rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
 				<path d="M16 2l-4 5-4-5" />
 			</svg>
+			{#if unreadBroadcastNotificationCount > 0}
+				<span class="sidebar-indicator" aria-label="未読の放送通知があります"></span>
+			{/if}
 			<span class="sidebar-btn-label">カレンダー</span>
 		</a>
 

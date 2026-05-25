@@ -15,6 +15,21 @@ function notificationLabel(type: string): string {
 	if (type === "follow_request") return "さんからフォロー申請が届きました";
 	return "";
 }
+
+function formatBroadcastTime(value: string | null): string {
+	if (!value) return "";
+	return new Date(value).toLocaleString("ja-JP", {
+		month: "numeric",
+		day: "numeric",
+		hour: "2-digit",
+		minute: "2-digit",
+	});
+}
+
+function broadcastLabel(value: string | null): string {
+	if (value && new Date(value).getTime() <= Date.now()) return "の放送ルームが開始しました";
+	return "の放送ルームがまもなく開始します";
+}
 </script>
 
 <svelte:head> <title>通知 - Anipolis</title> </svelte:head>
@@ -31,39 +46,69 @@ function notificationLabel(type: string): string {
 			<ul class="notification-list">
 				{#each data.notifications as notif (notif.id)}
 					<li class="notification-item">
-						<a href="/profile/{notif.actor_username}" class="notification-avatar">
-							<UserAvatar src={notif.actor_avatar_url} username={notif.actor_username} size="md" />
-						</a>
-						<div class="notification-body">
-							<p class="notification-text">
-								<a href="/profile/{notif.actor_username}" class="notification-actor">
-									{notif.actor_display_name ?? notif.actor_username}
-								</a>
-								{notificationLabel(notif.type)}
-							</p>
-							{#if notif.post_content && notif.post_id}
-								<a href="/posts/{notif.post_id}" class="notification-post-preview">
-									{notif.post_content.length > 80
-										? `${notif.post_content.slice(0, 80)}…`
-										: notif.post_content}
-								</a>
-							{/if}
-							{#if notif.type === 'anime_recommendation' && notif.recommendation_anime_id}
-								<a href="/anime/{notif.recommendation_anime_id}" class="notification-anime-preview">
-									{#if notif.recommendation_anime_cover_url}
-										<img
-											src={notif.recommendation_anime_cover_url}
-											alt={notif.recommendation_anime_title ?? '推薦作品'}
-										>
-									{/if}
-									<span> <strong>{notif.recommendation_anime_title ?? '推薦作品'}</strong> </span>
-								</a>
-							{/if}
-							{#if notif.type === 'follow_request'}
-								<a href="/settings/follow-requests" class="notification-action-link">申請を確認</a>
-							{/if}
-							<span class="notification-time">{formatRelativeTime(notif.created_at)}</span>
-						</div>
+						{#if notif.type === 'broadcast'}
+							<div class="notification-room-icon" aria-hidden="true">
+								<span class="i-lucide-calendar-clock"></span>
+							</div>
+							<div class="notification-body">
+								<p class="notification-text">
+									<strong>{notif.broadcast_anime_title ?? '登録したアニメ'}</strong>
+									{broadcastLabel(notif.broadcast_scheduled_at)}
+								</p>
+								{#if notif.broadcast_anime_id && notif.broadcast_room_date}
+									<a
+										href="/rooms/anime/{notif.broadcast_anime_id}/{notif.broadcast_room_date}"
+										class="notification-anime-preview"
+									>
+										{#if notif.broadcast_anime_cover_url}
+											<img
+												src={notif.broadcast_anime_cover_url}
+												alt={notif.broadcast_anime_title ?? '放送作品'}
+											>
+										{/if}
+										<span>
+											<strong>{notif.broadcast_anime_title ?? '放送ルーム'}</strong>
+											<small>{formatBroadcastTime(notif.broadcast_scheduled_at)} 開始</small>
+										</span>
+									</a>
+								{/if}
+								<span class="notification-time">{formatRelativeTime(notif.created_at)}</span>
+							</div>
+						{:else}
+							<a href="/profile/{notif.actor_username}" class="notification-avatar">
+								<UserAvatar src={notif.actor_avatar_url} username={notif.actor_username} size="md" />
+							</a>
+							<div class="notification-body">
+								<p class="notification-text">
+									<a href="/profile/{notif.actor_username}" class="notification-actor">
+										{notif.actor_display_name ?? notif.actor_username}
+									</a>
+									{notificationLabel(notif.type)}
+								</p>
+								{#if notif.post_content && notif.post_id}
+									<a href="/posts/{notif.post_id}" class="notification-post-preview">
+										{notif.post_content.length > 80
+											? `${notif.post_content.slice(0, 80)}…`
+											: notif.post_content}
+									</a>
+								{/if}
+								{#if notif.type === 'anime_recommendation' && notif.recommendation_anime_id}
+									<a href="/anime/{notif.recommendation_anime_id}" class="notification-anime-preview">
+										{#if notif.recommendation_anime_cover_url}
+											<img
+												src={notif.recommendation_anime_cover_url}
+												alt={notif.recommendation_anime_title ?? '推薦作品'}
+											>
+										{/if}
+										<span> <strong>{notif.recommendation_anime_title ?? '推薦作品'}</strong> </span>
+									</a>
+								{/if}
+								{#if notif.type === 'follow_request'}
+									<a href="/settings/follow-requests" class="notification-action-link">申請を確認</a>
+								{/if}
+								<span class="notification-time">{formatRelativeTime(notif.created_at)}</span>
+							</div>
+						{/if}
 					</li>
 				{/each}
 			</ul>
@@ -100,6 +145,18 @@ function notificationLabel(type: string): string {
 }
 
 .notification-avatar {
+	flex-shrink: 0;
+}
+
+.notification-room-icon {
+	display: grid;
+	place-items: center;
+	width: 40px;
+	height: 40px;
+	border-radius: 9999px;
+	background: color-mix(in srgb, var(--accent, #6366f1) 16%, transparent);
+	color: var(--accent, #6366f1);
+	font-size: 20px;
 	flex-shrink: 0;
 }
 
@@ -183,6 +240,11 @@ function notificationLabel(type: string): string {
 
 .notification-anime-preview strong {
 	font-size: 13px;
+}
+
+.notification-anime-preview small {
+	font-size: 12px;
+	color: var(--color-text-muted);
 }
 
 .notification-action-link {

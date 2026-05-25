@@ -40,8 +40,9 @@ const settingsSubmit: SubmitFunction = () => {
 			<section class="settings-section">
 				<h2 class="settings-section-title">放送前通知のタイミング</h2>
 				<p class="settings-section-desc">
-					スケジュールページでベル登録したアニメの放送が近づくと、カレンダー欄の放送枠がハイライトされます。
-					以下で通知するタイミングを選択してください。
+					スケジュールページでベル登録したアニメの放送が近づくと、アプリ内通知をお届けし、
+					カレンダーのアイコンに未読マークを表示します。
+					複数選択した場合は、最も早いタイミングで一度だけ通知します。
 				</p>
 
 				<form
@@ -54,7 +55,7 @@ const settingsSubmit: SubmitFunction = () => {
 						<input type="checkbox" name="notify_1min" bind:checked={notify1min}>
 						<span>
 							<strong>1分前</strong>
-							<small>放送の1分前にハイライト表示</small>
+							<small>放送の1分前にアプリ内通知</small>
 						</span>
 					</label>
 
@@ -62,7 +63,7 @@ const settingsSubmit: SubmitFunction = () => {
 						<input type="checkbox" name="notify_5min" bind:checked={notify5min}>
 						<span>
 							<strong>5分前</strong>
-							<small>放送の5分前にハイライト表示</small>
+							<small>放送の5分前にアプリ内通知</small>
 						</span>
 					</label>
 
@@ -70,7 +71,7 @@ const settingsSubmit: SubmitFunction = () => {
 						<input type="checkbox" name="notify_30min" bind:checked={notify30min}>
 						<span>
 							<strong>30分前</strong>
-							<small>放送の30分前にハイライト表示</small>
+							<small>放送の30分前にアプリ内通知</small>
 						</span>
 					</label>
 
@@ -83,11 +84,10 @@ const settingsSubmit: SubmitFunction = () => {
 			</section>
 
 			<section class="settings-section">
-				<h2 class="settings-section-title">ブラウザ通知</h2>
+				<h2 class="settings-section-title">通知の確認</h2>
 				<p class="settings-section-desc">
-					スケジュールページを開いている間、放送通知ベルを登録したアニメが通知タイミングに達すると
-					ブラウザ通知も送られます（ブラウザの通知許可が必要です）。
-					通知許可はスケジュールページで最初にベル登録したときに求められます。
+					放送通知は通知一覧に届きます。アプリを開いている間は定期的に更新され、
+					通知一覧を開くと既読になります。
 				</p>
 			</section>
 		</div>

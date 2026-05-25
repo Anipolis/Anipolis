@@ -1,7 +1,8 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import type { ServerLoad } from "@sveltejs/kit";
+import { generateDueBroadcastNotifications, markAllNotificationsRead } from "$lib/server/actions";
 import { getExtraAccounts } from "$lib/server/multi-account";
-import { getUnreadNotificationCount } from "$lib/server/queries";
+import { getUnreadBroadcastNotificationCount, getUnreadNotificationCount } from "$lib/server/queries";
 import type { Database } from "$lib/supabase/database.types";
 
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
@@ -45,13 +46,20 @@ async function getOrCreateProfile(supabase: SupabaseClient<Database>, user: User
 	return created;
 }
 
-export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, cookies }) => {
+export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, cookies, depends, url }) => {
+	depends("broadcast:notifications");
 	const { session, user } = await safeGetSession();
 
-	const [profile, unreadNotificationCount] = await Promise.all([
-		user ? getOrCreateProfile(supabase, user) : Promise.resolve(null),
-		user ? getUnreadNotificationCount(supabase, user.id) : Promise.resolve(0),
-	]);
+	const profile = user ? await getOrCreateProfile(supabase, user) : null;
+	if (user) await generateDueBroadcastNotifications(supabase);
+	if (user && url.pathname === "/notifications") await markAllNotificationsRead(supabase, user.id);
+
+	const [unreadNotificationCount, unreadBroadcastNotificationCount] = user
+		? await Promise.all([
+				getUnreadNotificationCount(supabase, user.id),
+				getUnreadBroadcastNotificationCount(supabase, user.id),
+			])
+		: [0, 0];
 
 	const filteredCookies = cookies.getAll().filter(({ name }) => /^sb-.+-auth-token/.test(name));
 	const extraAccounts = user ? getExtraAccounts(cookies) : [];
@@ -61,6 +69,7 @@ export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, c
 		user,
 		profile,
 		unreadNotificationCount,
+		unreadBroadcastNotificationCount,
 		cookies: filteredCookies,
 		extraAccounts,
 	};

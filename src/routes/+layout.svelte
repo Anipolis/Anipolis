@@ -13,7 +13,13 @@ onMount(() => {
 	} = data.supabase.auth.onAuthStateChange(() => {
 		invalidate("supabase:auth");
 	});
-	return () => subscription.unsubscribe();
+	const notificationInterval = setInterval(() => {
+		if (data.session) void invalidate("broadcast:notifications");
+	}, 30_000);
+	return () => {
+		subscription.unsubscribe();
+		clearInterval(notificationInterval);
+	};
 });
 </script>
 
@@ -23,6 +29,7 @@ onMount(() => {
 		session={data.session}
 		profile={data.profile}
 		unreadNotificationCount={data.unreadNotificationCount}
+		unreadBroadcastNotificationCount={data.unreadBroadcastNotificationCount}
 		extraAccounts={data.extraAccounts}
 	/>
 	<div class="app-main">

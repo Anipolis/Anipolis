@@ -31,16 +31,26 @@ type NotificationRecommendation = {
 	anime: { title: string | null; cover_url: string | null } | null;
 };
 
+type NotificationBroadcastAnime = {
+	id: number;
+	title: string | null;
+	cover_url: string | null;
+};
+
 type NotificationRow = {
 	id: string;
 	type: string;
 	post_id: string | null;
 	anime_recommendation_id: string | null;
+	broadcast_anime_id: number | null;
+	broadcast_scheduled_at: string | null;
+	broadcast_room_date: string | null;
 	read: boolean;
 	created_at: string;
 	actor: NotificationActor | NotificationActor[] | null;
 	post: NotificationPost | NotificationPost[] | null;
 	recommendation: NotificationRecommendation | NotificationRecommendation[] | null;
+	broadcast_anime: NotificationBroadcastAnime | NotificationBroadcastAnime[] | null;
 };
 
 type EventRow = Omit<Database["public"]["Tables"]["events"]["Row"], "anime_id"> & {
@@ -210,6 +220,9 @@ export async function getNotifications(
             type,
             post_id,
             anime_recommendation_id,
+            broadcast_anime_id,
+            broadcast_scheduled_at,
+            broadcast_room_date,
             read,
             created_at,
             actor:profiles!notifications_actor_id_fkey (
@@ -226,6 +239,11 @@ export async function getNotifications(
                     title,
                     cover_url
                 )
+            ),
+            broadcast_anime:anime!notifications_broadcast_anime_id_fkey (
+                id,
+                title,
+                cover_url
             )
         `)
 		.eq("recipient_id", userId)
@@ -238,11 +256,15 @@ export async function getNotifications(
 		const actor = Array.isArray(row.actor) ? row.actor[0] : row.actor;
 		const post = Array.isArray(row.post) ? row.post[0] : row.post;
 		const recommendation = Array.isArray(row.recommendation) ? row.recommendation[0] : row.recommendation;
+		const broadcastAnime = Array.isArray(row.broadcast_anime) ? row.broadcast_anime[0] : row.broadcast_anime;
 		return {
 			id: row["id"],
 			type: row.type as Notification["type"],
 			post_id: row.post_id,
 			anime_recommendation_id: row.anime_recommendation_id,
+			broadcast_anime_id: row.broadcast_anime_id != null ? String(row.broadcast_anime_id) : null,
+			broadcast_scheduled_at: row.broadcast_scheduled_at,
+			broadcast_room_date: row.broadcast_room_date,
 			read: row.read,
 			created_at: row.created_at,
 			actor_username: actor?.username ?? "unknown",
@@ -252,6 +274,8 @@ export async function getNotifications(
 			recommendation_anime_id: recommendation?.anime_id != null ? String(recommendation.anime_id) : null,
 			recommendation_anime_title: recommendation?.anime?.title ?? null,
 			recommendation_anime_cover_url: recommendation?.anime?.cover_url ?? null,
+			broadcast_anime_title: broadcastAnime?.title ?? null,
+			broadcast_anime_cover_url: broadcastAnime?.cover_url ?? null,
 		};
 	});
 }
@@ -265,6 +289,20 @@ export async function getUnreadNotificationCount(supabase: SupabaseClient<Databa
 		.select("id", { count: "exact", head: true })
 		.eq("recipient_id", userId)
 		.eq("read", false);
+
+	return count ?? 0;
+}
+
+export async function getUnreadBroadcastNotificationCount(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+): Promise<number> {
+	const { count } = await supabase
+		.from("notifications")
+		.select("id", { count: "exact", head: true })
+		.eq("recipient_id", userId)
+		.eq("read", false)
+		.eq("type", "broadcast" as never);
 
 	return count ?? 0;
 }
