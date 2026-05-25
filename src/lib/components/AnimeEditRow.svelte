@@ -16,6 +16,8 @@ let {
 	statusOrder: AnimeStatus[];
 	statusLabel: Record<AnimeStatus, string>;
 } = $props();
+
+const episodeMax = $derived(anime.episode_count ? Number(anime.episode_count) : 9999);
 </script>
 
 <div class="anime-row-edit">
@@ -62,7 +64,7 @@ let {
 					name="progress"
 					class="edit-number"
 					min="0"
-					max={anime.episode_count ?? 9999}
+					max={episodeMax}
 					bind:value={entry.progress}
 					aria-label="進捗"
 				>
@@ -70,8 +72,7 @@ let {
 					type="button"
 					class="stepper-btn"
 					onclick={() => {
-						const max = anime.episode_count ?? 9999;
-						if (entry.progress < max) entry.progress += 1;
+						if (entry.progress < episodeMax) entry.progress += 1;
 					}}
 					aria-label="1話増やす"
 				>

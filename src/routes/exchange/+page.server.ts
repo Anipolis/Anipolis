@@ -88,7 +88,7 @@ async function getExchangeEntries(supabase: SupabaseClient<Database>, userId: st
 		`)
 		.eq("user_id", userId)
 		.order("created_at", { ascending: false })
-		.limit(50);
+		.limit(5);
 
 	if (error || !data) return [];
 	const entries = (data as unknown as ExchangeRow[])

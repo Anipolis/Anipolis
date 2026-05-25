@@ -9,6 +9,7 @@ let { data, form }: PageProps = $props();
 const GENRES = [
 	"アクション",
 	"アドベンチャー",
+	"受賞歴あり",
 	"コメディ",
 	"ドラマ",
 	"ファンタジー",
@@ -18,6 +19,9 @@ const GENRES = [
 	"SF",
 	"スポーツ",
 	"日常",
+	"超自然",
+	"サスペンス",
+	"グルメ",
 	"魔法少女",
 	"メカ",
 	"音楽",
@@ -25,8 +29,17 @@ const GENRES = [
 	"歴史",
 	"異世界",
 	"ハーレム",
+	"ボーイズラブ",
+	"ガールズラブ",
 	"百合",
 	"心理",
+	"転生",
+	"吸血鬼",
+	"少年向け",
+	"少女向け",
+	"青年向け",
+	"女性向け",
+	"子ども向け",
 ];
 
 const tabs = [
@@ -47,9 +60,10 @@ const statusLabels: Record<AnimeStatus, string> = {
 };
 
 function animeStatusBadge(anime: Anime): string {
-	if (anime.status === "airing" || !anime.status) return "放送中";
-	if (anime.status === "upcoming") return "放送予定";
-	return "放送終了";
+	if (anime.computed_broadcast_status === "airing") return "放送中";
+	if (anime.computed_broadcast_status === "upcoming") return "放送予定";
+	if (anime.computed_broadcast_status === "finished") return "放送終了";
+	return "未定";
 }
 
 const statusOptions: { value: AnimeStatus; label: string; color: string }[] = [
@@ -114,7 +128,7 @@ $effect(() => {
 					>
 				</div>
 				<button type="submit" class="search-btn">検索</button>
-				{#if data.search || data.genre || data.season || data.studio || data.producer}
+				{#if data.search || data.genre || data.season || data.broadcastYear || data.broadcastSeason || data.studio || data.producer}
 					<a href="/anime" class="search-clear" title="フィルターをすべてクリア">✕</a>
 				{/if}
 			</div>
@@ -129,31 +143,28 @@ $effect(() => {
 						{/each}
 					</select>
 				</div>
-				<div class="filter-group">
-					<label for="filter-season" class="filter-label">シーズン</label>
+				<div class="filter-group filter-group--year">
+					<label for="filter-broadcast-year" class="filter-label">放送年</label>
 					<input
-						id="filter-season"
-						name="season"
-						type="text"
+						id="filter-broadcast-year"
+						name="broadcastYear"
+						type="number"
+						min="1900"
+						max="2100"
 						class="filter-input"
-						placeholder="例: 2025春"
-						value={data.season ?? ''}
-						list="season-suggestions"
+						placeholder="例: 2025"
+						value={data.broadcastYear ?? ''}
 					>
-					<datalist id="season-suggestions">
-						<option value="2025冬"></option>
-						<option value="2025春"></option>
-						<option value="2025夏"></option>
-						<option value="2025秋"></option>
-						<option value="2024冬"></option>
-						<option value="2024春"></option>
-						<option value="2024夏"></option>
-						<option value="2024秋"></option>
-						<option value="2023冬"></option>
-						<option value="2023春"></option>
-						<option value="2023夏"></option>
-						<option value="2023秋"></option>
-					</datalist>
+				</div>
+				<div class="filter-group">
+					<label for="filter-broadcast-season" class="filter-label">放送シーズン</label>
+					<select id="filter-broadcast-season" name="broadcastSeason" class="filter-select">
+						<option value="">すべて</option>
+						<option value="冬" selected={data.broadcastSeason === '冬'}>冬</option>
+						<option value="春" selected={data.broadcastSeason === '春'}>春</option>
+						<option value="夏" selected={data.broadcastSeason === '夏'}>夏</option>
+						<option value="秋" selected={data.broadcastSeason === '秋'}>秋</option>
+					</select>
 				</div>
 				<div class="filter-group">
 					<label for="filter-studio" class="filter-label">スタジオ</label>
@@ -204,6 +215,11 @@ $effect(() => {
 			<p class="search-label">
 				シーズン：<strong>{data.season}</strong>
 				— {data.animes.length}件 <a href="/anime" class="filter-clear">✕</a>
+			</p>
+		{:else if data.broadcastYear || data.broadcastSeason}
+			<p class="search-label">
+				放送時期：<strong>{[data.broadcastYear, data.broadcastSeason].filter(Boolean).join(' ')}</strong>
+				／ {data.animes.length}件 <a href="/anime" class="filter-clear">✕</a>
 			</p>
 		{:else if data.studio}
 			<p class="search-label">
@@ -294,7 +310,9 @@ $effect(() => {
 								<p class="anime-title-en">{anime.title_en}</p>
 							{/if}
 							<div class="anime-meta">
-								<span class="anime-status-badge status-{anime.status}">{animeStatusBadge(anime)}</span>
+								<span class="anime-status-badge status-{anime.computed_broadcast_status}"
+									>{animeStatusBadge(anime)}</span
+								>
 								{#if anime.season}
 									<span class="anime-season">{anime.season}</span>
 								{/if}
@@ -484,6 +502,9 @@ $effect(() => {
 	min-width: 120px;
 	max-width: 220px;
 }
+.filter-group--year {
+	flex: 0 1 120px;
+}
 .filter-label {
 	font-size: 0.75rem;
 	font-weight: 600;
@@ -658,6 +679,10 @@ $effect(() => {
 .status-finished {
 	background: var(--color-surface-hover);
 	color: var(--color-text-muted);
+}
+.status-unknown {
+	background: var(--hover-bg);
+	color: var(--text-muted);
 }
 
 .anime-season {

@@ -18,7 +18,11 @@
 		"check:types": "tsc --noEmit",
 		"check": "pnpm check:biome && pnpm check:svelte && pnpm check:types",
 		"test:unit": "vitest --run --coverage",
-		"test": "pnpm test:unit"
+		"test": "pnpm test:unit",
+		"lint": "biome check .",
+		"lint:fix": "biome check . --write",
+		"format": "biome format --write .",
+		"import:jikan": "node --env-file-if-exists=.env --experimental-strip-types scripts/import-jikan-season.ts"
 	},
 	"simple-git-hooks": {
 		"pre-commit": "pnpm check:biome"

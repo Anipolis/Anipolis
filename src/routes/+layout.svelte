@@ -2,7 +2,6 @@
 import { onMount } from "svelte";
 import { browser } from "$app/environment";
 import { invalidate } from "$app/navigation";
-import Nav from "$lib/components/Nav.svelte";
 import Sidebar from "$lib/components/Sidebar.svelte";
 import type { LayoutProps } from "./$types";
 import "../app.css";
@@ -40,6 +39,7 @@ onMount(() => {
 		unreadNotificationCount={data.unreadNotificationCount}
 		pendingFollowRequestCount={data.pendingFollowRequestCount}
 		{sidebarOpen}
+		extraAccounts={data.extraAccounts}
 	/>
 	<button
 		type="button"
@@ -67,7 +67,6 @@ onMount(() => {
 		</svg>
 	</button>
 	<div class="app-main" id="main-content" tabindex="-1">
-		<Nav />
 		{@render children()}
 	</div>
 </div>

@@ -24,7 +24,7 @@ export interface UserAnimeListEntry {
 		id: string;
 		title: string;
 		cover_url: string | null;
-		episode_count: number | null;
+		episode_count: string | null;
 	};
 }
 
@@ -32,6 +32,7 @@ export interface AnimeQuote {
 	id: string;
 	title: string;
 	cover_url: string | null;
+	room_href: string | null;
 	/** 閲覧者自身のスコア（enrichPostsWithCounts で付加） */
 	user_score: number | null;
 }
@@ -103,7 +104,7 @@ export interface TrendingHashtag {
 
 export interface Notification {
 	id: string;
-	type: "like" | "repost" | "reply" | "mention" | "follow" | "anime_recommendation";
+	type: "like" | "repost" | "reply" | "mention" | "follow" | "follow_request" | "anime_recommendation";
 	post_id: string | null;
 	anime_recommendation_id: string | null;
 	read: boolean;
@@ -138,6 +139,7 @@ export interface Event {
 // ----------------------------------------------------------------
 
 export type AnimeStatus = "watching" | "completed" | "plan_to_watch" | "dropped" | "on_hold";
+export type BroadcastStatus = "airing" | "finished" | "upcoming" | "unknown";
 
 export interface UserAnimeEntry {
 	status: AnimeStatus;
@@ -146,27 +148,51 @@ export interface UserAnimeEntry {
 	updated_at: string;
 }
 
+export interface AnimeResourceLink {
+	name: string;
+	url: string;
+}
+
+export interface AnimeRelation {
+	relation_type: string;
+	related_anime_mal_id: number;
+	related_title: string;
+	anime: {
+		id: string;
+		title: string;
+		cover_url: string | null;
+	} | null;
+}
+
 export interface Anime {
 	id: string;
+	mal_id: number | null;
 	title: string;
 	title_en: string | null;
 	title_romaji: string | null;
 	synopsis: string | null;
 	cover_url: string | null;
 	season: string | null;
-	episode_count: number | null;
+	episode_count: string | null;
 	type: string | null;
 	status: string | null;
+	computed_broadcast_status: BroadcastStatus;
 	aired_from: string | null;
 	aired_to: string | null;
 	source: string | null;
 	studio: string[] | null;
+	studio_en: string[] | null;
 	producer: string[] | null;
 	genre: string[] | null;
+	genre_en: string[] | null;
 	official_site_url: string | null;
 	official_x_url: string | null;
 	official_hashtag: string[] | null;
+	resources: AnimeResourceLink[];
 	copyright: string | null;
+	broadcast_day: number | null;
+	broadcast_time: string | null;
+	broadcast_station: string[] | null;
 	created_at: string;
 	// 集計フィールド（クエリ時に付加）
 	list_count?: number;
@@ -212,6 +238,8 @@ export interface RawPost {
 		id: string | number;
 		title: string;
 		cover_url: string | null;
+		broadcast_day?: number | null;
+		broadcast_time?: string | null;
 	} | null;
 	profiles: {
 		username: string;
@@ -283,10 +311,53 @@ export function toPost(
 		bookmarked_by_me: counts?.bookmarked_by_me ?? false,
 		anime_id: raw.anime_id != null ? String(raw.anime_id) : null,
 		anime_quote: raw.anime
-			? { id: String(raw.anime.id), title: raw.anime.title, cover_url: raw.anime.cover_url, user_score: null }
+			? {
+					id: String(raw.anime.id),
+					title: raw.anime.title,
+					cover_url: raw.anime.cover_url,
+					room_href: buildAnimeRoomHref(raw.anime, raw.created_at),
+					user_score: null,
+				}
 			: null,
 		exchange_share: toAnimeExchangeShare(raw.exchange_share),
 	};
+}
+
+function buildAnimeRoomHref(anime: NonNullable<RawPost["anime"]>, createdAt: string): string | null {
+	if (anime.broadcast_day == null) return null;
+	const roomDate = getRoomDateKeyForPost(createdAt, anime.broadcast_day);
+	if (!roomDate) return null;
+	if (!isWithinBroadcastWindow(createdAt, roomDate, anime.broadcast_time ?? null)) return null;
+	return `/rooms/anime/${String(anime.id)}/${roomDate}`;
+}
+
+function isWithinBroadcastWindow(createdAt: string, roomDate: string, broadcastTime: string | null): boolean {
+	if (!broadcastTime) return false;
+	const match = broadcastTime.match(/^(\d{1,2}):([0-5]\d)/);
+	if (!match) return false;
+	const [year, month, day] = roomDate.split("-").map(Number);
+	if (year == null || month == null || day == null) return false;
+	const hour = Number(match[1]);
+	const minute = Number(match[2]);
+	// hour≥24（深夜帯: "25:30"など）でも Date.UTC の算術オーバーフローで正しく翌日に繰り越される
+	const scheduledMs = Date.UTC(year, month - 1, day, hour - 9, minute);
+	const createdMs = new Date(createdAt).getTime();
+	if (Number.isNaN(createdMs)) return false;
+	return createdMs >= scheduledMs && createdMs <= scheduledMs + 30 * 60 * 1000;
+}
+
+function getRoomDateKeyForPost(createdAt: string, broadcastDay: number): string | null {
+	const createdDate = new Date(createdAt);
+	if (Number.isNaN(createdDate.getTime())) return null;
+
+	const jstDate = new Date(createdDate.getTime() + 9 * 60 * 60 * 1000);
+	const dayOffset = (jstDate.getUTCDay() - broadcastDay + 7) % 7;
+	jstDate.setUTCDate(jstDate.getUTCDate() - dayOffset);
+
+	const year = jstDate.getUTCFullYear();
+	const month = String(jstDate.getUTCMonth() + 1).padStart(2, "0");
+	const day = String(jstDate.getUTCDate()).padStart(2, "0");
+	return `${year}-${month}-${day}`;
 }
 
 function toAnimeExchangeShare(value: unknown): AnimeExchangeShare | null {
@@ -312,5 +383,21 @@ function toAnimeExchangeShareAnime(value: unknown): AnimeExchangeShareAnime | nu
 		title: raw.title,
 		title_en: typeof raw.title_en === "string" ? raw.title_en : null,
 		cover_url: typeof raw.cover_url === "string" ? raw.cover_url : null,
+	};
+}
+
+export interface BroadcastNotificationSettings {
+	notify_1min: boolean;
+	notify_5min: boolean;
+	notify_30min: boolean;
+}
+
+export interface StoredAccount {
+	userId: string;
+	refreshToken: string;
+	profile: {
+		username: string;
+		display_name: string | null;
+		avatar_url: string | null;
 	};
 }

@@ -21,6 +21,11 @@ let followerCount = $state(0);
 let editDisplayName = $state(untrack(() => data.profile.display_name ?? ""));
 let editBio = $state(untrack(() => data.profile.bio ?? ""));
 let profileSubmitting = $state(false);
+let showUserReportModal = $state(false);
+let reportReason = $state("harassment");
+let reportDetails = $state("");
+let reportSubmitting = $state(false);
+let reportMessage = $state("");
 
 $effect(() => {
 	isFollowing = data.isFollowing;
@@ -44,6 +49,37 @@ const handleProfileSubmit: SubmitFunction = () => {
 		}
 	};
 };
+
+async function submitUserReport() {
+	if (reportSubmitting) return;
+	reportSubmitting = true;
+	reportMessage = "";
+
+	try {
+		const fd = new FormData();
+		fd.append("target_type", "user");
+		fd.append("target_id", profile.id);
+		fd.append("reason", reportReason);
+		fd.append("details", reportDetails.trim());
+
+		const res = await fetch("/api/reports", { method: "POST", body: fd });
+		const body = await res.json().catch(() => ({}));
+		if (!res.ok) {
+			reportMessage = body.message ?? "通報の送信に失敗しました";
+		} else {
+			reportMessage = "通報を受け付けました";
+			reportDetails = "";
+			setTimeout(() => {
+				showUserReportModal = false;
+				reportMessage = "";
+			}, 900);
+		}
+	} catch {
+		reportMessage = "通報の送信に失敗しました";
+	}
+
+	reportSubmitting = false;
+}
 
 const statusOrder: AnimeStatus[] = ["watching", "completed", "plan_to_watch", "on_hold", "dropped"];
 
@@ -123,10 +159,11 @@ const grouped = $derived(
 						プロフィールを編集
 					</a>
 				{:else if data.user}
-					<form
-						method="POST"
-						action="?/follow"
-						use:enhance={() => {
+					<div class="profile-actions">
+						<form
+							method="POST"
+							action="?/follow"
+							use:enhance={() => {
                             return async ({ result }) => {
                                 if (result.type === 'success' && result.data) {
                                     const payload = result.data as { followed: boolean; requestStatus?: "none" | "pending" };
@@ -140,21 +177,85 @@ const grouped = $derived(
                                 }
                             };
                         }}
-						style="margin-top: 12px;"
-					>
-						<input type="hidden" name="target_id" value={profile.id}>
-						<button
-							type="submit"
-							class="btn {isFollowing || followRequestStatus === 'pending' ? 'btn-outline' : 'btn-primary'}"
-							disabled={followRequestStatus === 'pending'}
-							style="font-size: 13px;"
 						>
-							{isFollowing ? 'フォロー中' : followRequestStatus === 'pending' ? '申請中' : profile.is_private ? 'フォロー申請' : 'フォローする'}
+							<input type="hidden" name="target_id" value={profile.id}>
+							<button
+								type="submit"
+								class="btn {isFollowing || followRequestStatus === 'pending' ? 'btn-outline' : 'btn-primary'}"
+								disabled={followRequestStatus === 'pending'}
+								style="font-size: 13px;"
+							>
+								{isFollowing ? 'フォロー中' : followRequestStatus === 'pending' ? '申請中' : profile.is_private ? 'フォロー申請' : 'フォローする'}
+							</button>
+						</form>
+						<button
+							type="button"
+							class="btn btn-outline"
+							style="font-size: 13px;"
+							onclick={() => (showUserReportModal = true)}
+						>
+							通報
 						</button>
-					</form>
+					</div>
 				{/if}
 			</div>
 		</div>
+
+		{#if showUserReportModal}
+			<div class="report-modal-overlay" role="presentation" onclick={() => (showUserReportModal = false)}>
+				<div
+					class="report-modal-card"
+					role="dialog"
+					aria-modal="true"
+					aria-labelledby="user-report-title"
+					tabindex="-1"
+					onclick={(event) => event.stopPropagation()}
+					onkeydown={(event) => event.stopPropagation()}
+				>
+					<div class="report-modal-header">
+						<span id="user-report-title" class="report-modal-title">@{profile.username} を通報</span>
+						<button
+							type="button"
+							class="report-modal-close"
+							aria-label="閉じる"
+							onclick={() => (showUserReportModal = false)}
+						>
+							×
+						</button>
+					</div>
+					<div class="report-modal-body">
+						<label class="report-field">
+							<span>理由</span>
+							<select bind:value={reportReason}>
+								<option value="spam">スパム</option>
+								<option value="harassment">嫌がらせ</option>
+								<option value="sexual">性的コンテンツ</option>
+								<option value="violence">暴力的コンテンツ</option>
+								<option value="illegal">違法・危険行為</option>
+								<option value="other">その他</option>
+							</select>
+						</label>
+						<label class="report-field">
+							<span>詳細</span>
+							<textarea rows="3" maxlength="500" bind:value={reportDetails}></textarea>
+						</label>
+						{#if reportMessage}
+							<p class="report-message">{reportMessage}</p>
+						{/if}
+					</div>
+					<div class="report-modal-footer">
+						<button
+							type="button"
+							class="btn btn-danger"
+							disabled={reportSubmitting}
+							onclick={submitUserReport}
+						>
+							{reportSubmitting ? '送信中...' : '送信'}
+						</button>
+					</div>
+				</div>
+			</div>
+		{/if}
 
 		<!-- タブ -->
 		<nav class="profile-tabs" aria-label="プロフィールタブ">
@@ -396,6 +497,13 @@ const grouped = $derived(
 	cursor: pointer;
 }
 
+.profile-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 12px;
+}
+
 .profile-lock-badge {
 	display: inline-flex;
 	align-items: center;
@@ -443,6 +551,101 @@ const grouped = $derived(
 
 .profile-edit-panel {
 	padding: 20px 4px;
+}
+
+.report-modal-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 100;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 16px;
+	background: rgb(15 23 42 / 0.68);
+}
+
+.report-modal-card {
+	width: min(100%, 420px);
+	border: 1px solid var(--color-border, var(--border, #334155));
+	border-radius: 8px;
+	background: var(--color-surface, var(--surface, #1e293b));
+	box-shadow: 0 24px 60px rgb(0 0 0 / 0.36);
+}
+
+.report-modal-header,
+.report-modal-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 12px 14px;
+	border-bottom: 1px solid var(--color-border, var(--border, #334155));
+}
+
+.report-modal-footer {
+	justify-content: flex-end;
+	border-top: 1px solid var(--color-border, var(--border, #334155));
+	border-bottom: 0;
+}
+
+.report-modal-title {
+	font-size: 15px;
+	font-weight: 800;
+}
+
+.report-modal-close {
+	width: 32px;
+	height: 32px;
+	border: 0;
+	border-radius: 999px;
+	background: transparent;
+	color: var(--color-text-muted, var(--fg-muted, #94a3b8));
+	cursor: pointer;
+	font-size: 20px;
+	line-height: 1;
+}
+
+.report-modal-close:hover {
+	background: var(--color-border, var(--border, #334155));
+	color: var(--color-text, var(--fg, #e2e8f0));
+}
+
+.report-modal-body {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 14px;
+}
+
+.report-field {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	color: var(--color-text-secondary, var(--fg-muted, #94a3b8));
+	font-size: 13px;
+	font-weight: 700;
+}
+
+.report-field select,
+.report-field textarea {
+	width: 100%;
+	border: 1px solid var(--color-border, var(--border, #334155));
+	border-radius: 8px;
+	background: var(--color-bg, var(--bg, #0f172a));
+	color: var(--color-text, var(--fg, #e2e8f0));
+	padding: 9px 10px;
+	font: inherit;
+	font-weight: 500;
+}
+
+.report-field textarea {
+	resize: vertical;
+}
+
+.report-message {
+	margin: 0;
+	color: var(--color-text-muted, var(--fg-muted, #94a3b8));
+	font-size: 13px;
 }
 
 .profile-edit-actions {

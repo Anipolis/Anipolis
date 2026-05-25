@@ -666,3 +666,56 @@ export async function exchangeAnimeAction(supabase: SupabaseClient<Database>, re
 		receivedAnime,
 	};
 }
+
+export async function toggleBroadcastSubscription(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+	animeId: string,
+): Promise<{ subscribed: boolean }> {
+	const { data: existing } = await supabase
+		.from("broadcast_notification_subscriptions")
+		.select("anime_id")
+		.eq("user_id", userId)
+		.eq("anime_id", Number(animeId))
+		.maybeSingle();
+
+	if (existing) {
+		await supabase
+			.from("broadcast_notification_subscriptions")
+			.delete()
+			.eq("user_id", userId)
+			.eq("anime_id", Number(animeId));
+		return { subscribed: false };
+	}
+
+	await supabase.from("broadcast_notification_subscriptions").insert({ user_id: userId, anime_id: Number(animeId) });
+	return { subscribed: true };
+}
+
+export async function updateBroadcastNotificationSettings(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+	settings: import("$lib/types").BroadcastNotificationSettings,
+): Promise<void> {
+	await supabase.from("broadcast_notification_settings").upsert({
+		user_id: userId,
+		notify_1min: settings.notify_1min,
+		notify_5min: settings.notify_5min,
+		notify_30min: settings.notify_30min,
+		updated_at: new Date().toISOString(),
+	});
+}
+
+// linked_accounts は自動生成型未収録のためテーブル名のみ型アサーション使用
+export async function linkAccounts(
+	serviceClient: SupabaseClient<Database>,
+	userIdA: string,
+	userIdB: string,
+	displayOrderForA: number,
+): Promise<void> {
+	// biome-ignore lint/suspicious/noExplicitAny: linked_accounts not yet in auto-generated DB types
+	await (serviceClient as SupabaseClient<any>).from("linked_accounts").upsert([
+		{ owner_user_id: userIdA, linked_user_id: userIdB, display_order: displayOrderForA },
+		{ owner_user_id: userIdB, linked_user_id: userIdA, display_order: 0 },
+	]);
+}

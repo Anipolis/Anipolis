@@ -1,7 +1,6 @@
 <script lang="ts">
 import { enhance } from "$app/forms";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
-import UserCardSkeleton from "$lib/components/UserCardSkeleton.svelte";
 import { formatRelativeTime } from "$lib/utils/format";
 import type { PageProps } from "./$types";
 
@@ -10,34 +9,28 @@ let { data, form }: PageProps = $props();
 
 <svelte:head> <title>フォロー申請 - Anipolis</title> </svelte:head>
 
-<div class="page-container">
-	<main class="feed-column">
-		<header class="page-header requests-header">
-			<h1 class="page-title">フォロー申請</h1>
-		</header>
-
-		{#if form && "message" in form}
-			<div class="flash-error">{form.message}</div>
-		{/if}
-
-		{#await data.requests}
-			<div class="posts-loading-spinner" aria-label="読み込み中">
-				<div class="spinner" aria-hidden="true"></div>
-				<span>読み込み中…</span>
+<div class="page-container" style="justify-content: center;">
+	<main style="flex: 0 1 640px; min-width: 0;">
+		<div class="settings-card">
+			<div class="settings-header-row">
+				<div>
+					<h1 class="settings-title">フォロー申請</h1>
+					<p class="settings-subtitle">{data.requests.length}件の未対応申請</p>
+				</div>
+				<a href="/settings" class="btn btn-ghost">設定へ戻る</a>
 			</div>
-			{#each { length: 5 } as _, i (i)}
-				<UserCardSkeleton />
-			{/each}
-		{:then requests}
-			<p class="page-subtitle">{requests.length}件の未対応申請</p>
 
-			{#if requests.length === 0}
+			{#if form && "message" in form}
+				<div class="flash-error">{form.message}</div>
+			{/if}
+
+			{#if data.requests.length === 0}
 				<div class="empty-state">
 					<p>未対応のフォロー申請はありません</p>
 				</div>
 			{:else}
 				<div class="request-list">
-					{#each requests as request (request.requester_id)}
+					{#each data.requests as request (request.requester_id)}
 						<article class="request-card">
 							<a href="/profile/{request.requester.username}" class="request-avatar">
 								<UserAvatar
@@ -74,28 +67,33 @@ let { data, form }: PageProps = $props();
 					{/each}
 				</div>
 			{/if}
-		{/await}
+		</div>
 	</main>
 </div>
 
 <style>
-.page-subtitle {
-	font-size: 0.8rem;
-	color: var(--color-text-muted);
-	margin: 0 0 8px;
+.settings-subtitle {
+	margin: 4px 0 0;
+	color: var(--fg-muted, #94a3b8);
+	font-size: 0.84rem;
 }
 
 .request-list {
 	display: flex;
 	flex-direction: column;
+	margin-top: 12px;
 }
 
 .request-card {
 	display: flex;
 	align-items: flex-start;
 	gap: 12px;
-	padding: 14px 4px;
-	border-bottom: 1px solid var(--color-border);
+	padding: 14px 0;
+	border-bottom: 1px solid var(--border, #334155);
+}
+
+.request-card:first-child {
+	border-top: 1px solid var(--border, #334155);
 }
 
 .request-avatar {
@@ -111,7 +109,7 @@ let { data, form }: PageProps = $props();
 	display: inline-block;
 	font-size: 0.95rem;
 	font-weight: 700;
-	color: var(--color-text);
+	color: var(--fg, #e2e8f0);
 	text-decoration: none;
 }
 
@@ -121,13 +119,13 @@ let { data, form }: PageProps = $props();
 
 .request-meta {
 	font-size: 0.82rem;
-	color: var(--color-text-muted);
+	color: var(--fg-muted, #94a3b8);
 	margin-bottom: 4px;
 }
 
 .request-body p {
 	font-size: 0.85rem;
-	color: var(--color-text-muted);
+	color: var(--fg-muted, #94a3b8);
 	margin: 0;
 	display: -webkit-box;
 	-webkit-line-clamp: 2;

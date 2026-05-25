@@ -13,6 +13,25 @@ interface UserResult {
 
 let { data, form }: PageProps = $props();
 
+const displayStudios = $derived(data.anime.studio ?? []);
+const displayGenres = $derived(data.anime.genre ?? []);
+const displayOfficialLinks = $derived(
+	buildDisplayOfficialLinks(data.anime.official_site_url, data.anime.official_x_url),
+);
+const displayResources = $derived(
+	buildDisplayResources(
+		data.anime.resources,
+		data.anime.mal_id,
+		data.anime.official_site_url,
+		data.anime.official_x_url,
+	),
+);
+const prequelRelations = $derived(data.relations.filter((relation) => relation.relation_type === "Prequel"));
+const sequelRelations = $derived(data.relations.filter((relation) => relation.relation_type === "Sequel"));
+const otherRelations = $derived(
+	data.relations.filter((relation) => relation.relation_type !== "Prequel" && relation.relation_type !== "Sequel"),
+);
+
 const statusOptions: { value: AnimeStatus; label: string }[] = [
 	{ value: "watching", label: "視聴中" },
 	{ value: "completed", label: "完了" },
@@ -25,6 +44,7 @@ const broadcastLabels: Record<string, string> = {
 	airing: "放送中",
 	upcoming: "放送予定",
 	finished: "放送終了",
+	unknown: "未定",
 };
 const listedUserStatusColors: Record<string, string> = {
 	watching: "#34d399",
@@ -41,9 +61,76 @@ const listedUserStatusLabels: Record<string, string> = {
 	dropped: "断念",
 };
 
+function formatAiredPeriod(airedFrom: string | null, airedTo: string | null): string | null {
+	if (!airedFrom) return null;
+	return `${airedFrom.slice(0, 10)} 〜 ${airedTo ? airedTo.slice(0, 10) : "未定"}`;
+}
+
+function isHttpUrl(url: string | null | undefined): url is string {
+	return typeof url === "string" && /^https?:\/\//i.test(url);
+}
+
+function buildDisplayOfficialLinks(officialSiteUrl: string | null, officialXUrl: string | null) {
+	const links: { name: string; url: string }[] = [];
+
+	if (isHttpUrl(officialSiteUrl)) links.push({ name: "公式サイト", url: officialSiteUrl });
+	if (isHttpUrl(officialXUrl)) links.push({ name: "X (Twitter)", url: officialXUrl });
+
+	return dedupeLinks(links);
+}
+
+function buildDisplayResources(
+	resources: { name: string; url: string }[],
+	malId: number | null,
+	officialSiteUrl: string | null,
+	officialXUrl: string | null,
+) {
+	const links: { name: string; url: string }[] = [];
+
+	if (malId) links.push({ name: "MAL", url: "https://myanimelist.net/" });
+	links.push(
+		...resources
+			.filter((resource) => resource.name && isHttpUrl(resource.url))
+			.map((resource) => {
+				if (isMalUrl(resource.url) || resource.name.toLowerCase() === "mal") {
+					return { name: "MAL", url: "https://myanimelist.net/" };
+				}
+				if (resource.name === "Home" || resource.name.toLowerCase() === "official site") {
+					return null;
+				}
+				if (resource.url === officialSiteUrl || resource.url === officialXUrl) return null;
+				return resource;
+			})
+			.filter((resource): resource is { name: string; url: string } => resource !== null),
+	);
+
+	return dedupeLinks(links);
+}
+
+function dedupeLinks(links: { name: string; url: string }[]) {
+	const seen = new Set<string>();
+	return links.filter((link) => {
+		const key = link.url.toLowerCase();
+		if (seen.has(key)) return false;
+		seen.add(key);
+		return true;
+	});
+}
+
+function isMalUrl(url: string) {
+	try {
+		const hostname = new URL(url).hostname.toLowerCase();
+		return hostname === "myanimelist.net" || hostname.endsWith(".myanimelist.net");
+	} catch {
+		return false;
+	}
+}
+
 let selectedStatus = $state<AnimeStatus>("plan_to_watch");
 let score = $state<string>("");
 let progress = $state<string>("0");
+let showRemoveWatchlistModal = $state(false);
+let removeWatchlistFormEl = $state<HTMLFormElement | null>(null);
 
 $effect(() => {
 	selectedStatus = data.anime.user_entry?.status ?? "plan_to_watch";
@@ -232,13 +319,13 @@ const handleRecommendSubmit: SubmitFunction = () => {
 			{/if}
 
 			<!-- Production info below cover -->
-			{#if data.anime.studio?.length || data.anime.producer?.length || data.anime.source || data.anime.genre?.length || data.anime.official_hashtag?.length || data.anime.official_site_url || data.anime.official_x_url}
+			{#if displayStudios.length || data.anime.producer?.length || data.anime.source || displayGenres.length || data.anime.official_hashtag?.length || displayOfficialLinks.length}
 				<dl class="prod-info">
-					{#if data.anime.studio?.length}
+					{#if displayStudios.length}
 						<div class="prod-row prod-row--wrap">
 							<dt>スタジオ</dt>
 							<dd class="genre-list">
-								{#each data.anime.studio as s}
+								{#each displayStudios as s}
 									<a href="/anime?studio={encodeURIComponent(s)}" class="genre-chip">{s}</a>
 								{/each}
 							</dd>
@@ -260,11 +347,11 @@ const handleRecommendSubmit: SubmitFunction = () => {
 							<dd>{data.anime.source}</dd>
 						</div>
 					{/if}
-					{#if data.anime.genre?.length}
+					{#if displayGenres.length}
 						<div class="prod-row prod-row--wrap">
 							<dt>ジャンル</dt>
 							<dd class="genre-list">
-								{#each data.anime.genre as g}
+								{#each displayGenres as g}
 									<a href="/anime?genre={encodeURIComponent(g)}" class="genre-chip">{g}</a>
 								{/each}
 							</dd>
@@ -282,32 +369,40 @@ const handleRecommendSubmit: SubmitFunction = () => {
 							</dd>
 						</div>
 					{/if}
-					{#if data.anime.official_site_url || data.anime.official_x_url}
+					{#if displayOfficialLinks.length}
 						<div class="prod-row prod-row--wrap">
-							<dt>公式</dt>
+							<dt>公式リンク</dt>
 							<dd class="links-list">
-								{#if data.anime.official_site_url?.startsWith('http')}
+								{#each displayOfficialLinks as resource (resource.url)}
 									<a
-										href={data.anime.official_site_url}
+										href={resource.url}
 										target="_blank"
 										rel="noopener noreferrer"
 										class="official-link"
-										>公式サイト</a
+										>{resource.name}</a
 									>
-								{/if}
-								{#if data.anime.official_x_url?.startsWith('http')}
-									<a
-										href={data.anime.official_x_url}
-										target="_blank"
-										rel="noopener noreferrer"
-										class="official-link"
-										>X (Twitter)</a
-									>
-								{/if}
+								{/each}
 							</dd>
 						</div>
 					{/if}
 				</dl>
+			{/if}
+			{#if displayResources.length}
+				<div class="resource-links">
+					<div class="resource-links-title">Resources</div>
+					<div class="links-list">
+						{#each displayResources as resource (resource.url)}
+							<a
+								href={resource.url}
+								target="_blank"
+								rel="noopener noreferrer"
+								class:resource-link--muted={resource.name === 'MAL'}
+								class="official-link resource-link"
+								>{resource.name}</a
+							>
+						{/each}
+					</div>
+				</div>
 			{/if}
 		</aside>
 
@@ -319,11 +414,9 @@ const handleRecommendSubmit: SubmitFunction = () => {
 					<p class="anime-title-en">{data.anime.title_en}</p>
 				{/if}
 				<div class="meta-row">
-					{#if data.anime.status}
-						<span class="status-badge status-{data.anime.status}">
-							{broadcastLabels[data.anime.status] ?? data.anime.status}
-						</span>
-					{/if}
+					<span class="status-badge status-{data.anime.computed_broadcast_status}">
+						{broadcastLabels[data.anime.computed_broadcast_status] ?? data.anime.computed_broadcast_status}
+					</span>
 					{#if data.anime.type}
 						<span class="meta-chip">{data.anime.type}</span>
 					{/if}
@@ -339,8 +432,7 @@ const handleRecommendSubmit: SubmitFunction = () => {
 					{/if}
 					{#if data.anime.aired_from}
 						<span class="meta-chip aired">
-							{data.anime.aired_from.slice(0, 10)}
-							{data.anime.aired_to ? ` 〜 ${data.anime.aired_to.slice(0, 10)}` : ""}
+							{formatAiredPeriod(data.anime.aired_from, data.anime.aired_to)}
 						</span>
 					{/if}
 				</div>
@@ -396,6 +488,49 @@ const handleRecommendSubmit: SubmitFunction = () => {
 				</section>
 			{/if}
 
+			{#if data.relations.length > 0}
+				<section class="relations-section">
+					<h2>関連作品</h2>
+					{#each [
+						{ label: '前作', relations: prequelRelations },
+						{ label: '続編', relations: sequelRelations },
+						{ label: '関連作品', relations: otherRelations },
+					] as group (group.label)}
+						{#if group.relations.length > 0}
+							<div class="relation-group">
+								<h3>{group.label}</h3>
+								<div class="relation-list">
+									{#each group.relations as relation (`${relation.relation_type}-${relation.related_anime_mal_id}`)}
+										{#if relation.anime}
+											<a href="/anime/{relation.anime.id}" class="relation-card">
+												{#if relation.anime.cover_url}
+													<img src={relation.anime.cover_url} alt="">
+												{/if}
+												<span>
+													<strong>{relation.anime.title}</strong>
+													{#if group.label === '関連作品'}
+														<small>{relation.relation_type}</small>
+													{/if}
+												</span>
+											</a>
+										{:else}
+											<div class="relation-card relation-card--unavailable">
+												<span>
+													<strong>{relation.related_title}</strong>
+													<small>
+														{group.label === '関連作品' ? relation.relation_type : '未登録'}
+													</small>
+												</span>
+											</div>
+										{/if}
+									{/each}
+								</div>
+							</div>
+						{/if}
+					{/each}
+				</section>
+			{/if}
+
 			<!-- Watchlist -->
 			{#if data.user}
 				<section class="watchlist-section">
@@ -445,7 +580,16 @@ const handleRecommendSubmit: SubmitFunction = () => {
 									>
 								</label>
 							{:else}
-								<input type="hidden" name="progress" value={progress}>
+								<label class="form-label">
+									進捗
+									<input
+										type="number"
+										name="progress"
+										min="0"
+										bind:value={progress}
+										class="form-input"
+									>
+								</label>
 							{/if}
 						</div>
 
@@ -492,18 +636,67 @@ const handleRecommendSubmit: SubmitFunction = () => {
 
 							{#if data.anime.user_entry}
 								<button
-									type="submit"
-									formaction="?/removeWatchlist"
+									type="button"
 									class="btn-danger"
-									onclick={(e) => {
-                                        if (!confirm('マイリストから削除しますか？')) e.preventDefault();
-                                    }}
+									onclick={() => (showRemoveWatchlistModal = true)}
 								>
 									削除
 								</button>
 							{/if}
 						</div>
 					</form>
+
+					<form
+						method="POST"
+						action="?/removeWatchlist"
+						bind:this={removeWatchlistFormEl}
+						style="display:none"
+					>
+						<input type="hidden" name="anime_id" value={data.anime.id}>
+					</form>
+
+					{#if showRemoveWatchlistModal}
+						<!-- svelte-ignore a11y_click_events_have_key_events -->
+						<div
+							class="remove-watchlist-modal-overlay"
+							role="presentation"
+							onclick={() => (showRemoveWatchlistModal = false)}
+						>
+							<div
+								class="remove-watchlist-modal-card"
+								role="dialog"
+								aria-modal="true"
+								aria-labelledby="remove-watchlist-modal-title"
+								tabindex="-1"
+								onclick={(e) => e.stopPropagation()}
+							>
+								<div class="remove-watchlist-modal-header">
+									<span id="remove-watchlist-modal-title" class="remove-watchlist-modal-title"
+										>マイリストから削除</span
+									>
+								</div>
+								<div class="remove-watchlist-modal-body">
+									<p>このアニメをマイリストから削除しますか？</p>
+								</div>
+								<div class="remove-watchlist-modal-footer">
+									<button
+										type="button"
+										class="btn btn-ghost"
+										onclick={() => (showRemoveWatchlistModal = false)}
+									>
+										キャンセル
+									</button>
+									<button
+										type="button"
+										class="btn btn-danger"
+										onclick={() => { showRemoveWatchlistModal = false; removeWatchlistFormEl?.requestSubmit(); }}
+									>
+										削除する
+									</button>
+								</div>
+							</div>
+						</div>
+					{/if}
 				</section>
 			{:else}
 				<section class="watchlist-section watchlist-section--guest">
@@ -634,11 +827,75 @@ const handleRecommendSubmit: SubmitFunction = () => {
 					</div>
 				</section>
 			{/if}
+
+			{#if data.episodes.length > 0}
+				<section class="room-log-section">
+					<h2 class="room-log-heading">ルームログ</h2>
+					<ol class="room-log-list">
+						{#each data.episodes as ep (ep.date)}
+							<li>
+								<a href="/rooms/anime/{data.anime.id}/{ep.date}" class="room-log-item">
+									<span class="room-log-ep">第{ep.number}話</span>
+									<span class="room-log-date">{ep.date}</span>
+								</a>
+							</li>
+						{/each}
+					</ol>
+				</section>
+			{/if}
 		</div>
 	</div>
 </div>
 
 <style>
+.remove-watchlist-modal-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 1000;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 16px;
+	background: rgba(0, 0, 0, 0.58);
+	backdrop-filter: blur(3px);
+}
+
+.remove-watchlist-modal-card {
+	width: min(360px, 100%);
+	border: 1px solid var(--color-border);
+	border-radius: 12px;
+	background: var(--color-bg-card);
+	box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
+}
+
+.remove-watchlist-modal-header {
+	padding: 16px 16px 0;
+}
+
+.remove-watchlist-modal-title {
+	font-size: 15px;
+	font-weight: 800;
+}
+
+.remove-watchlist-modal-body {
+	padding: 12px 16px 16px;
+	color: var(--color-text-secondary);
+	font-size: 14px;
+}
+
+.remove-watchlist-modal-body p {
+	margin: 0;
+}
+
+.remove-watchlist-modal-footer {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 8px;
+	padding: 12px 16px;
+	border-top: 1px solid var(--color-border);
+}
+
 .detail-page {
 	padding-top: calc(var(--nav-height) + 24px);
 	padding-bottom: 48px;
@@ -800,6 +1057,28 @@ const handleRecommendSubmit: SubmitFunction = () => {
 	background: var(--accent);
 	color: #fff;
 }
+.resource-link--muted {
+	border-color: var(--border);
+	color: var(--text-muted);
+}
+.resource-link--muted:hover {
+	background: var(--hover-bg);
+	border-color: var(--border);
+	color: var(--text);
+}
+.resource-links {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 0 14px;
+}
+.resource-links-title {
+	color: var(--text-muted);
+	font-size: 0.72rem;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
 .copyright {
 	font-size: 0.72rem;
 	color: var(--color-text-muted);
@@ -867,6 +1146,10 @@ const handleRecommendSubmit: SubmitFunction = () => {
 .status-finished {
 	background: var(--color-surface-hover);
 	color: var(--color-text-muted);
+}
+.status-unknown {
+	background: var(--hover-bg);
+	color: var(--text-muted);
 }
 .meta-chip {
 	font-size: 0.78rem;
@@ -936,6 +1219,76 @@ const handleRecommendSubmit: SubmitFunction = () => {
 	line-height: 1.7;
 	color: var(--text-secondary, var(--text));
 	margin: 0;
+}
+
+/* Related anime */
+.relations-section {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+.relations-section h2 {
+	font-size: 1rem;
+	font-weight: 600;
+	margin: 0;
+}
+.relation-group {
+	display: flex;
+	flex-direction: column;
+	gap: 7px;
+}
+.relation-group h3 {
+	font-size: 0.76rem;
+	color: var(--text-muted);
+	margin: 0;
+	font-weight: 600;
+}
+.relation-list {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+.relation-card {
+	display: flex;
+	gap: 9px;
+	align-items: center;
+	min-height: 52px;
+	max-width: 290px;
+	padding: 7px 10px 7px 7px;
+	background: var(--card-bg);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	color: var(--text);
+	text-decoration: none;
+}
+a.relation-card:hover {
+	border-color: var(--accent);
+	background: var(--hover-bg);
+}
+.relation-card img {
+	width: 34px;
+	height: 48px;
+	object-fit: cover;
+	border-radius: 4px;
+	flex-shrink: 0;
+}
+.relation-card span {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+.relation-card strong {
+	font-size: 0.84rem;
+	line-height: 1.35;
+	font-weight: 600;
+}
+.relation-card small {
+	font-size: 0.72rem;
+	color: var(--text-muted);
+}
+.relation-card--unavailable {
+	color: var(--text-muted);
 }
 
 /* Watchlist */
@@ -1305,6 +1658,50 @@ const handleRecommendSubmit: SubmitFunction = () => {
 	font-size: 0.68rem;
 	color: var(--status-score);
 	font-weight: 600;
+}
+
+/* Room log */
+.room-log-section {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+.room-log-heading {
+	font-size: 1rem;
+	font-weight: 600;
+	margin: 0;
+}
+.room-log-list {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+.room-log-item {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 6px 10px;
+	border-radius: 6px;
+	text-decoration: none;
+	color: var(--text);
+	border: 1px solid var(--border);
+	background: var(--card-bg);
+	font-size: 0.85rem;
+	transition: background 0.12s;
+}
+.room-log-item:hover {
+	background: var(--hover-bg);
+}
+.room-log-ep {
+	font-weight: 600;
+	min-width: 60px;
+}
+.room-log-date {
+	color: var(--text-muted);
+	font-size: 0.8rem;
 }
 
 /* Responsive */

@@ -53,16 +53,22 @@ const statCounts = $derived(statusOrder.map((s) => ({ status: s, count: grouped[
 
 // 各エントリのローカル状態（編集用）
 type EntryState = { status: AnimeStatus; score: string; progress: number };
-let entryStates = $state<Record<string, EntryState>>({});
+type EditRow = { entry: EntryState };
+let editRows = $state<Record<string, EditRow>>({});
 
 $effect(() => {
-	for (const anime of data.animeList) {
-		entryStates[anime.id] = {
-			status: anime.user_entry?.status ?? "plan_to_watch",
-			score: anime.user_entry?.score?.toString() ?? "",
-			progress: anime.user_entry?.progress ?? 0,
-		};
-	}
+	editRows = Object.fromEntries(
+		data.animeList.map((anime) => [
+			anime.id,
+			{
+				entry: {
+					status: anime.user_entry?.status ?? "plan_to_watch",
+					score: anime.user_entry?.score?.toString() ?? "",
+					progress: anime.user_entry?.progress ?? 0,
+				},
+			},
+		]),
+	);
 });
 </script>
 
@@ -204,7 +210,7 @@ $effect(() => {
 						</h2>
 						<div class="anime-list" class:anime-list--edit={viewMode === 'edit'}>
 							{#each grouped[status] as anime (anime.id)}
-								{@const entry = entryStates[anime.id]}
+								{@const editRow = editRows[anime.id]}
 								{#if viewMode === 'list'}
 									<!-- 一覧表示 -->
 									<a href="/anime/{anime.id}" class="anime-card">
@@ -234,13 +240,8 @@ $effect(() => {
 											{/if}
 										</div>
 									</a>
-								{:else if entry}
-									<AnimeEditRow
-										{anime}
-										bind:entry={entryStates[anime.id]!}
-										{statusOrder}
-										{statusLabel}
-									/>
+								{:else if editRow}
+									<AnimeEditRow {anime} bind:entry={editRow.entry} {statusOrder} {statusLabel} />
 								{/if}
 							{/each}
 						</div>

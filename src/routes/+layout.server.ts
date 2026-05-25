@@ -1,5 +1,6 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import type { ServerLoad } from "@sveltejs/kit";
+import { getExtraAccounts } from "$lib/server/multi-account";
 import { getPendingFollowRequestCount, getUnreadNotificationCount } from "$lib/server/queries";
 import type { Database } from "$lib/supabase/database.types";
 
@@ -59,6 +60,7 @@ export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, c
 		: ([null, [0, 0]] as const);
 
 	const filteredCookies = cookies.getAll().filter(({ name }) => /^sb-.+-auth-token/.test(name));
+	const extraAccounts = user ? getExtraAccounts(cookies) : [];
 
 	// ── 通知カウントを deferred Promise として返す ─────────────────
 	// await せずに Promise のまま返すことで SvelteKit のストリーミング機能を
@@ -73,5 +75,6 @@ export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, c
 		cookies: filteredCookies,
 		unreadNotificationCount: user ? getUnreadNotificationCount(supabase, user.id) : Promise.resolve(0),
 		pendingFollowRequestCount: user ? getPendingFollowRequestCount(supabase, user.id) : Promise.resolve(0),
+		extraAccounts,
 	};
 };

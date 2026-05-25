@@ -17,6 +17,13 @@ let { data }: PageProps = $props();
 			</div>
 
 			<nav class="settings-category-list" aria-label="設定カテゴリ">
+				<a href="/settings/notifications" class="settings-category-link">
+					<span>
+						<strong>通知</strong>
+						<small>放送前通知のタイミングを設定します。</small>
+					</span>
+					<span class="settings-category-arrow" aria-hidden="true">›</span>
+				</a>
 				<a href="/settings/account" class="settings-category-link">
 					<span>
 						<strong>アカウント</strong>
@@ -29,6 +36,13 @@ let { data }: PageProps = $props();
 					<span>
 						<strong>プライバシーと安全</strong>
 						<small>鍵アカウントとミュートワードを管理します。</small>
+					</span>
+					<span class="settings-category-arrow" aria-hidden="true">›</span>
+				</a>
+				<a href="/settings/follow-requests" class="settings-category-link">
+					<span>
+						<strong>フォロー申請</strong>
+						<small>{data.pendingFollowRequestCount}件の未対応申請を確認します</small>
 					</span>
 					<span class="settings-category-arrow" aria-hidden="true">›</span>
 				</a>

@@ -4,7 +4,10 @@ import type {
 	Anime,
 	AnimeExchangeItem,
 	AnimeExchangeShare,
+	AnimeRelation,
+	AnimeResourceLink,
 	AnimeStatus,
+	BroadcastStatus,
 	Event,
 	Notification,
 	Post,
@@ -72,6 +75,8 @@ export async function enrichPostsWithCounts(
 ): Promise<Post[]> {
 	if (rawPosts.length === 0) return [];
 
+	const mutedWordsPromise = getMutedWords(supabase, userId);
+
 	type QuotedPostRow = {
 		id: string;
 		content: string;
@@ -79,38 +84,18 @@ export async function enrichPostsWithCounts(
 		user_id: string;
 		profiles: { username: string; display_name: string | null; avatar_url: string | null } | null;
 	};
-
-	const quotedPostIds = [...new Set(rawPosts.map((rawPost) => rawPost.quoted_post_id).filter(Boolean))] as string[];
-	// アニメIDもミュートフィルター前に全件取得（フィルター後に絞り込む必要なし）
-	const allAnimeIds = [
-		...new Set(rawPosts.map((rawPost) => rawPost.anime_id).filter((id): id is string | number => id != null)),
-	];
-
-	// ── 全プリフェッチを並列実行 ──────────────────────────────────
-	const [mutedWords, quotedRaw, userScoreEntries] = await Promise.all([
-		getMutedWords(supabase, userId),
-		quotedPostIds.length > 0
-			? supabase
-					.from("posts")
-					.select(
-						"id, content, created_at, user_id, profiles!posts_user_id_fkey ( username, display_name, avatar_url )",
-					)
-					.in("id", quotedPostIds)
-					.then((r) => r.data ?? [])
-			: Promise.resolve([] as QuotedPostRow[]),
-		userId && allAnimeIds.length > 0
-			? supabase
-					.from("user_anime_list")
-					.select("anime_id, score")
-					.eq("user_id", userId)
-					.in("anime_id", allAnimeIds.map(Number))
-					.then((r) => r.data ?? [])
-			: Promise.resolve([] as { anime_id: number; score: number | null }[]),
-	]);
-
+	const quotedPostIds = [...new Set(rawPosts.map((p) => p.quoted_post_id).filter(Boolean))] as string[];
 	const quotedPostMap = new Map<string, QuotedPostRow>();
-	for (const quotedPostRow of quotedRaw) {
-		quotedPostMap.set(quotedPostRow.id, quotedPostRow as QuotedPostRow);
+	if (quotedPostIds.length > 0) {
+		const { data: quotedRaw } = await supabase
+			.from("posts")
+			.select(
+				"id, content, created_at, user_id, profiles!posts_user_id_fkey ( username, display_name, avatar_url )",
+			)
+			.in("id", quotedPostIds);
+		for (const qp of quotedRaw ?? []) {
+			quotedPostMap.set(qp.id, qp as QuotedPostRow);
+		}
 	}
 
 	for (const raw of rawPosts) {
@@ -120,24 +105,17 @@ export async function enrichPostsWithCounts(
 		}
 	}
 
+	const mutedWords = await mutedWordsPromise;
 	const visibleRawPosts =
 		mutedWords.length > 0 ? rawPosts.filter((post) => !containsMutedWord(post, mutedWords)) : rawPosts;
 
 	if (visibleRawPosts.length === 0) return [];
 
-	const postIds = visibleRawPosts.map((rawPost) => rawPost.id as string);
+	const postIds = visibleRawPosts.map((p) => p.id as string);
 
 	// ── 並列バッチクエリ ──────────────────────────────────────────
-	const [likesRes, repostsRes, repliesRes, myLikesRes, myRepostsRes, myBookmarksRes] = await Promise.all([
-		// 各投稿のいいね数（post_id ごとにカウント）
-		supabase.from("likes").select("post_id").in("post_id", postIds),
-
-		// 各投稿のリポスト数
-		supabase.from("reposts").select("post_id").in("post_id", postIds),
-
-		// 各投稿のリプライ数（parent_id が投稿IDに一致するもの）
-		supabase.from("posts").select("parent_id").in("parent_id", postIds),
-
+	const [countsRes, myLikesRes, myRepostsRes, myBookmarksRes] = await Promise.all([
+		supabase.rpc("get_post_engagement_counts", { target_post_ids: postIds }),
 		// ログイン中ユーザーのいいね一覧
 		userId
 			? supabase.from("likes").select("post_id").eq("user_id", userId).in("post_id", postIds)
@@ -153,26 +131,31 @@ export async function enrichPostsWithCounts(
 			: Promise.resolve({ data: [] as { post_id: string }[] }),
 	]);
 
-	// ── JS でカウント集計 ─────────────────────────────────────────
-	const likeCount = countByPostId(likesRes.data ?? []);
-	const repostCount = countByPostId(repostsRes.data ?? []);
-	const replyCount = countByPostId((repliesRes.data ?? []).map((reply) => ({ post_id: reply.parent_id as string })));
+	const countsByPostId = new Map((countsRes.data ?? []).map((row) => [row.post_id, row]));
 
-	const likedSet = new Set((myLikesRes.data ?? []).map((like) => like.post_id));
-	const repostedSet = new Set((myRepostsRes.data ?? []).map((repost) => repost.post_id));
-	const bookmarkedSet = new Set((myBookmarksRes.data ?? []).map((bookmark) => bookmark.post_id));
+	const likedSet = new Set((myLikesRes.data ?? []).map((r) => r.post_id));
+	const repostedSet = new Set((myRepostsRes.data ?? []).map((r) => r.post_id));
+	const bookmarkedSet = new Set((myBookmarksRes.data ?? []).map((r) => r.post_id));
 
-	// ── アニメスコアマップ（並列取得済み） ────────────────────────
+	// ── アニメ引用がある投稿のスコアを一括取得 ────────────────────
+	const animeIds = [...new Set(visibleRawPosts.map((p) => p.anime_id).filter(Boolean))] as string[];
 	const userScoreMap = new Map<string, number | null>();
-	for (const entry of userScoreEntries) {
-		userScoreMap.set(String(entry.anime_id), entry.score);
+	if (userId && animeIds.length > 0) {
+		const { data: entries } = await supabase
+			.from("user_anime_list")
+			.select("anime_id, score")
+			.eq("user_id", userId)
+			.in("anime_id", animeIds.map(Number));
+		for (const e of entries ?? []) {
+			userScoreMap.set(String(e.anime_id), e.score);
+		}
 	}
 
 	return visibleRawPosts.map((raw) => {
 		const post = toPost(raw, {
-			like_count: likeCount.get(raw["id"]) ?? 0,
-			repost_count: repostCount.get(raw["id"]) ?? 0,
-			reply_count: replyCount.get(raw["id"]) ?? 0,
+			like_count: countsByPostId.get(raw["id"])?.like_count ?? 0,
+			repost_count: countsByPostId.get(raw["id"])?.repost_count ?? 0,
+			reply_count: countsByPostId.get(raw["id"])?.reply_count ?? 0,
 			liked_by_me: likedSet.has(raw["id"]),
 			reposted_by_me: repostedSet.has(raw["id"]),
 			bookmarked_by_me: bookmarkedSet.has(raw["id"]),
@@ -210,14 +193,6 @@ function containsMutedWord(post: RawPost, mutedWords: string[]): boolean {
 
 function normalizeMutedWord(word: string): string {
 	return word.trim().toLocaleLowerCase();
-}
-
-function countByPostId(rows: { post_id: string }[]): Map<string, number> {
-	const map = new Map<string, number>();
-	for (const row of rows) {
-		map.set(row.post_id, (map.get(row.post_id) ?? 0) + 1);
-	}
-	return map;
 }
 
 /**
@@ -312,12 +287,32 @@ export async function getEventsByMonth(
 	const { data, error } = await supabase
 		.from("events")
 		.select(`
-            id, creator_id, title, description, hashtag,
+            id, creator_id, title, description, hashtag, anime_id,
             scheduled_at, duration_minutes, is_cancelled, created_at,
             profiles!events_creator_id_fkey ( username, display_name, avatar_url )
         `)
 		.gte("scheduled_at", startOfMonth)
 		.lte("scheduled_at", endOfMonth)
+		.order("scheduled_at", { ascending: true });
+
+	if (error || !data) return [];
+	return data.map(toEvent);
+}
+
+export async function getEventsByRange(
+	supabase: SupabaseClient<Database>,
+	startIso: string,
+	endIso: string,
+): Promise<Event[]> {
+	const { data, error } = await supabase
+		.from("events")
+		.select(`
+            id, creator_id, title, description, hashtag, anime_id,
+            scheduled_at, duration_minutes, is_cancelled, created_at,
+            profiles!events_creator_id_fkey ( username, display_name, avatar_url )
+        `)
+		.gte("scheduled_at", startIso)
+		.lte("scheduled_at", endIso)
 		.order("scheduled_at", { ascending: true });
 
 	if (error || !data) return [];
@@ -333,7 +328,7 @@ export async function getUpcomingEvents(supabase: SupabaseClient<Database>, limi
 	const { data, error } = await supabase
 		.from("events")
 		.select(`
-            id, creator_id, title, description, hashtag,
+            id, creator_id, title, description, hashtag, anime_id,
             scheduled_at, duration_minutes, is_cancelled, created_at,
             profiles!events_creator_id_fkey ( username, display_name, avatar_url )
         `)
@@ -353,7 +348,7 @@ export async function getEvent(supabase: SupabaseClient<Database>, eventId: stri
 	const { data, error } = await supabase
 		.from("events")
 		.select(`
-            id, creator_id, title, description, hashtag,
+            id, creator_id, title, description, hashtag, anime_id,
             scheduled_at, duration_minutes, is_cancelled, created_at,
             profiles!events_creator_id_fkey ( username, display_name, avatar_url )
         `)
@@ -394,7 +389,7 @@ export async function getEventPosts(
 			`id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, exchange_share,
              profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
              post_hashtags ( hashtags ( name ) ),
-             anime:anime!posts_anime_id_fkey ( id, title, cover_url )`,
+             anime:anime!posts_anime_id_fkey ( id, title, cover_url, broadcast_day, broadcast_time )`,
 		)
 		.in("id", postIds)
 		.is("parent_id", null) // トップレベル投稿のみ
@@ -518,7 +513,8 @@ export interface AdminDashboardData {
 		bannedUsers: number;
 	};
 	reasonCounts: Array<{ reason: ReportReason; count: number }>;
-	recentReports: AdminReport[];
+	postReports: AdminReport[];
+	accountReports: AdminReport[];
 }
 
 type AdminReportRow = Database["public"]["Tables"]["reports"]["Row"] & {
@@ -635,7 +631,8 @@ export async function getAdminDashboardData(supabase: SupabaseClient<Database>):
 		restrictedUsers,
 		bannedUsers,
 		reasonRows,
-		recentReports,
+		postReports,
+		accountReports,
 	] = await Promise.all([
 		countRows(supabase, "reports", (query) => query.eq("status", "open")),
 		countRows(supabase, "reports", (query) => query.eq("status", "reviewing")),
@@ -648,64 +645,14 @@ export async function getAdminDashboardData(supabase: SupabaseClient<Database>):
 		countRows(supabase, "account_moderation", (query) => query.eq("status", "restricted")),
 		countRows(supabase, "account_moderation", (query) => query.eq("status", "banned")),
 		supabase.from("reports").select("reason").gte("created_at", weekAgo.toISOString()),
-		supabase
-			.from("reports")
-			.select(`
-				id,
-				reporter_id,
-				target_type,
-				target_id,
-				target_user_id,
-				reason,
-				details,
-				status,
-				created_at,
-				updated_at,
-				reporter:profiles!reports_reporter_id_fkey (
-					username,
-					display_name
-				),
-				target_user:profiles!reports_target_user_id_fkey (
-					username,
-					display_name
-				)
-			`)
-			.order("created_at", { ascending: false })
-			.limit(25),
+		getAdminReportsByTargetType(supabase, "post"),
+		getAdminReportsByTargetType(supabase, "user"),
 	]);
 
 	const reasonMap = new Map<ReportReason, number>();
 	for (const row of reasonRows.data ?? []) {
 		const reason = row.reason as ReportReason;
 		reasonMap.set(reason, (reasonMap.get(reason) ?? 0) + 1);
-	}
-
-	const recentRows = (recentReports.data ?? []) as unknown as AdminReportRow[];
-	const postIds = recentRows.filter((row) => row.target_type === "post").map((row) => row.target_id);
-	const targetUserIds = recentRows.map((row) => row.target_user_id).filter((id): id is string => id !== null);
-	const postContentById = new Map<string, string>();
-	if (postIds.length > 0) {
-		const { data: posts } = await supabase.from("posts").select("id, content").in("id", postIds);
-		for (const post of posts ?? []) {
-			postContentById.set(post.id, post.content);
-		}
-	}
-	const moderationByUserId = new Map<
-		string,
-		{ status: ModerationStatus; restricted_until: string | null; reason: string | null }
-	>();
-	if (targetUserIds.length > 0) {
-		const { data: moderationRows } = await supabase
-			.from("account_moderation")
-			.select("user_id, status, restricted_until, reason")
-			.in("user_id", targetUserIds);
-		for (const row of moderationRows ?? []) {
-			moderationByUserId.set(row.user_id, {
-				status: row.status as ModerationStatus,
-				restricted_until: row.restricted_until,
-				reason: row.reason,
-			});
-		}
 	}
 
 	return {
@@ -722,14 +669,93 @@ export async function getAdminDashboardData(supabase: SupabaseClient<Database>):
 			bannedUsers,
 		},
 		reasonCounts: [...reasonMap.entries()].map(([reason, count]) => ({ reason, count })),
-		recentReports: recentRows.map((row) =>
-			toAdminReport(
-				row,
-				postContentById.get(row.target_id) ?? null,
-				row.target_user_id ? (moderationByUserId.get(row.target_user_id) ?? null) : null,
-			),
-		),
+		postReports,
+		accountReports,
 	};
+}
+
+async function getAdminReportsByTargetType(
+	supabase: SupabaseClient<Database>,
+	targetType: ReportTargetType,
+	limit = 25,
+): Promise<AdminReport[]> {
+	const { data } = await supabase
+		.from("reports")
+		.select(`
+			id,
+			reporter_id,
+			target_type,
+			target_id,
+			target_user_id,
+			reason,
+			details,
+			status,
+			created_at,
+			updated_at,
+			reporter:profiles!reports_reporter_id_fkey (
+				username,
+				display_name
+			),
+			target_user:profiles!reports_target_user_id_fkey (
+				username,
+				display_name
+			)
+		`)
+		.eq("target_type", targetType)
+		.order("created_at", { ascending: false })
+		.limit(limit);
+
+	const rows = (data ?? []) as unknown as AdminReportRow[];
+	const postContentById = await getReportedPostContentById(supabase, rows);
+	const moderationByUserId = await getModerationByUserId(supabase, rows);
+
+	return rows.map((row) =>
+		toAdminReport(
+			row,
+			postContentById.get(row.target_id) ?? null,
+			row.target_user_id ? (moderationByUserId.get(row.target_user_id) ?? null) : null,
+		),
+	);
+}
+
+async function getReportedPostContentById(
+	supabase: SupabaseClient<Database>,
+	rows: AdminReportRow[],
+): Promise<Map<string, string>> {
+	const postIds = rows.filter((row) => row.target_type === "post").map((row) => row.target_id);
+	const postContentById = new Map<string, string>();
+	if (postIds.length === 0) return postContentById;
+
+	const { data: posts } = await supabase.from("posts").select("id, content").in("id", postIds);
+	for (const post of posts ?? []) {
+		postContentById.set(post.id, post.content);
+	}
+	return postContentById;
+}
+
+async function getModerationByUserId(
+	supabase: SupabaseClient<Database>,
+	rows: AdminReportRow[],
+): Promise<Map<string, { status: ModerationStatus; restricted_until: string | null; reason: string | null }>> {
+	const targetUserIds = [...new Set(rows.map((row) => row.target_user_id).filter((id): id is string => id !== null))];
+	const moderationByUserId = new Map<
+		string,
+		{ status: ModerationStatus; restricted_until: string | null; reason: string | null }
+	>();
+	if (targetUserIds.length === 0) return moderationByUserId;
+
+	const { data: moderationRows } = await supabase
+		.from("account_moderation")
+		.select("user_id, status, restricted_until, reason")
+		.in("user_id", targetUserIds);
+	for (const row of moderationRows ?? []) {
+		moderationByUserId.set(row.user_id, {
+			status: row.status as ModerationStatus,
+			restricted_until: row.restricted_until,
+			reason: row.reason,
+		});
+	}
+	return moderationByUserId;
 }
 
 type CountableTable = "reports" | "profiles" | "posts" | "account_moderation";
@@ -823,7 +849,7 @@ export async function getBookmarkedPosts(supabase: SupabaseClient<Database>, use
 			`id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, exchange_share,
              profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
              post_hashtags ( hashtags ( name ) ),
-             anime:anime!posts_anime_id_fkey ( id, title, cover_url )`,
+             anime:anime!posts_anime_id_fkey ( id, title, cover_url, broadcast_day, broadcast_time )`,
 		)
 		.in("id", postIds);
 	// ブックマーク保存順を維持するため postIds の順序に並べ直す
@@ -851,7 +877,7 @@ export async function getLikedPosts(
 			`id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, exchange_share,
              profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
              post_hashtags ( hashtags ( name ) ),
-             anime:anime!posts_anime_id_fkey ( id, title, cover_url )`,
+             anime:anime!posts_anime_id_fkey ( id, title, cover_url, broadcast_day, broadcast_time )`,
 		)
 		.in("id", postIds)
 		.order("created_at", { ascending: false });
@@ -864,10 +890,13 @@ export async function getLikedPosts(
 
 export interface AnimeListOptions {
 	season?: string;
+	broadcastYear?: string;
+	broadcastSeason?: string;
+	scheduleRange?: { start: string; end: string };
 	genre?: string;
 	studio?: string;
 	producer?: string;
-	status?: "airing" | "finished" | "upcoming";
+	broadcastStatus?: Exclude<BroadcastStatus, "unknown">;
 	limit?: number;
 	userId?: string | null;
 	query?: string;
@@ -880,23 +909,116 @@ export async function getAnimeList(
 	supabase: SupabaseClient<Database>,
 	options: AnimeListOptions = {},
 ): Promise<Anime[]> {
-	const { season, genre, studio, producer, status, limit = 20, userId, query: searchQuery } = options;
+	const {
+		season,
+		broadcastYear,
+		broadcastSeason,
+		scheduleRange,
+		genre,
+		studio,
+		producer,
+		broadcastStatus,
+		limit = 20,
+		userId,
+		query: searchQuery,
+	} = options;
+
+	let query = supabase
+		.from("anime_with_computed_broadcast_status")
+		.select("*")
+		.order("created_at", { ascending: false })
+		.limit(limit);
+
+	if (season) query = query.eq("season", season);
+	const seasonFilter = buildSeasonFilter(broadcastYear, broadcastSeason);
+	if (seasonFilter) query = query.or(seasonFilter);
+	if (scheduleRange) {
+		query = query
+			.not("broadcast_day", "is", null)
+			.or(`aired_from.is.null,aired_from.lte.${scheduleRange.end}`)
+			.or(`aired_to.is.null,aired_to.gte.${scheduleRange.start}`);
+	}
+	if (genre) query = query.or(arrayContainsAny(["genre", "genre_en"], genre));
+	if (studio) query = query.or(arrayContainsAny(["studio", "studio_en"], studio));
+	if (producer) query = query.contains("producer", [producer]);
+	if (broadcastStatus) query = query.eq("computed_broadcast_status", broadcastStatus);
+	if (searchQuery) query = query.or(`title.ilike.%${searchQuery}%,title_en.ilike.%${searchQuery}%`);
+
+	const { data, error } = await query;
+	const rows = error || !data ? await getAnimeListRowsFromBaseTable(supabase, options, seasonFilter) : data;
+	if (rows.length === 0) return [];
+
+	const animes: Anime[] = (rows as Record<string, unknown>[])
+		.map(toAnime)
+		.filter((anime) => !broadcastStatus || anime.computed_broadcast_status === broadcastStatus);
+	if (userId) return enrichAnimeWithUserEntries(supabase, animes, userId);
+	return animes;
+}
+
+async function getAnimeListRowsFromBaseTable(
+	supabase: SupabaseClient<Database>,
+	options: AnimeListOptions,
+	seasonFilter: string | null,
+): Promise<Record<string, unknown>[]> {
+	const { season, scheduleRange, genre, studio, producer, limit = 20, query: searchQuery } = options;
 
 	let query = supabase.from("anime").select("*").order("created_at", { ascending: false }).limit(limit);
 
 	if (season) query = query.eq("season", season);
-	if (genre) query = query.contains("genre", [genre]);
-	if (studio) query = query.contains("studio", [studio]);
+	if (seasonFilter) query = query.or(seasonFilter);
+	if (scheduleRange) {
+		query = query
+			.not("broadcast_day", "is", null)
+			.or(`aired_from.is.null,aired_from.lte.${scheduleRange.end}`)
+			.or(`aired_to.is.null,aired_to.gte.${scheduleRange.start}`);
+	}
+	if (genre) query = query.or(arrayContainsAny(["genre", "genre_en"], genre));
+	if (studio) query = query.or(arrayContainsAny(["studio", "studio_en"], studio));
 	if (producer) query = query.contains("producer", [producer]);
-	if (status) query = query.eq("status", status);
 	if (searchQuery) query = query.or(`title.ilike.%${searchQuery}%,title_en.ilike.%${searchQuery}%`);
 
-	const { data, error } = await query;
-	if (error || !data) return [];
+	const { data } = await query;
+	return (data ?? []) as Record<string, unknown>[];
+}
 
-	const animes: Anime[] = (data as Record<string, unknown>[]).map(toAnime);
-	if (userId) return enrichAnimeWithUserEntries(supabase, animes, userId);
-	return animes;
+function buildSeasonFilter(year: string | undefined, season: string | undefined): string | null {
+	const normalizedYear = year?.trim();
+	const normalizedSeason = season?.trim();
+	if (!normalizedYear && !normalizedSeason) return null;
+
+	if (normalizedYear && normalizedSeason) {
+		return seasonSearchTerms(normalizedSeason)
+			.map((term) => `season.ilike.${normalizedYear}%${term}`)
+			.join(",");
+	}
+
+	if (normalizedYear) return `season.ilike.${normalizedYear}%`;
+
+	return seasonSearchTerms(normalizedSeason ?? "")
+		.flatMap((term) => [`season.ilike.%${term}`, `season.ilike.%-${term}`])
+		.join(",");
+}
+
+function arrayContainsAny(columns: string[], value: string) {
+	const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+	const literal = `{"${escaped}"}`;
+	return columns.map((column) => `${column}.cs.${literal}`).join(",");
+}
+
+function seasonSearchTerms(season: string): string[] {
+	const aliases: Record<string, string[]> = {
+		春: ["春", "spring"],
+		夏: ["夏", "summer"],
+		秋: ["秋", "autumn", "fall"],
+		冬: ["冬", "winter"],
+		spring: ["spring", "春"],
+		summer: ["summer", "夏"],
+		autumn: ["autumn", "fall", "秋"],
+		fall: ["fall", "autumn", "秋"],
+		winter: ["winter", "冬"],
+	};
+
+	return [...new Set(aliases[season.toLowerCase()] ?? [season])];
 }
 
 /**
@@ -907,11 +1029,18 @@ export async function getAnime(
 	animeId: string,
 	userId?: string | null,
 ): Promise<Anime | null> {
-	const { data, error } = await supabase.from("anime").select("*").eq("id", Number(animeId)).maybeSingle();
+	const { data, error } = await supabase
+		.from("anime_with_computed_broadcast_status")
+		.select("*")
+		.eq("id", Number(animeId))
+		.maybeSingle();
 
-	if (error || !data) return null;
+	const animeRow =
+		error || !data ? (await supabase.from("anime").select("*").eq("id", Number(animeId)).maybeSingle()).data : data;
 
-	const anime = toAnime(data as Record<string, unknown>);
+	if (!animeRow) return null;
+
+	const anime = toAnime(animeRow as Record<string, unknown>);
 
 	const [popularityRes, trendingRes, topRatedRes] = await Promise.all([
 		supabase
@@ -956,28 +1085,55 @@ export async function getAnime(
 	return anime;
 }
 
+export async function getAnimeRelations(
+	supabase: SupabaseClient<Database>,
+	malId: number | null,
+): Promise<AnimeRelation[]> {
+	if (malId == null) return [];
+
+	const { data, error } = await supabase
+		.from("anime_relations" as never)
+		.select("relation_type, related_anime_mal_id, related_title")
+		.eq("anime_mal_id", malId);
+
+	if (error || !data) return [];
+
+	const rows = data as unknown as Omit<AnimeRelation, "anime">[];
+	const relatedMalIds = [...new Set(rows.map((row) => row.related_anime_mal_id))];
+	const { data: relatedAnimes } =
+		relatedMalIds.length > 0
+			? await supabase.from("anime").select("id, mal_id, title, cover_url").in("mal_id", relatedMalIds)
+			: { data: [] };
+	const animesByMalId = new Map(
+		(relatedAnimes ?? [])
+			.filter((anime) => anime.mal_id != null)
+			.map((anime) => [
+				anime.mal_id as number,
+				{ id: String(anime.id), title: anime.title, cover_url: anime.cover_url },
+			]),
+	);
+
+	return rows.map((row) => ({
+		...row,
+		anime: animesByMalId.get(row.related_anime_mal_id) ?? null,
+	}));
+}
+
 /**
  * 人気ランキング（総マイリスト登録数順）
  */
 export async function getAnimeRankingPopularity(supabase: SupabaseClient<Database>, limit = 20): Promise<Anime[]> {
-	const { data, error } = await supabase.from("user_anime_list").select("anime_id");
+	const { data, error } = await supabase
+		.from("anime_popularity")
+		.select("anime_id, list_count")
+		.gt("list_count", 0)
+		.order("list_count", { ascending: false })
+		.order("anime_id", { ascending: true })
+		.limit(limit);
 	if (error || !data || data.length === 0) return [];
 
-	const countMap = new Map<string, number>();
-	for (const row of data) {
-		const animeId = String(row.anime_id);
-		countMap.set(animeId, (countMap.get(animeId) ?? 0) + 1);
-	}
-
-	const rankedIds = [...countMap.entries()]
-		.sort((a, b) => {
-			if (b[1] !== a[1]) return b[1] - a[1];
-			return Number(a[0]) - Number(b[0]);
-		})
-		.slice(0, limit)
-		.map(([animeId]) => animeId);
-
-	if (rankedIds.length === 0) return [];
+	const rankedIds = data.map((row) => String(row.anime_id));
+	const countMap = new Map(data.map((row) => [String(row.anime_id), Number(row.list_count)]));
 	const animes = await fetchAnimesByIds(supabase, rankedIds);
 	return animes.map((a) => ({ ...a, list_count: countMap.get(a.id) ?? 0 }));
 }
@@ -986,25 +1142,17 @@ export async function getAnimeRankingPopularity(supabase: SupabaseClient<Databas
  * トレンドランキング（直近7日間のアクティビティ順）
  */
 export async function getAnimeRankingTrending(supabase: SupabaseClient<Database>, limit = 20): Promise<Anime[]> {
-	const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-	const { data, error } = await supabase.from("user_anime_list").select("anime_id").gte("updated_at", since);
+	const { data, error } = await supabase
+		.from("anime_trending")
+		.select("anime_id, recent_count")
+		.gt("recent_count", 0)
+		.order("recent_count", { ascending: false })
+		.order("anime_id", { ascending: true })
+		.limit(limit);
 	if (error || !data || data.length === 0) return [];
 
-	const countMap = new Map<string, number>();
-	for (const row of data) {
-		const animeId = String(row.anime_id);
-		countMap.set(animeId, (countMap.get(animeId) ?? 0) + 1);
-	}
-
-	const rankedIds = [...countMap.entries()]
-		.sort((a, b) => {
-			if (b[1] !== a[1]) return b[1] - a[1];
-			return Number(a[0]) - Number(b[0]);
-		})
-		.slice(0, limit)
-		.map(([animeId]) => animeId);
-
-	if (rankedIds.length === 0) return [];
+	const rankedIds = data.map((row) => String(row.anime_id));
+	const countMap = new Map(data.map((row) => [String(row.anime_id), Number(row.recent_count)]));
 	const animes = await fetchAnimesByIds(supabase, rankedIds);
 	return animes.map((a) => ({ ...a, recent_count: countMap.get(a.id) ?? 0 }));
 }
@@ -1013,35 +1161,20 @@ export async function getAnimeRankingTrending(supabase: SupabaseClient<Database>
  * 高評価ランキング（平均スコア順）
  */
 export async function getAnimeRankingTopRated(supabase: SupabaseClient<Database>, limit = 20): Promise<Anime[]> {
-	const { data, error } = await supabase.from("user_anime_list").select("anime_id, score").not("score", "is", null);
+	const { data, error } = await supabase
+		.from("anime_top_rated")
+		.select("anime_id, avg_score, score_count")
+		.gt("score_count", 0)
+		.order("avg_score", { ascending: false })
+		.order("score_count", { ascending: false })
+		.order("anime_id", { ascending: true })
+		.limit(limit);
 	if (error || !data || data.length === 0) return [];
 
-	const totals = new Map<string, { sum: number; count: number }>();
-	for (const row of data) {
-		if (row.score == null) continue;
-		const animeId = String(row.anime_id);
-		const current = totals.get(animeId) ?? { sum: 0, count: 0 };
-		current.sum += Number(row.score);
-		current.count += 1;
-		totals.set(animeId, current);
-	}
-	if (totals.size === 0) return [];
-
-	const ranked = [...totals.entries()]
-		.map(([animeId, v]) => ({ anime_id: animeId, avg_score: v.sum / v.count, score_count: v.count }))
-		.sort((a, b) => {
-			if (b.avg_score !== a.avg_score) return b.avg_score - a.avg_score;
-			if (b.score_count !== a.score_count) return b.score_count - a.score_count;
-			return Number(a.anime_id) - Number(b.anime_id);
-		})
-		.slice(0, limit);
-
-	const avgMap = new Map(ranked.map((r) => [r.anime_id, r.avg_score]));
-	const cntMap = new Map(ranked.map((r) => [r.anime_id, r.score_count]));
-	const animes = await fetchAnimesByIds(
-		supabase,
-		ranked.map((r) => r.anime_id),
-	);
+	const rankedIds = data.map((row) => String(row.anime_id));
+	const avgMap = new Map(data.map((row) => [String(row.anime_id), Number(row.avg_score)]));
+	const cntMap = new Map(data.map((row) => [String(row.anime_id), Number(row.score_count)]));
+	const animes = await fetchAnimesByIds(supabase, rankedIds);
 	return animes.map((a) => ({
 		...a,
 		avg_score: avgMap.get(a.id) ?? null,
@@ -1231,29 +1364,59 @@ export async function getAnimeExchangeShareForUser(
 }
 
 function toAnime(raw: Record<string, unknown>): Anime {
+	const rawMalId = raw["mal_id"];
+
 	return {
 		id: String(raw["id"]),
+		mal_id:
+			typeof rawMalId === "number"
+				? rawMalId
+				: typeof rawMalId === "string"
+					? Number.parseInt(rawMalId, 10) || null
+					: null,
 		title: String(raw["title"]),
 		title_en: (raw["title_en"] as string | null) ?? null,
 		title_romaji: (raw["title_romaji"] as string | null) ?? null,
 		synopsis: (raw["synopsis"] as string | null) ?? null,
 		cover_url: (raw["cover_url"] as string | null) ?? null,
 		season: (raw["season"] as string | null) ?? null,
-		episode_count: (raw["episode_count"] as number | null) ?? null,
+		episode_count: (raw["episode_count"] as string | null) || null,
 		type: (raw["type"] as string | null) ?? null,
 		status: (raw["status"] as string | null) ?? null,
+		computed_broadcast_status: toBroadcastStatus(raw),
 		aired_from: (raw["aired_from"] as string | null) ?? null,
 		aired_to: (raw["aired_to"] as string | null) ?? null,
 		source: (raw["source"] as string | null) ?? null,
 		studio: (raw["studio"] as string[] | null) ?? null,
+		studio_en: (raw["studio_en"] as string[] | null) ?? null,
 		producer: (raw["producer"] as string[] | null) ?? null,
 		genre: (raw["genre"] as string[] | null) ?? null,
+		genre_en: (raw["genre_en"] as string[] | null) ?? null,
 		official_site_url: (raw["official_site_url"] as string | null) ?? null,
 		official_x_url: (raw["official_x_url"] as string | null) ?? null,
 		official_hashtag: (raw["official_hashtag"] as string[] | null) ?? null,
+		resources: toAnimeResourceLinks(raw["resources"]),
 		copyright: (raw["copyright"] as string | null) ?? null,
+		broadcast_day: (raw["broadcast_day"] as number | null) ?? null,
+		broadcast_time: (raw["broadcast_time"] as string | null) ?? null,
+		broadcast_station: (raw["broadcast_station"] as string[] | null) ?? null,
 		created_at: String(raw["created_at"]),
 	};
+}
+
+function toAnimeResourceLinks(value: unknown): AnimeResourceLink[] {
+	if (!Array.isArray(value)) return [];
+
+	return value
+		.map((item) => {
+			if (!item || typeof item !== "object") return null;
+			const resource = item as Record<string, unknown>;
+			const name = typeof resource["name"] === "string" ? resource["name"].trim() : "";
+			const url = typeof resource["url"] === "string" ? resource["url"].trim() : "";
+			if (!name || !url) return null;
+			return { name, url };
+		})
+		.filter((item): item is AnimeResourceLink => item !== null);
 }
 
 function toAnimeExchangeItem(raw: Record<string, unknown>): AnimeExchangeItem | null {
@@ -1283,9 +1446,13 @@ function toAnimeExchangeItem(raw: Record<string, unknown>): AnimeExchangeItem | 
 
 async function fetchAnimesByIds(supabase: SupabaseClient<Database>, ids: string[]): Promise<Anime[]> {
 	if (ids.length === 0) return [];
-	const { data } = await supabase.from("anime").select("*").in("id", ids.map(Number));
-	if (!data) return [];
-	const map = new Map((data as Record<string, unknown>[]).map((a) => [String(a["id"]), toAnime(a)]));
+	const { data, error } = await supabase
+		.from("anime_with_computed_broadcast_status")
+		.select("*")
+		.in("id", ids.map(Number));
+	const rows = error || !data ? (await supabase.from("anime").select("*").in("id", ids.map(Number))).data : data;
+	if (!rows) return [];
+	const map = new Map((rows as Record<string, unknown>[]).map((a) => [String(a["id"]), toAnime(a)]));
 	return ids.map((id) => map.get(id)).filter((a): a is Anime => a !== undefined);
 }
 
@@ -1314,4 +1481,45 @@ async function enrichAnimeWithUserEntries(
 	);
 
 	return animes.map((a) => ({ ...a, user_entry: entryMap.get(Number(a.id)) ?? null }));
+}
+
+function toBroadcastStatus(raw: Record<string, unknown>): BroadcastStatus {
+	const computed = raw["computed_broadcast_status"];
+	if (computed === "airing" || computed === "finished" || computed === "upcoming" || computed === "unknown") {
+		return computed;
+	}
+
+	const today = new Date();
+	const jstToday = new Date(today.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+	const airedFrom = typeof raw["aired_from"] === "string" ? raw["aired_from"].slice(0, 10) : null;
+	const airedTo = typeof raw["aired_to"] === "string" ? raw["aired_to"].slice(0, 10) : null;
+	const rawType = typeof raw["type"] === "string" ? raw["type"] : null;
+	const normalizedType = rawType?.toLowerCase().replace(/[^a-z0-9]/g, "") ?? "";
+	const isFiniteReleaseType = ["movie", "ona", "ova", "tvspecial", "special"].includes(normalizedType);
+
+	if (airedFrom && airedFrom > jstToday) return "upcoming";
+	if (airedTo && airedTo < jstToday) return "finished";
+	if (airedFrom && airedFrom <= jstToday && !airedTo && isFiniteReleaseType) return "finished";
+	if (airedFrom && airedFrom <= jstToday && (!airedTo || airedTo >= jstToday)) return "airing";
+	return "unknown";
+}
+
+export async function getBroadcastSubscriptions(supabase: SupabaseClient<Database>, userId: string): Promise<string[]> {
+	const { data } = await supabase
+		.from("broadcast_notification_subscriptions")
+		.select("anime_id")
+		.eq("user_id", userId);
+	return (data ?? []).map((row) => String(row.anime_id));
+}
+
+export async function getBroadcastNotificationSettings(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+): Promise<import("$lib/types").BroadcastNotificationSettings> {
+	const { data } = await supabase
+		.from("broadcast_notification_settings")
+		.select("notify_1min, notify_5min, notify_30min")
+		.eq("user_id", userId)
+		.maybeSingle();
+	return data ?? { notify_1min: true, notify_5min: true, notify_30min: false };
 }
