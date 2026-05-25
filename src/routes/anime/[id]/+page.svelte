@@ -85,13 +85,13 @@ function buildDisplayResources(
 ) {
 	const links: { name: string; url: string }[] = [];
 
-	if (malId) links.push({ name: "MAL", url: "https://myanimelist.net/" });
+	if (malId) links.push({ name: "MAL", url: `https://myanimelist.net/anime/${malId}` });
 	links.push(
 		...resources
 			.filter((resource) => resource.name && isHttpUrl(resource.url))
 			.map((resource) => {
 				if (isMalUrl(resource.url) || resource.name.toLowerCase() === "mal") {
-					return { name: "MAL", url: "https://myanimelist.net/" };
+					return { name: "MAL", url: malId ? `https://myanimelist.net/anime/${malId}` : resource.url };
 				}
 				if (resource.name === "Home" || resource.name.toLowerCase() === "official site") {
 					return null;

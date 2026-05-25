@@ -1,4 +1,4 @@
-﻿<script lang="ts">
+<script lang="ts">
 import type { SubmitFunction } from "@sveltejs/kit";
 import { untrack } from "svelte";
 import { enhance } from "$app/forms";
@@ -465,12 +465,12 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 .schedule-header h1 {
 	font-size: 1.2rem;
 	font-weight: 700;
-	color: var(--text);
+	color: var(--color-text);
 	margin: 0 0 4px;
 }
 .schedule-subtitle {
 	font-size: 0.82rem;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 	margin: 0;
 }
 .schedule-actions {
@@ -488,7 +488,7 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 .week-range {
 	font-size: 0.85rem;
 	font-weight: 700;
-	color: var(--text);
+	color: var(--color-text);
 	white-space: nowrap;
 }
 .week-nav-btn {
@@ -497,10 +497,10 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	border: 1px solid var(--border);
+	border: 1px solid var(--color-border);
 	border-radius: 6px;
-	color: var(--text);
-	background: var(--card-bg);
+	color: var(--color-text);
+	background: var(--color-surface);
 	text-decoration: none;
 }
 .week-nav-btn--disabled {
@@ -526,7 +526,7 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 	font-weight: 700;
 	padding: 6px 8px;
 	border-radius: 6px 6px 0 0;
-	border: 1px solid var(--border);
+	border: 1px solid var(--color-border);
 	border-bottom: none;
 }
 .day-heading time {
@@ -534,17 +534,17 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 	color: color-mix(in srgb, currentColor 72%, transparent);
 }
 .day-slots {
-	border: 1px solid var(--border);
+	border: 1px solid var(--color-border);
 	border-radius: 0 0 6px 6px;
 	padding: 6px;
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
 	min-height: 120px;
-	background: color-mix(in srgb, var(--card-bg) 78%, transparent);
+	background: color-mix(in srgb, var(--color-surface) 78%, transparent);
 }
 .empty-day {
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 	font-size: 0.8rem;
 	text-align: center;
 	padding: 8px 0;
@@ -580,10 +580,10 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 	gap: 7px;
 	padding: 6px;
 	border-radius: 6px;
-	border: 1px solid var(--border);
-	background: var(--card-bg);
+	border: 1px solid var(--color-border);
+	background: var(--color-surface);
 	text-decoration: none;
-	color: var(--text);
+	color: var(--color-text);
 	transition: background 0.12s;
 	width: 100%;
 	box-sizing: border-box;
@@ -593,12 +593,12 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 }
 .anime-slot:hover,
 .event-slot:hover {
-	background: var(--hover-bg);
+	background: var(--color-surface-hover);
 }
 .event-slot {
 	flex-direction: column;
 	gap: 2px;
-	border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+	border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-border));
 }
 .event-slot--cancelled,
 .event-list-item--cancelled {
@@ -620,7 +620,7 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 	border-radius: 3px;
 }
 .slot-cover--placeholder {
-	background: var(--border);
+	background: var(--color-border);
 }
 .slot-ep-badge {
 	position: absolute;
@@ -644,18 +644,18 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 .slot-kind {
 	font-size: 0.62rem;
 	font-weight: 800;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 	letter-spacing: 0;
 }
 .slot-time {
 	font-size: 0.72rem;
 	font-weight: 700;
-	color: var(--accent);
+	color: var(--color-accent);
 }
 .slot-title {
 	font-size: 0.78rem;
 	font-weight: 600;
-	color: var(--text);
+	color: var(--color-text);
 	line-height: 1.3;
 	display: -webkit-box;
 	-webkit-line-clamp: 3;
@@ -665,7 +665,7 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 }
 .slot-station {
 	font-size: 0.7rem;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -686,9 +686,9 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 	align-items: center;
 	justify-content: center;
 	border-radius: 4px;
-	background: var(--card-bg);
-	border: 1px solid var(--border);
-	color: var(--text-muted);
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
+	color: var(--color-text-muted);
 	cursor: pointer;
 	transition:
 		background 0.1s,
@@ -697,20 +697,20 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 	padding: 0;
 }
 .notify-btn:hover {
-	background: var(--hover-bg);
-	color: var(--text);
+	background: var(--color-surface-hover);
+	color: var(--color-text);
 }
 .notify-btn--active {
-	background: color-mix(in srgb, var(--accent) 15%, var(--card-bg));
-	border-color: var(--accent);
-	color: var(--accent);
+	background: color-mix(in srgb, var(--color-accent) 15%, var(--color-surface));
+	border-color: var(--color-accent);
+	color: var(--color-accent);
 }
 
 .event-strip {
 	margin-top: 14px;
-	border: 1px solid var(--border);
+	border: 1px solid var(--color-border);
 	border-radius: 8px;
-	background: var(--card-bg);
+	background: var(--color-surface);
 	padding: 12px;
 }
 .event-strip-header {
@@ -723,11 +723,11 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 .event-strip h2 {
 	font-size: 0.95rem;
 	margin: 0;
-	color: var(--text);
+	color: var(--color-text);
 }
 .event-strip-header span {
 	font-size: 0.75rem;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 }
 .event-list {
 	display: grid;
@@ -739,16 +739,16 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 	flex-direction: column;
 	gap: 2px;
 	padding: 8px;
-	border: 1px solid var(--border);
+	border: 1px solid var(--color-border);
 	border-radius: 6px;
-	color: var(--text);
+	color: var(--color-text);
 	text-decoration: none;
 }
 .event-list-item time,
 .event-list-item span,
 .panel-muted {
 	font-size: 0.76rem;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 }
 .event-list-item strong {
 	font-size: 0.84rem;
@@ -776,9 +776,9 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 	width: min(520px, 100%);
 	max-height: min(720px, calc(100vh - 2rem));
 	overflow-y: auto;
-	border: 1px solid var(--border);
+	border: 1px solid var(--color-border);
 	border-radius: 8px;
-	background: var(--card-bg);
+	background: var(--color-surface);
 	padding: 16px;
 	box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
 }
@@ -800,11 +800,11 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 	align-items: center;
 	justify-content: center;
 	border-radius: 6px;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 }
 .dialog-close:hover {
-	background: var(--hover-bg);
-	color: var(--text);
+	background: var(--color-surface-hover);
+	color: var(--color-text);
 }
 .event-form {
 	display: flex;
@@ -817,13 +817,13 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 	gap: 4px;
 	font-size: 0.75rem;
 	font-weight: 700;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 }
 .event-form textarea {
 	resize: vertical;
 }
 .form-error {
-	color: var(--danger, #ef4444);
+	color: var(--color-danger);
 	font-size: 0.8rem;
 	margin: 0 0 8px;
 }

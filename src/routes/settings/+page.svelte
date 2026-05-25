@@ -42,7 +42,7 @@ let { data }: PageProps = $props();
 				<a href="/settings/follow-requests" class="settings-category-link">
 					<span>
 						<strong>フォロー申請</strong>
-						<small>{data.pendingFollowRequestCount}件の未対応申請を確認します</small>
+						<small>{data.pendingFollowRequestCount ?? 0}件の未対応申請を確認します</small>
 					</span>
 					<span class="settings-category-arrow" aria-hidden="true">›</span>
 				</a>

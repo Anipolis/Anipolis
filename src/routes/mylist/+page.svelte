@@ -54,10 +54,8 @@ const statCounts = $derived(statusOrder.map((s) => ({ status: s, count: grouped[
 // 各エントリのローカル状態（編集用）
 type EntryState = { status: AnimeStatus; score: string; progress: number };
 type EditRow = { entry: EntryState };
-let editRows = $state<Record<string, EditRow>>({});
-
-$effect(() => {
-	editRows = Object.fromEntries(
+let editRows = $derived<Record<string, EditRow>>(
+	Object.fromEntries(
 		data.animeList.map((anime) => [
 			anime.id,
 			{
@@ -68,8 +66,8 @@ $effect(() => {
 				},
 			},
 		]),
-	);
-});
+	),
+);
 </script>
 
 <svelte:head> <title>マイリスト — Anipolis</title> </svelte:head>

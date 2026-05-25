@@ -681,8 +681,8 @@ $effect(() => {
 	color: var(--color-text-muted);
 }
 .status-unknown {
-	background: var(--hover-bg);
-	color: var(--text-muted);
+	background: var(--color-surface);
+	color: var(--color-text-muted);
 }
 
 .anime-season {

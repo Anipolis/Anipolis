@@ -1102,7 +1102,8 @@ export async function getAnimeRelations(
 
 	if (error || !data) return [];
 
-	const rows = data as unknown as Omit<AnimeRelation, "anime">[];
+	type AnimeRelationRow = { relation_type: string; related_anime_mal_id: number; related_title: string };
+	const rows = data as unknown as AnimeRelationRow[];
 	const relatedMalIds = [...new Set(rows.map((row) => row.related_anime_mal_id))];
 	const { data: relatedAnimes } =
 		relatedMalIds.length > 0

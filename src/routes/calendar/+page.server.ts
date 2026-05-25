@@ -2,5 +2,5 @@ import { redirect } from "@sveltejs/kit";
 import type { PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async () => {
-	redirect(308, "/schedule");
+	redirect(301, "/schedule");
 };

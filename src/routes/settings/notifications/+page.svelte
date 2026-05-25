@@ -101,19 +101,19 @@ const settingsSubmit: SubmitFunction = () => {
 .settings-section {
 	padding-top: 18px;
 	margin-top: 18px;
-	border-top: 1px solid var(--border, #334155);
+	border-top: 1px solid var(--color-border);
 }
 
 .settings-section-title {
 	margin: 0 0 8px;
 	font-size: 1rem;
 	font-weight: 700;
-	color: var(--fg, #e2e8f0);
+	color: var(--color-text);
 }
 
 .settings-section-desc {
 	font-size: 0.82rem;
-	color: var(--text-muted, #94a3b8);
+	color: var(--color-text-muted);
 	margin: 0 0 16px;
 	line-height: 1.6;
 }
@@ -129,7 +129,7 @@ const settingsSubmit: SubmitFunction = () => {
 	align-items: center;
 	gap: 12px;
 	padding: 12px 0;
-	border-bottom: 1px solid var(--border, #334155);
+	border-bottom: 1px solid var(--color-border);
 	cursor: pointer;
 }
 
@@ -137,7 +137,7 @@ const settingsSubmit: SubmitFunction = () => {
 	width: 18px;
 	height: 18px;
 	flex-shrink: 0;
-	accent-color: var(--accent, #6366f1);
+	accent-color: var(--color-accent);
 	cursor: pointer;
 }
 
@@ -148,12 +148,12 @@ const settingsSubmit: SubmitFunction = () => {
 
 .toggle-row strong {
 	font-size: 0.96rem;
-	color: var(--text, #e2e8f0);
+	color: var(--color-text);
 }
 
 .toggle-row small {
 	margin-top: 2px;
-	color: var(--text-muted, #94a3b8);
+	color: var(--color-text-muted);
 	font-size: 0.82rem;
 }
 
