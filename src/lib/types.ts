@@ -153,6 +153,17 @@ export interface AnimeResourceLink {
 	url: string;
 }
 
+export interface AnimeRelation {
+	relation_type: string;
+	related_anime_mal_id: number;
+	related_title: string;
+	anime: {
+		id: string;
+		title: string;
+		cover_url: string | null;
+	} | null;
+}
+
 export interface Anime {
 	id: string;
 	mal_id: number | null;
@@ -379,4 +390,14 @@ export interface BroadcastNotificationSettings {
 	notify_1min: boolean;
 	notify_5min: boolean;
 	notify_30min: boolean;
+}
+
+export interface StoredAccount {
+	userId: string;
+	refreshToken: string;
+	profile: {
+		username: string;
+		display_name: string | null;
+		avatar_url: string | null;
+	};
 }

@@ -675,3 +675,17 @@ export async function updateBroadcastNotificationSettings(
 		updated_at: new Date().toISOString(),
 	});
 }
+
+// linked_accounts は自動生成型未収録のためテーブル名のみ型アサーション使用
+export async function linkAccounts(
+	serviceClient: SupabaseClient<Database>,
+	userIdA: string,
+	userIdB: string,
+	displayOrderForA: number,
+): Promise<void> {
+	// biome-ignore lint/suspicious/noExplicitAny: linked_accounts not yet in auto-generated DB types
+	await (serviceClient as SupabaseClient<any>).from("linked_accounts").upsert([
+		{ owner_user_id: userIdA, linked_user_id: userIdB, display_order: displayOrderForA },
+		{ owner_user_id: userIdB, linked_user_id: userIdA, display_order: 0 },
+	]);
+}
