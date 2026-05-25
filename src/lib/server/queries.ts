@@ -492,6 +492,7 @@ export interface AdminReport {
 	target_moderation_until: string | null;
 	target_moderation_reason: string | null;
 	post_content: string | null;
+	post_hidden_by_admin: boolean;
 	reason: ReportReason;
 	details: string | null;
 	status: ReportStatus;
@@ -709,26 +710,28 @@ async function getAdminReportsByTargetType(
 	const postContentById = await getReportedPostContentById(supabase, rows);
 	const moderationByUserId = await getModerationByUserId(supabase, rows);
 
-	return rows.map((row) =>
-		toAdminReport(
+	return rows.map((row) => {
+		const postData = postContentById.get(row.target_id) ?? null;
+		return toAdminReport(
 			row,
-			postContentById.get(row.target_id) ?? null,
+			postData?.content ?? null,
+			postData?.hidden_by_admin ?? false,
 			row.target_user_id ? (moderationByUserId.get(row.target_user_id) ?? null) : null,
-		),
-	);
+		);
+	});
 }
 
 async function getReportedPostContentById(
 	supabase: SupabaseClient<Database>,
 	rows: AdminReportRow[],
-): Promise<Map<string, string>> {
+): Promise<Map<string, { content: string; hidden_by_admin: boolean }>> {
 	const postIds = rows.filter((row) => row.target_type === "post").map((row) => row.target_id);
-	const postContentById = new Map<string, string>();
+	const postContentById = new Map<string, { content: string; hidden_by_admin: boolean }>();
 	if (postIds.length === 0) return postContentById;
 
-	const { data: posts } = await supabase.from("posts").select("id, content").in("id", postIds);
+	const { data: posts } = await supabase.from("posts").select("id, content, hidden_by_admin").in("id", postIds);
 	for (const post of posts ?? []) {
-		postContentById.set(post.id, post.content);
+		postContentById.set(post.id, { content: post.content, hidden_by_admin: post.hidden_by_admin });
 	}
 	return postContentById;
 }
@@ -780,6 +783,7 @@ type CountQuery = {
 function toAdminReport(
 	row: AdminReportRow,
 	postContent: string | null,
+	postHiddenByAdmin: boolean,
 	moderation: { status: ModerationStatus; restricted_until: string | null; reason: string | null } | null,
 ): AdminReport {
 	const reporter = Array.isArray(row.reporter) ? row.reporter[0] : row.reporter;
@@ -798,6 +802,7 @@ function toAdminReport(
 		target_moderation_until: moderation?.restricted_until ?? null,
 		target_moderation_reason: moderation?.reason ?? null,
 		post_content: postContent,
+		post_hidden_by_admin: postHiddenByAdmin,
 		reason: row.reason,
 		details: row.details,
 		status: row.status,

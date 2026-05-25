@@ -341,6 +341,75 @@ export async function updateAccountModerationAction(
 	return { moderated: true };
 }
 
+/**
+ * 管理者による投稿削除（投稿者以外の投稿も削除可）
+ */
+export async function adminDeletePostAction(request: Request, supabase: SupabaseClient<Database>, adminId: string) {
+	const form = await request.formData();
+	const postId = (form.get("post_id") as string | null)?.trim() ?? "";
+	const reportId = (form.get("report_id") as string | null)?.trim() || null;
+
+	if (!postId) return fail(400, { message: "投稿IDが不正です" });
+
+	const { error } = await supabase.from("posts").delete().eq("id", postId);
+	if (error) return fail(500, { message: "投稿の削除に失敗しました" });
+
+	await supabase.from("admin_audit_logs").insert({
+		admin_id: adminId,
+		action: "post_delete",
+		target_type: "post",
+		target_id: postId,
+		metadata: { report_id: reportId },
+	});
+
+	if (reportId) {
+		await supabase
+			.from("reports")
+			.update({ status: "resolved" })
+			.eq("id", reportId)
+			.in("status", ["open", "reviewing"]);
+	}
+
+	return { deleted: true };
+}
+
+/**
+ * 管理者による投稿の表示/非表示切り替え
+ */
+export async function adminTogglePostVisibilityAction(
+	request: Request,
+	supabase: SupabaseClient<Database>,
+	adminId: string,
+) {
+	const form = await request.formData();
+	const postId = (form.get("post_id") as string | null)?.trim() ?? "";
+	const reportId = (form.get("report_id") as string | null)?.trim() || null;
+	const hide = form.get("hide") === "1";
+
+	if (!postId) return fail(400, { message: "投稿IDが不正です" });
+
+	const { error } = await supabase.from("posts").update({ hidden_by_admin: hide }).eq("id", postId);
+	if (error) return fail(500, { message: "投稿の表示状態の変更に失敗しました" });
+
+	await supabase.from("admin_audit_logs").insert({
+		admin_id: adminId,
+		action: hide ? "post_hide" : "post_unhide",
+		target_type: "post",
+		target_id: postId,
+		metadata: { report_id: reportId },
+	});
+
+	if (reportId && hide) {
+		await supabase
+			.from("reports")
+			.update({ status: "resolved" })
+			.eq("id", reportId)
+			.in("status", ["open", "reviewing"]);
+	}
+
+	return { hidden: hide };
+}
+
 // ================================================================
 // イベント視聴ルーム アクション
 // ================================================================
