@@ -7,12 +7,12 @@ export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession 
 	const { user } = await safeGetSession();
 	if (!user) redirect(302, "/");
 
-	const requestsPromise = getPendingFollowRequests(supabase, user.id).catch((err) => {
+	const requests = await getPendingFollowRequests(supabase, user.id).catch((err) => {
 		console.error("[follow-requests] error:", err);
 		return [] as Awaited<ReturnType<typeof getPendingFollowRequests>>;
 	});
 
-	return { requests: requestsPromise };
+	return { requests };
 };
 
 export const actions: Actions = {

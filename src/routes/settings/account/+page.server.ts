@@ -1,14 +1,38 @@
 import { fail, redirect } from "@sveltejs/kit";
+import { setPasswordAction } from "$lib/server/actions";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ locals: { safeGetSession } }) => {
 	const { user } = await safeGetSession();
 	if (!user) redirect(303, "/");
 
-	return {};
+	const hasEmailProvider = user.identities?.some((id) => id.provider === "email") ?? false;
+
+	return { hasEmailProvider };
 };
 
 export const actions: Actions = {
+	setPassword: async ({ request, locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { action: "setPassword", message: "ログインが必要です" });
+
+		const hasEmailProvider = user.identities?.some((id) => id.provider === "email") ?? false;
+		if (hasEmailProvider) {
+			return fail(400, { action: "setPassword", message: "すでにパスワードが設定されています" });
+		}
+
+		const result = await setPasswordAction(request, supabase, user.id);
+		if ("error" in result) {
+			return fail(400, {
+				action: "setPassword",
+				field: result.field,
+				message: result.error,
+			});
+		}
+
+		return { action: "setPassword", success: true };
+	},
+
 	updateUsername: async ({ request, locals: { supabase, safeGetSession } }) => {
 		const { user } = await safeGetSession();
 		if (!user) return fail(401, { message: "ログインが必要です" });

@@ -26,5 +26,6 @@ export const load: LayoutLoad = async ({ data, depends, fetch }) => {
 		// layout.svelte 側で $effect を使って非同期解決する
 		unreadNotificationCount: data.unreadNotificationCount ?? Promise.resolve(0),
 		pendingFollowRequestCount: data.pendingFollowRequestCount ?? Promise.resolve(0),
+		extraAccounts: data.extraAccounts ?? [],
 	};
 };

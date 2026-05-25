@@ -10,12 +10,14 @@ export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession 
 	const isAdmin = await isAdminUser(supabase, user.id);
 	if (!isAdmin) redirect(302, "/");
 
-	const dashboardPromise = getAdminDashboardData(supabase).catch((err) => {
+	const dashboard: Awaited<ReturnType<typeof getAdminDashboardData>> | null = await getAdminDashboardData(
+		supabase,
+	).catch((err) => {
 		console.error("[admin] dashboard error:", err);
-		return null as unknown as Awaited<ReturnType<typeof getAdminDashboardData>>;
+		return null;
 	});
 
-	return { dashboard: dashboardPromise };
+	return { dashboard };
 };
 
 export const actions: Actions = {

@@ -8,32 +8,37 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 	const { user } = await safeGetSession();
 	const tag = params.tag.toLowerCase();
 
-	const [{ data: hashtag }, trendingResult] = await Promise.all([
-		supabase.from("hashtags").select("id").eq("name", tag).maybeSingle(),
+	const { data: hashtag } = await supabase.from("hashtags").select("id").eq("name", tag).maybeSingle();
+
+	const [postsResult, trendingResult] = await Promise.all([
+		(async () => {
+			if (!hashtag) return { data: [] };
+
+			const { data: links } = await supabase.from("post_hashtags").select("post_id").eq("hashtag_id", hashtag.id);
+
+			const postIds = (links ?? []).map((l) => l.post_id);
+			if (postIds.length === 0) return { data: [] };
+
+			return supabase
+				.from("posts")
+				.select(
+					`id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, exchange_share,
+                     profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
+                     post_hashtags ( hashtags ( name ) ),
+                     anime:anime!posts_anime_id_fkey ( id, title, cover_url, broadcast_day, broadcast_time )`,
+				)
+				.in("id", postIds)
+				.order("created_at", { ascending: false })
+				.limit(50);
+		})(),
+
 		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
 	]);
 
 	const posts = (async () => {
 		if (!hashtag) return [] as Post[];
-
-		const { data: links } = await supabase.from("post_hashtags").select("post_id").eq("hashtag_id", hashtag.id);
-
-		const postIds = (links ?? []).map((link) => link.post_id);
-		if (postIds.length === 0) return [] as Post[];
-
-		const { data } = await supabase
-			.from("posts")
-			.select(
-				`id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, exchange_share,
-                 profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
-                 post_hashtags ( hashtags ( name ) ),
-                 anime:anime!posts_anime_id_fkey ( id, title, cover_url )`,
-			)
-			.in("id", postIds)
-			.order("created_at", { ascending: false })
-			.limit(50);
-
-		return enrichPostsWithCounts(supabase, data ?? [], user?.id ?? null);
+		const rawPosts = postsResult.data ?? [];
+		return enrichPostsWithCounts(supabase, rawPosts, user?.id ?? null);
 	})().catch((err) => {
 		console.error("[hashtag] posts fetch error:", err);
 		return [] as Post[];

@@ -184,7 +184,7 @@ function formatDate(iso: string): string {
 	<!-- サイドバー：トレンド -->
 	<aside class="sidebar-column">
 		<div style="margin-bottom:16px;">
-			<a href="/calendar" class="btn btn-ghost" style="width:100%;"> ← カレンダーへ戻る </a>
+			<a href="/schedule" class="btn btn-ghost" style="width:100%;"> ← 週間スケジュールへ戻る </a>
 		</div>
 		<TrendingPanel trending={data.trending} />
 	</aside>

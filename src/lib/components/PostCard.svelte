@@ -11,22 +11,33 @@ interface Props {
 	post: Post;
 	currentUserId?: string | null;
 	isDetailView?: boolean;
+	roomContext?: { href: string; title: string } | null;
+	insideRoom?: boolean;
 }
 
-let { post, currentUserId = null, isDetailView = false }: Props = $props();
+let { post, currentUserId = null, isDetailView = false, roomContext = null, insideRoom = false }: Props = $props();
 
 const parts = $derived(parseContentParts(post.content));
 const relativeTime = $derived(formatRelativeTime(post.created_at));
 const displayName = $derived(post.display_name || post.username);
 const isOwn = $derived(!!currentUserId && currentUserId === post.user_id);
 const isLoggedIn = $derived(!!currentUserId);
+const effectiveRoomContext = $derived(
+	roomContext ??
+		(post.anime_quote?.room_href ? { href: post.anime_quote.room_href, title: post.anime_quote.title } : null),
+);
+
+const isLong = $derived(post.content.length > 300 || (post.content.match(/\n/g)?.length ?? 0) >= 5);
+let collapsed = $state(true);
 
 let deleting = $state(false);
 let lightboxUrl = $state<string | null>(null);
+let showDeleteModal = $state(false);
 let showRepostMenu = $state(false);
 let showQuoteModal = $state(false);
 let showExchangeModal = $state(false);
 let showReportModal = $state(false);
+let deleteFormEl = $state<HTMLFormElement | null>(null);
 let quoteText = $state("");
 let quoteSubmitting = $state(false);
 let quoteError = $state("");
@@ -46,9 +57,17 @@ function closeLightbox() {
 }
 
 function handleLightboxKeydown(event: KeyboardEvent) {
-	if (lightboxUrl && event.key === "Escape") closeLightbox();
-	if (showExchangeModal && event.key === "Escape") showExchangeModal = false;
-	if (showReportModal && event.key === "Escape") showReportModal = false;
+	if (event.key === "Escape") {
+		if (lightboxUrl) {
+			closeLightbox();
+		} else if (showDeleteModal) {
+			showDeleteModal = false;
+		} else if (showExchangeModal) {
+			showExchangeModal = false;
+		} else if (showReportModal) {
+			showReportModal = false;
+		}
+	}
 }
 
 function openExchangeModal(event: MouseEvent) {
@@ -76,8 +95,7 @@ const repostCount = $derived(repostCountLocal ?? post.repost_count);
 const repostedByMe = $derived(repostedByMeLocal ?? post.reposted_by_me);
 const bookmarkedByMe = $derived(bookmarkedByMeLocal ?? post.bookmarked_by_me);
 
-const handleDelete: SubmitFunction = ({ cancel }) => {
-	if (!confirm("この投稿を削除しますか？")) return cancel();
+const handleDelete: SubmitFunction = () => {
 	deleting = true;
 	return async ({ update }) => {
 		await update();
@@ -182,10 +200,18 @@ async function submitReport() {
 	class="post-card"
 	class:deleting
 	class:post-card-clickable={!isDetailView}
-	class:post-card-modal-open={showExchangeModal || showQuoteModal || showReportModal || !!lightboxUrl}
+	class:post-card-modal-open={showDeleteModal || showExchangeModal || showQuoteModal || showReportModal || !!lightboxUrl}
+	class:post-card--with-room={!!effectiveRoomContext && !insideRoom}
 >
 	{#if !isDetailView}
 		<a href="/posts/{post.id}" class="post-card-hitarea" aria-label="投稿詳細を開く"></a>
+	{/if}
+
+	{#if effectiveRoomContext && !insideRoom}
+		<a href={effectiveRoomContext.href} class="post-room-link" onclick={(e) => e.stopPropagation()}>
+			<span class="i-lucide-door-open" aria-hidden="true"></span>
+			<span>{effectiveRoomContext.title}</span>
+		</a>
 	{/if}
 
 	<a href="/profile/{post.username}" class="post-avatar-link" aria-label={displayName}>
@@ -202,14 +228,15 @@ async function submitReport() {
 					<time datetime={post.created_at}>{relativeTime}</time>
 				</a>
 				{#if isOwn}
-					<form method="POST" action="?/deletePost" use:enhance={handleDelete}>
+					<form method="POST" action="?/deletePost" use:enhance={handleDelete} bind:this={deleteFormEl}>
 						<input type="hidden" name="post_id" value={post.id}>
 						<button
-							type="submit"
+							type="button"
 							class="post-delete-btn"
 							disabled={deleting}
 							aria-label="投稿を削除"
 							title="削除"
+							onclick={(e) => { e.stopPropagation(); showDeleteModal = true; }}
 						>
 							✕
 						</button>
@@ -218,17 +245,30 @@ async function submitReport() {
 			</div>
 		</div>
 
-		<p class="post-content">
-			{#each parts as part}
-				{#if part.type === 'hashtag'}
-					<a href="/hashtag/{part.value}" class="hashtag">#{part.value}</a>
-				{:else if part.type === 'mention'}
-					<a href="/profile/{part.value}" class="mention">@{part.value}</a>
-				{:else}
-					{part.value}
-				{/if}
-			{/each}
-		</p>
+		<div class="post-content-outer">
+			<div class="post-content-inner" class:post-content-clipped={isLong && collapsed && !isDetailView}>
+				<p class="post-content">
+					{#each parts as part}
+						{#if part.type === 'hashtag'}
+							<a href="/hashtag/{part.value}" class="hashtag">#{part.value}</a>
+						{:else if part.type === 'mention'}
+							<a href="/profile/{part.value}" class="mention">@{part.value}</a>
+						{:else}
+							{part.value}
+						{/if}
+					{/each}
+				</p>
+			</div>
+			{#if isLong && !isDetailView}
+				<button
+					type="button"
+					class="post-content-toggle"
+					onclick={(e) => { e.stopPropagation(); collapsed = !collapsed; }}
+				>
+					{collapsed ? 'もっと見る' : '閉じる'}
+				</button>
+			{/if}
+		</div>
 
 		{#if post.quoted_post}
 			<a href="/posts/{post.quoted_post.id}" class="quoted-post" onclick={(e) => e.stopPropagation()}>
@@ -257,7 +297,7 @@ async function submitReport() {
 					linkCards={false}
 				/>
 			</div>
-		{:else if post.anime_quote}
+		{:else if post.anime_quote && !effectiveRoomContext}
 			<a href="/anime/{post.anime_quote.id}" class="anime-quote-card" onclick={(e) => e.stopPropagation()}>
 				{#if post.anime_quote.cover_url}
 					<img src={post.anime_quote.cover_url} alt={post.anime_quote.title} class="anime-quote-cover">
@@ -470,6 +510,39 @@ async function submitReport() {
 			</div>
 		{/if}
 
+		{#if showDeleteModal}
+			<!-- svelte-ignore a11y_click_events_have_key_events -->
+			<div class="delete-modal-overlay" role="presentation" onclick={() => (showDeleteModal = false)}>
+				<div
+					class="delete-modal-card"
+					role="dialog"
+					aria-modal="true"
+					aria-labelledby="delete-modal-title"
+					tabindex="-1"
+					onclick={(e) => e.stopPropagation()}
+				>
+					<div class="delete-modal-header">
+						<span id="delete-modal-title" class="delete-modal-title">投稿を削除</span>
+					</div>
+					<div class="delete-modal-body">
+						<p>この投稿を削除しますか？この操作は取り消せません。</p>
+					</div>
+					<div class="delete-modal-footer">
+						<button type="button" class="btn btn-ghost" onclick={() => (showDeleteModal = false)}>
+							キャンセル
+						</button>
+						<button
+							type="button"
+							class="btn btn-danger"
+							onclick={() => { showDeleteModal = false; deleteFormEl?.requestSubmit(); }}
+						>
+							削除する
+						</button>
+					</div>
+				</div>
+			</div>
+		{/if}
+
 		<div class="post-footer">
 			<a href="/posts/{post.id}" class="post-action-btn post-reply-btn" aria-label="返信">
 				<svg
@@ -657,6 +730,91 @@ async function submitReport() {
 </article>
 
 <style>
+.post-card--with-room {
+	--post-content-offset: 50px;
+	flex-wrap: wrap;
+}
+
+.post-room-link {
+	flex: 0 0 calc(100% - var(--post-content-offset));
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	width: fit-content;
+	max-width: calc(100% - var(--post-content-offset));
+	margin: -4px 0 -2px var(--post-content-offset);
+	color: var(--color-text-muted);
+	font-size: 12px;
+	font-weight: 700;
+	line-height: 1.2;
+	text-decoration: none;
+}
+
+.post-room-link:hover {
+	color: var(--color-text-secondary);
+	text-decoration: underline;
+}
+
+.post-room-link span:last-child {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.post-room-link [class^="i-lucide"] {
+	flex-shrink: 0;
+	width: 13px;
+	height: 13px;
+}
+
+.delete-modal-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 1000;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 16px;
+	background: rgba(0, 0, 0, 0.58);
+	backdrop-filter: blur(3px);
+}
+
+.delete-modal-card {
+	width: min(360px, 100%);
+	border: 1px solid var(--color-border);
+	border-radius: 12px;
+	background: var(--color-bg-card);
+	box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
+}
+
+.delete-modal-header {
+	padding: 16px 16px 0;
+}
+
+.delete-modal-title {
+	font-size: 15px;
+	font-weight: 800;
+}
+
+.delete-modal-body {
+	padding: 12px 16px 16px;
+	color: var(--color-text-secondary);
+	font-size: 14px;
+}
+
+.delete-modal-body p {
+	margin: 0;
+}
+
+.delete-modal-footer {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 8px;
+	padding: 12px 16px;
+	border-top: 1px solid var(--color-border);
+}
+
 .report-modal-overlay {
 	position: fixed;
 	inset: 0;
@@ -752,5 +910,41 @@ async function submitReport() {
 .post-report-btn:disabled {
 	opacity: 0.35;
 	cursor: not-allowed;
+}
+
+.post-content-inner {
+	position: relative;
+}
+
+.post-content-clipped {
+	max-height: 200px;
+	overflow: hidden;
+}
+
+.post-content-clipped::after {
+	content: "";
+	position: absolute;
+	bottom: 0;
+	left: 0;
+	right: 0;
+	height: 80px;
+	background: linear-gradient(to bottom, transparent, var(--color-bg-card));
+	pointer-events: none;
+}
+
+.post-content-toggle {
+	display: block;
+	padding: 4px 0 0;
+	color: var(--color-accent);
+	font-size: 13px;
+	font-weight: 700;
+	background: none;
+	border: none;
+	cursor: pointer;
+	text-align: left;
+}
+
+.post-content-toggle:hover {
+	text-decoration: underline;
 }
 </style>

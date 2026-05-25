@@ -1,23 +1,28 @@
 import { error, fail } from "@sveltejs/kit";
 import { recommendAnimeAction, removeUserAnimeEntry, upsertUserAnimeEntry } from "$lib/server/actions";
-import type { AnimeListUser } from "$lib/server/queries";
-import { getAnime, getUsersWhoListedAnime, isAdminUser } from "$lib/server/queries";
+import { calcBroadcastEpisodes, isEligibleForRoomLog } from "$lib/server/animeUtils";
+import { getAnime, getAnimeRelations, getUsersWhoListedAnime, isAdminUser } from "$lib/server/queries";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
-	const anime = await getAnime(supabase, params.id, user?.id ?? null);
+
+	const [anime, listedUsers, isAdmin] = await Promise.all([
+		getAnime(supabase, params.id, user?.id ?? null),
+		getUsersWhoListedAnime(supabase, params.id),
+		user ? isAdminUser(supabase, user.id) : Promise.resolve(false),
+	]);
 
 	if (!anime) throw error(404, "アニメが見つかりません");
 
-	const isAdmin = user ? await isAdminUser(supabase, user.id) : false;
+	const relations = await getAnimeRelations(supabase, anime.mal_id);
 
-	const listedUsersPromise: Promise<AnimeListUser[]> = getUsersWhoListedAnime(supabase, params.id).catch((err) => {
-		console.error("[anime/[id]] listedUsers fetch error:", err);
-		return [] as AnimeListUser[];
-	});
+	const episodes =
+		isEligibleForRoomLog(anime.season) && anime.broadcast_day != null && anime.aired_from != null
+			? calcBroadcastEpisodes(anime.aired_from, anime.aired_to ?? null, anime.broadcast_day)
+			: [];
 
-	return { anime, user, isAdmin, listedUsers: listedUsersPromise };
+	return { anime, user, isAdmin, listedUsers, relations, episodes };
 };
 
 export const actions: Actions = {

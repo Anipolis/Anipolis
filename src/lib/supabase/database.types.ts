@@ -366,7 +366,14 @@ export type Database = {
 					id: string;
 					recipient_id: string;
 					actor_id: string;
-					type: "like" | "repost" | "reply" | "mention" | "follow" | "anime_recommendation";
+					type:
+						| "like"
+						| "repost"
+						| "reply"
+						| "mention"
+						| "follow"
+						| "follow_request"
+						| "anime_recommendation";
 					post_id: string | null;
 					anime_recommendation_id: string | null;
 					read: boolean;
@@ -376,7 +383,14 @@ export type Database = {
 					id?: string;
 					recipient_id: string;
 					actor_id: string;
-					type: "like" | "repost" | "reply" | "mention" | "follow" | "anime_recommendation";
+					type:
+						| "like"
+						| "repost"
+						| "reply"
+						| "mention"
+						| "follow"
+						| "follow_request"
+						| "anime_recommendation";
 					post_id?: string | null;
 					anime_recommendation_id?: string | null;
 					read?: boolean;
@@ -597,69 +611,90 @@ export type Database = {
 			anime: {
 				Row: {
 					id: number;
+					mal_id: number | null;
 					title: string;
 					title_en: string | null;
 					title_romaji: string | null;
 					synopsis: string | null;
 					cover_url: string | null;
 					season: string | null;
-					episode_count: number | null;
+					episode_count: string | null;
 					type: string | null;
 					status: string | null;
 					aired_from: string | null;
 					aired_to: string | null;
 					source: string | null;
 					studio: string[] | null;
+					studio_en: string[] | null;
 					producer: string[] | null;
 					genre: string[] | null;
+					genre_en: string[] | null;
 					official_site_url: string | null;
 					official_x_url: string | null;
 					official_hashtag: string[] | null;
+					resources: Json;
 					copyright: string | null;
+					broadcast_day: number | null;
+					broadcast_time: string | null;
+					broadcast_station: string[] | null;
 					created_at: string;
 				};
 				Insert: {
 					title: string;
+					mal_id?: number | null;
 					title_en?: string | null;
 					title_romaji?: string | null;
 					synopsis?: string | null;
 					cover_url?: string | null;
 					season?: string | null;
-					episode_count?: number | null;
+					episode_count?: string | null;
 					type?: string | null;
 					status?: string | null;
 					aired_from?: string | null;
 					aired_to?: string | null;
 					source?: string | null;
 					studio?: string[] | null;
+					studio_en?: string[] | null;
 					producer?: string[] | null;
 					genre?: string[] | null;
+					genre_en?: string[] | null;
 					official_site_url?: string | null;
 					official_x_url?: string | null;
 					official_hashtag?: string[] | null;
+					resources?: Json;
 					copyright?: string | null;
+					broadcast_day?: number | null;
+					broadcast_time?: string | null;
+					broadcast_station?: string[] | null;
 					created_at?: string;
 				};
 				Update: {
 					title?: string;
+					mal_id?: number | null;
 					title_en?: string | null;
 					title_romaji?: string | null;
 					synopsis?: string | null;
 					cover_url?: string | null;
 					season?: string | null;
-					episode_count?: number | null;
+					episode_count?: string | null;
 					type?: string | null;
 					status?: string | null;
 					aired_from?: string | null;
 					aired_to?: string | null;
 					source?: string | null;
 					studio?: string[] | null;
+					studio_en?: string[] | null;
 					producer?: string[] | null;
 					genre?: string[] | null;
+					genre_en?: string[] | null;
 					official_site_url?: string | null;
 					official_x_url?: string | null;
 					official_hashtag?: string[] | null;
+					resources?: Json;
 					copyright?: string | null;
+					broadcast_day?: number | null;
+					broadcast_time?: string | null;
+					broadcast_station?: string[] | null;
 				};
 				Relationships: [];
 			};
@@ -703,6 +738,70 @@ export type Database = {
 					},
 				];
 			};
+			broadcast_notification_subscriptions: {
+				Row: {
+					user_id: string;
+					anime_id: number;
+					created_at: string;
+				};
+				Insert: {
+					user_id: string;
+					anime_id: number;
+					created_at?: string;
+				};
+				Update: {
+					user_id?: string;
+					anime_id?: number;
+					created_at?: string;
+				};
+				Relationships: [
+					{
+						foreignKeyName: "broadcast_notification_subscriptions_user_id_fkey";
+						columns: ["user_id"];
+						isOneToOne: false;
+						referencedRelation: "profiles";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "broadcast_notification_subscriptions_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime";
+						referencedColumns: ["id"];
+					},
+				];
+			};
+			broadcast_notification_settings: {
+				Row: {
+					user_id: string;
+					notify_1min: boolean;
+					notify_5min: boolean;
+					notify_30min: boolean;
+					updated_at: string;
+				};
+				Insert: {
+					user_id: string;
+					notify_1min?: boolean;
+					notify_5min?: boolean;
+					notify_30min?: boolean;
+					updated_at?: string;
+				};
+				Update: {
+					notify_1min?: boolean;
+					notify_5min?: boolean;
+					notify_30min?: boolean;
+					updated_at?: string;
+				};
+				Relationships: [
+					{
+						foreignKeyName: "broadcast_notification_settings_user_id_fkey";
+						columns: ["user_id"];
+						isOneToOne: true;
+						referencedRelation: "profiles";
+						referencedColumns: ["id"];
+					},
+				];
+			};
 		};
 		Views: {
 			anime_popularity: {
@@ -727,11 +826,54 @@ export type Database = {
 				};
 				Relationships: [];
 			};
+			anime_with_computed_broadcast_status: {
+				Row: {
+					id: number;
+					mal_id: number | null;
+					title: string;
+					title_en: string | null;
+					title_romaji: string | null;
+					synopsis: string | null;
+					cover_url: string | null;
+					season: string | null;
+					episode_count: string | null;
+					type: string | null;
+					status: string | null;
+					computed_broadcast_status: "airing" | "finished" | "upcoming" | "unknown";
+					aired_from: string | null;
+					aired_to: string | null;
+					source: string | null;
+					studio: string[] | null;
+					studio_en: string[] | null;
+					producer: string[] | null;
+					genre: string[] | null;
+					genre_en: string[] | null;
+					official_site_url: string | null;
+					official_x_url: string | null;
+					official_hashtag: string[] | null;
+					resources: Json;
+					copyright: string | null;
+					broadcast_day: number | null;
+					broadcast_time: string | null;
+					broadcast_station: string[] | null;
+					created_at: string;
+				};
+				Relationships: [];
+			};
 		};
 		Functions: {
 			get_trending_hashtags: {
 				Args: { limit_count?: number };
 				Returns: { name: string; post_count: number }[];
+			};
+			get_post_engagement_counts: {
+				Args: { target_post_ids: string[] };
+				Returns: {
+					post_id: string;
+					like_count: number;
+					repost_count: number;
+					reply_count: number;
+				}[];
 			};
 			create_anime_exchange: {
 				Args: { p_anime_id: number };

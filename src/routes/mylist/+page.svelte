@@ -1,6 +1,5 @@
 <script lang="ts">
 import { enhance } from "$app/forms";
-import AnimeCardSkeleton from "$lib/components/AnimeCardSkeleton.svelte";
 import AnimeEditRow from "$lib/components/AnimeEditRow.svelte";
 import type { Anime, AnimeStatus } from "$lib/types";
 import type { PageProps } from "./$types";
@@ -38,29 +37,37 @@ $effect(() => {
 	}
 });
 
-function buildGrouped(animeList: Anime[]) {
-	return statusOrder.reduce<Record<AnimeStatus, Anime[]>>(
+const grouped = $derived(
+	statusOrder.reduce<Record<AnimeStatus, Anime[]>>(
 		(acc, status) => {
-			acc[status] = animeList.filter((e) => e.user_entry?.status === status);
+			acc[status] = data.animeList.filter((e) => e.user_entry?.status === status);
 			return acc;
 		},
 		{ watching: [], completed: [], plan_to_watch: [], on_hold: [], dropped: [] },
-	);
-}
+	),
+);
+
+const totalCount = $derived(data.animeList.length);
+
+const statCounts = $derived(statusOrder.map((s) => ({ status: s, count: grouped[s].length })));
 
 // 各エントリのローカル状態（編集用）
 type EntryState = { status: AnimeStatus; score: string; progress: number };
-let entryStates = $state<Record<string, EntryState>>({});
-
-function initEntryStates(animeList: Anime[]) {
-	for (const anime of animeList) {
-		entryStates[anime.id] = {
-			status: anime.user_entry?.status ?? "plan_to_watch",
-			score: anime.user_entry?.score?.toString() ?? "",
-			progress: anime.user_entry?.progress ?? 0,
-		};
-	}
-}
+type EditRow = { entry: EntryState };
+let editRows = $derived<Record<string, EditRow>>(
+	Object.fromEntries(
+		data.animeList.map((anime) => [
+			anime.id,
+			{
+				entry: {
+					status: anime.user_entry?.status ?? "plan_to_watch",
+					score: anime.user_entry?.score?.toString() ?? "",
+					progress: anime.user_entry?.progress ?? 0,
+				},
+			},
+		]),
+	),
+);
 </script>
 
 <svelte:head> <title>マイリスト — Anipolis</title> </svelte:head>
@@ -176,93 +183,70 @@ function initEntryStates(animeList: Anime[]) {
 				</div>
 			</div>
 
-			{#await data.animeList}
-				<div class="mylist-stats"><span class="stat-total">読み込み中…</span></div>
-			{:then animeList}
-				{@const grouped = buildGrouped(animeList)}
-				{@const totalCount = animeList.length}
-				{@const statCounts = statusOrder.map((s) => ({ status: s, count: grouped[s].length }))}
-				<div class="mylist-stats">
-					<span class="stat-total">合計 <strong>{totalCount}</strong> 作品</span>
-					{#each statCounts as { status, count }}
-						{#if count > 0}
-							<span class="stat-chip stat-chip--{status}"> {statusLabel[status]} {count} </span>
-						{/if}
-					{/each}
-				</div>
-			{/await}
-		</header>
-
-		{#await data.animeList}
-			<div class="posts-loading-spinner" aria-label="読み込み中">
-				<div class="spinner" aria-hidden="true"></div>
-				<span>読み込み中…</span>
-			</div>
-			<div class="skeleton-anime-grid">
-				{#each { length: 5 } as _, i (i)}
-					<AnimeCardSkeleton />
-				{/each}
-			</div>
-		{:then animeList}
-			{@const grouped = buildGrouped(animeList)}
-			{@const totalCount = animeList.length}
-			{#if initEntryStates(animeList) === undefined}
-			<!-- side-effect: init entryStates --> {/if}
-			{#if totalCount === 0}
-				<div class="mylist-empty">
-					<p>まだアニメがありません。<a href="/anime">アニメを探す</a></p>
-				</div>
-			{:else}
-				{#each statusOrder as status}
-					{#if grouped[status].length > 0}
-						<section class="status-section status-section--{status}">
-							<h2 class="status-heading">
-								<span class="status-icon">{statusIcon[status]}</span>
-								{statusLabel[status]}
-								<span class="status-count">{grouped[status].length}</span>
-							</h2>
-							<div class="anime-list" class:anime-list--edit={viewMode === 'edit'}>
-								{#each grouped[status] as anime (anime.id)}
-									{@const entry = entryStates[anime.id]}
-									{#if viewMode === 'list'}
-										<!-- 一覧表示 -->
-										<a href="/anime/{anime.id}" class="anime-card">
-											<div class="card-cover">
-												{#if anime.cover_url}
-													<img src={anime.cover_url} alt={anime.title}>
-												{:else}
-													<div class="anime-cover-placeholder">?</div>
-												{/if}
-												{#if anime.user_entry?.score !== null && anime.user_entry?.score !== undefined}
-													<div class="card-score">★ {anime.user_entry.score}</div>
-												{/if}
-											</div>
-											<div class="card-info">
-												<div class="card-title">{anime.title}</div>
-												{#if anime.episode_count}
-													<div class="card-progress">
-														{anime.user_entry?.progress ?? 0}/{anime.episode_count}話
-													</div>
-												{:else if (anime.user_entry?.progress ?? 0) > 0}
-													<div class="card-progress">{anime.user_entry?.progress}話</div>
-												{/if}
-											</div>
-										</a>
-									{:else if entry}
-										<AnimeEditRow
-											{anime}
-											bind:entry={entryStates[anime.id]!}
-											{statusOrder}
-											{statusLabel}
-										/>
-									{/if}
-								{/each}
-							</div>
-						</section>
+			<div class="mylist-stats">
+				<span class="stat-total">合計 <strong>{totalCount}</strong> 作品</span>
+				{#each statCounts as { status, count }}
+					{#if count > 0}
+						<span class="stat-chip stat-chip--{status}"> {statusLabel[status]} {count} </span>
 					{/if}
 				{/each}
-			{/if}
-		{/await}
+			</div>
+		</header>
+
+		{#if totalCount === 0}
+			<div class="mylist-empty">
+				<p>まだアニメがありません。<a href="/anime">アニメを探す</a></p>
+			</div>
+		{:else}
+			{#each statusOrder as status}
+				{#if grouped[status].length > 0}
+					<section class="status-section status-section--{status}">
+						<h2 class="status-heading">
+							<span class="status-icon">{statusIcon[status]}</span>
+							{statusLabel[status]}
+							<span class="status-count">{grouped[status].length}</span>
+						</h2>
+						<div class="anime-list" class:anime-list--edit={viewMode === 'edit'}>
+							{#each grouped[status] as anime (anime.id)}
+								{@const editRow = editRows[anime.id]}
+								{#if viewMode === 'list'}
+									<!-- 一覧表示 -->
+									<a href="/anime/{anime.id}" class="anime-card">
+										<div class="card-cover">
+											{#if anime.cover_url}
+												<img
+													src={anime.cover_url}
+													alt={anime.title}
+													loading="lazy"
+													decoding="async"
+												>
+											{:else}
+												<div class="anime-cover-placeholder">?</div>
+											{/if}
+											{#if anime.user_entry?.score !== null && anime.user_entry?.score !== undefined}
+												<div class="card-score">★ {anime.user_entry.score}</div>
+											{/if}
+										</div>
+										<div class="card-info">
+											<div class="card-title">{anime.title}</div>
+											{#if anime.episode_count}
+												<div class="card-progress">
+													{anime.user_entry?.progress ?? 0}/{anime.episode_count}話
+												</div>
+											{:else if (anime.user_entry?.progress ?? 0) > 0}
+												<div class="card-progress">{anime.user_entry?.progress}話</div>
+											{/if}
+										</div>
+									</a>
+								{:else if editRow}
+									<AnimeEditRow {anime} bind:entry={editRow.entry} {statusOrder} {statusLabel} />
+								{/if}
+							{/each}
+						</div>
+					</section>
+				{/if}
+			{/each}
+		{/if}
 	</div>
 </div>
 

@@ -101,33 +101,43 @@ export async function insertPostWithHashtags(
 	}
 
 	const tags = extractHashtags(postContent);
-	for (const tag of tags) {
-		await supabase.from("hashtags").upsert({ name: tag }, { onConflict: "name", ignoreDuplicates: true });
-		const { data: hashtag } = await supabase.from("hashtags").select("id").eq("name", tag).maybeSingle();
-		if (hashtag) {
-			await supabase.from("post_hashtags").insert({ post_id: post.id, hashtag_id: hashtag.id });
+	const mentionedUsernames = extractMentions(postContent);
+
+	// ハッシュタグとメンションユーザーを並列取得
+	const [, mentionedUsersResult] = await Promise.all([
+		tags.length > 0
+			? supabase.from("hashtags").upsert(
+					tags.map((t) => ({ name: t })),
+					{ onConflict: "name", ignoreDuplicates: true },
+				)
+			: Promise.resolve(null),
+		mentionedUsernames.length > 0
+			? supabase.from("profiles").select("id").in("username", mentionedUsernames)
+			: Promise.resolve({ data: [] as { id: string }[] }),
+	]);
+
+	// ハッシュタグIDを一括取得してpost_hashtagsを一括挿入
+	if (tags.length > 0) {
+		const { data: hashtagRows } = await supabase.from("hashtags").select("id, name").in("name", tags);
+		if (hashtagRows && hashtagRows.length > 0) {
+			await supabase
+				.from("post_hashtags")
+				.insert(hashtagRows.map((h) => ({ post_id: post.id, hashtag_id: h.id })));
 		}
 	}
 
-	// メンション通知（エラーは無視）
-	const mentionedUsernames = extractMentions(postContent);
-	if (mentionedUsernames.length > 0) {
-		const { data: mentionedUsers } = await supabase
-			.from("profiles")
-			.select("id")
-			.in("username", mentionedUsernames);
-		if (mentionedUsers) {
-			for (const mentioned of mentionedUsers) {
-				if (mentioned.id !== userId) {
-					await supabase.from("notifications").insert({
-						recipient_id: mentioned.id,
-						actor_id: userId,
-						type: "mention",
-						post_id: post.id,
-					});
-				}
-			}
-		}
+	// メンション通知を一括挿入（エラーは無視）
+	const mentionedUsers = mentionedUsersResult?.data ?? [];
+	const toNotify = mentionedUsers.filter((u) => u.id !== userId);
+	if (toNotify.length > 0) {
+		await supabase.from("notifications").insert(
+			toNotify.map((u) => ({
+				recipient_id: u.id,
+				actor_id: userId,
+				type: "mention" as const,
+				post_id: post.id,
+			})),
+		);
 	}
 
 	return { success: true, postId: post.id };
@@ -655,4 +665,117 @@ export async function exchangeAnimeAction(supabase: SupabaseClient<Database>, re
 		exchangeMatched: result?.received_anime_id != null,
 		receivedAnime,
 	};
+}
+
+export async function toggleBroadcastSubscription(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+	animeId: string,
+): Promise<{ subscribed: boolean }> {
+	const numericAnimeId = Number(animeId);
+	if (!Number.isFinite(numericAnimeId)) {
+		throw new Error("Invalid anime_id");
+	}
+
+	const { data: existing, error: selectError } = await supabase
+		.from("broadcast_notification_subscriptions")
+		.select("anime_id")
+		.eq("user_id", userId)
+		.eq("anime_id", numericAnimeId)
+		.maybeSingle();
+
+	if (selectError) throw selectError;
+
+	if (existing) {
+		const { error: deleteError } = await supabase
+			.from("broadcast_notification_subscriptions")
+			.delete()
+			.eq("user_id", userId)
+			.eq("anime_id", numericAnimeId);
+		if (deleteError) throw deleteError;
+		return { subscribed: false };
+	}
+
+	const { error: insertError } = await supabase
+		.from("broadcast_notification_subscriptions")
+		.insert({ user_id: userId, anime_id: numericAnimeId });
+	if (insertError) throw insertError;
+	return { subscribed: true };
+}
+
+export async function updateBroadcastNotificationSettings(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+	settings: import("$lib/types").BroadcastNotificationSettings,
+): Promise<void> {
+	const { error } = await supabase.from("broadcast_notification_settings").upsert({
+		user_id: userId,
+		notify_1min: settings.notify_1min,
+		notify_5min: settings.notify_5min,
+		notify_30min: settings.notify_30min,
+		updated_at: new Date().toISOString(),
+	});
+	if (error) throw error;
+}
+
+export async function setPasswordAction(
+	request: Request,
+	supabase: SupabaseClient<Database>,
+	_userId: string,
+): Promise<{ success: true } | { error: string; field?: string }> {
+	const form = await request.formData();
+	const password = (form.get("password") as string | null) ?? "";
+	const confirm = (form.get("confirm") as string | null) ?? "";
+
+	const MIN_PASSWORD_LENGTH = 6;
+
+	if (password.length < MIN_PASSWORD_LENGTH) {
+		return {
+			error: `パスワードは${MIN_PASSWORD_LENGTH}文字以上で入力してください`,
+			field: "password",
+		};
+	}
+	if (password !== confirm) {
+		return {
+			error: "パスワードが一致しません",
+			field: "confirm",
+		};
+	}
+
+	const { error } = await supabase.auth.updateUser({ password });
+	if (error) {
+		return { error: "パスワードの設定に失敗しました" };
+	}
+
+	return { success: true };
+}
+
+export async function updateNotificationSettingsAction(
+	request: Request,
+	supabase: SupabaseClient<Database>,
+	userId: string,
+): Promise<void> {
+	const form = await request.formData();
+	const settings = {
+		notify_1min: form.get("notify_1min") === "on",
+		notify_5min: form.get("notify_5min") === "on",
+		notify_30min: form.get("notify_30min") === "on",
+	};
+
+	await updateBroadcastNotificationSettings(supabase, userId, settings);
+}
+
+// linked_accounts は自動生成型未収録のためテーブル名のみ型アサーション使用
+export async function linkAccounts(
+	serviceClient: SupabaseClient<Database>,
+	userIdA: string,
+	userIdB: string,
+	displayOrderForA: number,
+): Promise<void> {
+	// biome-ignore lint/suspicious/noExplicitAny: linked_accounts not yet in auto-generated DB types
+	const { error } = await (serviceClient as SupabaseClient<any>).from("linked_accounts").upsert([
+		{ owner_user_id: userIdA, linked_user_id: userIdB, display_order: displayOrderForA },
+		{ owner_user_id: userIdB, linked_user_id: userIdA, display_order: 0 },
+	]);
+	if (error) throw error;
 }

@@ -158,15 +158,6 @@ async function handleFileChange(e: Event) {
 
 		<div class="form-row">
 			<div class="form-group">
-				<label for="rf-status">ステータス</label>
-				<select id="rf-status" name="status" class="rf-select">
-					<option value="">未設定</option>
-					<option value="airing">放送中</option>
-					<option value="upcoming">放送予定</option>
-					<option value="finished">放送終了</option>
-				</select>
-			</div>
-			<div class="form-group">
 				<label for="rf-type">タイプ</label>
 				<select id="rf-type" name="type" class="rf-select">
 					<option value="">未設定</option>
@@ -202,6 +193,45 @@ async function handleFileChange(e: Event) {
 			</div>
 		</div>
 
+		<div class="form-row">
+			<div class="form-group">
+				<label for="rf-broadcast-day">放送曜日</label>
+				<select id="rf-broadcast-day" name="broadcast_day" class="rf-select">
+					<option value="">未設定</option>
+					<option value="0">日曜日</option>
+					<option value="1">月曜日</option>
+					<option value="2">火曜日</option>
+					<option value="3">水曜日</option>
+					<option value="4">木曜日</option>
+					<option value="5">金曜日</option>
+					<option value="6">土曜日</option>
+				</select>
+			</div>
+			<div class="form-group">
+				<label for="rf-broadcast-time">放送時刻 (JST)</label>
+				<input
+					id="rf-broadcast-time"
+					name="broadcast_time"
+					type="text"
+					inputmode="numeric"
+					pattern="([0-3]?[0-9]|4[0-7]):[0-5][0-9]"
+					placeholder="例: 24:30 / 26:00"
+					class="rf-input"
+				>
+			</div>
+		</div>
+
+		<div class="form-group">
+			<label for="rf-broadcast-station">放送局</label>
+			<input
+				id="rf-broadcast-station"
+				type="text"
+				name="broadcast_station"
+				class="rf-input"
+				placeholder="複数の場合はカンマ区切り（例: TBS, MX, AT-X）"
+			>
+		</div>
+
 		<div class="form-group">
 			<span class="field-label">ジャンル</span>
 			<div class="tag-picker">
@@ -211,6 +241,7 @@ async function handleFileChange(e: Event) {
 						class="tag-btn"
 						class:selected={selectedGenres.includes(g)}
 						onclick={() => toggleGenre(g)}
+						aria-pressed={selectedGenres.includes(g)}
 					>
 						{g}
 					</button>

@@ -16,12 +16,17 @@ let {
 	statusOrder: AnimeStatus[];
 	statusLabel: Record<AnimeStatus, string>;
 } = $props();
+
+const episodeMax = $derived.by(() => {
+	const parsed = parseInt(String(anime.episode_count), 10);
+	return !Number.isNaN(parsed) ? parsed : 9999;
+});
 </script>
 
 <div class="anime-row-edit">
 	<a href="/anime/{anime.id}" class="anime-cover edit-cover" tabindex="-1">
 		{#if anime.cover_url}
-			<img src={anime.cover_url} alt={anime.title}>
+			<img src={anime.cover_url} alt={anime.title} loading="lazy" decoding="async">
 		{:else}
 			<div class="anime-cover-placeholder">?</div>
 		{/if}
@@ -62,7 +67,7 @@ let {
 					name="progress"
 					class="edit-number"
 					min="0"
-					max={anime.episode_count ?? 9999}
+					max={episodeMax}
 					bind:value={entry.progress}
 					aria-label="進捗"
 				>
@@ -70,8 +75,7 @@ let {
 					type="button"
 					class="stepper-btn"
 					onclick={() => {
-						const max = anime.episode_count ?? 9999;
-						if (entry.progress < max) entry.progress += 1;
+						if (entry.progress < episodeMax) entry.progress += 1;
 					}}
 					aria-label="1話増やす"
 				>

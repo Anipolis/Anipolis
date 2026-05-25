@@ -5,15 +5,14 @@ import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
 import PostCard from "$lib/components/PostCard.svelte";
-import PostCardSkeleton from "$lib/components/PostCardSkeleton.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
-import type { AnimeStatus } from "$lib/types";
+import type { Anime, AnimeStatus } from "$lib/types";
 import type { PageProps } from "./$types";
 
 let { data, form }: PageProps = $props();
 
-const { profile, isOwn, canViewContent } = $derived(data);
+const { profile, posts, imagePosts, isOwn, canViewContent } = $derived(data);
 const displayName = $derived(profile.display_name ?? profile.username);
 
 let isFollowing = $state(false);
@@ -22,6 +21,11 @@ let followerCount = $state(0);
 let editDisplayName = $state(untrack(() => data.profile.display_name ?? ""));
 let editBio = $state(untrack(() => data.profile.bio ?? ""));
 let profileSubmitting = $state(false);
+let showUserReportModal = $state(false);
+let reportReason = $state("harassment");
+let reportDetails = $state("");
+let reportSubmitting = $state(false);
+let reportMessage = $state("");
 
 $effect(() => {
 	isFollowing = data.isFollowing;
@@ -46,6 +50,44 @@ const handleProfileSubmit: SubmitFunction = () => {
 	};
 };
 
+async function submitUserReport() {
+	if (reportSubmitting) return;
+	reportSubmitting = true;
+	reportMessage = "";
+
+	try {
+		const fd = new FormData();
+		fd.append("target_type", "user");
+		fd.append("target_id", profile.id);
+		fd.append("reason", reportReason);
+		fd.append("details", reportDetails.trim());
+
+		const res = await fetch("/api/reports", { method: "POST", body: fd });
+		const body: Record<string, unknown> = await res.json().catch(() => ({}));
+		if (!res.ok) {
+			reportMessage =
+				(typeof body["message"] === "string" ? body["message"] : null) ?? "通報の送信に失敗しました";
+		} else {
+			reportMessage = "通報を受け付けました";
+			reportDetails = "";
+			setTimeout(() => {
+				showUserReportModal = false;
+				reportMessage = "";
+			}, 900);
+		}
+	} catch {
+		reportMessage = "通報の送信に失敗しました";
+	}
+
+	reportSubmitting = false;
+}
+
+function handleReportModalKeydown(event: KeyboardEvent) {
+	if (showUserReportModal && event.key === "Escape") {
+		showUserReportModal = false;
+	}
+}
+
 const statusOrder: AnimeStatus[] = ["watching", "completed", "plan_to_watch", "on_hold", "dropped"];
 
 const statusLabel: Record<AnimeStatus, string> = {
@@ -63,9 +105,23 @@ const statusIcon: Record<AnimeStatus, string> = {
 	on_hold: "⏸",
 	dropped: "✕",
 };
+
+const animeList = $derived((data.animeList ?? []) as Anime[]);
+
+const grouped = $derived(
+	statusOrder.reduce<Record<AnimeStatus, Anime[]>>(
+		(acc, status) => {
+			acc[status] = animeList.filter((e) => e.user_entry?.status === status);
+			return acc;
+		},
+		{ watching: [], completed: [], plan_to_watch: [], on_hold: [], dropped: [] },
+	),
+);
 </script>
 
 <svelte:head> <title>{displayName} (@{profile.username}) — Anipolis</title> </svelte:head>
+
+<svelte:window onkeydown={handleReportModalKeydown} />
 
 <div class="page-container">
 	<main class="feed-column">
@@ -84,7 +140,7 @@ const statusIcon: Record<AnimeStatus, string> = {
 				{/if}
 				<div class="profile-stats">
 					<span class="profile-stat">
-						<strong>—</strong>
+						<strong>{posts.length}</strong>
 						<span>投稿</span>
 					</span>
 					<a href="/profile/{profile.username}/followers" class="profile-stat profile-stat--link">
@@ -95,6 +151,12 @@ const statusIcon: Record<AnimeStatus, string> = {
 						<strong>{data.followCounts.following}</strong>
 						<span>フォロー中</span>
 					</a>
+					{#if canViewContent && (profile.list_is_public || isOwn)}
+						<span class="profile-stat">
+							<strong>{animeList.length}</strong>
+							<span>アニメ</span>
+						</span>
+					{/if}
 				</div>
 
 				{#if isOwn}
@@ -106,10 +168,11 @@ const statusIcon: Record<AnimeStatus, string> = {
 						プロフィールを編集
 					</a>
 				{:else if data.user}
-					<form
-						method="POST"
-						action="?/follow"
-						use:enhance={() => {
+					<div class="profile-actions">
+						<form
+							method="POST"
+							action="?/follow"
+							use:enhance={() => {
                             return async ({ result }) => {
                                 if (result.type === 'success' && result.data) {
                                     const payload = result.data as { followed: boolean; requestStatus?: "none" | "pending" };
@@ -123,24 +186,88 @@ const statusIcon: Record<AnimeStatus, string> = {
                                 }
                             };
                         }}
-						style="margin-top: 12px;"
-					>
-						<input type="hidden" name="target_id" value={profile.id}>
-						<button
-							type="submit"
-							class="btn {isFollowing || followRequestStatus === 'pending' ? 'btn-outline' : 'btn-primary'}"
-							disabled={followRequestStatus === 'pending'}
-							style="font-size: 13px;"
 						>
-							{isFollowing ? 'フォロー中' : followRequestStatus === 'pending' ? '申請中' : profile.is_private ? 'フォロー申請' : 'フォローする'}
+							<input type="hidden" name="target_id" value={profile.id}>
+							<button
+								type="submit"
+								class="btn {isFollowing || followRequestStatus === 'pending' ? 'btn-outline' : 'btn-primary'}"
+								disabled={followRequestStatus === 'pending'}
+								style="font-size: 13px;"
+							>
+								{isFollowing ? 'フォロー中' : followRequestStatus === 'pending' ? '申請中' : profile.is_private ? 'フォロー申請' : 'フォローする'}
+							</button>
+						</form>
+						<button
+							type="button"
+							class="btn btn-outline"
+							style="font-size: 13px;"
+							onclick={() => (showUserReportModal = true)}
+						>
+							通報
 						</button>
-					</form>
+					</div>
 				{/if}
 			</div>
 		</div>
 
+		{#if showUserReportModal}
+			<div class="report-modal-overlay" role="presentation" onclick={() => (showUserReportModal = false)}>
+				<div
+					class="report-modal-card"
+					role="dialog"
+					aria-modal="true"
+					aria-labelledby="user-report-title"
+					tabindex="-1"
+					onclick={(event) => event.stopPropagation()}
+					onkeydown={(event) => event.stopPropagation()}
+				>
+					<div class="report-modal-header">
+						<span id="user-report-title" class="report-modal-title">@{profile.username} を通報</span>
+						<button
+							type="button"
+							class="report-modal-close"
+							aria-label="閉じる"
+							onclick={() => (showUserReportModal = false)}
+						>
+							×
+						</button>
+					</div>
+					<div class="report-modal-body">
+						<label class="report-field">
+							<span>理由</span>
+							<select bind:value={reportReason}>
+								<option value="spam">スパム</option>
+								<option value="harassment">嫌がらせ</option>
+								<option value="sexual">性的コンテンツ</option>
+								<option value="violence">暴力的コンテンツ</option>
+								<option value="illegal">違法・危険行為</option>
+								<option value="other">その他</option>
+							</select>
+						</label>
+						<label class="report-field">
+							<span>詳細</span>
+							<textarea rows="3" maxlength="500" bind:value={reportDetails}></textarea>
+						</label>
+						{#if reportMessage}
+							<p class="report-message">{reportMessage}</p>
+						{/if}
+					</div>
+					<div class="report-modal-footer">
+						<button
+							type="button"
+							class="btn btn-danger"
+							disabled={reportSubmitting}
+							onclick={submitUserReport}
+						>
+							{reportSubmitting ? '送信中...' : '送信'}
+						</button>
+					</div>
+				</div>
+			</div>
+		{/if}
+
 		<!-- タブ -->
-		<div class="profile-tabs">
+		<nav class="profile-tabs" aria-label="プロフィールタブ">
 			<a href="/profile/{profile.username}" class="profile-tab" class:active={activeTab === 'posts'}>投稿</a>
 			<a href="/profile/{profile.username}?tab=images" class="profile-tab" class:active={activeTab === 'images'}
 				>画像</a
@@ -159,9 +286,148 @@ const statusIcon: Record<AnimeStatus, string> = {
 					>編集</a
 				>
 			{/if}
-		</div>
+		</nav>
 
-		<!-- 編集タブ（同期データのみ使用） -->
+		<!-- 投稿タブ -->
+		{#if activeTab === 'posts'}
+			{#if !canViewContent}
+				<div class="empty-state profile-private-state">
+					<p>このアカウントの投稿はフォロワーだけが見ることができます</p>
+				</div>
+			{:else if posts.length === 0}
+				<div class="empty-state">
+					<p>まだ投稿がありません</p>
+				</div>
+			{:else}
+				{#each posts as post (post.id)}
+					<PostCard {post} currentUserId={data.user?.id ?? null} />
+				{/each}
+			{/if}
+		{/if}
+
+		<!-- 画像タブ -->
+		{#if activeTab === 'images'}
+			{#if !canViewContent}
+				<div class="empty-state profile-private-state">
+					<p>このアカウントの画像投稿はフォロワーだけが見ることができます</p>
+				</div>
+			{:else if imagePosts.length === 0}
+				<div class="empty-state">
+					<p>画像付きの投稿がありません</p>
+				</div>
+			{:else}
+				{#each imagePosts as post (post.id)}
+					<PostCard {post} currentUserId={data.user?.id ?? null} />
+				{/each}
+			{/if}
+		{/if}
+
+		<!-- マイリストタブ -->
+		{#if activeTab === 'list'}
+			{#if !canViewContent || (!profile.list_is_public && !isOwn)}
+				<div class="empty-state list-private">
+					<svg
+						width="36"
+						height="36"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="1.5"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+						style="margin-bottom:12px; color: var(--fg-muted)"
+					>
+						<rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+						<path d="M7 11V7a5 5 0 0 1 10 0v4" />
+					</svg>
+					<p>
+						{!canViewContent ? 'このアカウントのマイリストはフォロワーだけが見ることができます' : 'このユーザーのマイリストは非公開です'}
+					</p>
+				</div>
+			{:else if animeList.length === 0}
+				<div class="empty-state">
+					<p>まだアニメがありません</p>
+				</div>
+			{:else}
+				<div class="list-summary">
+					<span class="list-total">合計 <strong>{animeList.length}</strong> 作品</span>
+					{#if isOwn}
+						<a href="/mylist" class="list-manage-link">リストを管理</a>
+					{/if}
+				</div>
+
+				{#each statusOrder as status}
+					{#if grouped[status].length > 0}
+						<section class="status-section status-section--{status}">
+							<h3 class="status-heading">
+								<span class="status-icon">{statusIcon[status]}</span>
+								{statusLabel[status]}
+								<span class="status-count">{grouped[status].length}</span>
+							</h3>
+							<div class="anime-list">
+								{#each grouped[status] as anime (anime.id)}
+									<a href="/anime/{anime.id}" class="anime-row">
+										<div class="anime-cover">
+											{#if anime.cover_url}
+												<img
+													src={anime.cover_url}
+													alt={anime.title}
+													loading="lazy"
+													decoding="async"
+												>
+											{:else}
+												<div class="anime-cover-placeholder">?</div>
+											{/if}
+										</div>
+										<div class="anime-info">
+											<div class="anime-title">{anime.title}</div>
+											<div class="anime-meta">
+												{#if anime.episode_count}
+													<span class="meta-progress"
+														>{anime.user_entry?.progress ?? 0}
+														/ {anime.episode_count} 話</span
+													>
+												{:else if (anime.user_entry?.progress ?? 0) > 0}
+													<span class="meta-progress">{anime.user_entry?.progress} 話</span>
+												{/if}
+												{#if anime.user_entry?.score !== null && anime.user_entry?.score !== undefined}
+													<span class="meta-score">★ {anime.user_entry.score}</span>
+												{/if}
+											</div>
+										</div>
+										{#if anime.user_entry?.updated_at}
+											<div class="anime-updated">
+												{new Date(anime.user_entry.updated_at).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' })}
+											</div>
+										{/if}
+									</a>
+								{/each}
+							</div>
+						</section>
+					{/if}
+				{/each}
+			{/if}
+		{/if}
+
+		<!-- いいねタブ -->
+		{#if activeTab === 'likes'}
+			{#if !canViewContent}
+				<div class="empty-state profile-private-state">
+					<p>このアカウントのいいねはフォロワーだけが見ることができます</p>
+				</div>
+			{:else if data.likedPosts.length === 0}
+				<div class="empty-state">
+					<p>いいねした投稿がありません</p>
+				</div>
+			{:else}
+				{#each data.likedPosts as post (post.id)}
+					<PostCard {post} currentUserId={data.user?.id ?? null} />
+				{/each}
+			{/if}
+		{/if}
+
+		<!-- 編集タブ -->
 		{#if activeTab === 'edit' && isOwn}
 			<section class="profile-edit-panel">
 				{#if form?.success}
@@ -225,167 +491,12 @@ const statusIcon: Record<AnimeStatus, string> = {
 			<div class="empty-state">
 				<p>プロフィール編集は本人だけが利用できます。</p>
 			</div>
-		{:else}
-			<!-- タブコンテンツ（非同期） -->
-			{#await data.profileContent}
-				<div class="posts-loading-spinner" aria-label="読み込み中">
-					<div class="spinner" aria-hidden="true"></div>
-					<span>読み込み中…</span>
-				</div>
-				{#each { length: 3 } as _, i (i)}
-					<PostCardSkeleton />
-				{/each}
-			{:then content}
-				{@const animeList = (content.animeList ?? []) as import("$lib/types").Anime[]}
-				{@const grouped = statusOrder.reduce<Record<AnimeStatus, import("$lib/types").Anime[]>>(
-					(acc, status) => {
-						acc[status] = animeList.filter((e) => e.user_entry?.status === status);
-						return acc;
-					},
-					{ watching: [], completed: [], plan_to_watch: [], on_hold: [], dropped: [] },
-				)}
-
-				<!-- 投稿タブ -->
-				{#if activeTab === 'posts'}
-					{#if !canViewContent}
-						<div class="empty-state profile-private-state">
-							<p>このアカウントの投稿はフォロワーだけが見ることができます</p>
-						</div>
-					{:else if content.posts.length === 0}
-						<div class="empty-state">
-							<p>まだ投稿がありません</p>
-						</div>
-					{:else}
-						{#each content.posts as post (post.id)}
-							<PostCard {post} currentUserId={data.user?.id ?? null} />
-						{/each}
-					{/if}
-				{/if}
-
-				<!-- 画像タブ -->
-				{#if activeTab === 'images'}
-					{#if !canViewContent}
-						<div class="empty-state profile-private-state">
-							<p>このアカウントの画像投稿はフォロワーだけが見ることができます</p>
-						</div>
-					{:else if content.imagePosts.length === 0}
-						<div class="empty-state">
-							<p>画像付きの投稿がありません</p>
-						</div>
-					{:else}
-						{#each content.imagePosts as post (post.id)}
-							<PostCard {post} currentUserId={data.user?.id ?? null} />
-						{/each}
-					{/if}
-				{/if}
-
-				<!-- マイリストタブ -->
-				{#if activeTab === 'list'}
-					{#if !canViewContent || (!profile.list_is_public && !isOwn)}
-						<div class="empty-state list-private">
-							<svg
-								width="36"
-								height="36"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="1.5"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								aria-hidden="true"
-								style="margin-bottom:12px; color: var(--fg-muted)"
-							>
-								<rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-								<path d="M7 11V7a5 5 0 0 1 10 0v4" />
-							</svg>
-							<p>
-								{!canViewContent ? 'このアカウントのマイリストはフォロワーだけが見ることができます' : 'このユーザーのマイリストは非公開です'}
-							</p>
-						</div>
-					{:else if animeList.length === 0}
-						<div class="empty-state">
-							<p>まだアニメがありません</p>
-						</div>
-					{:else}
-						<div class="list-summary">
-							<span class="list-total">合計 <strong>{animeList.length}</strong> 作品</span>
-							{#if isOwn}
-								<a href="/mylist" class="list-manage-link">リストを管理</a>
-							{/if}
-						</div>
-
-						{#each statusOrder as status}
-							{#if grouped[status].length > 0}
-								<section class="status-section status-section--{status}">
-									<h3 class="status-heading">
-										<span class="status-icon">{statusIcon[status]}</span>
-										{statusLabel[status]}
-										<span class="status-count">{grouped[status].length}</span>
-									</h3>
-									<div class="anime-list">
-										{#each grouped[status] as anime (anime.id)}
-											<a href="/anime/{anime.id}" class="anime-row">
-												<div class="anime-cover">
-													{#if anime.cover_url}
-														<img src={anime.cover_url} alt={anime.title}>
-													{:else}
-														<div class="anime-cover-placeholder">?</div>
-													{/if}
-												</div>
-												<div class="anime-info">
-													<div class="anime-title">{anime.title}</div>
-													<div class="anime-meta">
-														{#if anime.episode_count}
-															<span class="meta-progress"
-																>{anime.user_entry?.progress ?? 0}
-																/ {anime.episode_count} 話</span
-															>
-														{:else if (anime.user_entry?.progress ?? 0) > 0}
-															<span class="meta-progress"
-																>{anime.user_entry?.progress}
-																話</span
-															>
-														{/if}
-														{#if anime.user_entry?.score !== null && anime.user_entry?.score !== undefined}
-															<span class="meta-score">★ {anime.user_entry.score}</span>
-														{/if}
-													</div>
-												</div>
-												{#if anime.user_entry?.updated_at}
-													<div class="anime-updated">
-														{new Date(anime.user_entry.updated_at).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' })}
-													</div>
-												{/if}
-											</a>
-										{/each}
-									</div>
-								</section>
-							{/if}
-						{/each}
-					{/if}
-				{/if}
-
-				<!-- いいねタブ -->
-				{#if activeTab === 'likes'}
-					{#if !canViewContent}
-						<div class="empty-state profile-private-state">
-							<p>このアカウントのいいねはフォロワーだけが見ることができます</p>
-						</div>
-					{:else if content.likedPosts.length === 0}
-						<div class="empty-state">
-							<p>いいねした投稿がありません</p>
-						</div>
-					{:else}
-						{#each content.likedPosts as post (post.id)}
-							<PostCard {post} currentUserId={data.user?.id ?? null} />
-						{/each}
-					{/if}
-				{/if}
-			{/await}
 		{/if}
 	</main>
 
-	<aside class="sidebar-column"><TrendingPanel trending={data.trending} /></aside>
+	<aside class="sidebar-column">
+		<TrendingPanel trending={data.trending} />
+	</aside>
 </div>
 
 <style>
@@ -393,6 +504,13 @@ const statusIcon: Record<AnimeStatus, string> = {
 	text-decoration: none;
 	color: inherit;
 	cursor: pointer;
+}
+
+.profile-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 12px;
 }
 
 .profile-lock-badge {
@@ -442,6 +560,101 @@ const statusIcon: Record<AnimeStatus, string> = {
 
 .profile-edit-panel {
 	padding: 20px 4px;
+}
+
+.report-modal-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 100;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 16px;
+	background: rgb(15 23 42 / 0.68);
+}
+
+.report-modal-card {
+	width: min(100%, 420px);
+	border: 1px solid var(--color-border, var(--border, #334155));
+	border-radius: 8px;
+	background: var(--color-surface, var(--surface, #1e293b));
+	box-shadow: 0 24px 60px rgb(0 0 0 / 0.36);
+}
+
+.report-modal-header,
+.report-modal-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 12px 14px;
+	border-bottom: 1px solid var(--color-border, var(--border, #334155));
+}
+
+.report-modal-footer {
+	justify-content: flex-end;
+	border-top: 1px solid var(--color-border, var(--border, #334155));
+	border-bottom: 0;
+}
+
+.report-modal-title {
+	font-size: 15px;
+	font-weight: 800;
+}
+
+.report-modal-close {
+	width: 32px;
+	height: 32px;
+	border: 0;
+	border-radius: 999px;
+	background: transparent;
+	color: var(--color-text-muted, var(--fg-muted, #94a3b8));
+	cursor: pointer;
+	font-size: 20px;
+	line-height: 1;
+}
+
+.report-modal-close:hover {
+	background: var(--color-border, var(--border, #334155));
+	color: var(--color-text, var(--fg, #e2e8f0));
+}
+
+.report-modal-body {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 14px;
+}
+
+.report-field {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	color: var(--color-text-secondary, var(--fg-muted, #94a3b8));
+	font-size: 13px;
+	font-weight: 700;
+}
+
+.report-field select,
+.report-field textarea {
+	width: 100%;
+	border: 1px solid var(--color-border, var(--border, #334155));
+	border-radius: 8px;
+	background: var(--color-bg, var(--bg, #0f172a));
+	color: var(--color-text, var(--fg, #e2e8f0));
+	padding: 9px 10px;
+	font: inherit;
+	font-weight: 500;
+}
+
+.report-field textarea {
+	resize: vertical;
+}
+
+.report-message {
+	margin: 0;
+	color: var(--color-text-muted, var(--fg-muted, #94a3b8));
+	font-size: 13px;
 }
 
 .profile-edit-actions {

@@ -9,7 +9,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	const query = url.searchParams.get("q")?.trim() ?? "";
 
 	if (!query) {
-		return { query: "", posts: Promise.resolve([] as Post[]), users: [] };
+		return { query: "", posts: [] as Post[], users: [], user };
 	}
 
 	// PostgREST の .or() フィルター文字列にカンマを含む入力を補間すると
@@ -24,7 +24,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 				`id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, exchange_share,
                  profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
                  post_hashtags ( hashtags ( name ) ),
-                 anime:anime!posts_anime_id_fkey ( id, title, cover_url )`,
+                 anime:anime!posts_anime_id_fkey ( id, title, cover_url, broadcast_day, broadcast_time )`,
 			)
 			.ilike("content", pattern)
 			.order("created_at", { ascending: false })
@@ -37,7 +37,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 			.limit(10),
 	]);
 
-	const posts = enrichPostsWithCounts(supabase, postsResult.data ?? [], user?.id ?? null).catch((err) => {
+	const posts = await enrichPostsWithCounts(supabase, postsResult.data ?? [], user?.id ?? null).catch((err) => {
 		console.error("[search] posts fetch error:", err);
 		return [] as Post[];
 	});
@@ -46,6 +46,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		query,
 		posts,
 		users: usersResult.data ?? [],
+		user,
 	};
 };
 

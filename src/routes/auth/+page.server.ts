@@ -1,4 +1,7 @@
 import { fail, redirect } from "@sveltejs/kit";
+import { linkAccounts } from "$lib/server/actions";
+import { getExtraAccounts, setExtraAccounts } from "$lib/server/multi-account";
+import { createServiceRoleClient } from "$lib/server/supabase-admin";
 import type { Actions, PageServerLoad } from "./$types";
 
 const MIN_PASSWORD_LENGTH = 6;
@@ -15,13 +18,15 @@ function normalizeUsername(value: FormDataEntryValue | null): string {
 export const load: PageServerLoad = async ({ url, locals: { safeGetSession } }) => {
 	const { user } = await safeGetSession();
 	const next = getSafeNext(url.searchParams.get("next"));
+	const rawMode = url.searchParams.get("mode");
+	const mode = rawMode === "register" ? "register" : rawMode === "add_account" ? "add_account" : "login";
 
-	if (user) redirect(303, next);
+	// add_account はログイン済みユーザーのみアクセス可
+	if (mode === "add_account" && !user) redirect(303, "/auth?mode=login");
+	// login/register はログイン済みならリダイレクト
+	if (mode !== "add_account" && user) redirect(303, next);
 
-	return {
-		mode: url.searchParams.get("mode") === "register" ? "register" : "login",
-		next,
-	};
+	return { mode, next };
 };
 
 export const actions: Actions = {
@@ -127,6 +132,120 @@ export const actions: Actions = {
 			success: true,
 			message: "確認メールを送信しました。メール内のリンクから登録を完了してください",
 		};
+	},
+
+	addAccount: async ({ request, cookies, locals: { supabase, safeGetSession } }) => {
+		const { user: ownerUser, session: ownerSession } = await safeGetSession();
+		if (!ownerUser || !ownerSession) {
+			return fail(401, { mode: "add_account", message: "ログインが必要です" });
+		}
+
+		const form = await request.formData();
+		const email = (form.get("email") as string | null)?.trim() ?? "";
+		const password = (form.get("password") as string | null) ?? "";
+
+		if (!email || !password) {
+			return fail(400, {
+				mode: "add_account",
+				message: "メールアドレスとパスワードを入力してください",
+			});
+		}
+
+		// 既存リンク数チェック（追加アカウントは最大2）
+		// biome-ignore lint/suspicious/noExplicitAny: linked_accounts not yet in auto-generated DB types
+		const { count } = await (supabase as any)
+			.from("linked_accounts")
+			.select("*", { count: "exact", head: true })
+			.eq("owner_user_id", ownerUser.id);
+
+		if ((count ?? 0) >= 2) {
+			return fail(400, {
+				mode: "add_account",
+				message: "追加アカウントは最大2つまでです",
+			});
+		}
+
+		// アカウント A の refresh_token を保持してからアカウント B でログイン
+		const ownerRefreshToken = ownerSession.refresh_token;
+
+		const { data: targetData, error: signInError } = await supabase.auth.signInWithPassword({
+			email,
+			password,
+		});
+
+		if (signInError || !targetData.session) {
+			// ログイン失敗 — アカウント A のセッションを復元
+			await supabase.auth.refreshSession({ refresh_token: ownerRefreshToken });
+			return fail(400, {
+				mode: "add_account",
+				message: "メールアドレスまたはパスワードが正しくありません",
+			});
+		}
+
+		const targetUserId = targetData.user.id;
+		const targetRefreshToken = targetData.session.refresh_token;
+
+		if (targetUserId === ownerUser.id) {
+			await supabase.auth.refreshSession({ refresh_token: ownerRefreshToken });
+			return fail(400, { mode: "add_account", message: "自分のアカウントは追加できません" });
+		}
+
+		// 既にリンク済みかチェック（B のセッションで owner=A のリンクは見えないので service role 使用）
+		const serviceClient = createServiceRoleClient();
+		// biome-ignore lint/suspicious/noExplicitAny: linked_accounts not yet in auto-generated DB types
+		const { data: existingLink } = await (serviceClient as any)
+			.from("linked_accounts")
+			.select("owner_user_id")
+			.eq("owner_user_id", ownerUser.id)
+			.eq("linked_user_id", targetUserId)
+			.maybeSingle();
+
+		if (existingLink) {
+			await supabase.auth.refreshSession({ refresh_token: ownerRefreshToken });
+			return fail(400, { mode: "add_account", message: "このアカウントはすでに追加されています" });
+		}
+
+		// アカウント B のプロフィールを取得
+		const { data: targetProfile, error: profileError } = await supabase
+			.from("profiles")
+			.select("username, display_name, avatar_url")
+			.eq("id", targetUserId)
+			.maybeSingle();
+
+		if (profileError || !targetProfile) {
+			// プロフィール取得失敗 — アカウント A のセッションを復元
+			await supabase.auth.refreshSession({ refresh_token: ownerRefreshToken });
+			return fail(400, { mode: "add_account", message: "プロフィールの取得に失敗しました" });
+		}
+
+		// アカウント A のセッションを復元
+		const { error: restoreError } = await supabase.auth.refreshSession({
+			refresh_token: ownerRefreshToken,
+		});
+
+		if (restoreError) {
+			redirect(303, "/auth?mode=login");
+		}
+
+		// DB にリンクを記録（双方向）
+		await linkAccounts(serviceClient, ownerUser.id, targetUserId, count ?? 0);
+
+		// Cookie にアカウント B を保存
+		const existing = getExtraAccounts(cookies);
+		setExtraAccounts(cookies, [
+			...existing.filter((a) => a.userId !== targetUserId),
+			{
+				userId: targetUserId,
+				refreshToken: targetRefreshToken,
+				profile: {
+					username: targetProfile?.username ?? "",
+					display_name: targetProfile?.display_name ?? null,
+					avatar_url: targetProfile?.avatar_url ?? null,
+				},
+			},
+		]);
+
+		redirect(303, "/");
 	},
 
 	google: async ({ request, url, locals: { supabase } }) => {

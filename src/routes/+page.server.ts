@@ -7,33 +7,90 @@ import {
 	toggleRepostAction,
 } from "$lib/server/actions";
 import { enrichPostsWithCounts, getAnimeExchangeShareForUser, getFollowingIds } from "$lib/server/queries";
-import type { AnimeExchangeShare, Post, RawPost } from "$lib/types";
+import type { AnimeExchangeShare, RawPost } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
-// exchange_share カラムは migration 034 で追加済み（IF NOT EXISTS付き）。
-// カラムは確実に存在するため、フォールバック用の POSTS_SELECT_BASE は不要。
-const POSTS_SELECT = `id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, exchange_share,
+const POSTS_SELECT_WITH_EXCHANGE = `id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, exchange_share,
 	profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
 	post_hashtags ( hashtags ( name ) ),
-	anime:anime!posts_anime_id_fkey ( id, title, cover_url )`;
+	anime:anime!posts_anime_id_fkey ( id, title, cover_url, broadcast_day, broadcast_time )`;
 
-export const load: PageServerLoad = async ({ url, locals: { supabase }, parent }) => {
-	const { profile, user } = await parent();
+const POSTS_SELECT_BASE = `id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id,
+	profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
+	post_hashtags ( hashtags ( name ) ),
+	anime:anime!posts_anime_id_fkey ( id, title, cover_url, broadcast_day, broadcast_time )`;
+
+export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession }, parent }) => {
+	// parent()を早めに発火（まだawaitしない）し、キャッシュ済みのsafeGetSessionでuserを並列取得
+	const parentPromise = parent();
+	const { user } = await safeGetSession();
 
 	const tab = url.searchParams.get("tab") === "following" && user ? "following" : "all";
 	const quoteAnimeId = url.searchParams.get("quote_anime");
 	const shareExchangeId = url.searchParams.get("share_exchange");
+	const followingIds = tab === "following" && user ? await getFollowingIds(supabase, user.id) : null;
+
+	const buildPostsQuery = (select: string) => {
+		let query = supabase
+			.from("posts")
+			.select(select)
+			.is("parent_id", null)
+			.order("created_at", { ascending: false })
+			.limit(50);
+
+		if (tab === "following" && followingIds !== null) {
+			query = query.in("user_id", followingIds);
+		}
+
+		return query;
+	};
+
+	const fetchPosts = async () => {
+		const result = await buildPostsQuery(POSTS_SELECT_WITH_EXCHANGE);
+		if (!result.error) return result;
+
+		const fallback = await buildPostsQuery(POSTS_SELECT_BASE);
+		if (fallback.error) console.error("home posts query failed:", fallback.error);
+		return fallback;
+	};
 
 	const buildExchangeInitialContent = (exchangeShare: AnimeExchangeShare | null) =>
 		exchangeShare?.received_anime.title
 			? `アニメ交換で「${exchangeShare.received_anime.title}」がおすすめとして届きました！ #アニメ交換`
 			: "アニメ交換でおすすめが届きました！ #アニメ交換";
 
-	// ── Stage 1: 全独立クエリを並列実行 ────────────────────────────
-	// followingIds・trending・quoteAnime・exchangeShare は互いに依存しないため
-	// 同一 Promise.all でまとめて発火し、ウォーターフォールを排除する
-	const [followingIds, trendingResult, quoteAnimeResult, exchangeShare] = await Promise.all([
-		tab === "following" && user ? getFollowingIds(supabase, user.id) : Promise.resolve(null),
+	if (tab === "following" && followingIds !== null && followingIds.length === 0) {
+		const [trendingResult, quoteAnimeResult, exchangeShare, { profile }] = await Promise.all([
+			supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
+			quoteAnimeId
+				? supabase
+						.from("anime")
+						.select("id, title, title_en, cover_url")
+						.eq("id", Number(quoteAnimeId))
+						.single()
+				: Promise.resolve({ data: null }),
+			user && shareExchangeId
+				? getAnimeExchangeShareForUser(supabase, user.id, shareExchangeId)
+				: Promise.resolve(null),
+			parentPromise,
+		]);
+		return {
+			posts: [],
+			trending: trendingResult.data ?? [],
+			profile,
+			tab,
+			initialAnime: quoteAnimeResult.data
+				? { ...quoteAnimeResult.data, id: String(quoteAnimeResult.data.id) }
+				: null,
+			initialExchangeId: exchangeShare ? shareExchangeId : null,
+			initialExchangeShare: exchangeShare,
+			initialContent: exchangeShare ? buildExchangeInitialContent(exchangeShare) : "",
+		};
+	}
+
+	// posts取得とlayout（parent）取得を並列実行
+	const [postsResult, trendingResult, quoteAnimeResult, exchangeShare, { profile }] = await Promise.all([
+		fetchPosts(),
 		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
 		quoteAnimeId
 			? supabase.from("anime").select("id, title, title_en, cover_url").eq("id", Number(quoteAnimeId)).single()
@@ -41,42 +98,16 @@ export const load: PageServerLoad = async ({ url, locals: { supabase }, parent }
 		user && shareExchangeId
 			? getAnimeExchangeShareForUser(supabase, user.id, shareExchangeId)
 			: Promise.resolve(null),
+		parentPromise,
 	]);
 
-	// ── Stage 2: 投稿クエリを deferred Promise として返す ──────────
-	// await しないことで SvelteKit のストリーミング機能を利用する。
-	// サーバーはページ HTML を即時送信し、投稿データは解決次第チャンクで流す。
-	// クライアント側では {#await data.posts} でスケルトン → 実データに切り替える。
-	// フォロー中タブで誰もフォローしていない場合は即時空配列
-	const postsPromise: Promise<Post[]> =
-		tab === "following" && followingIds !== null && followingIds.length === 0
-			? Promise.resolve([])
-			: (async () => {
-					let postsQuery = supabase
-						.from("posts")
-						.select(POSTS_SELECT)
-						.is("parent_id", null)
-						.order("created_at", { ascending: false })
-						.limit(50);
-
-					if (tab === "following" && followingIds !== null) {
-						postsQuery = postsQuery.in("user_id", followingIds);
-					}
-
-					const postsResult = await postsQuery;
-					return enrichPostsWithCounts(
-						supabase,
-						(postsResult.data ?? []) as unknown as RawPost[],
-						user?.id ?? null,
-					);
-				})().catch((err) => {
-					// 投稿取得に失敗しても page crash を防ぐ。エラーはサーバーログに記録。
-					console.error("[home] posts fetch error:", err);
-					return [] as Post[];
-				});
+	// Cast to RawPost[] - postsResult.data is expected to be an array of raw post objects
+	// with nested joins from Supabase (posts + profiles + anime + quoted_post via enrichPostsWithCounts)
+	const rawPosts = Array.isArray(postsResult.data) ? (postsResult.data as unknown as RawPost[]) : [];
+	const posts = await enrichPostsWithCounts(supabase, rawPosts, user?.id ?? null);
 
 	return {
-		posts: postsPromise,
+		posts,
 		trending: trendingResult.data ?? [],
 		profile,
 		tab,

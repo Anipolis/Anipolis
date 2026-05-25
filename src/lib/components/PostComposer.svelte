@@ -242,6 +242,7 @@ const handleSubmit: SubmitFunction = () => {
 					bind:value={content}
 					maxlength={MAX_LENGTH + 10}
 					oninput={handleContentInput}
+					aria-label="投稿内容"
 				></textarea>
 
 				{#if mentionDropdownOpen && mentionResults.length > 0}
@@ -266,7 +267,12 @@ const handleSubmit: SubmitFunction = () => {
 			{#if selectedAnime}
 				<div class="composer-anime-preview">
 					{#if selectedAnime.cover_url}
-						<img src={selectedAnime.cover_url} alt={selectedAnime.title} class="composer-anime-thumb">
+						<img
+							src={selectedAnime.cover_url}
+							alt={selectedAnime.title}
+							class="composer-anime-thumb"
+							decoding="async"
+						>
 					{/if}
 					<div class="composer-anime-info">
 						<span class="composer-anime-title">{selectedAnime.title}</span>
@@ -451,8 +457,9 @@ const handleSubmit: SubmitFunction = () => {
 				placeholder="タイトルで検索…"
 				bind:value={animeQuery}
 				oninput={handleAnimeQueryInput}
+				aria-label="アニメタイトルで検索"
 			>
-			<div class="anime-search-results">
+			<div class="anime-search-results" aria-live="polite" aria-busy={animeSearching}>
 				{#if animeSearching}
 					<p class="anime-search-empty">検索中…</p>
 				{:else if animeQuery.trim().length > 0 && animeResults.length === 0}
@@ -461,7 +468,13 @@ const handleSubmit: SubmitFunction = () => {
 					{#each animeResults as anime}
 						<button type="button" class="anime-search-item" onclick={() => selectAnime(anime)}>
 							{#if anime.cover_url}
-								<img src={anime.cover_url} alt={anime.title} class="anime-search-thumb">
+								<img
+									src={anime.cover_url}
+									alt={anime.title}
+									class="anime-search-thumb"
+									loading="lazy"
+									decoding="async"
+								>
 							{:else}
 								<div class="anime-search-thumb anime-search-thumb-empty"></div>
 							{/if}

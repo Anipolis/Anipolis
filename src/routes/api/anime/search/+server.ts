@@ -16,5 +16,9 @@ export const GET: RequestHandler = async ({ url, locals: { supabase } }) => {
 		.order("title", { ascending: true })
 		.limit(10);
 
-	return json(data ?? []);
+	return json(data ?? [], {
+		headers: {
+			"Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
+		},
+	});
 };

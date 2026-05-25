@@ -25,11 +25,13 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 	}
 
 	const isOwn = user?.id === profile.id;
-	const isFollowing = user && user.id !== profile.id ? await checkIsFollowing(supabase, user.id, profile.id) : false;
-	const followRequestStatus =
-		user && user.id !== profile.id && !isFollowing
-			? await getFollowRequestStatus(supabase, user.id, profile.id)
-			: "none";
+	const myId = user?.id;
+
+	const [isFollowing, rawFollowRequestStatus] = await Promise.all([
+		myId && !isOwn ? checkIsFollowing(supabase, myId, profile.id) : Promise.resolve(false),
+		myId && !isOwn ? getFollowRequestStatus(supabase, myId, profile.id) : Promise.resolve("none" as const),
+	]);
+	const followRequestStatus = isFollowing ? ("none" as const) : rawFollowRequestStatus;
 	const canViewContent = isOwn || !profile.is_private || isFollowing;
 
 	const [followCounts, trendingResult] = await Promise.all([
@@ -40,7 +42,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 	const postSelect = `id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, exchange_share,
                        profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
                        post_hashtags ( hashtags ( name ) ),
-                       anime:anime!posts_anime_id_fkey ( id, title, cover_url )`;
+                       anime:anime!posts_anime_id_fkey ( id, title, cover_url, broadcast_day, broadcast_time )`;
 
 	const activeTab = url.searchParams.get("tab") ?? "posts";
 
@@ -80,6 +82,8 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 			})
 		: Promise.resolve({ posts: [], imagePosts: [], likedPosts: [], animeList: [] });
 
+	const profileContent = await profileContentPromise;
+
 	return {
 		profile,
 		isOwn,
@@ -89,7 +93,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 		followRequestStatus,
 		trending: trendingResult.data ?? [],
 		user,
-		profileContent: profileContentPromise,
+		...profileContent,
 	};
 };
 
