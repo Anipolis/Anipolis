@@ -6,6 +6,7 @@ export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession 
 	const { user } = await safeGetSession();
 	if (!user) redirect(303, "/");
 
+	const hasEmailProvider = user.identities?.some((id) => id.provider === "email") ?? false;
 	const pendingFollowRequestCount = await getPendingFollowRequestCount(supabase, user.id);
-	return { pendingFollowRequestCount };
+	return { pendingFollowRequestCount, hasEmailProvider };
 };
