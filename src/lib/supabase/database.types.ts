@@ -92,6 +92,7 @@ export type Database = {
 					image_urls: string[];
 					anime_id: number | null;
 					exchange_share: Json | null;
+					hidden_by_admin: boolean;
 				};
 				Insert: {
 					id?: string;
@@ -103,6 +104,7 @@ export type Database = {
 					image_urls?: string[];
 					anime_id?: number | null;
 					exchange_share?: Json | null;
+					hidden_by_admin?: boolean;
 				};
 				Update: {
 					content?: string;
@@ -111,6 +113,7 @@ export type Database = {
 					image_urls?: string[];
 					anime_id?: number | null;
 					exchange_share?: Json | null;
+					hidden_by_admin?: boolean;
 				};
 				Relationships: [
 					{
