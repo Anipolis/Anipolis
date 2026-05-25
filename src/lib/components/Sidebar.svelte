@@ -4,6 +4,7 @@ import { browser } from "$app/environment";
 import { goto, invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
 import type { Database } from "$lib/supabase/database.types";
+import type { StoredAccount } from "$lib/types";
 import UserAvatar from "./UserAvatar.svelte";
 
 type Profile = Database["public"]["Tables"]["profiles"]["Row"] | null;
@@ -13,9 +14,10 @@ interface Props {
 	session: Session | null;
 	profile: Profile;
 	unreadNotificationCount?: number;
+	extraAccounts?: StoredAccount[];
 }
 
-let { supabase, session, profile, unreadNotificationCount = 0 }: Props = $props();
+let { supabase, session, profile, unreadNotificationCount = 0, extraAccounts = [] }: Props = $props();
 
 let theme = $state(
 	browser ? localStorage.getItem("theme") || document.documentElement.getAttribute("data-theme") || "dark" : "dark",
@@ -33,6 +35,36 @@ async function handleLogout() {
 	await supabase.auth.signOut();
 	await invalidateAll();
 	await goto("/", { invalidateAll: true });
+}
+
+let isSwitching = $state(false);
+let switchError = $state<string | null>(null);
+
+async function handleSwitch(userId: string) {
+	if (isSwitching) return;
+	isSwitching = true;
+	switchError = null;
+	try {
+		const res = await fetch("/api/account-switch", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ userId }),
+		});
+		if (!res.ok) {
+			const text = await res.text();
+			if (text.includes("REFRESH_EXPIRED")) {
+				switchError = "セッションが切れました。再度追加してください。";
+			} else {
+				switchError = "切り替えに失敗しました。";
+			}
+			return;
+		}
+		await invalidateAll();
+	} catch {
+		switchError = "ネットワークエラーが発生しました。";
+	} finally {
+		isSwitching = false;
+	}
 }
 
 function isActive(path: string): boolean {
@@ -324,6 +356,53 @@ function isActive(path: string): boolean {
 				</a>
 			{/if}
 
+			{#if switchError}
+				<p class="sidebar-switch-error">{switchError}</p>
+			{/if}
+
+			{#each extraAccounts as acct (acct.userId)}
+				<button
+					type="button"
+					class="sidebar-btn"
+					onclick={() => handleSwitch(acct.userId)}
+					disabled={isSwitching}
+					title="{acct.profile.display_name ?? acct.profile.username} に切り替え"
+				>
+					<UserAvatar
+						src={acct.profile.avatar_url}
+						username={acct.profile.display_name ?? acct.profile.username}
+						size="sm"
+					/>
+					<span class="sidebar-btn-label">{acct.profile.display_name ?? acct.profile.username}</span>
+				</button>
+			{/each}
+
+			{#if extraAccounts.length < 2}
+				<a
+					href="/auth?mode=add_account"
+					class="sidebar-btn"
+					aria-label="アカウントを追加"
+					title="アカウントを追加"
+				>
+					<svg
+						width="20"
+						height="20"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<circle cx="12" cy="12" r="10" />
+						<line x1="12" y1="8" x2="12" y2="16" />
+						<line x1="8" y1="12" x2="16" y2="12" />
+					</svg>
+					<span class="sidebar-btn-label">アカウントを追加</span>
+				</a>
+			{/if}
+
 			<a href="/settings" class="sidebar-btn" class:active={isActive('/settings')} aria-label="設定" title="設定">
 				<svg
 					width="22"
@@ -390,3 +469,12 @@ function isActive(path: string): boolean {
 		{/if}
 	</div>
 </aside>
+
+<style>
+.sidebar-switch-error {
+	font-size: 0.78rem;
+	color: var(--fg-danger, #e05353);
+	padding: 4px 8px;
+	margin: 0;
+}
+</style>

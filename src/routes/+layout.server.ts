@@ -1,5 +1,6 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import type { ServerLoad } from "@sveltejs/kit";
+import { getExtraAccounts } from "$lib/server/multi-account";
 import { getUnreadNotificationCount } from "$lib/server/queries";
 import type { Database } from "$lib/supabase/database.types";
 
@@ -53,6 +54,7 @@ export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, c
 	]);
 
 	const filteredCookies = cookies.getAll().filter(({ name }) => /^sb-.+-auth-token/.test(name));
+	const extraAccounts = user ? getExtraAccounts(cookies) : [];
 
 	return {
 		session,
@@ -60,5 +62,6 @@ export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, c
 		profile,
 		unreadNotificationCount,
 		cookies: filteredCookies,
+		extraAccounts,
 	};
 };

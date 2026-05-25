@@ -23,6 +23,7 @@ onMount(() => {
 		session={data.session}
 		profile={data.profile}
 		unreadNotificationCount={data.unreadNotificationCount}
+		extraAccounts={data.extraAccounts}
 	/>
 	<div class="app-main">
 		{@render children()}
