@@ -202,6 +202,34 @@ const accountReports = $derived(dashboard.accountReports);
 								</form>
 							</details>
 						{/if}
+
+						<details class="moderation-disclosure">
+							<summary>投稿措置</summary>
+							<div class="post-moderation-actions">
+								{#if report.post_hidden_by_admin}
+									<span class="post-hidden-badge">非表示中</span>
+								{/if}
+								<form method="POST" action="?/adminTogglePostVisibility" use:enhance>
+									<input type="hidden" name="post_id" value={report.target_id}>
+									<input type="hidden" name="report_id" value={report.id}>
+									<input type="hidden" name="hide" value={report.post_hidden_by_admin ? '0' : '1'}>
+									<button type="submit" class="btn btn-outline">
+										{report.post_hidden_by_admin ? '投稿を表示に戻す' : '投稿を非表示'}
+									</button>
+								</form>
+								<form method="POST" action="?/adminDeletePost" use:enhance>
+									<input type="hidden" name="post_id" value={report.target_id}>
+									<input type="hidden" name="report_id" value={report.id}>
+									<button
+										type="submit"
+										class="btn btn-danger"
+										onclick={(e) => { if (!confirm('この投稿を削除しますか？この操作は取り消せません。')) e.preventDefault(); }}
+									>
+										投稿を削除
+									</button>
+								</form>
+							</div>
+						</details>
 					</article>
 				{/each}
 			</div>
@@ -555,6 +583,24 @@ const accountReports = $derived(dashboard.accountReports);
 	grid-template-columns: minmax(120px, 160px) minmax(160px, 220px) minmax(180px, 1fr) auto;
 	gap: 8px;
 	align-items: start;
+}
+
+.post-moderation-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+
+.post-hidden-badge {
+	display: inline-flex;
+	align-items: center;
+	padding: 2px 8px;
+	border-radius: 999px;
+	background: color-mix(in srgb, #f59e0b 18%, transparent);
+	color: #f59e0b;
+	font-size: 12px;
+	font-weight: 700;
 }
 
 .report-actions select,
