@@ -7,6 +7,9 @@ node_modules/
 # SvelteKit artifacts
 .svelte-kit/
 
+# Wrangler caches
+.wrangler/
+
 # Vitest reports
 coverage/
 
@@ -18,8 +21,3 @@ supabase/.temp/
 
 # Personal references
 refs/
-
-# Local environment variables — never commit real secrets
-.env
-.env.local
-.env.*.local
