@@ -1,6 +1,8 @@
 <script lang="ts">
 import type { SubmitFunction } from "@sveltejs/kit";
 import { enhance } from "$app/forms";
+import { replaceState } from "$app/navigation";
+import { page } from "$app/state";
 import type { AnimeExchangeShare } from "$lib/types";
 import { charCountClass } from "$lib/utils/format";
 import AnimeExchangeResult from "./AnimeExchangeResult.svelte";
@@ -38,19 +40,6 @@ let {
 	initialExchangeShare = null,
 }: Props = $props();
 
-$effect(() => {
-	if (initialAnime && !selectedAnime) {
-		selectedAnime = initialAnime;
-	}
-	if (initialContent && !content) {
-		content = initialContent;
-	}
-	if (initialExchangeShare && !selectedExchangeShare) {
-		selectedExchangeId = initialExchangeId;
-		selectedExchangeShare = initialExchangeShare;
-	}
-});
-
 const MAX_LENGTH = 280;
 const MAX_IMAGES = 4;
 
@@ -76,6 +65,31 @@ let textareaEl = $state<HTMLTextAreaElement | null>(null);
 let mentionResults = $state<UserResult[]>([]);
 let mentionDropdownOpen = $state(false);
 let mentionDebounce = $state<ReturnType<typeof setTimeout> | null>(null);
+let appliedInitialValuesKey = $state<string | null>(null);
+
+const initialValuesKey = $derived(
+	initialExchangeShare && initialExchangeId
+		? `exchange:${initialExchangeId}`
+		: initialAnime
+			? `anime:${initialAnime.id}`
+			: initialContent || null,
+);
+
+$effect(() => {
+	if (!initialValuesKey || appliedInitialValuesKey === initialValuesKey) return;
+
+	appliedInitialValuesKey = initialValuesKey;
+	if (initialAnime && !selectedAnime) {
+		selectedAnime = initialAnime;
+	}
+	if (initialContent && !content) {
+		content = initialContent;
+	}
+	if (initialExchangeShare && !selectedExchangeShare) {
+		selectedExchangeId = initialExchangeId;
+		selectedExchangeShare = initialExchangeShare;
+	}
+});
 
 const remaining = $derived(MAX_LENGTH - content.length);
 const countClass = $derived(charCountClass(content.length, MAX_LENGTH));
@@ -147,6 +161,12 @@ function clearAnime() {
 function clearExchangeShare() {
 	selectedExchangeId = null;
 	selectedExchangeShare = null;
+
+	if (page.url.searchParams.has("share_exchange")) {
+		const url = new URL(page.url);
+		url.searchParams.delete("share_exchange");
+		replaceState(url, page.state);
+	}
 }
 
 function handleAnimeQueryInput() {
