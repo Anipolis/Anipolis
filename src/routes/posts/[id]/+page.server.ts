@@ -1,4 +1,5 @@
-﻿import { error, fail } from "@sveltejs/kit";
+﻿import type { SupabaseClient } from "@supabase/supabase-js";
+import { error, fail } from "@sveltejs/kit";
 import {
 	deletePostAction,
 	insertPostWithHashtags,
@@ -11,34 +12,41 @@ import type { RawPost } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
 const POSTS_SELECT = `
-    id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, exchange_share,
+    id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, broadcast_room_session_id, exchange_share,
     profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
     post_hashtags ( hashtags ( name ) ),
-    anime:anime!posts_anime_id_fkey ( id, title, cover_url, broadcast_day, broadcast_time )
+    broadcast_room_session:broadcast_room_sessions!posts_broadcast_room_session_id_fkey ( room_date ),
+    anime:anime!posts_anime_id_fkey ( id, title, cover_url, broadcast_day, broadcast_time, broadcast_duration_minutes )
 ` as const;
 
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
+	// biome-ignore lint/suspicious/noExplicitAny: migration 061 columns are not present in generated Supabase types yet
+	const postReader = supabase as SupabaseClient<any>;
 
-	const { data: rawPost } = await supabase.from("posts").select(POSTS_SELECT).eq("id", params.id).maybeSingle();
+	const { data: rawPost } = await postReader.from("posts").select(POSTS_SELECT).eq("id", params.id).maybeSingle();
 
 	if (!rawPost) error(404, "投稿が見つかりません");
 
 	// 親投稿・リプライを並列取得
 	const [rawParentRes, rawRepliesRes] = await Promise.all([
 		rawPost.parent_id
-			? supabase.from("posts").select(POSTS_SELECT).eq("id", rawPost.parent_id).maybeSingle()
+			? postReader.from("posts").select(POSTS_SELECT).eq("id", rawPost.parent_id).maybeSingle()
 			: Promise.resolve({ data: null }),
 
-		supabase.from("posts").select(POSTS_SELECT).eq("parent_id", params.id).order("created_at", { ascending: true }),
+		postReader
+			.from("posts")
+			.select(POSTS_SELECT)
+			.eq("parent_id", params.id)
+			.order("created_at", { ascending: true }),
 	]);
 
 	const rawParent = rawParentRes.data;
 	const rawReplies = rawRepliesRes.data ?? [];
 
 	// 全投稿を一度に enrich（バッチクエリを最小化）
-	const rawAll: RawPost[] = [rawPost, ...(rawParent ? [rawParent] : []), ...rawReplies];
-	const enriched = await enrichPostsWithCounts(supabase, rawAll, user?.id ?? null);
+	const rawAll = [rawPost, ...(rawParent ? [rawParent] : []), ...rawReplies] as unknown as RawPost[];
+	const enriched = await enrichPostsWithCounts(supabase, rawAll, user?.id ?? null, { includeMutedRoomPosts: true });
 
 	const enrichedPost = enriched.find((p) => p.id === params.id);
 	if (!enrichedPost) error(404, "投稿が見つかりません");

@@ -34,6 +34,15 @@ function normalizeEpisodeCount(value: string | null | undefined) {
 	return raw;
 }
 
+function normalizeBroadcastDuration(value: string | null | undefined) {
+	const raw = value?.trim();
+	if (!raw) return 30;
+
+	const minutes = Number(raw);
+	if (!Number.isInteger(minutes) || minutes < 1 || minutes > 1440) return undefined;
+	return minutes;
+}
+
 export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 	const tab = (url.searchParams.get("tab") as Tab) ?? "popular";
@@ -119,6 +128,12 @@ export const actions: Actions = {
 		if (broadcastTime === undefined) {
 			return fail(400, { message: "放送時刻は 23:30 や 26:00 の形式で入力してください" });
 		}
+		const broadcastDurationMinutes = normalizeBroadcastDuration(
+			fd.get("broadcast_duration_minutes") as string | null,
+		);
+		if (broadcastDurationMinutes === undefined) {
+			return fail(400, { message: "放送枠は1〜1440分の整数で入力してください" });
+		}
 
 		let cover_url: string | null = (fd.get("cover_url") as string)?.trim() || null;
 		const imageFile = fd.get("image_file");
@@ -134,7 +149,9 @@ export const actions: Actions = {
 			}
 		}
 
-		const { data, error } = await supabase
+		// biome-ignore lint/suspicious/noExplicitAny: broadcast_duration_minutes is introduced by migration 061 and generated Supabase types lag migrations
+		const animeWriter = supabase as import("@supabase/supabase-js").SupabaseClient<any>;
+		const { data, error } = await animeWriter
 			.from("anime")
 			.insert({
 				title,
@@ -160,6 +177,7 @@ export const actions: Actions = {
 					return v !== "" && v != null ? parseInt(v, 10) : null;
 				})(),
 				broadcast_time: broadcastTime,
+				broadcast_duration_minutes: broadcastDurationMinutes,
 				broadcast_station: (() => {
 					const v = (fd.get("broadcast_station") as string)?.trim();
 					if (!v) return null;

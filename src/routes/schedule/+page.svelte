@@ -8,9 +8,11 @@ import type { ActionData, PageProps } from "./$types";
 let { data, form }: PageProps & { form: ActionData } = $props();
 
 let showEventDialog = $state(false);
+let openAlertMenu = $state<string | null>(null);
 
 // Notification subscription state — optimistic, keyed by anime.id
 let subscribedIds = $state(new Set<string>(untrack(() => data.subscriptions)));
+let mutedAnimeIds = $state(new Set<string>(untrack(() => data.mutedAnimeIds)));
 
 // Which anime are currently in their notification window (client-side highlight)
 let notifyingIds = $state(new Set<string>());
@@ -19,12 +21,13 @@ const DAY_BG = ["#fff1f0", "#f4f7ff", "#f4f7ff", "#f4f7ff", "#f4f7ff", "#f4f7ff"
 const DAY_COLOR = ["#dc2626", "#334155", "#334155", "#334155", "#334155", "#334155", "#2563eb"];
 
 $effect(() => {
-	if (form && "message" in form) showEventDialog = true;
+	if (form && "message" in form && !("roomMuteError" in form)) showEventDialog = true;
 });
 
 // Sync subscriptions when server data refreshes
 $effect(() => {
 	subscribedIds = new Set<string>(data.subscriptions);
+	mutedAnimeIds = new Set<string>(data.mutedAnimeIds);
 });
 
 function formatDate(value: string) {
@@ -92,6 +95,7 @@ $effect(() => {
 
 // Optimistic toggle — update local state before server responds
 const notifySubmit: SubmitFunction = ({ formData }) => {
+	openAlertMenu = null;
 	const animeId = formData.get("anime_id") as string;
 	const wasSubscribed = subscribedIds.has(animeId);
 	if (wasSubscribed) {
@@ -114,6 +118,17 @@ const notifySubmit: SubmitFunction = ({ formData }) => {
 		await update({ reset: false });
 	};
 };
+
+const muteSubmit: SubmitFunction = () => {
+	openAlertMenu = null;
+	return async ({ update }) => {
+		await update({ reset: false });
+	};
+};
+
+function alertKey(animeId: string, date: string) {
+	return `${animeId}:${date}`;
+}
 
 // Check if anime status allows notifications (airing or upcoming only)
 function canSubscribe(anime: Anime): boolean {
@@ -232,6 +247,10 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 		</div>
 	</header>
 
+	{#if form && "roomMuteError" in form && "message" in form}
+		<p class="form-error schedule-flash">{form.message}</p>
+	{/if}
+
 	<div class="schedule-grid">
 		{#each data.days as day, d}
 			<div class="day-col">
@@ -259,9 +278,14 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 						{#each day.anime as anime (anime.id)}
 							{@const isSubscribed = subscribedIds.has(anime.id)}
 							{@const isNotifying = notifyingIds.has(anime.id)}
+							{@const isMuted = mutedAnimeIds.has(anime.id)}
 							{@const subscribable = canSubscribe(anime)}
 							{@const ep = currentEpisodeForSlot(anime, day.date)}
-							<div class="anime-slot-wrap" class:anime-slot-wrap--notifying={isNotifying}>
+							<div
+								class="anime-slot-wrap"
+								class:anime-slot-wrap--notifying={isNotifying}
+								class:anime-slot-wrap--menu-open={openAlertMenu === alertKey(anime.id, day.date)}
+							>
 								<a href="/rooms/anime/{anime.id}/{day.date}" class="anime-slot">
 									<div class="slot-cover-wrap">
 										{#if anime.cover_url}
@@ -286,20 +310,20 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 										{/if}
 									</div>
 								</a>
-								{#if data.user && subscribable}
-									<form
-										method="POST"
-										action="?/toggleBroadcastNotification"
-										use:enhance={notifySubmit}
-										class="notify-form"
-									>
-										<input type="hidden" name="anime_id" value={anime.id}>
+								{#if data.user}
+									<div class="room-alert-control">
 										<button
-											type="submit"
+											type="button"
 											class="notify-btn"
 											class:notify-btn--active={isSubscribed}
-											title={isSubscribed ? "アプリ内通知登録済み（クリックで解除）" : "アプリ内通知を登録"}
-											aria-label={isSubscribed ? "アプリ内通知を解除" : "アプリ内通知を登録"}
+											class:notify-btn--muted={isMuted}
+											title="通知またはミュートを設定"
+											aria-label="通知またはミュートを設定"
+											aria-expanded={openAlertMenu === alertKey(anime.id, day.date)}
+											onclick={() => {
+												const key = alertKey(anime.id, day.date);
+												openAlertMenu = openAlertMenu === key ? null : key;
+											}}
 										>
 											{#if isSubscribed}
 												<svg
@@ -331,7 +355,47 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 												</svg>
 											{/if}
 										</button>
-									</form>
+										{#if openAlertMenu === alertKey(anime.id, day.date)}
+											<div class="room-alert-menu" aria-label="ルーム設定">
+												{#if subscribable}
+													<form
+														method="POST"
+														action="?/toggleBroadcastNotification"
+														use:enhance={notifySubmit}
+													>
+														<input type="hidden" name="anime_id" value={anime.id}>
+														<button
+															type="submit"
+															class="alert-choice"
+															class:alert-choice--active={isSubscribed}
+														>
+															<span class="i-lucide-bell" aria-hidden="true"></span>
+															{isSubscribed ? "通知を解除" : "通知を設定"}
+														</button>
+													</form>
+												{/if}
+												<form
+													method="POST"
+													action="?/muteBroadcastRoom"
+													use:enhance={muteSubmit}
+												>
+													<input type="hidden" name="anime_id" value={anime.id}>
+													<input type="hidden" name="room_date" value={day.date}>
+													<button
+														type="submit"
+														class="alert-choice"
+														class:alert-choice--active={isMuted}
+													>
+														<span class="i-lucide-bell-off" aria-hidden="true"></span>
+														{isMuted ? "ミュートを更新 (3日)" : "3日ミュート"}
+													</button>
+												</form>
+												<a class="alert-settings-link" href="/settings/notifications"
+													>期間を設定</a
+												>
+											</div>
+										{/if}
+									</div>
 								{/if}
 							</div>
 						{/each}
@@ -462,6 +526,9 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 	flex-wrap: wrap;
 	justify-content: flex-end;
 }
+.schedule-flash {
+	margin: 0 0 10px;
+}
 .week-nav {
 	display: flex;
 	align-items: center;
@@ -537,6 +604,10 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 .anime-slot-wrap {
 	position: relative;
 	border-radius: 6px;
+}
+.anime-slot-wrap--menu-open {
+	padding-bottom: 86px;
+	z-index: 3;
 }
 .anime-slot-wrap--notifying {
 	animation: notify-pulse 1.8s ease-in-out infinite;
@@ -654,8 +725,8 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 	max-width: 100%;
 }
 
-/* Notification bell button */
-.notify-form {
+/* Notification and spoiler mute menu */
+.room-alert-control {
 	position: absolute;
 	top: 4px;
 	right: 4px;
@@ -685,6 +756,53 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 .notify-btn--active {
 	background: color-mix(in srgb, var(--accent) 15%, var(--card-bg));
 	border-color: var(--accent);
+	color: var(--accent);
+}
+.notify-btn--muted {
+	border-color: var(--accent);
+}
+.room-alert-menu {
+	position: absolute;
+	top: 26px;
+	right: 0;
+	min-width: 150px;
+	padding: 5px;
+	border: 1px solid var(--border);
+	border-radius: 7px;
+	background: var(--card-bg);
+	box-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.alert-choice {
+	width: 100%;
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	padding: 7px 8px;
+	border: none;
+	border-radius: 5px;
+	background: transparent;
+	color: var(--text);
+	font-size: 0.76rem;
+	white-space: nowrap;
+	cursor: pointer;
+}
+.alert-choice:hover,
+.alert-choice--active {
+	background: color-mix(in srgb, var(--accent) 13%, var(--card-bg));
+	color: var(--accent);
+}
+.alert-settings-link {
+	padding: 6px 8px 4px;
+	border-top: 1px solid var(--border);
+	color: var(--text-muted);
+	font-size: 0.7rem;
+	text-decoration: none;
+	white-space: nowrap;
+}
+.alert-settings-link:hover {
 	color: var(--accent);
 }
 

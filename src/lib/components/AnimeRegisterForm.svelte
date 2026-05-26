@@ -219,6 +219,18 @@ async function handleFileChange(e: Event) {
 					class="rf-input"
 				>
 			</div>
+			<div class="form-group form-group--narrow">
+				<label for="rf-broadcast-duration">放送枠 (分)</label>
+				<input
+					id="rf-broadcast-duration"
+					name="broadcast_duration_minutes"
+					type="number"
+					min="1"
+					max="1440"
+					value="30"
+					class="rf-input"
+				>
+			</div>
 		</div>
 
 		<div class="form-group">

@@ -6,7 +6,7 @@ import {
 	toggleLikeAction,
 	toggleRepostAction,
 } from "$lib/server/actions";
-import { getAnime, getEventPosts } from "$lib/server/queries";
+import { getAnime, getBroadcastRoomSession, getEventPosts } from "$lib/server/queries";
 import type { Anime } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -45,37 +45,31 @@ function roomHashtag(anime: Anime) {
 	return officialHashtag ?? fallbackRoomHashtag(anime.title);
 }
 
-function scheduledAtIso(dateKey: string, time: string | null) {
-	const match = time?.match(/^(\d{1,2}):([0-5]\d)/);
-	if (!match) return `${dateKey}T00:00:00+09:00`;
-
-	const dateParts = dateKey.split("-").map(Number);
-	const [year, month, day] = dateParts;
-	if (year == null || month == null || day == null) return `${dateKey}T00:00:00+09:00`;
-
-	const hour = Number(match[1]);
-	const minute = Number(match[2]);
-	return new Date(Date.UTC(year, month - 1, day, hour - 9, minute)).toISOString();
-}
-
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 	const anime = await getAnime(supabase, params.id, user?.id ?? null);
 	if (!anime) throw error(404, "アニメが見つかりません");
 	if (!animeIsScheduledForDate(anime, params.date)) throw error(404, "放送ルームが見つかりません");
 
+	const session = await getBroadcastRoomSession(supabase, anime.id, params.date);
+	if (!session) throw error(404, "放送ルームが見つかりません");
+
 	const hashtag = roomHashtag(anime);
 	const [posts, trending] = await Promise.all([
-		getEventPosts(supabase, hashtag, user?.id ?? null),
+		getEventPosts(supabase, hashtag, user?.id ?? null, 100, true, session.id),
 		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
 	]);
 
 	return {
 		anime,
 		room: {
+			session_id: session.id,
 			date: params.date,
 			hashtag,
-			scheduled_at: scheduledAtIso(params.date, anime.broadcast_time),
+			scheduled_at: session.scheduled_at,
+			posting_opens_at: session.posting_opens_at,
+			posting_closes_at: session.posting_closes_at,
+			duration_minutes: session.duration_minutes,
 			title: `${anime.title} 放送ルーム`,
 		},
 		posts,
@@ -94,13 +88,23 @@ export const actions: Actions = {
 			return fail(404, { message: "放送ルームが見つかりません" });
 		}
 
+		const session = await getBroadcastRoomSession(supabase, anime.id, params.date);
+		if (!session) return fail(404, { message: "放送ルームが見つかりません" });
+		const now = Date.now();
+		if (now < new Date(session.posting_opens_at).getTime()) {
+			return fail(403, { message: "このルームはまだ投稿を受け付けていません" });
+		}
+		if (now > new Date(session.posting_closes_at).getTime()) {
+			return fail(403, { message: "このルームの投稿受付は終了しました" });
+		}
+
 		const form = await request.formData();
 		const content = (form.get("content") as string | null)?.trim() ?? "";
 		const hashtag = roomHashtag(anime);
 		const hasTag = content.toLowerCase().includes(`#${hashtag.toLowerCase()}`);
 		const finalContent = hasTag ? content : `${content} #${hashtag}`;
 
-		return insertPostWithHashtags(supabase, user.id, finalContent, null, [], anime.id);
+		return insertPostWithHashtags(supabase, user.id, finalContent, null, [], anime.id, null, null, session.id);
 	},
 
 	deletePost: async ({ request, locals: { supabase, safeGetSession } }) => {

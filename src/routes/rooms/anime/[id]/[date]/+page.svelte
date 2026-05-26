@@ -7,7 +7,7 @@ import type { ActionData, PageData } from "./$types";
 
 let { data, form }: { data: PageData; form: ActionData } = $props();
 
-type RoomStatus = "upcoming" | "live" | "ended";
+type RoomStatus = "not_open" | "open" | "ended";
 
 let now = $state(Date.now());
 let intervalId: ReturnType<typeof setInterval>;
@@ -15,7 +15,9 @@ let postContent = $state("");
 
 const maxLen = 280;
 const scheduledMs = $derived(new Date(data.room.scheduled_at).getTime());
-const endMs = $derived(scheduledMs + 30 * 60 * 1000);
+const openMs = $derived(new Date(data.room.posting_opens_at).getTime());
+const closeMs = $derived(new Date(data.room.posting_closes_at).getTime());
+const openLeadMinutes = $derived(Math.round((scheduledMs - openMs) / (60 * 1000)));
 const roomHref = $derived(`/rooms/anime/${data.anime.id}/${data.room.date}`);
 const hashtagSuffix = $derived(` #${data.room.hashtag}`);
 const contentWithTag = $derived(
@@ -25,9 +27,9 @@ const charCount = $derived(contentWithTag.length);
 const overLimit = $derived(charCount > maxLen);
 
 const status = $derived.by<RoomStatus>(() => {
-	if (now < scheduledMs) return "upcoming";
-	if (now >= endMs) return "ended";
-	return "live";
+	if (now < openMs) return "not_open";
+	if (now >= closeMs) return "ended";
+	return "open";
 });
 
 onMount(() => {
@@ -51,9 +53,10 @@ function formatHMS(ms: number) {
 }
 
 const timerLabel = $derived.by(() => {
-	if (status === "upcoming") return `開始まで ${formatHMS(scheduledMs - now)}`;
-	if (status === "live") return `経過 ${formatHMS(now - scheduledMs)}`;
-	return "放送予定時刻を過ぎました";
+	if (status === "not_open") return `開場まで ${formatHMS(openMs - now)}`;
+	if (status === "open" && now < scheduledMs) return `放送開始まで ${formatHMS(scheduledMs - now)}`;
+	if (status === "open") return `投稿終了まで ${formatHMS(closeMs - now)}`;
+	return "このルームは終了しました";
 });
 
 function formatDate(iso: string) {
@@ -75,12 +78,12 @@ function formatDate(iso: string) {
 		<div class="room-mobile-bar">
 			<span class="room-mobile-title">{data.room.title}</span>
 			<span class="room-mobile-timer event-timer--{status}">{timerLabel}</span>
-			{#if status === "live"}
-				<span class="event-timer-badge">ライブ</span>
+			{#if status === "open"}
+				<span class="event-timer-badge">受付中</span>
 			{/if}
 		</div>
 
-		{#if data.user}
+		{#if data.user && status === "open"}
 			<div class="card composer">
 				{#if form && "message" in form}
 					<p class="form-error">{form.message}</p>
@@ -109,9 +112,15 @@ function formatDate(iso: string) {
 					<p class="composer-hint">投稿には <strong>#{data.room.hashtag}</strong> が自動で付きます。</p>
 				</form>
 			</div>
-		{:else}
+		{:else if !data.user && status === "open"}
 			<div class="card anime-room-login">
 				<a href="/auth" class="btn btn-primary">ログインして参加</a>
+			</div>
+		{:else if status === "not_open"}
+			<div class="card anime-room-login">投稿受付は放送開始{openLeadMinutes}分前から始まります。</div>
+		{:else}
+			<div class="card anime-room-login">
+				このルームの投稿受付は終了しました。<a href="/?quote_anime={data.anime.id}">通常投稿で感想を残す</a>
 			</div>
 		{/if}
 
@@ -154,6 +163,11 @@ function formatDate(iso: string) {
 					<h1 class="room-info-title">{data.room.title}</h1>
 					<div class="event-room-meta">
 						<time>{formatDate(data.room.scheduled_at)}</time>
+						<span> / {data.room.duration_minutes}分枠</span>
+						<span>
+							/ 投稿受付 {formatDate(data.room.posting_opens_at)} -
+							{formatDate(data.room.posting_closes_at)}</span
+						>
 						{#if data.anime.broadcast_station?.length}
 							<span> / {data.anime.broadcast_station.join(" / ")}</span>
 						{/if}
@@ -162,8 +176,8 @@ function formatDate(iso: string) {
 			</div>
 			<div class="event-timer event-timer--{status} room-timer-compact">
 				<div class="event-timer-display">{timerLabel}</div>
-				{#if status === "live"}
-					<div class="event-timer-badge">ライブ</div>
+				{#if status === "open"}
+					<div class="event-timer-badge">受付中</div>
 				{/if}
 			</div>
 		</div>
@@ -205,7 +219,7 @@ function formatDate(iso: string) {
 	white-space: nowrap;
 	flex-shrink: 0;
 }
-.room-mobile-timer.event-timer--live {
+.room-mobile-timer.event-timer--open {
 	color: var(--color-primary);
 	font-weight: 600;
 }

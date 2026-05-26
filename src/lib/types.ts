@@ -197,6 +197,9 @@ export interface Anime {
 	copyright: string | null;
 	broadcast_day: number | null;
 	broadcast_time: string | null;
+	broadcast_duration_minutes: number;
+	broadcast_room_pre_open_minutes: number;
+	broadcast_room_post_close_minutes: number;
 	broadcast_station: string[] | null;
 	created_at: string;
 	// 集計フィールド（クエリ時に付加）
@@ -238,6 +241,8 @@ export interface RawPost {
 	created_at: string;
 	image_urls?: string[] | null;
 	anime_id?: string | number | null;
+	broadcast_room_session_id?: string | null;
+	broadcast_room_session?: { room_date: string } | { room_date: string }[] | null;
 	exchange_share?: unknown;
 	anime?: {
 		id: string | number;
@@ -245,6 +250,7 @@ export interface RawPost {
 		cover_url: string | null;
 		broadcast_day?: number | null;
 		broadcast_time?: string | null;
+		broadcast_duration_minutes?: number | null;
 	} | null;
 	profiles: {
 		username: string;
@@ -320,7 +326,7 @@ export function toPost(
 					id: String(raw.anime.id),
 					title: raw.anime.title,
 					cover_url: raw.anime.cover_url,
-					room_href: buildAnimeRoomHref(raw.anime, raw.created_at),
+					room_href: buildAnimeRoomHref(raw.anime, raw.broadcast_room_session ?? null),
 					user_score: null,
 				}
 			: null,
@@ -328,41 +334,12 @@ export function toPost(
 	};
 }
 
-function buildAnimeRoomHref(anime: NonNullable<RawPost["anime"]>, createdAt: string): string | null {
-	if (anime.broadcast_day == null) return null;
-	const roomDate = getRoomDateKeyForPost(createdAt, anime.broadcast_day);
-	if (!roomDate) return null;
-	if (!isWithinBroadcastWindow(createdAt, roomDate, anime.broadcast_time ?? null)) return null;
-	return `/rooms/anime/${String(anime.id)}/${roomDate}`;
-}
-
-function isWithinBroadcastWindow(createdAt: string, roomDate: string, broadcastTime: string | null): boolean {
-	if (!broadcastTime) return false;
-	const match = broadcastTime.match(/^(\d{1,2}):([0-5]\d)/);
-	if (!match) return false;
-	const [year, month, day] = roomDate.split("-").map(Number);
-	if (year == null || month == null || day == null) return false;
-	const hour = Number(match[1]);
-	const minute = Number(match[2]);
-	// hour≥24（深夜帯: "25:30"など）でも Date.UTC の算術オーバーフローで正しく翌日に繰り越される
-	const scheduledMs = Date.UTC(year, month - 1, day, hour - 9, minute);
-	const createdMs = new Date(createdAt).getTime();
-	if (Number.isNaN(createdMs)) return false;
-	return createdMs >= scheduledMs && createdMs <= scheduledMs + 30 * 60 * 1000;
-}
-
-function getRoomDateKeyForPost(createdAt: string, broadcastDay: number): string | null {
-	const createdDate = new Date(createdAt);
-	if (Number.isNaN(createdDate.getTime())) return null;
-
-	const jstDate = new Date(createdDate.getTime() + 9 * 60 * 60 * 1000);
-	const dayOffset = (jstDate.getUTCDay() - broadcastDay + 7) % 7;
-	jstDate.setUTCDate(jstDate.getUTCDate() - dayOffset);
-
-	const year = jstDate.getUTCFullYear();
-	const month = String(jstDate.getUTCMonth() + 1).padStart(2, "0");
-	const day = String(jstDate.getUTCDate()).padStart(2, "0");
-	return `${year}-${month}-${day}`;
+function buildAnimeRoomHref(
+	anime: NonNullable<RawPost["anime"]>,
+	rawSession: RawPost["broadcast_room_session"],
+): string | null {
+	const session = Array.isArray(rawSession) ? rawSession[0] : rawSession;
+	return session?.room_date ? `/rooms/anime/${String(anime.id)}/${session.room_date}` : null;
 }
 
 function toAnimeExchangeShare(value: unknown): AnimeExchangeShare | null {
@@ -395,6 +372,30 @@ export interface BroadcastNotificationSettings {
 	notify_1min: boolean;
 	notify_5min: boolean;
 	notify_30min: boolean;
+}
+
+export type BroadcastRoomMuteDuration = 1 | 2 | 3 | 4 | 5 | 6 | 7 | "event_end";
+
+export interface BroadcastRoomMute {
+	anime_id: string;
+	anime_title: string;
+	anime_cover_url: string | null;
+	room_session_id: string;
+	room_date: string;
+	duration: BroadcastRoomMuteDuration;
+	muted_until: string;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface BroadcastRoomSession {
+	id: string;
+	anime_id: number;
+	room_date: string;
+	scheduled_at: string;
+	duration_minutes: number;
+	posting_opens_at: string;
+	posting_closes_at: string;
 }
 
 export interface StoredAccount {

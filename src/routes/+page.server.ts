@@ -10,15 +10,17 @@ import { enrichPostsWithCounts, getAnimeExchangeShareForUser, getFollowingIds } 
 import type { AnimeExchangeShare, RawPost } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
-const POSTS_SELECT_WITH_EXCHANGE = `id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, exchange_share,
+const POSTS_SELECT_WITH_EXCHANGE = `id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, broadcast_room_session_id, exchange_share,
 	profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
 	post_hashtags ( hashtags ( name ) ),
-	anime:anime!posts_anime_id_fkey ( id, title, cover_url, broadcast_day, broadcast_time )`;
+	broadcast_room_session:broadcast_room_sessions!posts_broadcast_room_session_id_fkey ( room_date ),
+	anime:anime!posts_anime_id_fkey ( id, title, cover_url, broadcast_day, broadcast_time, broadcast_duration_minutes )`;
 
-const POSTS_SELECT_BASE = `id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id,
+const POSTS_SELECT_BASE = `id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, broadcast_room_session_id,
 	profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
 	post_hashtags ( hashtags ( name ) ),
-	anime:anime!posts_anime_id_fkey ( id, title, cover_url, broadcast_day, broadcast_time )`;
+	broadcast_room_session:broadcast_room_sessions!posts_broadcast_room_session_id_fkey ( room_date ),
+	anime:anime!posts_anime_id_fkey ( id, title, cover_url, broadcast_day, broadcast_time, broadcast_duration_minutes )`;
 
 export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession }, parent }) => {
 	const { profile } = await parent();

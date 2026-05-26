@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fail } from "@sveltejs/kit";
 import type { Database, Json } from "$lib/supabase/database.types";
-import type { AnimeExchangeShare, AnimeStatus } from "$lib/types";
+import type { AnimeExchangeShare, AnimeStatus, BroadcastRoomMuteDuration } from "$lib/types";
 import { extractHashtags, extractMentions } from "$lib/utils/hashtag";
 
 const reportStatuses = new Set(["open", "reviewing", "resolved", "rejected"]);
@@ -61,6 +61,7 @@ export async function insertPostWithHashtags(
 	animeId: string | null = null,
 	quotedPostId: string | null = null,
 	exchangeShare: AnimeExchangeShare | null = null,
+	broadcastRoomSessionId: string | null = null,
 ) {
 	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
 	if (moderationFailure) return moderationFailure;
@@ -88,6 +89,7 @@ export async function insertPostWithHashtags(
 		image_urls: imageUrls,
 		anime_id: animeId ? Number(animeId) : null,
 		quoted_post_id: quotedPostId || null,
+		broadcast_room_session_id: broadcastRoomSessionId,
 	};
 	const postPayload = exchangeShare ? { ...basePost, exchange_share: exchangeShare as unknown as Json } : basePost;
 
@@ -753,6 +755,60 @@ export async function updateBroadcastNotificationSettings(
 		notify_30min: settings.notify_30min,
 		updated_at: new Date().toISOString(),
 	});
+}
+
+export async function upsertBroadcastRoomMute(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+	animeId: string,
+	roomDate: string,
+	duration: BroadcastRoomMuteDuration,
+) {
+	if (!animeId || Number.isNaN(Number(animeId))) return fail(400, { message: "アニメが見つかりません" });
+
+	const { data: sessions } = await supabase.rpc("ensure_broadcast_room_session", {
+		p_anime_id: Number(animeId),
+		p_room_date: roomDate,
+	});
+	const session = sessions?.[0];
+	if (!session) return fail(404, { message: "放送ルームが見つかりません" });
+
+	const now = new Date();
+	const mutedUntil =
+		duration === "event_end"
+			? new Date(session.posting_closes_at)
+			: new Date(
+					Math.max(now.getTime(), new Date(session.scheduled_at).getTime()) + duration * 24 * 60 * 60 * 1000,
+				);
+	if (mutedUntil <= now) {
+		return fail(400, { message: "終了済みのルームは「イベント終了まで」に設定できません" });
+	}
+
+	const { error } = await supabase.from("broadcast_room_mutes").upsert(
+		{
+			user_id: userId,
+			anime_id: Number(animeId),
+			room_date: roomDate,
+			room_session_id: session.id,
+			duration_days: duration === "event_end" ? null : duration,
+			mute_until_event_end: duration === "event_end",
+			muted_until: mutedUntil.toISOString(),
+			updated_at: now.toISOString(),
+		},
+		{ onConflict: "user_id,anime_id" },
+	);
+	if (error) return fail(500, { message: "ルームのミュート設定に失敗しました" });
+	return { roomMuteSuccess: true };
+}
+
+export async function removeBroadcastRoomMute(supabase: SupabaseClient<Database>, userId: string, animeId: string) {
+	const { error } = await supabase
+		.from("broadcast_room_mutes")
+		.delete()
+		.eq("user_id", userId)
+		.eq("anime_id", Number(animeId));
+	if (error) return fail(500, { message: "ルームのミュート解除に失敗しました" });
+	return { roomMuteSuccess: true };
 }
 
 // linked_accounts は自動生成型未収録のためテーブル名のみ型アサーション使用

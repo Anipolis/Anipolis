@@ -1,6 +1,7 @@
 ﻿import { fail } from "@sveltejs/kit";
 import { deletePostAction, toggleBookmarkAction, toggleLikeAction, toggleRepostAction } from "$lib/server/actions";
 import { enrichPostsWithCounts } from "$lib/server/queries";
+import type { RawPost } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {
@@ -17,10 +18,11 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		supabase
 			.from("posts")
 			.select(
-				`id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, exchange_share,
+				`id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, broadcast_room_session_id, exchange_share,
                  profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
                  post_hashtags ( hashtags ( name ) ),
-                 anime:anime!posts_anime_id_fkey ( id, title, cover_url, broadcast_day, broadcast_time )`,
+                 broadcast_room_session:broadcast_room_sessions!posts_broadcast_room_session_id_fkey ( room_date ),
+                 anime:anime!posts_anime_id_fkey ( id, title, cover_url, broadcast_day, broadcast_time, broadcast_duration_minutes )`,
 			)
 			.ilike("content", pattern)
 			.order("created_at", { ascending: false })
@@ -33,7 +35,11 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 			.limit(10),
 	]);
 
-	const posts = await enrichPostsWithCounts(supabase, postsResult.data ?? [], user?.id ?? null);
+	const posts = await enrichPostsWithCounts(
+		supabase,
+		(postsResult.data ?? []) as unknown as RawPost[],
+		user?.id ?? null,
+	);
 
 	return {
 		query,

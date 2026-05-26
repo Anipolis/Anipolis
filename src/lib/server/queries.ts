@@ -7,6 +7,8 @@ import type {
 	AnimeRelation,
 	AnimeResourceLink,
 	AnimeStatus,
+	BroadcastRoomMute,
+	BroadcastRoomSession,
 	BroadcastStatus,
 	Event,
 	Notification,
@@ -82,10 +84,14 @@ export async function enrichPostsWithCounts(
 	supabase: SupabaseClient<Database>,
 	rawPosts: RawPost[],
 	userId: string | null,
+	options: { includeMutedRoomPosts?: boolean } = {},
 ): Promise<Post[]> {
 	if (rawPosts.length === 0) return [];
 
 	const mutedWordsPromise = getMutedWords(supabase, userId);
+	const mutedRoomAnimeIdsPromise = options.includeMutedRoomPosts
+		? Promise.resolve(new Set<string>())
+		: getActiveBroadcastRoomMuteAnimeIds(supabase, userId);
 
 	type QuotedPostRow = {
 		id: string;
@@ -115,9 +121,12 @@ export async function enrichPostsWithCounts(
 		}
 	}
 
-	const mutedWords = await mutedWordsPromise;
-	const visibleRawPosts =
-		mutedWords.length > 0 ? rawPosts.filter((post) => !containsMutedWord(post, mutedWords)) : rawPosts;
+	const [mutedWords, mutedRoomAnimeIds] = await Promise.all([mutedWordsPromise, mutedRoomAnimeIdsPromise]);
+	const visibleRawPosts = rawPosts.filter(
+		(post) =>
+			!(mutedWords.length > 0 && containsMutedWord(post, mutedWords)) &&
+			!(post.broadcast_room_session_id && post.anime_id != null && mutedRoomAnimeIds.has(String(post.anime_id))),
+	);
 
 	if (visibleRawPosts.length === 0) return [];
 
@@ -185,6 +194,19 @@ export async function getMutedWords(supabase: SupabaseClient<Database>, userId: 
 		.eq("user_id", userId)
 		.order("created_at", { ascending: false });
 	return (data ?? []).map((row) => normalizeMutedWord(row.word)).filter((word) => word.length > 0);
+}
+
+export async function getActiveBroadcastRoomMuteAnimeIds(
+	supabase: SupabaseClient<Database>,
+	userId: string | null,
+): Promise<Set<string>> {
+	if (!userId) return new Set();
+	const { data } = await supabase
+		.from("broadcast_room_mutes")
+		.select("anime_id")
+		.eq("user_id", userId)
+		.gt("muted_until", new Date().toISOString());
+	return new Set((data ?? []).map((row: { anime_id: number }) => String(row.anime_id)));
 }
 
 function containsMutedWord(post: RawPost, mutedWords: string[]): boolean {
@@ -405,6 +427,8 @@ export async function getEventPosts(
 	hashtag: string,
 	userId: string | null,
 	limit = 100,
+	includeMutedRoomPosts = false,
+	broadcastRoomSessionId: string | null = null,
 ): Promise<Post[]> {
 	// ハッシュタグ ID を取得
 	const { data: hashtagRow } = await supabase
@@ -421,20 +445,21 @@ export async function getEventPosts(
 	const postIds = (links ?? []).map((l) => l.post_id);
 	if (postIds.length === 0) return [];
 
-	const { data: rawPosts } = await supabase
+	let postsQuery = supabase
 		.from("posts")
 		.select(
-			`id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, exchange_share,
+			`id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, broadcast_room_session_id, exchange_share,
              profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
              post_hashtags ( hashtags ( name ) ),
-             anime:anime!posts_anime_id_fkey ( id, title, cover_url, broadcast_day, broadcast_time )`,
+             broadcast_room_session:broadcast_room_sessions!posts_broadcast_room_session_id_fkey ( room_date ),
+             anime:anime!posts_anime_id_fkey ( id, title, cover_url, broadcast_day, broadcast_time, broadcast_duration_minutes )`,
 		)
 		.in("id", postIds)
-		.is("parent_id", null) // トップレベル投稿のみ
-		.order("created_at", { ascending: false })
-		.limit(limit);
+		.is("parent_id", null);
+	if (broadcastRoomSessionId) postsQuery = postsQuery.eq("broadcast_room_session_id", broadcastRoomSessionId);
+	const { data: rawPosts } = await postsQuery.order("created_at", { ascending: false }).limit(limit);
 
-	return enrichPostsWithCounts(supabase, rawPosts ?? [], userId);
+	return enrichPostsWithCounts(supabase, (rawPosts ?? []) as unknown as RawPost[], userId, { includeMutedRoomPosts });
 }
 
 // ── ヘルパー ──────────────────────────────────────────────────────
@@ -940,15 +965,18 @@ export async function getBookmarkedPosts(supabase: SupabaseClient<Database>, use
 	const { data: rawPosts } = await supabase
 		.from("posts")
 		.select(
-			`id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, exchange_share,
+			`id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, broadcast_room_session_id, exchange_share,
              profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
              post_hashtags ( hashtags ( name ) ),
-             anime:anime!posts_anime_id_fkey ( id, title, cover_url, broadcast_day, broadcast_time )`,
+             broadcast_room_session:broadcast_room_sessions!posts_broadcast_room_session_id_fkey ( room_date ),
+             anime:anime!posts_anime_id_fkey ( id, title, cover_url, broadcast_day, broadcast_time, broadcast_duration_minutes )`,
 		)
 		.in("id", postIds);
 	// ブックマーク保存順を維持するため postIds の順序に並べ直す
 	const orderMap = new Map(postIds.map((id, i) => [id, i]));
-	const sorted = (rawPosts ?? []).sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
+	const sorted = ((rawPosts ?? []) as unknown as RawPost[]).sort(
+		(a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0),
+	);
 	return enrichPostsWithCounts(supabase, sorted, userId);
 }
 
@@ -968,14 +996,15 @@ export async function getLikedPosts(
 	const { data: rawPosts } = await supabase
 		.from("posts")
 		.select(
-			`id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, exchange_share,
+			`id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, broadcast_room_session_id, exchange_share,
              profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
              post_hashtags ( hashtags ( name ) ),
-             anime:anime!posts_anime_id_fkey ( id, title, cover_url, broadcast_day, broadcast_time )`,
+             broadcast_room_session:broadcast_room_sessions!posts_broadcast_room_session_id_fkey ( room_date ),
+             anime:anime!posts_anime_id_fkey ( id, title, cover_url, broadcast_day, broadcast_time, broadcast_duration_minutes )`,
 		)
 		.in("id", postIds)
 		.order("created_at", { ascending: false });
-	return enrichPostsWithCounts(supabase, rawPosts ?? [], currentUserId);
+	return enrichPostsWithCounts(supabase, (rawPosts ?? []) as unknown as RawPost[], currentUserId);
 }
 
 // ================================================================
@@ -1493,6 +1522,9 @@ function toAnime(raw: Record<string, unknown>): Anime {
 		copyright: (raw["copyright"] as string | null) ?? null,
 		broadcast_day: (raw["broadcast_day"] as number | null) ?? null,
 		broadcast_time: (raw["broadcast_time"] as string | null) ?? null,
+		broadcast_duration_minutes: (raw["broadcast_duration_minutes"] as number | null) ?? 30,
+		broadcast_room_pre_open_minutes: (raw["broadcast_room_pre_open_minutes"] as number | null) ?? 5,
+		broadcast_room_post_close_minutes: (raw["broadcast_room_post_close_minutes"] as number | null) ?? 30,
 		broadcast_station: (raw["broadcast_station"] as string[] | null) ?? null,
 		created_at: String(raw["created_at"]),
 	};
@@ -1616,4 +1648,74 @@ export async function getBroadcastNotificationSettings(
 		.eq("user_id", userId)
 		.maybeSingle();
 	return data ?? { notify_1min: true, notify_5min: true, notify_30min: false };
+}
+
+export async function getBroadcastRoomSession(
+	supabase: SupabaseClient<Database>,
+	animeId: string,
+	roomDate: string,
+): Promise<BroadcastRoomSession | null> {
+	const { data, error } = await supabase.rpc("ensure_broadcast_room_session", {
+		p_anime_id: Number(animeId),
+		p_room_date: roomDate,
+	});
+	if (error) {
+		console.error("broadcast room session query failed:", error);
+		return null;
+	}
+	return (data?.[0] as BroadcastRoomSession | undefined) ?? null;
+}
+
+export async function getBroadcastRoomMutes(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+): Promise<BroadcastRoomMute[]> {
+	type BroadcastRoomMuteRow = {
+		anime_id: number;
+		room_session_id: string;
+		session: { room_date: string } | { room_date: string }[];
+		duration_days: number | null;
+		mute_until_event_end: boolean;
+		muted_until: string;
+		created_at: string;
+		updated_at: string;
+	};
+
+	const { data } = await supabase
+		.from("broadcast_room_mutes")
+		.select(
+			"anime_id, room_session_id, session:broadcast_room_sessions!broadcast_room_mutes_room_session_id_fkey ( room_date ), duration_days, mute_until_event_end, muted_until, created_at, updated_at",
+		)
+		.eq("user_id", userId)
+		.order("muted_until", { ascending: false });
+	const rows = (data ?? []) as BroadcastRoomMuteRow[];
+	if (rows.length === 0) return [];
+
+	const { data: animes } = await supabase
+		.from("anime")
+		.select("id, title, cover_url")
+		.in(
+			"id",
+			rows.map((row) => row.anime_id),
+		);
+	const animeById = new Map((animes ?? []).map((anime) => [anime.id, anime]));
+
+	return rows.map((row) => {
+		const anime = animeById.get(row.anime_id);
+		const duration =
+			row.mute_until_event_end || row.duration_days == null
+				? "event_end"
+				: (Math.min(7, Math.max(1, row.duration_days)) as 1 | 2 | 3 | 4 | 5 | 6 | 7);
+		return {
+			anime_id: String(row.anime_id),
+			anime_title: anime?.title ?? "不明なアニメ",
+			anime_cover_url: anime?.cover_url ?? null,
+			room_session_id: row.room_session_id,
+			room_date: (Array.isArray(row.session) ? row.session[0]?.room_date : row.session?.room_date) ?? "",
+			duration,
+			muted_until: row.muted_until,
+			created_at: row.created_at,
+			updated_at: row.updated_at,
+		};
+	});
 }

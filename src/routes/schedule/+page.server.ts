@@ -1,6 +1,7 @@
 import { fail, redirect } from "@sveltejs/kit";
-import { createEventAction, toggleBroadcastSubscription } from "$lib/server/actions";
+import { createEventAction, toggleBroadcastSubscription, upsertBroadcastRoomMute } from "$lib/server/actions";
 import {
+	getActiveBroadcastRoomMuteAnimeIds,
 	getAnimeList,
 	getBroadcastNotificationSettings,
 	getBroadcastSubscriptions,
@@ -73,7 +74,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		end: toDateInputValue(addDays(weekStart, 6)),
 	};
 
-	const [animeList, events, subscriptions, notificationSettings] = await Promise.all([
+	const [animeList, events, subscriptions, notificationSettings, mutedAnimeIds] = await Promise.all([
 		getAnimeList(supabase, { scheduleRange, limit: 1000, userId: user?.id ?? null }),
 		getEventsByRange(supabase, weekStart.toISOString(), weekEnd.toISOString()),
 		user ? getBroadcastSubscriptions(supabase, user.id) : Promise.resolve([] as string[]),
@@ -84,6 +85,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 					notify_5min: true,
 					notify_30min: false,
 				} as BroadcastNotificationSettings),
+		user ? getActiveBroadcastRoomMuteAnimeIds(supabase, user.id) : Promise.resolve(new Set<string>()),
 	]);
 
 	const days: { date: string; label: string; anime: Anime[]; events: Event[] }[] = DAY_LABELS.map((label, index) => ({
@@ -116,6 +118,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		events,
 		user,
 		subscriptions,
+		mutedAnimeIds: [...mutedAnimeIds],
 		notificationSettings,
 		weekStart: toDateInputValue(weekStart),
 		prevWeek: toDateInputValue(addDays(weekStart, -7)),
@@ -148,5 +151,21 @@ export const actions: Actions = {
 
 		const result = await toggleBroadcastSubscription(supabase, user.id, animeId);
 		return { toggleSuccess: true, subscribed: result.subscribed, animeId };
+	},
+
+	muteBroadcastRoom: async ({ request, locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { message: "ログインが必要です" });
+
+		const form = await request.formData();
+		const animeId = (form.get("anime_id") as string | null)?.trim() ?? "";
+		const roomDate = (form.get("room_date") as string | null)?.trim() ?? "";
+		if (!animeId || !roomDate) return fail(400, { message: "放送ルームが見つかりません" });
+
+		const result = await upsertBroadcastRoomMute(supabase, user.id, animeId, roomDate, 3);
+		if ("status" in result) {
+			return fail(result.status, { ...result.data, roomMuteError: true });
+		}
+		return result;
 	},
 };

@@ -14,6 +14,7 @@ import {
 	getLikedPosts,
 	getUserAnimeList,
 } from "$lib/server/queries";
+import type { RawPost } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ params, url, locals: { supabase, safeGetSession } }) => {
@@ -32,10 +33,11 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 			: "none";
 	const canViewContent = isOwn || !profile.is_private || isFollowing;
 
-	const postSelect = `id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, exchange_share,
+	const postSelect = `id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, broadcast_room_session_id, exchange_share,
                        profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
                        post_hashtags ( hashtags ( name ) ),
-                       anime:anime!posts_anime_id_fkey ( id, title, cover_url, broadcast_day, broadcast_time )`;
+                       broadcast_room_session:broadcast_room_sessions!posts_broadcast_room_session_id_fkey ( room_date ),
+                       anime:anime!posts_anime_id_fkey ( id, title, cover_url, broadcast_day, broadcast_time, broadcast_duration_minutes )`;
 
 	const [rawPostsResult, rawImagePostsResult, followCounts, trendingResult, animeList] = await Promise.all([
 		canViewContent
@@ -71,8 +73,8 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 	const activeTab = url.searchParams.get("tab") ?? "posts";
 
 	const [posts, imagePosts, likedPosts] = await Promise.all([
-		enrichPostsWithCounts(supabase, rawPostsResult.data ?? [], user?.id ?? null),
-		enrichPostsWithCounts(supabase, rawImagePostsResult.data ?? [], user?.id ?? null),
+		enrichPostsWithCounts(supabase, (rawPostsResult.data ?? []) as unknown as RawPost[], user?.id ?? null),
+		enrichPostsWithCounts(supabase, (rawImagePostsResult.data ?? []) as unknown as RawPost[], user?.id ?? null),
 		canViewContent && activeTab === "likes"
 			? getLikedPosts(supabase, profile.id, user?.id ?? null)
 			: Promise.resolve([]),
