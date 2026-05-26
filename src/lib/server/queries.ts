@@ -652,6 +652,15 @@ export async function isAdminUser(supabase: SupabaseClient<Database>, userId: st
 	return data?.is_admin === true;
 }
 
+export async function getPendingReportsCount(supabase: SupabaseClient<Database>): Promise<number> {
+	const { count } = await supabase
+		.from("reports")
+		.select("id", { count: "exact", head: true })
+		.in("status", ["open", "reviewing"]);
+
+	return count ?? 0;
+}
+
 export async function getAdminDashboardData(supabase: SupabaseClient<Database>): Promise<AdminDashboardData> {
 	const now = new Date();
 	const today = new Date(now);
@@ -713,7 +722,49 @@ export async function getAdminDashboardData(supabase: SupabaseClient<Database>):
 	};
 }
 
-async function getAdminReportsByTargetType(
+export async function getAdminReportById(
+	supabase: SupabaseClient<Database>,
+	reportId: string,
+): Promise<AdminReport | null> {
+	const { data } = await supabase
+		.from("reports")
+		.select(`
+			id,
+			reporter_id,
+			target_type,
+			target_id,
+			target_user_id,
+			reason,
+			details,
+			status,
+			created_at,
+			updated_at,
+			reporter:profiles!reports_reporter_id_fkey (
+				username,
+				display_name
+			),
+			target_user:profiles!reports_target_user_id_fkey (
+				username,
+				display_name
+			)
+		`)
+		.eq("id", reportId)
+		.single();
+
+	if (!data) return null;
+	const row = data as unknown as AdminReportRow;
+	const postContentById = await getReportedPostContentById(supabase, [row]);
+	const moderationByUserId = await getModerationByUserId(supabase, [row]);
+	const postData = postContentById.get(row.target_id) ?? null;
+	return toAdminReport(
+		row,
+		postData?.content ?? null,
+		postData?.hidden_by_admin ?? false,
+		row.target_user_id ? (moderationByUserId.get(row.target_user_id) ?? null) : null,
+	);
+}
+
+export async function getAdminReportsByTargetType(
 	supabase: SupabaseClient<Database>,
 	targetType: ReportTargetType,
 	limit = 25,

@@ -30,6 +30,7 @@ onMount(() => {
 		profile={data.profile}
 		unreadNotificationCount={data.unreadNotificationCount}
 		unreadBroadcastNotificationCount={data.unreadBroadcastNotificationCount}
+		pendingReportsCount={data.pendingReportsCount}
 		extraAccounts={data.extraAccounts}
 	/>
 	<div class="app-main">

@@ -2,7 +2,11 @@ import type { SupabaseClient, User } from "@supabase/supabase-js";
 import type { ServerLoad } from "@sveltejs/kit";
 import { generateDueBroadcastNotifications, markAllNotificationsRead } from "$lib/server/actions";
 import { getExtraAccounts } from "$lib/server/multi-account";
-import { getUnreadBroadcastNotificationCount, getUnreadNotificationCount } from "$lib/server/queries";
+import {
+	getPendingReportsCount,
+	getUnreadBroadcastNotificationCount,
+	getUnreadNotificationCount,
+} from "$lib/server/queries";
 import type { Database } from "$lib/supabase/database.types";
 
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
@@ -61,6 +65,8 @@ export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, c
 			])
 		: [0, 0];
 
+	const pendingReportsCount = profile?.is_admin ? await getPendingReportsCount(supabase) : 0;
+
 	const filteredCookies = cookies.getAll().filter(({ name }) => /^sb-.+-auth-token/.test(name));
 	const extraAccounts = user ? getExtraAccounts(cookies) : [];
 
@@ -70,6 +76,7 @@ export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, c
 		profile,
 		unreadNotificationCount,
 		unreadBroadcastNotificationCount,
+		pendingReportsCount,
 		cookies: filteredCookies,
 		extraAccounts,
 	};

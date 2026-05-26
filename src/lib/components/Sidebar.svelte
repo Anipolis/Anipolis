@@ -15,6 +15,7 @@ interface Props {
 	profile: Profile;
 	unreadNotificationCount?: number;
 	unreadBroadcastNotificationCount?: number;
+	pendingReportsCount?: number;
 	extraAccounts?: StoredAccount[];
 }
 
@@ -24,6 +25,7 @@ let {
 	profile,
 	unreadNotificationCount = 0,
 	unreadBroadcastNotificationCount = 0,
+	pendingReportsCount = 0,
 	extraAccounts = [],
 }: Props = $props();
 
@@ -201,6 +203,9 @@ function isActive(path: string): boolean {
 					>
 						<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
 					</svg>
+					{#if pendingReportsCount > 0}
+						<span class="sidebar-badge">{pendingReportsCount > 99 ? '99+' : pendingReportsCount}</span>
+					{/if}
 					<span class="sidebar-btn-label">Admin</span>
 				</a>
 			{/if}
