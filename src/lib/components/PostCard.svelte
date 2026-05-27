@@ -1,6 +1,7 @@
 <script lang="ts">
 import type { SubmitFunction } from "@sveltejs/kit";
 import { enhance } from "$app/forms";
+import { goto } from "$app/navigation";
 import AnimeExchangeResult from "$lib/components/AnimeExchangeResult.svelte";
 import ReactionUsersPopover from "$lib/components/ReactionUsersPopover.svelte";
 import type { Post, ReactionType, ReactionUser } from "$lib/types";
@@ -59,6 +60,12 @@ function openLightbox(event: MouseEvent, url: string) {
 
 function closeLightbox() {
 	lightboxUrl = null;
+}
+
+function handleCardClick(e: MouseEvent) {
+	if (isDetailView) return;
+	if ((e.target as HTMLElement).closest("a, button")) return;
+	goto(`/posts/${post.id}`);
 }
 
 function handleLightboxKeydown(event: KeyboardEvent) {
@@ -230,12 +237,15 @@ async function submitReport() {
 
 <svelte:window onkeydown={handleLightboxKeydown} />
 
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <article
 	class="post-card"
 	class:deleting
 	class:post-card-clickable={!isDetailView}
 	class:post-card-modal-open={showDeleteModal || showExchangeModal || showQuoteModal || showReportModal || !!lightboxUrl}
 	class:post-card--with-room={!!effectiveRoomContext && !insideRoom}
+	onclick={handleCardClick}
 >
 	{#if !isDetailView}
 		<a href="/posts/{post.id}" class="post-card-hitarea" aria-label="投稿詳細を開く"></a>
@@ -433,7 +443,11 @@ async function submitReport() {
 
 		{#if showExchangeModal && post.exchange_share}
 			<!-- svelte-ignore a11y_click_events_have_key_events -->
-			<div class="exchange-result-modal-overlay" role="presentation" onclick={() => (showExchangeModal = false)}>
+			<div
+				class="exchange-result-modal-overlay"
+				role="presentation"
+				onclick={(e) => { e.stopPropagation(); showExchangeModal = false; }}
+			>
 				<div
 					class="exchange-result-modal-card"
 					role="dialog"
@@ -470,7 +484,7 @@ async function submitReport() {
 			<!-- svelte-ignore a11y_click_events_have_key_events -->
 			<div
 				class="lightbox-overlay"
-				onclick={closeLightbox}
+				onclick={(e) => { e.stopPropagation(); closeLightbox(); }}
 				role="dialog"
 				aria-modal="true"
 				aria-label="画像拡大表示"
@@ -490,7 +504,11 @@ async function submitReport() {
 
 		{#if showReportModal}
 			<!-- svelte-ignore a11y_click_events_have_key_events -->
-			<div class="report-modal-overlay" role="presentation" onclick={() => (showReportModal = false)}>
+			<div
+				class="report-modal-overlay"
+				role="presentation"
+				onclick={(e) => { e.stopPropagation(); showReportModal = false; }}
+			>
 				<div
 					class="report-modal-card"
 					role="dialog"
@@ -546,7 +564,11 @@ async function submitReport() {
 
 		{#if showDeleteModal}
 			<!-- svelte-ignore a11y_click_events_have_key_events -->
-			<div class="delete-modal-overlay" role="presentation" onclick={() => (showDeleteModal = false)}>
+			<div
+				class="delete-modal-overlay"
+				role="presentation"
+				onclick={(e) => { e.stopPropagation(); showDeleteModal = false; }}
+			>
 				<div
 					class="delete-modal-card"
 					role="dialog"
@@ -638,7 +660,11 @@ async function submitReport() {
 
 				{#if showRepostMenu}
 					<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
-					<div class="repost-backdrop" role="presentation" onclick={() => showRepostMenu = false}></div>
+					<div
+						class="repost-backdrop"
+						role="presentation"
+						onclick={(e) => { e.stopPropagation(); showRepostMenu = false; }}
+					></div>
 					<div class="repost-dropdown">
 						<form method="POST" action="?/repost" use:enhance={handleRepost}>
 							<input type="hidden" name="post_id" value={post.id}>
