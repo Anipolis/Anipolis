@@ -199,6 +199,11 @@ let recipientDebounce = $state<ReturnType<typeof setTimeout> | null>(null);
 let recommendSubmitting = $state(false);
 let recommendFeedback = $state("");
 let recommendError = $state("");
+let activeAction = $state<"quote" | "watchlist" | "recommend" | null>(null);
+
+function toggleAction(action: "quote" | "watchlist" | "recommend") {
+	activeAction = activeAction === action ? null : action;
+}
 
 function handleRecipientInput() {
 	selectedRecipient = null;
@@ -438,13 +443,19 @@ const handleRecommendSubmit: SubmitFunction = () => {
 				</div>
 			</div>
 
-			<!-- 引用投稿 -->
+			<!-- アクションバー -->
 			{#if data.user}
-				<div class="quote-post-bar">
-					<a href="/?quote_anime={data.anime.id}" class="btn-quote-post">
+				<div class="action-bar">
+					<button
+						type="button"
+						class="action-bar-btn"
+						class:active={activeAction === 'quote'}
+						onclick={() => toggleAction('quote')}
+						aria-pressed={activeAction === 'quote'}
+					>
 						<svg
-							width="15"
-							height="15"
+							width="18"
+							height="18"
 							viewBox="0 0 24 24"
 							fill="none"
 							stroke="currentColor"
@@ -455,9 +466,319 @@ const handleRecommendSubmit: SubmitFunction = () => {
 						>
 							<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
 						</svg>
-						この作品について投稿
-					</a>
+						<span>投稿</span>
+					</button>
+					<button
+						type="button"
+						class="action-bar-btn"
+						class:active={activeAction === 'watchlist'}
+						onclick={() => toggleAction('watchlist')}
+						aria-pressed={activeAction === 'watchlist'}
+					>
+						<svg
+							width="18"
+							height="18"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+						>
+							<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+						</svg>
+						<span>マイリスト</span>
+					</button>
+					<button
+						type="button"
+						class="action-bar-btn"
+						class:active={activeAction === 'recommend'}
+						onclick={() => toggleAction('recommend')}
+						aria-pressed={activeAction === 'recommend'}
+					>
+						<svg
+							width="18"
+							height="18"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+						>
+							<line x1="22" y1="2" x2="11" y2="13" />
+							<polygon points="22 2 15 22 11 13 2 9 22 2" />
+						</svg>
+						<span>推薦</span>
+					</button>
 				</div>
+
+				{#if activeAction}
+					<div class="action-panel">
+						{#if activeAction === 'quote'}
+							<a href="/?quote_anime={data.anime.id}" class="btn-quote-post">
+								<svg
+									width="15"
+									height="15"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+								>
+									<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+								</svg>
+								この作品について投稿
+							</a>
+						{:else if activeAction === 'watchlist'}
+							{#if form?.message}
+								<p class="form-error">{form.message}</p>
+							{/if}
+
+							<form method="POST" action="?/upsertWatchlist" use:enhance>
+								<input type="hidden" name="anime_id" value={data.anime.id}>
+
+								<div class="form-row">
+									<label class="form-label">
+										ステータス
+										<select name="status" bind:value={selectedStatus} class="form-select">
+											{#each statusOptions as opt}
+												<option value={opt.value}>{opt.label}</option>
+											{/each}
+										</select>
+									</label>
+
+									<label class="form-label">
+										スコア (1〜10)
+										<input
+											type="number"
+											name="score"
+											min="1"
+											max="10"
+											step="0.5"
+											bind:value={score}
+											placeholder="未評価"
+											class="form-input"
+										>
+									</label>
+
+									{#if data.anime.episode_count}
+										<label class="form-label">
+											進捗 ({data.anime.episode_count}話中)
+											<input
+												type="number"
+												name="progress"
+												min="0"
+												max={data.anime.episode_count}
+												bind:value={progress}
+												class="form-input"
+											>
+										</label>
+									{:else}
+										<label class="form-label">
+											進捗
+											<input
+												type="number"
+												name="progress"
+												min="0"
+												bind:value={progress}
+												class="form-input"
+											>
+										</label>
+									{/if}
+								</div>
+
+								<div class="form-actions">
+									<button
+										type="submit"
+										class="btn-primary {data.anime.user_entry ? 'btn-primary--update' : 'btn-primary--add'}"
+									>
+										{#if data.anime.user_entry}
+											<svg
+												aria-hidden="true"
+												xmlns="http://www.w3.org/2000/svg"
+												width="16"
+												height="16"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2.5"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+											>
+												<path d="M20 6L9 17l-5-5" />
+											</svg>
+											更新
+										{:else}
+											<svg
+												aria-hidden="true"
+												xmlns="http://www.w3.org/2000/svg"
+												width="16"
+												height="16"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2.5"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+											>
+												<line x1="12" y1="5" x2="12" y2="19" />
+												<line x1="5" y1="12" x2="19" y2="12" />
+											</svg>
+											マイリストに追加
+										{/if}
+									</button>
+
+									{#if data.anime.user_entry}
+										<button
+											type="button"
+											class="btn-danger"
+											onclick={() => (showRemoveWatchlistModal = true)}
+										>
+											削除
+										</button>
+									{/if}
+								</div>
+							</form>
+
+							<form
+								method="POST"
+								action="?/removeWatchlist"
+								bind:this={removeWatchlistFormEl}
+								style="display:none"
+							>
+								<input type="hidden" name="anime_id" value={data.anime.id}>
+							</form>
+
+							{#if showRemoveWatchlistModal}
+								<!-- svelte-ignore a11y_click_events_have_key_events -->
+								<div
+									class="remove-watchlist-modal-overlay"
+									role="presentation"
+									onclick={() => (showRemoveWatchlistModal = false)}
+								>
+									<div
+										class="remove-watchlist-modal-card"
+										role="dialog"
+										aria-modal="true"
+										aria-labelledby="remove-watchlist-modal-title"
+										tabindex="-1"
+										onclick={(e) => e.stopPropagation()}
+									>
+										<div class="remove-watchlist-modal-header">
+											<span id="remove-watchlist-modal-title" class="remove-watchlist-modal-title"
+												>マイリストから削除</span
+											>
+										</div>
+										<div class="remove-watchlist-modal-body">
+											<p>このアニメをマイリストから削除しますか？</p>
+										</div>
+										<div class="remove-watchlist-modal-footer">
+											<button
+												type="button"
+												class="btn btn-ghost"
+												onclick={() => (showRemoveWatchlistModal = false)}
+											>
+												キャンセル
+											</button>
+											<button
+												type="button"
+												class="btn btn-danger"
+												onclick={() => { showRemoveWatchlistModal = false; removeWatchlistFormEl?.requestSubmit(); }}
+											>
+												削除する
+											</button>
+										</div>
+									</div>
+								</div>
+							{/if}
+						{:else if activeAction === 'recommend'}
+							{#if form?.recommendMessage || recommendError}
+								<p class="form-error">{recommendError || form?.recommendMessage}</p>
+							{/if}
+							{#if form?.recommendSuccess || recommendFeedback}
+								<p class="form-success">{recommendFeedback || '推薦を送信しました'}</p>
+							{/if}
+
+							<form
+								method="POST"
+								action="?/recommendAnime"
+								use:enhance={handleRecommendSubmit}
+								class="recommend-form"
+							>
+								<input type="hidden" name="anime_id" value={data.anime.id}>
+								<input type="hidden" name="recipient_id" value={selectedRecipient?.id ?? ''}>
+
+								<div class="recommend-recipient-field">
+									<label class="form-label">
+										相手
+										<input
+											type="search"
+											class="form-input recommend-user-input"
+											placeholder="@username"
+											bind:value={recipientQuery}
+											oninput={handleRecipientInput}
+											autocomplete="off"
+										>
+									</label>
+
+									{#if selectedRecipient}
+										<div class="selected-recipient">
+											{#if selectedRecipient.avatar_url}
+												<img
+													src={selectedRecipient.avatar_url}
+													alt={selectedRecipient.username}
+												>
+											{/if}
+											<span>{selectedRecipient.display_name ?? selectedRecipient.username}</span>
+											<button type="button" onclick={clearRecipient} aria-label="相手をクリア">
+												×
+											</button>
+										</div>
+									{/if}
+
+									{#if recipientResults.length > 0}
+										<div class="recommend-user-results">
+											{#each recipientResults as user (user.id)}
+												<button
+													type="button"
+													class="recommend-user-result"
+													onclick={() => selectRecipient(user)}
+												>
+													{#if user.avatar_url}
+														<img src={user.avatar_url} alt={user.username}>
+													{:else}
+														<span class="recommend-user-avatar-fallback">
+															{(user.display_name ?? user.username).charAt(0).toUpperCase()}
+														</span>
+													{/if}
+													<span>
+														<strong>{user.display_name ?? user.username}</strong>
+														<small>@{user.username}</small>
+													</span>
+												</button>
+											{/each}
+										</div>
+									{:else if recipientSearching}
+										<p class="recommend-search-hint">検索中…</p>
+									{/if}
+								</div>
+
+								<button
+									type="submit"
+									class="btn-primary recommend-submit"
+									disabled={!selectedRecipient || recommendSubmitting}
+								>
+									{recommendSubmitting ? '送信中…' : '推薦する'}
+								</button>
+							</form>
+						{/if}
+					</div>
+				{/if}
 			{/if}
 
 			<!-- Score hero -->
@@ -528,260 +849,6 @@ const handleRecommendSubmit: SubmitFunction = () => {
 							</div>
 						{/if}
 					{/each}
-				</section>
-			{/if}
-
-			<!-- Watchlist -->
-			{#if data.user}
-				<section class="watchlist-section">
-					<h2>マイリスト</h2>
-
-					{#if form?.message}
-						<p class="form-error">{form.message}</p>
-					{/if}
-
-					<form method="POST" action="?/upsertWatchlist" use:enhance>
-						<input type="hidden" name="anime_id" value={data.anime.id}>
-
-						<div class="form-row">
-							<label class="form-label">
-								ステータス
-								<select name="status" bind:value={selectedStatus} class="form-select">
-									{#each statusOptions as opt}
-										<option value={opt.value}>{opt.label}</option>
-									{/each}
-								</select>
-							</label>
-
-							<label class="form-label">
-								スコア (1〜10)
-								<input
-									type="number"
-									name="score"
-									min="1"
-									max="10"
-									step="0.5"
-									bind:value={score}
-									placeholder="未評価"
-									class="form-input"
-								>
-							</label>
-
-							{#if data.anime.episode_count}
-								<label class="form-label">
-									進捗 ({data.anime.episode_count}話中)
-									<input
-										type="number"
-										name="progress"
-										min="0"
-										max={data.anime.episode_count}
-										bind:value={progress}
-										class="form-input"
-									>
-								</label>
-							{:else}
-								<label class="form-label">
-									進捗
-									<input
-										type="number"
-										name="progress"
-										min="0"
-										bind:value={progress}
-										class="form-input"
-									>
-								</label>
-							{/if}
-						</div>
-
-						<div class="form-actions">
-							<button
-								type="submit"
-								class="btn-primary {data.anime.user_entry ? 'btn-primary--update' : 'btn-primary--add'}"
-							>
-								{#if data.anime.user_entry}
-									<svg
-										aria-hidden="true"
-										xmlns="http://www.w3.org/2000/svg"
-										width="16"
-										height="16"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="2.5"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-									>
-										<path d="M20 6L9 17l-5-5" />
-									</svg>
-									更新
-								{:else}
-									<svg
-										aria-hidden="true"
-										xmlns="http://www.w3.org/2000/svg"
-										width="16"
-										height="16"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="2.5"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-									>
-										<line x1="12" y1="5" x2="12" y2="19" />
-										<line x1="5" y1="12" x2="19" y2="12" />
-									</svg>
-									マイリストに追加
-								{/if}
-							</button>
-
-							{#if data.anime.user_entry}
-								<button
-									type="button"
-									class="btn-danger"
-									onclick={() => (showRemoveWatchlistModal = true)}
-								>
-									削除
-								</button>
-							{/if}
-						</div>
-					</form>
-
-					<form
-						method="POST"
-						action="?/removeWatchlist"
-						bind:this={removeWatchlistFormEl}
-						style="display:none"
-					>
-						<input type="hidden" name="anime_id" value={data.anime.id}>
-					</form>
-
-					{#if showRemoveWatchlistModal}
-						<!-- svelte-ignore a11y_click_events_have_key_events -->
-						<div
-							class="remove-watchlist-modal-overlay"
-							role="presentation"
-							onclick={() => (showRemoveWatchlistModal = false)}
-						>
-							<div
-								class="remove-watchlist-modal-card"
-								role="dialog"
-								aria-modal="true"
-								aria-labelledby="remove-watchlist-modal-title"
-								tabindex="-1"
-								onclick={(e) => e.stopPropagation()}
-							>
-								<div class="remove-watchlist-modal-header">
-									<span id="remove-watchlist-modal-title" class="remove-watchlist-modal-title"
-										>マイリストから削除</span
-									>
-								</div>
-								<div class="remove-watchlist-modal-body">
-									<p>このアニメをマイリストから削除しますか？</p>
-								</div>
-								<div class="remove-watchlist-modal-footer">
-									<button
-										type="button"
-										class="btn btn-ghost"
-										onclick={() => (showRemoveWatchlistModal = false)}
-									>
-										キャンセル
-									</button>
-									<button
-										type="button"
-										class="btn btn-danger"
-										onclick={() => { showRemoveWatchlistModal = false; removeWatchlistFormEl?.requestSubmit(); }}
-									>
-										削除する
-									</button>
-								</div>
-							</div>
-						</div>
-					{/if}
-				</section>
-			{:else}
-				<section class="watchlist-section watchlist-section--guest">
-					<p class="login-prompt"><a href="/" class="login-prompt-link">ログイン</a>してマイリストに追加</p>
-				</section>
-			{/if}
-
-			{#if data.user}
-				<section class="recommend-section">
-					<h2>作品を推薦</h2>
-
-					{#if form?.recommendMessage || recommendError}
-						<p class="form-error">{recommendError || form?.recommendMessage}</p>
-					{/if}
-					{#if form?.recommendSuccess || recommendFeedback}
-						<p class="form-success">{recommendFeedback || '推薦を送信しました'}</p>
-					{/if}
-
-					<form
-						method="POST"
-						action="?/recommendAnime"
-						use:enhance={handleRecommendSubmit}
-						class="recommend-form"
-					>
-						<input type="hidden" name="anime_id" value={data.anime.id}>
-						<input type="hidden" name="recipient_id" value={selectedRecipient?.id ?? ''}>
-
-						<div class="recommend-recipient-field">
-							<label class="form-label">
-								相手
-								<input
-									type="search"
-									class="form-input recommend-user-input"
-									placeholder="@username"
-									bind:value={recipientQuery}
-									oninput={handleRecipientInput}
-									autocomplete="off"
-								>
-							</label>
-
-							{#if selectedRecipient}
-								<div class="selected-recipient">
-									{#if selectedRecipient.avatar_url}
-										<img src={selectedRecipient.avatar_url} alt={selectedRecipient.username}>
-									{/if}
-									<span>{selectedRecipient.display_name ?? selectedRecipient.username}</span>
-									<button type="button" onclick={clearRecipient} aria-label="相手をクリア">×</button>
-								</div>
-							{/if}
-
-							{#if recipientResults.length > 0}
-								<div class="recommend-user-results">
-									{#each recipientResults as user (user.id)}
-										<button
-											type="button"
-											class="recommend-user-result"
-											onclick={() => selectRecipient(user)}
-										>
-											{#if user.avatar_url}
-												<img src={user.avatar_url} alt={user.username}>
-											{:else}
-												<span class="recommend-user-avatar-fallback">
-													{(user.display_name ?? user.username).charAt(0).toUpperCase()}
-												</span>
-											{/if}
-											<span>
-												<strong>{user.display_name ?? user.username}</strong>
-												<small>@{user.username}</small>
-											</span>
-										</button>
-									{/each}
-								</div>
-							{:else if recipientSearching}
-								<p class="recommend-search-hint">検索中…</p>
-							{/if}
-						</div>
-
-						<button
-							type="submit"
-							class="btn-primary recommend-submit"
-							disabled={!selectedRecipient || recommendSubmitting}
-						>
-							{recommendSubmitting ? '送信中…' : '推薦する'}
-						</button>
-					</form>
 				</section>
 			{/if}
 
@@ -1281,26 +1348,64 @@ a.relation-card:hover {
 	color: var(--text-muted);
 }
 
-/* Watchlist */
-.watchlist-section {
-	border: 1px solid var(--accent, #6366f1);
-	border-radius: 12px;
-	padding: 20px;
-	background: var(--card-bg);
-	box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #6366f1) 12%, transparent);
-}
-.watchlist-section h2 {
-	font-size: 1rem;
-	font-weight: 700;
-	margin: 0 0 14px;
-	color: var(--accent, #6366f1);
+/* Action bar */
+.action-bar {
 	display: flex;
-	align-items: center;
-	gap: 6px;
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	overflow: hidden;
 }
-.watchlist-section h2::before {
-	content: "★";
+.action-bar-btn {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 4px;
+	padding: 12px 8px;
+	background: none;
+	border: none;
+	border-right: 1px solid var(--border);
+	cursor: pointer;
+	color: var(--text-muted);
+	font-size: 0.78rem;
+	transition:
+		background 0.12s,
+		color 0.12s;
+}
+.action-bar-btn:last-child {
+	border-right: none;
+}
+.action-bar-btn:hover {
+	background: var(--hover-bg);
+	color: var(--text);
+}
+.action-bar-btn.active {
+	background: var(--accent);
+	color: #fff;
+}
+.action-panel {
+	border: 1px solid var(--border);
+	border-top: none;
+	border-radius: 0 0 10px 10px;
+	padding: 18px 16px;
+	background: var(--card-bg);
+	margin-bottom: 24px;
+}
+.btn-quote-post {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	background: var(--accent);
+	color: #fff;
+	padding: 10px 20px;
+	border-radius: 8px;
+	text-decoration: none;
+	font-weight: 600;
 	font-size: 0.9rem;
+	transition: opacity 0.12s;
+}
+.btn-quote-post:hover {
+	opacity: 0.85;
 }
 
 .form-row {
@@ -1395,40 +1500,6 @@ a.relation-card:hover {
 	color: var(--status-watching);
 	font-size: 0.85rem;
 	margin: 0 0 10px;
-}
-.watchlist-section--guest {
-	border-color: var(--border);
-	box-shadow: none;
-}
-.login-prompt {
-	color: var(--text-muted);
-	font-size: 0.9rem;
-	margin: 0;
-}
-.login-prompt-link {
-	color: #fff;
-	background: var(--accent);
-	padding: 2px 10px;
-	border-radius: 5px;
-	font-weight: 600;
-	text-decoration: none;
-	margin-right: 4px;
-}
-.login-prompt-link:hover {
-	opacity: 0.85;
-}
-
-.recommend-section {
-	border: 1px solid var(--border);
-	border-radius: 8px;
-	padding: 18px;
-	background: var(--card-bg);
-}
-
-.recommend-section h2 {
-	font-size: 1rem;
-	font-weight: 700;
-	margin: 0 0 14px;
 }
 
 .recommend-form {
