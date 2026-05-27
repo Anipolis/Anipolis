@@ -269,9 +269,11 @@ const grouped = $derived(
 					<span class="tab-lock">🔒</span>
 				{/if}
 			</a>
-			<a href="/profile/{profile.username}?tab=likes" class="profile-tab" class:active={activeTab === 'likes'}
-				>いいね</a
-			>
+			{#if isOwn}
+				<a href="/profile/{profile.username}?tab=likes" class="profile-tab" class:active={activeTab === 'likes'}
+					>いいね</a
+				>
+			{/if}
 			{#if isOwn}
 				<a href="/profile/{profile.username}?tab=edit" class="profile-tab" class:active={activeTab === 'edit'}
 					>編集</a
@@ -398,9 +400,9 @@ const grouped = $derived(
 
 		<!-- いいねタブ -->
 		{#if activeTab === 'likes'}
-			{#if !canViewContent}
+			{#if !isOwn}
 				<div class="empty-state profile-private-state">
-					<p>このアカウントのいいねはフォロワーだけが見ることができます</p>
+					<p>他のユーザーのいいねは表示できません</p>
 				</div>
 			{:else if data.likedPosts.length === 0}
 				<div class="empty-state">

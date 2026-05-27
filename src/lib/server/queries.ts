@@ -14,6 +14,8 @@ import type {
 	Notification,
 	Post,
 	RawPost,
+	ReactionType,
+	ReactionUser,
 	UserAnimeEntry,
 } from "$lib/types";
 import { toPost } from "$lib/types";
@@ -1005,6 +1007,28 @@ export async function getLikedPosts(
 		.in("id", postIds)
 		.order("created_at", { ascending: false });
 	return enrichPostsWithCounts(supabase, (rawPosts ?? []) as unknown as RawPost[], currentUserId);
+}
+
+export async function getPostReactionUsers(
+	supabase: SupabaseClient<Database>,
+	postId: string,
+	actionType: ReactionType,
+): Promise<ReactionUser[]> {
+	type ReactionUsersRpc = (
+		name: string,
+		args: { target_post_id: string; action_type: ReactionType },
+	) => PromiseLike<{ data: ReactionUser[] | null; error: { message: string } | null }>;
+
+	// This RPC is introduced by migration 062; generated Supabase types are refreshed separately.
+	const { data, error } = await (supabase.rpc as unknown as ReactionUsersRpc)("get_post_reaction_users", {
+		target_post_id: postId,
+		action_type: actionType,
+	});
+	if (error) {
+		console.error("post reaction users query error (postId=%s, type=%s):", postId, actionType, error.message);
+		throw new Error("リアクションしたユーザーの取得に失敗しました");
+	}
+	return data ?? [];
 }
 
 // ================================================================

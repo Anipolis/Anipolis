@@ -97,6 +97,16 @@ export interface Post {
 	exchange_share: AnimeExchangeShare | null;
 }
 
+export type ReactionType = "like" | "repost";
+
+export interface ReactionUser {
+	user_id: string;
+	username: string;
+	display_name: string | null;
+	avatar_url: string | null;
+	reacted_at: string;
+}
+
 export interface TrendingHashtag {
 	name: string;
 	post_count: number;

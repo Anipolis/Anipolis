@@ -75,9 +75,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 	const [posts, imagePosts, likedPosts] = await Promise.all([
 		enrichPostsWithCounts(supabase, (rawPostsResult.data ?? []) as unknown as RawPost[], user?.id ?? null),
 		enrichPostsWithCounts(supabase, (rawImagePostsResult.data ?? []) as unknown as RawPost[], user?.id ?? null),
-		canViewContent && activeTab === "likes"
-			? getLikedPosts(supabase, profile.id, user?.id ?? null)
-			: Promise.resolve([]),
+		isOwn && activeTab === "likes" ? getLikedPosts(supabase, profile.id, user?.id ?? null) : Promise.resolve([]),
 	]);
 
 	return {
