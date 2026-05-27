@@ -268,9 +268,9 @@ async function submitReport() {
 				<div class="post-display-name">@{post.username}</div>
 			</div>
 			<div class="post-header-right">
-				<a href="/posts/{post.id}" class="post-time" title={post.created_at}>
+				<span class="post-time" title={post.created_at}>
 					<time datetime={post.created_at}>{relativeTime}</time>
-				</a>
+				</span>
 				{#if isOwn}
 					<form method="POST" action="?/deletePost" use:enhance={handleDelete} bind:this={deleteFormEl}>
 						<input type="hidden" name="post_id" value={post.id}>
