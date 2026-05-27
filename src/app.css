@@ -1567,6 +1567,195 @@ textarea {
 	color: #f43f5e;
 }
 
+.reaction-action-group {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+}
+
+.reaction-action-group form {
+	display: inline-flex;
+}
+
+.reaction-count-button,
+.reaction-count-static {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	margin-left: 4px;
+	padding: 0;
+	border: none;
+	background: none;
+	color: var(--color-text-muted);
+	font: inherit;
+	font-size: 13px;
+	line-height: 1.2;
+}
+
+.reaction-count-button {
+	cursor: pointer;
+	border-radius: var(--radius-sm);
+}
+
+.reaction-count-static {
+	min-width: 28px;
+	height: 28px;
+}
+
+.reaction-icon-hitbox {
+	position: relative;
+	min-width: 44px;
+	min-height: 44px;
+	touch-action: manipulation;
+	/* Expand away from the adjacent count while preserving the visible icon position. */
+	margin: -11.5px 0 -11.5px -13px;
+	padding: 14.5px 8px 14.5px 21px;
+}
+
+.reaction-count-hitbox {
+	position: relative;
+	z-index: 1;
+	min-width: 28px;
+	min-height: 28px;
+	touch-action: manipulation;
+	/* Counts use a compact target while retaining separation from the action icon. */
+	margin-top: -3.5px;
+	margin-bottom: -3.5px;
+}
+
+.reaction-icon-hitbox::before {
+	position: absolute;
+	pointer-events: none;
+	content: "";
+	border-radius: var(--radius-sm);
+}
+
+.reaction-icon-hitbox::before {
+	top: 11.5px;
+	right: 0;
+	bottom: 11.5px;
+	left: 13px;
+}
+
+.post-repost-btn.reaction-icon-hitbox:not(:disabled):hover,
+.post-like-btn.reaction-icon-hitbox:not(:disabled):hover {
+	background: none;
+}
+
+.post-repost-count.reaction-count-hitbox:hover {
+	color: #22c55e;
+	background: rgba(34, 197, 94, 0.1);
+}
+
+.post-like-count.reaction-count-hitbox:hover {
+	color: #f43f5e;
+	background: rgba(244, 63, 94, 0.1);
+}
+
+.post-repost-btn.reaction-icon-hitbox:not(:disabled):hover::before {
+	background: rgba(34, 197, 94, 0.1);
+}
+
+.post-like-btn.reaction-icon-hitbox:not(:disabled):hover::before {
+	background: rgba(244, 63, 94, 0.1);
+}
+
+.reaction-popover-backdrop {
+	position: fixed;
+	inset: 0;
+	z-index: 100;
+	border: none;
+	background: transparent;
+}
+
+.reaction-popover {
+	position: absolute;
+	bottom: calc(100% + 8px);
+	left: 0;
+	z-index: 101;
+	width: min(300px, calc(100vw - 32px));
+	overflow: hidden;
+	border: 1px solid var(--color-border, #313244);
+	border-radius: 12px;
+	background: var(--color-bg-card, #1e1e2e);
+	box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+}
+
+.reaction-popover-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 10px 10px 10px 14px;
+	border-bottom: 1px solid var(--color-border, #313244);
+	color: var(--color-text);
+	font-size: 14px;
+}
+
+.reaction-popover-close {
+	display: inline-flex;
+	padding: 5px;
+	border: none;
+	border-radius: var(--radius-sm);
+	background: none;
+	color: var(--color-text-muted);
+	cursor: pointer;
+}
+
+.reaction-popover-close:hover {
+	background: var(--color-bg-hover, #313244);
+	color: var(--color-text);
+}
+
+.reaction-popover-list {
+	max-height: 280px;
+	overflow-y: auto;
+}
+
+.reaction-user {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 10px 12px;
+	color: var(--color-text);
+	text-decoration: none;
+}
+
+.reaction-user:hover {
+	background: var(--color-bg-hover, #313244);
+	text-decoration: none;
+}
+
+.reaction-user-names {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	font-size: 13px;
+}
+
+.reaction-user-names strong,
+.reaction-user-names span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.reaction-user-names span,
+.reaction-popover-status {
+	color: var(--color-text-muted);
+}
+
+.reaction-popover-status {
+	margin: 0;
+	padding: 22px 14px;
+	text-align: center;
+	font-size: 13px;
+}
+
+.reaction-popover-error {
+	color: #f87171;
+}
+
 .post-card-clickable {
 	cursor: pointer;
 }

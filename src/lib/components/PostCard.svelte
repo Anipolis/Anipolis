@@ -2,7 +2,8 @@
 import type { SubmitFunction } from "@sveltejs/kit";
 import { enhance } from "$app/forms";
 import AnimeExchangeResult from "$lib/components/AnimeExchangeResult.svelte";
-import type { Post } from "$lib/types";
+import ReactionUsersPopover from "$lib/components/ReactionUsersPopover.svelte";
+import type { Post, ReactionType, ReactionUser } from "$lib/types";
 import { formatRelativeTime } from "$lib/utils/format";
 import { parseContentParts } from "$lib/utils/hashtag";
 import UserAvatar from "./UserAvatar.svelte";
@@ -45,6 +46,10 @@ let reportReason = $state("spam");
 let reportDetails = $state("");
 let reportSubmitting = $state(false);
 let reportMessage = $state("");
+let openReactionType = $state<ReactionType | null>(null);
+let reactionUsers = $state<ReactionUser[]>([]);
+let reactionUsersLoading = $state(false);
+let reactionUsersError = $state("");
 
 function openLightbox(event: MouseEvent, url: string) {
 	event.preventDefault();
@@ -61,6 +66,7 @@ function handleLightboxKeydown(event: KeyboardEvent) {
 	if (showDeleteModal && event.key === "Escape") showDeleteModal = false;
 	if (showExchangeModal && event.key === "Escape") showExchangeModal = false;
 	if (showReportModal && event.key === "Escape") showReportModal = false;
+	if (openReactionType && event.key === "Escape") openReactionType = null;
 }
 
 function openExchangeModal(event: MouseEvent) {
@@ -87,6 +93,41 @@ const likedByMe = $derived(likedByMeLocal ?? post.liked_by_me);
 const repostCount = $derived(repostCountLocal ?? post.repost_count);
 const repostedByMe = $derived(repostedByMeLocal ?? post.reposted_by_me);
 const bookmarkedByMe = $derived(bookmarkedByMeLocal ?? post.bookmarked_by_me);
+
+function closeReactionPopover() {
+	openReactionType = null;
+}
+
+async function openReactionPopover(event: MouseEvent, type: ReactionType) {
+	event.preventDefault();
+	event.stopPropagation();
+	if (openReactionType === type) {
+		closeReactionPopover();
+		return;
+	}
+	showRepostMenu = false;
+	openReactionType = type;
+	reactionUsers = [];
+	reactionUsersError = "";
+	reactionUsersLoading = true;
+	try {
+		const response = await fetch(`/api/posts/${encodeURIComponent(post.id)}/reactions?type=${type}`);
+		const body = (await response.json().catch(() => ({}))) as {
+			users?: ReactionUser[];
+			message?: string;
+		};
+		if (openReactionType !== type) return;
+		if (!response.ok) {
+			reactionUsersError = body.message ?? "一覧を取得できませんでした";
+		} else {
+			reactionUsers = body.users ?? [];
+		}
+	} catch {
+		if (openReactionType === type) reactionUsersError = "一覧を取得できませんでした";
+	} finally {
+		if (openReactionType === type) reactionUsersLoading = false;
+	}
+}
 
 const handleDelete: SubmitFunction = () => {
 	deleting = true;
@@ -556,10 +597,10 @@ async function submitReport() {
 				{/if}
 			</a>
 
-			<div class="post-repost-wrapper">
+			<div class="post-repost-wrapper reaction-action-group">
 				<button
 					type="button"
-					class="post-action-btn post-repost-btn"
+					class="post-action-btn post-repost-btn reaction-icon-hitbox"
 					class:active={repostedByMe}
 					disabled={!isLoggedIn}
 					aria-label={repostedByMe ? 'リポストメニュー' : 'リポスト'}
@@ -582,10 +623,18 @@ async function submitReport() {
 						<path d="M7 23l-4-4 4-4" />
 						<path d="M21 13v2a4 4 0 0 1-4 4H3" />
 					</svg>
-					{#if repostCount > 0}
-						<span>{repostCount}</span>
-					{/if}
 				</button>
+				{#if repostCount > 0}
+					<button
+						type="button"
+						class="reaction-count-button post-repost-count reaction-count-hitbox"
+						aria-label="リポストしたユーザーを表示"
+						aria-expanded={openReactionType === 'repost'}
+						onclick={(event) => openReactionPopover(event, 'repost')}
+					>
+						{repostCount}
+					</button>
+				{/if}
 
 				{#if showRepostMenu}
 					<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
@@ -636,38 +685,70 @@ async function submitReport() {
 						</button>
 					</div>
 				{/if}
+				{#if openReactionType === 'repost'}
+					<ReactionUsersPopover
+						title="リポストしたユーザー"
+						users={reactionUsers}
+						loading={reactionUsersLoading}
+						errorMessage={reactionUsersError}
+						onClose={closeReactionPopover}
+					/>
+				{/if}
 			</div>
 
-			<form method="POST" action="?/like" use:enhance={handleLike}>
-				<input type="hidden" name="post_id" value={post.id}>
-				<button
-					type="submit"
-					class="post-action-btn post-like-btn"
-					class:active={likedByMe}
-					disabled={!isLoggedIn}
-					aria-label={likedByMe ? 'いいね取り消し' : 'いいね'}
-					title={likedByMe ? 'いいね取り消し' : 'いいね'}
-				>
-					<svg
-						width="15"
-						height="15"
-						viewBox="0 0 24 24"
-						fill={likedByMe ? 'currentColor' : 'none'}
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						aria-hidden="true"
+			<div class="reaction-action-group">
+				<form method="POST" action="?/like" use:enhance={handleLike}>
+					<input type="hidden" name="post_id" value={post.id}>
+					<button
+						type="submit"
+						class="post-action-btn post-like-btn reaction-icon-hitbox"
+						class:active={likedByMe}
+						disabled={!isLoggedIn}
+						aria-label={likedByMe ? 'いいね取り消し' : 'いいね'}
+						title={likedByMe ? 'いいね取り消し' : 'いいね'}
 					>
-						<path
-							d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
-						/>
-					</svg>
-					{#if likeCount > 0}
-						<span>{likeCount}</span>
+						<svg
+							width="15"
+							height="15"
+							viewBox="0 0 24 24"
+							fill={likedByMe ? 'currentColor' : 'none'}
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+						>
+							<path
+								d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
+							/>
+						</svg>
+					</button>
+				</form>
+				{#if likeCount > 0}
+					{#if isOwn}
+						<button
+							type="button"
+							class="reaction-count-button post-like-count reaction-count-hitbox"
+							aria-label="いいねしたユーザーを表示"
+							aria-expanded={openReactionType === 'like'}
+							onclick={(event) => openReactionPopover(event, 'like')}
+						>
+							{likeCount}
+						</button>
+					{:else}
+						<span class="reaction-count-static">{likeCount}</span>
 					{/if}
-				</button>
-			</form>
+				{/if}
+				{#if openReactionType === 'like'}
+					<ReactionUsersPopover
+						title="いいねしたユーザー"
+						users={reactionUsers}
+						loading={reactionUsersLoading}
+						errorMessage={reactionUsersError}
+						onClose={closeReactionPopover}
+					/>
+				{/if}
+			</div>
 
 			<form method="POST" action="?/bookmark" use:enhance={handleBookmark}>
 				<input type="hidden" name="post_id" value={post.id}>
