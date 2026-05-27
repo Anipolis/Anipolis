@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
 import type { Session } from "@supabase/supabase-js";
 import { browser } from "$app/environment";
 import { goto, invalidateAll } from "$app/navigation";
@@ -141,6 +141,35 @@ function isActive(path: string): boolean {
 			<span class="sidebar-btn-label">検索</span>
 		</a>
 
+		{#if session}
+			<a
+				href="/notifications"
+				class="sidebar-btn"
+				class:active={isActive('/notifications')}
+				aria-label="通知"
+				title="通知"
+			>
+				<svg
+					width="22"
+					height="22"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
+					<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+					<path d="M13.73 21a2 2 0 0 1-3.46 0" />
+				</svg>
+				{#if unreadNotificationCount > 0}
+					<span class="sidebar-badge">{unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}</span>
+				{/if}
+				<span class="sidebar-btn-label">通知</span>
+			</a>
+		{/if}
+
 		<a href="/anime" class="sidebar-btn" class:active={isActive('/anime')} aria-label="アニメ" title="アニメ">
 			<svg
 				width="22"
@@ -159,6 +188,31 @@ function isActive(path: string): boolean {
 			</svg>
 			<span class="sidebar-btn-label">アニメ</span>
 		</a>
+
+		{#if session}
+			<a
+				href="/mylist"
+				class="sidebar-btn"
+				class:active={isActive('/mylist')}
+				aria-label="マイリスト"
+				title="マイリスト"
+			>
+				<svg
+					width="22"
+					height="22"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
+					<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+				</svg>
+				<span class="sidebar-btn-label">マイリスト</span>
+			</a>
+		{/if}
 
 		<a
 			href="/schedule"
@@ -188,101 +242,6 @@ function isActive(path: string): boolean {
 		</a>
 
 		{#if session}
-			{#if profile?.is_admin}
-				<a href="/admin" class="sidebar-btn" class:active={isActive('/admin')} aria-label="Admin" title="Admin">
-					<svg
-						width="22"
-						height="22"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						aria-hidden="true"
-					>
-						<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-					</svg>
-					{#if pendingReportsCount > 0}
-						<span class="sidebar-badge">{pendingReportsCount > 99 ? '99+' : pendingReportsCount}</span>
-					{/if}
-					<span class="sidebar-btn-label">Admin</span>
-				</a>
-			{/if}
-
-			<a
-				href="/bookmarks"
-				class="sidebar-btn"
-				class:active={isActive('/bookmarks')}
-				aria-label="ブックマーク"
-				title="ブックマーク"
-			>
-				<svg
-					width="22"
-					height="22"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-				</svg>
-				<span class="sidebar-btn-label">ブックマーク</span>
-			</a>
-
-			<a
-				href="/notifications"
-				class="sidebar-btn"
-				class:active={isActive('/notifications')}
-				aria-label="通知"
-				title="通知"
-			>
-				<svg
-					width="22"
-					height="22"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-					<path d="M13.73 21a2 2 0 0 1-3.46 0" />
-				</svg>
-				{#if unreadNotificationCount > 0}
-					<span class="sidebar-badge">{unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}</span>
-				{/if}
-				<span class="sidebar-btn-label">通知</span>
-			</a>
-
-			<a
-				href="/mylist"
-				class="sidebar-btn"
-				class:active={isActive('/mylist')}
-				aria-label="マイリスト"
-				title="マイリスト"
-			>
-				<svg
-					width="22"
-					height="22"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-				</svg>
-				<span class="sidebar-btn-label">マイリスト</span>
-			</a>
-
 			<a
 				href="/exchange"
 				class="sidebar-btn"
@@ -309,6 +268,29 @@ function isActive(path: string): boolean {
 				<span class="sidebar-btn-label">トレード</span>
 			</a>
 
+			<a
+				href="/bookmarks"
+				class="sidebar-btn"
+				class:active={isActive('/bookmarks')}
+				aria-label="ブックマーク"
+				title="ブックマーク"
+			>
+				<svg
+					width="22"
+					height="22"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
+					<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+				</svg>
+				<span class="sidebar-btn-label">ブックマーク</span>
+			</a>
+
 			<a href="/settings" class="sidebar-btn" class:active={isActive('/settings')} aria-label="設定" title="設定">
 				<svg
 					width="22"
@@ -328,6 +310,28 @@ function isActive(path: string): boolean {
 				</svg>
 				<span class="sidebar-btn-label">設定</span>
 			</a>
+
+			{#if profile?.is_admin}
+				<a href="/admin" class="sidebar-btn" class:active={isActive('/admin')} aria-label="Admin" title="Admin">
+					<svg
+						width="22"
+						height="22"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+					</svg>
+					{#if pendingReportsCount > 0}
+						<span class="sidebar-badge">{pendingReportsCount > 99 ? '99+' : pendingReportsCount}</span>
+					{/if}
+					<span class="sidebar-btn-label">Admin</span>
+				</a>
+			{/if}
 		{/if}
 	</nav>
 
