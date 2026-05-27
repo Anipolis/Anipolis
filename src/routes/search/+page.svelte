@@ -80,6 +80,6 @@ let { data }: PageProps = $props();
 	</main>
 
 	<aside class="sidebar-column">
-		<TrendingPanel trending={[]} />
+		<TrendingPanel trending={data.trending} />
 	</aside>
 </div>

@@ -42,9 +42,10 @@ function toExchangeShareAnime(value: unknown): AnimeExchangeShare["offered_anime
 }
 
 export const load: PageServerLoad = async ({ params, locals: { supabase } }) => {
-	const { data: post } = await supabase
-		.from("posts")
-		.select(`
+	const [postResult, trendingResult] = await Promise.all([
+		supabase
+			.from("posts")
+			.select(`
 			id,
 			created_at,
 			exchange_share,
@@ -54,8 +55,11 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 				avatar_url
 			)
 		`)
-		.eq("id", params.id)
-		.maybeSingle();
+			.eq("id", params.id)
+			.maybeSingle(),
+		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
+	]);
+	const post = postResult.data;
 
 	const exchangeShare = toExchangeShare(post?.exchange_share);
 	if (!post || !exchangeShare) error(404, "交換結果が見つかりません");
@@ -71,5 +75,6 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 			display_name: profile?.display_name ?? null,
 			avatar_url: profile?.avatar_url ?? null,
 		},
+		trending: trendingResult.data ?? [],
 	};
 };

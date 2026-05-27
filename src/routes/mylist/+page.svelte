@@ -1,6 +1,7 @@
 <script lang="ts">
 import { enhance } from "$app/forms";
 import AnimeEditRow from "$lib/components/AnimeEditRow.svelte";
+import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import type { Anime, AnimeStatus } from "$lib/types";
 import type { PageProps } from "./$types";
 
@@ -74,188 +75,197 @@ $effect(() => {
 
 <svelte:head> <title>マイリスト — Anipolis</title> </svelte:head>
 
-<div class="mylist-page">
-	<div class="mylist-container">
-		<header class="mylist-header">
-			<div class="mylist-title-row">
-				<h1 class="mylist-title">★ マイリスト</h1>
-				<div class="header-actions">
-					<!-- 表示切り替え -->
-					<div class="view-toggle">
-						<button
-							type="button"
-							class="view-btn"
-							class:active={viewMode === 'list'}
-							onclick={() => (viewMode = 'list')}
-						>
-							<svg
-								width="14"
-								height="14"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								aria-hidden="true"
+<div class="page-container">
+	<main class="feed-column mylist-page">
+		<div class="mylist-container">
+			<header class="mylist-header">
+				<div class="mylist-title-row">
+					<h1 class="mylist-title">★ マイリスト</h1>
+					<div class="header-actions">
+						<!-- 表示切り替え -->
+						<div class="view-toggle">
+							<button
+								type="button"
+								class="view-btn"
+								class:active={viewMode === 'list'}
+								onclick={() => (viewMode = 'list')}
 							>
-								<line x1="8" y1="6" x2="21" y2="6" />
-								<line x1="8" y1="12" x2="21" y2="12" />
-								<line x1="8" y1="18" x2="21" y2="18" />
-								<line x1="3" y1="6" x2="3.01" y2="6" />
-								<line x1="3" y1="12" x2="3.01" y2="12" />
-								<line x1="3" y1="18" x2="3.01" y2="18" />
-							</svg>
-							一覧
-						</button>
-						<button
-							type="button"
-							class="view-btn"
-							class:active={viewMode === 'edit'}
-							onclick={() => (viewMode = 'edit')}
-						>
-							<svg
-								width="14"
-								height="14"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								aria-hidden="true"
+								<svg
+									width="14"
+									height="14"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+								>
+									<line x1="8" y1="6" x2="21" y2="6" />
+									<line x1="8" y1="12" x2="21" y2="12" />
+									<line x1="8" y1="18" x2="21" y2="18" />
+									<line x1="3" y1="6" x2="3.01" y2="6" />
+									<line x1="3" y1="12" x2="3.01" y2="12" />
+									<line x1="3" y1="18" x2="3.01" y2="18" />
+								</svg>
+								一覧
+							</button>
+							<button
+								type="button"
+								class="view-btn"
+								class:active={viewMode === 'edit'}
+								onclick={() => (viewMode = 'edit')}
 							>
-								<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-								<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-							</svg>
-							編集
-						</button>
-					</div>
+								<svg
+									width="14"
+									height="14"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+								>
+									<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+									<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+								</svg>
+								編集
+							</button>
+						</div>
 
-					<!-- 公開/非公開切り替え -->
-					<form
-						method="POST"
-						action="?/toggleVisibility"
-						use:enhance={() => {
+						<!-- 公開/非公開切り替え -->
+						<form
+							method="POST"
+							action="?/toggleVisibility"
+							use:enhance={() => {
                             return ({ result }) => {
                                 if (result.type === 'success' && result.data) {
                                     isPublic = (result.data as { list_is_public: boolean }).list_is_public;
                                 }
                             };
                         }}
-					>
-						<button type="submit" class="visibility-btn" class:public={isPublic} class:private={!isPublic}>
-							{#if isPublic}
-								<svg
-									width="14"
-									height="14"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									aria-hidden="true"
-								>
-									<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-									<circle cx="12" cy="12" r="3" />
-								</svg>
-								公開中
-							{:else}
-								<svg
-									width="14"
-									height="14"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									aria-hidden="true"
-								>
-									<path
-										d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
-									/>
-									<line x1="1" y1="1" x2="23" y2="23" />
-								</svg>
-								非公開
-							{/if}
-						</button>
-					</form>
+						>
+							<button
+								type="submit"
+								class="visibility-btn"
+								class:public={isPublic}
+								class:private={!isPublic}
+							>
+								{#if isPublic}
+									<svg
+										width="14"
+										height="14"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										aria-hidden="true"
+									>
+										<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+										<circle cx="12" cy="12" r="3" />
+									</svg>
+									公開中
+								{:else}
+									<svg
+										width="14"
+										height="14"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										aria-hidden="true"
+									>
+										<path
+											d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
+										/>
+										<line x1="1" y1="1" x2="23" y2="23" />
+									</svg>
+									非公開
+								{/if}
+							</button>
+						</form>
+					</div>
 				</div>
-			</div>
 
-			<div class="mylist-stats">
-				<span class="stat-total">合計 <strong>{totalCount}</strong> 作品</span>
-				{#each statCounts as { status, count }}
-					{#if count > 0}
-						<span class="stat-chip stat-chip--{status}"> {statusLabel[status]} {count} </span>
+				<div class="mylist-stats">
+					<span class="stat-total">合計 <strong>{totalCount}</strong> 作品</span>
+					{#each statCounts as { status, count }}
+						{#if count > 0}
+							<span class="stat-chip stat-chip--{status}"> {statusLabel[status]} {count} </span>
+						{/if}
+					{/each}
+				</div>
+			</header>
+
+			{#if totalCount === 0}
+				<div class="mylist-empty">
+					<p>まだアニメがありません。<a href="/anime">アニメを探す</a></p>
+				</div>
+			{:else}
+				{#each statusOrder as status}
+					{#if grouped[status].length > 0}
+						<section class="status-section status-section--{status}">
+							<h2 class="status-heading">
+								<span class="status-icon">{statusIcon[status]}</span>
+								{statusLabel[status]}
+								<span class="status-count">{grouped[status].length}</span>
+							</h2>
+							<div class="anime-list" class:anime-list--edit={viewMode === 'edit'}>
+								{#each grouped[status] as anime (anime.id)}
+									{@const editRow = editRows[anime.id]}
+									{#if viewMode === 'list'}
+										<!-- 一覧表示 -->
+										<a href="/anime/{anime.id}" class="anime-card">
+											<div class="card-cover">
+												{#if anime.cover_url}
+													<img src={anime.cover_url} alt={anime.title}>
+												{:else}
+													<div class="anime-cover-placeholder">?</div>
+												{/if}
+												{#if anime.user_entry?.score !== null && anime.user_entry?.score !== undefined}
+													<div class="card-score">★ {anime.user_entry.score}</div>
+												{/if}
+											</div>
+											<div class="card-info">
+												<div class="card-title">{anime.title}</div>
+												{#if anime.episode_count}
+													<div class="card-progress">
+														{anime.user_entry?.progress ?? 0}/{anime.episode_count}話
+													</div>
+												{:else if (anime.user_entry?.progress ?? 0) > 0}
+													<div class="card-progress">{anime.user_entry?.progress}話</div>
+												{/if}
+											</div>
+										</a>
+									{:else if editRow}
+										<AnimeEditRow {anime} bind:entry={editRow.entry} {statusOrder} {statusLabel} />
+									{/if}
+								{/each}
+							</div>
+						</section>
 					{/if}
 				{/each}
-			</div>
-		</header>
+			{/if}
+		</div>
+	</main>
 
-		{#if totalCount === 0}
-			<div class="mylist-empty">
-				<p>まだアニメがありません。<a href="/anime">アニメを探す</a></p>
-			</div>
-		{:else}
-			{#each statusOrder as status}
-				{#if grouped[status].length > 0}
-					<section class="status-section status-section--{status}">
-						<h2 class="status-heading">
-							<span class="status-icon">{statusIcon[status]}</span>
-							{statusLabel[status]}
-							<span class="status-count">{grouped[status].length}</span>
-						</h2>
-						<div class="anime-list" class:anime-list--edit={viewMode === 'edit'}>
-							{#each grouped[status] as anime (anime.id)}
-								{@const editRow = editRows[anime.id]}
-								{#if viewMode === 'list'}
-									<!-- 一覧表示 -->
-									<a href="/anime/{anime.id}" class="anime-card">
-										<div class="card-cover">
-											{#if anime.cover_url}
-												<img src={anime.cover_url} alt={anime.title}>
-											{:else}
-												<div class="anime-cover-placeholder">?</div>
-											{/if}
-											{#if anime.user_entry?.score !== null && anime.user_entry?.score !== undefined}
-												<div class="card-score">★ {anime.user_entry.score}</div>
-											{/if}
-										</div>
-										<div class="card-info">
-											<div class="card-title">{anime.title}</div>
-											{#if anime.episode_count}
-												<div class="card-progress">
-													{anime.user_entry?.progress ?? 0}/{anime.episode_count}話
-												</div>
-											{:else if (anime.user_entry?.progress ?? 0) > 0}
-												<div class="card-progress">{anime.user_entry?.progress}話</div>
-											{/if}
-										</div>
-									</a>
-								{:else if editRow}
-									<AnimeEditRow {anime} bind:entry={editRow.entry} {statusOrder} {statusLabel} />
-								{/if}
-							{/each}
-						</div>
-					</section>
-				{/if}
-			{/each}
-		{/if}
-	</div>
+	<aside class="sidebar-column">
+		<TrendingPanel trending={data.trending} />
+	</aside>
 </div>
 
 <style>
 .mylist-page {
-	padding: calc(var(--nav-height) + 24px) 16px 24px;
-	min-height: 100vh;
+	padding: 0;
 }
 
 .mylist-container {
-	max-width: 860px;
-	margin: 0 auto;
+	width: 100%;
 }
 
 .mylist-header {

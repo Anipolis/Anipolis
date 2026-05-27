@@ -7,8 +7,11 @@ export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession 
 	const { user } = await safeGetSession();
 	if (!user) error(401, "ログインが必要です");
 
-	const posts = await getBookmarkedPosts(supabase, user.id);
-	return { posts, userId: user.id };
+	const [posts, trendingResult] = await Promise.all([
+		getBookmarkedPosts(supabase, user.id),
+		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
+	]);
+	return { posts, userId: user.id, trending: trendingResult.data ?? [] };
 };
 
 export const actions: Actions = {

@@ -2,6 +2,7 @@
 import type { SubmitFunction } from "@sveltejs/kit";
 import { enhance } from "$app/forms";
 import PostCard from "$lib/components/PostCard.svelte";
+import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
 import { charCountClass } from "$lib/utils/format";
 import type { PageProps } from "./$types";
@@ -32,8 +33,8 @@ const handleReply: SubmitFunction = () => {
 
 <svelte:head> <title>{displayName}の投稿 — Anipolis</title> </svelte:head>
 
-<div class="page-container" style="justify-content: center;">
-	<main style="flex: 0 1 600px; min-width: 0;">
+<div class="page-container">
+	<main class="feed-column">
 		<!-- 親投稿（このポストがリプライの場合） -->
 		{#if data.parentPost}
 			<div class="thread-parent">
@@ -101,4 +102,8 @@ const handleReply: SubmitFunction = () => {
 			</div>
 		{/if}
 	</main>
+
+	<aside class="sidebar-column">
+		<TrendingPanel trending={data.trending} />
+	</aside>
 </div>

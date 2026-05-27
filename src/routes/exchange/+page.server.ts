@@ -136,12 +136,16 @@ export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession 
 	const { user } = await safeGetSession();
 	if (!user) throw redirect(302, "/");
 
-	const exchanges = await getExchangeEntries(supabase, user.id);
+	const [exchanges, trendingResult] = await Promise.all([
+		getExchangeEntries(supabase, user.id),
+		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
+	]);
 	return {
 		user,
 		exchanges,
 		waitingExchange: exchanges.find((entry) => entry.status === "waiting") ?? null,
 		latestMatchedExchange: exchanges.find((entry) => entry.status === "matched" && entry.received_anime) ?? null,
+		trending: trendingResult.data ?? [],
 	};
 };
 

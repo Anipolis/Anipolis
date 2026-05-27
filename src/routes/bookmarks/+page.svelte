@@ -1,31 +1,36 @@
 <script lang="ts">
 import PostCard from "$lib/components/PostCard.svelte";
+import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();
 </script>
 
-<div class="bookmarks-page">
-	<header class="bookmarks-header">
-		<h1>ブックマーク</h1>
-	</header>
+<div class="page-container">
+	<main class="feed-column bookmarks-page">
+		<header class="bookmarks-header">
+			<h1>ブックマーク</h1>
+		</header>
 
-	{#if data.posts.length === 0}
-		<p class="empty">保存した投稿はまだありません</p>
-	{:else}
-		<div class="post-list">
-			{#each data.posts as post (post.id)}
-				<PostCard {post} currentUserId={data.userId} />
-			{/each}
-		</div>
-	{/if}
+		{#if data.posts.length === 0}
+			<p class="empty">保存した投稿はまだありません</p>
+		{:else}
+			<div class="post-list">
+				{#each data.posts as post (post.id)}
+					<PostCard {post} currentUserId={data.userId} />
+				{/each}
+			</div>
+		{/if}
+	</main>
+
+	<aside class="sidebar-column">
+		<TrendingPanel trending={data.trending} />
+	</aside>
 </div>
 
 <style>
 .bookmarks-page {
-	max-width: 600px;
-	margin: 0 auto;
-	padding: 0 1rem;
+	padding: 0;
 }
 
 .bookmarks-header {

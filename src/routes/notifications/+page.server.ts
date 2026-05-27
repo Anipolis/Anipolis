@@ -12,7 +12,10 @@ export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession 
 	// ページ読み込み時に全通知を既読にする
 	await markAllNotificationsRead(supabase, user.id);
 
-	const notifications = await getNotifications(supabase, user.id);
+	const [notifications, trendingResult] = await Promise.all([
+		getNotifications(supabase, user.id),
+		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
+	]);
 
-	return { notifications };
+	return { notifications, trending: trendingResult.data ?? [] };
 };

@@ -15,9 +15,12 @@ export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession 
 
 	if (!profile) redirect(302, "/");
 
-	const animeList = await getUserAnimeList(supabase, user.id);
+	const [animeList, trendingResult] = await Promise.all([
+		getUserAnimeList(supabase, user.id),
+		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
+	]);
 
-	return { animeList, profile, user };
+	return { animeList, profile, user, trending: trendingResult.data ?? [] };
 };
 
 export const actions: Actions = {

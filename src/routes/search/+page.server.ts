@@ -7,14 +7,16 @@ import type { Actions, PageServerLoad } from "./$types";
 export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 	const query = url.searchParams.get("q")?.trim() ?? "";
+	const trendingPromise = supabase.rpc("get_trending_hashtags", { limit_count: 10 });
 
 	if (!query) {
-		return { query: "", posts: [], users: [], user };
+		const trendingResult = await trendingPromise;
+		return { query: "", posts: [], users: [], user, trending: trendingResult.data ?? [] };
 	}
 
 	const pattern = `%${query}%`;
 
-	const [postsResult, usersResult] = await Promise.all([
+	const [postsResult, usersResult, trendingResult] = await Promise.all([
 		supabase
 			.from("posts")
 			.select(
@@ -33,6 +35,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 			.select("id, username, display_name, avatar_url")
 			.or(`username.ilike.${pattern},display_name.ilike.${pattern}`)
 			.limit(10),
+		trendingPromise,
 	]);
 
 	const posts = await enrichPostsWithCounts(
@@ -46,6 +49,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		posts,
 		users: usersResult.data ?? [],
 		user,
+		trending: trendingResult.data ?? [],
 	};
 };
 

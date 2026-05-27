@@ -1,4 +1,5 @@
 <script lang="ts">
+import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
 import { formatRelativeTime } from "$lib/utils/format";
 import type { PageProps } from "./$types";
@@ -35,7 +36,7 @@ function broadcastLabel(value: string | null): string {
 <svelte:head> <title>通知 - Anipolis</title> </svelte:head>
 
 <div class="page-container">
-	<main class="notifications-column">
+	<main class="feed-column notifications-column">
 		<h1 class="notifications-title">通知</h1>
 
 		{#if data.notifications.length === 0}
@@ -114,13 +115,15 @@ function broadcastLabel(value: string | null): string {
 			</ul>
 		{/if}
 	</main>
+
+	<aside class="sidebar-column">
+		<TrendingPanel trending={data.trending} />
+	</aside>
 </div>
 
 <style>
 .notifications-column {
-	max-width: 600px;
-	margin: 0 auto;
-	padding: 0 16px;
+	padding: 0;
 }
 
 .notifications-title {
