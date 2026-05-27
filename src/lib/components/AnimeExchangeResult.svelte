@@ -158,12 +158,15 @@ a.exchange-result-card:hover {
 .exchange-result-cover-wrap {
 	width: 74px;
 	aspect-ratio: 2 / 3;
+	overflow: hidden;
 }
 
 .exchange-result-cover {
 	width: 100%;
-	height: 100%;
 	object-fit: cover;
+	image-rendering: auto;
+	-webkit-backface-visibility: hidden;
+	backface-visibility: hidden;
 	border-radius: 6px;
 	background: var(--color-border);
 	box-shadow: 0 10px 26px rgba(0, 0, 0, 0.26);
