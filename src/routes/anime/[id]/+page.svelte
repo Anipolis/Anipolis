@@ -1766,7 +1766,7 @@ a.relation-card:hover {
 }
 
 /* Responsive */
-@media (max-width: 700px) {
+@media (max-width: 768px) {
 	.anime-layout {
 		grid-template-columns: 1fr;
 	}
