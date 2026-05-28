@@ -1,7 +1,10 @@
 <script lang="ts">
 import { onMount } from "svelte";
-import { invalidate } from "$app/navigation";
+import { goto, invalidate } from "$app/navigation";
+import { page } from "$app/state";
+import MobileBottomNav from "$lib/components/MobileBottomNav.svelte";
 import Sidebar from "$lib/components/Sidebar.svelte";
+import { composeOpen } from "$lib/stores/compose";
 import type { LayoutProps } from "./$types";
 import "../app.css";
 
@@ -21,6 +24,14 @@ onMount(() => {
 		clearInterval(notificationInterval);
 	};
 });
+
+// FAB: open compose modal (navigate to home first if needed)
+async function handleFabClick() {
+	if (page.url.pathname !== "/") {
+		await goto("/");
+	}
+	composeOpen.set(true);
+}
 </script>
 
 <div class="app-layout">
@@ -37,3 +48,59 @@ onMount(() => {
 		{@render children()}
 	</div>
 </div>
+
+<MobileBottomNav session={data.session} unreadNotificationCount={data.unreadNotificationCount} />
+
+<!-- FAB: compose post (mobile only) -->
+{#if data.session}
+	<button type="button" class="mobile-fab" onclick={handleFabClick} aria-label="投稿する">
+		<svg
+			width="24"
+			height="24"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			stroke-width="2"
+			stroke-linecap="round"
+			stroke-linejoin="round"
+			aria-hidden="true"
+		>
+			<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+			<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+		</svg>
+	</button>
+{/if}
+
+<style>
+.mobile-fab {
+	display: none;
+	position: fixed;
+	bottom: 72px;
+	right: 16px;
+	width: 56px;
+	height: 56px;
+	border-radius: 50%;
+	background: var(--color-accent);
+	color: white;
+	border: none;
+	cursor: pointer;
+	align-items: center;
+	justify-content: center;
+	box-shadow: 0 4px 16px rgba(99, 102, 241, 0.45);
+	z-index: 140;
+	transition:
+		transform 0.15s,
+		box-shadow 0.15s;
+}
+
+.mobile-fab:hover {
+	transform: scale(1.05);
+	box-shadow: 0 6px 20px rgba(99, 102, 241, 0.55);
+}
+
+@media (max-width: 768px) {
+	.mobile-fab {
+		display: flex;
+	}
+}
+</style>

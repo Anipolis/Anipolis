@@ -1,4 +1,4 @@
-:root {
+﻿:root {
 	--color-bg: #0d0d0d;
 	--color-surface: #161616;
 	--color-surface-hover: #1c1c1c;
@@ -156,10 +156,11 @@ textarea {
 	}
 }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
 	.page-container {
 		padding: 0 12px;
-		padding-top: calc(var(--nav-height) + 8px);
+		padding-top: calc(52px + 12px);
+		padding-bottom: 80px;
 	}
 }
 
@@ -316,7 +317,7 @@ textarea {
 	pointer-events: none;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
 	.icon-sidebar {
 		display: none;
 	}
@@ -325,6 +326,7 @@ textarea {
 	}
 	.app-main {
 		padding-left: 0;
+		padding-top: 52px;
 	}
 }
 
@@ -496,7 +498,7 @@ textarea {
 	background: rgba(0, 0, 0, 0.85);
 }
 
-/* --- 投稿画像グリッド --- */
+/* --- 謚慕ｨｿ逕ｻ蜒上げ繝ｪ繝・ラ --- */
 .post-images {
 	display: grid;
 	grid-template-columns: repeat(2, 1fr);
@@ -531,7 +533,7 @@ textarea {
 	opacity: 0.9;
 }
 
-/* ライトボックス */
+/* 繝ｩ繧､繝医・繝・け繧ｹ */
 .lightbox-overlay {
 	position: fixed;
 	inset: 0;
@@ -1325,7 +1327,7 @@ textarea {
 	}
 }
 
-/* フォームフィールド */
+/* 繝輔か繝ｼ繝繝輔ぅ繝ｼ繝ｫ繝・*/
 
 .field {
 	margin-bottom: 20px;
@@ -1490,7 +1492,7 @@ textarea {
 	color: var(--color-danger);
 }
 
-/* 成功フラッシュ */
+/* 謌仙粥繝輔Λ繝・す繝･ */
 .flash-success {
 	background: rgba(34, 197, 94, 0.1);
 	border: 1px solid rgba(34, 197, 94, 0.3);
@@ -1536,7 +1538,7 @@ textarea {
 	opacity: 0.5;
 }
 
-/* リプライ */
+/* 繝ｪ繝励Λ繧､ */
 .post-reply-btn {
 	margin-left: -8px;
 }
@@ -1547,7 +1549,7 @@ textarea {
 	text-decoration: none;
 }
 
-/* リポスト */
+/* 繝ｪ繝昴せ繝・*/
 .post-repost-btn:not(:disabled):hover {
 	color: #22c55e;
 	background: rgba(34, 197, 94, 0.1);
@@ -1557,7 +1559,7 @@ textarea {
 	color: #22c55e;
 }
 
-/* いいね */
+/* 縺・＞縺ｭ */
 .post-like-btn:not(:disabled):hover {
 	color: #f43f5e;
 	background: rgba(244, 63, 94, 0.1);
@@ -1802,10 +1804,10 @@ textarea {
 }
 
 /* ================================================================
-   カレンダー / イベント視聴ルーム
+   繧ｫ繝ｬ繝ｳ繝繝ｼ / 繧､繝吶Φ繝郁ｦ冶・繝ｫ繝ｼ繝
    ================================================================ */
 
-/* ── Nav カレンダーボタン ──────────────────────────────────────── */
+/* 笏笏 Nav 繧ｫ繝ｬ繝ｳ繝繝ｼ繝懊ち繝ｳ 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏 */
 .nav-icon-btn {
 	display: flex;
 	align-items: center;
@@ -1824,7 +1826,7 @@ textarea {
 	color: var(--color-text);
 }
 
-/* ── カレンダーページ専用レイアウト ──────────────────────────────── */
+/* 笏笏 繧ｫ繝ｬ繝ｳ繝繝ｼ繝壹・繧ｸ蟆ら畑繝ｬ繧､繧｢繧ｦ繝・笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏 */
 .calendar-page-container {
 	max-width: 1600px;
 	width: 100%;
@@ -1857,7 +1859,7 @@ textarea {
 	}
 }
 
-/* ── カレンダーカード ────────────────────────────────────────────── */
+/* 笏笏 繧ｫ繝ｬ繝ｳ繝繝ｼ繧ｫ繝ｼ繝・笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏 */
 .calendar-card {
 	padding: 0;
 	overflow: hidden;
@@ -1969,7 +1971,7 @@ textarea {
 	text-overflow: ellipsis;
 }
 
-/* ── イベント一覧 ───────────────────────────────────────────────── */
+/* 笏笏 繧､繝吶Φ繝井ｸ隕ｧ 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏 */
 .section-heading {
 	font-size: 15px;
 	font-weight: 600;
@@ -2027,7 +2029,7 @@ textarea {
 	margin-top: 1px;
 }
 
-/* ── イベント作成フォーム ──────────────────────────────────────── */
+/* 笏笏 繧､繝吶Φ繝井ｽ懈・繝輔か繝ｼ繝 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏 */
 .event-form {
 	display: flex;
 	flex-direction: column;
@@ -2068,7 +2070,7 @@ textarea {
 	color: var(--color-danger, #ef4444);
 }
 
-/* ── イベントルームヘッダー ─────────────────────────────────────── */
+/* 笏笏 繧､繝吶Φ繝医Ν繝ｼ繝繝倥ャ繝繝ｼ 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏 */
 .event-room-header {
 	margin-bottom: 0;
 }
@@ -2114,7 +2116,7 @@ textarea {
 	margin: 0 0 8px;
 }
 
-/* ── ライブタイマー ────────────────────────────────────────────── */
+/* 笏笏 繝ｩ繧､繝悶ち繧､繝槭・ 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏 */
 .event-timer {
 	display: flex;
 	align-items: center;
@@ -2159,7 +2161,7 @@ textarea {
 	}
 }
 
-/* ── イベント投稿フィード ──────────────────────────────────────── */
+/* 笏笏 繧､繝吶Φ繝域兜遞ｿ繝輔ぅ繝ｼ繝・笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏 */
 .event-posts-header {
 	display: flex;
 	align-items: center;
@@ -2170,14 +2172,14 @@ textarea {
 	color: var(--color-text-muted);
 }
 
-/* ── コンポーザーヒント ────────────────────────────────────────── */
+/* 笏笏 繧ｳ繝ｳ繝昴・繧ｶ繝ｼ繝偵Φ繝・笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏 */
 .composer-hint {
 	font-size: 12px;
 	color: var(--color-text-muted);
 	margin: 6px 0 0;
 }
 
-/* ── 汎用 ──────────────────────────────────────────────────────── */
+/* 笏笏 豎守畑 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏 */
 .btn-danger {
 	background: #ef4444;
 	color: #fff;
@@ -2187,7 +2189,7 @@ textarea {
 	background: #dc2626;
 }
 
-/* ── アニメ引用カード（PostCard） ───────────────────────────────── */
+/* 笏笏 繧｢繝九Γ蠑慕畑繧ｫ繝ｼ繝会ｼ・ostCard・・笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏 */
 .anime-quote-card {
 	display: flex;
 	align-items: center;
@@ -2361,7 +2363,7 @@ textarea {
 	color: var(--status-score);
 }
 
-/* ── アニメ引用プレビュー（PostComposer） ───────────────────────── */
+/* 笏笏 繧｢繝九Γ蠑慕畑繝励Ξ繝薙Η繝ｼ・・ostComposer・・笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏 */
 .composer-anime-preview {
 	display: flex;
 	align-items: center;
@@ -2419,7 +2421,7 @@ textarea {
 	color: var(--color-primary);
 }
 
-/* ── アニメ検索モーダル ─────────────────────────────────────────── */
+/* 笏笏 繧｢繝九Γ讀懃ｴ｢繝｢繝ｼ繝繝ｫ 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏 */
 .anime-search-overlay {
 	position: fixed;
 	inset: 0;
@@ -2743,8 +2745,7 @@ form + .repost-menu-item {
 }
 
 /* ----------------------------------------------------------------
-   引用リポスト — 埋め込み表示カード
-   ---------------------------------------------------------------- */
+   蠑慕畑繝ｪ繝昴せ繝・窶・蝓九ａ霎ｼ縺ｿ陦ｨ遉ｺ繧ｫ繝ｼ繝・   ---------------------------------------------------------------- */
 .quoted-post {
 	display: block;
 	margin-top: 10px;
@@ -2793,4 +2794,65 @@ form + .repost-menu-item {
 	line-clamp: 3;
 	-webkit-box-orient: vertical;
 	overflow: hidden;
+}
+
+/* ============================================================
+   MOBILE RESPONSIVE (≤768px additions)
+   ============================================================ */
+
+@media (max-width: 768px) {
+	/* Touch target: post action buttons */
+	.post-action-btn {
+		padding: 10px 8px;
+		min-height: 40px;
+	}
+
+	/* Profile header: stack on mobile */
+	.profile-header {
+		flex-direction: column;
+		align-items: center;
+		text-align: center;
+		padding: 16px;
+		gap: 12px;
+	}
+
+	.profile-stats {
+		justify-content: center;
+		gap: 16px;
+	}
+
+	/* Feed column fills full width (960px rule already handles this for the right sidebar-column,
+	   but on mobile the feed-column itself should be full width) */
+	.feed-column {
+		flex: 1;
+		width: 100%;
+	}
+
+	/* Search form: column on mobile */
+	.global-search-form {
+		align-items: stretch;
+		flex-direction: column;
+	}
+
+	/* Post images: ensure full width on small screens */
+	.post-images {
+		max-width: 100%;
+	}
+}
+
+/* Small phone adjustments (≤480px) */
+@media (max-width: 480px) {
+	.page-container {
+		padding: 0 8px;
+		padding-top: calc(52px + 8px);
+		padding-bottom: 80px;
+	}
+
+	.post-card {
+		padding: 10px 12px;
+	}
+
+	.profile-display-name {
+		font-size: 18px;
+	}
 }
