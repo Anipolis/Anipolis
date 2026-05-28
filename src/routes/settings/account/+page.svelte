@@ -7,6 +7,8 @@ import type { PageProps } from "./$types";
 let { data, form }: PageProps = $props();
 
 let username = $state(untrack(() => data.profile?.username ?? ""));
+let currentPassword = $state("");
+let showCurrentPassword = $state(false);
 let saving = $state(false);
 
 const submitUsername: SubmitFunction = () => {
@@ -16,6 +18,7 @@ const submitUsername: SubmitFunction = () => {
 		await update({ reset: false });
 		if (result.type === "success" && data.profile) {
 			username = data.profile.username;
+			currentPassword = "";
 		}
 	};
 };
@@ -65,6 +68,44 @@ const submitUsername: SubmitFunction = () => {
 						<p class="field-hint">3〜20文字の半角英数字・アンダースコアのみ使用できます。</p>
 					{/if}
 				</div>
+
+				{#if data.hasEmailProvider}
+					<div class="field">
+						<label for="current-password" class="field-label">
+							現在のパスワード<span class="field-required">必須</span>
+						</label>
+						<div class="password-input-wrap">
+							<input
+								id="current-password"
+								name="current_password"
+								type={showCurrentPassword ? "text" : "password"}
+								class="field-input password-input"
+								class:field-error={form && "field" in form && form.field === "current_password"}
+								autocomplete="current-password"
+								required
+								bind:value={currentPassword}
+							>
+							<button
+								type="button"
+								class="password-toggle"
+								aria-label={showCurrentPassword ? "パスワードを隠す" : "パスワードを表示"}
+								title={showCurrentPassword ? "パスワードを隠す" : "パスワードを表示"}
+								onclick={() => {
+									showCurrentPassword = !showCurrentPassword;
+								}}
+							>
+								{#if showCurrentPassword}
+									<span class="i-lucide-eye-off" aria-hidden="true"></span>
+								{:else}
+									<span class="i-lucide-eye" aria-hidden="true"></span>
+								{/if}
+							</button>
+						</div>
+						{#if form && "field" in form && form.field === "current_password"}
+							<p class="field-error-msg">{form.message}</p>
+						{/if}
+					</div>
+				{/if}
 
 				<div class="settings-actions">
 					<button type="submit" class="btn btn-primary" disabled={saving}>

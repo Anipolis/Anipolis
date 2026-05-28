@@ -20,13 +20,13 @@ const items = $derived.by((): Item[] => {
 		const list: Item[] = [
 			{ label: "ユーザー名", description: "ユーザー名を変更します", href: "/settings/account" },
 		];
-		if (!data.hasEmailProvider) {
-			list.push({
-				label: "パスワードの設定",
-				description: "メールアドレスとパスワードでもログインできるようになります",
-				href: "/settings/account/password",
-			});
-		}
+		list.push({
+			label: data.hasEmailProvider ? "パスワードの変更" : "パスワードの設定",
+			description: data.hasEmailProvider
+				? "現在のパスワードを確認して変更します"
+				: "メールアドレスとパスワードでもログインできるようになります",
+			href: "/settings/account/password",
+		});
 		return list;
 	}
 	if (activeSection === "privacy") {

@@ -6,6 +6,7 @@ import MobileBottomNav from "$lib/components/MobileBottomNav.svelte";
 import Sidebar from "$lib/components/Sidebar.svelte";
 import { composeOpen } from "$lib/stores/compose";
 import type { LayoutProps } from "./$types";
+import "virtual:uno.css";
 import "../app.css";
 
 let { data, children }: LayoutProps = $props();
