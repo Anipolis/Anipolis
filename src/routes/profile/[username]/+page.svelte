@@ -20,6 +20,7 @@ let followRequestStatus = $state<"none" | "pending">("none");
 let followerCount = $state(0);
 let editDisplayName = $state(untrack(() => data.profile.display_name ?? ""));
 let editBio = $state(untrack(() => data.profile.bio ?? ""));
+let editProfileId = $state(untrack(() => data.profile.id));
 let profileSubmitting = $state(false);
 let showUserReportModal = $state(false);
 let reportReason = $state("harassment");
@@ -31,6 +32,13 @@ $effect(() => {
 	isFollowing = data.isFollowing;
 	followRequestStatus = data.followRequestStatus;
 	followerCount = data.followCounts.followers;
+});
+
+$effect(() => {
+	if (editProfileId === data.profile.id) return;
+	editProfileId = data.profile.id;
+	editDisplayName = data.profile.display_name ?? "";
+	editBio = data.profile.bio ?? "";
 });
 
 const activeTab = $derived(
