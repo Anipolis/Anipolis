@@ -575,6 +575,13 @@ $effect(() => {
 	grid-template-columns: repeat(5, 1fr);
 	gap: 14px;
 }
+
+@media (max-width: 768px) {
+	.anime-grid {
+		grid-template-columns: repeat(3, 1fr);
+		gap: 10px;
+	}
+}
 .anime-card {
 	display: flex;
 	flex-direction: column;
