@@ -29,6 +29,7 @@ interface Props {
 	initialContent?: string;
 	initialExchangeId?: string | null;
 	initialExchangeShare?: AnimeExchangeShare | null;
+	onsubmitsuccess?: () => void;
 }
 
 let {
@@ -38,6 +39,7 @@ let {
 	initialContent = "",
 	initialExchangeId = null,
 	initialExchangeShare = null,
+	onsubmitsuccess,
 }: Props = $props();
 
 const MAX_LENGTH = 280;
@@ -243,6 +245,7 @@ const handleSubmit: SubmitFunction = () => {
 			selectedAnime = null;
 			clearExchangeShare();
 			await update();
+			onsubmitsuccess?.();
 		}
 	};
 };
