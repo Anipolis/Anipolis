@@ -12,6 +12,7 @@ type RoomStatus = "not_open" | "open" | "ended";
 let now = $state(Date.now());
 let intervalId: ReturnType<typeof setInterval>;
 let postContent = $state("");
+let textareaEl: HTMLTextAreaElement | null = $state(null);
 
 const maxLen = 280;
 const scheduledMs = $derived(new Date(data.room.scheduled_at).getTime());
@@ -36,6 +37,9 @@ onMount(() => {
 	intervalId = setInterval(() => {
 		now = Date.now();
 	}, 1000);
+	if (!("ontouchstart" in window) && textareaEl) {
+		textareaEl.focus();
+	}
 });
 
 onDestroy(() => clearInterval(intervalId));
@@ -91,12 +95,21 @@ function formatDate(iso: string) {
 				<form method="POST" action="?/createPost" use:enhance>
 					<div class="composer-body">
 						<textarea
+							bind:this={textareaEl}
 							class="composer-textarea"
 							name="content"
-							placeholder="#{data.room.hashtag} で実況しよう..."
+							placeholder="#{data.room.hashtag} で実況しよう... (Shift+Enterで改行)"
 							rows="3"
 							bind:value={postContent}
 							maxlength={maxLen}
+							onkeydown={(e) => {
+								if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+									e.preventDefault();
+									if (!overLimit && postContent.trim()) {
+										e.currentTarget.closest('form')?.requestSubmit();
+									}
+								}
+							}}
 						></textarea>
 						<div class="composer-footer">
 							<span class="char-count {overLimit ? 'char-count--over' : ''}">{charCount}/{maxLen}</span>
