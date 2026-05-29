@@ -43,6 +43,8 @@ const displayName = $derived(profile?.display_name || profile?.username || sessi
 
 async function handleLogout() {
 	menuOpen = false;
+	mobileAccountMenuOpen = false;
+	drawerOpen = false;
 	await supabase.auth.signOut();
 	await invalidateAll();
 	await goto("/", { invalidateAll: true });
@@ -52,9 +54,11 @@ let isSwitching = $state(false);
 let switchError = $state<string | null>(null);
 let menuOpen = $state(false);
 let drawerOpen = $state(false);
+let mobileAccountMenuOpen = $state(false);
 
 function closeDrawer() {
 	drawerOpen = false;
+	mobileAccountMenuOpen = false;
 }
 
 async function handleSwitch(userId: string) {
@@ -62,6 +66,7 @@ async function handleSwitch(userId: string) {
 	isSwitching = true;
 	switchError = null;
 	menuOpen = false;
+	mobileAccountMenuOpen = false;
 	try {
 		const res = await fetch("/api/account-switch", {
 			method: "POST",
@@ -240,6 +245,31 @@ function isActive(path: string): boolean {
 		</a>
 
 		{#if session}
+			{#if profile}
+				<a
+					href="/profile/{profile.username}"
+					class="mobile-drawer-btn"
+					class:active={isActive('/profile')}
+					onclick={closeDrawer}
+				>
+					<svg
+						width="20"
+						height="20"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+						<circle cx="12" cy="7" r="4" />
+					</svg>
+					プロフィール
+				</a>
+			{/if}
+
 			<a href="/exchange" class="mobile-drawer-btn" class:active={isActive('/exchange')} onclick={closeDrawer}>
 				<svg
 					width="20"
@@ -325,17 +355,81 @@ function isActive(path: string): boolean {
 
 	{#if session}
 		<div class="mobile-drawer-footer">
-			{#if profile}
-				<a href="/profile/{profile.username}" class="mobile-drawer-profile" onclick={closeDrawer}>
-					<UserAvatar src={profile.avatar_url} username={displayName} size="sm" />
-					<div class="mobile-drawer-profile-info">
-						<span class="mobile-drawer-display">{displayName}</span>
+			<button
+				type="button"
+				class="mobile-drawer-profile mobile-drawer-current-account mobile-drawer-account-toggle"
+				class:active={mobileAccountMenuOpen}
+				aria-label="アカウントメニュー"
+				aria-haspopup="true"
+				aria-expanded={mobileAccountMenuOpen}
+				onclick={() => (mobileAccountMenuOpen = !mobileAccountMenuOpen)}
+			>
+				<UserAvatar src={profile?.avatar_url} username={displayName} size="sm" />
+				<div class="mobile-drawer-profile-info">
+					<span class="mobile-drawer-display">{displayName}</span>
+					{#if profile}
 						<span class="mobile-drawer-username">@{profile.username}</span>
-					</div>
-				</a>
-			{/if}
-			{#if extraAccounts.length < 2}
-				<a href="/auth?mode=add_account" class="mobile-drawer-btn" onclick={closeDrawer}>
+					{/if}
+				</div>
+				<svg
+					class="mobile-drawer-account-check"
+					width="16"
+					height="16"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2.5"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
+					<polyline points="6 15 12 9 18 15" />
+				</svg>
+			</button>
+
+			{#if mobileAccountMenuOpen}
+				{#each extraAccounts as acct (acct.userId)}
+					<button
+						type="button"
+						class="mobile-drawer-btn mobile-drawer-extra-account"
+						onclick={() => { closeDrawer(); handleSwitch(acct.userId); }}
+						disabled={isSwitching}
+					>
+						<UserAvatar
+							src={acct.profile.avatar_url}
+							username={acct.profile.display_name || acct.profile.username}
+							size="sm"
+						/>
+						<div class="mobile-drawer-profile-info">
+							<span class="mobile-drawer-display"
+								>{acct.profile.display_name || acct.profile.username}</span
+							>
+							<span class="mobile-drawer-username">@{acct.profile.username}</span>
+						</div>
+					</button>
+				{/each}
+				{#if extraAccounts.length < 2}
+					<a href="/auth?mode=add_account" class="mobile-drawer-btn" onclick={closeDrawer}>
+						<svg
+							width="20"
+							height="20"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+						>
+							<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+							<circle cx="12" cy="7" r="4" />
+							<line x1="12" y1="14" x2="12" y2="20" />
+							<line x1="9" y1="17" x2="15" y2="17" />
+						</svg>
+						アカウントを追加
+					</a>
+				{/if}
+				<button type="button" class="mobile-drawer-btn mobile-drawer-danger" onclick={handleLogout}>
 					<svg
 						width="20"
 						height="20"
@@ -347,32 +441,13 @@ function isActive(path: string): boolean {
 						stroke-linejoin="round"
 						aria-hidden="true"
 					>
-						<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-						<circle cx="12" cy="7" r="4" />
-						<line x1="12" y1="14" x2="12" y2="20" />
-						<line x1="9" y1="17" x2="15" y2="17" />
+						<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+						<polyline points="16 17 21 12 16 7" />
+						<line x1="21" y1="12" x2="9" y2="12" />
 					</svg>
-					アカウントを追加
-				</a>
+					ログアウト
+				</button>
 			{/if}
-			<button type="button" class="mobile-drawer-btn mobile-drawer-danger" onclick={handleLogout}>
-				<svg
-					width="20"
-					height="20"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-					<polyline points="16 17 21 12 16 7" />
-					<line x1="21" y1="12" x2="9" y2="12" />
-				</svg>
-				ログアウト
-			</button>
 		</div>
 	{:else}
 		<div class="mobile-drawer-footer">
@@ -1014,10 +1089,31 @@ function isActive(path: string): boolean {
 	color: var(--color-text);
 }
 
+.mobile-drawer-current-account {
+	margin: 4px 8px;
+	padding: 12px;
+	border: 1px solid transparent;
+	border-radius: 8px;
+	background: transparent;
+}
+
+.mobile-drawer-account-toggle {
+	width: calc(100% - 16px);
+	font-family: inherit;
+	cursor: pointer;
+	text-align: left;
+}
+
+.mobile-drawer-account-toggle.active {
+	border-color: color-mix(in srgb, var(--color-accent) 34%, var(--color-border));
+	background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+
 .mobile-drawer-profile-info {
 	display: flex;
 	flex-direction: column;
 	min-width: 0;
+	flex: 1;
 }
 
 .mobile-drawer-display {
@@ -1033,8 +1129,25 @@ function isActive(path: string): boolean {
 	color: var(--color-text-muted);
 }
 
+.mobile-drawer-account-check {
+	flex-shrink: 0;
+	color: var(--color-accent);
+	transition: transform 0.12s ease;
+}
+
+.mobile-drawer-account-toggle.active .mobile-drawer-account-check {
+	transform: rotate(180deg);
+}
+
 .mobile-drawer-danger {
 	color: var(--fg-danger, #e05353);
+}
+
+.mobile-drawer-extra-account {
+	background: none;
+	border: none;
+	cursor: pointer;
+	text-align: left;
 }
 
 .mobile-drawer-accent {
