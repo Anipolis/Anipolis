@@ -1,6 +1,7 @@
 <script lang="ts">
 import { enhance } from "$app/forms";
 import AnimeEditRow from "$lib/components/AnimeEditRow.svelte";
+import AnimeStatusSection from "$lib/components/AnimeStatusSection.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import type { Anime, AnimeStatus } from "$lib/types";
 import type { PageProps } from "./$types";
@@ -50,7 +51,7 @@ const grouped = $derived(
 
 const totalCount = $derived(data.animeList.length);
 
-const statCounts = $derived(statusOrder.map((s) => ({ status: s, count: grouped[s].length })));
+let selectedStatus = $state<AnimeStatus>("watching");
 
 // 各エントリのローカル状態（編集用）
 type EntryState = { status: AnimeStatus; score: string; progress: number };
@@ -191,63 +192,62 @@ $effect(() => {
 						</form>
 					</div>
 				</div>
-
-				<div class="mylist-stats">
-					<span class="stat-total">合計 <strong>{totalCount}</strong> 作品</span>
-					{#each statCounts as { status, count }}
-						{#if count > 0}
-							<span class="stat-chip stat-chip--{status}"> {statusLabel[status]} {count} </span>
-						{/if}
-					{/each}
-				</div>
 			</header>
+
+			<!-- モバイル用ステータスタブバー -->
+			<div class="status-tab-bar">
+				{#each statusOrder as status}
+					<button
+						type="button"
+						class="status-tab status-tab--{status}"
+						class:active={selectedStatus === status}
+						onclick={() => (selectedStatus = status)}
+					>
+						<span class="tab-icon">{statusIcon[status]}</span>
+						{statusLabel[status]}
+						<span class="tab-count">{grouped[status].length}</span>
+					</button>
+				{/each}
+			</div>
 
 			{#if totalCount === 0}
 				<div class="mylist-empty">
 					<p>まだアニメがありません。<a href="/anime">アニメを探す</a></p>
 				</div>
 			{:else}
+				{#if grouped[selectedStatus].length === 0}
+					<div class="mobile-status-empty">
+						<p>{statusLabel[selectedStatus]}にはまだ登録がありません</p>
+					</div>
+				{/if}
 				{#each statusOrder as status}
 					{#if grouped[status].length > 0}
-						<section class="status-section status-section--{status}">
-							<h2 class="status-heading">
-								<span class="status-icon">{statusIcon[status]}</span>
-								{statusLabel[status]}
-								<span class="status-count">{grouped[status].length}</span>
-							</h2>
-							<div class="anime-list" class:anime-list--edit={viewMode === 'edit'}>
-								{#each grouped[status] as anime (anime.id)}
-									{@const editRow = editRows[anime.id]}
-									{#if viewMode === 'list'}
-										<!-- 一覧表示 -->
-										<a href="/anime/{anime.id}" class="anime-card">
-											<div class="card-cover">
-												{#if anime.cover_url}
-													<img src={anime.cover_url} alt={anime.title}>
-												{:else}
-													<div class="anime-cover-placeholder">?</div>
-												{/if}
-												{#if anime.user_entry?.score !== null && anime.user_entry?.score !== undefined}
-													<div class="card-score">★ {anime.user_entry.score}</div>
-												{/if}
-											</div>
-											<div class="card-info">
-												<div class="card-title">{anime.title}</div>
-												{#if anime.episode_count}
-													<div class="card-progress">
-														{anime.user_entry?.progress ?? 0}/{anime.episode_count}話
-													</div>
-												{:else if (anime.user_entry?.progress ?? 0) > 0}
-													<div class="card-progress">{anime.user_entry?.progress}話</div>
-												{/if}
-											</div>
-										</a>
-									{:else if editRow}
-										<AnimeEditRow {anime} bind:entry={editRow.entry} {statusOrder} {statusLabel} />
-									{/if}
-								{/each}
-							</div>
-						</section>
+						<div class:mobile-hidden={selectedStatus !== status}>
+							{#if viewMode === 'list'}
+								<AnimeStatusSection {status} animes={grouped[status]} {statusLabel} {statusIcon} />
+							{:else}
+								<section class="status-section status-section--{status}">
+									<h2 class="status-heading">
+										<span class="status-icon">{statusIcon[status]}</span>
+										{statusLabel[status]}
+										<span class="status-count">{grouped[status].length}</span>
+									</h2>
+									<div class="anime-list anime-list--edit">
+										{#each grouped[status] as anime (anime.id)}
+											{@const editRow = editRows[anime.id]}
+											{#if editRow}
+												<AnimeEditRow
+													{anime}
+													bind:entry={editRow.entry}
+													{statusOrder}
+													{statusLabel}
+												/>
+											{/if}
+										{/each}
+									</div>
+								</section>
+							{/if}
+						</div>
 					{/if}
 				{/each}
 			{/if}
@@ -359,57 +359,14 @@ $effect(() => {
 	filter: brightness(1.1);
 }
 
-.mylist-stats {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 8px;
-	font-size: 0.85rem;
-	color: var(--fg-muted, #94a3b8);
-}
-
-.stat-total {
-	margin-right: 4px;
-}
-
-.stat-total strong {
-	color: var(--fg, #e2e8f0);
-}
-
-.stat-chip {
-	padding: 2px 10px;
-	border-radius: 12px;
-	font-size: 0.78rem;
-	font-weight: 600;
-	background: color-mix(in srgb, var(--fg, #e2e8f0) 8%, transparent);
-	color: var(--fg-muted, #94a3b8);
-}
-
-.stat-chip--watching {
-	color: var(--status-watching);
-	background: color-mix(in srgb, var(--status-watching) 15%, transparent);
-}
-.stat-chip--completed {
-	color: var(--accent, #6366f1);
-	background: color-mix(in srgb, var(--accent, #6366f1) 15%, transparent);
-}
-.stat-chip--plan_to_watch {
-	color: var(--status-plan);
-	background: color-mix(in srgb, var(--status-plan) 15%, transparent);
-}
-.stat-chip--on_hold {
-	color: var(--status-on-hold);
-	background: color-mix(in srgb, var(--status-on-hold) 15%, transparent);
-}
-.stat-chip--dropped {
-	color: var(--status-dropped);
-	background: color-mix(in srgb, var(--status-dropped) 15%, transparent);
-}
-
 .mylist-empty {
 	text-align: center;
 	padding: 60px 0;
 	color: var(--fg-muted, #94a3b8);
+}
+
+.mobile-status-empty {
+	display: none;
 }
 
 .mylist-empty a {
@@ -455,90 +412,94 @@ $effect(() => {
 	font-weight: 400;
 }
 
-.anime-list {
-	display: grid;
-	grid-template-columns: repeat(5, 1fr);
-	gap: 12px;
-}
-
 .anime-list--edit {
 	display: flex;
 	flex-direction: column;
 	gap: 4px;
 }
 
-/* ---- 一覧表示（グリッドカード） ---- */
-.anime-card {
-	display: flex;
-	flex-direction: column;
-	border-radius: 8px;
-	overflow: hidden;
-	text-decoration: none;
-	color: inherit;
-	background: var(--surface, #1e293b);
-	transition:
-		transform 0.12s,
-		box-shadow 0.12s;
+/* ---- モバイル用ステータスタブバー ---- */
+.status-tab-bar {
+	display: none;
+	overflow-x: auto;
+	gap: 8px;
+	padding: 0 0 16px;
+	scrollbar-width: none;
+	margin-bottom: 4px;
 }
 
-.anime-card:hover {
-	transform: translateY(-2px);
-	box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+.status-tab-bar::-webkit-scrollbar {
+	display: none;
 }
 
-.card-cover {
-	position: relative;
-	aspect-ratio: 1 / 1.414;
-	background: var(--bg, #0f172a);
-	overflow: hidden;
-}
-
-.card-cover img {
-	width: 100%;
-	display: block;
-}
-
-.anime-cover-placeholder {
-	width: 100%;
-	height: 100%;
-	display: flex;
+.status-tab {
+	display: inline-flex;
 	align-items: center;
-	justify-content: center;
+	gap: 5px;
+	padding: 8px 14px;
+	border-radius: 20px;
+	border: none;
+	cursor: pointer;
+	font-size: 0.82rem;
+	font-weight: 600;
+	background: color-mix(in srgb, var(--fg, #e2e8f0) 8%, transparent);
 	color: var(--fg-muted, #94a3b8);
-	font-size: 1.5rem;
+	transition:
+		background 0.15s,
+		color 0.15s;
+	white-space: nowrap;
+	flex-shrink: 0;
 }
 
-.card-score {
-	position: absolute;
-	bottom: 5px;
-	right: 5px;
-	background: rgba(0, 0, 0, 0.72);
-	color: var(--status-score);
+.status-tab.active {
+	background: color-mix(in srgb, var(--accent, #6366f1) 20%, transparent);
+	color: var(--accent, #6366f1);
+}
+
+.status-tab--watching.active {
+	background: color-mix(in srgb, var(--status-watching) 20%, transparent);
+	color: var(--status-watching);
+}
+
+.status-tab--on_hold.active {
+	background: color-mix(in srgb, var(--status-on-hold) 20%, transparent);
+	color: var(--status-on-hold);
+}
+
+.status-tab--dropped.active {
+	background: color-mix(in srgb, var(--status-dropped) 20%, transparent);
+	color: var(--status-dropped);
+}
+
+.status-tab--plan_to_watch.active {
+	background: color-mix(in srgb, var(--status-plan) 20%, transparent);
+	color: var(--status-plan);
+}
+
+.tab-icon {
+	font-size: 0.75rem;
+}
+
+.tab-count {
 	font-size: 0.72rem;
-	font-weight: 700;
-	padding: 2px 6px;
-	border-radius: 4px;
+	opacity: 0.8;
 }
 
-.card-info {
-	padding: 7px 8px 8px;
-}
+@media (max-width: 600px) {
+	.status-tab-bar {
+		display: flex;
+	}
 
-.card-title {
-	font-size: 0.78rem;
-	font-weight: 500;
-	color: var(--fg, #e2e8f0);
-	overflow: hidden;
-	display: -webkit-box;
-	-webkit-line-clamp: 2;
-	line-clamp: 2;
-	-webkit-box-orient: vertical;
-	line-height: 1.35;
-	margin-bottom: 3px;
-}
+	.mobile-hidden {
+		display: none;
+	}
 
-.card-progress {
-	font-size: 0.7rem;
-	color: var(--fg-muted, #94a3b8);
+	.mobile-status-empty {
+		display: block;
+		text-align: center;
+		padding: 40px 16px;
+		color: var(--fg-muted, #94a3b8);
+		font-size: 0.9rem;
+	}
 }
 </style>

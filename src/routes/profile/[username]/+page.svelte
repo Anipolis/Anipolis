@@ -4,6 +4,7 @@ import { untrack } from "svelte";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
+import AnimeStatusSection from "$lib/components/AnimeStatusSection.svelte";
 import PostCard from "$lib/components/PostCard.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
@@ -22,6 +23,7 @@ let editDisplayName = $state(untrack(() => data.profile.display_name ?? ""));
 let editBio = $state(untrack(() => data.profile.bio ?? ""));
 let editProfileId = $state(untrack(() => data.profile.id));
 let profileSubmitting = $state(false);
+let showProfileEditModal = $state(false);
 let showUserReportModal = $state(false);
 let reportReason = $state("harassment");
 let reportDetails = $state("");
@@ -41,8 +43,9 @@ $effect(() => {
 	editBio = data.profile.bio ?? "";
 });
 
+const requestedTab = $derived(page.url.searchParams.get("tab"));
 const activeTab = $derived(
-	(page.url.searchParams.get("tab") ?? "posts") as "posts" | "images" | "list" | "likes" | "edit",
+	requestedTab === "images" || requestedTab === "list" || requestedTab === "likes" ? requestedTab : "posts",
 );
 const bioRemaining = $derived(160 - editBio.length);
 
@@ -54,9 +57,29 @@ const handleProfileSubmit: SubmitFunction = () => {
 		if (result.type === "success") {
 			editDisplayName = data.profile.display_name ?? "";
 			editBio = data.profile.bio ?? "";
+			showProfileEditModal = false;
 		}
 	};
 };
+
+$effect(() => {
+	if (isOwn && (page.url.searchParams.get("edit") === "profile" || page.url.searchParams.get("tab") === "edit")) {
+		showProfileEditModal = true;
+	}
+});
+
+function openProfileEditModal() {
+	editDisplayName = data.profile.display_name ?? "";
+	editBio = data.profile.bio ?? "";
+	showProfileEditModal = true;
+}
+
+function closeProfileEditModal() {
+	if (profileSubmitting) return;
+	showProfileEditModal = false;
+	editDisplayName = data.profile.display_name ?? "";
+	editBio = data.profile.bio ?? "";
+}
 
 async function submitUserReport() {
 	if (reportSubmitting) return;
@@ -159,13 +182,14 @@ const grouped = $derived(
 				</div>
 
 				{#if isOwn}
-					<a
-						href="/profile/{profile.username}?tab=edit"
+					<button
+						type="button"
 						class="btn btn-outline"
 						style="margin-top: 12px; font-size: 13px;"
+						onclick={openProfileEditModal}
 					>
 						プロフィールを編集
-					</a>
+					</button>
 				{:else if data.user}
 					<div class="profile-actions">
 						<form
@@ -265,6 +289,102 @@ const grouped = $derived(
 			</div>
 		{/if}
 
+		{#if showProfileEditModal && isOwn}
+			<div class="profile-edit-modal-overlay" role="presentation" onclick={closeProfileEditModal}>
+				<div
+					class="profile-edit-modal-card"
+					role="dialog"
+					aria-modal="true"
+					aria-labelledby="profile-edit-title"
+					tabindex="-1"
+					onclick={(event) => event.stopPropagation()}
+					onkeydown={(event) => {
+						event.stopPropagation();
+						if (event.key === "Escape") closeProfileEditModal();
+					}}
+				>
+					<div class="profile-edit-modal-header">
+						<span id="profile-edit-title" class="profile-edit-modal-title">プロフィールを編集</span>
+						<button
+							type="button"
+							class="profile-edit-modal-close"
+							aria-label="閉じる"
+							disabled={profileSubmitting}
+							onclick={closeProfileEditModal}
+						>
+							×
+						</button>
+					</div>
+
+					<form method="POST" action="?/updateProfile" use:enhance={handleProfileSubmit}>
+						<div class="profile-edit-modal-body">
+							{#if form?.success}
+								<div class="flash-success">プロフィールを更新しました。</div>
+							{/if}
+
+							{#if form && 'message' in form && !('field' in form)}
+								<div class="flash-error">{form.message}</div>
+							{/if}
+
+							<div class="field">
+								<label for="display_name" class="field-label">表示名</label>
+								<input
+									id="display_name"
+									name="display_name"
+									type="text"
+									class="field-input"
+									class:field-error={form && 'field' in form && form.field === 'display_name'}
+									placeholder="アニメ太郎"
+									maxlength="50"
+									bind:value={editDisplayName}
+								>
+								{#if form && 'field' in form && form.field === 'display_name'}
+									<p class="field-error-msg">{form.message}</p>
+								{:else}
+									<p class="field-hint">タイムラインやプロフィールで表示される名前です。</p>
+								{/if}
+							</div>
+
+							<div class="field">
+								<label for="bio" class="field-label">自己紹介</label>
+								<textarea
+									id="bio"
+									name="bio"
+									class="field-textarea"
+									class:field-error={form && 'field' in form && form.field === 'bio'}
+									placeholder="好きな作品や今見ているアニメなど"
+									rows="3"
+									maxlength="160"
+									bind:value={editBio}
+								></textarea>
+								<p class="field-hint" class:danger={bioRemaining < 0}>
+									{#if form && 'field' in form && form.field === 'bio'}
+										{form.message}
+									{:else}
+										残り {bioRemaining} 文字
+									{/if}
+								</p>
+							</div>
+						</div>
+
+						<div class="profile-edit-modal-footer">
+							<button
+								type="button"
+								class="btn btn-ghost"
+								disabled={profileSubmitting}
+								onclick={closeProfileEditModal}
+							>
+								キャンセル
+							</button>
+							<button type="submit" class="btn btn-primary" disabled={profileSubmitting}>
+								{profileSubmitting ? '保存中...' : '保存する'}
+							</button>
+						</div>
+					</form>
+				</div>
+			</div>
+		{/if}
+
 		<!-- タブ -->
 		<div class="profile-tabs">
 			<a href="/profile/{profile.username}" class="profile-tab" class:active={activeTab === 'posts'}>投稿</a>
@@ -280,11 +400,6 @@ const grouped = $derived(
 			{#if isOwn}
 				<a href="/profile/{profile.username}?tab=likes" class="profile-tab" class:active={activeTab === 'likes'}
 					>いいね</a
-				>
-			{/if}
-			{#if isOwn}
-				<a href="/profile/{profile.username}?tab=edit" class="profile-tab" class:active={activeTab === 'edit'}
-					>編集</a
 				>
 			{/if}
 		</div>
@@ -360,47 +475,13 @@ const grouped = $derived(
 
 				{#each statusOrder as status}
 					{#if grouped[status].length > 0}
-						<section class="status-section status-section--{status}">
-							<h3 class="status-heading">
-								<span class="status-icon">{statusIcon[status]}</span>
-								{statusLabel[status]}
-								<span class="status-count">{grouped[status].length}</span>
-							</h3>
-							<div class="anime-list">
-								{#each grouped[status] as anime (anime.id)}
-									<a href="/anime/{anime.id}" class="anime-row">
-										<div class="anime-cover">
-											{#if anime.cover_url}
-												<img src={anime.cover_url} alt={anime.title}>
-											{:else}
-												<div class="anime-cover-placeholder">?</div>
-											{/if}
-										</div>
-										<div class="anime-info">
-											<div class="anime-title">{anime.title}</div>
-											<div class="anime-meta">
-												{#if anime.episode_count}
-													<span class="meta-progress"
-														>{anime.user_entry?.progress ?? 0}
-														/ {anime.episode_count} 話</span
-													>
-												{:else if (anime.user_entry?.progress ?? 0) > 0}
-													<span class="meta-progress">{anime.user_entry?.progress} 話</span>
-												{/if}
-												{#if anime.user_entry?.score !== null && anime.user_entry?.score !== undefined}
-													<span class="meta-score">★ {anime.user_entry.score}</span>
-												{/if}
-											</div>
-										</div>
-										{#if anime.user_entry?.updated_at}
-											<div class="anime-updated">
-												{new Date(anime.user_entry.updated_at).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' })}
-											</div>
-										{/if}
-									</a>
-								{/each}
-							</div>
-						</section>
+						<AnimeStatusSection
+							{status}
+							animes={grouped[status]}
+							{statusLabel}
+							{statusIcon}
+							headingLevel={3}
+						/>
 					{/if}
 				{/each}
 			{/if}
@@ -421,72 +502,6 @@ const grouped = $derived(
 					<PostCard {post} currentUserId={data.user?.id ?? null} />
 				{/each}
 			{/if}
-		{/if}
-
-		<!-- 編集タブ -->
-		{#if activeTab === 'edit' && isOwn}
-			<section class="profile-edit-panel">
-				{#if form?.success}
-					<div class="flash-success">プロフィールを更新しました。</div>
-				{/if}
-
-				{#if form && 'message' in form && !('field' in form)}
-					<div class="flash-error">{form.message}</div>
-				{/if}
-
-				<form method="POST" action="?/updateProfile" use:enhance={handleProfileSubmit}>
-					<div class="field">
-						<label for="display_name" class="field-label">表示名</label>
-						<input
-							id="display_name"
-							name="display_name"
-							type="text"
-							class="field-input"
-							class:field-error={form && 'field' in form && form.field === 'display_name'}
-							placeholder="アニメ太郎"
-							maxlength="50"
-							bind:value={editDisplayName}
-						>
-						{#if form && 'field' in form && form.field === 'display_name'}
-							<p class="field-error-msg">{form.message}</p>
-						{:else}
-							<p class="field-hint">タイムラインやプロフィールで表示される名前です。</p>
-						{/if}
-					</div>
-
-					<div class="field">
-						<label for="bio" class="field-label">自己紹介</label>
-						<textarea
-							id="bio"
-							name="bio"
-							class="field-textarea"
-							class:field-error={form && 'field' in form && form.field === 'bio'}
-							placeholder="好きな作品や今見ているアニメなど"
-							rows="3"
-							maxlength="160"
-							bind:value={editBio}
-						></textarea>
-						<p class="field-hint" class:danger={bioRemaining < 0}>
-							{#if form && 'field' in form && form.field === 'bio'}
-								{form.message}
-							{:else}
-								残り {bioRemaining} 文字
-							{/if}
-						</p>
-					</div>
-
-					<div class="profile-edit-actions">
-						<a href="/profile/{profile.username}" class="btn btn-ghost">キャンセル</a>
-						<button type="submit" class="btn btn-primary" disabled={profileSubmitting}>
-							{profileSubmitting ? '保存中...' : '保存する'}
-						</button>
-					</div>
-				</form>
-			</section>
-		{:else if activeTab === 'edit'}
-			<div class="empty-state">
-				<p>プロフィール編集は本人だけが利用できます。</p>
-			</div>
 		{/if}
 	</main>
 
@@ -552,10 +567,6 @@ const grouped = $derived(
 	color: var(--accent, #6366f1);
 	border-bottom-color: var(--accent, #6366f1);
 	font-weight: 700;
-}
-
-.profile-edit-panel {
-	padding: 20px 4px;
 }
 
 .report-modal-overlay {
@@ -653,11 +664,75 @@ const grouped = $derived(
 	font-size: 13px;
 }
 
-.profile-edit-actions {
+.profile-edit-modal-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 100;
 	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 16px;
+	background: rgb(15 23 42 / 0.68);
+}
+
+.profile-edit-modal-card {
+	width: min(100%, 520px);
+	max-height: calc(100vh - 32px);
+	overflow: auto;
+	border: 1px solid var(--color-border, var(--border, #334155));
+	border-radius: 8px;
+	background: var(--color-surface, var(--surface, #1e293b));
+	box-shadow: 0 24px 60px rgb(0 0 0 / 0.36);
+}
+
+.profile-edit-modal-header,
+.profile-edit-modal-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 12px 14px;
+	border-bottom: 1px solid var(--color-border, var(--border, #334155));
+}
+
+.profile-edit-modal-footer {
 	justify-content: flex-end;
-	gap: 10px;
-	margin-top: 18px;
+	border-top: 1px solid var(--color-border, var(--border, #334155));
+	border-bottom: 0;
+}
+
+.profile-edit-modal-title {
+	font-size: 15px;
+	font-weight: 800;
+}
+
+.profile-edit-modal-close {
+	width: 32px;
+	height: 32px;
+	border: 0;
+	border-radius: 999px;
+	background: transparent;
+	color: var(--color-text-muted, var(--fg-muted, #94a3b8));
+	cursor: pointer;
+	font-size: 20px;
+	line-height: 1;
+}
+
+.profile-edit-modal-close:hover:not(:disabled) {
+	background: var(--color-border, var(--border, #334155));
+	color: var(--color-text, var(--fg, #e2e8f0));
+}
+
+.profile-edit-modal-close:disabled {
+	cursor: not-allowed;
+	opacity: 0.55;
+}
+
+.profile-edit-modal-body {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	padding: 14px;
 }
 
 .tab-lock {
@@ -701,127 +776,5 @@ const grouped = $derived(
 
 .list-manage-link:hover {
 	text-decoration: underline;
-}
-
-.status-section {
-	margin-bottom: 24px;
-}
-
-.status-heading {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	font-size: 0.85rem;
-	font-weight: 700;
-	padding: 8px 4px;
-	margin: 0 0 4px;
-	border-bottom: 1px solid var(--border, #334155);
-	color: var(--fg, #e2e8f0);
-}
-
-.status-section--watching .status-icon {
-	color: var(--status-watching);
-}
-.status-section--completed .status-icon {
-	color: var(--accent, #6366f1);
-}
-.status-section--plan_to_watch .status-icon {
-	color: var(--status-plan);
-}
-.status-section--on_hold .status-icon {
-	color: var(--status-on-hold);
-}
-.status-section--dropped .status-icon {
-	color: var(--status-dropped);
-}
-
-.status-count {
-	margin-left: auto;
-	font-size: 0.75rem;
-	color: var(--fg-muted, #94a3b8);
-	font-weight: 400;
-}
-
-.anime-list {
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
-}
-
-.anime-row {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	padding: 6px 8px;
-	border-radius: 6px;
-	text-decoration: none;
-	color: inherit;
-	transition: background 0.12s;
-}
-
-.anime-row:hover {
-	background: color-mix(in srgb, var(--fg, #e2e8f0) 6%, transparent);
-}
-
-.anime-cover {
-	width: 36px;
-	aspect-ratio: 2 / 3;
-	border-radius: 3px;
-	overflow: hidden;
-	flex-shrink: 0;
-	background: var(--surface, #1e293b);
-}
-
-.anime-cover img {
-	width: 100%;
-	height: auto;
-	image-rendering: auto;
-}
-
-.anime-cover-placeholder {
-	width: 100%;
-	height: 100%;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	color: var(--fg-muted, #94a3b8);
-}
-
-.anime-info {
-	flex: 1;
-	min-width: 0;
-}
-
-.anime-title {
-	font-size: 0.85rem;
-	font-weight: 500;
-	color: var(--fg, #e2e8f0);
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	margin-bottom: 3px;
-}
-
-.anime-meta {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	font-size: 0.75rem;
-}
-
-.meta-progress {
-	color: var(--fg-muted, #94a3b8);
-}
-
-.meta-score {
-	color: var(--status-score);
-	font-weight: 600;
-}
-
-.anime-updated {
-	font-size: 0.72rem;
-	color: var(--fg-muted, #94a3b8);
-	flex-shrink: 0;
-	white-space: nowrap;
 }
 </style>
