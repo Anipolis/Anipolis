@@ -200,7 +200,7 @@ export const actions: Actions = {
 			.eq("linked_user_id", targetUserId)
 			.maybeSingle();
 
-		if (existingLink) {
+		if (existingLink && getExtraAccounts(cookies).some((a) => a.userId === targetUserId)) {
 			await supabase.auth.refreshSession({ refresh_token: ownerRefreshToken });
 			return fail(400, { mode: "add_account", message: "このアカウントはすでに追加されています" });
 		}
