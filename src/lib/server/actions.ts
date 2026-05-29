@@ -797,7 +797,10 @@ export async function upsertBroadcastRoomMute(
 		},
 		{ onConflict: "user_id,anime_id" },
 	);
-	if (error) return fail(500, { message: "ルームのミュート設定に失敗しました" });
+	if (error) {
+		console.error("broadcast room mute upsert error:", error);
+		return fail(500, { message: "ルームのミュート設定に失敗しました" });
+	}
 	return { roomMuteSuccess: true };
 }
 
