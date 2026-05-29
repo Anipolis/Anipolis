@@ -24,6 +24,47 @@ function getDisplayDayOrder(): number[] {
 	const today = new Date().getDay();
 	return Array.from({ length: 7 }, (_, i) => (today - 3 + i + 7) % 7);
 }
+
+function parseDateInput(value: string): Date {
+	return new Date(`${value}T00:00:00`);
+}
+
+function toDateInputValue(date: Date): string {
+	const y = date.getFullYear();
+	const m = String(date.getMonth() + 1).padStart(2, "0");
+	const d = String(date.getDate()).padStart(2, "0");
+	return `${y}-${m}-${d}`;
+}
+
+function addDays(date: Date, days: number): Date {
+	const next = new Date(date);
+	next.setDate(next.getDate() + days);
+	return next;
+}
+
+function getDisplayDateForDay(dayIdx: number, fallbackDate: string): string {
+	const centerDayIdx = getDefaultDayIndex();
+	const displayPos = getDisplayDayOrder().indexOf(dayIdx);
+	if (displayPos === -1) return fallbackDate;
+
+	const centerDate = addDays(parseDateInput(data.weekStart), centerDayIdx);
+	return toDateInputValue(addDays(centerDate, displayPos - 3));
+}
+
+function getDisplayDayItems() {
+	return getDisplayDayOrder()
+		.map((dayIdx) => {
+			const day = data.days[dayIdx];
+			if (!day) return null;
+			return {
+				dayIdx,
+				day,
+				date: getDisplayDateForDay(dayIdx, day.date),
+			};
+		})
+		.filter((item): item is NonNullable<typeof item> => item !== null);
+}
+
 let selectedDayIndex = $state(getDefaultDayIndex());
 let dayTabBar = $state<HTMLElement | null>(null);
 
@@ -285,29 +326,27 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 	{/if}
 
 	<div class="day-tab-bar" aria-label="日付選択" bind:this={dayTabBar}>
-		{#each getDisplayDayOrder() as dayIdx}
-			{@const day = data.days[dayIdx]}
-			{#if day}
-				<button
-					type="button"
-					class="day-tab"
-					class:day-tab--active={selectedDayIndex === dayIdx}
-					onclick={() => (selectedDayIndex = dayIdx)}
-					aria-pressed={selectedDayIndex === dayIdx}
-				>
-					<span class="day-tab-label" style="color: {DAY_COLOR[dayIdx]}">{day.label}</span>
-					<span class="day-tab-date">{formatShortDate(day.date)}</span>
-				</button>
-			{/if}
+		{#each getDisplayDayItems() as item}
+			<button
+				type="button"
+				class="day-tab"
+				class:day-tab--active={selectedDayIndex === item.dayIdx}
+				onclick={() => (selectedDayIndex = item.dayIdx)}
+				aria-pressed={selectedDayIndex === item.dayIdx}
+			>
+				<span class="day-tab-label" style="color: {DAY_COLOR[item.dayIdx]}">{item.day.label}</span>
+				<span class="day-tab-date">{formatShortDate(item.date)}</span>
+			</button>
 		{/each}
 	</div>
 
 	<div class="schedule-grid">
 		{#each data.days as day, d}
+			{@const displayDate = d === selectedDayIndex ? getDisplayDateForDay(d, day.date) : day.date}
 			<div class="day-col" class:day-col--selected={d === selectedDayIndex}>
 				<div class="day-heading" style="color: {DAY_COLOR[d]}; background: {DAY_BG[d]}">
 					<span>{day.label}曜日</span>
-					<time>{formatDate(day.date)}</time>
+					<time>{formatDate(displayDate)}</time>
 				</div>
 				<div class="day-slots">
 					{#if day.events.length === 0 && day.anime.length === 0}
@@ -331,13 +370,13 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 							{@const isNotifying = notifyingIds.has(anime.id)}
 							{@const isMuted = mutedAnimeIds.has(anime.id)}
 							{@const subscribable = canSubscribe(anime)}
-							{@const ep = currentEpisodeForSlot(anime, day.date)}
+							{@const ep = currentEpisodeForSlot(anime, displayDate)}
 							<div
 								class="anime-slot-wrap"
 								class:anime-slot-wrap--notifying={isNotifying}
-								class:anime-slot-wrap--menu-open={openAlertMenu === alertKey(anime.id, day.date)}
+								class:anime-slot-wrap--menu-open={openAlertMenu === alertKey(anime.id, displayDate)}
 							>
-								<a href="/rooms/anime/{anime.id}/{day.date}" class="anime-slot">
+								<a href="/rooms/anime/{anime.id}/{displayDate}" class="anime-slot">
 									<div class="slot-cover-wrap">
 										{#if anime.cover_url}
 											<img src={anime.cover_url} alt={anime.title} class="slot-cover">
@@ -370,9 +409,9 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 											class:notify-btn--muted={isMuted}
 											title="通知またはミュートを設定"
 											aria-label="通知またはミュートを設定"
-											aria-expanded={openAlertMenu === alertKey(anime.id, day.date)}
+											aria-expanded={openAlertMenu === alertKey(anime.id, displayDate)}
 											onclick={() => {
-												const key = alertKey(anime.id, day.date);
+												const key = alertKey(anime.id, displayDate);
 												openAlertMenu = openAlertMenu === key ? null : key;
 											}}
 										>
@@ -406,7 +445,7 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 												</svg>
 											{/if}
 										</button>
-										{#if openAlertMenu === alertKey(anime.id, day.date)}
+										{#if openAlertMenu === alertKey(anime.id, displayDate)}
 											<div class="room-alert-menu" aria-label="ルーム設定">
 												{#if subscribable}
 													<form
@@ -431,7 +470,7 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 													use:enhance={muteSubmit}
 												>
 													<input type="hidden" name="anime_id" value={anime.id}>
-													<input type="hidden" name="room_date" value={day.date}>
+													<input type="hidden" name="room_date" value={displayDate}>
 													<button
 														type="submit"
 														class="alert-choice"
