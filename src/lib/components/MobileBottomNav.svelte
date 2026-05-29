@@ -200,12 +200,14 @@ function isActive(path: string): boolean {
 	position: fixed;
 	bottom: 0;
 	left: 0;
-	right: 0;
+	width: 100vw;
+	max-width: 100vw;
 	height: 56px;
 	padding-bottom: env(safe-area-inset-bottom);
 	background: var(--color-bg);
 	border-top: 1px solid var(--color-border);
 	z-index: 150;
+	overflow-x: clip;
 }
 
 .mobile-tab {

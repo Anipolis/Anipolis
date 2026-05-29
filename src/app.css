@@ -72,6 +72,8 @@
 
 html {
 	-webkit-text-size-adjust: 100%;
+	width: 100%;
+	overflow-x: clip;
 }
 
 body {
@@ -82,6 +84,8 @@ body {
 	font-size: 15px;
 	line-height: 1.6;
 	min-height: 100vh;
+	width: 100%;
+	overflow-x: clip;
 }
 
 a {
@@ -115,17 +119,22 @@ textarea {
 	display: flex;
 	flex-direction: row;
 	min-height: 100vh;
+	width: 100%;
+	max-width: 100vw;
+	overflow-x: clip;
 }
 
 .app-main {
 	flex: 1;
 	min-width: 0;
+	max-width: 100vw;
 	display: flex;
 	flex-direction: column;
 	padding-left: var(--icon-bar-width);
 }
 
 .page-container {
+	width: 100%;
 	max-width: var(--content-max);
 	margin: 0 auto;
 	padding: 0;
@@ -161,6 +170,8 @@ textarea {
 		padding: 0 12px;
 		padding-top: calc(52px + 12px);
 		padding-bottom: 80px;
+		max-width: 100vw;
+		overflow-x: clip;
 	}
 }
 
