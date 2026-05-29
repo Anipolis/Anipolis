@@ -17,6 +17,29 @@ let mutedAnimeIds = $state(new Set<string>(untrack(() => data.mutedAnimeIds)));
 // Which anime are currently in their notification window (client-side highlight)
 let notifyingIds = $state(new Set<string>());
 
+function getDefaultDayIndex(): number {
+	return new Date().getDay(); // 0=日〜6=土
+}
+function getDisplayDayOrder(): number[] {
+	const today = new Date().getDay();
+	return Array.from({ length: 7 }, (_, i) => (today - 3 + i + 7) % 7);
+}
+let selectedDayIndex = $state(getDefaultDayIndex());
+let dayTabBar = $state<HTMLElement | null>(null);
+
+$effect(() => {
+	const idx = selectedDayIndex;
+	if (!dayTabBar) return;
+	const displayPos = getDisplayDayOrder().indexOf(idx);
+	const tabs = dayTabBar.querySelectorAll<HTMLElement>(".day-tab");
+	const activeTab = tabs[displayPos];
+	if (!activeTab) return;
+	const barRect = dayTabBar.getBoundingClientRect();
+	const tabRect = activeTab.getBoundingClientRect();
+	const tabCenterInBar = tabRect.left - barRect.left + dayTabBar.scrollLeft + tabRect.width / 2;
+	dayTabBar.scrollLeft = Math.max(0, tabCenterInBar - barRect.width / 2);
+});
+
 const DAY_BG = ["#fff1f0", "#f4f7ff", "#f4f7ff", "#f4f7ff", "#f4f7ff", "#f4f7ff", "#eff8ff"];
 const DAY_COLOR = ["#dc2626", "#334155", "#334155", "#334155", "#334155", "#334155", "#2563eb"];
 
@@ -30,8 +53,18 @@ $effect(() => {
 	mutedAnimeIds = new Set<string>(data.mutedAnimeIds);
 });
 
+$effect(() => {
+	data.weekStart;
+	selectedDayIndex = getDefaultDayIndex();
+});
+
 function formatDate(value: string) {
 	return new Date(`${value}T00:00:00`).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" });
+}
+
+function formatShortDate(value: string): string {
+	const d = new Date(`${value}T00:00:00`);
+	return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
 function formatTime(iso: string) {
@@ -251,9 +284,27 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 		<p class="form-error schedule-flash">{form.message}</p>
 	{/if}
 
+	<div class="day-tab-bar" aria-label="日付選択" bind:this={dayTabBar}>
+		{#each getDisplayDayOrder() as dayIdx}
+			{@const day = data.days[dayIdx]}
+			{#if day}
+				<button
+					type="button"
+					class="day-tab"
+					class:day-tab--active={selectedDayIndex === dayIdx}
+					onclick={() => (selectedDayIndex = dayIdx)}
+					aria-pressed={selectedDayIndex === dayIdx}
+				>
+					<span class="day-tab-label" style="color: {DAY_COLOR[dayIdx]}">{day.label}</span>
+					<span class="day-tab-date">{formatShortDate(day.date)}</span>
+				</button>
+			{/if}
+		{/each}
+	</div>
+
 	<div class="schedule-grid">
 		{#each data.days as day, d}
-			<div class="day-col">
+			<div class="day-col" class:day-col--selected={d === selectedDayIndex}>
 				<div class="day-heading" style="color: {DAY_COLOR[d]}; background: {DAY_BG[d]}">
 					<span>{day.label}曜日</span>
 					<time>{formatDate(day.date)}</time>
@@ -631,6 +682,7 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 	display: flex;
 	align-items: flex-start;
 	gap: 7px;
+	height: 76px;
 	padding: 6px;
 	border-radius: 6px;
 	border: 1px solid var(--border);
@@ -640,6 +692,7 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 	transition: background 0.12s;
 	width: 100%;
 	box-sizing: border-box;
+	overflow: hidden;
 }
 .anime-slot-wrap .anime-slot {
 	border: none;
@@ -692,6 +745,7 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 	display: flex;
 	flex-direction: column;
 	gap: 2px;
+	min-width: 0;
 	overflow: hidden;
 }
 .slot-kind {
@@ -711,10 +765,12 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 	color: var(--text);
 	line-height: 1.3;
 	display: -webkit-box;
-	-webkit-line-clamp: 3;
-	line-clamp: 3;
+	-webkit-line-clamp: 2;
+	line-clamp: 2;
 	-webkit-box-orient: vertical;
 	overflow: hidden;
+	text-overflow: ellipsis;
+	word-break: break-word;
 }
 .slot-station {
 	font-size: 0.7rem;
@@ -927,6 +983,9 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 	font-size: 0.8rem;
 	margin: 0 0 8px;
 }
+.day-tab-bar {
+	display: none;
+}
 
 @media (max-width: 760px) {
 	.schedule-header {
@@ -953,7 +1012,51 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 		justify-content: center;
 	}
 	.schedule-grid {
-		grid-template-columns: repeat(2, 1fr);
+		grid-template-columns: 1fr;
+	}
+	.day-col {
+		display: none;
+	}
+	.day-col--selected {
+		display: block;
+	}
+	.day-tab-bar {
+		display: flex;
+		overflow-x: auto;
+		scrollbar-width: none;
+		gap: 0;
+		border-bottom: 1px solid var(--border);
+		margin: 0 0 12px;
+		-webkit-overflow-scrolling: touch;
+	}
+	.day-tab-bar::-webkit-scrollbar {
+		display: none;
+	}
+	.day-tab {
+		flex: 0 0 calc(100% / 4.5);
+		padding: 10px 4px 8px;
+		text-align: center;
+		background: none;
+		border: none;
+		border-bottom: 3px solid transparent;
+		cursor: pointer;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 2px;
+		color: var(--text-muted);
+		transition: border-color 0.15s;
+	}
+	.day-tab--active {
+		border-bottom-color: var(--accent, #6366f1);
+		color: var(--text);
+	}
+	.day-tab-label {
+		font-size: 0.78rem;
+		font-weight: 700;
+	}
+	.day-tab-date {
+		font-size: 0.72rem;
 	}
 }
 </style>
