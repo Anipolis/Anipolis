@@ -266,183 +266,184 @@ const handleRecommendSubmit: SubmitFunction = () => {
 	<a href="/anime" class="back-link">← アニメ一覧</a>
 
 	<div class="anime-layout">
+		<div class="title-block">
+			<h1 class="anime-title">{data.anime.title}</h1>
+			{#if data.anime.title_en}
+				<p class="anime-title-en">{data.anime.title_en}</p>
+			{/if}
+			<div class="meta-row">
+				<span class="status-badge status-{data.anime.computed_broadcast_status}">
+					{broadcastLabels[data.anime.computed_broadcast_status] ?? data.anime.computed_broadcast_status}
+				</span>
+				{#if data.anime.type}
+					<span class="meta-chip">{data.anime.type}</span>
+				{/if}
+				{#if data.anime.season}
+					<a href="/anime?season={encodeURIComponent(data.anime.season)}" class="meta-chip meta-chip--link"
+						>{data.anime.season}</a
+					>
+				{/if}
+				{#if data.anime.episode_count}
+					<span class="meta-chip">{data.anime.episode_count}話</span>
+				{/if}
+				{#if data.anime.aired_from}
+					<span class="meta-chip aired">
+						{formatAiredPeriod(data.anime.aired_from, data.anime.aired_to)}
+					</span>
+				{/if}
+			</div>
+		</div>
+
 		<!-- Left: Cover + production info -->
 		<aside class="left-panel">
-			<div class="anime-cover">
-				{#if coverUrl}
-					<img src={coverUrl} alt={data.anime.title}>
-				{:else}
-					<div class="anime-cover-placeholder">
-						<svg
-							width="56"
-							height="56"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="1.5"
-							aria-hidden="true"
-						>
-							<rect x="2" y="2" width="20" height="20" rx="2" />
-							<path d="M10 8l6 4-6 4V8z" />
-						</svg>
-					</div>
-				{/if}
-				{#if data.isAdmin}
-					<label class="cover-upload-btn" title="カバー画像を変更" class:uploading={coverUploading}>
-						{#if coverUploading}
-							<span>...</span>
-						{:else}
+			<div class="cover-col">
+				<div class="anime-cover">
+					{#if coverUrl}
+						<img src={coverUrl} alt={data.anime.title}>
+					{:else}
+						<div class="anime-cover-placeholder">
 							<svg
-								width="16"
-								height="16"
+								width="56"
+								height="56"
 								viewBox="0 0 24 24"
 								fill="none"
 								stroke="currentColor"
-								stroke-width="2"
+								stroke-width="1.5"
 								aria-hidden="true"
 							>
-								<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-								<polyline points="17 8 12 3 7 8" />
-								<line x1="12" y1="3" x2="12" y2="15" />
+								<rect x="2" y="2" width="20" height="20" rx="2" />
+								<path d="M10 8l6 4-6 4V8z" />
 							</svg>
-						{/if}
-						<input
-							type="file"
-							accept="image/jpeg,image/png,image/webp"
-							onchange={uploadCover}
-							disabled={coverUploading}
-						>
-					</label>
+						</div>
+					{/if}
+					{#if data.isAdmin}
+						<label class="cover-upload-btn" title="カバー画像を変更" class:uploading={coverUploading}>
+							{#if coverUploading}
+								<span>...</span>
+							{:else}
+								<svg
+									width="16"
+									height="16"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									aria-hidden="true"
+								>
+									<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+									<polyline points="17 8 12 3 7 8" />
+									<line x1="12" y1="3" x2="12" y2="15" />
+								</svg>
+							{/if}
+							<input
+								type="file"
+								accept="image/jpeg,image/png,image/webp"
+								onchange={uploadCover}
+								disabled={coverUploading}
+							>
+						</label>
+					{/if}
+				</div>
+				{#if data.anime.copyright}
+					<p class="copyright-notice">{data.anime.copyright}</p>
 				{/if}
 			</div>
-			{#if coverError}
-				<p class="cover-error">{coverError}</p>
-			{/if}
+			<div class="left-panel-info">
+				{#if coverError}
+					<p class="cover-error">{coverError}</p>
+				{/if}
 
-			{#if data.anime.copyright}
-				<p class="copyright-notice">{data.anime.copyright}</p>
-			{/if}
-
-			<!-- Production info below cover -->
-			{#if displayStudios.length || data.anime.producer?.length || data.anime.source || displayGenres.length || data.anime.official_hashtag?.length || displayOfficialLinks.length}
-				<dl class="prod-info">
-					{#if displayStudios.length}
-						<div class="prod-row prod-row--wrap">
-							<dt>スタジオ</dt>
-							<dd class="genre-list">
-								{#each displayStudios as s}
-									<a href="/anime?studio={encodeURIComponent(s)}" class="genre-chip">{s}</a>
-								{/each}
-							</dd>
+				<!-- Production info below cover -->
+				{#if displayStudios.length || data.anime.producer?.length || data.anime.source || displayGenres.length || data.anime.official_hashtag?.length || displayOfficialLinks.length}
+					<dl class="prod-info">
+						{#if displayStudios.length}
+							<div class="prod-row prod-row--wrap">
+								<dt>スタジオ</dt>
+								<dd class="genre-list">
+									{#each displayStudios as s}
+										<a href="/anime?studio={encodeURIComponent(s)}" class="genre-chip">{s}</a>
+									{/each}
+								</dd>
+							</div>
+						{/if}
+						{#if data.anime.producer?.length}
+							<div class="prod-row prod-row--wrap">
+								<dt>制作</dt>
+								<dd class="genre-list">
+									{#each data.anime.producer as p}
+										<a href="/anime?producer={encodeURIComponent(p)}" class="genre-chip">{p}</a>
+									{/each}
+								</dd>
+							</div>
+						{/if}
+						{#if data.anime.source}
+							<div class="prod-row">
+								<dt>原作</dt>
+								<dd>{data.anime.source}</dd>
+							</div>
+						{/if}
+						{#if displayGenres.length}
+							<div class="prod-row prod-row--wrap">
+								<dt>ジャンル</dt>
+								<dd class="genre-list">
+									{#each displayGenres as g}
+										<a href="/anime?genre={encodeURIComponent(g)}" class="genre-chip">{g}</a>
+									{/each}
+								</dd>
+							</div>
+						{/if}
+						{#if data.anime.official_hashtag?.length}
+							<div class="prod-row prod-row--wrap">
+								<dt>ハッシュタグ</dt>
+								<dd class="genre-list">
+									{#each data.anime.official_hashtag as tag}
+										<a href="/hashtag/{tag.replace(/^#/, '')}" class="hashtag-link"
+											>#{tag.replace(/^#/, '')}</a
+										>
+									{/each}
+								</dd>
+							</div>
+						{/if}
+						{#if displayOfficialLinks.length}
+							<div class="prod-row prod-row--wrap">
+								<dt>公式リンク</dt>
+								<dd class="links-list">
+									{#each displayOfficialLinks as resource (resource.url)}
+										<a
+											href={resource.url}
+											target="_blank"
+											rel="noopener noreferrer"
+											class="official-link"
+											>{resource.name}</a
+										>
+									{/each}
+								</dd>
+							</div>
+						{/if}
+					</dl>
+				{/if}
+				{#if displayResources.length}
+					<div class="resource-links">
+						<div class="resource-links-title">Resources</div>
+						<div class="links-list">
+							{#each displayResources as resource (resource.url)}
+								<a
+									href={resource.url}
+									target="_blank"
+									rel="noopener noreferrer"
+									class:resource-link--muted={resource.name === 'MAL'}
+									class="official-link resource-link"
+									>{resource.name}</a
+								>
+							{/each}
 						</div>
-					{/if}
-					{#if data.anime.producer?.length}
-						<div class="prod-row prod-row--wrap">
-							<dt>制作</dt>
-							<dd class="genre-list">
-								{#each data.anime.producer as p}
-									<a href="/anime?producer={encodeURIComponent(p)}" class="genre-chip">{p}</a>
-								{/each}
-							</dd>
-						</div>
-					{/if}
-					{#if data.anime.source}
-						<div class="prod-row">
-							<dt>原作</dt>
-							<dd>{data.anime.source}</dd>
-						</div>
-					{/if}
-					{#if displayGenres.length}
-						<div class="prod-row prod-row--wrap">
-							<dt>ジャンル</dt>
-							<dd class="genre-list">
-								{#each displayGenres as g}
-									<a href="/anime?genre={encodeURIComponent(g)}" class="genre-chip">{g}</a>
-								{/each}
-							</dd>
-						</div>
-					{/if}
-					{#if data.anime.official_hashtag?.length}
-						<div class="prod-row prod-row--wrap">
-							<dt>ハッシュタグ</dt>
-							<dd class="genre-list">
-								{#each data.anime.official_hashtag as tag}
-									<a href="/hashtag/{tag.replace(/^#/, '')}" class="hashtag-link"
-										>#{tag.replace(/^#/, '')}</a
-									>
-								{/each}
-							</dd>
-						</div>
-					{/if}
-					{#if displayOfficialLinks.length}
-						<div class="prod-row prod-row--wrap">
-							<dt>公式リンク</dt>
-							<dd class="links-list">
-								{#each displayOfficialLinks as resource (resource.url)}
-									<a
-										href={resource.url}
-										target="_blank"
-										rel="noopener noreferrer"
-										class="official-link"
-										>{resource.name}</a
-									>
-								{/each}
-							</dd>
-						</div>
-					{/if}
-				</dl>
-			{/if}
-			{#if displayResources.length}
-				<div class="resource-links">
-					<div class="resource-links-title">Resources</div>
-					<div class="links-list">
-						{#each displayResources as resource (resource.url)}
-							<a
-								href={resource.url}
-								target="_blank"
-								rel="noopener noreferrer"
-								class:resource-link--muted={resource.name === 'MAL'}
-								class="official-link resource-link"
-								>{resource.name}</a
-							>
-						{/each}
 					</div>
-				</div>
-			{/if}
+				{/if}
+			</div>
 		</aside>
 
-		<!-- Main: title, score, synopsis, watchlist -->
+		<!-- Main: score, synopsis, watchlist -->
 		<div class="main-content">
-			<div class="title-block">
-				<h1 class="anime-title">{data.anime.title}</h1>
-				{#if data.anime.title_en}
-					<p class="anime-title-en">{data.anime.title_en}</p>
-				{/if}
-				<div class="meta-row">
-					<span class="status-badge status-{data.anime.computed_broadcast_status}">
-						{broadcastLabels[data.anime.computed_broadcast_status] ?? data.anime.computed_broadcast_status}
-					</span>
-					{#if data.anime.type}
-						<span class="meta-chip">{data.anime.type}</span>
-					{/if}
-					{#if data.anime.season}
-						<a
-							href="/anime?season={encodeURIComponent(data.anime.season)}"
-							class="meta-chip meta-chip--link"
-							>{data.anime.season}</a
-						>
-					{/if}
-					{#if data.anime.episode_count}
-						<span class="meta-chip">{data.anime.episode_count}話</span>
-					{/if}
-					{#if data.anime.aired_from}
-						<span class="meta-chip aired">
-							{formatAiredPeriod(data.anime.aired_from, data.anime.aired_to)}
-						</span>
-					{/if}
-				</div>
-			</div>
-
 			<!-- アクションバー -->
 			{#if data.user}
 				<div class="action-bar">
@@ -518,7 +519,7 @@ const handleRecommendSubmit: SubmitFunction = () => {
 				{#if activeAction}
 					<div class="action-panel">
 						{#if activeAction === 'quote'}
-							<a href="/?quote_anime={data.anime.id}" class="btn-quote-post">
+							<a href="/?quote_anime={data.anime.id}#compose" class="btn-quote-post">
 								<svg
 									width="15"
 									height="15"
@@ -977,12 +978,30 @@ const handleRecommendSubmit: SubmitFunction = () => {
 .anime-layout {
 	display: grid;
 	grid-template-columns: 220px 1fr;
-	gap: 32px;
+	grid-template-rows: auto 1fr;
+	grid-template-areas:
+		"left title"
+		"left main";
+	column-gap: 32px;
+	row-gap: 24px;
 	align-items: flex-start;
 }
 
 /* ── Left panel ── */
 .left-panel {
+	grid-area: left;
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.cover-col {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.left-panel-info {
 	display: flex;
 	flex-direction: column;
 	gap: 16px;
@@ -1158,12 +1177,14 @@ const handleRecommendSubmit: SubmitFunction = () => {
 
 /* ── Main content ── */
 .main-content {
+	grid-area: main;
 	display: flex;
 	flex-direction: column;
 	gap: 24px;
 }
 
 .title-block {
+	grid-area: title;
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
@@ -1768,10 +1789,25 @@ a.relation-card:hover {
 /* Responsive */
 @media (max-width: 768px) {
 	.anime-layout {
-		grid-template-columns: 1fr;
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+	}
+	.left-panel {
+		flex-direction: row;
+		align-items: flex-start;
+		gap: 12px;
+	}
+	.cover-col {
+		width: 48%;
+		flex-shrink: 0;
 	}
 	.anime-cover {
-		max-width: 200px;
+		max-width: none;
+	}
+	.left-panel-info {
+		flex: 1;
+		min-width: 0;
 	}
 	.detail-page {
 		padding-left: 14px;

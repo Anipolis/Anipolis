@@ -1,4 +1,5 @@
 <script lang="ts">
+import { goto } from "$app/navigation";
 import PostCard from "$lib/components/PostCard.svelte";
 import PostComposer from "$lib/components/PostComposer.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
@@ -10,6 +11,18 @@ let { data }: PageProps = $props();
 function closeModal() {
 	composeOpen.set(false);
 }
+
+$effect(() => {
+	if (data.initialAnime && data.profile) {
+		if (window.matchMedia("(max-width: 768px)").matches) {
+			composeOpen.set(true);
+		}
+		const url = new URL(window.location.href);
+		url.searchParams.delete("quote_anime");
+		url.hash = "";
+		goto(url.toString(), { replaceState: true, noScroll: true });
+	}
+});
 </script>
 
 <svelte:head> <title>Anipolis — タイムライン</title> </svelte:head>
@@ -17,7 +30,7 @@ function closeModal() {
 <div class="page-container">
 	<main class="feed-column">
 		<!-- Desktop: always visible -->
-		<div class="composer-desktop">
+		<div class="composer-desktop" id="compose">
 			{#if data.profile}
 				<PostComposer
 					username={data.profile.username}
