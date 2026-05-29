@@ -1,7 +1,6 @@
 import { error, fail } from "@sveltejs/kit";
-import { ADMIN_EMAIL } from "$env/static/private";
 import { recommendAnimeAction, removeUserAnimeEntry, upsertUserAnimeEntry } from "$lib/server/actions";
-import { getAnime, getAnimeRelations, getUsersWhoListedAnime } from "$lib/server/queries";
+import { getAnime, getAnimeRelations, getUsersWhoListedAnime, isAdminUser } from "$lib/server/queries";
 import type { Actions, PageServerLoad } from "./$types";
 
 function toDateStr(date: Date): string {
@@ -51,9 +50,10 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 
 	if (!anime) throw error(404, "アニメが見つかりません");
 
-	const [listedUsers, relations] = await Promise.all([
+	const [listedUsers, relations, isAdmin] = await Promise.all([
 		getUsersWhoListedAnime(supabase, params.id),
 		getAnimeRelations(supabase, anime.mal_id),
+		user ? isAdminUser(supabase, user.id) : Promise.resolve(false),
 	]);
 
 	const episodes =
@@ -61,7 +61,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 			? calcBroadcastEpisodes(anime.aired_from, anime.aired_to ?? null, anime.broadcast_day)
 			: [];
 
-	return { anime, user, isAdmin: user?.email === ADMIN_EMAIL, listedUsers, relations, episodes };
+	return { anime, user, isAdmin, listedUsers, relations, episodes };
 };
 
 export const actions: Actions = {

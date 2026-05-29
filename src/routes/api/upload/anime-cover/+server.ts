@@ -1,7 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 import { error, json } from "@sveltejs/kit";
-import { ADMIN_EMAIL, SUPABASE_SERVICE_ROLE_KEY } from "$env/static/private";
+import { SUPABASE_SERVICE_ROLE_KEY } from "$env/static/private";
 import { PUBLIC_SUPABASE_URL } from "$env/static/public";
+import { isAdminUser } from "$lib/server/queries";
 import type { RequestHandler } from "./$types";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -10,7 +11,7 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 export const POST: RequestHandler = async ({ request, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 	if (!user) error(401, "ログインが必要です");
-	if (user.email !== ADMIN_EMAIL) error(403, "権限がありません");
+	if (!(await isAdminUser(supabase, user.id))) error(403, "権限がありません");
 
 	const form = await request.formData();
 	const fileEntry = form.get("file");
