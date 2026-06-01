@@ -35,6 +35,22 @@ const handleReply: SubmitFunction = () => {
 
 <div class="page-container">
 	<main class="feed-column">
+		<a href="/" class="post-detail-back" aria-label="タイムラインに戻る">
+			<svg
+				width="18"
+				height="18"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				aria-hidden="true"
+			>
+				<path d="m15 18-6-6 6-6" />
+			</svg>
+		</a>
+
 		<!-- 親投稿（このポストがリプライの場合） -->
 		{#if data.parentPost}
 			<div class="thread-parent">
