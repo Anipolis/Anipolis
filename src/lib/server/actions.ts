@@ -763,6 +763,7 @@ export async function upsertBroadcastRoomMute(
 	animeId: string,
 	roomDate: string,
 	duration: BroadcastRoomMuteDuration,
+	repeatWeekly = false,
 ) {
 	if (!animeId || Number.isNaN(Number(animeId))) return fail(400, { message: "アニメが見つかりません" });
 
@@ -772,31 +773,39 @@ export async function upsertBroadcastRoomMute(
 	});
 	const session = sessions?.[0];
 	if (!session) return fail(404, { message: "放送ルームが見つかりません" });
+	if (repeatWeekly && duration === "event_end") {
+		return fail(400, { message: "毎週繰り返す場合は、1日から7日のミュート期間を選択してください" });
+	}
 
 	const now = new Date();
 	const mutedUntil =
 		duration === "event_end"
 			? new Date(session.posting_closes_at)
 			: new Date(
-					Math.max(now.getTime(), new Date(session.scheduled_at).getTime()) + duration * 24 * 60 * 60 * 1000,
+					(repeatWeekly
+						? new Date(session.scheduled_at).getTime()
+						: Math.max(now.getTime(), new Date(session.scheduled_at).getTime())) +
+						duration * 24 * 60 * 60 * 1000,
 				);
-	if (mutedUntil <= now) {
+	if (!repeatWeekly && mutedUntil <= now) {
 		return fail(400, { message: "終了済みのルームは「イベント終了まで」に設定できません" });
 	}
 
-	const { error } = await supabase.from("broadcast_room_mutes").upsert(
-		{
-			user_id: userId,
-			anime_id: Number(animeId),
-			room_date: roomDate,
-			room_session_id: session.id,
-			duration_days: duration === "event_end" ? null : duration,
-			mute_until_event_end: duration === "event_end",
-			muted_until: mutedUntil.toISOString(),
-			updated_at: now.toISOString(),
-		},
-		{ onConflict: "user_id,anime_id" },
-	);
+	const roomMute = {
+		user_id: userId,
+		anime_id: Number(animeId),
+		room_date: roomDate,
+		room_session_id: session.id,
+		duration_days: duration === "event_end" ? null : duration,
+		mute_until_event_end: duration === "event_end",
+		repeat_weekly: repeatWeekly,
+		muted_until: mutedUntil.toISOString(),
+		updated_at: now.toISOString(),
+	};
+	const roomMutesTable = supabase.from("broadcast_room_mutes") as unknown as {
+		upsert: (value: typeof roomMute, options: { onConflict: string }) => PromiseLike<{ error: unknown }>;
+	};
+	const { error } = await roomMutesTable.upsert(roomMute, { onConflict: "user_id,anime_id" });
 	if (error) {
 		console.error("broadcast room mute upsert error:", error);
 		return fail(500, { message: "ルームのミュート設定に失敗しました" });

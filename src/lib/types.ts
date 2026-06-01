@@ -393,6 +393,7 @@ export interface BroadcastRoomMute {
 	room_session_id: string;
 	room_date: string;
 	duration: BroadcastRoomMuteDuration;
+	repeat_weekly: boolean;
 	muted_until: string;
 	created_at: string;
 	updated_at: string;

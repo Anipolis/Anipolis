@@ -205,10 +205,31 @@ export async function getActiveBroadcastRoomMuteAnimeIds(
 	if (!userId) return new Set();
 	const { data } = await supabase
 		.from("broadcast_room_mutes")
-		.select("anime_id")
-		.eq("user_id", userId)
-		.gt("muted_until", new Date().toISOString());
-	return new Set((data ?? []).map((row: { anime_id: number }) => String(row.anime_id)));
+		.select("anime_id, duration_days, repeat_weekly, muted_until")
+		.eq("user_id", userId);
+	const now = Date.now();
+	const weekMs = 7 * 24 * 60 * 60 * 1000;
+	return new Set(
+		(
+			(data ?? []) as unknown as {
+				anime_id: number;
+				duration_days: number | null;
+				repeat_weekly: boolean;
+				muted_until: string;
+			}[]
+		)
+			.filter((row) => {
+				const mutedUntil = new Date(row.muted_until).getTime();
+				if (!row.repeat_weekly || row.duration_days == null) return mutedUntil > now;
+				const durationMs = row.duration_days * 24 * 60 * 60 * 1000;
+				if (now < mutedUntil - durationMs) return false;
+				if (now < mutedUntil) return true;
+				const elapsedSinceFirstWindow = now - mutedUntil;
+				const currentWeekOffset = elapsedSinceFirstWindow % weekMs;
+				return currentWeekOffset >= weekMs - durationMs;
+			})
+			.map((row) => String(row.anime_id)),
+	);
 }
 
 function containsMutedWord(post: RawPost, mutedWords: string[]): boolean {
@@ -1700,6 +1721,7 @@ export async function getBroadcastRoomMutes(
 		session: { room_date: string } | { room_date: string }[];
 		duration_days: number | null;
 		mute_until_event_end: boolean;
+		repeat_weekly: boolean;
 		muted_until: string;
 		created_at: string;
 		updated_at: string;
@@ -1708,11 +1730,11 @@ export async function getBroadcastRoomMutes(
 	const { data } = await supabase
 		.from("broadcast_room_mutes")
 		.select(
-			"anime_id, room_session_id, session:broadcast_room_sessions!broadcast_room_mutes_room_session_id_fkey ( room_date ), duration_days, mute_until_event_end, muted_until, created_at, updated_at",
+			"anime_id, room_session_id, session:broadcast_room_sessions!broadcast_room_mutes_room_session_id_fkey ( room_date ), duration_days, mute_until_event_end, repeat_weekly, muted_until, created_at, updated_at",
 		)
 		.eq("user_id", userId)
 		.order("muted_until", { ascending: false });
-	const rows = (data ?? []) as BroadcastRoomMuteRow[];
+	const rows = (data ?? []) as unknown as BroadcastRoomMuteRow[];
 	if (rows.length === 0) return [];
 
 	const { data: animes } = await supabase
@@ -1737,6 +1759,7 @@ export async function getBroadcastRoomMutes(
 			room_session_id: row.room_session_id,
 			room_date: (Array.isArray(row.session) ? row.session[0]?.room_date : row.session?.room_date) ?? "",
 			duration,
+			repeat_weekly: row.repeat_weekly,
 			muted_until: row.muted_until,
 			created_at: row.created_at,
 			updated_at: row.updated_at,

@@ -3,14 +3,14 @@ import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();
 
-type SectionId = "account" | "privacy" | "notifications";
+type SectionId = "account" | "privacy" | "rooms";
 
 let activeSection = $state<SectionId>("account");
 
 const sections: { id: SectionId; label: string }[] = [
 	{ id: "account", label: "アカウント" },
 	{ id: "privacy", label: "プライバシーと安全" },
-	{ id: "notifications", label: "通知" },
+	{ id: "rooms", label: "ルーム" },
 ];
 
 type Item = { label: string; description: string; href: string };
@@ -52,7 +52,12 @@ const items = $derived.by((): Item[] => {
 		{
 			label: "通知",
 			description: "放送前通知のタイミングを設定します",
-			href: "/settings/notifications",
+			href: "/settings/rooms/notifications",
+		},
+		{
+			label: "ミュート",
+			description: "ルーム投稿のネタバレ防止ミュートを管理します",
+			href: "/settings/rooms/mutes",
 		},
 	];
 });

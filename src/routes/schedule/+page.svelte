@@ -13,6 +13,7 @@ let openAlertMenu = $state<string | null>(null);
 // Notification subscription state — optimistic, keyed by anime.id
 let subscribedIds = $state(new Set<string>(untrack(() => data.subscriptions)));
 let mutedAnimeIds = $state(new Set<string>(untrack(() => data.mutedAnimeIds)));
+const muteDays = [1, 2, 3, 4, 5, 6, 7] as const;
 
 // Which anime are currently in their notification window (client-side highlight)
 let notifyingIds = $state(new Set<string>());
@@ -369,6 +370,7 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 							{@const isSubscribed = subscribedIds.has(anime.id)}
 							{@const isNotifying = notifyingIds.has(anime.id)}
 							{@const isMuted = mutedAnimeIds.has(anime.id)}
+							{@const roomMute = data.roomMuteSettings[anime.id]}
 							{@const subscribable = canSubscribe(anime)}
 							{@const ep = currentEpisodeForSlot(anime, displayDate)}
 							<div
@@ -471,16 +473,44 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 												>
 													<input type="hidden" name="anime_id" value={anime.id}>
 													<input type="hidden" name="room_date" value={displayDate}>
+													<label class="alert-mute-field">
+														<span>ミュート期間</span>
+														<select name="duration">
+															{#each muteDays as days}
+																<option
+																	value={days}
+																	selected={(roomMute?.duration ?? 3) === days}
+																>
+																	{days}日
+																</option>
+															{/each}
+															<option
+																value="event_end"
+																selected={roomMute?.duration === "event_end"}
+															>
+																イベント終了まで
+															</option>
+														</select>
+													</label>
+													<label class="alert-mute-repeat">
+														<input
+															type="checkbox"
+															name="repeat_weekly"
+															value="true"
+															checked={roomMute?.repeat_weekly}
+														>
+														毎週繰り返す
+													</label>
 													<button
 														type="submit"
 														class="alert-choice"
 														class:alert-choice--active={isMuted}
 													>
 														<span class="i-lucide-bell-off" aria-hidden="true"></span>
-														{isMuted ? "ミュートを更新 (3日)" : "3日ミュート"}
+														{roomMute ? "ミュート設定を更新" : "ミュートを設定"}
 													</button>
 												</form>
-												<a class="alert-settings-link" href="/settings/notifications"
+												<a class="alert-settings-link" href="/settings/rooms/mutes"
 													>期間を設定</a
 												>
 											</div>
@@ -860,7 +890,7 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 	position: absolute;
 	top: 26px;
 	right: 0;
-	min-width: 150px;
+	min-width: 190px;
 	padding: 5px;
 	border: 1px solid var(--border);
 	border-radius: 7px;
@@ -869,6 +899,29 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 	display: flex;
 	flex-direction: column;
 	gap: 2px;
+}
+.alert-mute-field,
+.alert-mute-repeat {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 5px 8px;
+	color: var(--text-muted);
+	font-size: 0.72rem;
+	white-space: nowrap;
+}
+.alert-mute-field select {
+	min-width: 86px;
+	padding: 3px 4px;
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	background: var(--card-bg);
+	color: var(--text);
+	font: inherit;
+}
+.alert-mute-repeat {
+	justify-content: flex-start;
 }
 .alert-choice {
 	width: 100%;

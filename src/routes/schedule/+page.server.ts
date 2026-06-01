@@ -4,10 +4,11 @@ import {
 	getActiveBroadcastRoomMuteAnimeIds,
 	getAnimeList,
 	getBroadcastNotificationSettings,
+	getBroadcastRoomMutes,
 	getBroadcastSubscriptions,
 	getEventsByRange,
 } from "$lib/server/queries";
-import type { Anime, BroadcastNotificationSettings, Event } from "$lib/types";
+import type { Anime, BroadcastNotificationSettings, BroadcastRoomMuteDuration, Event } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
 const DAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"] as const;
@@ -74,7 +75,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		end: toDateInputValue(addDays(weekStart, 6)),
 	};
 
-	const [animeList, events, subscriptions, notificationSettings, mutedAnimeIds] = await Promise.all([
+	const [animeList, events, subscriptions, notificationSettings, mutedAnimeIds, roomMutes] = await Promise.all([
 		getAnimeList(supabase, { scheduleRange, limit: 1000, userId: user?.id ?? null }),
 		getEventsByRange(supabase, weekStart.toISOString(), weekEnd.toISOString()),
 		user ? getBroadcastSubscriptions(supabase, user.id) : Promise.resolve([] as string[]),
@@ -86,6 +87,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 					notify_30min: false,
 				} as BroadcastNotificationSettings),
 		user ? getActiveBroadcastRoomMuteAnimeIds(supabase, user.id) : Promise.resolve(new Set<string>()),
+		user ? getBroadcastRoomMutes(supabase, user.id) : Promise.resolve([]),
 	]);
 
 	const days: { date: string; label: string; anime: Anime[]; events: Event[] }[] = DAY_LABELS.map((label, index) => ({
@@ -119,6 +121,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		user,
 		subscriptions,
 		mutedAnimeIds: [...mutedAnimeIds],
+		roomMuteSettings: Object.fromEntries(roomMutes.map((mute) => [mute.anime_id, mute])),
 		notificationSettings,
 		weekStart: toDateInputValue(weekStart),
 		prevWeek: toDateInputValue(addDays(weekStart, -7)),
@@ -128,6 +131,12 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		defaultScheduledAt: `${toDateInputValue(new Date())}T20:00`,
 	};
 };
+
+function toMuteDuration(value: FormDataEntryValue | null): BroadcastRoomMuteDuration | null {
+	if (value === "event_end") return value;
+	const days = Number(value);
+	return days >= 1 && days <= 7 && Number.isInteger(days) ? (days as 1 | 2 | 3 | 4 | 5 | 6 | 7) : null;
+}
 
 export const actions: Actions = {
 	createEvent: async ({ request, locals: { supabase, safeGetSession } }) => {
@@ -160,9 +169,12 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const animeId = (form.get("anime_id") as string | null)?.trim() ?? "";
 		const roomDate = (form.get("room_date") as string | null)?.trim() ?? "";
+		const duration = toMuteDuration(form.get("duration"));
+		const repeatWeekly = form.get("repeat_weekly") === "true";
 		if (!animeId || !roomDate) return fail(400, { message: "放送ルームが見つかりません" });
+		if (!duration) return fail(400, { message: "ミュート期間を選択してください" });
 
-		const result = await upsertBroadcastRoomMute(supabase, user.id, animeId, roomDate, 3);
+		const result = await upsertBroadcastRoomMute(supabase, user.id, animeId, roomDate, duration, repeatWeekly);
 		if ("status" in result) {
 			return fail(result.status, { ...result.data, roomMuteError: true });
 		}
