@@ -35,6 +35,7 @@ let collapsed = $state(true);
 let deleting = $state(false);
 let lightboxUrl = $state<string | null>(null);
 let showDeleteModal = $state(false);
+let showKebabMenu = $state(false);
 let showRepostMenu = $state(false);
 let showQuoteModal = $state(false);
 let showExchangeModal = $state(false);
@@ -73,6 +74,7 @@ function handleLightboxKeydown(event: KeyboardEvent) {
 	if (showDeleteModal && event.key === "Escape") showDeleteModal = false;
 	if (showExchangeModal && event.key === "Escape") showExchangeModal = false;
 	if (showReportModal && event.key === "Escape") showReportModal = false;
+	if (showKebabMenu && event.key === "Escape") showKebabMenu = false;
 	if (openReactionType && event.key === "Escape") openReactionType = null;
 }
 
@@ -242,6 +244,7 @@ async function submitReport() {
 <article
 	class="post-card"
 	class:deleting
+	class:post-card--detail={isDetailView}
 	class:post-card-clickable={!isDetailView}
 	class:post-card-modal-open={showDeleteModal || showExchangeModal || showQuoteModal || showReportModal || !!lightboxUrl}
 	class:post-card--with-room={!!effectiveRoomContext && !insideRoom}
@@ -272,19 +275,59 @@ async function submitReport() {
 					<time datetime={post.created_at}>{relativeTime}</time>
 				</span>
 				{#if isOwn}
-					<form method="POST" action="?/deletePost" use:enhance={handleDelete} bind:this={deleteFormEl}>
+					<form
+						method="POST"
+						action="?/deletePost"
+						use:enhance={handleDelete}
+						bind:this={deleteFormEl}
+						style="display:none"
+					>
 						<input type="hidden" name="post_id" value={post.id}>
+					</form>
+				{/if}
+				{#if isLoggedIn}
+					<div class="post-kebab-wrapper">
 						<button
 							type="button"
-							class="post-delete-btn"
-							disabled={deleting}
-							aria-label="投稿を削除"
-							title="削除"
-							onclick={(e) => { e.stopPropagation(); showDeleteModal = true; }}
+							class="post-kebab-btn"
+							aria-label="メニュー"
+							aria-haspopup="true"
+							onclick={(e) => { e.stopPropagation(); showKebabMenu = !showKebabMenu; }}
 						>
-							✕
+							<span class="i-lucide-ellipsis-vertical" aria-hidden="true"></span>
 						</button>
-					</form>
+						{#if showKebabMenu}
+							<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+							<div
+								class="post-kebab-backdrop"
+								role="presentation"
+								onclick={(e) => { e.stopPropagation(); showKebabMenu = false; }}
+							></div>
+							<div class="post-kebab-menu" role="menu">
+								{#if isOwn}
+									<button
+										type="button"
+										class="post-kebab-item post-kebab-item--danger"
+										role="menuitem"
+										onclick={(e) => { e.stopPropagation(); showKebabMenu = false; showDeleteModal = true; }}
+									>
+										<span class="i-lucide-trash-2" aria-hidden="true"></span>
+										削除
+									</button>
+								{:else}
+									<button
+										type="button"
+										class="post-kebab-item"
+										role="menuitem"
+										onclick={(e) => { e.stopPropagation(); showKebabMenu = false; showReportModal = true; }}
+									>
+										<span class="i-lucide-flag" aria-hidden="true"></span>
+										通報
+									</button>
+								{/if}
+							</div>
+						{/if}
+					</div>
 				{/if}
 			</div>
 		</div>
@@ -600,35 +643,8 @@ async function submitReport() {
 		{/if}
 
 		<div class="post-footer">
-			<a href="/posts/{post.id}" class="post-action-btn post-reply-btn" aria-label="返信">
-				<svg
-					width="15"
-					height="15"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-				</svg>
-				{#if post.reply_count > 0}
-					<span>{post.reply_count}</span>
-				{/if}
-			</a>
-
-			<div class="post-repost-wrapper reaction-action-group">
-				<button
-					type="button"
-					class="post-action-btn post-repost-btn reaction-icon-hitbox"
-					class:active={repostedByMe}
-					disabled={!isLoggedIn}
-					aria-label={repostedByMe ? 'リポストメニュー' : 'リポスト'}
-					title={repostedByMe ? 'リポストメニュー' : 'リポスト'}
-					onclick={() => { if (isLoggedIn) showRepostMenu = !showRepostMenu; }}
-				>
+			<div class="post-footer-item">
+				<a href="/posts/{post.id}" class="post-action-btn post-reply-btn" aria-label="返信">
 					<svg
 						width="15"
 						height="15"
@@ -640,35 +656,93 @@ async function submitReport() {
 						stroke-linejoin="round"
 						aria-hidden="true"
 					>
-						<path d="M17 1l4 4-4 4" />
-						<path d="M3 11V9a4 4 0 0 1 4-4h14" />
-						<path d="M7 23l-4-4 4-4" />
-						<path d="M21 13v2a4 4 0 0 1-4 4H3" />
+						<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
 					</svg>
-				</button>
-				{#if repostCount > 0}
+					{#if post.reply_count > 0}
+						<span>{post.reply_count}</span>
+					{/if}
+				</a>
+			</div>
+
+			<div class="post-footer-item">
+				<div class="post-repost-wrapper reaction-action-group">
 					<button
 						type="button"
-						class="reaction-count-button post-repost-count reaction-count-hitbox"
-						aria-label="リポストしたユーザーを表示"
-						aria-expanded={openReactionType === 'repost'}
-						onclick={(event) => openReactionPopover(event, 'repost')}
+						class="post-action-btn post-repost-btn reaction-icon-hitbox"
+						class:active={repostedByMe}
+						disabled={!isLoggedIn}
+						aria-label={repostedByMe ? 'リポストメニュー' : 'リポスト'}
+						title={repostedByMe ? 'リポストメニュー' : 'リポスト'}
+						onclick={() => { if (isLoggedIn) showRepostMenu = !showRepostMenu; }}
 					>
-						{repostCount}
+						<svg
+							width="15"
+							height="15"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+						>
+							<path d="M17 1l4 4-4 4" />
+							<path d="M3 11V9a4 4 0 0 1 4-4h14" />
+							<path d="M7 23l-4-4 4-4" />
+							<path d="M21 13v2a4 4 0 0 1-4 4H3" />
+						</svg>
 					</button>
-				{/if}
+					{#if isDetailView}
+						{#if repostCount > 0}
+							<button
+								type="button"
+								class="reaction-count-button post-repost-count reaction-count-hitbox"
+								aria-label="リポストしたユーザーを表示"
+								aria-expanded={openReactionType === 'repost'}
+								onclick={(event) => openReactionPopover(event, 'repost')}
+							>
+								{repostCount}
+							</button>
+						{/if}
+					{:else}
+						<span class="reaction-count-static">{repostCount > 0 ? repostCount : ''}</span>
+					{/if}
 
-				{#if showRepostMenu}
-					<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
-					<div
-						class="repost-backdrop"
-						role="presentation"
-						onclick={(e) => { e.stopPropagation(); showRepostMenu = false; }}
-					></div>
-					<div class="repost-dropdown">
-						<form method="POST" action="?/repost" use:enhance={handleRepost}>
-							<input type="hidden" name="post_id" value={post.id}>
-							<button type="submit" class="repost-menu-item">
+					{#if showRepostMenu}
+						<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+						<div
+							class="repost-backdrop"
+							role="presentation"
+							onclick={(e) => { e.stopPropagation(); showRepostMenu = false; }}
+						></div>
+						<div class="repost-dropdown">
+							<form method="POST" action="?/repost" use:enhance={handleRepost}>
+								<input type="hidden" name="post_id" value={post.id}>
+								<button type="submit" class="repost-menu-item">
+									<svg
+										width="14"
+										height="14"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										aria-hidden="true"
+									>
+										<path d="M17 1l4 4-4 4" />
+										<path d="M3 11V9a4 4 0 0 1 4-4h14" />
+										<path d="M7 23l-4-4 4-4" />
+										<path d="M21 13v2a4 4 0 0 1-4 4H3" />
+									</svg>
+									{repostedByMe ? 'リポストを取り消す' : 'リポスト'}
+								</button>
+							</form>
+							<button
+								type="button"
+								class="repost-menu-item repost-menu-item-quote"
+								onclick={() => { showRepostMenu = false; showQuoteModal = true; }}
+							>
 								<svg
 									width="14"
 									height="14"
@@ -680,78 +754,55 @@ async function submitReport() {
 									stroke-linejoin="round"
 									aria-hidden="true"
 								>
-									<path d="M17 1l4 4-4 4" />
-									<path d="M3 11V9a4 4 0 0 1 4-4h14" />
-									<path d="M7 23l-4-4 4-4" />
-									<path d="M21 13v2a4 4 0 0 1-4 4H3" />
+									<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+									<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
 								</svg>
-								{repostedByMe ? 'リポストを取り消す' : 'リポスト'}
+								引用リポスト
 							</button>
-						</form>
+						</div>
+					{/if}
+					{#if openReactionType === 'repost'}
+						<ReactionUsersPopover
+							title="リポストしたユーザー"
+							users={reactionUsers}
+							loading={reactionUsersLoading}
+							errorMessage={reactionUsersError}
+							onClose={closeReactionPopover}
+						/>
+					{/if}
+				</div>
+			</div>
+
+			<div class="post-footer-item">
+				<div class="reaction-action-group">
+					<form method="POST" action="?/like" use:enhance={handleLike}>
+						<input type="hidden" name="post_id" value={post.id}>
 						<button
-							type="button"
-							class="repost-menu-item repost-menu-item-quote"
-							onclick={() => { showRepostMenu = false; showQuoteModal = true; }}
+							type="submit"
+							class="post-action-btn post-like-btn reaction-icon-hitbox"
+							class:active={likedByMe}
+							disabled={!isLoggedIn}
+							aria-label={likedByMe ? 'いいね取り消し' : 'いいね'}
+							title={likedByMe ? 'いいね取り消し' : 'いいね'}
 						>
 							<svg
-								width="14"
-								height="14"
+								width="15"
+								height="15"
 								viewBox="0 0 24 24"
-								fill="none"
+								fill={likedByMe ? 'currentColor' : 'none'}
 								stroke="currentColor"
 								stroke-width="2"
 								stroke-linecap="round"
 								stroke-linejoin="round"
 								aria-hidden="true"
 							>
-								<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-								<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+								<path
+									d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
+								/>
 							</svg>
-							引用リポスト
 						</button>
-					</div>
-				{/if}
-				{#if openReactionType === 'repost'}
-					<ReactionUsersPopover
-						title="リポストしたユーザー"
-						users={reactionUsers}
-						loading={reactionUsersLoading}
-						errorMessage={reactionUsersError}
-						onClose={closeReactionPopover}
-					/>
-				{/if}
-			</div>
-
-			<div class="reaction-action-group">
-				<form method="POST" action="?/like" use:enhance={handleLike}>
-					<input type="hidden" name="post_id" value={post.id}>
-					<button
-						type="submit"
-						class="post-action-btn post-like-btn reaction-icon-hitbox"
-						class:active={likedByMe}
-						disabled={!isLoggedIn}
-						aria-label={likedByMe ? 'いいね取り消し' : 'いいね'}
-						title={likedByMe ? 'いいね取り消し' : 'いいね'}
-					>
-						<svg
-							width="15"
-							height="15"
-							viewBox="0 0 24 24"
-							fill={likedByMe ? 'currentColor' : 'none'}
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							aria-hidden="true"
-						>
-							<path
-								d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
-							/>
-						</svg>
-					</button>
-				</form>
-				{#if likeCount > 0}
-					{#if isOwn}
+					</form>
+					{#if isDetailView && isOwn && likeCount > 0}
 						<button
 							type="button"
 							class="reaction-count-button post-like-count reaction-count-hitbox"
@@ -762,69 +813,47 @@ async function submitReport() {
 							{likeCount}
 						</button>
 					{:else}
-						<span class="reaction-count-static">{likeCount}</span>
+						<span class="reaction-count-static">{likeCount > 0 ? likeCount : ''}</span>
 					{/if}
-				{/if}
-				{#if openReactionType === 'like'}
-					<ReactionUsersPopover
-						title="いいねしたユーザー"
-						users={reactionUsers}
-						loading={reactionUsersLoading}
-						errorMessage={reactionUsersError}
-						onClose={closeReactionPopover}
-					/>
-				{/if}
+					{#if openReactionType === 'like'}
+						<ReactionUsersPopover
+							title="いいねしたユーザー"
+							users={reactionUsers}
+							loading={reactionUsersLoading}
+							errorMessage={reactionUsersError}
+							onClose={closeReactionPopover}
+						/>
+					{/if}
+				</div>
 			</div>
 
-			<form method="POST" action="?/bookmark" use:enhance={handleBookmark}>
-				<input type="hidden" name="post_id" value={post.id}>
-				<button
-					type="submit"
-					class="post-action-btn post-bookmark-btn"
-					class:active={bookmarkedByMe}
-					disabled={!isLoggedIn}
-					aria-label={bookmarkedByMe ? 'ブックマーク解除' : 'ブックマーク'}
-					title={bookmarkedByMe ? 'ブックマーク解除' : 'ブックマーク'}
-				>
-					<svg
-						width="15"
-						height="15"
-						viewBox="0 0 24 24"
-						fill={bookmarkedByMe ? 'currentColor' : 'none'}
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						aria-hidden="true"
+			<div class="post-footer-item">
+				<form method="POST" action="?/bookmark" use:enhance={handleBookmark}>
+					<input type="hidden" name="post_id" value={post.id}>
+					<button
+						type="submit"
+						class="post-action-btn post-bookmark-btn"
+						class:active={bookmarkedByMe}
+						disabled={!isLoggedIn}
+						aria-label={bookmarkedByMe ? 'ブックマーク解除' : 'ブックマーク'}
+						title={bookmarkedByMe ? 'ブックマーク解除' : 'ブックマーク'}
 					>
-						<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-					</svg>
-				</button>
-			</form>
-
-			<button
-				type="button"
-				class="post-action-btn post-report-btn"
-				disabled={!isLoggedIn || isOwn}
-				aria-label="通報"
-				title="通報"
-				onclick={(e) => { e.preventDefault(); e.stopPropagation(); showReportModal = true; }}
-			>
-				<svg
-					width="15"
-					height="15"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
-					<line x1="4" y1="22" x2="4" y2="15" />
-				</svg>
-			</button>
+						<svg
+							width="15"
+							height="15"
+							viewBox="0 0 24 24"
+							fill={bookmarkedByMe ? 'currentColor' : 'none'}
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+						>
+							<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+						</svg>
+					</button>
+				</form>
+			</div>
 		</div>
 	</div>
 </article>
@@ -865,6 +894,18 @@ async function submitReport() {
 	flex-shrink: 0;
 	width: 13px;
 	height: 13px;
+}
+
+.post-card--detail.post-card--with-room .post-room-link {
+	grid-column: 2;
+	grid-row: 1;
+	max-width: 100%;
+	margin: -4px 0 -2px;
+}
+
+.post-card--detail.post-card--with-room .post-avatar-link,
+.post-card--detail.post-card--with-room .post-header {
+	grid-row: 2;
 }
 
 .delete-modal-overlay {
@@ -1005,11 +1046,6 @@ async function submitReport() {
 	margin: 0;
 	color: var(--color-text-secondary);
 	font-size: 13px;
-}
-
-.post-report-btn:disabled {
-	opacity: 0.35;
-	cursor: not-allowed;
 }
 
 .post-content-inner {

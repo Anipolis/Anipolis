@@ -651,6 +651,7 @@ textarea {
 	padding: 16px;
 	position: relative;
 	transition: background 0.1s;
+	-webkit-tap-highlight-color: transparent;
 }
 
 .post-card-modal-open {
@@ -683,8 +684,29 @@ textarea {
 	min-width: 0;
 }
 
-.post-card:hover {
-	background: var(--color-surface);
+.post-card--detail {
+	display: grid;
+	grid-template-columns: 40px minmax(0, 1fr);
+	row-gap: 0;
+}
+
+.post-card--detail .post-avatar-link {
+	grid-column: 1;
+	grid-row: 1;
+}
+
+.post-card--detail .post-body {
+	display: contents;
+}
+
+.post-card--detail .post-body > * {
+	grid-column: 1 / -1;
+}
+
+@media (hover: hover) {
+	.post-card:hover {
+		background: var(--color-surface);
+	}
 }
 
 .post-header {
@@ -692,6 +714,11 @@ textarea {
 	align-items: center;
 	gap: 10px;
 	margin-bottom: 10px;
+}
+
+.post-card--detail .post-header {
+	grid-column: 2;
+	grid-row: 1;
 }
 
 .post-meta {
@@ -728,34 +755,84 @@ textarea {
 	color: var(--color-text-muted);
 }
 
-.post-delete-btn {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	width: 24px;
-	height: 24px;
+.post-kebab-wrapper {
+	position: relative;
+}
+
+.post-kebab-btn {
+	display: grid;
+	place-items: center;
+	width: 28px;
+	height: 28px;
 	border-radius: 50%;
-	font-size: 11px;
 	color: var(--color-text-muted);
-	opacity: 0;
+	background: none;
+	border: none;
+	cursor: pointer;
 	transition:
-		opacity 0.15s,
 		background 0.15s,
 		color 0.15s;
 }
 
-.post-card:hover .post-delete-btn {
-	opacity: 1;
+.post-kebab-btn:hover {
+	background: var(--color-bg-hover);
+	color: var(--color-text);
 }
 
-.post-delete-btn:hover {
-	background: rgba(239, 68, 68, 0.15);
+.post-kebab-backdrop {
+	position: fixed;
+	inset: 0;
+	z-index: 200;
+	border: none;
+	background: transparent;
+	cursor: default;
+}
+
+.post-kebab-menu {
+	position: absolute;
+	top: calc(100% + 4px);
+	right: 0;
+	z-index: 201;
+	min-width: 140px;
+	border: 1px solid var(--color-border);
+	border-radius: 10px;
+	background: var(--color-bg-card);
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+	overflow: hidden;
+}
+
+.post-kebab-item {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	padding: 10px 14px;
+	background: none;
+	border: none;
+	cursor: pointer;
+	font-size: 14px;
+	color: var(--color-text);
+	text-align: left;
+	font-family: inherit;
+	transition: background 0.12s;
+}
+
+.post-kebab-item:hover {
+	background: var(--color-bg-hover);
+}
+
+.post-kebab-item--danger {
 	color: var(--color-danger);
 }
 
-.post-delete-btn:disabled {
-	opacity: 0.4;
-	cursor: not-allowed;
+.post-kebab-item--danger:hover {
+	background: rgba(239, 68, 68, 0.1);
+}
+
+.post-kebab-item [class^="i-lucide"] {
+	flex-shrink: 0;
+	width: 15px;
+	height: 15px;
 }
 
 .post-card.deleting {
@@ -1556,11 +1633,31 @@ textarea {
 /* --- Post footer (reply button) --- */
 
 .post-footer {
-	display: flex;
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
 	align-items: center;
-	gap: 16px;
+	gap: 0;
 	margin-top: 10px;
 	padding-top: 8px;
+}
+
+.post-footer-item {
+	display: flex;
+	min-width: 0;
+	justify-content: flex-start;
+	align-items: center;
+}
+
+.post-footer-item > :first-child {
+	margin-left: -8px;
+}
+
+.post-footer-item:last-child > :first-child {
+	margin-left: 0;
+}
+
+.post-bookmark-btn {
+	padding-right: 0;
 }
 
 /* --- Post action buttons (reply / repost / like) --- */
@@ -1590,7 +1687,7 @@ textarea {
 
 /* 繝ｪ繝励Λ繧､ */
 .post-reply-btn {
-	margin-left: -8px;
+	margin-left: 0;
 }
 
 .post-reply-btn:hover {
@@ -1625,6 +1722,10 @@ textarea {
 	align-items: center;
 }
 
+.post-footer-item > .reaction-action-group {
+	margin-left: -6.5px;
+}
+
 .reaction-action-group form {
 	display: inline-flex;
 }
@@ -1650,18 +1751,17 @@ textarea {
 }
 
 .reaction-count-static {
-	min-width: 28px;
 	height: 28px;
+	margin-left: 2px;
 }
 
 .reaction-icon-hitbox {
 	position: relative;
-	min-width: 44px;
-	min-height: 44px;
+	width: 28px;
+	height: 28px;
 	touch-action: manipulation;
-	/* Expand away from the adjacent count while preserving the visible icon position. */
-	margin: -11.5px 0 -11.5px -13px;
-	padding: 14.5px 8px 14.5px 21px;
+	margin: -3.5px 0;
+	padding: 6.5px;
 }
 
 .reaction-count-hitbox {
@@ -1683,10 +1783,10 @@ textarea {
 }
 
 .reaction-icon-hitbox::before {
-	top: 11.5px;
+	top: 0;
 	right: 0;
-	bottom: 11.5px;
-	left: 13px;
+	bottom: 0;
+	left: 0;
 }
 
 .post-repost-btn.reaction-icon-hitbox:not(:disabled):hover,
@@ -2879,6 +2979,11 @@ form + .repost-menu-item {
 	.post-action-btn {
 		padding: 10px 8px;
 		min-height: 40px;
+	}
+
+	.reaction-icon-hitbox {
+		min-height: 28px;
+		padding: 6.5px;
 	}
 
 	/* Profile header: stack on mobile */
