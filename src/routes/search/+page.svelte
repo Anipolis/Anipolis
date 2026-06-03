@@ -42,6 +42,10 @@ let { data }: PageProps = $props();
 			<button type="submit" class="global-search-button">検索</button>
 		</form>
 
+		<div class="mobile-search-trending">
+			<TrendingPanel trending={data.trending} />
+		</div>
+
 		{#if !data.query}
 			<div class="empty-state">
 				<p>キーワードを入力して検索してください</p>
@@ -83,3 +87,16 @@ let { data }: PageProps = $props();
 		<TrendingPanel trending={data.trending} />
 	</aside>
 </div>
+
+<style>
+.mobile-search-trending {
+	display: none;
+}
+
+@media (max-width: 768px) {
+	.mobile-search-trending {
+		display: block;
+		margin-bottom: 24px;
+	}
+}
+</style>
