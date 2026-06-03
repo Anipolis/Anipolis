@@ -199,9 +199,9 @@ let recipientDebounce = $state<ReturnType<typeof setTimeout> | null>(null);
 let recommendSubmitting = $state(false);
 let recommendFeedback = $state("");
 let recommendError = $state("");
-let activeAction = $state<"quote" | "watchlist" | "recommend" | null>(null);
+let activeAction = $state<"watchlist" | "recommend" | null>(null);
 
-function toggleAction(action: "quote" | "watchlist" | "recommend") {
+function toggleAction(action: "watchlist" | "recommend") {
 	activeAction = activeAction === action ? null : action;
 }
 
@@ -447,13 +447,7 @@ const handleRecommendSubmit: SubmitFunction = () => {
 			<!-- アクションバー -->
 			{#if data.user}
 				<div class="action-bar">
-					<button
-						type="button"
-						class="action-bar-btn"
-						class:active={activeAction === 'quote'}
-						onclick={() => toggleAction('quote')}
-						aria-pressed={activeAction === 'quote'}
-					>
+					<a href="/?quote_anime={data.anime.id}#compose" class="action-bar-btn">
 						<svg
 							width="18"
 							height="18"
@@ -468,7 +462,7 @@ const handleRecommendSubmit: SubmitFunction = () => {
 							<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
 						</svg>
 						<span>投稿</span>
-					</button>
+					</a>
 					<button
 						type="button"
 						class="action-bar-btn"
@@ -518,24 +512,7 @@ const handleRecommendSubmit: SubmitFunction = () => {
 
 				{#if activeAction}
 					<div class="action-panel">
-						{#if activeAction === 'quote'}
-							<a href="/?quote_anime={data.anime.id}#compose" class="btn-quote-post">
-								<svg
-									width="15"
-									height="15"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									aria-hidden="true"
-								>
-									<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-								</svg>
-								この作品について投稿
-							</a>
-						{:else if activeAction === 'watchlist'}
+						{#if activeAction === 'watchlist'}
 							{#if form?.message}
 								<p class="form-error">{form.message}</p>
 							{/if}
@@ -1388,6 +1365,7 @@ a.relation-card:hover {
 	border-right: 1px solid var(--border);
 	cursor: pointer;
 	color: var(--text-muted);
+	text-decoration: none;
 	font-size: 0.78rem;
 	transition:
 		background 0.12s,
@@ -1412,23 +1390,6 @@ a.relation-card:hover {
 	background: var(--card-bg);
 	margin-bottom: 24px;
 }
-.btn-quote-post {
-	display: inline-flex;
-	align-items: center;
-	gap: 8px;
-	background: var(--accent);
-	color: #fff;
-	padding: 10px 20px;
-	border-radius: 8px;
-	text-decoration: none;
-	font-weight: 600;
-	font-size: 0.9rem;
-	transition: opacity 0.12s;
-}
-.btn-quote-post:hover {
-	opacity: 0.85;
-}
-
 .form-row {
 	display: flex;
 	flex-wrap: wrap;
