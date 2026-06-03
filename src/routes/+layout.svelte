@@ -1,6 +1,6 @@
 <script lang="ts">
 import { onMount } from "svelte";
-import { goto, invalidate } from "$app/navigation";
+import { invalidate } from "$app/navigation";
 import { page } from "$app/state";
 import MobileBottomNav from "$lib/components/MobileBottomNav.svelte";
 import Sidebar from "$lib/components/Sidebar.svelte";
@@ -26,11 +26,8 @@ onMount(() => {
 	};
 });
 
-// FAB: open compose modal (navigate to home first if needed)
-async function handleFabClick() {
-	if (page.url.pathname !== "/") {
-		await goto("/");
-	}
+// FAB: open compose modal on the timeline.
+function handleFabClick() {
 	composeOpen.set(true);
 }
 </script>
@@ -53,7 +50,7 @@ async function handleFabClick() {
 <MobileBottomNav session={data.session} unreadNotificationCount={data.unreadNotificationCount} />
 
 <!-- FAB: compose post (mobile only) -->
-{#if data.session}
+{#if data.session && page.url.pathname === "/"}
 	<button type="button" class="mobile-fab" onclick={handleFabClick} aria-label="投稿する">
 		<svg
 			width="24"
