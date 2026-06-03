@@ -1,6 +1,7 @@
 <script lang="ts">
 import type { SubmitFunction } from "@sveltejs/kit";
 import { enhance } from "$app/forms";
+import SettingsBackLink from "$lib/components/SettingsBackLink.svelte";
 import type { PageProps } from "./$types";
 
 let { data, form }: PageProps = $props();
@@ -25,9 +26,9 @@ const submitPassword: SubmitFunction = () => {
 <div class="page-container" style="justify-content: center;">
 	<main style="flex: 0 1 560px; min-width: 0;">
 		<div class="settings-card">
+			<SettingsBackLink />
 			<div class="settings-header-row">
 				<h1 class="settings-title">{title}</h1>
-				<a href="/settings" class="btn btn-ghost">設定</a>
 			</div>
 
 			{#if form?.success}
