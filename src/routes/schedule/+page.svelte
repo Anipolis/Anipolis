@@ -242,82 +242,32 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 			<div class="week-nav">
 				{#if data.canGoPrev}
 					<a class="week-nav-btn" href="/schedule?week={data.prevWeek}" aria-label="前の週">
-						<svg
-							aria-hidden="true"
-							width="18"
-							height="18"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2.5"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						>
-							<polyline points="15 18 9 12 15 6"></polyline>
-						</svg>
+						<span class="i-lucide-chevron-left" aria-hidden="true"></span>
+						前週
 					</a>
 				{:else}
 					<span class="week-nav-btn week-nav-btn--disabled" aria-disabled="true">
-						<svg
-							aria-hidden="true"
-							width="18"
-							height="18"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2.5"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						>
-							<polyline points="15 18 9 12 15 6"></polyline>
-						</svg>
+						<span class="i-lucide-chevron-left" aria-hidden="true"></span>
+						前週
 					</span>
 				{/if}
-				<span class="week-range">{formatDate(data.weekStart)} の週</span>
 				{#if data.canGoNext}
 					<a class="week-nav-btn" href="/schedule?week={data.nextWeek}" aria-label="次の週">
-						<svg
-							aria-hidden="true"
-							width="18"
-							height="18"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2.5"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						>
-							<polyline points="9 18 15 12 9 6"></polyline>
-						</svg>
+						翌週
+						<span class="i-lucide-chevron-right" aria-hidden="true"></span>
 					</a>
 				{:else}
 					<span class="week-nav-btn week-nav-btn--disabled" aria-disabled="true">
-						<svg
-							aria-hidden="true"
-							width="18"
-							height="18"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2.5"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						>
-							<polyline points="9 18 15 12 9 6"></polyline>
-						</svg>
+						翌週
+						<span class="i-lucide-chevron-right" aria-hidden="true"></span>
 					</span>
 				{/if}
 			</div>
-			{#if data.user}
+			{#if data.isAdmin}
 				<button type="button" class="btn btn-primary create-event-btn" onclick={() => (showEventDialog = true)}>
 					<span class="i-lucide-calendar-plus" aria-hidden="true"></span>
 					イベント作成
 				</button>
-			{:else}
-				<a href="/auth" class="btn btn-primary create-event-btn">
-					<span class="i-lucide-log-in" aria-hidden="true"></span>
-					ログインして作成
-				</a>
 			{/if}
 		</div>
 	</header>
@@ -557,7 +507,7 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 	</section>
 </div>
 
-{#if showEventDialog && data.user}
+{#if showEventDialog && data.isAdmin}
 	<div class="dialog-backdrop">
 		<button
 			type="button"
@@ -652,20 +602,17 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 .week-nav {
 	display: flex;
 	align-items: center;
-	gap: 0.5rem;
-}
-.week-range {
-	font-size: 0.85rem;
-	font-weight: 700;
-	color: var(--text);
-	white-space: nowrap;
+	justify-content: space-between;
+	gap: 1rem;
+	min-width: 144px;
 }
 .week-nav-btn {
-	width: 34px;
+	min-width: 58px;
 	height: 34px;
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
+	gap: 0.15rem;
 	border: 1px solid var(--border);
 	border-radius: 6px;
 	color: var(--text);
@@ -726,8 +673,7 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 	border-radius: 6px;
 }
 .anime-slot-wrap--menu-open {
-	padding-bottom: 86px;
-	z-index: 3;
+	z-index: 4;
 }
 .anime-slot-wrap--notifying {
 	animation: notify-pulse 1.8s ease-in-out infinite;
@@ -890,6 +836,7 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 	position: absolute;
 	top: 26px;
 	right: 0;
+	z-index: 5;
 	min-width: 190px;
 	padding: 5px;
 	border: 1px solid var(--border);

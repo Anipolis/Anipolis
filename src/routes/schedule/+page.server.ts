@@ -7,6 +7,7 @@ import {
 	getBroadcastRoomMutes,
 	getBroadcastSubscriptions,
 	getEventsByRange,
+	isAdminUser,
 } from "$lib/server/queries";
 import type { Anime, BroadcastNotificationSettings, BroadcastRoomMuteDuration, Event } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
@@ -75,20 +76,22 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		end: toDateInputValue(addDays(weekStart, 6)),
 	};
 
-	const [animeList, events, subscriptions, notificationSettings, mutedAnimeIds, roomMutes] = await Promise.all([
-		getAnimeList(supabase, { scheduleRange, limit: 1000, userId: user?.id ?? null }),
-		getEventsByRange(supabase, weekStart.toISOString(), weekEnd.toISOString()),
-		user ? getBroadcastSubscriptions(supabase, user.id) : Promise.resolve([] as string[]),
-		user
-			? getBroadcastNotificationSettings(supabase, user.id)
-			: Promise.resolve({
-					notify_1min: true,
-					notify_5min: true,
-					notify_30min: false,
-				} as BroadcastNotificationSettings),
-		user ? getActiveBroadcastRoomMuteAnimeIds(supabase, user.id) : Promise.resolve(new Set<string>()),
-		user ? getBroadcastRoomMutes(supabase, user.id) : Promise.resolve([]),
-	]);
+	const [animeList, events, subscriptions, notificationSettings, mutedAnimeIds, roomMutes, isAdmin] =
+		await Promise.all([
+			getAnimeList(supabase, { scheduleRange, limit: 1000, userId: user?.id ?? null }),
+			getEventsByRange(supabase, weekStart.toISOString(), weekEnd.toISOString()),
+			user ? getBroadcastSubscriptions(supabase, user.id) : Promise.resolve([] as string[]),
+			user
+				? getBroadcastNotificationSettings(supabase, user.id)
+				: Promise.resolve({
+						notify_1min: true,
+						notify_5min: true,
+						notify_30min: false,
+					} as BroadcastNotificationSettings),
+			user ? getActiveBroadcastRoomMuteAnimeIds(supabase, user.id) : Promise.resolve(new Set<string>()),
+			user ? getBroadcastRoomMutes(supabase, user.id) : Promise.resolve([]),
+			user ? isAdminUser(supabase, user.id) : Promise.resolve(false),
+		]);
 
 	const days: { date: string; label: string; anime: Anime[]; events: Event[] }[] = DAY_LABELS.map((label, index) => ({
 		date: toDateInputValue(addDays(weekStart, index)),
@@ -119,6 +122,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		dayLabels: DAY_LABELS,
 		events,
 		user,
+		isAdmin,
 		subscriptions,
 		mutedAnimeIds: [...mutedAnimeIds],
 		roomMuteSettings: Object.fromEntries(roomMutes.map((mute) => [mute.anime_id, mute])),
@@ -142,6 +146,8 @@ export const actions: Actions = {
 	createEvent: async ({ request, locals: { supabase, safeGetSession } }) => {
 		const { user } = await safeGetSession();
 		if (!user) return fail(401, { message: "ログインが必要です" });
+
+		if (!(await isAdminUser(supabase, user.id))) return fail(403, { message: "管理者権限が必要です" });
 
 		const result = await createEventAction(request, supabase, user.id);
 		if ("success" in result && result.success) {
