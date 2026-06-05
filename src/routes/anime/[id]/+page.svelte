@@ -948,6 +948,8 @@ const handleRecommendSubmit: SubmitFunction = () => {
 }
 
 .detail-page {
+	width: 100%;
+	box-sizing: border-box;
 	padding-top: calc(var(--nav-height) + 24px);
 	padding-bottom: 48px;
 	padding-left: 24px;
@@ -970,7 +972,9 @@ const handleRecommendSubmit: SubmitFunction = () => {
 /* Two-column layout */
 .anime-layout {
 	display: grid;
-	grid-template-columns: 220px 1fr;
+	width: 100%;
+	box-sizing: border-box;
+	grid-template-columns: 220px minmax(0, 1fr);
 	grid-template-rows: auto 1fr;
 	grid-template-areas:
 		"left title"
@@ -1174,6 +1178,8 @@ const handleRecommendSubmit: SubmitFunction = () => {
 	display: flex;
 	flex-direction: column;
 	gap: 24px;
+	width: 100%;
+	min-width: 0;
 }
 
 .title-block {
@@ -1365,15 +1371,19 @@ a.relation-card:hover {
 /* Action bar */
 .action-bar {
 	display: flex;
+	width: 100%;
+	min-width: 0;
 	border: 1px solid var(--border);
 	border-radius: 10px;
 	overflow: hidden;
 }
 .action-bar-btn {
 	flex: 1;
+	min-width: 0;
 	display: flex;
 	flex-direction: column;
 	align-items: center;
+	justify-content: center;
 	gap: 4px;
 	padding: 12px 8px;
 	background: none;
@@ -1382,6 +1392,7 @@ a.relation-card:hover {
 	cursor: pointer;
 	color: var(--text-muted);
 	text-decoration: none;
+	text-align: center;
 	font-size: 0.78rem;
 	transition:
 		background 0.12s,
@@ -1399,6 +1410,9 @@ a.relation-card:hover {
 	color: #fff;
 }
 .action-panel {
+	width: 100%;
+	min-width: 0;
+	box-sizing: border-box;
 	border: 1px solid var(--border);
 	border-top: none;
 	border-radius: 0 0 10px 10px;
@@ -1410,18 +1424,23 @@ a.relation-card:hover {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 14px;
+	min-width: 0;
 	margin-bottom: 14px;
 }
 .form-label {
 	display: flex;
+	flex: 1 1 130px;
 	flex-direction: column;
 	gap: 4px;
+	min-width: 0;
 	font-size: 0.82rem;
 	color: var(--text-muted);
 	font-weight: 500;
 }
 .form-select,
 .form-input {
+	width: 100%;
+	box-sizing: border-box;
 	padding: 6px 10px;
 	border-radius: 6px;
 	border: 1px solid var(--border);
@@ -1505,6 +1524,7 @@ a.relation-card:hover {
 	grid-template-columns: minmax(180px, 320px) auto;
 	gap: 12px;
 	align-items: end;
+	min-width: 0;
 }
 
 .recommend-recipient-field {
@@ -1768,6 +1788,7 @@ a.relation-card:hover {
 	.anime-layout {
 		display: flex;
 		flex-direction: column;
+		align-items: stretch;
 		gap: 16px;
 	}
 	.left-panel {
