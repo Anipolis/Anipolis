@@ -8,6 +8,17 @@ import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();
 
+let onboardingDismissed = $state(true);
+
+$effect(() => {
+	onboardingDismissed = localStorage.getItem("anipolis_onboarding_dismissed") === "1";
+});
+
+function dismissOnboarding() {
+	localStorage.setItem("anipolis_onboarding_dismissed", "1");
+	onboardingDismissed = true;
+}
+
 function closeModal() {
 	composeOpen.set(false);
 }
@@ -29,7 +40,7 @@ $effect(() => {
 
 <div class="page-container">
 	<main class="feed-column">
-		<!-- Desktop: always visible -->
+		<!-- Desktop: composer / landing hero -->
 		<div class="composer-desktop" id="compose">
 			{#if data.profile}
 				<PostComposer
@@ -45,11 +56,109 @@ $effect(() => {
 					<p>ようこそ！<a href="/settings">設定</a>を確認してから投稿できます。</p>
 				</div>
 			{:else}
-				<div class="auth-gate">
-					<p>投稿するにはログインが必要です</p>
+				<div class="landing-hero">
+					<div class="landing-logo">Anipolis</div>
+					<p class="landing-tagline">アニメファンのためのSNS</p>
+					<a href="/auth" class="landing-cta">ログイン / 新規登録</a>
+					<ul class="landing-features">
+						<li>
+							<svg
+								width="16"
+								height="16"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2.5"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								aria-hidden="true"
+							>
+								<polyline points="20 6 9 17 4 12" />
+							</svg>
+							視聴中のアニメを記録・管理
+						</li>
+						<li>
+							<svg
+								width="16"
+								height="16"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2.5"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								aria-hidden="true"
+							>
+								<polyline points="20 6 9 17 4 12" />
+							</svg>
+							アニメの感想を投稿・共有
+						</li>
+						<li>
+							<svg
+								width="16"
+								height="16"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2.5"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								aria-hidden="true"
+							>
+								<polyline points="20 6 9 17 4 12" />
+							</svg>
+							放送に合わせてリアルタイム実況
+						</li>
+					</ul>
 				</div>
 			{/if}
 		</div>
+
+		<!-- Onboarding banner for new users who haven't set up their profile yet -->
+		{#if data.profile && !data.profile.display_name && !data.profile.avatar_url && !onboardingDismissed}
+			<div class="onboarding-banner">
+				<div class="onboarding-banner-body">
+					<svg
+						width="20"
+						height="20"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<circle cx="12" cy="12" r="10" />
+						<line x1="12" y1="8" x2="12" y2="12" />
+						<line x1="12" y1="16" x2="12.01" y2="16" />
+					</svg>
+					<div>
+						<strong>プロフィールを完成させましょう！</strong>
+						<p>アバターと表示名を設定して、他のユーザーに覚えてもらいましょう。</p>
+					</div>
+				</div>
+				<div class="onboarding-banner-actions">
+					<a href="/settings" class="onboarding-btn-primary">設定へ</a>
+					<button type="button" class="onboarding-btn-close" onclick={dismissOnboarding} aria-label="閉じる">
+						<svg
+							width="16"
+							height="16"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+						>
+							<line x1="18" y1="6" x2="6" y2="18" />
+							<line x1="6" y1="6" x2="18" y2="18" />
+						</svg>
+					</button>
+				</div>
+			</div>
+		{/if}
 
 		{#if data.user}
 			<div class="timeline-tabs">
@@ -122,9 +231,10 @@ $effect(() => {
 	display: block;
 }
 
-/* Mobile: hide inline composer, show only via modal */
+/* Mobile: hide inline composer, show only via modal.
+   Exception: landing hero inside .composer-desktop is always shown. */
 @media (max-width: 768px) {
-	.composer-desktop {
+	.composer-desktop:not(:has(.landing-hero)) {
 		display: none;
 	}
 }
@@ -180,5 +290,160 @@ $effect(() => {
 .compose-modal-body {
 	overflow-y: auto;
 	padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Landing hero (unauthenticated) */
+.landing-hero {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 16px;
+	padding: 32px 24px;
+	border-bottom: 1px solid var(--color-border);
+}
+
+.landing-logo {
+	font-size: 28px;
+	font-weight: 800;
+	color: var(--color-accent);
+	letter-spacing: -0.5px;
+}
+
+.landing-tagline {
+	font-size: 16px;
+	color: var(--color-text-muted);
+	margin: 0;
+}
+
+.landing-cta {
+	display: inline-flex;
+	align-items: center;
+	padding: 10px 24px;
+	background: var(--color-accent);
+	color: white;
+	border-radius: 999px;
+	font-size: 15px;
+	font-weight: 600;
+	text-decoration: none;
+	transition: background 0.15s;
+}
+
+.landing-cta:hover {
+	background: var(--color-accent-hover);
+	text-decoration: none;
+	color: white;
+}
+
+.landing-features {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.landing-features li {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 14px;
+	color: var(--color-text-secondary);
+}
+
+.landing-features svg {
+	color: var(--color-accent);
+	flex-shrink: 0;
+}
+
+/* Onboarding banner */
+.onboarding-banner {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 14px 16px;
+	background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface));
+	border: 1px solid color-mix(in srgb, var(--color-accent) 30%, transparent);
+	border-radius: var(--radius-sm);
+	margin-bottom: 4px;
+}
+
+.onboarding-banner-body {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	color: var(--color-accent);
+	flex: 1;
+	min-width: 0;
+}
+
+.onboarding-banner-body div {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.onboarding-banner-body strong {
+	font-size: 14px;
+	color: var(--color-text);
+}
+
+.onboarding-banner-body p {
+	font-size: 13px;
+	color: var(--color-text-muted);
+	margin: 0;
+}
+
+.onboarding-banner-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-shrink: 0;
+}
+
+.onboarding-btn-primary {
+	display: inline-flex;
+	align-items: center;
+	padding: 6px 14px;
+	background: var(--color-accent);
+	color: white;
+	border-radius: var(--radius-sm);
+	font-size: 13px;
+	font-weight: 600;
+	text-decoration: none;
+	white-space: nowrap;
+	transition: background 0.15s;
+}
+
+.onboarding-btn-primary:hover {
+	background: var(--color-accent-hover);
+	text-decoration: none;
+	color: white;
+}
+
+.onboarding-btn-close {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 4px;
+	background: none;
+	border: none;
+	cursor: pointer;
+	color: var(--color-text-muted);
+	border-radius: var(--radius-sm);
+	transition: color 0.15s;
+}
+
+.onboarding-btn-close:hover {
+	color: var(--color-text);
+}
+
+/* Landing hero: also show on mobile (override .composer-desktop hide) */
+@media (max-width: 768px) {
+	.landing-hero {
+		display: flex;
+		padding: 24px 16px;
+	}
 }
 </style>
