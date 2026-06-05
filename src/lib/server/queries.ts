@@ -1294,7 +1294,6 @@ export async function getAnimeRankingPopularity(supabase: SupabaseClient<Databas
 	const { data, error } = await supabase
 		.from("anime_popularity")
 		.select("anime_id, list_count")
-		.gt("list_count", 0)
 		.order("list_count", { ascending: false })
 		.order("anime_id", { ascending: true })
 		.limit(limit);
@@ -1313,7 +1312,6 @@ export async function getAnimeRankingTrending(supabase: SupabaseClient<Database>
 	const { data, error } = await supabase
 		.from("anime_trending")
 		.select("anime_id, recent_count")
-		.gt("recent_count", 0)
 		.order("recent_count", { ascending: false })
 		.order("anime_id", { ascending: true })
 		.limit(limit);
@@ -1332,7 +1330,6 @@ export async function getAnimeRankingTopRated(supabase: SupabaseClient<Database>
 	const { data, error } = await supabase
 		.from("anime_top_rated")
 		.select("anime_id, avg_score, score_count")
-		.gt("score_count", 0)
 		.order("avg_score", { ascending: false })
 		.order("score_count", { ascending: false })
 		.order("anime_id", { ascending: true })
