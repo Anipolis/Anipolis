@@ -971,8 +971,8 @@ textarea {
 }
 
 .anime-trending-cover {
-	width: 32px;
-	height: 44px;
+	width: 44px;
+	height: 60px;
 	flex-shrink: 0;
 	border-radius: 4px;
 	object-fit: cover;
