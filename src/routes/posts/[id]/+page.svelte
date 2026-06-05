@@ -1,6 +1,7 @@
 <script lang="ts">
 import type { SubmitFunction } from "@sveltejs/kit";
 import { enhance } from "$app/forms";
+import { page } from "$app/state";
 import PostCard from "$lib/components/PostCard.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
@@ -31,7 +32,17 @@ const handleReply: SubmitFunction = () => {
 };
 </script>
 
-<svelte:head> <title>{displayName}の投稿 — Anipolis</title> </svelte:head>
+<svelte:head>
+	<title>{displayName}の投稿 — Anipolis</title>
+	<meta property="og:title" content="{displayName}の投稿 — Anipolis">
+	<meta property="og:description" content={data.post.content.slice(0, 120)}>
+	<meta property="og:type" content="website">
+	<meta property="og:url" content={page.url.href}>
+	{#if data.post.image_urls?.[0]}
+		<meta property="og:image" content={data.post.image_urls[0]}>
+		<meta name="twitter:card" content="summary_large_image">
+	{/if}
+</svelte:head>
 
 <div class="page-container">
 	<main class="feed-column">

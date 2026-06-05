@@ -36,7 +36,15 @@ $effect(() => {
 });
 </script>
 
-<svelte:head> <title>Anipolis — タイムライン</title> </svelte:head>
+<svelte:head>
+	<title>Anipolis — タイムライン</title>
+	<meta property="og:title" content="Anipolis">
+	<meta
+		property="og:description"
+		content="アニメファンのためのSNS。視聴中のアニメを記録して、感想を投稿・共有しよう。"
+	>
+	<meta property="og:type" content="website">
+</svelte:head>
 
 <div class="page-container">
 	<main class="feed-column">

@@ -1,6 +1,7 @@
 <script lang="ts">
 import type { SubmitFunction } from "@sveltejs/kit";
 import { enhance } from "$app/forms";
+import { page } from "$app/state";
 import type { AnimeStatus } from "$lib/types";
 import type { PageProps } from "./$types";
 
@@ -15,6 +16,11 @@ let { data, form }: PageProps = $props();
 
 const displayStudios = $derived(data.anime.studio ?? []);
 const displayGenres = $derived(data.anime.genre ?? []);
+const ogDescription = $derived(
+	displayGenres.length > 0
+		? `${displayGenres.slice(0, 3).join(" · ")} — Anipolis`
+		: `${data.anime.title}の情報・視聴記録 — Anipolis`,
+);
 const displayOfficialLinks = $derived(
 	buildDisplayOfficialLinks(data.anime.official_site_url, data.anime.official_x_url),
 );
@@ -260,7 +266,17 @@ const handleRecommendSubmit: SubmitFunction = () => {
 };
 </script>
 
-<svelte:head> <title>{data.anime.title} — Anipolis</title> </svelte:head>
+<svelte:head>
+	<title>{data.anime.title} — Anipolis</title>
+	<meta property="og:title" content="{data.anime.title} — Anipolis">
+	<meta property="og:description" content={ogDescription}>
+	<meta property="og:type" content="website">
+	<meta property="og:url" content={page.url.href}>
+	{#if data.anime.cover_url}
+		<meta property="og:image" content={data.anime.cover_url}>
+		<meta name="twitter:card" content="summary_large_image">
+	{/if}
+</svelte:head>
 
 <div class="detail-page">
 	<a href="/anime" class="back-link">← アニメ一覧</a>

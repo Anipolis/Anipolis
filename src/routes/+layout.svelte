@@ -32,6 +32,11 @@ function handleFabClick() {
 }
 </script>
 
+<svelte:head>
+	<meta property="og:site_name" content="Anipolis">
+	<meta name="twitter:card" content="summary">
+</svelte:head>
+
 <div class="app-layout">
 	<Sidebar
 		supabase={data.supabase}
