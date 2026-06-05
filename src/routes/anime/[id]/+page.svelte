@@ -1798,4 +1798,17 @@ a.relation-card:hover {
 		width: 100%;
 	}
 }
+
+@media (max-width: 480px) {
+	.cover-col {
+		width: 40%;
+	}
+	.anime-title {
+		font-size: 1.1rem;
+	}
+	.detail-page {
+		padding-left: 8px;
+		padding-right: 8px;
+	}
+}
 </style>

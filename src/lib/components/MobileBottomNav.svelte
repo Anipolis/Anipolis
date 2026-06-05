@@ -244,6 +244,12 @@ function isActive(path: string): boolean {
 	}
 }
 
+@media (max-width: 768px) and (orientation: landscape) {
+	.mobile-bottom-nav {
+		display: none;
+	}
+}
+
 .mobile-tab-badge {
 	position: absolute;
 	top: -6px;

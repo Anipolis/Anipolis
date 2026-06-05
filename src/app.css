@@ -3074,3 +3074,28 @@ form + .repost-menu-item {
 		font-size: 18px;
 	}
 }
+
+/* Ultra-small phone adjustments (≤375px) */
+@media (max-width: 375px) {
+	.page-container {
+		padding: 0 6px;
+		padding-top: calc(52px + 6px);
+		padding-bottom: 80px;
+	}
+
+	.post-card {
+		padding: 8px 10px;
+	}
+}
+
+/* Landscape mode on mobile: hide bottom nav to reclaim vertical space.
+   .mobile-fab is scoped in +layout.svelte — its landscape rule lives there. */
+@media (max-width: 768px) and (orientation: landscape) {
+	.mobile-bottom-nav {
+		display: none;
+	}
+
+	.page-container {
+		padding-bottom: 16px;
+	}
+}

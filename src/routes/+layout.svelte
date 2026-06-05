@@ -106,4 +106,10 @@ function handleFabClick() {
 		display: flex;
 	}
 }
+
+@media (max-width: 768px) and (orientation: landscape) {
+	.mobile-fab {
+		display: none;
+	}
+}
 </style>
