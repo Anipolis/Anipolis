@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fail, redirect } from "@sveltejs/kit";
+import { getAnimeRankingTrending } from "$lib/server/queries";
 import type { Database } from "$lib/supabase/database.types";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -136,9 +137,10 @@ export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession 
 	const { user } = await safeGetSession();
 	if (!user) throw redirect(302, "/");
 
-	const [exchanges, trendingResult] = await Promise.all([
+	const [exchanges, trendingResult, animeTrending] = await Promise.all([
 		getExchangeEntries(supabase, user.id),
 		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
+		getAnimeRankingTrending(supabase, 5),
 	]);
 	return {
 		user,
@@ -146,6 +148,7 @@ export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession 
 		waitingExchange: exchanges.find((entry) => entry.status === "waiting") ?? null,
 		latestMatchedExchange: exchanges.find((entry) => entry.status === "matched" && entry.received_anime) ?? null,
 		trending: trendingResult.data ?? [],
+		animeTrending,
 	};
 };
 

@@ -1,17 +1,18 @@
 import { error, fail } from "@sveltejs/kit";
 import { deletePostAction, toggleBookmarkAction, toggleLikeAction, toggleRepostAction } from "$lib/server/actions";
-import { getBookmarkedPosts } from "$lib/server/queries";
+import { getAnimeRankingTrending, getBookmarkedPosts } from "$lib/server/queries";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 	if (!user) error(401, "ログインが必要です");
 
-	const [posts, trendingResult] = await Promise.all([
+	const [posts, trendingResult, animeTrending] = await Promise.all([
 		getBookmarkedPosts(supabase, user.id),
 		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
+		getAnimeRankingTrending(supabase, 5),
 	]);
-	return { posts, userId: user.id, trending: trendingResult.data ?? [] };
+	return { posts, userId: user.id, trending: trendingResult.data ?? [], animeTrending };
 };
 
 export const actions: Actions = {

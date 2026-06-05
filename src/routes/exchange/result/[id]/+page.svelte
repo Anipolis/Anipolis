@@ -55,7 +55,7 @@ const relativeTime = $derived(formatRelativeTime(data.createdAt));
 	</main>
 
 	<aside class="sidebar-column">
-		<TrendingPanel trending={data.trending} />
+		<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
 	</aside>
 </div>
 

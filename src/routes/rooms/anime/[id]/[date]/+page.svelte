@@ -198,7 +198,7 @@ function formatDate(iso: string) {
 		<div class="anime-room-back">
 			<a href="/schedule" class="btn btn-ghost">週間スケジュールへ戻る</a>
 		</div>
-		<TrendingPanel trending={data.trending} />
+		<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
 	</aside>
 </div>
 

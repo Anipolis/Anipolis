@@ -7,7 +7,7 @@ import {
 	toggleLikeAction,
 	toggleRepostAction,
 } from "$lib/server/actions";
-import { enrichPostsWithCounts } from "$lib/server/queries";
+import { enrichPostsWithCounts, getAnimeRankingTrending } from "$lib/server/queries";
 import type { RawPost } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -29,7 +29,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 	if (!rawPost) error(404, "投稿が見つかりません");
 
 	// 親投稿・リプライを並列取得
-	const [rawParentRes, rawRepliesRes, trendingResult] = await Promise.all([
+	const [rawParentRes, rawRepliesRes, trendingResult, animeTrending] = await Promise.all([
 		rawPost.parent_id
 			? postReader.from("posts").select(POSTS_SELECT).eq("id", rawPost.parent_id).maybeSingle()
 			: Promise.resolve({ data: null }),
@@ -40,6 +40,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 			.eq("parent_id", params.id)
 			.order("created_at", { ascending: true }),
 		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
+		getAnimeRankingTrending(supabase, 5),
 	]);
 
 	const rawParent = rawParentRes.data;
@@ -60,6 +61,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 		replies: enrichedReplies,
 		currentUserId: user?.id ?? null,
 		trending: trendingResult.data ?? [],
+		animeTrending,
 	};
 };
 

@@ -43,7 +43,7 @@ let { data }: PageProps = $props();
 		</form>
 
 		<div class="mobile-search-trending">
-			<TrendingPanel trending={data.trending} />
+			<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
 		</div>
 
 		{#if !data.query}
@@ -84,7 +84,7 @@ let { data }: PageProps = $props();
 	</main>
 
 	<aside class="sidebar-column">
-		<TrendingPanel trending={data.trending} />
+		<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
 	</aside>
 </div>
 

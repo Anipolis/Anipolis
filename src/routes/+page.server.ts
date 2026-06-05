@@ -6,7 +6,12 @@ import {
 	toggleLikeAction,
 	toggleRepostAction,
 } from "$lib/server/actions";
-import { enrichPostsWithCounts, getAnimeExchangeShareForUser, getFollowingIds } from "$lib/server/queries";
+import {
+	enrichPostsWithCounts,
+	getAnimeExchangeShareForUser,
+	getAnimeRankingTrending,
+	getFollowingIds,
+} from "$lib/server/queries";
 import type { AnimeExchangeShare, RawPost } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -61,8 +66,9 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 			: "アニメ交換でおすすめが届きました！ #アニメ交換";
 
 	if (tab === "following" && followingIds !== null && followingIds.length === 0) {
-		const [trendingResult, quoteAnimeResult, exchangeShare] = await Promise.all([
+		const [trendingResult, animeTrending, quoteAnimeResult, exchangeShare] = await Promise.all([
 			supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
+			getAnimeRankingTrending(supabase, 5),
 			quoteAnimeId
 				? supabase
 						.from("anime")
@@ -77,6 +83,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		return {
 			posts: [],
 			trending: trendingResult.data ?? [],
+			animeTrending,
 			profile,
 			tab,
 			initialAnime: quoteAnimeResult.data
@@ -88,9 +95,10 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		};
 	}
 
-	const [postsResult, trendingResult, quoteAnimeResult, exchangeShare] = await Promise.all([
+	const [postsResult, trendingResult, animeTrending, quoteAnimeResult, exchangeShare] = await Promise.all([
 		fetchPosts(),
 		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
+		getAnimeRankingTrending(supabase, 5),
 		quoteAnimeId
 			? supabase.from("anime").select("id, title, title_en, cover_url").eq("id", Number(quoteAnimeId)).single()
 			: Promise.resolve({ data: null }),
@@ -108,6 +116,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	return {
 		posts,
 		trending: trendingResult.data ?? [],
+		animeTrending,
 		profile,
 		tab,
 		initialAnime: quoteAnimeResult.data ? { ...quoteAnimeResult.data, id: String(quoteAnimeResult.data.id) } : null,

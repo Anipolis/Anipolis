@@ -1,6 +1,6 @@
 ﻿import { fail } from "@sveltejs/kit";
 import { deletePostAction, toggleBookmarkAction, toggleLikeAction, toggleRepostAction } from "$lib/server/actions";
-import { enrichPostsWithCounts } from "$lib/server/queries";
+import { enrichPostsWithCounts, getAnimeRankingTrending } from "$lib/server/queries";
 import type { RawPost } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -8,15 +8,16 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	const { user } = await safeGetSession();
 	const query = url.searchParams.get("q")?.trim() ?? "";
 	const trendingPromise = supabase.rpc("get_trending_hashtags", { limit_count: 10 });
+	const animeTrendingPromise = getAnimeRankingTrending(supabase, 5);
 
 	if (!query) {
-		const trendingResult = await trendingPromise;
-		return { query: "", posts: [], users: [], user, trending: trendingResult.data ?? [] };
+		const [trendingResult, animeTrending] = await Promise.all([trendingPromise, animeTrendingPromise]);
+		return { query: "", posts: [], users: [], user, trending: trendingResult.data ?? [], animeTrending };
 	}
 
 	const pattern = `%${query}%`;
 
-	const [postsResult, usersResult, trendingResult] = await Promise.all([
+	const [postsResult, usersResult, trendingResult, animeTrending] = await Promise.all([
 		supabase
 			.from("posts")
 			.select(
@@ -36,6 +37,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 			.or(`username.ilike.${pattern},display_name.ilike.${pattern}`)
 			.limit(10),
 		trendingPromise,
+		animeTrendingPromise,
 	]);
 
 	const posts = await enrichPostsWithCounts(
@@ -50,6 +52,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		users: usersResult.data ?? [],
 		user,
 		trending: trendingResult.data ?? [],
+		animeTrending,
 	};
 };
 

@@ -6,7 +6,7 @@ import {
 	toggleLikeAction,
 	toggleRepostAction,
 } from "$lib/server/actions";
-import { getAnime, getBroadcastRoomSession, getEventPosts } from "$lib/server/queries";
+import { getAnime, getAnimeRankingTrending, getBroadcastRoomSession, getEventPosts } from "$lib/server/queries";
 import type { Anime } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -55,9 +55,10 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 	if (!session) throw error(404, "放送ルームが見つかりません");
 
 	const hashtag = roomHashtag(anime);
-	const [posts, trending] = await Promise.all([
+	const [posts, trending, animeTrending] = await Promise.all([
 		getEventPosts(supabase, hashtag, user?.id ?? null, 100, true, session.id),
 		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
+		getAnimeRankingTrending(supabase, 5),
 	]);
 
 	return {
@@ -74,6 +75,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 		},
 		posts,
 		trending: trending.data ?? [],
+		animeTrending,
 		user,
 	};
 };

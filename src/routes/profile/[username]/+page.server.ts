@@ -9,6 +9,7 @@ import {
 import {
 	checkIsFollowing,
 	enrichPostsWithCounts,
+	getAnimeRankingTrending,
 	getFollowCounts,
 	getFollowRequestStatus,
 	getLikedPosts,
@@ -39,36 +40,39 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
                        broadcast_room_session:broadcast_room_sessions!posts_broadcast_room_session_id_fkey ( room_date ),
                        anime:anime!posts_anime_id_fkey ( id, title, cover_url, broadcast_day, broadcast_time, broadcast_duration_minutes )`;
 
-	const [rawPostsResult, rawImagePostsResult, followCounts, trendingResult, animeList] = await Promise.all([
-		canViewContent
-			? supabase
-					.from("posts")
-					.select(postSelect)
-					.eq("user_id", profile.id)
-					.is("parent_id", null)
-					.order("created_at", { ascending: false })
-					.limit(50)
-			: Promise.resolve({ data: [] }),
+	const [rawPostsResult, rawImagePostsResult, followCounts, trendingResult, animeTrending, animeList] =
+		await Promise.all([
+			canViewContent
+				? supabase
+						.from("posts")
+						.select(postSelect)
+						.eq("user_id", profile.id)
+						.is("parent_id", null)
+						.order("created_at", { ascending: false })
+						.limit(50)
+				: Promise.resolve({ data: [] }),
 
-		canViewContent
-			? supabase
-					.from("posts")
-					.select(postSelect)
-					.eq("user_id", profile.id)
-					.is("parent_id", null)
-					.not("image_urls", "eq", "{}")
-					.order("created_at", { ascending: false })
-					.limit(50)
-			: Promise.resolve({ data: [] }),
+			canViewContent
+				? supabase
+						.from("posts")
+						.select(postSelect)
+						.eq("user_id", profile.id)
+						.is("parent_id", null)
+						.not("image_urls", "eq", "{}")
+						.order("created_at", { ascending: false })
+						.limit(50)
+				: Promise.resolve({ data: [] }),
 
-		getFollowCounts(supabase, profile.id),
+			getFollowCounts(supabase, profile.id),
 
-		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
+			supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
 
-		canViewContent && (isOwn || profile.list_is_public)
-			? getUserAnimeList(supabase, profile.id)
-			: Promise.resolve([]),
-	]);
+			getAnimeRankingTrending(supabase, 5),
+
+			canViewContent && (isOwn || profile.list_is_public)
+				? getUserAnimeList(supabase, profile.id)
+				: Promise.resolve([]),
+		]);
 
 	const activeTab = url.searchParams.get("tab") ?? "posts";
 
@@ -89,6 +93,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 		isFollowing,
 		followRequestStatus,
 		trending: trendingResult.data ?? [],
+		animeTrending,
 		animeList,
 		user,
 	};
