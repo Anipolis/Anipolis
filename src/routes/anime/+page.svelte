@@ -236,12 +236,16 @@ $effect(() => {
 		{#if data.tab === 'register'}
 			<AnimeRegisterForm {form} />
 		{:else if data.tab === 'mylist' && !data.user}
-			<div class="empty-state">
-				<p>マイリストを見るにはログインが必要です</p>
+			<div class="anime-grid anime-grid--empty">
+				<div class="empty-state">
+					<p>マイリストを見るにはログインが必要です</p>
+				</div>
 			</div>
 		{:else if data.animes.length === 0}
-			<div class="empty-state">
-				<p>アニメが見つかりません</p>
+			<div class="anime-grid anime-grid--empty">
+				<div class="empty-state">
+					<p>アニメが見つかりません</p>
+				</div>
 			</div>
 		{:else}
 			<div class="anime-grid">
@@ -398,12 +402,15 @@ $effect(() => {
 
 <style>
 .anime-page-wrap {
+	width: 100%;
 	max-width: 1100px;
 	margin: 0 auto;
 	padding: 0 16px;
+	box-sizing: border-box;
 }
 .anime-main {
 	width: 100%;
+	min-width: 0;
 }
 
 .search-form {
@@ -572,13 +579,15 @@ $effect(() => {
 
 .anime-grid {
 	display: grid;
-	grid-template-columns: repeat(5, 1fr);
+	width: 100%;
+	min-width: 0;
+	grid-template-columns: repeat(5, minmax(0, 1fr));
 	gap: 14px;
 }
 
 @media (max-width: 768px) {
 	.anime-grid {
-		grid-template-columns: repeat(3, 1fr);
+		grid-template-columns: repeat(3, minmax(0, 1fr));
 		gap: 10px;
 	}
 }
@@ -704,6 +713,10 @@ $effect(() => {
 	text-align: center;
 	padding: 60px 20px;
 	color: var(--text-muted);
+}
+
+.anime-grid--empty .empty-state {
+	grid-column: 1 / -1;
 }
 
 /* ─── 登録タブ ─── */
