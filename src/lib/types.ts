@@ -32,6 +32,7 @@ export interface AnimeQuote {
 	id: string;
 	title: string;
 	cover_url: string | null;
+	official_hashtag: string[] | null;
 	room_href: string | null;
 	/** 閲覧者自身のスコア（enrichPostsWithCounts で付加） */
 	user_score: number | null;
@@ -217,6 +218,7 @@ export interface Anime {
 	broadcast_room_pre_open_minutes: number;
 	broadcast_room_post_close_minutes: number;
 	broadcast_station: string[] | null;
+	hidden_by_admin: boolean;
 	created_at: string;
 	// 集計フィールド（クエリ時に付加）
 	list_count?: number;
@@ -266,6 +268,7 @@ export interface RawPost {
 		id: string | number;
 		title: string;
 		cover_url: string | null;
+		official_hashtag?: string[] | null;
 		broadcast_day?: number | null;
 		broadcast_time?: string | null;
 		broadcast_duration_minutes?: number | null;
@@ -346,6 +349,7 @@ export function toPost(
 					id: String(raw.anime.id),
 					title: raw.anime.title,
 					cover_url: raw.anime.cover_url,
+					official_hashtag: raw.anime.official_hashtag ?? null,
 					room_href: buildAnimeRoomHref(raw.anime, raw.broadcast_room_session ?? null),
 					user_score: null,
 				}
@@ -364,6 +368,14 @@ function buildAnimeRoomHref(
 ): string | null {
 	const session = Array.isArray(rawSession) ? rawSession[0] : rawSession;
 	return session?.room_date ? `/rooms/anime/${String(anime.id)}/${session.room_date}` : null;
+}
+
+export function buildAnimeRoomLabel(anime: Pick<AnimeQuote, "title" | "official_hashtag">): string {
+	const officialHashtag = anime.official_hashtag
+		?.map((tag) => tag.trim().replace(/^#+/, ""))
+		.find((tag) => tag.length > 0);
+	const fallbackHashtag = anime.title.replace(/\s+/g, "").replace(/[^\p{L}\p{N}_]/gu, "");
+	return `#${officialHashtag ?? fallbackHashtag}`;
 }
 
 function toAnimeExchangeShare(value: unknown): AnimeExchangeShare | null {

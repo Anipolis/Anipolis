@@ -67,7 +67,7 @@ type UserAnimeListWithAnimeRow = {
 	score: number | null;
 	progress: number;
 	updated_at: string;
-	anime: Record<string, unknown>;
+	anime: Record<string, unknown> | null;
 };
 type UserAnimeListWithProfileRow = {
 	user_id: string;
@@ -476,7 +476,7 @@ export async function getEventPosts(
              profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
              post_hashtags ( hashtags ( name ) ),
              broadcast_room_session:broadcast_room_sessions!posts_broadcast_room_session_id_fkey ( room_date ),
-             anime:anime!posts_anime_id_fkey ( id, title, cover_url, broadcast_day, broadcast_time, broadcast_duration_minutes )`,
+             anime:anime!posts_anime_id_fkey ( id, title, cover_url, official_hashtag, broadcast_day, broadcast_time, broadcast_duration_minutes )`,
 		)
 		.in("id", postIds)
 		.is("parent_id", null);
@@ -996,7 +996,7 @@ export async function getBookmarkedPosts(supabase: SupabaseClient<Database>, use
              profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
              post_hashtags ( hashtags ( name ) ),
              broadcast_room_session:broadcast_room_sessions!posts_broadcast_room_session_id_fkey ( room_date ),
-             anime:anime!posts_anime_id_fkey ( id, title, cover_url, broadcast_day, broadcast_time, broadcast_duration_minutes )`,
+             anime:anime!posts_anime_id_fkey ( id, title, cover_url, official_hashtag, broadcast_day, broadcast_time, broadcast_duration_minutes )`,
 		)
 		.in("id", postIds);
 	// ブックマーク保存順を維持するため postIds の順序に並べ直す
@@ -1027,7 +1027,7 @@ export async function getLikedPosts(
              profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
              post_hashtags ( hashtags ( name ) ),
              broadcast_room_session:broadcast_room_sessions!posts_broadcast_room_session_id_fkey ( room_date ),
-             anime:anime!posts_anime_id_fkey ( id, title, cover_url, broadcast_day, broadcast_time, broadcast_duration_minutes )`,
+             anime:anime!posts_anime_id_fkey ( id, title, cover_url, official_hashtag, broadcast_day, broadcast_time, broadcast_duration_minutes )`,
 		)
 		.in("id", postIds)
 		.order("created_at", { ascending: false });
@@ -1370,15 +1370,17 @@ export async function getUserAnimeList(
 	const { data, error } = await query;
 	if (error || !data) return [];
 
-	return (data as UserAnimeListWithAnimeRow[]).map((row) => ({
-		...toAnime(row.anime),
-		user_entry: {
-			status: row.status as AnimeStatus,
-			score: row.score as number | null,
-			progress: row.progress as number,
-			updated_at: row.updated_at as string,
-		} satisfies UserAnimeEntry,
-	}));
+	return (data as UserAnimeListWithAnimeRow[])
+		.filter((row): row is UserAnimeListWithAnimeRow & { anime: Record<string, unknown> } => row.anime !== null)
+		.map((row) => ({
+			...toAnime(row.anime),
+			user_entry: {
+				status: row.status as AnimeStatus,
+				score: row.score as number | null,
+				progress: row.progress as number,
+				updated_at: row.updated_at as string,
+			} satisfies UserAnimeEntry,
+		}));
 }
 
 export interface AnimeListUser {
@@ -1583,6 +1585,7 @@ function toAnime(raw: Record<string, unknown>): Anime {
 		broadcast_room_pre_open_minutes: (raw["broadcast_room_pre_open_minutes"] as number | null) ?? 5,
 		broadcast_room_post_close_minutes: (raw["broadcast_room_post_close_minutes"] as number | null) ?? 30,
 		broadcast_station: (raw["broadcast_station"] as string[] | null) ?? null,
+		hidden_by_admin: raw["hidden_by_admin"] === true,
 		created_at: String(raw["created_at"]),
 	};
 }

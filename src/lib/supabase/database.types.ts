@@ -666,6 +666,7 @@ export type Database = {
 					broadcast_room_pre_open_minutes: number;
 					broadcast_room_post_close_minutes: number;
 					broadcast_station: string[] | null;
+					hidden_by_admin: boolean;
 					created_at: string;
 				};
 				Insert: {
@@ -698,6 +699,7 @@ export type Database = {
 					broadcast_room_pre_open_minutes?: number;
 					broadcast_room_post_close_minutes?: number;
 					broadcast_station?: string[] | null;
+					hidden_by_admin?: boolean;
 					created_at?: string;
 				};
 				Update: {
@@ -730,6 +732,7 @@ export type Database = {
 					broadcast_room_pre_open_minutes?: number;
 					broadcast_room_post_close_minutes?: number;
 					broadcast_station?: string[] | null;
+					hidden_by_admin?: boolean;
 				};
 				Relationships: [];
 			};
@@ -979,6 +982,7 @@ export type Database = {
 					broadcast_room_pre_open_minutes: number;
 					broadcast_room_post_close_minutes: number;
 					broadcast_station: string[] | null;
+					hidden_by_admin: boolean;
 					created_at: string;
 				};
 				Relationships: [];
