@@ -4,7 +4,7 @@ import { enhance } from "$app/forms";
 import { goto } from "$app/navigation";
 import AnimeExchangeResult from "$lib/components/AnimeExchangeResult.svelte";
 import ReactionUsersPopover from "$lib/components/ReactionUsersPopover.svelte";
-import type { Post, ReactionType, ReactionUser } from "$lib/types";
+import { buildAnimeRoomLabel, type Post, type ReactionType, type ReactionUser } from "$lib/types";
 import { formatRelativeTime } from "$lib/utils/format";
 import { parseContentParts } from "$lib/utils/hashtag";
 import UserAvatar from "./UserAvatar.svelte";
@@ -26,7 +26,9 @@ const isOwn = $derived(!!currentUserId && currentUserId === post.user_id);
 const isLoggedIn = $derived(!!currentUserId);
 const effectiveRoomContext = $derived(
 	roomContext ??
-		(post.anime_quote?.room_href ? { href: post.anime_quote.room_href, title: post.anime_quote.title } : null),
+		(post.anime_quote?.room_href
+			? { href: post.anime_quote.room_href, title: buildAnimeRoomLabel(post.anime_quote) }
+			: null),
 );
 
 const isLong = $derived(post.content.length > 300 || (post.content.match(/\n/g)?.length ?? 0) >= 5);
@@ -895,6 +897,8 @@ async function submitReport() {
 .post-card--with-room {
 	--post-content-offset: 50px;
 	flex-wrap: wrap;
+	column-gap: 10px;
+	row-gap: 2px;
 }
 
 .post-room-link {
@@ -934,6 +938,10 @@ async function submitReport() {
 	grid-row: 1;
 	max-width: 100%;
 	margin: -4px 0 -2px;
+}
+
+.post-card--detail.post-card--with-room {
+	row-gap: 0;
 }
 
 .post-card--detail.post-card--with-room .post-avatar-link,
