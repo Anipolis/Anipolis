@@ -2,13 +2,14 @@ import { randomInt } from "node:crypto";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import type { ServerLoad } from "@sveltejs/kit";
 import { generateDueBroadcastNotifications, markAllNotificationsRead } from "$lib/server/actions";
-import { getExtraAccounts } from "$lib/server/multi-account";
+import { getExtraAccounts, setExtraAccounts } from "$lib/server/multi-account";
 import {
 	getPendingReportsCount,
 	getUnreadBroadcastNotificationCount,
 	getUnreadNotificationCount,
 } from "$lib/server/queries";
 import type { Database } from "$lib/supabase/database.types";
+import type { StoredAccount } from "$lib/types";
 
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 
@@ -123,7 +124,41 @@ export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, c
 	const pendingReportsCount = profile?.is_admin ? await getPendingReportsCount(supabase) : 0;
 
 	const filteredCookies = cookies.getAll().filter(({ name }) => /^sb-.+-auth-token/.test(name));
-	const extraAccounts = user ? getExtraAccounts(cookies) : [];
+	const storedExtraAccounts = getExtraAccounts(cookies);
+	let extraAccounts: StoredAccount[] = [];
+
+	if (!user) {
+		if (storedExtraAccounts.length > 0) setExtraAccounts(cookies, []);
+	} else {
+		const nonSelfExtraAccounts = storedExtraAccounts.filter((account) => account.userId !== user.id);
+		extraAccounts = nonSelfExtraAccounts;
+
+		if (nonSelfExtraAccounts.length > 0) {
+			const linkedUserIds = [...new Set(nonSelfExtraAccounts.map((account) => account.userId))];
+			// biome-ignore lint/suspicious/noExplicitAny: linked_accounts not yet in auto-generated DB types
+			const { data: links, error: linksError } = await (supabase as any)
+				.from("linked_accounts")
+				.select("linked_user_id")
+				.eq("owner_user_id", user.id)
+				.in("linked_user_id", linkedUserIds);
+
+			if (!linksError) {
+				const validLinkedUserIds = new Set(
+					(links ?? [])
+						.map((link: { linked_user_id?: unknown }) => link.linked_user_id)
+						.filter((id: unknown): id is string => typeof id === "string"),
+				);
+				extraAccounts = nonSelfExtraAccounts.filter((account) => validLinkedUserIds.has(account.userId));
+			}
+		}
+
+		if (
+			extraAccounts.length !== storedExtraAccounts.length ||
+			extraAccounts.some((account, index) => account.userId !== storedExtraAccounts[index]?.userId)
+		) {
+			setExtraAccounts(cookies, extraAccounts);
+		}
+	}
 
 	return {
 		session,
