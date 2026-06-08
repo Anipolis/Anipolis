@@ -56,7 +56,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 
 	const hashtag = roomHashtag(anime);
 	const [posts, trending, animeTrending] = await Promise.all([
-		getEventPosts(supabase, hashtag, user?.id ?? null, 100, true, session.id),
+		getEventPosts(supabase, hashtag, user?.id ?? null, 100, true, session.id, true),
 		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
 		getAnimeRankingTrending(supabase, 5),
 	]);

@@ -1,5 +1,5 @@
 <script lang="ts">
-import { onDestroy, onMount } from "svelte";
+import { onDestroy, onMount, tick } from "svelte";
 import { enhance } from "$app/forms";
 import PostCard from "$lib/components/PostCard.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
@@ -8,11 +8,15 @@ import type { ActionData, PageData } from "./$types";
 let { data, form }: { data: PageData; form: ActionData } = $props();
 
 type RoomStatus = "not_open" | "open" | "ended";
+type PostOrder = "oldest" | "newest";
 
 let now = $state(Date.now());
 let intervalId: ReturnType<typeof setInterval>;
 let postContent = $state("");
 let textareaEl: HTMLTextAreaElement | null = $state(null);
+let mounted = $state(false);
+let postOrder = $state<PostOrder>("oldest");
+let lastPostCount = $state(0);
 
 const maxLen = 280;
 const scheduledMs = $derived(new Date(data.room.scheduled_at).getTime());
@@ -26,6 +30,11 @@ const contentWithTag = $derived(
 );
 const charCount = $derived(contentWithTag.length);
 const overLimit = $derived(charCount > maxLen);
+const displayedPosts = $derived(
+	postOrder === "oldest"
+		? data.posts
+		: [...data.posts].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+);
 
 const status = $derived.by<RoomStatus>(() => {
 	if (now < openMs) return "not_open";
@@ -34,11 +43,16 @@ const status = $derived.by<RoomStatus>(() => {
 });
 
 onMount(() => {
+	mounted = true;
+	lastPostCount = data.posts.length;
 	intervalId = setInterval(() => {
 		now = Date.now();
 	}, 1000);
 	if (!("ontouchstart" in window) && textareaEl) {
 		textareaEl.focus();
+	}
+	if (status === "open" && data.posts.length > 0) {
+		void focusLatestPost();
 	}
 });
 
@@ -47,6 +61,26 @@ onDestroy(() => clearInterval(intervalId));
 $effect(() => {
 	if (form && "success" in form && form.success) postContent = "";
 });
+
+$effect(() => {
+	if (!mounted || status !== "open") return;
+	if (data.posts.length === lastPostCount) return;
+	lastPostCount = data.posts.length;
+	if (data.posts.length > 0) void focusLatestPost();
+});
+
+async function focusLatestPost(order: PostOrder = postOrder) {
+	await tick();
+	requestAnimationFrame(() => {
+		const selector = order === "oldest" ? ".anime-room-post:last-of-type" : ".anime-room-post:first-of-type";
+		document.querySelector<HTMLElement>(selector)?.scrollIntoView({ block: "center" });
+	});
+}
+
+function setPostOrder(order: PostOrder) {
+	postOrder = order;
+	if (status === "open" && data.posts.length > 0) void focusLatestPost(order);
+}
 
 function formatHMS(ms: number) {
 	const totalSec = Math.floor(Math.abs(ms) / 1000);
@@ -141,6 +175,25 @@ function formatDate(iso: string) {
 			<span class="event-posts-count">{data.posts.length}件の実況</span>
 		</div>
 
+		<div class="room-order-toggle" role="group" aria-label="投稿の表示順">
+			<button
+				type="button"
+				class:active={postOrder === "oldest"}
+				aria-pressed={postOrder === "oldest"}
+				onclick={() => setPostOrder("oldest")}
+			>
+				古い順
+			</button>
+			<button
+				type="button"
+				class:active={postOrder === "newest"}
+				aria-pressed={postOrder === "newest"}
+				onclick={() => setPostOrder("newest")}
+			>
+				新しい順
+			</button>
+		</div>
+
 		{#if data.posts.length === 0}
 			<div class="card anime-room-empty">
 				まだ実況投稿はありません。<br>
@@ -148,13 +201,15 @@ function formatDate(iso: string) {
 				で最初の感想を残しましょう。
 			</div>
 		{:else}
-			{#each data.posts as post (post.id)}
-				<PostCard
-					{post}
-					currentUserId={data.user?.id ?? null}
-					insideRoom={true}
-					roomContext={{ href: roomHref, title: `${data.anime.title} の放送ルーム` }}
-				/>
+			{#each displayedPosts as post (post.id)}
+				<div class="anime-room-post">
+					<PostCard
+						{post}
+						currentUserId={data.user?.id ?? null}
+						insideRoom={true}
+						roomContext={{ href: roomHref, title: `${data.anime.title} の放送ルーム` }}
+					/>
+				</div>
 			{/each}
 		{/if}
 	</div>
@@ -203,6 +258,61 @@ function formatDate(iso: string) {
 </div>
 
 <style>
+.feed-column {
+	display: flex;
+	flex-direction: column;
+}
+
+.room-mobile-bar {
+	order: 0;
+}
+
+.event-posts-header,
+.room-order-toggle {
+	order: 1;
+}
+
+.anime-room-empty,
+.anime-room-post {
+	order: 2;
+}
+
+.feed-column > .composer,
+.feed-column > .anime-room-login {
+	order: 3;
+	margin-top: 16px;
+}
+
+.feed-column > .composer {
+	margin-bottom: 0;
+}
+
+.room-order-toggle {
+	display: inline-flex;
+	align-self: flex-start;
+	gap: 2px;
+	padding: 3px;
+	margin: -4px 0 12px;
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-sm);
+}
+
+.room-order-toggle button {
+	min-width: 78px;
+	padding: 6px 10px;
+	border-radius: 6px;
+	color: var(--color-text-muted);
+	font-size: 13px;
+	font-weight: 600;
+	line-height: 1.2;
+}
+
+.room-order-toggle button.active {
+	background: var(--color-accent);
+	color: white;
+}
+
 /* ── モバイル用コンパクトバー (サイドバー非表示時のみ表示) ── */
 .room-mobile-bar {
 	display: none;
