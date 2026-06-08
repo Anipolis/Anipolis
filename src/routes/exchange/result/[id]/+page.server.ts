@@ -7,6 +7,8 @@ type ExchangeShareRaw = {
 	type?: unknown;
 	offered_anime?: unknown;
 	received_anime?: unknown;
+	offered_comment?: unknown;
+	received_comment?: unknown;
 };
 
 type ExchangeShareAnimeRaw = {
@@ -27,6 +29,8 @@ function toExchangeShare(value: unknown): AnimeExchangeShare | null {
 		type: "anime_exchange",
 		offered_anime: offered,
 		received_anime: received,
+		offered_comment: typeof raw.offered_comment === "string" ? raw.offered_comment : null,
+		received_comment: typeof raw.received_comment === "string" ? raw.received_comment : null,
 	};
 }
 

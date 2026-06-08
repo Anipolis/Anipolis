@@ -36,6 +36,8 @@ const relativeTime = $derived(formatRelativeTime(data.createdAt));
 				<AnimeExchangeResult
 					offeredAnime={data.exchangeShare.offered_anime}
 					receivedAnime={data.exchangeShare.received_anime}
+					offeredComment={data.exchangeShare.offered_comment}
+					receivedComment={data.exchangeShare.received_comment}
 				/>
 
 				<div class="exchange-result-actions">

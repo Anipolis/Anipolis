@@ -730,6 +730,7 @@ textarea {
 .post-username {
 	font-weight: 600;
 	font-size: 14px;
+	line-height: 1.25;
 	color: var(--color-text);
 	text-decoration: none;
 }
@@ -741,6 +742,7 @@ textarea {
 
 .post-display-name {
 	font-size: 13px;
+	line-height: 1.25;
 	color: var(--color-text-muted);
 }
 

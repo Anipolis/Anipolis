@@ -5,12 +5,22 @@ import type { AnimeExchangeShareAnime } from "$lib/types";
 interface Props {
 	offeredAnime: AnimeExchangeShareAnime;
 	receivedAnime: AnimeExchangeShareAnime;
+	offeredComment?: string | null;
+	receivedComment?: string | null;
 	mode?: "full" | "timeline";
 	linkCards?: boolean;
 	actions?: Snippet;
 }
 
-let { offeredAnime, receivedAnime, mode = "full", linkCards = true, actions }: Props = $props();
+let {
+	offeredAnime,
+	receivedAnime,
+	offeredComment = null,
+	receivedComment = null,
+	mode = "full",
+	linkCards = true,
+	actions,
+}: Props = $props();
 
 function animeHref(animeId: string) {
 	return `/anime/${animeId}`;
@@ -34,6 +44,9 @@ function animeHref(animeId: string) {
 					{#if offeredAnime.title_en}
 						<small>{offeredAnime.title_en}</small>
 					{/if}
+					{#if offeredComment}
+						<p class="exchange-result-comment">{offeredComment}</p>
+					{/if}
 				</div>
 			</a>
 		{:else}
@@ -50,6 +63,9 @@ function animeHref(animeId: string) {
 					<strong>{offeredAnime.title}</strong>
 					{#if offeredAnime.title_en}
 						<small>{offeredAnime.title_en}</small>
+					{/if}
+					{#if offeredComment}
+						<p class="exchange-result-comment">{offeredComment}</p>
 					{/if}
 				</div>
 			</div>
@@ -75,6 +91,9 @@ function animeHref(animeId: string) {
 					{#if receivedAnime.title_en}
 						<small>{receivedAnime.title_en}</small>
 					{/if}
+					{#if receivedComment}
+						<p class="exchange-result-comment">{receivedComment}</p>
+					{/if}
 				</div>
 			</a>
 		{:else}
@@ -92,6 +111,9 @@ function animeHref(animeId: string) {
 					<strong>{receivedAnime.title}</strong>
 					{#if receivedAnime.title_en}
 						<small>{receivedAnime.title_en}</small>
+					{/if}
+					{#if receivedComment}
+						<p class="exchange-result-comment">{receivedComment}</p>
 					{/if}
 				</div>
 			</div>
@@ -214,6 +236,14 @@ a.exchange-result-card:hover {
 	-webkit-line-clamp: 1;
 }
 
+.exchange-result-comment {
+	margin: 3px 0 0;
+	color: var(--color-text);
+	font-size: 0.78rem;
+	line-height: 1.45;
+	overflow-wrap: anywhere;
+}
+
 .exchange-swap-icon {
 	display: flex;
 	align-items: center;
@@ -285,7 +315,8 @@ a.exchange-result-card:hover {
 }
 
 .anime-exchange-result--timeline .exchange-result-copy span,
-.anime-exchange-result--timeline .exchange-result-copy small {
+.anime-exchange-result--timeline .exchange-result-copy small,
+.anime-exchange-result--timeline .exchange-result-comment {
 	font-size: 0.68rem;
 }
 

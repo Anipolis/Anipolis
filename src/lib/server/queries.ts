@@ -452,6 +452,7 @@ export async function getEventPosts(
 	limit = 100,
 	includeMutedRoomPosts = false,
 	broadcastRoomSessionId: string | null = null,
+	ascending = false,
 ): Promise<Post[]> {
 	// ハッシュタグ ID を取得
 	const { data: hashtagRow } = await supabase
@@ -481,8 +482,11 @@ export async function getEventPosts(
 		.is("parent_id", null);
 	if (broadcastRoomSessionId) postsQuery = postsQuery.eq("broadcast_room_session_id", broadcastRoomSessionId);
 	const { data: rawPosts } = await postsQuery.order("created_at", { ascending: false }).limit(limit);
+	const orderedPosts = ascending ? [...(rawPosts ?? [])].reverse() : rawPosts;
 
-	return enrichPostsWithCounts(supabase, (rawPosts ?? []) as unknown as RawPost[], userId, { includeMutedRoomPosts });
+	return enrichPostsWithCounts(supabase, (orderedPosts ?? []) as unknown as RawPost[], userId, {
+		includeMutedRoomPosts,
+	});
 }
 
 // ── ヘルパー ──────────────────────────────────────────────────────
@@ -1445,6 +1449,7 @@ export async function getAnimeExchangeEntries(
             status,
             created_at,
             matched_at,
+            comment,
             received_entry_id,
             anime:anime_exchange_entries_anime_id_fkey (
                 id,
@@ -1475,6 +1480,7 @@ export async function getAnimeExchangeEntries(
 		.from("anime_exchange_entries")
 		.select(`
 			id,
+			comment,
 			anime:anime_exchange_entries_anime_id_fkey (
 				id,
 				title,
@@ -1486,17 +1492,20 @@ export async function getAnimeExchangeEntries(
 
 	if (receivedError || !receivedRows) return baseItems;
 
-	const receivedAnimeByEntryId = new Map<string, AnimeExchangeItem["received_anime"]>();
+	const receivedEntryById = new Map<string, Pick<AnimeExchangeItem, "received_anime" | "received_comment">>();
 	for (const row of receivedRows as Record<string, unknown>[]) {
 		const animeValue = row["anime"];
 		const anime = Array.isArray(animeValue) ? animeValue[0] : animeValue;
 		if (!anime || typeof anime !== "object" || !row["id"]) continue;
 		const animeRecord = anime as Record<string, unknown>;
-		receivedAnimeByEntryId.set(String(row["id"]), {
-			id: String(animeRecord["id"]),
-			title: String(animeRecord["title"]),
-			title_en: typeof animeRecord["title_en"] === "string" ? animeRecord["title_en"] : null,
-			cover_url: typeof animeRecord["cover_url"] === "string" ? animeRecord["cover_url"] : null,
+		receivedEntryById.set(String(row["id"]), {
+			received_anime: {
+				id: String(animeRecord["id"]),
+				title: String(animeRecord["title"]),
+				title_en: typeof animeRecord["title_en"] === "string" ? animeRecord["title_en"] : null,
+				cover_url: typeof animeRecord["cover_url"] === "string" ? animeRecord["cover_url"] : null,
+			},
+			received_comment: typeof row["comment"] === "string" ? row["comment"] : null,
 		});
 	}
 
@@ -1504,9 +1513,13 @@ export async function getAnimeExchangeEntries(
 		const receivedEntryId = baseRows[index]?.["received_entry_id"];
 		const receivedAnime =
 			typeof receivedEntryId === "string" && receivedEntryId.length > 0
-				? (receivedAnimeByEntryId.get(receivedEntryId) ?? null)
+				? (receivedEntryById.get(receivedEntryId)?.received_anime ?? null)
 				: null;
-		return { ...item, received_anime: receivedAnime };
+		const receivedComment =
+			typeof receivedEntryId === "string" && receivedEntryId.length > 0
+				? (receivedEntryById.get(receivedEntryId)?.received_comment ?? null)
+				: null;
+		return { ...item, received_anime: receivedAnime, received_comment: receivedComment };
 	});
 }
 
@@ -1525,6 +1538,8 @@ export async function getAnimeExchangeShareForUser(
 		type: "anime_exchange",
 		offered_anime: exchange.offered_anime,
 		received_anime: exchange.received_anime,
+		offered_comment: exchange.comment,
+		received_comment: exchange.received_comment,
 	};
 }
 
@@ -1602,6 +1617,7 @@ function toAnimeExchangeItem(raw: Record<string, unknown>): AnimeExchangeItem | 
 		status,
 		created_at: String(raw["created_at"]),
 		matched_at: (raw["matched_at"] as string | null) ?? null,
+		comment: typeof raw["comment"] === "string" ? raw["comment"] : null,
 		offered_anime: {
 			id: String(offeredRecord["id"]),
 			title: String(offeredRecord["title"]),
@@ -1609,6 +1625,7 @@ function toAnimeExchangeItem(raw: Record<string, unknown>): AnimeExchangeItem | 
 			cover_url: typeof offeredRecord["cover_url"] === "string" ? offeredRecord["cover_url"] : null,
 		},
 		received_anime: null,
+		received_comment: null,
 	};
 }
 

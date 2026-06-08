@@ -22,6 +22,7 @@ let { data, form }: PageProps = $props();
 
 let animeQuery = $state("");
 let animeResults = $state<AnimeResult[]>([]);
+let exchangeComment = $state("");
 let selectedAnime = $state<AnimeResult | null>(null);
 let animeSearching = $state(false);
 let searchDebounce = $state<ReturnType<typeof setTimeout> | null>(null);
@@ -34,6 +35,7 @@ let listFeedback = $state("");
 let listError = $state("");
 
 const canExchange = $derived(Boolean(selectedAnime) && !exchangeSubmitting);
+const commentRemaining = $derived(120 - exchangeComment.length);
 
 function handleAnimeQueryInput() {
 	selectedAnime = null;
@@ -125,6 +127,7 @@ const handleExchangeSubmit: SubmitFunction = () => {
 		}
 
 		clearAnime();
+		exchangeComment = "";
 		await update();
 	};
 };
@@ -217,6 +220,20 @@ const handleExchangeSubmit: SubmitFunction = () => {
 						{/if}
 					</div>
 
+					<div class="exchange-comment-field">
+						<label for="exchange-comment">一言コメント</label>
+						<textarea
+							id="exchange-comment"
+							name="comment"
+							class="exchange-comment-input"
+							placeholder="この作品をすすめたい理由を一言"
+							rows="2"
+							maxlength="120"
+							bind:value={exchangeComment}
+						></textarea>
+						<small class:comment-over={commentRemaining < 0}>{commentRemaining}</small>
+					</div>
+
 					{#if selectedAnime}
 						<div class="selected-anime">
 							{#if selectedAnime.cover_url}
@@ -245,10 +262,15 @@ const handleExchangeSubmit: SubmitFunction = () => {
 								<h2>最近の交換結果</h2>
 							</div>
 						</div>
-						<AnimeExchangeResult offeredAnime={latestMatchedExchange.offered_anime} {receivedAnime}>
+						<AnimeExchangeResult
+							offeredAnime={latestMatchedExchange.offered_anime}
+							{receivedAnime}
+							offeredComment={latestMatchedExchange.comment}
+							receivedComment={latestMatchedExchange.received_comment}
+						>
 							{#snippet actions()}
 								<a
-									href="/?share_exchange={latestMatchedExchange.id}"
+									href="/?share_exchange={latestMatchedExchange.id}#compose"
 									class="btn-action btn-action--ghost"
 								>
 									結果をシェアする
@@ -289,6 +311,9 @@ const handleExchangeSubmit: SubmitFunction = () => {
 									<div>
 										<span class="history-label">渡した作品</span>
 										<a href="/anime/{exchange.offered_anime.id}">{exchange.offered_anime.title}</a>
+										{#if exchange.comment}
+											<p class="history-comment">{exchange.comment}</p>
+										{/if}
 									</div>
 								</div>
 								<div class="history-arrow">→</div>
@@ -309,6 +334,9 @@ const handleExchangeSubmit: SubmitFunction = () => {
 											<a href="/anime/{exchange.received_anime.id}"
 												>{exchange.received_anime.title}</a
 											>
+											{#if exchange.received_comment}
+												<p class="history-comment">{exchange.received_comment}</p>
+											{/if}
 										{:else}
 											<span class="history-muted">次の交換相手を待っています</span>
 										{/if}
@@ -443,7 +471,8 @@ const handleExchangeSubmit: SubmitFunction = () => {
 	min-width: 0;
 }
 
-.anime-picker label {
+.anime-picker label,
+.exchange-comment-field label {
 	display: block;
 	color: var(--color-text-muted);
 	font-size: 0.8rem;
@@ -451,7 +480,13 @@ const handleExchangeSubmit: SubmitFunction = () => {
 	margin-bottom: 6px;
 }
 
-.exchange-input {
+.exchange-comment-field {
+	grid-column: 1 / -1;
+	min-width: 0;
+}
+
+.exchange-input,
+.exchange-comment-input {
 	width: 100%;
 	padding: 10px 12px;
 	border: 1px solid var(--color-border);
@@ -460,7 +495,27 @@ const handleExchangeSubmit: SubmitFunction = () => {
 	color: var(--color-text);
 }
 
-.exchange-input:focus {
+.exchange-comment-input {
+	display: block;
+	min-height: 72px;
+	resize: vertical;
+	line-height: 1.5;
+}
+
+.exchange-comment-field small {
+	display: block;
+	margin-top: 4px;
+	color: var(--color-text-muted);
+	font-size: 0.75rem;
+	text-align: right;
+}
+
+.exchange-comment-field small.comment-over {
+	color: var(--color-danger);
+}
+
+.exchange-input:focus,
+.exchange-comment-input:focus {
 	outline: none;
 	border-color: var(--color-accent);
 }
@@ -679,6 +734,14 @@ const handleExchangeSubmit: SubmitFunction = () => {
 	color: var(--color-text);
 	font-weight: 700;
 	font-size: 0.9rem;
+}
+
+.history-comment {
+	margin: 3px 0 0;
+	color: var(--color-text-muted);
+	font-size: 0.78rem;
+	line-height: 1.45;
+	overflow-wrap: anywhere;
 }
 
 .history-arrow {
