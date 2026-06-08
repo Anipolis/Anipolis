@@ -156,7 +156,6 @@ const REQUEST_WAIT_MAX_MS = 1_000;
 const RETRY_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
 const MAX_RETRIES = 5;
 const UPSERT_BATCH_SIZE = 100;
-const MAL_HOME_URL = "https://myanimelist.net/";
 const BLOCKED_RESOURCE_KEYWORDS = ["namuwiki", "bangumi"];
 const BLOCKED_TYPES = new Set(["music", "pv", "cm"]);
 const FINITE_RELEASE_TYPES = new Set(["movie", "ona", "ova", "tvspecial", "special"]);
@@ -784,10 +783,12 @@ function dedupeResourceLinks(resources: AnimeResourceLink[]) {
 	return deduped;
 }
 
+function removeMalResourceLinks(resources: AnimeResourceLink[]) {
+	return resources.filter((resource) => resource.name.toLowerCase() !== "mal" && !isMalUrl(resource.url));
+}
+
 function buildAnimeResources(anime: JikanAnime) {
 	const resources: AnimeResourceLink[] = [];
-
-	if (anime.mal_id) resources.push({ name: "MAL", url: MAL_HOME_URL });
 
 	for (const link of anime.resources ?? []) {
 		const normalized = normalizeResourceLink(link);
@@ -972,7 +973,7 @@ async function preserveExistingValuesOnPartialFailures(
 			{
 				official_site_url: row.official_site_url,
 				official_x_url: row.official_x_url,
-				resources: row.resources ?? [],
+				resources: removeMalResourceLinks(row.resources ?? []),
 				cover_url: row.cover_url,
 			},
 		]),
