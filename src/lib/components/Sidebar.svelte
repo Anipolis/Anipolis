@@ -769,7 +769,7 @@ function isActive(path: string): boolean {
 					<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
 				</svg>
 			{/if}
-			<span class="sidebar-btn-label">{theme === 'dark' ? 'ライト' : 'ダーク'}</span>
+			<span class="sidebar-btn-label">テーマ切り替え</span>
 		</button>
 
 		{#if session}

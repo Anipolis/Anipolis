@@ -307,7 +307,7 @@ const handleSubmit: SubmitFunction = () => {
 					bind:this={textareaEl}
 					name="content"
 					class="composer-textarea"
-					placeholder="いまなにしてる？"
+					placeholder="どのアニメ見てる？"
 					rows="3"
 					bind:value={content}
 					maxlength={MAX_LENGTH + 10}
