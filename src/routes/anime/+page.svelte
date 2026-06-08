@@ -95,6 +95,14 @@ $effect(() => {
 	window.addEventListener("keydown", handler);
 	return () => window.removeEventListener("keydown", handler);
 });
+
+function isAiringToday(anime: Anime): boolean {
+	if (anime.broadcast_day == null || anime.computed_broadcast_status !== "airing") return false;
+	const now = new Date(Date.now() + 9 * 60 * 60 * 1000); // JST
+	// Before 4 AM is still part of the previous broadcast night (26時制)
+	const broadcastDay = now.getUTCHours() < 4 ? (now.getUTCDay() + 6) % 7 : now.getUTCDay();
+	return anime.broadcast_day === broadcastDay;
+}
 </script>
 
 <svelte:head> <title>アニメ — Anipolis</title> </svelte:head>
@@ -272,6 +280,9 @@ $effect(() => {
 							{/if}
 							{#if data.tab === 'popular' || data.tab === 'trending' || data.tab === 'top_rated'}
 								<span class="rank-badge">#{i + 1}</span>
+							{/if}
+							{#if isAiringToday(anime)}
+								<span class="airing-today-badge">本日放送</span>
 							{/if}
 							{#if data.user}
 								<button
@@ -694,6 +705,20 @@ $effect(() => {
 .status-unknown {
 	background: var(--hover-bg);
 	color: var(--text-muted);
+}
+
+.airing-today-badge {
+	position: absolute;
+	top: 6px;
+	right: 6px;
+	font-size: 0.7rem;
+	font-weight: 700;
+	padding: 3px 6px;
+	border-radius: 4px;
+	background: #ef4444;
+	color: #fff;
+	letter-spacing: 0.02em;
+	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
 }
 
 .anime-season {
