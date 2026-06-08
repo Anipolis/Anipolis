@@ -18,6 +18,9 @@ const muteDays = [1, 2, 3, 4, 5, 6, 7] as const;
 // Which anime are currently in their notification window (client-side highlight)
 let notifyingIds = $state(new Set<string>());
 
+// Which anime rooms are currently live (broadcast started, within 90 min)
+let liveAnimeIds = $state(new Set<string>());
+
 function getDefaultDayIndex(): number {
 	return new Date().getDay(); // 0=日〜6=土
 }
@@ -161,10 +164,28 @@ function refreshNotifyingIds() {
 	notifyingIds = next;
 }
 
+function refreshLiveIds() {
+	const now = new Date();
+	const next = new Set<string>();
+	for (const day of data.days) {
+		for (const anime of day.anime) {
+			const mins = minutesUntilBroadcast(anime, now);
+			if (mins !== null && mins <= 0 && mins >= -90) {
+				next.add(anime.id);
+			}
+		}
+	}
+	liveAnimeIds = next;
+}
+
 // Check every 30 seconds
 $effect(() => {
 	refreshNotifyingIds();
-	const id = setInterval(refreshNotifyingIds, 30_000);
+	refreshLiveIds();
+	const id = setInterval(() => {
+		refreshNotifyingIds();
+		refreshLiveIds();
+	}, 30_000);
 	return () => clearInterval(id);
 });
 
@@ -319,6 +340,7 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 						{#each day.anime as anime (anime.id)}
 							{@const isSubscribed = subscribedIds.has(anime.id)}
 							{@const isNotifying = notifyingIds.has(anime.id)}
+							{@const isLive = liveAnimeIds.has(anime.id)}
 							{@const isMuted = mutedAnimeIds.has(anime.id)}
 							{@const roomMute = data.roomMuteSettings[anime.id]}
 							{@const subscribable = canSubscribe(anime)}
@@ -343,6 +365,9 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 									</div>
 									<div class="slot-info">
 										<span class="slot-kind">ROOM</span>
+										{#if isLive}
+											<span class="slot-live-badge">LIVE</span>
+										{/if}
 										{#if anime.broadcast_time}
 											<span class="slot-time">{anime.broadcast_time.slice(0, 5)}</span>
 										{/if}
@@ -768,6 +793,28 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 	font-weight: 800;
 	color: var(--text-muted);
 	letter-spacing: 0;
+}
+.slot-live-badge {
+	display: inline-block;
+	font-size: 0.58rem;
+	font-weight: 800;
+	color: #fff;
+	background: #e53e3e;
+	border-radius: 3px;
+	padding: 1px 4px;
+	letter-spacing: 0.04em;
+	vertical-align: middle;
+	line-height: 1.4;
+	animation: live-pulse 1.8s ease-in-out infinite;
+}
+@keyframes live-pulse {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.65;
+	}
 }
 .slot-time {
 	font-size: 0.72rem;
