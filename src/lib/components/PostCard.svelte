@@ -31,6 +31,7 @@ const effectiveRoomContext = $derived(
 
 const isLong = $derived(post.content.length > 300 || (post.content.match(/\n/g)?.length ?? 0) >= 5);
 let collapsed = $state(true);
+let cwRevealed = $state(false);
 
 let deleting = $state(false);
 let lightboxUrl = $state<string | null>(null);
@@ -333,27 +334,55 @@ async function submitReport() {
 		</div>
 
 		<div class="post-content-outer">
-			<div class="post-content-inner" class:post-content-clipped={isLong && collapsed && !isDetailView}>
-				<p class="post-content">
-					{#each parts as part}
-						{#if part.type === 'hashtag'}
-							<a href="/hashtag/{part.value}" class="hashtag">#{part.value}</a>
-						{:else if part.type === 'mention'}
-							<a href="/profile/{part.value}" class="mention">@{part.value}</a>
-						{:else}
-							{part.value}
-						{/if}
-					{/each}
-				</p>
-			</div>
-			{#if isLong && !isDetailView}
+			{#if post.cw_anime && !cwRevealed}
 				<button
 					type="button"
-					class="post-content-toggle"
-					onclick={(e) => { e.stopPropagation(); collapsed = !collapsed; }}
+					class="post-cw-banner"
+					onclick={(e) => { e.stopPropagation(); cwRevealed = true; }}
 				>
-					{collapsed ? 'もっと見る' : '閉じる'}
+					<svg
+						width="18"
+						height="18"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<path
+							d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+						/>
+						<line x1="12" y1="9" x2="12" y2="13" />
+						<line x1="12" y1="17" x2="12.01" y2="17" />
+					</svg>
+					<span>『{post.cw_anime.title}』のネタバレを含みます</span>
+					<span class="post-cw-tap">タップして表示</span>
 				</button>
+			{:else}
+				<div class="post-content-inner" class:post-content-clipped={isLong && collapsed && !isDetailView}>
+					<p class="post-content">
+						{#each parts as part}
+							{#if part.type === 'hashtag'}
+								<a href="/hashtag/{part.value}" class="hashtag">#{part.value}</a>
+							{:else if part.type === 'mention'}
+								<a href="/profile/{part.value}" class="mention">@{part.value}</a>
+							{:else}
+								{part.value}
+							{/if}
+						{/each}
+					</p>
+				</div>
+				{#if isLong && !isDetailView}
+					<button
+						type="button"
+						class="post-content-toggle"
+						onclick={(e) => { e.stopPropagation(); collapsed = !collapsed; }}
+					>
+						{collapsed ? 'もっと見る' : '閉じる'}
+					</button>
+				{/if}
 			{/if}
 		</div>
 
@@ -380,6 +409,8 @@ async function submitReport() {
 				<AnimeExchangeResult
 					offeredAnime={post.exchange_share.offered_anime}
 					receivedAnime={post.exchange_share.received_anime}
+					offeredComment={post.exchange_share.offered_comment}
+					receivedComment={post.exchange_share.received_comment}
 					mode="timeline"
 					linkCards={false}
 				/>
@@ -514,6 +545,8 @@ async function submitReport() {
 						<AnimeExchangeResult
 							offeredAnime={post.exchange_share.offered_anime}
 							receivedAnime={post.exchange_share.received_anime}
+							offeredComment={post.exchange_share.offered_comment}
+							receivedComment={post.exchange_share.received_comment}
 						/>
 					</div>
 					<div class="exchange-result-modal-footer">
@@ -1082,5 +1115,34 @@ async function submitReport() {
 
 .post-content-toggle:hover {
 	text-decoration: underline;
+}
+
+.post-cw-banner {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 4px;
+	width: 100%;
+	padding: 12px 16px;
+	margin: 4px 0;
+	border: 1px solid var(--color-warning, #f59e0b);
+	background: color-mix(in srgb, var(--color-warning, #f59e0b) 8%, transparent);
+	border-radius: var(--radius-md, 8px);
+	cursor: pointer;
+	font-size: 14px;
+	text-align: center;
+	color: var(--color-text);
+	line-height: 1.4;
+}
+.post-cw-banner:hover {
+	background: color-mix(in srgb, var(--color-warning, #f59e0b) 16%, transparent);
+}
+.post-cw-banner svg {
+	color: var(--color-warning, #f59e0b);
+	flex-shrink: 0;
+}
+.post-cw-tap {
+	font-size: 12px;
+	color: var(--color-text-muted);
 }
 </style>

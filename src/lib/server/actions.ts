@@ -62,6 +62,7 @@ export async function insertPostWithHashtags(
 	quotedPostId: string | null = null,
 	exchangeShare: AnimeExchangeShare | null = null,
 	broadcastRoomSessionId: string | null = null,
+	cwAnimeId: string | null = null,
 ) {
 	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
 	if (moderationFailure) return moderationFailure;
@@ -88,6 +89,7 @@ export async function insertPostWithHashtags(
 		parent_id: parentId,
 		image_urls: imageUrls,
 		anime_id: animeId ? Number(animeId) : null,
+		cw_anime_id: cwAnimeId ? Number(cwAnimeId) : null,
 		quoted_post_id: quotedPostId || null,
 		broadcast_room_session_id: broadcastRoomSessionId,
 	};
@@ -677,13 +679,21 @@ export async function exchangeAnimeAction(supabase: SupabaseClient<Database>, re
 
 	const form = await request.formData();
 	const animeId = (form.get("anime_id") as string | null)?.trim() ?? "";
+	const comment = ((form.get("comment") as string | null)?.trim() ?? "") || null;
 
 	if (!userId) return fail(401, { exchangeMessage: "ログインが必要です" });
 	if (!animeId || Number.isNaN(Number(animeId))) {
 		return fail(400, { exchangeMessage: "アニメを選択してください" });
 	}
 
-	const { data, error } = await supabase.rpc("create_anime_exchange", { p_anime_id: Number(animeId) });
+	if (comment && comment.length > 120) {
+		return fail(400, { exchangeMessage: "コメントは120文字以内で入力してください" });
+	}
+
+	const { data, error } = await supabase.rpc("create_anime_exchange", {
+		p_anime_id: Number(animeId),
+		p_comment: comment,
+	});
 
 	if (error) {
 		if (error.message.includes("anime not found")) {

@@ -48,12 +48,16 @@ export interface AnimeExchangeShare {
 	type: "anime_exchange";
 	offered_anime: AnimeExchangeShareAnime;
 	received_anime: AnimeExchangeShareAnime;
+	offered_comment: string | null;
+	received_comment: string | null;
 }
 
 type AnimeExchangeShareRaw = {
 	type?: unknown;
 	offered_anime?: unknown;
 	received_anime?: unknown;
+	offered_comment?: unknown;
+	received_comment?: unknown;
 };
 
 type AnimeExchangeShareAnimeRaw = {
@@ -95,6 +99,8 @@ export interface Post {
 	anime_id: string | null;
 	anime_quote: AnimeQuote | null;
 	exchange_share: AnimeExchangeShare | null;
+	cw_anime_id: string | null;
+	cw_anime: { id: string; title: string; cover_url: string | null } | null;
 }
 
 export type ReactionType = "like" | "repost";
@@ -226,6 +232,7 @@ export interface AnimeExchangeItem {
 	status: "waiting" | "matched" | "cancelled";
 	created_at: string;
 	matched_at: string | null;
+	comment: string | null;
 	offered_anime: {
 		id: string;
 		title: string;
@@ -238,6 +245,7 @@ export interface AnimeExchangeItem {
 		title_en: string | null;
 		cover_url: string | null;
 	} | null;
+	received_comment: string | null;
 }
 
 // ----------------------------------------------------------------
@@ -262,6 +270,8 @@ export interface RawPost {
 		broadcast_time?: string | null;
 		broadcast_duration_minutes?: number | null;
 	} | null;
+	cw_anime_id?: string | number | null;
+	cw_anime?: { id: string | number; title: string; cover_url: string | null } | null;
 	profiles: {
 		username: string;
 		display_name: string | null;
@@ -341,6 +351,10 @@ export function toPost(
 				}
 			: null,
 		exchange_share: toAnimeExchangeShare(raw.exchange_share),
+		cw_anime_id: raw.cw_anime_id != null ? String(raw.cw_anime_id) : null,
+		cw_anime: raw.cw_anime
+			? { id: String(raw.cw_anime.id), title: raw.cw_anime.title, cover_url: raw.cw_anime.cover_url ?? null }
+			: null,
 	};
 }
 
@@ -363,6 +377,8 @@ function toAnimeExchangeShare(value: unknown): AnimeExchangeShare | null {
 		type: "anime_exchange",
 		offered_anime: offered,
 		received_anime: received,
+		offered_comment: typeof raw.offered_comment === "string" ? raw.offered_comment : null,
+		received_comment: typeof raw.received_comment === "string" ? raw.received_comment : null,
 	};
 }
 

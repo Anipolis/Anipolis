@@ -24,12 +24,13 @@ function closeModal() {
 }
 
 $effect(() => {
-	if (data.initialAnime && data.profile) {
+	if ((data.initialAnime || data.initialExchangeShare) && data.profile) {
 		if (window.matchMedia("(max-width: 768px)").matches) {
 			composeOpen.set(true);
 		}
 		const url = new URL(window.location.href);
 		url.searchParams.delete("quote_anime");
+		url.searchParams.delete("share_exchange");
 		url.hash = "";
 		goto(url.toString(), { replaceState: true, noScroll: true });
 	}
@@ -58,6 +59,7 @@ $effect(() => {
 					initialContent={data.initialContent}
 					initialExchangeId={data.initialExchangeId}
 					initialExchangeShare={data.initialExchangeShare}
+					watchingAnime={data.watchingAnime}
 				/>
 			{:else if data.session}
 				<div class="auth-gate">
@@ -227,6 +229,7 @@ $effect(() => {
 				initialContent={data.initialContent}
 				initialExchangeId={data.initialExchangeId}
 				initialExchangeShare={data.initialExchangeShare}
+				watchingAnime={data.watchingAnime}
 				onsubmitsuccess={closeModal}
 			/>
 		</div>
@@ -257,12 +260,12 @@ $effect(() => {
 
 .compose-modal {
 	position: fixed;
-	bottom: 0;
+	top: 0;
 	left: 0;
 	right: 0;
 	background: var(--color-bg);
-	border-top: 1px solid var(--color-border);
-	border-radius: 16px 16px 0 0;
+	border-bottom: 1px solid var(--color-border);
+	border-radius: 0 0 16px 16px;
 	z-index: 201;
 	max-height: 90dvh;
 	display: flex;
@@ -274,7 +277,7 @@ $effect(() => {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	padding: 14px 16px 10px;
+	padding: calc(14px + env(safe-area-inset-top)) 16px 10px;
 	border-bottom: 1px solid var(--color-border);
 	flex-shrink: 0;
 }
@@ -297,7 +300,6 @@ $effect(() => {
 
 .compose-modal-body {
 	overflow-y: auto;
-	padding-bottom: env(safe-area-inset-bottom);
 }
 
 /* Landing hero (unauthenticated) */

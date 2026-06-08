@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
 import type { SubmitFunction } from "@sveltejs/kit";
 import { enhance } from "$app/forms";
 import { replaceState } from "$app/navigation";
@@ -29,6 +29,7 @@ interface Props {
 	initialContent?: string;
 	initialExchangeId?: string | null;
 	initialExchangeShare?: AnimeExchangeShare | null;
+	watchingAnime?: AnimeResult[];
 	onsubmitsuccess?: () => void;
 }
 
@@ -39,6 +40,7 @@ let {
 	initialContent = "",
 	initialExchangeId = null,
 	initialExchangeShare = null,
+	watchingAnime = [],
 	onsubmitsuccess,
 }: Props = $props();
 
@@ -61,6 +63,15 @@ let animeResults = $state<AnimeResult[]>([]);
 let animeSearching = $state(false);
 let selectedAnime = $state<AnimeResult | null>(null);
 let searchDebounce = $state<ReturnType<typeof setTimeout> | null>(null);
+
+// CW（コンテンツ警告）
+let cwSearchOpen = $state(false);
+let cwQuery = $state("");
+let cwResults = $state<AnimeResult[]>([]);
+let cwSearching = $state(false);
+let selectedCwAnime = $state<AnimeResult | null>(null);
+let cwSearchDebounce: ReturnType<typeof setTimeout> | null = null;
+let cwInputEl = $state<HTMLInputElement | null>(null);
 
 // @メンション
 let textareaEl = $state<HTMLTextAreaElement | null>(null);
@@ -158,6 +169,42 @@ function selectAnime(anime: AnimeResult) {
 
 function clearAnime() {
 	selectedAnime = null;
+}
+
+function openCwSearch() {
+	cwSearchOpen = true;
+	cwQuery = "";
+	cwResults = [];
+}
+$effect(() => {
+	if (cwSearchOpen && cwInputEl) setTimeout(() => cwInputEl?.focus(), 50);
+});
+function closeCwSearch() {
+	cwSearchOpen = false;
+}
+function selectCwAnime(anime: AnimeResult) {
+	selectedCwAnime = anime;
+	cwSearchOpen = false;
+}
+function clearCwAnime() {
+	selectedCwAnime = null;
+}
+function handleCwQueryInput() {
+	if (cwSearchDebounce) clearTimeout(cwSearchDebounce);
+	if (cwQuery.trim().length === 0) {
+		cwResults = [];
+		return;
+	}
+	cwSearchDebounce = setTimeout(async () => {
+		cwSearching = true;
+		try {
+			const res = await fetch(`/api/anime/search?q=${encodeURIComponent(cwQuery.trim())}`);
+			cwResults = res.ok ? await res.json() : [];
+		} catch {
+			cwResults = [];
+		}
+		cwSearching = false;
+	}, 300);
 }
 
 function clearExchangeShare() {
@@ -309,11 +356,24 @@ const handleSubmit: SubmitFunction = () => {
 				<input type="hidden" name="anime_id" value={selectedAnime.id}>
 			{/if}
 
+			{#if selectedCwAnime}
+				<div class="composer-cw-badge">
+					<span class="i-lucide-alert-triangle composer-cw-icon" aria-hidden="true"></span>
+					<span class="composer-cw-label">ネタバレ：{selectedCwAnime.title}</span>
+					<button type="button" class="composer-cw-remove" onclick={clearCwAnime} aria-label="CW解除">
+						✕
+					</button>
+				</div>
+				<input type="hidden" name="cw_anime_id" value={selectedCwAnime.id}>
+			{/if}
+
 			{#if selectedExchangeShare}
 				<div class="composer-exchange-preview">
 					<AnimeExchangeResult
 						offeredAnime={selectedExchangeShare.offered_anime}
 						receivedAnime={selectedExchangeShare.received_anime}
+						offeredComment={selectedExchangeShare.offered_comment}
+						receivedComment={selectedExchangeShare.received_comment}
 						mode="timeline"
 					/>
 					<button
@@ -440,6 +500,33 @@ const handleSubmit: SubmitFunction = () => {
 					</svg>
 				</button>
 
+				<!-- CWボタン -->
+				<button
+					type="button"
+					class="composer-image-btn"
+					class:active={selectedCwAnime !== null}
+					onclick={openCwSearch}
+					aria-label="ネタバレCWを設定"
+					title="ネタバレCW（コンテンツ警告）を設定"
+				>
+					<svg
+						width="18"
+						height="18"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<path
+							d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
+						/>
+						<line x1="1" y1="1" x2="23" y2="23" />
+					</svg>
+				</button>
+
 				<span class="char-count {countClass}">{remaining}</span>
 				<button type="submit" class="btn btn-primary" disabled={!canSubmit}>
 					{submitting ? '投稿中…' : '投稿'}
@@ -483,6 +570,58 @@ const handleSubmit: SubmitFunction = () => {
 				{:else}
 					{#each animeResults as anime}
 						<button type="button" class="anime-search-item" onclick={() => selectAnime(anime)}>
+							{#if anime.cover_url}
+								<img src={anime.cover_url} alt={anime.title} class="anime-search-thumb">
+							{:else}
+								<div class="anime-search-thumb anime-search-thumb-empty"></div>
+							{/if}
+							<div class="anime-search-item-info">
+								<span class="anime-search-item-title">{anime.title}</span>
+								{#if anime.title_en}
+									<span class="anime-search-item-sub">{anime.title_en}</span>
+								{/if}
+							</div>
+						</button>
+					{/each}
+				{/if}
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- CW（ネタバレ）作品検索モーダル -->
+{#if cwSearchOpen}
+	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<div
+		class="anime-search-overlay"
+		onclick={(e) => { if (e.target === e.currentTarget) closeCwSearch(); }}
+		role="dialog"
+		aria-modal="true"
+		aria-label="ネタバレ作品を選択"
+		tabindex="-1"
+	>
+		<div class="anime-search-modal">
+			<div class="anime-search-header">
+				<span class="anime-search-title">ネタバレ作品を選択</span>
+				<button type="button" class="anime-search-close" onclick={closeCwSearch} aria-label="閉じる">✕</button>
+			</div>
+			<input
+				type="search"
+				class="anime-search-input"
+				placeholder="作品名で検索…"
+				bind:this={cwInputEl}
+				bind:value={cwQuery}
+				oninput={handleCwQueryInput}
+			>
+			<div class="anime-search-results">
+				{#if cwSearching}
+					<p class="anime-search-empty">検索中…</p>
+				{:else if cwQuery.trim().length > 0 && cwResults.length === 0}
+					<p class="anime-search-empty">見つかりませんでした</p>
+				{:else}
+					{#each (cwQuery.trim() ? cwResults : watchingAnime) as anime}
+						<button type="button" class="anime-search-item" onclick={() => selectCwAnime(anime)}>
 							{#if anime.cover_url}
 								<img src={anime.cover_url} alt={anime.title} class="anime-search-thumb">
 							{:else}
@@ -553,5 +692,37 @@ const handleSubmit: SubmitFunction = () => {
 	top: 8px;
 	right: 8px;
 	z-index: 1;
+}
+.composer-cw-badge {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 10px;
+	margin-top: 8px;
+	border: 1px solid var(--color-warning, #f59e0b);
+	background: color-mix(in srgb, var(--color-warning, #f59e0b) 10%, transparent);
+	border-radius: var(--radius-sm, 6px);
+	font-size: 13px;
+}
+.composer-cw-icon {
+	color: var(--color-warning, #f59e0b);
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+}
+.composer-cw-label {
+	flex: 1;
+	font-weight: 600;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.composer-cw-remove {
+	background: none;
+	border: none;
+	cursor: pointer;
+	color: var(--color-text-muted);
+	padding: 0 2px;
+	font-size: 12px;
 }
 </style>

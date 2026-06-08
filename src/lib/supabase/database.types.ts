@@ -91,6 +91,7 @@ export type Database = {
 					quoted_post_id: string | null;
 					image_urls: string[];
 					anime_id: number | null;
+					cw_anime_id: number | null;
 					broadcast_room_session_id: string | null;
 					exchange_share: Json | null;
 					hidden_by_admin: boolean;
@@ -104,6 +105,7 @@ export type Database = {
 					quoted_post_id?: string | null;
 					image_urls?: string[];
 					anime_id?: number | null;
+					cw_anime_id?: number | null;
 					broadcast_room_session_id?: string | null;
 					exchange_share?: Json | null;
 					hidden_by_admin?: boolean;
@@ -114,6 +116,7 @@ export type Database = {
 					quoted_post_id?: string | null;
 					image_urls?: string[];
 					anime_id?: number | null;
+					cw_anime_id?: number | null;
 					broadcast_room_session_id?: string | null;
 					exchange_share?: Json | null;
 					hidden_by_admin?: boolean;
@@ -129,6 +132,13 @@ export type Database = {
 					{
 						foreignKeyName: "posts_anime_id_fkey";
 						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "posts_cw_anime_id_fkey";
+						columns: ["cw_anime_id"];
 						isOneToOne: false;
 						referencedRelation: "anime";
 						referencedColumns: ["id"];
@@ -469,6 +479,7 @@ export type Database = {
 					id: string;
 					user_id: string;
 					anime_id: number;
+					comment: string | null;
 					status: "waiting" | "matched" | "cancelled";
 					received_entry_id: string | null;
 					created_at: string;
@@ -478,12 +489,14 @@ export type Database = {
 					id?: string;
 					user_id: string;
 					anime_id: number;
+					comment?: string | null;
 					status?: "waiting" | "matched" | "cancelled";
 					received_entry_id?: string | null;
 					created_at?: string;
 					matched_at?: string | null;
 				};
 				Update: {
+					comment?: string | null;
 					status?: "waiting" | "matched" | "cancelled";
 					received_entry_id?: string | null;
 					matched_at?: string | null;
@@ -990,7 +1003,7 @@ export type Database = {
 				}[];
 			};
 			create_anime_exchange: {
-				Args: { p_anime_id: number };
+				Args: { p_anime_id: number; p_comment?: string | null };
 				Returns: {
 					exchange_id: string;
 					received_entry_id: string | null;
