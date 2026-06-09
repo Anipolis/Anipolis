@@ -316,15 +316,42 @@ textarea {
 	pointer-events: none;
 }
 
+.sidebar-toggle {
+	display: none;
+}
+
 @media (max-width: 640px) {
 	.icon-sidebar {
-		display: none;
+		display: flex;
+		transform: translateX(-100%);
+		transition: transform 0.2s ease;
+	}
+	:root:not(.sidebar-collapsed) .icon-sidebar {
+		transform: translateX(0);
 	}
 	.app-layout {
 		flex-direction: column;
 	}
 	.app-main {
 		padding-left: 0;
+	}
+	.sidebar-toggle {
+		position: fixed;
+		top: calc(var(--nav-height) + 12px);
+		left: 12px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 36px;
+		height: 36px;
+		border: 1px solid var(--color-border);
+		border-radius: 9999px;
+		background: var(--color-surface);
+		color: var(--color-text);
+		z-index: 220;
+	}
+	:root:not(.sidebar-collapsed) .sidebar-toggle {
+		left: calc(var(--icon-bar-width) - 18px);
 	}
 }
 

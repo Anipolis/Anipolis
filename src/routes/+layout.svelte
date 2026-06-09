@@ -8,7 +8,16 @@ import "../app.css";
 
 let { data, children }: LayoutProps = $props();
 
-let sidebarOpen = $state(browser ? localStorage.getItem("sidebarOpen") !== "false" : true);
+function getInitialSidebarOpen() {
+	if (!browser) return true;
+
+	const storedValue = localStorage.getItem("sidebarOpen");
+	if (storedValue !== null) return storedValue !== "false";
+
+	return !window.matchMedia("(max-width: 640px)").matches;
+}
+
+let sidebarOpen = $state(getInitialSidebarOpen());
 
 $effect(() => {
 	if (browser) {
