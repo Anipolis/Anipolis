@@ -34,6 +34,7 @@ export interface AnimeQuote {
 	cover_url: string | null;
 	official_hashtag: string[] | null;
 	room_href: string | null;
+	episode_number: number | null;
 	/** 閲覧者自身のスコア（enrichPostsWithCounts で付加） */
 	user_score: number | null;
 }
@@ -272,6 +273,7 @@ export interface RawPost {
 		broadcast_day?: number | null;
 		broadcast_time?: string | null;
 		broadcast_duration_minutes?: number | null;
+		aired_from?: string | null;
 	} | null;
 	cw_anime_id?: string | number | null;
 	cw_anime?: { id: string | number; title: string; cover_url: string | null } | null;
@@ -351,6 +353,11 @@ export function toPost(
 					cover_url: raw.anime.cover_url,
 					official_hashtag: raw.anime.official_hashtag ?? null,
 					room_href: buildAnimeRoomHref(raw.anime, raw.broadcast_room_session ?? null),
+					episode_number: calcEpisodeNumber(
+						raw.broadcast_room_session ?? null,
+						raw.anime.aired_from ?? null,
+						raw.anime.broadcast_time ?? null,
+					),
 					user_score: null,
 				}
 			: null,
@@ -370,12 +377,29 @@ function buildAnimeRoomHref(
 	return session?.room_date ? `/rooms/anime/${String(anime.id)}/${session.room_date}` : null;
 }
 
-export function buildAnimeRoomLabel(anime: Pick<AnimeQuote, "title" | "official_hashtag">): string {
+function calcEpisodeNumber(
+	rawSession: RawPost["broadcast_room_session"],
+	airedFrom: string | null,
+	broadcastTime: string | null,
+): number | null {
+	const session = Array.isArray(rawSession) ? rawSession[0] : rawSession;
+	if (!session?.room_date || !airedFrom) return null;
+	const airedFromDate = new Date(`${airedFrom.slice(0, 10)}T00:00:00`);
+	const slotDate = new Date(`${session.room_date}T00:00:00`);
+	const broadcastHour = broadcastTime ? Number(broadcastTime.split(":")[0]) : 0;
+	if (broadcastHour >= 24) slotDate.setDate(slotDate.getDate() + 1);
+	const msDiff = slotDate.getTime() - airedFromDate.getTime();
+	if (msDiff < 0) return null;
+	return Math.floor(Math.round(msDiff / 86_400_000) / 7) + 1;
+}
+
+export function buildAnimeRoomLabel(anime: Pick<AnimeQuote, "title" | "official_hashtag" | "episode_number">): string {
 	const officialHashtag = anime.official_hashtag
 		?.map((tag) => tag.trim().replace(/^#+/, ""))
 		.find((tag) => tag.length > 0);
 	const fallbackHashtag = anime.title.replace(/\s+/g, "").replace(/[^\p{L}\p{N}_]/gu, "");
-	return `#${officialHashtag ?? fallbackHashtag}`;
+	const tag = `#${officialHashtag ?? fallbackHashtag}`;
+	return anime.episode_number != null ? `${tag}　${anime.episode_number}話` : tag;
 }
 
 function toAnimeExchangeShare(value: unknown): AnimeExchangeShare | null {

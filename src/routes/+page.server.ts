@@ -20,20 +20,20 @@ const POSTS_SELECT_WITH_EXCHANGE_AND_CW = `id, content, created_at, user_id, par
 	profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
 	post_hashtags ( hashtags ( name ) ),
 	broadcast_room_session:broadcast_room_sessions!posts_broadcast_room_session_id_fkey ( room_date ),
-	anime:anime!posts_anime_id_fkey ( id, title, cover_url, official_hashtag, broadcast_day, broadcast_time, broadcast_duration_minutes ),
+	anime:anime!posts_anime_id_fkey ( id, title, cover_url, official_hashtag, broadcast_day, broadcast_time, broadcast_duration_minutes, aired_from ),
 	cw_anime:anime!posts_cw_anime_id_fkey ( id, title, cover_url )`;
 
 const POSTS_SELECT_WITH_EXCHANGE = `id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, broadcast_room_session_id, exchange_share,
 	profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
 	post_hashtags ( hashtags ( name ) ),
 	broadcast_room_session:broadcast_room_sessions!posts_broadcast_room_session_id_fkey ( room_date ),
-	anime:anime!posts_anime_id_fkey ( id, title, cover_url, official_hashtag, broadcast_day, broadcast_time, broadcast_duration_minutes )`;
+	anime:anime!posts_anime_id_fkey ( id, title, cover_url, official_hashtag, broadcast_day, broadcast_time, broadcast_duration_minutes, aired_from )`;
 
 const POSTS_SELECT_BASE = `id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, broadcast_room_session_id,
 	profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
 	post_hashtags ( hashtags ( name ) ),
 	broadcast_room_session:broadcast_room_sessions!posts_broadcast_room_session_id_fkey ( room_date ),
-	anime:anime!posts_anime_id_fkey ( id, title, cover_url, official_hashtag, broadcast_day, broadcast_time, broadcast_duration_minutes )`;
+	anime:anime!posts_anime_id_fkey ( id, title, cover_url, official_hashtag, broadcast_day, broadcast_time, broadcast_duration_minutes, aired_from )`;
 
 export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession }, parent }) => {
 	const { profile } = await parent();
