@@ -101,15 +101,9 @@ function handleFabClick() {
 	box-shadow: 0 6px 20px rgba(99, 102, 241, 0.55);
 }
 
-@media (max-width: 768px) {
+@media (max-width: 960px) {
 	.mobile-fab {
 		display: flex;
-	}
-}
-
-@media (max-width: 768px) and (orientation: landscape) {
-	.mobile-fab {
-		display: none;
 	}
 }
 </style>

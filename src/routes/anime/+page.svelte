@@ -51,6 +51,8 @@ const tabs = [
 	{ id: "mylist", label: "マイリスト" },
 ] as const;
 
+const ANIME_SECTION_SIZE = 50;
+
 const statusLabels: Record<AnimeStatus, string> = {
 	watching: "視聴中",
 	completed: "完了",
@@ -68,7 +70,7 @@ function animeStatusBadge(anime: Anime): string {
 
 const statusOptions: { value: AnimeStatus; label: string; color: string }[] = [
 	{ value: "watching" as AnimeStatus, label: "視聴中", color: "#16a34a" },
-	{ value: "completed" as AnimeStatus, label: "完了", color: "#7c3aed" },
+	{ value: "completed" as AnimeStatus, label: "完了", color: "#19448e" },
 	{ value: "plan_to_watch" as AnimeStatus, label: "視聴予定", color: "#2563eb" },
 	{ value: "on_hold" as AnimeStatus, label: "中断", color: "#d97706" },
 	{ value: "dropped" as AnimeStatus, label: "断念", color: "#dc2626" },
@@ -76,6 +78,67 @@ const statusOptions: { value: AnimeStatus; label: string; color: string }[] = [
 
 let quickAddAnime = $state<Anime | null>(null);
 let quickAddSubmitting = $state(false);
+let currentAnimeSectionIndex = $state(0);
+let animeSections = $derived(chunkAnimes(data.animes));
+let currentAnimeSection = $derived(animeSections[currentAnimeSectionIndex] ?? { start: 0, end: 0, items: [] });
+let visibleAnimeSectionPages = $derived(getVisibleAnimeSectionPages(animeSections, currentAnimeSectionIndex, 7));
+let visibleMobileAnimeSectionPages = $derived(getVisibleAnimeSectionPages(animeSections, currentAnimeSectionIndex, 5));
+let animeListContextKey = $derived(
+	[
+		data.tab,
+		data.search,
+		data.genre,
+		data.season,
+		data.broadcastYear,
+		data.broadcastSeason,
+		data.studio,
+		data.producer,
+	].join("\u0000"),
+);
+let previousAnimeListContextKey = $state<string | null>(null);
+
+function chunkAnimes(animes: Anime[]) {
+	const sections: { start: number; end: number; items: Anime[] }[] = [];
+	for (let start = 0; start < animes.length; start += ANIME_SECTION_SIZE) {
+		const items = animes.slice(start, start + ANIME_SECTION_SIZE);
+		sections.push({ start, end: start + items.length, items });
+	}
+	return sections;
+}
+
+function setAnimeSectionIndex(index: number) {
+	currentAnimeSectionIndex = Math.min(Math.max(index, 0), Math.max(animeSections.length - 1, 0));
+}
+
+function getVisibleAnimeSectionPages(
+	sections: { start: number; end: number; items: Anime[] }[],
+	currentIndex: number,
+	visibleCount: number,
+) {
+	const maxStart = Math.max(sections.length - visibleCount, 0);
+	const sideCount = Math.floor(visibleCount / 2);
+	const start = Math.min(Math.max(currentIndex - sideCount, 0), maxStart);
+	return sections.slice(start, start + visibleCount).map((section, offset) => ({
+		section,
+		index: start + offset,
+	}));
+}
+
+$effect(() => {
+	if (previousAnimeListContextKey === null) {
+		previousAnimeListContextKey = animeListContextKey;
+		return;
+	}
+	if (animeListContextKey !== previousAnimeListContextKey) {
+		previousAnimeListContextKey = animeListContextKey;
+		currentAnimeSectionIndex = 0;
+	}
+});
+
+$effect(() => {
+	const maxIndex = Math.max(animeSections.length - 1, 0);
+	if (currentAnimeSectionIndex > maxIndex) currentAnimeSectionIndex = maxIndex;
+});
 
 function openQuickAdd(e: MouseEvent, anime: Anime) {
 	e.preventDefault();
@@ -256,88 +319,158 @@ function isAiringToday(anime: Anime): boolean {
 				</div>
 			</div>
 		{:else}
-			<div class="anime-grid">
-				{#each data.animes as anime, i}
-					<a href="/anime/{anime.id}" class="anime-card">
-						<div class="anime-cover">
-							{#if anime.cover_url}
-								<img src={anime.cover_url ?? ''} alt={anime.title} loading="lazy">
-							{:else}
-								<div class="anime-cover-placeholder">
-									<svg
-										width="32"
-										height="32"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="1.5"
-										aria-hidden="true"
-									>
-										<rect x="2" y="2" width="20" height="20" rx="2" />
-										<path d="M10 8l6 4-6 4V8z" />
-									</svg>
-								</div>
-							{/if}
-							{#if data.tab === 'popular' || data.tab === 'trending' || data.tab === 'top_rated'}
-								<span class="rank-badge">#{i + 1}</span>
-							{/if}
-							{#if isAiringToday(anime)}
-								<span class="airing-today-badge">本日放送</span>
-							{/if}
-							{#if data.user}
-								<button
-									type="button"
-									class="quick-add-btn"
-									class:in-list={anime.user_entry}
-									onclick={(e) => openQuickAdd(e, anime)}
-									aria-label={anime.user_entry ? statusLabels[anime.user_entry.status as AnimeStatus] : 'マイリストに追加'}
-									title={anime.user_entry ? statusLabels[anime.user_entry.status as AnimeStatus] : 'マイリストに追加'}
-								>
-									{#if anime.user_entry}
+			<div class="anime-list-surface">
+				<div class="anime-grid">
+					{#each currentAnimeSection.items as anime, sectionItemIndex}
+						{@const rankIndex = currentAnimeSection.start + sectionItemIndex}
+						<a href="/anime/{anime.id}" class="anime-card">
+							<div class="anime-cover">
+								{#if anime.cover_url}
+									<img src={anime.cover_url ?? ''} alt={anime.title} loading="lazy">
+								{:else}
+									<div class="anime-cover-placeholder">
 										<svg
-											width="13"
-											height="13"
-											viewBox="0 0 24 24"
-											fill="currentColor"
-											aria-hidden="true"
-										>
-											<path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
-										</svg>
-									{:else}
-										<svg
-											width="13"
-											height="13"
+											width="32"
+											height="32"
 											viewBox="0 0 24 24"
 											fill="none"
 											stroke="currentColor"
-											stroke-width="2.5"
+											stroke-width="1.5"
 											aria-hidden="true"
 										>
-											<path d="M12 5v14M5 12h14" />
+											<rect x="2" y="2" width="20" height="20" rx="2" />
+											<path d="M10 8l6 4-6 4V8z" />
 										</svg>
-									{/if}
-								</button>
-							{/if}
-						</div>
-						<div class="anime-info">
-							<p class="anime-title">{anime.title}</p>
-							{#if anime.title_en}
-								<p class="anime-title-en">{anime.title_en}</p>
-							{/if}
-							<div class="anime-meta">
-								<span class="anime-status-badge status-{anime.computed_broadcast_status}"
-									>{animeStatusBadge(anime)}</span
-								>
-								{#if anime.season}
-									<span class="anime-season">{anime.season}</span>
+									</div>
+								{/if}
+								{#if data.tab === 'popular' || data.tab === 'trending' || data.tab === 'top_rated'}
+									<span class="rank-badge">#{rankIndex + 1}</span>
+								{/if}
+								{#if isAiringToday(anime)}
+									<span class="airing-today-badge">本日放送</span>
+								{/if}
+								{#if data.user}
+									<button
+										type="button"
+										class="quick-add-btn"
+										class:in-list={anime.user_entry}
+										onclick={(e) => openQuickAdd(e, anime)}
+										aria-label={anime.user_entry ? statusLabels[anime.user_entry.status as AnimeStatus] : 'マイリストに追加'}
+										title={anime.user_entry ? statusLabels[anime.user_entry.status as AnimeStatus] : 'マイリストに追加'}
+									>
+										{#if anime.user_entry}
+											<svg
+												width="13"
+												height="13"
+												viewBox="0 0 24 24"
+												fill="currentColor"
+												aria-hidden="true"
+											>
+												<path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+											</svg>
+										{:else}
+											<svg
+												width="13"
+												height="13"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2.5"
+												aria-hidden="true"
+											>
+												<path d="M12 5v14M5 12h14" />
+											</svg>
+										{/if}
+									</button>
 								{/if}
 							</div>
-							{#if anime.user_entry}
-								<span class="mylist-badge">{statusLabels[anime.user_entry.status as AnimeStatus]}</span>
-							{/if}
-						</div>
-					</a>
-				{/each}
+							<div class="anime-info">
+								<p class="anime-title">{anime.title}</p>
+								{#if anime.title_en}
+									<p class="anime-title-en">{anime.title_en}</p>
+								{/if}
+								<div class="anime-meta">
+									<span class="anime-status-badge status-{anime.computed_broadcast_status}"
+										>{animeStatusBadge(anime)}</span
+									>
+									{#if anime.season}
+										<span class="anime-season">{anime.season}</span>
+									{/if}
+								</div>
+								{#if anime.user_entry}
+									<span class="mylist-badge"
+										>{statusLabels[anime.user_entry.status as AnimeStatus]}</span
+									>
+								{/if}
+							</div>
+						</a>
+					{/each}
+				</div>
+
+				{#if animeSections.length > 1}
+					<nav class="anime-section-bar" aria-label="50件ごとの表示切り替え">
+						<button
+							type="button"
+							class="anime-section-control"
+							onclick={() => setAnimeSectionIndex(0)}
+							disabled={currentAnimeSectionIndex === 0}
+							aria-label="最初の50件"
+						>
+							<span aria-hidden="true">«</span>
+						</button>
+						<button
+							type="button"
+							class="anime-section-control"
+							onclick={() => setAnimeSectionIndex(currentAnimeSectionIndex - 1)}
+							disabled={currentAnimeSectionIndex === 0}
+							aria-label="前の50件"
+						>
+							<span aria-hidden="true">‹</span>
+						</button>
+						{#each visibleAnimeSectionPages as page}
+							<button
+								type="button"
+								class="anime-section-page anime-section-page--desktop"
+								class:active={currentAnimeSectionIndex === page.index}
+								onclick={() => setAnimeSectionIndex(page.index)}
+								aria-label={`${page.section.start + 1}-${page.section.end}件を表示`}
+								aria-current={currentAnimeSectionIndex === page.index ? 'page' : undefined}
+							>
+								{page.index + 1}
+							</button>
+						{/each}
+						{#each visibleMobileAnimeSectionPages as page}
+							<button
+								type="button"
+								class="anime-section-page anime-section-page--mobile"
+								class:active={currentAnimeSectionIndex === page.index}
+								onclick={() => setAnimeSectionIndex(page.index)}
+								aria-label={`${page.section.start + 1}-${page.section.end}件を表示`}
+								aria-current={currentAnimeSectionIndex === page.index ? 'page' : undefined}
+							>
+								{page.index + 1}
+							</button>
+						{/each}
+						<button
+							type="button"
+							class="anime-section-control"
+							onclick={() => setAnimeSectionIndex(currentAnimeSectionIndex + 1)}
+							disabled={currentAnimeSectionIndex === animeSections.length - 1}
+							aria-label="次の50件"
+						>
+							<span aria-hidden="true">›</span>
+						</button>
+						<button
+							type="button"
+							class="anime-section-control"
+							onclick={() => setAnimeSectionIndex(animeSections.length - 1)}
+							disabled={currentAnimeSectionIndex === animeSections.length - 1}
+							aria-label="最後の50件"
+						>
+							<span aria-hidden="true">»</span>
+						</button>
+					</nav>
+				{/if}
 			</div>
 		{/if}
 	</main>
@@ -573,14 +706,16 @@ function isAiringToday(anime: Anime): boolean {
 	padding: 6px 14px;
 	border-radius: 20px;
 	font-size: 0.85rem;
-	color: var(--text-muted);
+	color: var(--text-secondary);
 	text-decoration: none;
-	border: 1px solid var(--border);
+	border: 1.5px solid var(--color-border-hover);
 	transition: all 0.15s;
+	font-weight: 500;
 }
 .tab-btn:hover {
 	background: var(--hover-bg);
 	color: var(--text);
+	border-color: var(--color-accent);
 }
 .tab-btn.active {
 	background: var(--accent);
@@ -588,8 +723,96 @@ function isAiringToday(anime: Anime): boolean {
 	border-color: var(--accent);
 }
 
+.anime-list-surface {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	width: 100%;
+	min-width: 0;
+}
+
+.anime-section-bar {
+	display: inline-flex;
+	max-width: 100%;
+	margin-top: 18px;
+	overflow-x: auto;
+	border: 1px solid var(--border);
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--card-bg) 86%, var(--hover-bg));
+	box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+	vertical-align: top;
+	scrollbar-width: none;
+}
+
+.anime-section-bar::-webkit-scrollbar {
+	display: none;
+}
+
+.anime-section-control,
+.anime-section-page {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 44px;
+	width: 44px;
+	height: 44px;
+	padding: 0;
+	border: 0;
+	border-right: 1px solid var(--border);
+	background: transparent;
+	color: var(--text);
+	font-size: 0.94rem;
+	line-height: 1;
+	cursor: pointer;
+	transition:
+		background 0.15s,
+		color 0.15s;
+}
+
+.anime-section-control:first-child {
+	border-top-left-radius: 999px;
+	border-bottom-left-radius: 999px;
+}
+
+.anime-section-control:last-child {
+	border-right: 0;
+	border-top-right-radius: 999px;
+	border-bottom-right-radius: 999px;
+}
+
+.anime-section-control {
+	color: var(--text-muted);
+	font-size: 1.4rem;
+	font-weight: 700;
+}
+
+.anime-section-page {
+	font-weight: 600;
+}
+
+.anime-section-page--mobile {
+	display: none;
+}
+
+.anime-section-control:hover:not(:disabled),
+.anime-section-page:hover {
+	background: var(--hover-bg);
+	color: var(--text);
+}
+
+.anime-section-page.active {
+	background: color-mix(in srgb, var(--accent) 24%, var(--hover-bg));
+	color: var(--text);
+}
+
+.anime-section-control:disabled {
+	color: color-mix(in srgb, var(--text-muted) 42%, transparent);
+	cursor: default;
+}
+
 .anime-grid {
 	display: grid;
+	align-self: stretch;
 	width: 100%;
 	min-width: 0;
 	grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -597,9 +820,44 @@ function isAiringToday(anime: Anime): boolean {
 }
 
 @media (max-width: 768px) {
+	.anime-list-surface {
+		padding-bottom: calc(72px + env(safe-area-inset-bottom));
+	}
+
 	.anime-grid {
 		grid-template-columns: repeat(3, minmax(0, 1fr));
 		gap: 10px;
+	}
+
+	.anime-section-bar {
+		max-width: 100%;
+		margin-top: 16px;
+	}
+
+	.anime-section-control,
+	.anime-section-page {
+		flex-basis: 36px;
+		width: 36px;
+		height: 38px;
+		font-size: 0.86rem;
+	}
+
+	.anime-section-control {
+		font-size: 1.2rem;
+	}
+
+	.anime-section-page--desktop {
+		display: none;
+	}
+
+	.anime-section-page--mobile {
+		display: inline-flex;
+	}
+}
+
+@media (max-width: 768px) and (orientation: landscape) {
+	.anime-list-surface {
+		padding-bottom: 0;
 	}
 }
 .anime-card {
@@ -729,7 +987,7 @@ function isAiringToday(anime: Anime): boolean {
 	font-size: 0.7rem;
 	padding: 1px 5px;
 	border-radius: 3px;
-	background: var(--accent-muted, #7c3aed22);
+	background: var(--accent-muted, #19448e22);
 	color: var(--accent);
 	width: fit-content;
 }

@@ -238,15 +238,9 @@ function isActive(path: string): boolean {
 	justify-content: center;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 960px) {
 	.mobile-bottom-nav {
 		display: flex;
-	}
-}
-
-@media (max-width: 768px) and (orientation: landscape) {
-	.mobile-bottom-nav {
-		display: none;
 	}
 }
 

@@ -25,7 +25,7 @@ function closeModal() {
 
 $effect(() => {
 	if ((data.initialAnime || data.initialExchangeShare) && data.profile) {
-		if (window.matchMedia("(max-width: 768px)").matches) {
+		if (window.matchMedia("(max-width: 960px)").matches) {
 			composeOpen.set(true);
 		}
 		const url = new URL(window.location.href);
@@ -244,7 +244,7 @@ $effect(() => {
 
 /* Mobile: hide inline composer, show only via modal.
    Exception: landing hero inside .composer-desktop is always shown. */
-@media (max-width: 768px) {
+@media (max-width: 960px) {
 	.composer-desktop:not(:has(.landing-hero)) {
 		display: none;
 	}
@@ -450,7 +450,7 @@ $effect(() => {
 }
 
 /* Landing hero: also show on mobile (override .composer-desktop hide) */
-@media (max-width: 768px) {
+@media (max-width: 960px) {
 	.landing-hero {
 		display: flex;
 		padding: 24px 16px;
