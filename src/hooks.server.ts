@@ -1,8 +1,21 @@
 import { createServerClient } from "@supabase/ssr";
-import type { Handle } from "@sveltejs/kit";
+import { type Handle, json } from "@sveltejs/kit";
 import { PUBLIC_SUPABASE_ANON_KEY, PUBLIC_SUPABASE_URL } from "$env/static/public";
+import { isApiRateLimited } from "$lib/server/rate-limit";
 
 export const handle: Handle = async ({ event, resolve }) => {
+	if (event.url.pathname.startsWith("/api/")) {
+		let clientKey = "unknown";
+		try {
+			clientKey = event.getClientAddress();
+		} catch {
+			// アドレスを取得できないアダプターでは共有バケットにフォールバック
+		}
+		if (isApiRateLimited(event.url.pathname, event.request.method, clientKey)) {
+			return json({ message: "リクエストが多すぎます。しばらく待ってからお試しください" }, { status: 429 });
+		}
+	}
+
 	event.locals.supabase = createServerClient(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY, {
 		cookies: {
 			getAll() {
