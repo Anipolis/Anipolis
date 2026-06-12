@@ -154,6 +154,29 @@ function isActive(path: string): boolean {
 			<span class="mobile-tab-label">検索</span>
 		</a>
 
+		<a
+			href="/schedule"
+			class="mobile-tab"
+			class:active={isActive('/schedule') || isActive('/events')}
+			aria-label="カレンダー"
+		>
+			<svg
+				width="22"
+				height="22"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				aria-hidden="true"
+			>
+				<rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+				<path d="M16 2l-4 5-4-5" />
+			</svg>
+			<span class="mobile-tab-label">カレンダー</span>
+		</a>
+
 		<a href="/anime" class="mobile-tab" class:active={isActive('/anime')} aria-label="アニメ">
 			<svg
 				width="22"

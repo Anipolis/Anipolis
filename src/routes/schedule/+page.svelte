@@ -116,6 +116,37 @@ function formatTime(iso: string) {
 	return new Date(iso).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
 }
 
+function getBroadcastMinutes(anime: Anime): number | null {
+	if (!anime.broadcast_time) return null;
+	const match = anime.broadcast_time.match(/^(\d{1,2}):(\d{2})/);
+	if (!match) return null;
+	return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function groupAnimeByTimeBand(animeList: Anime[]): Anime[][] {
+	const groups: Anime[][] = [];
+	let currentGroup: Anime[] = [];
+	let previousMinutes: number | null = null;
+
+	for (const anime of animeList) {
+		const minutes = getBroadcastMinutes(anime);
+		if (
+			currentGroup.length > 0 &&
+			minutes !== null &&
+			previousMinutes !== null &&
+			Math.abs(minutes - previousMinutes) <= 10
+		) {
+			currentGroup.push(anime);
+		} else {
+			currentGroup = [anime];
+			groups.push(currentGroup);
+		}
+		previousMinutes = minutes;
+	}
+
+	return groups;
+}
+
 // Returns minutes until broadcast from now, or null if not applicable today.
 // Handles late-night times ≥ 24:00 (e.g. "25:30" = 1:30am next calendar day).
 function minutesUntilBroadcast(anime: Anime, now: Date): number | null {
@@ -337,161 +368,174 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 							</a>
 						{/each}
 
-						{#each day.anime as anime (anime.id)}
-							{@const isSubscribed = subscribedIds.has(anime.id)}
-							{@const isNotifying = notifyingIds.has(anime.id)}
-							{@const isLive = liveAnimeIds.has(anime.id)}
-							{@const isMuted = mutedAnimeIds.has(anime.id)}
-							{@const roomMute = data.roomMuteSettings[anime.id]}
-							{@const subscribable = canSubscribe(anime)}
-							{@const ep = currentEpisodeForSlot(anime, displayDate)}
-							<div
-								class="anime-slot-wrap"
-								class:anime-slot-wrap--notifying={isNotifying}
-								class:anime-slot-wrap--menu-open={openAlertMenu === alertKey(anime.id, displayDate)}
-							>
-								<a href="/rooms/anime/{anime.id}/{displayDate}" class="anime-slot">
-									<div class="slot-cover-wrap">
-										{#if anime.cover_url}
-											<img src={anime.cover_url} alt={anime.title} class="slot-cover">
-										{:else}
-											<div class="slot-cover slot-cover--placeholder"></div>
-										{/if}
-										{#if ep !== null}
-											<span class="slot-ep-badge"
-												>{ep}{anime.episode_count ? `/${anime.episode_count}` : ""}</span
-											>
-										{/if}
-									</div>
-									<div class="slot-info">
-										<span class="slot-kind">ROOM</span>
-										{#if isLive}
-											<span class="slot-live-badge">LIVE</span>
-										{/if}
-										{#if anime.broadcast_time}
-											<span class="slot-time">{anime.broadcast_time.slice(0, 5)}</span>
-										{/if}
-										<span class="slot-title">{anime.title}</span>
-										{#if anime.broadcast_station?.length}
-											<span class="slot-station">{anime.broadcast_station.join(" / ")}</span>
-										{/if}
-									</div>
-								</a>
-								{#if data.user}
-									<div class="room-alert-control">
-										<button
-											type="button"
-											class="notify-btn"
-											class:notify-btn--active={isSubscribed}
-											class:notify-btn--muted={isMuted}
-											title="通知またはミュートを設定"
-											aria-label="通知またはミュートを設定"
-											aria-expanded={openAlertMenu === alertKey(anime.id, displayDate)}
-											onclick={() => {
-												const key = alertKey(anime.id, displayDate);
-												openAlertMenu = openAlertMenu === key ? null : key;
-											}}
-										>
-											{#if isSubscribed}
-												<svg
-													width="13"
-													height="13"
-													viewBox="0 0 24 24"
-													fill="currentColor"
-													stroke="currentColor"
-													stroke-width="1"
-													aria-hidden="true"
-												>
-													<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-													<path d="M13.73 21a2 2 0 0 1-3.46 0" />
-												</svg>
-											{:else}
-												<svg
-													width="13"
-													height="13"
-													viewBox="0 0 24 24"
-													fill="none"
-													stroke="currentColor"
-													stroke-width="2"
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													aria-hidden="true"
-												>
-													<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-													<path d="M13.73 21a2 2 0 0 1-3.46 0" />
-												</svg>
-											{/if}
-										</button>
-										{#if openAlertMenu === alertKey(anime.id, displayDate)}
-											<div class="room-alert-menu" aria-label="ルーム設定">
-												{#if subscribable}
-													<form
-														method="POST"
-														action="?/toggleBroadcastNotification"
-														use:enhance={notifySubmit}
-													>
-														<input type="hidden" name="anime_id" value={anime.id}>
-														<button
-															type="submit"
-															class="alert-choice"
-															class:alert-choice--active={isSubscribed}
-														>
-															<span class="i-lucide-bell" aria-hidden="true"></span>
-															{isSubscribed ? "通知を解除" : "通知を設定"}
-														</button>
-													</form>
+						{#each groupAnimeByTimeBand(day.anime) as animeGroup (animeGroup[0]?.id)}
+							<div class="anime-time-group">
+								{#each animeGroup as anime (anime.id)}
+									{@const isSubscribed = subscribedIds.has(anime.id)}
+									{@const isNotifying = notifyingIds.has(anime.id)}
+									{@const isLive = liveAnimeIds.has(anime.id)}
+									{@const isMuted = mutedAnimeIds.has(anime.id)}
+									{@const roomMute = data.roomMuteSettings[anime.id]}
+									{@const subscribable = canSubscribe(anime)}
+									{@const ep = currentEpisodeForSlot(anime, displayDate)}
+									<div
+										class="anime-slot-wrap"
+										class:anime-slot-wrap--notifying={isNotifying}
+										class:anime-slot-wrap--menu-open={openAlertMenu === alertKey(anime.id, displayDate)}
+									>
+										<a href="/rooms/anime/{anime.id}/{displayDate}" class="anime-slot">
+											<div class="slot-cover-wrap">
+												{#if anime.cover_url}
+													<img src={anime.cover_url} alt={anime.title} class="slot-cover">
+												{:else}
+													<div class="slot-cover slot-cover--placeholder"></div>
 												{/if}
-												<form
-													method="POST"
-													action="?/muteBroadcastRoom"
-													use:enhance={muteSubmit}
-												>
-													<input type="hidden" name="anime_id" value={anime.id}>
-													<input type="hidden" name="room_date" value={displayDate}>
-													<label class="alert-mute-field">
-														<span>ミュート期間</span>
-														<select name="duration">
-															{#each muteDays as days}
-																<option
-																	value={days}
-																	selected={(roomMute?.duration ?? 3) === days}
-																>
-																	{days}日
-																</option>
-															{/each}
-															<option
-																value="event_end"
-																selected={roomMute?.duration === "event_end"}
-															>
-																イベント終了まで
-															</option>
-														</select>
-													</label>
-													<label class="alert-mute-repeat">
-														<input
-															type="checkbox"
-															name="repeat_weekly"
-															value="true"
-															checked={roomMute?.repeat_weekly}
-														>
-														毎週繰り返す
-													</label>
-													<button
-														type="submit"
-														class="alert-choice"
-														class:alert-choice--active={isMuted}
+												{#if ep !== null}
+													<span class="slot-ep-badge"
+														>{ep}
+														{anime.episode_count ? `/${anime.episode_count}` : ""}</span
 													>
-														<span class="i-lucide-bell-off" aria-hidden="true"></span>
-														{roomMute ? "ミュート設定を更新" : "ミュートを設定"}
-													</button>
-												</form>
-												<a class="alert-settings-link" href="/settings/rooms/mutes"
-													>期間を設定</a
+												{/if}
+											</div>
+											<div class="slot-info">
+												<span class="slot-kind">ROOM</span>
+												{#if isLive}
+													<span class="slot-live-badge">LIVE</span>
+												{/if}
+												{#if anime.broadcast_time}
+													<span class="slot-time">{anime.broadcast_time.slice(0, 5)}</span>
+												{/if}
+												<span class="slot-title">{anime.title}</span>
+												{#if anime.broadcast_station?.length}
+													<span class="slot-station"
+														>{anime.broadcast_station.join(" / ")}</span
+													>
+												{/if}
+											</div>
+										</a>
+										{#if data.user}
+											<div class="room-alert-control">
+												<button
+													type="button"
+													class="notify-btn"
+													class:notify-btn--active={isSubscribed}
+													class:notify-btn--muted={isMuted}
+													title="通知またはミュートを設定"
+													aria-label="通知またはミュートを設定"
+													aria-expanded={openAlertMenu === alertKey(anime.id, displayDate)}
+													onclick={() => {
+														const key = alertKey(anime.id, displayDate);
+														openAlertMenu = openAlertMenu === key ? null : key;
+													}}
 												>
+													{#if isSubscribed}
+														<svg
+															width="13"
+															height="13"
+															viewBox="0 0 24 24"
+															fill="currentColor"
+															stroke="currentColor"
+															stroke-width="1"
+															aria-hidden="true"
+														>
+															<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+															<path d="M13.73 21a2 2 0 0 1-3.46 0" />
+														</svg>
+													{:else}
+														<svg
+															width="13"
+															height="13"
+															viewBox="0 0 24 24"
+															fill="none"
+															stroke="currentColor"
+															stroke-width="2"
+															stroke-linecap="round"
+															stroke-linejoin="round"
+															aria-hidden="true"
+														>
+															<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+															<path d="M13.73 21a2 2 0 0 1-3.46 0" />
+														</svg>
+													{/if}
+												</button>
+												{#if openAlertMenu === alertKey(anime.id, displayDate)}
+													<div class="room-alert-menu" aria-label="ルーム設定">
+														{#if subscribable}
+															<form
+																method="POST"
+																action="?/toggleBroadcastNotification"
+																use:enhance={notifySubmit}
+															>
+																<input type="hidden" name="anime_id" value={anime.id}>
+																<button
+																	type="submit"
+																	class="alert-choice"
+																	class:alert-choice--active={isSubscribed}
+																>
+																	<span
+																		class="i-lucide-bell"
+																		aria-hidden="true"
+																	></span>
+																	{isSubscribed ? "通知を解除" : "通知を設定"}
+																</button>
+															</form>
+														{/if}
+														<form
+															method="POST"
+															action="?/muteBroadcastRoom"
+															use:enhance={muteSubmit}
+														>
+															<input type="hidden" name="anime_id" value={anime.id}>
+															<input type="hidden" name="room_date" value={displayDate}>
+															<label class="alert-mute-field">
+																<span>ミュート期間</span>
+																<select name="duration">
+																	{#each muteDays as days}
+																		<option
+																			value={days}
+																			selected={(roomMute?.duration ?? 3) === days}
+																		>
+																			{days}日
+																		</option>
+																	{/each}
+																	<option
+																		value="event_end"
+																		selected={roomMute?.duration === "event_end"}
+																	>
+																		イベント終了まで
+																	</option>
+																</select>
+															</label>
+															<label class="alert-mute-repeat">
+																<input
+																	type="checkbox"
+																	name="repeat_weekly"
+																	value="true"
+																	checked={roomMute?.repeat_weekly}
+																>
+																毎週繰り返す
+															</label>
+															<button
+																type="submit"
+																class="alert-choice"
+																class:alert-choice--active={isMuted}
+															>
+																<span
+																	class="i-lucide-bell-off"
+																	aria-hidden="true"
+																></span>
+																{roomMute ? "ミュート設定を更新" : "ミュートを設定"}
+															</button>
+														</form>
+														<a class="alert-settings-link" href="/settings/rooms/mutes"
+															>期間を設定</a
+														>
+													</div>
+												{/if}
 											</div>
 										{/if}
 									</div>
-								{/if}
+								{/each}
 							</div>
 						{/each}
 					{/if}
@@ -690,6 +734,11 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 	text-align: center;
 	padding: 8px 0;
 	margin: 0;
+}
+.anime-time-group {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
 }
 
 /* Anime slot wrapper — holds the card + notify button */
@@ -1073,7 +1122,7 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 	display: none;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 960px) {
 	.schedule-header {
 		align-items: flex-start;
 		flex-direction: column;
@@ -1081,21 +1130,6 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 	.schedule-actions {
 		width: 100%;
 		justify-content: space-between;
-	}
-	.schedule-grid {
-		grid-template-columns: repeat(4, minmax(118px, 1fr));
-	}
-}
-@media (max-width: 520px) {
-	.schedule-actions {
-		align-items: stretch;
-		flex-direction: column;
-	}
-	.week-nav {
-		justify-content: space-between;
-	}
-	.create-event-btn {
-		justify-content: center;
 	}
 	.schedule-grid {
 		grid-template-columns: 1fr;
@@ -1143,6 +1177,39 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 	}
 	.day-tab-date {
 		font-size: 0.72rem;
+	}
+	.day-slots {
+		padding-right: 0;
+		padding-left: 0;
+	}
+	.anime-time-group {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 4px;
+		width: 100%;
+		max-width: 388px;
+	}
+	.anime-slot {
+		gap: 4px;
+		height: 98px;
+		padding: 4px;
+	}
+	.slot-cover-wrap,
+	.slot-cover {
+		width: 64px;
+		height: 88px;
+	}
+}
+@media (max-width: 520px) {
+	.schedule-actions {
+		align-items: stretch;
+		flex-direction: column;
+	}
+	.week-nav {
+		justify-content: space-between;
+	}
+	.create-event-btn {
+		justify-content: center;
 	}
 }
 </style>

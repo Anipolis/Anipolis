@@ -74,6 +74,7 @@ html {
 	-webkit-text-size-adjust: 100%;
 	width: 100%;
 	overflow-x: clip;
+	overscroll-behavior-x: none;
 	scrollbar-gutter: stable;
 }
 
@@ -87,6 +88,59 @@ body {
 	min-height: 100vh;
 	width: 100%;
 	overflow-x: clip;
+	overscroll-behavior-x: none;
+}
+
+html[data-swipe-direction="next"]::view-transition-old(root) {
+	animation: anipolis-swipe-next-old 0.28s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+html[data-swipe-direction="next"]::view-transition-new(root) {
+	animation: anipolis-swipe-next-new 0.28s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+html[data-swipe-direction="prev"]::view-transition-old(root) {
+	animation: anipolis-swipe-prev-old 0.28s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+html[data-swipe-direction="prev"]::view-transition-new(root) {
+	animation: anipolis-swipe-prev-new 0.28s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+@keyframes anipolis-swipe-next-old {
+	from {
+		transform: translateX(0);
+	}
+	to {
+		transform: translateX(-22%);
+	}
+}
+
+@keyframes anipolis-swipe-next-new {
+	from {
+		transform: translateX(100%);
+	}
+	to {
+		transform: translateX(0);
+	}
+}
+
+@keyframes anipolis-swipe-prev-old {
+	from {
+		transform: translateX(0);
+	}
+	to {
+		transform: translateX(22%);
+	}
+}
+
+@keyframes anipolis-swipe-prev-new {
+	from {
+		transform: translateX(-100%);
+	}
+	to {
+		transform: translateX(0);
+	}
 }
 
 a {
@@ -3065,6 +3119,10 @@ form + .repost-menu-item {
    ============================================================ */
 
 @media (max-width: 960px) {
+	body {
+		font-size: 14px;
+	}
+
 	/* Touch target: post action buttons */
 	.post-action-btn {
 		padding: 10px 8px;
@@ -3111,6 +3169,10 @@ form + .repost-menu-item {
 
 /* Small phone adjustments (≤480px) */
 @media (max-width: 480px) {
+	body {
+		font-size: 13px;
+	}
+
 	.page-container {
 		padding: 0 8px;
 		padding-top: calc(52px + 8px);

@@ -3,6 +3,7 @@ import { onMount } from "svelte";
 import { invalidate } from "$app/navigation";
 import { page } from "$app/state";
 import MobileBottomNav from "$lib/components/MobileBottomNav.svelte";
+import MobileSwipeNavigation from "$lib/components/MobileSwipeNavigation.svelte";
 import Sidebar from "$lib/components/Sidebar.svelte";
 import { composeOpen } from "$lib/stores/compose";
 import type { LayoutProps } from "./$types";
@@ -53,6 +54,7 @@ function handleFabClick() {
 </div>
 
 <MobileBottomNav session={data.session} unreadNotificationCount={data.unreadNotificationCount} />
+<MobileSwipeNavigation session={data.session} />
 
 <!-- FAB: compose post (mobile only) -->
 {#if data.session && page.url.pathname === "/"}
