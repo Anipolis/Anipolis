@@ -1611,21 +1611,59 @@ export async function getAnimeExchangeEntries(
 
 // ── ヘルパー ──────────────────────────────────────────────────────
 
+function toExchangeShareAnime(value: unknown): AnimeExchangeShare["offered_anime"] | null {
+	const anime = Array.isArray(value) ? value[0] : value;
+	if (!anime || typeof anime !== "object") return null;
+	const record = anime as Record<string, unknown>;
+	if (record["id"] === undefined || record["title"] === undefined) return null;
+	return {
+		id: String(record["id"]),
+		title: String(record["title"]),
+		title_en: typeof record["title_en"] === "string" ? record["title_en"] : null,
+		cover_url: typeof record["cover_url"] === "string" ? record["cover_url"] : null,
+	};
+}
+
+const EXCHANGE_SHARE_SELECT = `comment, received_entry_id,
+            anime:anime_exchange_entries_anime_id_fkey ( id, title, title_en, cover_url )`;
+
 export async function getAnimeExchangeShareForUser(
 	supabase: SupabaseClient<Database>,
 	userId: string,
 	exchangeId: string,
 ): Promise<AnimeExchangeShare | null> {
-	const entries = await getAnimeExchangeEntries(supabase, userId, 50);
-	const exchange = entries.find((entry) => entry.id === exchangeId && entry.received_anime);
-	if (!exchange?.received_anime) return null;
+	// 共有対象の1件を直接引く（以前は一覧50件を取得してから探していた）
+	const { data: entry } = await supabase
+		.from("anime_exchange_entries")
+		.select(EXCHANGE_SHARE_SELECT)
+		.eq("id", exchangeId)
+		.eq("user_id", userId)
+		.maybeSingle();
+
+	const entryRecord = entry as Record<string, unknown> | null;
+	const receivedEntryId = entryRecord?.["received_entry_id"];
+	if (!entryRecord || typeof receivedEntryId !== "string" || receivedEntryId.length === 0) return null;
+
+	const offeredAnime = toExchangeShareAnime(entryRecord["anime"]);
+	if (!offeredAnime) return null;
+
+	const { data: received } = await supabase
+		.from("anime_exchange_entries")
+		.select(EXCHANGE_SHARE_SELECT)
+		.eq("id", receivedEntryId)
+		.maybeSingle();
+
+	const receivedRecord = received as Record<string, unknown> | null;
+	const receivedAnime = receivedRecord ? toExchangeShareAnime(receivedRecord["anime"]) : null;
+	if (!receivedAnime) return null;
 
 	return {
 		type: "anime_exchange",
-		offered_anime: exchange.offered_anime,
-		received_anime: exchange.received_anime,
-		offered_comment: exchange.comment,
-		received_comment: exchange.received_comment,
+		offered_anime: offeredAnime,
+		received_anime: receivedAnime,
+		offered_comment: typeof entryRecord["comment"] === "string" ? entryRecord["comment"] : null,
+		received_comment:
+			typeof receivedRecord?.["comment"] === "string" ? (receivedRecord["comment"] as string) : null,
 	};
 }
 
