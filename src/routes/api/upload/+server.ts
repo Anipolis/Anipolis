@@ -1,4 +1,5 @@
 import { error, json } from "@sveltejs/kit";
+import { validateImageBuffer } from "$lib/server/upload";
 import type { RequestHandler } from "./$types";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
@@ -45,13 +46,16 @@ export const POST: RequestHandler = async ({ request, locals: { supabase, safeGe
 	if (!ALLOWED_TYPES.includes(file.type)) error(400, "対応していないファイル形式です（JPEG/PNG/GIF/WebP）");
 	if (file.size > MAX_FILE_SIZE) error(400, "ファイルサイズが大きすぎます（最大5MB）");
 
-	const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
-	const path = `${user.id}/${Date.now()}-${crypto.randomUUID()}.${ext}`;
-
+	// 保存する MIME・拡張子は申告値（file.type / ファイル名）ではなくマジックバイトの判定結果を使う
 	const arrayBuffer = await file.arrayBuffer();
+	const validated = validateImageBuffer(arrayBuffer, ALLOWED_TYPES);
+	if (!validated) error(400, "対応していないファイル形式です（JPEG/PNG/GIF/WebP）");
+
+	const path = `${user.id}/${Date.now()}-${crypto.randomUUID()}.${validated.ext}`;
+
 	const { error: uploadError } = await supabase.storage
 		.from("post-images")
-		.upload(path, arrayBuffer, { contentType: file.type });
+		.upload(path, arrayBuffer, { contentType: validated.mime });
 
 	if (uploadError) {
 		console.error("upload error:", uploadError);

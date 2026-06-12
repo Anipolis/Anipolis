@@ -3,6 +3,7 @@ import { error, json } from "@sveltejs/kit";
 import { SUPABASE_SERVICE_ROLE_KEY } from "$env/static/private";
 import { PUBLIC_SUPABASE_URL } from "$env/static/public";
 import { isAdminUser } from "$lib/server/queries";
+import { validateImageBuffer } from "$lib/server/upload";
 import type { RequestHandler } from "./$types";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -28,13 +29,16 @@ export const POST: RequestHandler = async ({ request, locals: { supabase, safeGe
 	if (!ALLOWED_TYPES.includes(file.type)) error(400, "対応していないファイル形式です（JPEG/PNG/WebP）");
 	if (file.size > MAX_FILE_SIZE) error(400, "ファイルサイズが大きすぎます（最大10MB）");
 
-	const ext = file.type === "image/webp" ? "webp" : file.type === "image/png" ? "png" : "jpg";
-	const path = `${animeId}.${ext}`;
-
+	// 保存する MIME・拡張子は申告値ではなくマジックバイトの判定結果を使う
 	const arrayBuffer = await file.arrayBuffer();
+	const validated = validateImageBuffer(arrayBuffer, ALLOWED_TYPES);
+	if (!validated) error(400, "対応していないファイル形式です（JPEG/PNG/WebP）");
+
+	const path = `${animeId}.${validated.ext}`;
+
 	const { error: uploadError } = await supabase.storage
 		.from("anime-covers")
-		.upload(path, arrayBuffer, { contentType: file.type, upsert: true });
+		.upload(path, arrayBuffer, { contentType: validated.mime, upsert: true });
 
 	if (uploadError) {
 		console.error("anime cover upload error:", uploadError);

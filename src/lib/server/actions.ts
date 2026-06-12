@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fail } from "@sveltejs/kit";
+import { createServiceRoleClient } from "$lib/server/supabase-admin";
+import { publicUrlToStoragePath } from "$lib/server/upload";
 import type { Database, Json } from "$lib/supabase/database.types";
 import type { AnimeExchangeShare, AnimeStatus, BroadcastRoomMuteDuration } from "$lib/types";
 import { extractHashtags } from "$lib/utils/hashtag";
@@ -132,11 +134,31 @@ export async function deletePostAction(request: Request, supabase: SupabaseClien
 
 	if (!postId) return fail(400, { message: "投稿IDが不正です" });
 
+	// 添付画像のクリーンアップ用に削除前へ控える
+	const { data: post } = await supabase
+		.from("posts")
+		.select("image_urls")
+		.eq("id", postId)
+		.eq("user_id", userId)
+		.maybeSingle();
+
 	const { error } = await supabase.from("posts").delete().eq("id", postId).eq("user_id", userId);
 
 	if (error) return fail(500, { message: "削除に失敗しました" });
 
+	await removePostImages(supabase, post?.image_urls ?? []);
+
 	return { deleted: true };
+}
+
+/** 投稿に添付されていた画像をストレージから削除する（ベストエフォート） */
+async function removePostImages(supabase: SupabaseClient<Database>, imageUrls: string[]): Promise<void> {
+	const paths = imageUrls
+		.map((url) => publicUrlToStoragePath(url, "post-images"))
+		.filter((path): path is string => path !== null);
+	if (paths.length === 0) return;
+	const { error } = await supabase.storage.from("post-images").remove(paths);
+	if (error) console.error("post image cleanup error:", error);
 }
 
 /**
@@ -342,8 +364,14 @@ export async function adminDeletePostAction(request: Request, supabase: Supabase
 
 	if (!postId) return fail(400, { message: "投稿IDが不正です" });
 
+	// 添付画像のクリーンアップ用に削除前へ控える
+	const { data: post } = await supabase.from("posts").select("image_urls").eq("id", postId).maybeSingle();
+
 	const { error } = await supabase.from("posts").delete().eq("id", postId);
 	if (error) return fail(500, { message: "投稿の削除に失敗しました" });
+
+	// 他ユーザーのフォルダはストレージ RLS で消せないため service role で削除する
+	await removePostImages(createServiceRoleClient(), post?.image_urls ?? []);
 
 	await supabase.from("admin_audit_logs").insert({
 		admin_id: adminId,
