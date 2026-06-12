@@ -6,7 +6,7 @@ import {
 	toggleLikeAction,
 	toggleRepostAction,
 } from "$lib/server/actions";
-import { getAnime, getAnimeRankingTrending, getBroadcastRoomSession, getEventPosts } from "$lib/server/queries";
+import { getAnime, getAnimeRankingTrending, getBroadcastRoomPosts, getBroadcastRoomSession } from "$lib/server/queries";
 import type { Anime } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -56,7 +56,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 
 	const hashtag = roomHashtag(anime);
 	const [posts, trending, animeTrending] = await Promise.all([
-		getEventPosts(supabase, hashtag, user?.id ?? null, 100, true, session.id, true),
+		getBroadcastRoomPosts(supabase, session.id, user?.id ?? null, { limit: 100, ascending: true }),
 		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
 		getAnimeRankingTrending(supabase, 5),
 	]);

@@ -77,6 +77,13 @@ type UserAnimeListWithProfileRow = {
 	profiles: { username: string; display_name: string | null; avatar_url: string | null; list_is_public: boolean };
 };
 
+/** 投稿一覧系クエリで共通の SELECT 句 */
+const POST_LIST_SELECT = `id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, broadcast_room_session_id, exchange_share,
+             profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
+             post_hashtags ( hashtags ( name ) ),
+             broadcast_room_session:broadcast_room_sessions!posts_broadcast_room_session_id_fkey ( room_date ),
+             anime:anime!posts_anime_id_fkey ( id, title, cover_url, official_hashtag, broadcast_day, broadcast_time, broadcast_duration_minutes, aired_from )`;
+
 /**
  * rawPost 配列に like_count / repost_count / reply_count / liked_by_me / reposted_by_me を付加して
  * Post[] に変換する共通ヘルパー。
@@ -451,7 +458,6 @@ export async function getEventPosts(
 	userId: string | null,
 	limit = 100,
 	includeMutedRoomPosts = false,
-	broadcastRoomSessionId: string | null = null,
 	ascending = false,
 ): Promise<Post[]> {
 	// ハッシュタグ ID を取得
@@ -463,29 +469,48 @@ export async function getEventPosts(
 
 	if (!hashtagRow) return [];
 
-	// そのハッシュタグを持つ post_id を取得
-	const { data: links } = await supabase.from("post_hashtags").select("post_id").eq("hashtag_id", hashtagRow["id"]);
-
-	const postIds = (links ?? []).map((l) => l.post_id);
-	if (postIds.length === 0) return [];
-
-	let postsQuery = supabase
+	// post_hashtags!inner の埋め込みフィルターで絞り込む。
+	// 全 post_id を取得して .in() に渡す方式は投稿数に比例して破綻する（URL長上限）ため使わない。
+	// hashtag_match は絞り込み専用の別名埋め込み — 表示用の post_hashtags(hashtags(name)) は全タグを保持する。
+	const { data: rawPosts } = await supabase
 		.from("posts")
-		.select(
-			`id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, broadcast_room_session_id, exchange_share,
-             profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
-             post_hashtags ( hashtags ( name ) ),
-             broadcast_room_session:broadcast_room_sessions!posts_broadcast_room_session_id_fkey ( room_date ),
-             anime:anime!posts_anime_id_fkey ( id, title, cover_url, official_hashtag, broadcast_day, broadcast_time, broadcast_duration_minutes, aired_from )`,
-		)
-		.in("id", postIds)
-		.is("parent_id", null);
-	if (broadcastRoomSessionId) postsQuery = postsQuery.eq("broadcast_room_session_id", broadcastRoomSessionId);
-	const { data: rawPosts } = await postsQuery.order("created_at", { ascending: false }).limit(limit);
+		.select(`${POST_LIST_SELECT},
+             hashtag_match:post_hashtags!inner ( hashtag_id )`)
+		.eq("hashtag_match.hashtag_id", hashtagRow["id"])
+		.is("parent_id", null)
+		.order("created_at", { ascending: false })
+		.limit(limit);
 	const orderedPosts = ascending ? [...(rawPosts ?? [])].reverse() : rawPosts;
 
 	return enrichPostsWithCounts(supabase, (orderedPosts ?? []) as unknown as RawPost[], userId, {
 		includeMutedRoomPosts,
+	});
+}
+
+/**
+ * 放送ルームの投稿を broadcast_room_session_id で直接取得する。
+ * ルームのホットパスなのでハッシュタグ経由ではなくセッションIDの等価検索＋インデックスで引く。
+ */
+export async function getBroadcastRoomPosts(
+	supabase: SupabaseClient<Database>,
+	sessionId: string,
+	userId: string | null,
+	options: { limit?: number; ascending?: boolean; sinceCreatedAt?: string } = {},
+): Promise<Post[]> {
+	const { limit = 100, ascending = false, sinceCreatedAt } = options;
+
+	let query = supabase
+		.from("posts")
+		.select(POST_LIST_SELECT)
+		.eq("broadcast_room_session_id", sessionId)
+		.is("parent_id", null);
+	if (sinceCreatedAt) query = query.gt("created_at", sinceCreatedAt);
+	const { data: rawPosts } = await query.order("created_at", { ascending: false }).limit(limit);
+	const orderedPosts = ascending ? [...(rawPosts ?? [])].reverse() : rawPosts;
+
+	// ルーム内ではそのルームのミュートを適用しない（明示的に入室しているため）
+	return enrichPostsWithCounts(supabase, (orderedPosts ?? []) as unknown as RawPost[], userId, {
+		includeMutedRoomPosts: true,
 	});
 }
 
