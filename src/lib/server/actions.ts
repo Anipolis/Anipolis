@@ -240,16 +240,6 @@ export async function markAllNotificationsRead(supabase: SupabaseClient<Database
 	await supabase.from("notifications").update({ read: true }).eq("recipient_id", userId).eq("read", false);
 }
 
-export async function generateDueBroadcastNotifications(supabase: SupabaseClient<Database>): Promise<void> {
-	const rpcClient = supabase as unknown as {
-		rpc: (functionName: "generate_due_broadcast_notifications") => Promise<{ error: { message: string } | null }>;
-	};
-	const { error } = await rpcClient.rpc("generate_due_broadcast_notifications");
-	if (error) {
-		console.error("broadcast notification generation error:", error.message);
-	}
-}
-
 export async function updateReportStatusAction(request: Request, supabase: SupabaseClient<Database>, adminId: string) {
 	const form = await request.formData();
 	const reportId = (form.get("report_id") as string | null)?.trim() ?? "";

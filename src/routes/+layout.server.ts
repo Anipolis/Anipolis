@@ -1,7 +1,7 @@
 import { randomInt } from "node:crypto";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import type { ServerLoad } from "@sveltejs/kit";
-import { generateDueBroadcastNotifications, markAllNotificationsRead } from "$lib/server/actions";
+import { markAllNotificationsRead } from "$lib/server/actions";
 import { getExtraAccounts, setExtraAccounts } from "$lib/server/multi-account";
 import {
 	getPendingReportsCount,
@@ -111,7 +111,7 @@ export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, c
 	const { session, user } = await safeGetSession();
 
 	const profile = user ? await getOrCreateProfile(supabase, user) : null;
-	if (user) await generateDueBroadcastNotifications(supabase);
+	// 放送通知の生成は migration 070 の pg_cron ジョブ（毎分）に移行済み
 	if (user && url.pathname === "/notifications") await markAllNotificationsRead(supabase, user.id);
 
 	const [unreadNotificationCount, unreadBroadcastNotificationCount] = user
