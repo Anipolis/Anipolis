@@ -3,6 +3,7 @@ import { onDestroy, onMount, tick } from "svelte";
 import { enhance } from "$app/forms";
 import PostCard from "$lib/components/PostCard.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
+import type { Post } from "$lib/types";
 import type { ActionData, PageData } from "./$types";
 
 let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -30,11 +31,48 @@ const contentWithTag = $derived(
 );
 const charCount = $derived(contentWithTag.length);
 const overLimit = $derived(charCount > maxLen);
+// ライブ更新で受信した投稿（load 由来の data.posts とは別に保持し、ID でマージする）
+let extraPosts = $state<Post[]>([]);
+
+const allPosts = $derived.by(() => {
+	if (extraPosts.length === 0) return data.posts;
+	const seen = new Set(data.posts.map((p) => p.id));
+	const fresh = extraPosts.filter((p) => !seen.has(p.id));
+	if (fresh.length === 0) return data.posts;
+	return [...data.posts, ...fresh].sort(
+		(a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+	);
+});
+
 const displayedPosts = $derived(
 	postOrder === "oldest"
-		? data.posts
-		: [...data.posts].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+		? allPosts
+		: [...allPosts].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
 );
+
+let fetchingLive = false;
+
+/** 最後に受信した投稿以降の差分を取得して extraPosts に追加する */
+async function fetchNewPosts() {
+	if (fetchingLive) return;
+	fetchingLive = true;
+	try {
+		const last = allPosts[allPosts.length - 1];
+		const params = new URLSearchParams({ session_id: data.room.session_id });
+		if (last) params.set("since", last.created_at);
+		const res = await fetch(`/api/rooms/posts?${params}`);
+		if (!res.ok) return;
+		const body = (await res.json()) as { posts: Post[] };
+		if (body.posts.length === 0) return;
+		const seen = new Set(allPosts.map((p) => p.id));
+		const fresh = body.posts.filter((p) => !seen.has(p.id));
+		if (fresh.length > 0) extraPosts = [...extraPosts, ...fresh];
+	} catch {
+		// ネットワークエラーは次回の受信/ポーリングで回復する
+	} finally {
+		fetchingLive = false;
+	}
+}
 
 const status = $derived.by<RoomStatus>(() => {
 	if (now < openMs) return "not_open";
@@ -64,9 +102,35 @@ $effect(() => {
 
 $effect(() => {
 	if (!mounted || status !== "open") return;
-	if (data.posts.length === lastPostCount) return;
-	lastPostCount = data.posts.length;
-	if (data.posts.length > 0) void focusLatestPost();
+	if (allPosts.length === lastPostCount) return;
+	lastPostCount = allPosts.length;
+	if (allPosts.length > 0) void focusLatestPost();
+});
+
+// 受付中はライブ更新: Realtime の INSERT を購読し、受信をトリガーに差分APIを叩く。
+// Realtime が無効な環境向けに低頻度ポーリングをフォールバックとして併用する。
+$effect(() => {
+	if (!mounted || status !== "open") return;
+
+	const channel = data.supabase
+		.channel(`room-${data.room.session_id}`)
+		.on(
+			"postgres_changes",
+			{
+				event: "INSERT",
+				schema: "public",
+				table: "posts",
+				filter: `broadcast_room_session_id=eq.${data.room.session_id}`,
+			},
+			() => void fetchNewPosts(),
+		)
+		.subscribe();
+	const pollId = setInterval(() => void fetchNewPosts(), 15000);
+
+	return () => {
+		clearInterval(pollId);
+		void data.supabase.removeChannel(channel);
+	};
 });
 
 async function focusLatestPost(order: PostOrder = postOrder) {
@@ -79,7 +143,7 @@ async function focusLatestPost(order: PostOrder = postOrder) {
 
 function setPostOrder(order: PostOrder) {
 	postOrder = order;
-	if (status === "open" && data.posts.length > 0) void focusLatestPost(order);
+	if (status === "open" && allPosts.length > 0) void focusLatestPost(order);
 }
 
 function formatHMS(ms: number) {
@@ -172,7 +236,7 @@ function formatDate(iso: string) {
 		{/if}
 
 		<div class="event-posts-header">
-			<span class="event-posts-count">{data.posts.length}件の実況</span>
+			<span class="event-posts-count">{allPosts.length}件の実況</span>
 		</div>
 
 		<div class="room-order-toggle" role="group" aria-label="投稿の表示順">
@@ -194,7 +258,7 @@ function formatDate(iso: string) {
 			</button>
 		</div>
 
-		{#if data.posts.length === 0}
+		{#if allPosts.length === 0}
 			<div class="card anime-room-empty">
 				まだ実況投稿はありません。<br>
 				#{data.room.hashtag}
