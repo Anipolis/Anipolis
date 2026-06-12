@@ -1,5 +1,6 @@
 <script lang="ts">
 import { enhance } from "$app/forms";
+import { goto } from "$app/navigation";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
 import type { Anime, AnimeStatus } from "$lib/types";
 import type { PageProps } from "./$types";
@@ -78,6 +79,23 @@ const statusOptions: { value: AnimeStatus; label: string; color: string }[] = [
 
 let quickAddAnime = $state<Anime | null>(null);
 let quickAddSubmitting = $state(false);
+
+// フィルターボトムシート
+let filterSheetOpen = $state(false);
+function buildGenreMap(selected: string[]): Record<string, boolean> {
+	const set = new Set(selected);
+	return Object.fromEntries(GENRES.map((g) => [g, set.has(g)]));
+}
+let pendingGenreMap = $state<Record<string, boolean>>(buildGenreMap(data.genre?.split(",").filter(Boolean) ?? []));
+let pendingYear = $state(data.broadcastYear ?? "");
+let pendingSeason = $state(data.broadcastSeason ?? "");
+let pendingStudio = $state(data.studio ?? "");
+let pendingProducer = $state(data.producer ?? "");
+let sheetResultCount = $state<number | null>(null);
+let sheetCountLoading = $state(false);
+let hasActiveFilters = $derived(
+	Boolean(data.genre || data.broadcastYear || data.broadcastSeason || data.studio || data.producer),
+);
 let currentAnimeSectionIndex = $state(0);
 let animeSections = $derived(chunkAnimes(data.animes));
 let currentAnimeSection = $derived(animeSections[currentAnimeSectionIndex] ?? { start: 0, end: 0, items: [] });
@@ -159,6 +177,95 @@ $effect(() => {
 	return () => window.removeEventListener("keydown", handler);
 });
 
+function openFilterSheet() {
+	pendingGenreMap = buildGenreMap(data.genre?.split(",").filter(Boolean) ?? []);
+	pendingYear = data.broadcastYear ?? "";
+	pendingSeason = data.broadcastSeason ?? "";
+	pendingStudio = data.studio ?? "";
+	pendingProducer = data.producer ?? "";
+	filterSheetOpen = true;
+}
+
+function closeFilterSheet() {
+	filterSheetOpen = false;
+}
+
+function clearPendingFilters() {
+	pendingGenreMap = buildGenreMap([]);
+	pendingYear = "";
+	pendingSeason = "";
+	pendingStudio = "";
+	pendingProducer = "";
+}
+
+function togglePendingGenre(genre: string) {
+	pendingGenreMap = {
+		...pendingGenreMap,
+		[genre]: !pendingGenreMap[genre],
+	};
+}
+
+function applyFilters() {
+	const params = new URLSearchParams();
+	if (data.search) params.set("search", data.search);
+	const selectedGenres = Object.keys(pendingGenreMap).filter((k) => pendingGenreMap[k]);
+	if (selectedGenres.length) params.set("genre", selectedGenres.join(","));
+	if (pendingYear) params.set("broadcastYear", pendingYear);
+	if (pendingSeason) params.set("broadcastSeason", pendingSeason);
+	if (pendingStudio) params.set("studio", pendingStudio);
+	if (pendingProducer) params.set("producer", pendingProducer);
+	if (data.tab && data.tab !== "popular") params.set("tab", data.tab);
+	const qs = params.toString();
+	goto(qs ? `/anime?${qs}` : "/anime");
+	closeFilterSheet();
+}
+
+$effect(() => {
+	if (!filterSheetOpen) return;
+	const handler = (e: KeyboardEvent) => {
+		if (e.key === "Escape") closeFilterSheet();
+	};
+	window.addEventListener("keydown", handler);
+	return () => window.removeEventListener("keydown", handler);
+});
+
+$effect(() => {
+	const gMap = pendingGenreMap;
+	const y = pendingYear;
+	const s = pendingSeason;
+	const st = pendingStudio;
+	const pr = pendingProducer;
+	if (!filterSheetOpen) return;
+
+	sheetCountLoading = true;
+	const controller = new AbortController();
+
+	const timer = setTimeout(async () => {
+		const params = new URLSearchParams();
+		const gList = Object.keys(gMap).filter((k) => gMap[k]);
+		if (gList.length) params.set("genre", gList.join(","));
+		if (y) params.set("broadcastYear", y);
+		if (s) params.set("broadcastSeason", s);
+		if (st) params.set("studio", st);
+		if (pr) params.set("producer", pr);
+		if (data.search) params.set("search", data.search);
+		try {
+			const res = await fetch(`/api/anime/count?${params.toString()}`, { signal: controller.signal });
+			const json = await res.json();
+			sheetResultCount = json.count ?? null;
+		} catch {
+			// aborted or failed
+		} finally {
+			sheetCountLoading = false;
+		}
+	}, 400);
+
+	return () => {
+		clearTimeout(timer);
+		controller.abort();
+	};
+});
+
 function isAiringToday(anime: Anime): boolean {
 	if (anime.broadcast_day == null || anime.computed_broadcast_status !== "airing") return false;
 	const now = new Date(Date.now() + 9 * 60 * 60 * 1000); // JST
@@ -199,12 +306,35 @@ function isAiringToday(anime: Anime): boolean {
 					>
 				</div>
 				<button type="submit" class="search-btn">検索</button>
+				<button
+					type="button"
+					class="filter-icon-btn"
+					class:filter-icon-btn--active={hasActiveFilters}
+					onclick={openFilterSheet}
+					aria-label="フィルターを開く"
+					title="フィルター"
+				>
+					<svg
+						width="17"
+						height="17"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						aria-hidden="true"
+					>
+						<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+					</svg>
+					{#if hasActiveFilters}
+						<span class="filter-active-dot" aria-hidden="true"></span>
+					{/if}
+				</button>
 				{#if data.search || data.genre || data.season || data.broadcastYear || data.broadcastSeason || data.studio || data.producer}
 					<a href="/anime" class="search-clear" title="フィルターをすべてクリア">✕</a>
 				{/if}
 			</div>
 
-			<div class="filter-row">
+			<div class="filter-row filter-row--desktop">
 				<div class="filter-group">
 					<label for="filter-genre" class="filter-label">ジャンル</label>
 					<select id="filter-genre" name="genre" class="filter-select">
@@ -539,6 +669,119 @@ function isAiringToday(anime: Anime): boolean {
 					</div>
 				</form>
 				<button type="button" class="quick-add-cancel" onclick={closeQuickAdd}>キャンセル</button>
+			</div>
+		</div>
+	{/if}
+
+	{#if filterSheetOpen}
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<div class="filter-sheet-overlay" role="presentation" onclick={closeFilterSheet}>
+			<div
+				class="filter-sheet"
+				onclick={(e) => e.stopPropagation()}
+				role="dialog"
+				aria-modal="true"
+				aria-label="フィルター"
+			>
+				<div class="filter-sheet-header">
+					<span class="filter-sheet-title">フィルター</span>
+					<button type="button" class="filter-sheet-close" onclick={closeFilterSheet} aria-label="閉じる">
+						<svg
+							width="20"
+							height="20"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							aria-hidden="true"
+						>
+							<path d="M18 6L6 18M6 6l12 12" />
+						</svg>
+					</button>
+				</div>
+
+				<div class="filter-sheet-body">
+					<section class="filter-sheet-section">
+						<h3 class="filter-sheet-section-label">ジャンル</h3>
+						<div class="genre-chips">
+							{#each GENRES as g}
+								<button
+									type="button"
+									class="genre-chip"
+									class:genre-chip--active={pendingGenreMap[g]}
+									aria-pressed={pendingGenreMap[g]}
+									onclick={() => togglePendingGenre(g)}
+								>
+									{g}
+								</button>
+							{/each}
+						</div>
+					</section>
+
+					<section class="filter-sheet-section">
+						<h3 class="filter-sheet-section-label">放送年</h3>
+						<input
+							type="number"
+							min="1900"
+							max="2100"
+							class="filter-sheet-input"
+							placeholder="例: 2025"
+							bind:value={pendingYear}
+						>
+					</section>
+
+					<section class="filter-sheet-section">
+						<h3 class="filter-sheet-section-label">放送シーズン</h3>
+						<div class="season-chips">
+							{#each ["冬", "春", "夏", "秋"] as s}
+								<button
+									type="button"
+									class="season-chip"
+									class:season-chip--active={pendingSeason === s}
+									onclick={() => { pendingSeason = pendingSeason === s ? "" : s; }}
+								>
+									{s}
+								</button>
+							{/each}
+						</div>
+					</section>
+
+					<section class="filter-sheet-section">
+						<h3 class="filter-sheet-section-label">スタジオ</h3>
+						<input
+							type="text"
+							class="filter-sheet-input"
+							placeholder="スタジオ名"
+							bind:value={pendingStudio}
+						>
+					</section>
+
+					<section class="filter-sheet-section">
+						<h3 class="filter-sheet-section-label">制作会社</h3>
+						<input
+							type="text"
+							class="filter-sheet-input"
+							placeholder="制作会社名"
+							bind:value={pendingProducer}
+						>
+					</section>
+
+					<button type="button" class="filter-sheet-clear" onclick={clearPendingFilters}>
+						フィルターをクリア
+					</button>
+				</div>
+
+				<div class="filter-sheet-footer">
+					<button type="button" class="filter-sheet-apply" onclick={applyFilters}>
+						{#if sheetCountLoading}
+							検索中...
+						{:else if sheetResultCount !== null}
+							この条件で検索（{sheetResultCount}件ヒット）
+						{:else}
+							この条件で検索
+						{/if}
+					</button>
+				</div>
 			</div>
 		</div>
 	{/if}
@@ -1171,5 +1414,258 @@ function isAiringToday(anime: Anime): boolean {
 .quick-add-cancel:hover {
 	background: var(--hover-bg);
 	color: var(--text);
+}
+
+/* ─── フィルターアイコンボタン ─── */
+.filter-icon-btn {
+	display: none;
+	position: relative;
+	padding: 8px 10px;
+	border-radius: 8px;
+	border: 1px solid var(--border);
+	background: var(--card-bg);
+	color: var(--text);
+	cursor: pointer;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: center;
+	transition:
+		background 0.15s,
+		border-color 0.15s,
+		color 0.15s;
+}
+.filter-icon-btn:hover {
+	background: var(--hover-bg);
+}
+.filter-icon-btn--active {
+	border-color: var(--accent);
+	color: var(--accent);
+}
+.filter-active-dot {
+	position: absolute;
+	top: 5px;
+	right: 5px;
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--accent);
+}
+
+/* ─── フィルターボトムシート ─── */
+.filter-sheet-overlay {
+	position: fixed;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.45);
+	z-index: 1100;
+	display: flex;
+	align-items: flex-end;
+	backdrop-filter: blur(2px);
+	animation: overlay-fadein 0.2s ease;
+}
+@keyframes overlay-fadein {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+.filter-sheet {
+	background: var(--card-bg);
+	border-top: 1px solid var(--border);
+	border-radius: 16px 16px 0 0;
+	width: 100%;
+	max-height: 85dvh;
+	display: flex;
+	flex-direction: column;
+	box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.25);
+	animation: sheet-slidein 0.25s cubic-bezier(0.32, 0.72, 0, 1);
+	padding-bottom: env(safe-area-inset-bottom);
+}
+@keyframes sheet-slidein {
+	from {
+		transform: translateY(100%);
+	}
+	to {
+		transform: translateY(0);
+	}
+}
+.filter-sheet-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 14px 16px 12px;
+	border-bottom: 1px solid var(--border);
+	flex-shrink: 0;
+}
+.filter-sheet-title {
+	font-size: 1rem;
+	font-weight: 700;
+	color: var(--text);
+}
+.filter-sheet-close {
+	padding: 4px;
+	border: none;
+	background: none;
+	color: var(--text-muted);
+	cursor: pointer;
+	border-radius: 6px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	transition:
+		background 0.12s,
+		color 0.12s;
+}
+.filter-sheet-close:hover {
+	background: var(--hover-bg);
+	color: var(--text);
+}
+.filter-sheet-body {
+	overflow-y: auto;
+	flex: 1;
+	padding: 16px;
+	display: flex;
+	flex-direction: column;
+	gap: 20px;
+	-webkit-overflow-scrolling: touch;
+}
+.filter-sheet-section {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+.filter-sheet-section-label {
+	font-size: 0.72rem;
+	font-weight: 700;
+	color: var(--text-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	margin: 0;
+}
+.genre-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+.genre-chip {
+	padding: 5px 12px;
+	border-radius: 999px;
+	border: 1.5px solid var(--border);
+	background: transparent;
+	color: var(--text);
+	font-size: 0.82rem;
+	cursor: pointer;
+	transition:
+		background 0.12s,
+		border-color 0.12s,
+		color 0.12s;
+	white-space: nowrap;
+}
+.genre-chip:hover {
+	background: var(--hover-bg);
+}
+.genre-chip--active,
+.genre-chip--active:hover,
+.genre-chip--active:focus,
+.genre-chip--active:focus-visible {
+	background: var(--accent);
+	border-color: var(--accent);
+	color: #fff;
+	font-weight: 600;
+}
+.season-chips {
+	display: grid;
+	grid-template-columns: repeat(4, 1fr);
+	gap: 8px;
+}
+.season-chip {
+	padding: 9px 0;
+	border-radius: 8px;
+	border: 1.5px solid var(--border);
+	background: transparent;
+	color: var(--text);
+	font-size: 0.9rem;
+	font-weight: 600;
+	cursor: pointer;
+	text-align: center;
+	transition:
+		background 0.12s,
+		border-color 0.12s,
+		color 0.12s;
+}
+.season-chip:hover {
+	background: var(--hover-bg);
+	border-color: var(--accent);
+}
+.season-chip--active {
+	background: var(--accent);
+	border-color: var(--accent);
+	color: #fff;
+}
+.filter-sheet-input {
+	padding: 9px 12px;
+	border-radius: 8px;
+	border: 1px solid var(--border);
+	background: var(--bg);
+	color: var(--text);
+	font-size: 0.9rem;
+	outline: none;
+	width: 100%;
+	box-sizing: border-box;
+	transition:
+		border-color 0.15s,
+		box-shadow 0.15s;
+}
+.filter-sheet-input:focus {
+	border-color: var(--accent);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+.filter-sheet-clear {
+	align-self: flex-start;
+	padding: 6px 14px;
+	border-radius: 8px;
+	border: 1px solid var(--border);
+	background: transparent;
+	color: var(--text-muted);
+	font-size: 0.82rem;
+	cursor: pointer;
+	transition:
+		background 0.12s,
+		color 0.12s;
+}
+.filter-sheet-clear:hover {
+	background: var(--hover-bg);
+	color: var(--text);
+}
+.filter-sheet-footer {
+	padding: 12px 16px;
+	border-top: 1px solid var(--border);
+	flex-shrink: 0;
+}
+.filter-sheet-apply {
+	width: 100%;
+	padding: 13px;
+	border-radius: 10px;
+	border: none;
+	background: var(--accent);
+	color: #fff;
+	font-size: 0.95rem;
+	font-weight: 700;
+	cursor: pointer;
+	transition: opacity 0.15s;
+}
+.filter-sheet-apply:hover {
+	opacity: 0.88;
+}
+
+/* ─── モバイル：フィルターアイコン表示 / インラインフィルター非表示 ─── */
+@media (max-width: 960px) {
+	.filter-icon-btn {
+		display: flex;
+	}
+	.filter-row--desktop {
+		display: none;
+	}
 }
 </style>

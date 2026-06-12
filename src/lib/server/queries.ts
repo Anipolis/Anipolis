@@ -1110,7 +1110,7 @@ export async function getAnimeList(
 			.or(`aired_from.is.null,aired_from.lte.${scheduleRange.end}`)
 			.or(`aired_to.is.null,aired_to.gte.${scheduleRange.start}`);
 	}
-	if (genre) query = query.or(arrayContainsAny(["genre", "genre_en"], genre));
+	if (genre) query = query.or(buildGenreFilter(genre));
 	if (studio) query = query.or(arrayContainsAny(["studio", "studio_en"], studio));
 	if (producer) query = query.contains("producer", [producer]);
 	if (broadcastStatus) query = query.eq("computed_broadcast_status", broadcastStatus);
@@ -1125,6 +1125,37 @@ export async function getAnimeList(
 		.filter((anime) => !broadcastStatus || anime.computed_broadcast_status === broadcastStatus);
 	if (userId) return enrichAnimeWithUserEntries(supabase, animes, userId);
 	return animes;
+}
+
+export async function getAnimeCount(
+	supabase: SupabaseClient<Database>,
+	options: Pick<AnimeListOptions, "genre" | "broadcastYear" | "broadcastSeason" | "studio" | "producer" | "query">,
+): Promise<number> {
+	const { genre, broadcastYear, broadcastSeason, studio, producer, query: searchQuery } = options;
+
+	let q = supabase.from("anime_with_computed_broadcast_status").select("id", { count: "exact", head: true });
+
+	const seasonFilter = buildSeasonFilter(broadcastYear, broadcastSeason);
+	if (seasonFilter) q = q.or(seasonFilter);
+	if (genre) q = q.or(buildGenreFilter(genre));
+	if (studio) q = q.or(arrayContainsAny(["studio", "studio_en"], studio));
+	if (producer) q = q.contains("producer", [producer]);
+	if (searchQuery) q = q.or(`title.ilike.%${searchQuery}%,title_en.ilike.%${searchQuery}%`);
+
+	const { count, error } = await q;
+
+	if (error || count === null) {
+		let fallback = supabase.from("anime").select("id", { count: "exact", head: true });
+		if (seasonFilter) fallback = fallback.or(seasonFilter);
+		if (genre) fallback = fallback.or(buildGenreFilter(genre));
+		if (studio) fallback = fallback.or(arrayContainsAny(["studio", "studio_en"], studio));
+		if (producer) fallback = fallback.contains("producer", [producer]);
+		if (searchQuery) fallback = fallback.or(`title.ilike.%${searchQuery}%,title_en.ilike.%${searchQuery}%`);
+		const { count: fallbackCount } = await fallback;
+		return fallbackCount ?? 0;
+	}
+
+	return count;
 }
 
 async function getAnimeListRowsFromBaseTable(
@@ -1144,7 +1175,7 @@ async function getAnimeListRowsFromBaseTable(
 			.or(`aired_from.is.null,aired_from.lte.${scheduleRange.end}`)
 			.or(`aired_to.is.null,aired_to.gte.${scheduleRange.start}`);
 	}
-	if (genre) query = query.or(arrayContainsAny(["genre", "genre_en"], genre));
+	if (genre) query = query.or(buildGenreFilter(genre));
 	if (studio) query = query.or(arrayContainsAny(["studio", "studio_en"], studio));
 	if (producer) query = query.contains("producer", [producer]);
 	if (searchQuery) query = query.or(`title.ilike.%${searchQuery}%,title_en.ilike.%${searchQuery}%`);
@@ -1175,6 +1206,14 @@ function arrayContainsAny(columns: string[], value: string) {
 	const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 	const literal = `{"${escaped}"}`;
 	return columns.map((column) => `${column}.cs.${literal}`).join(",");
+}
+
+function buildGenreFilter(genre: string): string {
+	return genre
+		.split(",")
+		.filter(Boolean)
+		.map((g) => arrayContainsAny(["genre", "genre_en"], g))
+		.join(",");
 }
 
 function seasonSearchTerms(season: string): string[] {
