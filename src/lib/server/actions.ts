@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { fail } from "@sveltejs/kit";
 import type { Database, Json } from "$lib/supabase/database.types";
 import type { AnimeExchangeShare, AnimeStatus, BroadcastRoomMuteDuration } from "$lib/types";
-import { extractHashtags, extractMentions } from "$lib/utils/hashtag";
+import { extractHashtags } from "$lib/utils/hashtag";
 
 const reportStatuses = new Set(["open", "reviewing", "resolved", "rejected"]);
 const moderationStatuses = new Set(["active", "restricted", "banned"]);
@@ -102,34 +102,21 @@ export async function insertPostWithHashtags(
 		return fail(500, { message: exchangeShare ? "交換結果つき投稿の保存に失敗しました" : "投稿に失敗しました" });
 	}
 
-	// ハッシュタグを処理（重複エラーは無視）
+	// ハッシュタグを一括登録（既存タグは ON CONFLICT DO NOTHING）。
+	// タグごとの insert+select ループは実況時の余分な往復になるため一括化している。
+	// メンション通知は DB トリガー notify_on_mention（migration 026）が生成する。
 	const tags = extractHashtags(postContent);
-	for (const tag of tags) {
-		await supabase.from("hashtags").insert({ name: tag });
-		const { data: hashtag } = await supabase.from("hashtags").select("id").eq("name", tag).maybeSingle();
-		if (hashtag) {
-			await supabase.from("post_hashtags").insert({ post_id: post.id, hashtag_id: hashtag.id });
-		}
-	}
-
-	// メンション通知（エラーは無視）
-	const mentionedUsernames = extractMentions(postContent);
-	if (mentionedUsernames.length > 0) {
-		const { data: mentionedUsers } = await supabase
-			.from("profiles")
-			.select("id")
-			.in("username", mentionedUsernames);
-		if (mentionedUsers) {
-			for (const mentioned of mentionedUsers) {
-				if (mentioned.id !== userId) {
-					await supabase.from("notifications").insert({
-						recipient_id: mentioned.id,
-						actor_id: userId,
-						type: "mention",
-						post_id: post.id,
-					});
-				}
-			}
+	if (tags.length > 0) {
+		await supabase.from("hashtags").upsert(
+			tags.map((name) => ({ name })),
+			{ onConflict: "name", ignoreDuplicates: true },
+		);
+		const { data: hashtagRows } = await supabase.from("hashtags").select("id").in("name", tags);
+		if (hashtagRows && hashtagRows.length > 0) {
+			await supabase.from("post_hashtags").upsert(
+				hashtagRows.map((h) => ({ post_id: post.id, hashtag_id: h.id })),
+				{ onConflict: "post_id,hashtag_id", ignoreDuplicates: true },
+			);
 		}
 	}
 
