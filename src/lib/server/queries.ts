@@ -1139,7 +1139,7 @@ export async function getAnimeList(
 	if (studio) query = query.or(arrayContainsAny(["studio", "studio_en"], studio));
 	if (producer) query = query.contains("producer", [producer]);
 	if (broadcastStatus) query = query.eq("computed_broadcast_status", broadcastStatus);
-	if (searchQuery) query = query.or(`title.ilike.%${searchQuery}%,title_en.ilike.%${searchQuery}%`);
+	if (searchQuery) query = query.or(buildTitleSearchFilter(searchQuery));
 
 	const { data, error } = await query;
 	const rows = error || !data ? await getAnimeListRowsFromBaseTable(supabase, options, seasonFilter) : data;
@@ -1165,7 +1165,7 @@ export async function getAnimeCount(
 	if (genre) q = q.or(buildGenreFilter(genre));
 	if (studio) q = q.or(arrayContainsAny(["studio", "studio_en"], studio));
 	if (producer) q = q.contains("producer", [producer]);
-	if (searchQuery) q = q.or(`title.ilike.%${searchQuery}%,title_en.ilike.%${searchQuery}%`);
+	if (searchQuery) q = q.or(buildTitleSearchFilter(searchQuery));
 
 	const { count, error } = await q;
 
@@ -1175,7 +1175,7 @@ export async function getAnimeCount(
 		if (genre) fallback = fallback.or(buildGenreFilter(genre));
 		if (studio) fallback = fallback.or(arrayContainsAny(["studio", "studio_en"], studio));
 		if (producer) fallback = fallback.contains("producer", [producer]);
-		if (searchQuery) fallback = fallback.or(`title.ilike.%${searchQuery}%,title_en.ilike.%${searchQuery}%`);
+		if (searchQuery) fallback = fallback.or(buildTitleSearchFilter(searchQuery));
 		const { count: fallbackCount } = await fallback;
 		return fallbackCount ?? 0;
 	}
@@ -1203,28 +1203,48 @@ async function getAnimeListRowsFromBaseTable(
 	if (genre) query = query.or(buildGenreFilter(genre));
 	if (studio) query = query.or(arrayContainsAny(["studio", "studio_en"], studio));
 	if (producer) query = query.contains("producer", [producer]);
-	if (searchQuery) query = query.or(`title.ilike.%${searchQuery}%,title_en.ilike.%${searchQuery}%`);
+	if (searchQuery) query = query.or(buildTitleSearchFilter(searchQuery));
 
 	const { data } = await query;
 	return (data ?? []) as Record<string, unknown>[];
 }
 
 function buildSeasonFilter(year: string | undefined, season: string | undefined): string | null {
-	const normalizedYear = year?.trim();
+	// 年は4桁数字のみ受け付ける（.or() 文字列への注入を防ぐ）
+	const trimmedYear = year?.trim();
+	const normalizedYear = trimmedYear && /^\d{4}$/.test(trimmedYear) ? trimmedYear : undefined;
 	const normalizedSeason = season?.trim();
 	if (!normalizedYear && !normalizedSeason) return null;
 
 	if (normalizedYear && normalizedSeason) {
 		return seasonSearchTerms(normalizedSeason)
-			.map((term) => `season.ilike.${normalizedYear}%${term}`)
+			.map((term) => `season.ilike.${quoteOrFilterValue(`${normalizedYear}%${term}`)}`)
 			.join(",");
 	}
 
-	if (normalizedYear) return `season.ilike.${normalizedYear}%`;
+	if (normalizedYear) return `season.ilike.${quoteOrFilterValue(`${normalizedYear}%`)}`;
 
 	return seasonSearchTerms(normalizedSeason ?? "")
-		.flatMap((term) => [`season.ilike.%${term}`, `season.ilike.%-${term}`])
+		.flatMap((term) => [
+			`season.ilike.${quoteOrFilterValue(`%${term}`)}`,
+			`season.ilike.${quoteOrFilterValue(`%-${term}`)}`,
+		])
 		.join(",");
+}
+
+/**
+ * PostgREST の .or() フィルターに埋め込む値を二重引用符リテラル化する。
+ * カンマ・括弧はフィルター構文のトークンとして解釈され条件注入につながるため、
+ * ユーザー入力を .or() 文字列に連結する際は必ずこれで包むこと。
+ */
+export function quoteOrFilterValue(value: string): string {
+	return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+/** title / title_en の部分一致検索用 .or() フィルターを生成する（入力は引用符リテラル化される） */
+export function buildTitleSearchFilter(searchQuery: string): string {
+	const pattern = quoteOrFilterValue(`%${searchQuery}%`);
+	return `title.ilike.${pattern},title_en.ilike.${pattern}`;
 }
 
 function arrayContainsAny(columns: string[], value: string) {

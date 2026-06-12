@@ -1,6 +1,6 @@
 ﻿import { fail } from "@sveltejs/kit";
 import { deletePostAction, toggleBookmarkAction, toggleLikeAction, toggleRepostAction } from "$lib/server/actions";
-import { enrichPostsWithCounts, getAnimeRankingTrending } from "$lib/server/queries";
+import { enrichPostsWithCounts, getAnimeRankingTrending, quoteOrFilterValue } from "$lib/server/queries";
 import type { RawPost } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -34,7 +34,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		supabase
 			.from("profiles")
 			.select("id, username, display_name, avatar_url")
-			.or(`username.ilike.${pattern},display_name.ilike.${pattern}`)
+			.or(`username.ilike.${quoteOrFilterValue(pattern)},display_name.ilike.${quoteOrFilterValue(pattern)}`)
 			.limit(10),
 		trendingPromise,
 		animeTrendingPromise,
