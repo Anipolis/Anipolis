@@ -1091,9 +1091,12 @@ export interface AnimeListOptions {
 	broadcastSeason?: string;
 	scheduleRange?: { start: string; end: string };
 	genre?: string;
+	genres?: string[];
 	studio?: string;
 	producer?: string;
 	broadcastStatus?: Exclude<BroadcastStatus, "unknown">;
+	sortBy?: "popular" | "trending" | "top_rated" | "created";
+	listedByUserId?: string | null;
 	limit?: number;
 	userId?: string | null;
 	query?: string;
@@ -1148,13 +1151,19 @@ export async function getAnimeList(
 		broadcastSeason,
 		scheduleRange,
 		genre,
+		genres,
 		studio,
 		producer,
 		broadcastStatus,
+		sortBy = "created",
+		listedByUserId,
 		limit = 20,
 		userId,
 		query: searchQuery,
 	} = options;
+	const selectedGenres = normalizeGenreFilters(genres ?? genre);
+	const listedAnimeIds = listedByUserId ? await getListedAnimeIds(supabase, listedByUserId) : null;
+	if (listedAnimeIds && listedAnimeIds.length === 0) return [];
 
 	let query = supabase
 		.from("anime_with_computed_broadcast_status")
@@ -1162,43 +1171,53 @@ export async function getAnimeList(
 		.order("created_at", { ascending: false })
 		.limit(limit);
 
+	if (listedAnimeIds) query = query.in("id", listedAnimeIds);
 	if (season) query = query.eq("season", season);
-	const seasonFilter = buildSeasonFilter(broadcastYear, broadcastSeason);
+	const seasonFilter = buildSeasonFilter(undefined, broadcastSeason);
 	if (seasonFilter) query = query.or(seasonFilter);
+	if (broadcastYear) query = applyAiredYearFilter(query, broadcastYear);
 	if (scheduleRange) {
 		query = query
 			.not("broadcast_day", "is", null)
 			.or(`aired_from.is.null,aired_from.lte.${scheduleRange.end}`)
 			.or(`aired_to.is.null,aired_to.gte.${scheduleRange.start}`);
 	}
-	if (genre) query = query.or(buildGenreFilter(genre));
+	if (selectedGenres.length) query = query.or(buildGenreFilter(selectedGenres));
 	if (studio) query = query.or(arrayContainsAny(["studio", "studio_en"], studio));
 	if (producer) query = query.contains("producer", [producer]);
 	if (broadcastStatus) query = query.eq("computed_broadcast_status", broadcastStatus);
 	if (searchQuery) query = query.or(buildTitleSearchFilter(searchQuery));
 
 	const { data, error } = await query;
-	const rows = error || !data ? await getAnimeListRowsFromBaseTable(supabase, options, seasonFilter) : data;
+	const rows =
+		error || !data ? await getAnimeListRowsFromBaseTable(supabase, options, seasonFilter, listedAnimeIds) : data;
 	if (rows.length === 0) return [];
 
-	const animes: Anime[] = (rows as Record<string, unknown>[])
-		.map(toAnime)
-		.filter((anime) => !broadcastStatus || anime.computed_broadcast_status === broadcastStatus);
+	const mappedAnimes = (rows as Record<string, unknown>[])
+		.map((row, index) => ({ anime: toAnime(row), index }))
+		.filter(({ anime }) => !broadcastStatus || anime.computed_broadcast_status === broadcastStatus);
+	await sortAnimeListItems(supabase, mappedAnimes, sortBy, selectedGenres);
+	const animes: Anime[] = mappedAnimes.map(({ anime }) => anime);
 	if (userId) return enrichAnimeWithUserEntries(supabase, animes, userId);
 	return animes;
 }
 
 export async function getAnimeCount(
 	supabase: SupabaseClient<Database>,
-	options: Pick<AnimeListOptions, "genre" | "broadcastYear" | "broadcastSeason" | "studio" | "producer" | "query">,
+	options: Pick<
+		AnimeListOptions,
+		"genre" | "genres" | "broadcastYear" | "broadcastSeason" | "studio" | "producer" | "query"
+	>,
 ): Promise<number> {
-	const { genre, broadcastYear, broadcastSeason, studio, producer, query: searchQuery } = options;
+	const { genre, genres, broadcastYear, broadcastSeason, studio, producer, query: searchQuery } = options;
+	const selectedGenres = normalizeGenreFilters(genres ?? genre);
 
 	let q = supabase.from("anime_with_computed_broadcast_status").select("id", { count: "exact", head: true });
 
-	const seasonFilter = buildSeasonFilter(broadcastYear, broadcastSeason);
+	const seasonFilter = buildSeasonFilter(undefined, broadcastSeason);
 	if (seasonFilter) q = q.or(seasonFilter);
-	if (genre) q = q.or(buildGenreFilter(genre));
+	if (broadcastYear) q = applyAiredYearFilter(q, broadcastYear);
+	if (selectedGenres.length) q = q.or(buildGenreFilter(selectedGenres));
 	if (studio) q = q.or(arrayContainsAny(["studio", "studio_en"], studio));
 	if (producer) q = q.contains("producer", [producer]);
 	if (searchQuery) q = q.or(buildTitleSearchFilter(searchQuery));
@@ -1208,7 +1227,8 @@ export async function getAnimeCount(
 	if (error || count === null) {
 		let fallback = supabase.from("anime").select("id", { count: "exact", head: true });
 		if (seasonFilter) fallback = fallback.or(seasonFilter);
-		if (genre) fallback = fallback.or(buildGenreFilter(genre));
+		if (broadcastYear) fallback = applyAiredYearFilter(fallback, broadcastYear);
+		if (selectedGenres.length) fallback = fallback.or(buildGenreFilter(selectedGenres));
 		if (studio) fallback = fallback.or(arrayContainsAny(["studio", "studio_en"], studio));
 		if (producer) fallback = fallback.contains("producer", [producer]);
 		if (searchQuery) fallback = fallback.or(buildTitleSearchFilter(searchQuery));
@@ -1223,8 +1243,20 @@ async function getAnimeListRowsFromBaseTable(
 	supabase: SupabaseClient<Database>,
 	options: AnimeListOptions,
 	seasonFilter: string | null,
+	listedAnimeIds: number[] | null = null,
 ): Promise<Record<string, unknown>[]> {
-	const { season, scheduleRange, genre, studio, producer, limit = 20, query: searchQuery } = options;
+	const {
+		season,
+		broadcastYear,
+		scheduleRange,
+		genre,
+		genres,
+		studio,
+		producer,
+		limit = 20,
+		query: searchQuery,
+	} = options;
+	const selectedGenres = normalizeGenreFilters(genres ?? genre);
 
 	let query = supabase
 		.from("anime")
@@ -1232,15 +1264,17 @@ async function getAnimeListRowsFromBaseTable(
 		.order("created_at", { ascending: false })
 		.limit(limit);
 
+	if (listedAnimeIds) query = query.in("id", listedAnimeIds);
 	if (season) query = query.eq("season", season);
 	if (seasonFilter) query = query.or(seasonFilter);
+	if (broadcastYear) query = applyAiredYearFilter(query, broadcastYear);
 	if (scheduleRange) {
 		query = query
 			.not("broadcast_day", "is", null)
 			.or(`aired_from.is.null,aired_from.lte.${scheduleRange.end}`)
 			.or(`aired_to.is.null,aired_to.gte.${scheduleRange.start}`);
 	}
-	if (genre) query = query.or(buildGenreFilter(genre));
+	if (selectedGenres.length) query = query.or(buildGenreFilter(selectedGenres));
 	if (studio) query = query.or(arrayContainsAny(["studio", "studio_en"], studio));
 	if (producer) query = query.contains("producer", [producer]);
 	if (searchQuery) query = query.or(buildTitleSearchFilter(searchQuery));
@@ -1293,12 +1327,123 @@ function arrayContainsAny(columns: string[], value: string) {
 	return columns.map((column) => `${column}.cs.${literal}`).join(",");
 }
 
-function buildGenreFilter(genre: string): string {
-	return genre
-		.split(",")
+function buildGenreFilter(genres: string[]): string {
+	return genres
 		.filter(Boolean)
-		.map((g) => arrayContainsAny(["genre", "genre_en"], g))
+		.map((genre) => arrayContainsAny(["genre", "genre_en"], genre))
 		.join(",");
+}
+
+function normalizeGenreFilters(value: string | string[] | undefined): string[] {
+	const rawGenres = Array.isArray(value) ? value : (value ?? "").split(",");
+	return [...new Set(rawGenres.map((genre) => genre.trim()).filter(Boolean))];
+}
+
+function applyAiredYearFilter<
+	T extends { gte: (column: string, value: string) => T; lt: (column: string, value: string) => T },
+>(query: T, year: string): T {
+	const normalizedYear = /^\d{4}$/.test(year.trim()) ? Number(year) : null;
+	if (normalizedYear === null) return query;
+	return query.gte("aired_from", `${normalizedYear}-01-01`).lt("aired_from", `${normalizedYear + 1}-01-01`);
+}
+
+function countGenreMatches(anime: Anime, selectedGenres: string[]): number {
+	const animeGenres = new Set(
+		[...(anime.genre ?? []), ...(anime.genre_en ?? [])].map((genre) => genre.toLowerCase()),
+	);
+	return selectedGenres.reduce((count, genre) => count + (animeGenres.has(genre.toLowerCase()) ? 1 : 0), 0);
+}
+
+async function getListedAnimeIds(supabase: SupabaseClient<Database>, userId: string): Promise<number[]> {
+	const { data, error } = await supabase.from("user_anime_list").select("anime_id").eq("user_id", userId);
+	if (error || !data) return [];
+	return data.map((row) => Number(row.anime_id)).filter((id) => Number.isFinite(id));
+}
+
+async function sortAnimeListItems(
+	supabase: SupabaseClient<Database>,
+	items: { anime: Anime; index: number }[],
+	sortBy: NonNullable<AnimeListOptions["sortBy"]>,
+	selectedGenres: string[],
+): Promise<void> {
+	if (items.length === 0) return;
+
+	if (sortBy === "created") {
+		if (selectedGenres.length) {
+			items.sort(
+				(a, b) =>
+					countGenreMatches(b.anime, selectedGenres) - countGenreMatches(a.anime, selectedGenres) ||
+					a.index - b.index,
+			);
+		}
+		return;
+	}
+
+	const metrics = await getAnimeRankingMetrics(
+		supabase,
+		items.map(({ anime }) => anime.id),
+		sortBy,
+	);
+	for (const { anime } of items) {
+		const metric = metrics.get(anime.id);
+		if (!metric) continue;
+		if (sortBy === "popular") anime.list_count = metric.primary;
+		if (sortBy === "trending") anime.recent_count = metric.primary;
+		if (sortBy === "top_rated") {
+			anime.avg_score = metric.primary;
+			anime.score_count = metric.secondary;
+		}
+	}
+
+	items.sort((a, b) => {
+		const aMetric = metrics.get(a.anime.id);
+		const bMetric = metrics.get(b.anime.id);
+		const metricDelta = (bMetric?.primary ?? 0) - (aMetric?.primary ?? 0);
+		if (metricDelta !== 0) return metricDelta;
+		if (sortBy === "top_rated") {
+			const scoreCountDelta = (bMetric?.secondary ?? 0) - (aMetric?.secondary ?? 0);
+			if (scoreCountDelta !== 0) return scoreCountDelta;
+		}
+		if (selectedGenres.length) {
+			const genreDelta = countGenreMatches(b.anime, selectedGenres) - countGenreMatches(a.anime, selectedGenres);
+			if (genreDelta !== 0) return genreDelta;
+		}
+		return a.index - b.index;
+	});
+}
+
+async function getAnimeRankingMetrics(
+	supabase: SupabaseClient<Database>,
+	animeIds: string[],
+	sortBy: Exclude<NonNullable<AnimeListOptions["sortBy"]>, "created">,
+): Promise<Map<string, { primary: number; secondary: number }>> {
+	const ids = animeIds.map(Number).filter((id) => Number.isFinite(id));
+	if (ids.length === 0) return new Map();
+
+	if (sortBy === "popular") {
+		const { data } = await supabase.from("anime_popularity").select("anime_id, list_count").in("anime_id", ids);
+		return new Map(
+			(data ?? []).map((row) => [String(row.anime_id), { primary: Number(row.list_count ?? 0), secondary: 0 }]),
+		);
+	}
+
+	if (sortBy === "trending") {
+		const { data } = await supabase.from("anime_trending").select("anime_id, recent_count").in("anime_id", ids);
+		return new Map(
+			(data ?? []).map((row) => [String(row.anime_id), { primary: Number(row.recent_count ?? 0), secondary: 0 }]),
+		);
+	}
+
+	const { data } = await supabase
+		.from("anime_top_rated")
+		.select("anime_id, avg_score, score_count")
+		.in("anime_id", ids);
+	return new Map(
+		(data ?? []).map((row) => [
+			String(row.anime_id),
+			{ primary: Number(row.avg_score ?? 0), secondary: Number(row.score_count ?? 0) },
+		]),
+	);
 }
 
 function seasonSearchTerms(season: string): string[] {

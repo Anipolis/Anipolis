@@ -53,6 +53,15 @@ const tabs = [
 ] as const;
 
 const ANIME_SECTION_SIZE = 50;
+type SeasonChip = "" | "冬" | "春" | "夏" | "秋";
+type AnimeFilterState = {
+	search: string;
+	genres: string[];
+	year: string;
+	season: SeasonChip;
+};
+
+const SEASON_CHIPS: Exclude<SeasonChip, "">[] = ["冬", "春", "夏", "秋"];
 
 const statusLabels: Record<AnimeStatus, string> = {
 	watching: "視聴中",
@@ -79,22 +88,35 @@ const statusOptions: { value: AnimeStatus; label: string; color: string }[] = [
 
 let quickAddAnime = $state<AnimeListItem | null>(null);
 let quickAddSubmitting = $state(false);
+// svelte-ignore state_referenced_locally
+let filterState = $state<AnimeFilterState>({
+	search: data.search ?? "",
+	genres: data.genres ?? data.genre?.split(",").filter(Boolean) ?? [],
+	year: data.broadcastYear ?? "",
+	season: ((data.broadcastSeason ?? "") as SeasonChip) || "",
+});
 
 // フィルターボトムシート
 let filterSheetOpen = $state(false);
+let filterDrawerOpen = $state(false);
 function buildGenreMap(selected: string[]): Record<string, boolean> {
 	const set = new Set(selected);
 	return Object.fromEntries(GENRES.map((g) => [g, set.has(g)]));
 }
+// svelte-ignore state_referenced_locally
 let pendingGenreMap = $state<Record<string, boolean>>(buildGenreMap(data.genre?.split(",").filter(Boolean) ?? []));
+// svelte-ignore state_referenced_locally
 let pendingYear = $state(data.broadcastYear ?? "");
+// svelte-ignore state_referenced_locally
 let pendingSeason = $state(data.broadcastSeason ?? "");
+// svelte-ignore state_referenced_locally
 let pendingStudio = $state(data.studio ?? "");
+// svelte-ignore state_referenced_locally
 let pendingProducer = $state(data.producer ?? "");
 let sheetResultCount = $state<number | null>(null);
 let sheetCountLoading = $state(false);
 let hasActiveFilters = $derived(
-	Boolean(data.genre || data.broadcastYear || data.broadcastSeason || data.studio || data.producer),
+	Boolean(data.search || data.genre || data.broadcastYear || data.broadcastSeason || data.studio || data.producer),
 );
 let currentAnimeSectionIndex = $state(0);
 let animeSections = $derived(chunkAnimes(data.animes));
@@ -114,6 +136,66 @@ let animeListContextKey = $derived(
 	].join("\u0000"),
 );
 let previousAnimeListContextKey = $state<string | null>(null);
+let previousDataFilterKey = $state("");
+
+function toFilterState(): AnimeFilterState {
+	return {
+		search: data.search ?? "",
+		genres: data.genres ?? data.genre?.split(",").filter(Boolean) ?? [],
+		year: data.broadcastYear ?? "",
+		season: ((data.broadcastSeason ?? "") as SeasonChip) || "",
+	};
+}
+
+function buildAnimeFilterUrl(filters: AnimeFilterState, tabId: string = data.tab) {
+	const params = new URLSearchParams();
+	if (filters.search.trim()) params.set("search", filters.search.trim());
+	if (filters.genres.length) params.set("genres", filters.genres.join(","));
+	if (filters.year.trim()) params.set("year", filters.year.trim());
+	if (filters.season) params.set("season", filters.season);
+	if (tabId && tabId !== "popular") params.set("tab", tabId);
+	const qs = params.toString();
+	return qs ? `/anime?${qs}` : "/anime";
+}
+
+function buildAnimeTabUrl(tabId: string) {
+	return buildAnimeFilterUrl(filterState, tabId);
+}
+
+function syncFiltersToUrl(filters: AnimeFilterState) {
+	goto(buildAnimeFilterUrl(filters), { keepFocus: true, noScroll: true });
+}
+
+function updateFilterState(patch: Partial<AnimeFilterState>) {
+	const next = { ...filterState, ...patch };
+	filterState = next;
+	syncFiltersToUrl(next);
+}
+
+function toggleSidebarGenre(genre: string) {
+	const genres = filterState.genres.includes(genre)
+		? filterState.genres.filter((selected) => selected !== genre)
+		: [...filterState.genres, genre];
+	updateFilterState({ genres });
+}
+
+function toggleSidebarSeason(season: Exclude<SeasonChip, "">) {
+	updateFilterState({ season: filterState.season === season ? "" : season });
+}
+
+function clearSidebarFilters() {
+	filterState = { search: "", genres: [], year: "", season: "" };
+	goto("/anime", { keepFocus: true, noScroll: true });
+}
+
+$effect(() => {
+	const next = toFilterState();
+	const nextKey = [next.search, next.genres.join(","), next.year, next.season].join("\u0000");
+	if (previousDataFilterKey !== nextKey) {
+		previousDataFilterKey = nextKey;
+		filterState = next;
+	}
+});
 
 function chunkAnimes(animes: AnimeListItem[]) {
 	const sections: { start: number; end: number; items: AnimeListItem[] }[] = [];
@@ -178,7 +260,7 @@ $effect(() => {
 });
 
 function openFilterSheet() {
-	pendingGenreMap = buildGenreMap(data.genre?.split(",").filter(Boolean) ?? []);
+	pendingGenreMap = buildGenreMap(data.genres ?? data.genre?.split(",").filter(Boolean) ?? []);
 	pendingYear = data.broadcastYear ?? "";
 	pendingSeason = data.broadcastSeason ?? "";
 	pendingStudio = data.studio ?? "";
@@ -209,14 +291,14 @@ function applyFilters() {
 	const params = new URLSearchParams();
 	if (data.search) params.set("search", data.search);
 	const selectedGenres = Object.keys(pendingGenreMap).filter((k) => pendingGenreMap[k]);
-	if (selectedGenres.length) params.set("genre", selectedGenres.join(","));
-	if (pendingYear) params.set("broadcastYear", pendingYear);
-	if (pendingSeason) params.set("broadcastSeason", pendingSeason);
+	if (selectedGenres.length) params.set("genres", selectedGenres.join(","));
+	if (pendingYear) params.set("year", pendingYear);
+	if (pendingSeason) params.set("season", pendingSeason);
 	if (pendingStudio) params.set("studio", pendingStudio);
 	if (pendingProducer) params.set("producer", pendingProducer);
 	if (data.tab && data.tab !== "popular") params.set("tab", data.tab);
 	const qs = params.toString();
-	goto(qs ? `/anime?${qs}` : "/anime");
+	goto(qs ? `/anime?${qs}` : "/anime", { keepFocus: true, noScroll: true });
 	closeFilterSheet();
 }
 
@@ -243,9 +325,9 @@ $effect(() => {
 	const timer = setTimeout(async () => {
 		const params = new URLSearchParams();
 		const gList = Object.keys(gMap).filter((k) => gMap[k]);
-		if (gList.length) params.set("genre", gList.join(","));
-		if (y) params.set("broadcastYear", y);
-		if (s) params.set("broadcastSeason", s);
+		if (gList.length) params.set("genres", gList.join(","));
+		if (y) params.set("year", y);
+		if (s) params.set("season", s);
 		if (st) params.set("studio", st);
 		if (pr) params.set("producer", pr);
 		if (data.search) params.set("search", data.search);
@@ -281,7 +363,130 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	<main class="anime-main">
 		<h1 class="section-title">アニメ</h1>
 
-		<form method="GET" action="/anime" class="search-form">
+		<section class="filter-drawer-shell" aria-label="アニメ検索と絞り込み">
+			<div class="filter-drawer-bar">
+				<label class="sr-only" for="desktop-anime-search">タイトル検索</label>
+				<div class="search-input-wrap">
+					<svg
+						class="search-icon"
+						width="16"
+						height="16"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						aria-hidden="true"
+					>
+						<circle cx="11" cy="11" r="8" />
+						<path d="m21 21-4.35-4.35" />
+					</svg>
+					<input
+						id="desktop-anime-search"
+						type="text"
+						class="search-input"
+						placeholder="タイトルで検索..."
+						value={filterState.search}
+						oninput={(e) => updateFilterState({ search: e.currentTarget.value })}
+					>
+				</div>
+				<button
+					type="button"
+					class="filter-drawer-toggle"
+					class:filter-drawer-toggle--active={filterDrawerOpen || hasActiveFilters}
+					aria-expanded={filterDrawerOpen}
+					aria-controls="anime-filter-drawer-panel"
+					onclick={() => {
+						filterDrawerOpen = !filterDrawerOpen;
+					}}
+				>
+					<span>詳細フィルター</span>
+					<svg
+						class:filter-drawer-chevron--open={filterDrawerOpen}
+						width="16"
+						height="16"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						aria-hidden="true"
+					>
+						<path d="m6 9 6 6 6-6" />
+					</svg>
+				</button>
+			</div>
+
+			<div
+				id="anime-filter-drawer-panel"
+				class="filter-drawer-panel"
+				class:filter-drawer-panel--open={filterDrawerOpen}
+				aria-hidden={!filterDrawerOpen}
+			>
+				<div class="filter-drawer-inner">
+					<div class="filter-drawer-grid">
+						<section class="filter-drawer-column">
+							<h2 class="filter-drawer-heading">ジャンル</h2>
+							<div class="drawer-genre-grid">
+								{#each GENRES as g}
+									<label class="genre-checkbox">
+										<input
+											type="checkbox"
+											checked={filterState.genres.includes(g)}
+											onchange={() => toggleSidebarGenre(g)}
+										>
+										<span>{g}</span>
+									</label>
+								{/each}
+							</div>
+						</section>
+
+						<section class="filter-drawer-column">
+							<h2 class="filter-drawer-heading">放送年</h2>
+							<label class="sr-only" for="desktop-anime-year">放送年</label>
+							<input
+								id="desktop-anime-year"
+								type="number"
+								min="1900"
+								max="2100"
+								class="filter-input"
+								placeholder="例: 2025"
+								value={filterState.year}
+								oninput={(e) => updateFilterState({ year: e.currentTarget.value })}
+							>
+						</section>
+
+						<section class="filter-drawer-column">
+							<h2 class="filter-drawer-heading">放送シーズン</h2>
+							<div class="season-chips">
+								{#each SEASON_CHIPS as s}
+									<button
+										type="button"
+										class="season-chip"
+										class:season-chip--active={filterState.season === s}
+										aria-pressed={filterState.season === s}
+										onclick={() => toggleSidebarSeason(s)}
+									>
+										{s}
+									</button>
+								{/each}
+							</div>
+						</section>
+					</div>
+
+					<div class="filter-drawer-actions">
+						<button
+							type="button"
+							class="filter-drawer-clear"
+							onclick={clearSidebarFilters}
+							disabled={!hasActiveFilters}
+						>
+							条件をクリア
+						</button>
+					</div>
+				</div>
+			</div>
+		</section>
+
+		<form method="GET" action="/anime" class="search-form search-form--mobile">
 			<div class="search-row">
 				<div class="search-input-wrap">
 					<svg
@@ -395,11 +600,16 @@ function isAiringToday(anime: AnimeListItem): boolean {
 		<nav class="tab-nav">
 			{#each tabs as tab}
 				{#if tab.id !== 'mylist' || data.user}
-					<a href="/anime?tab={tab.id}" class="tab-btn" class:active={data.tab === tab.id}>{tab.label}</a>
+					<a href={buildAnimeTabUrl(tab.id)} class="tab-btn" class:active={data.tab === tab.id}
+						>{tab.label}</a
+					>
 				{/if}
 			{/each}
 			{#if data.user}
-				<a href="/anime?tab=register" class="tab-btn tab-btn--add" class:active={data.tab === 'register'}
+				<a
+					href={buildAnimeTabUrl('register')}
+					class="tab-btn tab-btn--add"
+					class:active={data.tab === 'register'}
 					>＋登録</a
 				>
 			{/if}
@@ -682,6 +892,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 				role="dialog"
 				aria-modal="true"
 				aria-label="フィルター"
+				tabindex="-1"
 			>
 				<div class="filter-sheet-header">
 					<span class="filter-sheet-title">フィルター</span>
@@ -733,7 +944,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 					<section class="filter-sheet-section">
 						<h3 class="filter-sheet-section-label">放送シーズン</h3>
 						<div class="season-chips">
-							{#each ["冬", "春", "夏", "秋"] as s}
+							{#each SEASON_CHIPS as s}
 								<button
 									type="button"
 									class="season-chip"
@@ -790,7 +1001,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 <style>
 .anime-page-wrap {
 	width: 100%;
-	max-width: 1100px;
+	max-width: 1360px;
 	margin: 0 auto;
 	padding: 0 16px;
 	box-sizing: border-box;
@@ -799,12 +1010,163 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	width: 100%;
 	min-width: 0;
 }
+.filter-drawer-shell {
+	margin: 0 0 16px;
+}
+.filter-drawer-bar {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+.filter-drawer-toggle {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	flex: 0 0 auto;
+	min-height: 38px;
+	padding: 0 14px;
+	border-radius: 8px;
+	border: 1px solid var(--border);
+	background: var(--card-bg);
+	color: var(--text);
+	font-size: 0.84rem;
+	font-weight: 600;
+	cursor: pointer;
+	white-space: nowrap;
+	transition:
+		background 0.15s,
+		border-color 0.15s,
+		color 0.15s,
+		box-shadow 0.15s;
+}
+.filter-drawer-toggle:hover {
+	background: var(--hover-bg);
+	border-color: var(--color-border-hover);
+}
+.filter-drawer-toggle--active {
+	border-color: var(--accent);
+	color: var(--accent);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.filter-drawer-toggle svg {
+	transition: transform 0.2s;
+}
+.filter-drawer-chevron--open {
+	transform: rotate(180deg);
+}
+.filter-drawer-panel {
+	max-height: 0;
+	opacity: 0;
+	overflow: hidden;
+	transform: translateY(-6px);
+	transition:
+		max-height 0.3s ease,
+		opacity 0.25s ease,
+		transform 0.3s ease,
+		margin-top 0.3s ease;
+}
+.filter-drawer-panel--open {
+	max-height: 420px;
+	opacity: 1;
+	transform: translateY(0);
+	margin-top: 10px;
+}
+.filter-drawer-inner {
+	padding: 16px;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	background: var(--card-bg);
+	box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+	box-sizing: border-box;
+}
+.filter-drawer-grid {
+	display: grid;
+	grid-template-columns: minmax(0, 1.7fr) minmax(180px, 0.65fr) minmax(220px, 0.85fr);
+	gap: 18px;
+	align-items: start;
+}
+.filter-drawer-column {
+	min-width: 0;
+}
+.filter-drawer-heading {
+	margin: 0 0 10px;
+	color: var(--text-muted);
+	font-size: 0.74rem;
+	font-weight: 700;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+}
+.drawer-genre-grid {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 7px 12px;
+}
+.genre-checkbox {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	color: var(--text);
+	font-size: 0.84rem;
+	line-height: 1.3;
+	cursor: pointer;
+}
+.genre-checkbox input {
+	flex: 0 0 auto;
+	width: 15px;
+	height: 15px;
+	accent-color: var(--accent);
+}
+.filter-drawer-actions {
+	display: flex;
+	justify-content: flex-end;
+	margin-top: 14px;
+	padding-top: 12px;
+	border-top: 1px solid var(--border);
+}
+.filter-drawer-clear {
+	padding: 8px 13px;
+	border-radius: 8px;
+	border: 1px solid var(--border);
+	background: transparent;
+	color: var(--text-muted);
+	font-size: 0.82rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition:
+		background 0.12s,
+		color 0.12s,
+		border-color 0.12s;
+}
+.filter-drawer-clear:hover:not(:disabled) {
+	background: var(--hover-bg);
+	color: var(--text);
+	border-color: var(--color-border-hover);
+}
+.filter-drawer-clear:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+.sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
+}
 
 .search-form {
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
 	margin-bottom: 16px;
+}
+.search-form--mobile {
+	display: none;
 }
 .search-row {
 	display: flex;
@@ -1058,8 +1420,14 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	align-self: stretch;
 	width: 100%;
 	min-width: 0;
-	grid-template-columns: repeat(5, minmax(0, 1fr));
+	grid-template-columns: repeat(6, minmax(0, 1fr));
 	gap: 14px;
+}
+
+@media (max-width: 1180px) {
+	.anime-grid {
+		grid-template-columns: repeat(5, minmax(0, 1fr));
+	}
 }
 
 @media (max-width: 768px) {
@@ -1663,6 +2031,15 @@ function isAiringToday(anime: AnimeListItem): boolean {
 
 /* ─── モバイル：フィルターアイコン表示 / インラインフィルター非表示 ─── */
 @media (max-width: 960px) {
+	.anime-page-wrap {
+		max-width: 1100px;
+	}
+	.filter-drawer-shell {
+		display: none;
+	}
+	.search-form--mobile {
+		display: flex;
+	}
 	.filter-icon-btn {
 		display: flex;
 	}

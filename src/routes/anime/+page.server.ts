@@ -10,6 +10,23 @@ import type { Anime, AnimeListItem } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
 type Tab = "popular" | "trending" | "top_rated" | "mylist" | "airing" | "upcoming" | "register";
+type SeasonChip = "" | "冬" | "春" | "夏" | "秋";
+
+function parseGenres(value: string | null): string[] {
+	return [
+		...new Set(
+			(value ?? "")
+				.split(",")
+				.map((genre) => genre.trim())
+				.filter(Boolean),
+		),
+	];
+}
+
+function normalizeSeasonChip(value: string | null): SeasonChip {
+	const season = value?.trim();
+	return season === "冬" || season === "春" || season === "夏" || season === "秋" ? season : "";
+}
 
 /** Anime 全フィールドを HTML に埋め込まず、カード描画に必要な8フィールドだけへ射影する。 */
 function toAnimeListItem(a: Anime): AnimeListItem {
@@ -61,17 +78,20 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	const { user } = await safeGetSession();
 	const tab = (url.searchParams.get("tab") as Tab) ?? "popular";
 	const search = url.searchParams.get("search")?.trim() ?? "";
-	const genre = url.searchParams.get("genre")?.trim() ?? "";
-	const season = url.searchParams.get("season")?.trim() ?? "";
-	const broadcastYearParam = url.searchParams.get("broadcastYear")?.trim() ?? "";
+	const genres = parseGenres(url.searchParams.get("genres") ?? url.searchParams.get("genre"));
+	const seasonParam = url.searchParams.get("season")?.trim() ?? "";
+	const broadcastYearParam = (url.searchParams.get("year") ?? url.searchParams.get("broadcastYear"))?.trim() ?? "";
 	const broadcastYear = /^\d{4}$/.test(broadcastYearParam) ? broadcastYearParam : "";
-	const broadcastSeason = url.searchParams.get("broadcastSeason")?.trim() ?? "";
+	const broadcastSeason = normalizeSeasonChip(
+		url.searchParams.get("season") ?? url.searchParams.get("broadcastSeason"),
+	);
+	const season = broadcastSeason ? "" : seasonParam;
 	const studio = url.searchParams.get("studio")?.trim() ?? "";
 	const producer = url.searchParams.get("producer")?.trim() ?? "";
 
 	let animes: Anime[];
 	const hasSearchFilters = Boolean(
-		search || genre || season || broadcastYear || broadcastSeason || studio || producer,
+		search || genres.length || season || broadcastYear || broadcastSeason || studio || producer,
 	);
 
 	if (hasSearchFilters) {
@@ -79,8 +99,33 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 			limit: 1000,
 			userId: user?.id ?? null,
 		};
+		if (tab === "trending") filters.sortBy = "trending";
+		else if (tab === "top_rated") filters.sortBy = "top_rated";
+		else if (tab === "mylist") filters.sortBy = "created";
+		else filters.sortBy = "popular";
+		if (tab === "airing") filters.broadcastStatus = "airing";
+		if (tab === "upcoming") filters.broadcastStatus = "upcoming";
+		if (tab === "mylist") {
+			if (!user) {
+				animes = [];
+				return {
+					animes: [],
+					tab,
+					search,
+					genre: genres.join(","),
+					genres,
+					season,
+					broadcastYear,
+					broadcastSeason,
+					studio,
+					producer,
+					user,
+				};
+			}
+			filters.listedByUserId = user.id;
+		}
 		if (search) filters.query = search;
-		if (genre) filters.genre = genre;
+		if (genres.length) filters.genres = genres;
 		if (season) filters.season = season;
 		if (broadcastYear) filters.broadcastYear = broadcastYear;
 		if (broadcastSeason) filters.broadcastSeason = broadcastSeason;
@@ -116,7 +161,8 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		animes: animes.map(toAnimeListItem),
 		tab,
 		search,
-		genre,
+		genre: genres.join(","),
+		genres,
 		season,
 		broadcastYear,
 		broadcastSeason,
