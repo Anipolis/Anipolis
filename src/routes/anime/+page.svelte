@@ -1158,6 +1158,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	flex-direction: column;
 	gap: 4px;
 	flex: 1;
+	min-height: calc(0.85rem * 1.3 * 2 + 0.72rem * 1.2 + 28px);
 }
 .anime-title {
 	font-size: 0.85rem;
@@ -1172,6 +1173,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 }
 .anime-title-en {
 	font-size: 0.72rem;
+	line-height: 1.2;
 	color: var(--text-muted);
 	margin: 0;
 	overflow: hidden;
@@ -1183,7 +1185,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	flex-wrap: wrap;
 	gap: 4px;
 	align-items: center;
-	margin-top: 2px;
+	margin-top: auto;
 }
 .anime-status-badge {
 	font-size: 0.7rem;
