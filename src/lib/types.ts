@@ -230,6 +230,17 @@ export interface Anime {
 	user_entry?: UserAnimeEntry | null;
 }
 
+/**
+ * /anime 一覧ページのカード描画に必要な最小フィールドのみを持つ軽量型。
+ * 一覧は最大1000件を HTML にシリアライズするため、Anime 全フィールド（約32個）を
+ * そのまま埋め込むとペイロードが肥大化する。テンプレートが実際に参照する8フィールドへ
+ * 射影してから返すことでページ重量を削減する。
+ */
+export type AnimeListItem = Pick<
+	Anime,
+	"id" | "title" | "title_en" | "cover_url" | "season" | "broadcast_day" | "computed_broadcast_status" | "user_entry"
+>;
+
 export interface AnimeExchangeItem {
 	id: string;
 	status: "waiting" | "matched" | "cancelled";

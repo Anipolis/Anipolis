@@ -6,10 +6,24 @@ import {
 	getAnimeRankingTrending,
 	getUserAnimeList,
 } from "$lib/server/queries";
-import type { Anime } from "$lib/types";
+import type { Anime, AnimeListItem } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
 type Tab = "popular" | "trending" | "top_rated" | "mylist" | "airing" | "upcoming" | "register";
+
+/** Anime 全フィールドを HTML に埋め込まず、カード描画に必要な8フィールドだけへ射影する。 */
+function toAnimeListItem(a: Anime): AnimeListItem {
+	return {
+		id: a.id,
+		title: a.title,
+		title_en: a.title_en,
+		cover_url: a.cover_url,
+		season: a.season,
+		broadcast_day: a.broadcast_day,
+		computed_broadcast_status: a.computed_broadcast_status,
+		user_entry: a.user_entry ?? null,
+	};
+}
 
 function normalizeBroadcastTime(value: string | null | undefined) {
 	const raw = value?.trim();
@@ -98,7 +112,18 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		}
 	}
 
-	return { animes, tab, search, genre, season, broadcastYear, broadcastSeason, studio, producer, user };
+	return {
+		animes: animes.map(toAnimeListItem),
+		tab,
+		search,
+		genre,
+		season,
+		broadcastYear,
+		broadcastSeason,
+		studio,
+		producer,
+		user,
+	};
 };
 
 export const actions: Actions = {

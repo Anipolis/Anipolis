@@ -2,7 +2,7 @@
 import { enhance } from "$app/forms";
 import { goto } from "$app/navigation";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
-import type { Anime, AnimeStatus } from "$lib/types";
+import type { AnimeListItem, AnimeStatus } from "$lib/types";
 import type { PageProps } from "./$types";
 
 let { data, form }: PageProps = $props();
@@ -62,7 +62,7 @@ const statusLabels: Record<AnimeStatus, string> = {
 	on_hold: "一時停止",
 };
 
-function animeStatusBadge(anime: Anime): string {
+function animeStatusBadge(anime: AnimeListItem): string {
 	if (anime.computed_broadcast_status === "airing") return "放送中";
 	if (anime.computed_broadcast_status === "upcoming") return "放送予定";
 	if (anime.computed_broadcast_status === "finished") return "放送終了";
@@ -77,7 +77,7 @@ const statusOptions: { value: AnimeStatus; label: string; color: string }[] = [
 	{ value: "dropped" as AnimeStatus, label: "断念", color: "#dc2626" },
 ];
 
-let quickAddAnime = $state<Anime | null>(null);
+let quickAddAnime = $state<AnimeListItem | null>(null);
 let quickAddSubmitting = $state(false);
 
 // フィルターボトムシート
@@ -115,8 +115,8 @@ let animeListContextKey = $derived(
 );
 let previousAnimeListContextKey = $state<string | null>(null);
 
-function chunkAnimes(animes: Anime[]) {
-	const sections: { start: number; end: number; items: Anime[] }[] = [];
+function chunkAnimes(animes: AnimeListItem[]) {
+	const sections: { start: number; end: number; items: AnimeListItem[] }[] = [];
 	for (let start = 0; start < animes.length; start += ANIME_SECTION_SIZE) {
 		const items = animes.slice(start, start + ANIME_SECTION_SIZE);
 		sections.push({ start, end: start + items.length, items });
@@ -129,7 +129,7 @@ function setAnimeSectionIndex(index: number) {
 }
 
 function getVisibleAnimeSectionPages(
-	sections: { start: number; end: number; items: Anime[] }[],
+	sections: { start: number; end: number; items: AnimeListItem[] }[],
 	currentIndex: number,
 	visibleCount: number,
 ) {
@@ -158,7 +158,7 @@ $effect(() => {
 	if (currentAnimeSectionIndex > maxIndex) currentAnimeSectionIndex = maxIndex;
 });
 
-function openQuickAdd(e: MouseEvent, anime: Anime) {
+function openQuickAdd(e: MouseEvent, anime: AnimeListItem) {
 	e.preventDefault();
 	e.stopPropagation();
 	quickAddAnime = anime;
@@ -266,7 +266,7 @@ $effect(() => {
 	};
 });
 
-function isAiringToday(anime: Anime): boolean {
+function isAiringToday(anime: AnimeListItem): boolean {
 	if (anime.broadcast_day == null || anime.computed_broadcast_status !== "airing") return false;
 	const now = new Date(Date.now() + 9 * 60 * 60 * 1000); // JST
 	// Before 4 AM is still part of the previous broadcast night (26時制)
