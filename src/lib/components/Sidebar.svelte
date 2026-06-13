@@ -180,7 +180,8 @@ function isActive(path: string): boolean {
 
 <!-- Mobile drawer backdrop -->
 {#if drawerOpen}
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div class="mobile-drawer-backdrop" onclick={closeDrawer}></div>
 {/if}
 
@@ -782,7 +783,8 @@ function isActive(path: string): boolean {
 
 			<div class="account-menu-wrapper">
 				{#if menuOpen}
-					<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+					<!-- svelte-ignore a11y_click_events_have_key_events -->
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<div class="account-menu-backdrop" onclick={() => (menuOpen = false)}></div>
 					<div class="account-menu" role="menu">
 						<!-- 現在ログイン中のアカウント（ハイライト表示） -->

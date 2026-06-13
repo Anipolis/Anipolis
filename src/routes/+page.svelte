@@ -199,7 +199,8 @@ $effect(() => {
 
 <!-- Mobile compose modal -->
 {#if $composeOpen && data.profile}
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div class="compose-modal-backdrop" onclick={closeModal}></div>
 	<div class="compose-modal">
 		<div class="compose-modal-header">
