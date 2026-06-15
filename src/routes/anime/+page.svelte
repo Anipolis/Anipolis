@@ -43,6 +43,24 @@ const GENRES = [
 	"子ども向け",
 ];
 
+const SOURCE_OPTIONS = [
+	"漫画",
+	"ライトノベル",
+	"小説",
+	"ビジュアルノベル",
+	"ゲーム",
+	"オリジナル",
+	"4コマ漫画",
+	"Web漫画",
+	"メディアミックス",
+	"カードゲーム",
+	"書籍",
+	"絵本",
+	"音楽",
+	"ラジオ",
+	"その他",
+];
+
 const tabs = [
 	{ id: "popular", label: "人気" },
 	{ id: "trending", label: "トレンド" },
@@ -59,6 +77,7 @@ type AnimeFilterState = {
 	genres: string[];
 	year: string;
 	season: SeasonChip;
+	source: string;
 };
 
 const SEASON_CHIPS: Exclude<SeasonChip, "">[] = ["冬", "春", "夏", "秋"];
@@ -94,6 +113,7 @@ let filterState = $state<AnimeFilterState>({
 	genres: data.genres ?? data.genre?.split(",").filter(Boolean) ?? [],
 	year: data.broadcastYear ?? "",
 	season: ((data.broadcastSeason ?? "") as SeasonChip) || "",
+	source: data.source ?? "",
 });
 
 // フィルターボトムシート
@@ -113,10 +133,20 @@ let pendingSeason = $state(data.broadcastSeason ?? "");
 let pendingStudio = $state(data.studio ?? "");
 // svelte-ignore state_referenced_locally
 let pendingProducer = $state(data.producer ?? "");
+// svelte-ignore state_referenced_locally
+let pendingSource = $state(data.source ?? "");
 let sheetResultCount = $state<number | null>(null);
 let sheetCountLoading = $state(false);
 let hasActiveFilters = $derived(
-	Boolean(data.search || data.genre || data.broadcastYear || data.broadcastSeason || data.studio || data.producer),
+	Boolean(
+		data.search ||
+			data.genre ||
+			data.broadcastYear ||
+			data.broadcastSeason ||
+			data.studio ||
+			data.producer ||
+			data.source,
+	),
 );
 let currentAnimeSectionIndex = $state(0);
 let animeSections = $derived(chunkAnimes(data.animes));
@@ -133,6 +163,7 @@ let animeListContextKey = $derived(
 		data.broadcastSeason,
 		data.studio,
 		data.producer,
+		data.source,
 	].join("\u0000"),
 );
 let previousAnimeListContextKey = $state<string | null>(null);
@@ -144,6 +175,7 @@ function toFilterState(): AnimeFilterState {
 		genres: data.genres ?? data.genre?.split(",").filter(Boolean) ?? [],
 		year: data.broadcastYear ?? "",
 		season: ((data.broadcastSeason ?? "") as SeasonChip) || "",
+		source: data.source ?? "",
 	};
 }
 
@@ -153,6 +185,7 @@ function buildAnimeFilterUrl(filters: AnimeFilterState, tabId: string = data.tab
 	if (filters.genres.length) params.set("genres", filters.genres.join(","));
 	if (filters.year.trim()) params.set("year", filters.year.trim());
 	if (filters.season) params.set("season", filters.season);
+	if (filters.source.trim()) params.set("source", filters.source.trim());
 	if (tabId && tabId !== "popular") params.set("tab", tabId);
 	const qs = params.toString();
 	return qs ? `/anime?${qs}` : "/anime";
@@ -160,6 +193,26 @@ function buildAnimeFilterUrl(filters: AnimeFilterState, tabId: string = data.tab
 
 function buildAnimeTabUrl(tabId: string) {
 	return buildAnimeFilterUrl(filterState, tabId);
+}
+
+function buildCurrentAnimeListUrl() {
+	const params = new URLSearchParams();
+	if (data.search) params.set("search", data.search);
+	if (data.genres?.length) params.set("genres", data.genres.join(","));
+	else if (data.genre) params.set("genre", data.genre);
+	if (data.broadcastYear) params.set("year", data.broadcastYear);
+	if (data.broadcastSeason) params.set("season", data.broadcastSeason);
+	if (data.studio) params.set("studio", data.studio);
+	if (data.producer) params.set("producer", data.producer);
+	if (data.source) params.set("source", data.source);
+	if (data.tab && data.tab !== "popular") params.set("tab", data.tab);
+	const qs = params.toString();
+	return qs ? `/anime?${qs}` : "/anime";
+}
+
+function buildAnimeDetailUrl(animeId: string | number) {
+	const listUrl = buildCurrentAnimeListUrl();
+	return listUrl === "/anime" ? `/anime/${animeId}` : `/anime/${animeId}?from=${encodeURIComponent(listUrl)}`;
 }
 
 function syncFiltersToUrl(filters: AnimeFilterState) {
@@ -184,13 +237,13 @@ function toggleSidebarSeason(season: Exclude<SeasonChip, "">) {
 }
 
 function clearSidebarFilters() {
-	filterState = { search: "", genres: [], year: "", season: "" };
+	filterState = { search: "", genres: [], year: "", season: "", source: "" };
 	goto("/anime", { keepFocus: true, noScroll: true });
 }
 
 $effect(() => {
 	const next = toFilterState();
-	const nextKey = [next.search, next.genres.join(","), next.year, next.season].join("\u0000");
+	const nextKey = [next.search, next.genres.join(","), next.year, next.season, next.source].join("\u0000");
 	if (previousDataFilterKey !== nextKey) {
 		previousDataFilterKey = nextKey;
 		filterState = next;
@@ -265,6 +318,7 @@ function openFilterSheet() {
 	pendingSeason = data.broadcastSeason ?? "";
 	pendingStudio = data.studio ?? "";
 	pendingProducer = data.producer ?? "";
+	pendingSource = data.source ?? "";
 	filterSheetOpen = true;
 }
 
@@ -278,6 +332,7 @@ function clearPendingFilters() {
 	pendingSeason = "";
 	pendingStudio = "";
 	pendingProducer = "";
+	pendingSource = "";
 }
 
 function togglePendingGenre(genre: string) {
@@ -296,6 +351,7 @@ function applyFilters() {
 	if (pendingSeason) params.set("season", pendingSeason);
 	if (pendingStudio) params.set("studio", pendingStudio);
 	if (pendingProducer) params.set("producer", pendingProducer);
+	if (pendingSource) params.set("source", pendingSource);
 	if (data.tab && data.tab !== "popular") params.set("tab", data.tab);
 	const qs = params.toString();
 	goto(qs ? `/anime?${qs}` : "/anime", { keepFocus: true, noScroll: true });
@@ -317,6 +373,7 @@ $effect(() => {
 	const s = pendingSeason;
 	const st = pendingStudio;
 	const pr = pendingProducer;
+	const src = pendingSource;
 	if (!filterSheetOpen) return;
 
 	sheetCountLoading = true;
@@ -330,6 +387,7 @@ $effect(() => {
 		if (s) params.set("season", s);
 		if (st) params.set("studio", st);
 		if (pr) params.set("producer", pr);
+		if (src) params.set("source", src);
 		if (data.search) params.set("search", data.search);
 		try {
 			const res = await fetch(`/api/anime/count?${params.toString()}`, { signal: controller.signal });
@@ -470,6 +528,22 @@ function isAiringToday(anime: AnimeListItem): boolean {
 								{/each}
 							</div>
 						</section>
+
+						<section class="filter-drawer-column">
+							<h2 class="filter-drawer-heading">原作</h2>
+							<label class="sr-only" for="desktop-anime-source">原作</label>
+							<select
+								id="desktop-anime-source"
+								class="filter-select"
+								value={filterState.source}
+								onchange={(e) => updateFilterState({ source: e.currentTarget.value })}
+							>
+								<option value="">すべて</option>
+								{#each SOURCE_OPTIONS as source}
+									<option value={source}>{source}</option>
+								{/each}
+							</select>
+						</section>
 					</div>
 
 					<div class="filter-drawer-actions">
@@ -534,7 +608,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 						<span class="filter-active-dot" aria-hidden="true"></span>
 					{/if}
 				</button>
-				{#if data.search || data.genre || data.season || data.broadcastYear || data.broadcastSeason || data.studio || data.producer}
+				{#if data.search || data.genre || data.season || data.broadcastYear || data.broadcastSeason || data.studio || data.producer || data.source}
 					<a href="/anime" class="search-clear" title="フィルターをすべてクリア">✕</a>
 				{/if}
 			</div>
@@ -594,6 +668,15 @@ function isAiringToday(anime: AnimeListItem): boolean {
 						value={data.producer ?? ''}
 					>
 				</div>
+				<div class="filter-group">
+					<label for="filter-source" class="filter-label">原作</label>
+					<select id="filter-source" name="source" class="filter-select">
+						<option value="">すべて</option>
+						{#each SOURCE_OPTIONS as source}
+							<option value={source} selected={data.source === source}>{source}</option>
+						{/each}
+					</select>
+				</div>
 			</div>
 		</form>
 
@@ -605,7 +688,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 					>
 				{/if}
 			{/each}
-			{#if data.user}
+			{#if data.isAdmin}
 				<a
 					href={buildAnimeTabUrl('register')}
 					class="tab-btn tab-btn--add"
@@ -642,10 +725,21 @@ function isAiringToday(anime: AnimeListItem): boolean {
 				制作：<strong>{data.producer}</strong>
 				— {data.animes.length}件 <a href="/anime" class="filter-clear">✕</a>
 			</p>
+		{:else if data.source}
+			<p class="search-label">
+				原作：<strong>{data.source}</strong>
+				— {data.animes.length}件 <a href="/anime" class="filter-clear">✕</a>
+			</p>
 		{/if}
 
-		{#if data.tab === 'register'}
+		{#if data.tab === 'register' && data.isAdmin}
 			<AnimeRegisterForm {form} />
+		{:else if data.tab === 'register'}
+			<div class="anime-grid anime-grid--empty">
+				<div class="empty-state">
+					<p>管理者権限が必要です</p>
+				</div>
+			</div>
 		{:else if data.tab === 'mylist' && !data.user}
 			<div class="anime-grid anime-grid--empty">
 				<div class="empty-state">
@@ -663,7 +757,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 				<div class="anime-grid">
 					{#each currentAnimeSection.items as anime, sectionItemIndex}
 						{@const rankIndex = currentAnimeSection.start + sectionItemIndex}
-						<a href="/anime/{anime.id}" class="anime-card">
+						<a href={buildAnimeDetailUrl(anime.id)} class="anime-card">
 							<div class="anime-cover">
 								{#if anime.cover_url}
 									<img src={anime.cover_url ?? ''} alt={anime.title} loading="lazy">
@@ -975,6 +1069,16 @@ function isAiringToday(anime: AnimeListItem): boolean {
 							placeholder="制作会社名"
 							bind:value={pendingProducer}
 						>
+					</section>
+
+					<section class="filter-sheet-section">
+						<h3 class="filter-sheet-section-label">原作</h3>
+						<select class="filter-sheet-input" bind:value={pendingSource}>
+							<option value="">すべて</option>
+							{#each SOURCE_OPTIONS as source}
+								<option value={source}>{source}</option>
+							{/each}
+						</select>
 					</section>
 
 					<button type="button" class="filter-sheet-clear" onclick={clearPendingFilters}>

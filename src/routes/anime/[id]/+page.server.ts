@@ -1,5 +1,6 @@
 import { error, fail } from "@sveltejs/kit";
 import { recommendAnimeAction, removeUserAnimeEntry, upsertUserAnimeEntry } from "$lib/server/actions";
+import { updateAnimeAction } from "$lib/server/anime-admin";
 import { getAnime, getAnimeRelations, getUsersWhoListedAnime, isAdminUser } from "$lib/server/queries";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -81,5 +82,16 @@ export const actions: Actions = {
 		const { user } = await safeGetSession();
 		if (!user) return fail(401, { recommendMessage: "ログインが必要です" });
 		return recommendAnimeAction(supabase, request, user.id);
+	},
+
+	updateAnime: async ({ request, params, locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { message: "ログインが必要です" });
+		if (!(await isAdminUser(supabase, user.id))) return fail(403, { message: "管理者権限が必要です" });
+
+		const anime = await getAnime(supabase, params.id, user.id);
+		if (!anime) return fail(404, { message: "アニメが見つかりません" });
+
+		return updateAnimeAction(supabase, request, params.id, anime.cover_url);
 	},
 };

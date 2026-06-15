@@ -1,8 +1,19 @@
 ﻿<script lang="ts">
 import { enhance } from "$app/forms";
+import type { Anime } from "$lib/types";
 
 type FormResult = { success?: boolean; animeId?: string | number; message?: string } | null | undefined;
-let { form }: { form: FormResult } = $props();
+let {
+	form,
+	mode = "create",
+	anime = null,
+	action = "?/registerAnime",
+}: {
+	form: FormResult;
+	mode?: "create" | "edit";
+	anime?: Anime | null;
+	action?: string;
+} = $props();
 
 const GENRES = [
 	"アクション",
@@ -27,13 +38,41 @@ const GENRES = [
 	"心理",
 ];
 
-let selectedGenres = $state<string[]>([]);
-let studios = $state<string[]>([]);
-let producers = $state<string[]>([]);
-let hashtags = $state<string[]>([]);
+const SOURCE_OPTIONS = [
+	"漫画",
+	"ライトノベル",
+	"小説",
+	"ビジュアルノベル",
+	"ゲーム",
+	"オリジナル",
+	"4コマ漫画",
+	"Web漫画",
+	"メディアミックス",
+	"カードゲーム",
+	"書籍",
+	"絵本",
+	"音楽",
+	"ラジオ",
+	"その他",
+];
+
+// svelte-ignore state_referenced_locally
+let selectedGenres = $state<string[]>(anime?.genre ?? []);
+// svelte-ignore state_referenced_locally
+let studios = $state<string[]>(anime?.studio ?? []);
+// svelte-ignore state_referenced_locally
+let producers = $state<string[]>(anime?.producer ?? []);
+// svelte-ignore state_referenced_locally
+let hashtags = $state<string[]>(anime?.official_hashtag ?? []);
 let studioInput = $state("");
 let producerInput = $state("");
 let hashtagInput = $state("");
+const isEditMode = $derived(mode === "edit");
+const broadcastStationValue = $derived((anime?.broadcast_station ?? []).join(", "));
+
+function dateValue(value: string | null | undefined) {
+	return value ? value.slice(0, 10) : "";
+}
 
 function toggleGenre(g: string) {
 	selectedGenres = selectedGenres.includes(g) ? selectedGenres.filter((x) => x !== g) : [...selectedGenres, g];
@@ -108,10 +147,12 @@ async function handleFileChange(e: Event) {
 </script>
 
 <div class="register-section">
-	<h2 class="register-title">アニメ登録</h2>
+	<h2 class="register-title">{isEditMode ? "作品情報を編集" : "アニメ登録"}</h2>
 
 	{#if form?.success}
-		<div class="form-success">登録しました！ <a href="/anime/{form.animeId}">詳細を見る →</a></div>
+		<div class="form-success">
+			{isEditMode ? "更新しました！" : "登録しました！"} <a href="/anime/{form.animeId}">詳細を見る →</a>
+		</div>
 	{/if}
 	{#if form?.message}
 		<div class="form-error">{form.message}</div>
@@ -119,7 +160,7 @@ async function handleFileChange(e: Event) {
 
 	<form
 		method="POST"
-		action="?/registerAnime"
+		{action}
 		use:enhance={async ({ formData }) => {
         if (resizedBlob) formData.set('image_file', resizedBlob, `cover_${Date.now()}.jpg`);
         return async ({ update }) => { await update(); };
@@ -129,31 +170,57 @@ async function handleFileChange(e: Event) {
 		<div class="form-row">
 			<div class="form-group form-group--wide">
 				<label for="rf-title">タイトル <span class="required">*</span></label>
-				<input id="rf-title" name="title" type="text" required class="rf-input">
+				<input id="rf-title" name="title" type="text" required class="rf-input" value={anime?.title ?? ""}>
 			</div>
 			<div class="form-group form-group--wide">
 				<label for="rf-title-en">英語タイトル</label>
-				<input id="rf-title-en" name="title_en" type="text" class="rf-input">
+				<input id="rf-title-en" name="title_en" type="text" class="rf-input" value={anime?.title_en ?? ""}>
 			</div>
 		</div>
 		<div class="form-row">
 			<div class="form-group form-group--wide">
 				<label for="rf-romaji">ローマ字タイトル</label>
-				<input id="rf-romaji" name="title_romaji" type="text" class="rf-input">
+				<input
+					id="rf-romaji"
+					name="title_romaji"
+					type="text"
+					class="rf-input"
+					value={anime?.title_romaji ?? ""}
+				>
 			</div>
 			<div class="form-group">
 				<label for="rf-season">シーズン（例: 2025春）</label>
-				<input id="rf-season" name="season" type="text" placeholder="2025春" class="rf-input">
+				<input
+					id="rf-season"
+					name="season"
+					type="text"
+					placeholder="2025春"
+					class="rf-input"
+					value={anime?.season ?? ""}
+				>
 			</div>
 			<div class="form-group form-group--narrow">
 				<label for="rf-ep">話数</label>
-				<input id="rf-ep" name="episode_count" type="number" min="1" class="rf-input">
+				<input
+					id="rf-ep"
+					name="episode_count"
+					type="number"
+					min="1"
+					class="rf-input"
+					value={anime?.episode_count ?? ""}
+				>
 			</div>
 		</div>
 
 		<div class="form-group">
 			<label for="rf-synopsis">あらすじ</label>
-			<textarea id="rf-synopsis" name="synopsis" rows="4" class="rf-textarea"></textarea>
+			<textarea
+				id="rf-synopsis"
+				name="synopsis"
+				rows="4"
+				class="rf-textarea"
+				value={anime?.synopsis ?? ""}
+			></textarea>
 		</div>
 
 		<div class="form-row">
@@ -161,23 +228,20 @@ async function handleFileChange(e: Event) {
 				<label for="rf-type">タイプ</label>
 				<select id="rf-type" name="type" class="rf-select">
 					<option value="">未設定</option>
-					<option value="TV">TV</option>
-					<option value="映画">映画</option>
-					<option value="OVA">OVA</option>
-					<option value="ONA">ONA</option>
-					<option value="特別">特別</option>
+					<option value="TV" selected={anime?.type === "TV"}>TV</option>
+					<option value="映画" selected={anime?.type === "映画"}>映画</option>
+					<option value="OVA" selected={anime?.type === "OVA"}>OVA</option>
+					<option value="ONA" selected={anime?.type === "ONA"}>ONA</option>
+					<option value="特別" selected={anime?.type === "特別"}>特別</option>
 				</select>
 			</div>
 			<div class="form-group">
 				<label for="rf-source">原作</label>
 				<select id="rf-source" name="source" class="rf-select">
 					<option value="">未設定</option>
-					<option value="漫画">漫画</option>
-					<option value="ライトノベル">ライトノベル</option>
-					<option value="小説">小説</option>
-					<option value="ゲーム">ゲーム</option>
-					<option value="オリジナル">オリジナル</option>
-					<option value="その他">その他</option>
+					{#each SOURCE_OPTIONS as source}
+						<option value={source} selected={anime?.source === source}>{source}</option>
+					{/each}
 				</select>
 			</div>
 		</div>
@@ -185,11 +249,17 @@ async function handleFileChange(e: Event) {
 		<div class="form-row">
 			<div class="form-group">
 				<label for="rf-aired-from">放送開始</label>
-				<input id="rf-aired-from" name="aired_from" type="date" class="rf-input">
+				<input
+					id="rf-aired-from"
+					name="aired_from"
+					type="date"
+					class="rf-input"
+					value={dateValue(anime?.aired_from)}
+				>
 			</div>
 			<div class="form-group">
 				<label for="rf-aired-to">放送終了</label>
-				<input id="rf-aired-to" name="aired_to" type="date" class="rf-input">
+				<input id="rf-aired-to" name="aired_to" type="date" class="rf-input" value={dateValue(anime?.aired_to)}>
 			</div>
 		</div>
 
@@ -198,13 +268,13 @@ async function handleFileChange(e: Event) {
 				<label for="rf-broadcast-day">放送曜日</label>
 				<select id="rf-broadcast-day" name="broadcast_day" class="rf-select">
 					<option value="">未設定</option>
-					<option value="0">日曜日</option>
-					<option value="1">月曜日</option>
-					<option value="2">火曜日</option>
-					<option value="3">水曜日</option>
-					<option value="4">木曜日</option>
-					<option value="5">金曜日</option>
-					<option value="6">土曜日</option>
+					<option value="0" selected={anime?.broadcast_day === 0}>日曜日</option>
+					<option value="1" selected={anime?.broadcast_day === 1}>月曜日</option>
+					<option value="2" selected={anime?.broadcast_day === 2}>火曜日</option>
+					<option value="3" selected={anime?.broadcast_day === 3}>水曜日</option>
+					<option value="4" selected={anime?.broadcast_day === 4}>木曜日</option>
+					<option value="5" selected={anime?.broadcast_day === 5}>金曜日</option>
+					<option value="6" selected={anime?.broadcast_day === 6}>土曜日</option>
 				</select>
 			</div>
 			<div class="form-group">
@@ -217,6 +287,7 @@ async function handleFileChange(e: Event) {
 					pattern="([01]?[0-9]|2[0-9]|3[0-5]|4[0-7]):[0-5][0-9]"
 					placeholder="例: 24:30 / 26:00"
 					class="rf-input"
+					value={anime?.broadcast_time ?? ""}
 				>
 			</div>
 			<div class="form-group form-group--narrow">
@@ -227,7 +298,7 @@ async function handleFileChange(e: Event) {
 					type="number"
 					min="1"
 					max="1440"
-					value="30"
+					value={anime?.broadcast_duration_minutes ?? 30}
 					class="rf-input"
 				>
 			</div>
@@ -241,6 +312,7 @@ async function handleFileChange(e: Event) {
 				name="broadcast_station"
 				class="rf-input"
 				placeholder="複数の場合はカンマ区切り（例: TBS, MX, AT-X）"
+				value={broadcastStationValue}
 			>
 		</div>
 
@@ -371,18 +443,32 @@ async function handleFileChange(e: Event) {
 		<div class="form-row">
 			<div class="form-group form-group--wide">
 				<label for="rf-site">公式サイト URL</label>
-				<input id="rf-site" name="official_site_url" type="url" class="rf-input" placeholder="https://...">
+				<input
+					id="rf-site"
+					name="official_site_url"
+					type="url"
+					class="rf-input"
+					placeholder="https://..."
+					value={anime?.official_site_url ?? ""}
+				>
 			</div>
 			<div class="form-group form-group--wide">
 				<label for="rf-x">公式 X (Twitter) URL</label>
-				<input id="rf-x" name="official_x_url" type="url" class="rf-input" placeholder="https://x.com/...">
+				<input
+					id="rf-x"
+					name="official_x_url"
+					type="url"
+					class="rf-input"
+					placeholder="https://x.com/..."
+					value={anime?.official_x_url ?? ""}
+				>
 			</div>
 		</div>
 
 		<div class="form-row">
 			<div class="form-group form-group--wide">
 				<label for="rf-copyright">権利表記</label>
-				<input id="rf-copyright" name="copyright" type="text" class="rf-input">
+				<input id="rf-copyright" name="copyright" type="text" class="rf-input" value={anime?.copyright ?? ""}>
 			</div>
 			<div class="form-group form-group--wide">
 				<span class="field-label">カバー画像</span>
@@ -424,14 +510,15 @@ async function handleFileChange(e: Event) {
 						class="rf-input"
 						style="margin-top:6px"
 						placeholder="または画像 URL を直接入力..."
+						value={anime?.cover_url ?? ""}
 					>
 				{/if}
 			</div>
 		</div>
 
 		<div class="form-actions">
-			<button type="submit" class="submit-btn">登録する</button>
-			<a href="/anime" class="cancel-link">キャンセル</a>
+			<button type="submit" class="submit-btn">{isEditMode ? "更新する" : "登録する"}</button>
+			<a href={isEditMode && anime ? `/anime/${anime.id}` : "/anime"} class="cancel-link">キャンセル</a>
 		</div>
 	</form>
 </div>

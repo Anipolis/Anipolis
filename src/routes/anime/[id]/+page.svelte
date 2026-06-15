@@ -2,6 +2,7 @@
 import type { SubmitFunction } from "@sveltejs/kit";
 import { enhance } from "$app/forms";
 import { page } from "$app/state";
+import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
 import type { AnimeStatus } from "$lib/types";
 import type { PageProps } from "./$types";
 
@@ -37,6 +38,7 @@ const sequelRelations = $derived(data.relations.filter((relation) => relation.re
 const otherRelations = $derived(
 	data.relations.filter((relation) => relation.relation_type !== "Prequel" && relation.relation_type !== "Sequel"),
 );
+const animeListHref = $derived(getAnimeListHref());
 
 const statusOptions: { value: AnimeStatus; label: string }[] = [
 	{ value: "watching", label: "視聴中" },
@@ -66,6 +68,19 @@ const listedUserStatusLabels: Record<string, string> = {
 	on_hold: "中断中",
 	dropped: "断念",
 };
+
+function getAnimeListHref() {
+	const from = page.url.searchParams.get("from");
+	if (!from) return "/anime";
+
+	try {
+		const url = new URL(from, page.url.origin);
+		if (url.origin !== page.url.origin || url.pathname !== "/anime") return "/anime";
+		return `${url.pathname}${url.search}`;
+	} catch {
+		return "/anime";
+	}
+}
 
 function formatAiredPeriod(airedFrom: string | null, airedTo: string | null): string | null {
 	if (!airedFrom) return null;
@@ -137,11 +152,17 @@ let score = $state<string>("");
 let progress = $state<string>("0");
 let showRemoveWatchlistModal = $state(false);
 let removeWatchlistFormEl = $state<HTMLFormElement | null>(null);
+// svelte-ignore state_referenced_locally
+let adminEditOpen = $state(Boolean(form?.success || form?.message));
 
 $effect(() => {
 	selectedStatus = data.anime.user_entry?.status ?? "plan_to_watch";
 	score = data.anime.user_entry?.score != null ? String(data.anime.user_entry.score) : "";
 	progress = String(data.anime.user_entry?.progress ?? 0);
+});
+
+$effect(() => {
+	if (form?.success || form?.message) adminEditOpen = true;
 });
 
 let coverUrl = $state("");
@@ -279,7 +300,7 @@ const handleRecommendSubmit: SubmitFunction = () => {
 </svelte:head>
 
 <div class="detail-page">
-	<a href="/anime" class="back-link">← アニメ一覧</a>
+	<a href={animeListHref} class="back-link">← アニメ一覧</a>
 
 	<div class="anime-layout">
 		<div class="title-block">
@@ -395,7 +416,11 @@ const handleRecommendSubmit: SubmitFunction = () => {
 						{#if data.anime.source}
 							<div class="prod-row">
 								<dt>原作</dt>
-								<dd>{data.anime.source}</dd>
+								<dd>
+									<a href="/anime?source={encodeURIComponent(data.anime.source)}" class="genre-chip"
+										>{data.anime.source}</a
+									>
+								</dd>
 							</div>
 						{/if}
 						{#if displayGenres.length}
@@ -800,6 +825,26 @@ const handleRecommendSubmit: SubmitFunction = () => {
 				<section class="synopsis">
 					<h2>あらすじ</h2>
 					<p>{data.anime.synopsis}</p>
+				</section>
+			{/if}
+
+			{#if data.isAdmin}
+				<section class="admin-edit-section">
+					<button
+						type="button"
+						class="admin-edit-toggle"
+						aria-expanded={adminEditOpen}
+						onclick={() => {
+							adminEditOpen = !adminEditOpen;
+						}}
+					>
+						{adminEditOpen ? "作品情報フォームを閉じる" : "作品情報を編集"}
+					</button>
+					{#if adminEditOpen}
+						<div class="admin-edit-form">
+							<AnimeRegisterForm {form} mode="edit" anime={data.anime} action="?/updateAnime" />
+						</div>
+					{/if}
 				</section>
 			{/if}
 
@@ -1296,6 +1341,37 @@ const handleRecommendSubmit: SubmitFunction = () => {
 	line-height: 1.7;
 	color: var(--text-secondary, var(--text));
 	margin: 0;
+}
+
+.admin-edit-section {
+	padding-top: 20px;
+	border-top: 1px solid var(--border);
+}
+.admin-edit-toggle {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 40px;
+	padding: 9px 16px;
+	border-radius: 8px;
+	border: 1px solid var(--border);
+	background: var(--card-bg);
+	color: var(--text);
+	font-size: 0.88rem;
+	font-weight: 700;
+	cursor: pointer;
+	transition:
+		background 0.15s,
+		border-color 0.15s,
+		color 0.15s;
+}
+.admin-edit-toggle:hover {
+	background: var(--hover-bg);
+	border-color: var(--accent);
+	color: var(--accent);
+}
+.admin-edit-form {
+	margin-top: 18px;
 }
 
 /* Related anime */

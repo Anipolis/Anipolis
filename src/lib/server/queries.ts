@@ -1094,6 +1094,7 @@ export interface AnimeListOptions {
 	genres?: string[];
 	studio?: string;
 	producer?: string;
+	source?: string;
 	broadcastStatus?: Exclude<BroadcastStatus, "unknown">;
 	sortBy?: "popular" | "trending" | "top_rated" | "created";
 	listedByUserId?: string | null;
@@ -1154,6 +1155,7 @@ export async function getAnimeList(
 		genres,
 		studio,
 		producer,
+		source,
 		broadcastStatus,
 		sortBy = "created",
 		listedByUserId,
@@ -1185,6 +1187,7 @@ export async function getAnimeList(
 	if (selectedGenres.length) query = query.or(buildGenreFilter(selectedGenres));
 	if (studio) query = query.or(arrayContainsAny(["studio", "studio_en"], studio));
 	if (producer) query = query.contains("producer", [producer]);
+	if (source) query = query.eq("source", source);
 	if (broadcastStatus) query = query.eq("computed_broadcast_status", broadcastStatus);
 	if (searchQuery) query = query.or(buildTitleSearchFilter(searchQuery));
 
@@ -1206,10 +1209,10 @@ export async function getAnimeCount(
 	supabase: SupabaseClient<Database>,
 	options: Pick<
 		AnimeListOptions,
-		"genre" | "genres" | "broadcastYear" | "broadcastSeason" | "studio" | "producer" | "query"
+		"genre" | "genres" | "broadcastYear" | "broadcastSeason" | "studio" | "producer" | "source" | "query"
 	>,
 ): Promise<number> {
-	const { genre, genres, broadcastYear, broadcastSeason, studio, producer, query: searchQuery } = options;
+	const { genre, genres, broadcastYear, broadcastSeason, studio, producer, source, query: searchQuery } = options;
 	const selectedGenres = normalizeGenreFilters(genres ?? genre);
 
 	let q = supabase.from("anime_with_computed_broadcast_status").select("id", { count: "exact", head: true });
@@ -1220,6 +1223,7 @@ export async function getAnimeCount(
 	if (selectedGenres.length) q = q.or(buildGenreFilter(selectedGenres));
 	if (studio) q = q.or(arrayContainsAny(["studio", "studio_en"], studio));
 	if (producer) q = q.contains("producer", [producer]);
+	if (source) q = q.eq("source", source);
 	if (searchQuery) q = q.or(buildTitleSearchFilter(searchQuery));
 
 	const { count, error } = await q;
@@ -1231,6 +1235,7 @@ export async function getAnimeCount(
 		if (selectedGenres.length) fallback = fallback.or(buildGenreFilter(selectedGenres));
 		if (studio) fallback = fallback.or(arrayContainsAny(["studio", "studio_en"], studio));
 		if (producer) fallback = fallback.contains("producer", [producer]);
+		if (source) fallback = fallback.eq("source", source);
 		if (searchQuery) fallback = fallback.or(buildTitleSearchFilter(searchQuery));
 		const { count: fallbackCount } = await fallback;
 		return fallbackCount ?? 0;
@@ -1253,6 +1258,7 @@ async function getAnimeListRowsFromBaseTable(
 		genres,
 		studio,
 		producer,
+		source,
 		limit = 20,
 		query: searchQuery,
 	} = options;
@@ -1277,6 +1283,7 @@ async function getAnimeListRowsFromBaseTable(
 	if (selectedGenres.length) query = query.or(buildGenreFilter(selectedGenres));
 	if (studio) query = query.or(arrayContainsAny(["studio", "studio_en"], studio));
 	if (producer) query = query.contains("producer", [producer]);
+	if (source) query = query.eq("source", source);
 	if (searchQuery) query = query.or(buildTitleSearchFilter(searchQuery));
 
 	const { data } = await query;
@@ -1318,7 +1325,7 @@ export function quoteOrFilterValue(value: string): string {
 /** title / title_en の部分一致検索用 .or() フィルターを生成する（入力は引用符リテラル化される） */
 export function buildTitleSearchFilter(searchQuery: string): string {
 	const pattern = quoteOrFilterValue(`%${searchQuery}%`);
-	return `title.ilike.${pattern},title_en.ilike.${pattern}`;
+	return `title.ilike.${pattern},title_en.ilike.${pattern},source.ilike.${pattern}`;
 }
 
 function arrayContainsAny(columns: string[], value: string) {

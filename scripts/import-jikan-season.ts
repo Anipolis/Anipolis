@@ -617,6 +617,30 @@ function translateNameList(names: string[], dictionary: Record<string, string>) 
 	return names.map((name) => dictionary[name] ?? name);
 }
 
+const SOURCE_JA_BY_EN: Record<string, string> = {
+	"4-koma manga": "4コマ漫画",
+	book: "書籍",
+	"card game": "カードゲーム",
+	game: "ゲーム",
+	"light novel": "ライトノベル",
+	manga: "漫画",
+	"mixed media": "メディアミックス",
+	music: "音楽",
+	novel: "小説",
+	original: "オリジナル",
+	other: "その他",
+	"picture book": "絵本",
+	radio: "ラジオ",
+	"visual novel": "ビジュアルノベル",
+	"web manga": "Web漫画",
+};
+
+function translateSource(source: string | null | undefined) {
+	const normalized = source?.trim();
+	if (!normalized) return null;
+	return SOURCE_JA_BY_EN[normalized.toLowerCase()] ?? normalized;
+}
+
 function normalizeBroadcastDay(day: string | null | undefined) {
 	if (!day) return null;
 
@@ -826,7 +850,7 @@ function mapJikanAnime(anime: JikanAnime, year: number, season: SeasonName): Ani
 		aired_from: airedFrom,
 		aired_to: airedTo,
 		season: `${year}-${season}`,
-		source: anime.source ?? null,
+		source: translateSource(anime.source),
 		studio: studioJa,
 		studio_en: studioEn,
 		genre: genreJa,

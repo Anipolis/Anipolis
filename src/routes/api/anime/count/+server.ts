@@ -23,6 +23,7 @@ export const GET: RequestHandler = async ({ url, locals: { supabase } }) => {
 			(url.searchParams.get("season") ?? url.searchParams.get("broadcastSeason"))?.trim() ?? "";
 		const studio = url.searchParams.get("studio")?.trim() ?? "";
 		const producer = url.searchParams.get("producer")?.trim() ?? "";
+		const source = url.searchParams.get("source")?.trim() ?? "";
 		const search = url.searchParams.get("search")?.trim() ?? "";
 
 		const opts: Parameters<typeof getAnimeCount>[1] = {};
@@ -31,6 +32,7 @@ export const GET: RequestHandler = async ({ url, locals: { supabase } }) => {
 		if (broadcastSeason) opts.broadcastSeason = broadcastSeason;
 		if (studio) opts.studio = studio;
 		if (producer) opts.producer = producer;
+		if (source) opts.source = source;
 		if (search) opts.query = search;
 		const count = await getAnimeCount(supabase, opts);
 
