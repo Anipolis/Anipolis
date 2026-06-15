@@ -8,7 +8,7 @@ export const GET: RequestHandler = async ({ url, locals: { supabase } }) => {
 
 	const { data } = await supabase
 		.from("anime")
-		.select("id, title, title_en, cover_url")
+		.select("id, title, title_en, cover_url, official_hashtag")
 		.or(buildTitleSearchFilter(q))
 		.order("title", { ascending: true })
 		.limit(10);

@@ -30,6 +30,7 @@ const effectiveRoomContext = $derived(
 			? { href: post.anime_quote.room_href, title: buildAnimeRoomLabel(post.anime_quote) }
 			: null),
 );
+const cwContentId = $derived(`post-cw-content-${post.id}`);
 
 const isLong = $derived(post.content.length > 300 || (post.content.match(/\n/g)?.length ?? 0) >= 5);
 let collapsed = $state(true);
@@ -336,32 +337,72 @@ async function submitReport() {
 		</div>
 
 		<div class="post-content-outer">
-			{#if post.cw_anime && !cwRevealed}
+			{#if post.cw_anime}
 				<button
 					type="button"
 					class="post-cw-banner"
-					onclick={(e) => { e.stopPropagation(); cwRevealed = true; }}
+					class:post-cw-banner--revealed={cwRevealed}
+					aria-expanded={cwRevealed}
+					aria-controls={cwContentId}
+					onclick={(e) => { e.stopPropagation(); cwRevealed = !cwRevealed; }}
 				>
-					<svg
-						width="18"
-						height="18"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						aria-hidden="true"
-					>
-						<path
-							d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
-						/>
-						<line x1="12" y1="9" x2="12" y2="13" />
-						<line x1="12" y1="17" x2="12.01" y2="17" />
-					</svg>
-					<span>『{post.cw_anime.title}』のネタバレを含みます</span>
-					<span class="post-cw-tap">タップして表示</span>
+					<span class="post-cw-main">
+						<svg
+							width="18"
+							height="18"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+						>
+							<path
+								d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+							/>
+							<line x1="12" y1="9" x2="12" y2="13" />
+							<line x1="12" y1="17" x2="12.01" y2="17" />
+						</svg>
+						<span> 『{post.cw_anime.title}』のネタバレを{cwRevealed ? '展開中' : '含みます'} </span>
+					</span>
+					<span class="post-cw-tap">{cwRevealed ? 'クリックで隠す △' : 'タップして表示 ▽'}</span>
 				</button>
+				<div
+					id={cwContentId}
+					class="post-cw-content"
+					class:post-cw-content--revealed={cwRevealed}
+					aria-hidden={!cwRevealed}
+					inert={!cwRevealed}
+				>
+					<div class="post-cw-content-body">
+						<div
+							class="post-content-inner"
+							class:post-content-clipped={isLong && collapsed && !isDetailView}
+						>
+							<p class="post-content">
+								{#each parts as part}
+									{#if part.type === 'hashtag'}
+										<a href="/hashtag/{part.value}" class="hashtag">#{part.value}</a>
+									{:else if part.type === 'mention'}
+										<a href="/profile/{part.value}" class="mention">@{part.value}</a>
+									{:else}
+										{part.value}
+									{/if}
+								{/each}
+							</p>
+						</div>
+						{#if isLong && !isDetailView}
+							<button
+								type="button"
+								class="post-content-toggle"
+								onclick={(e) => { e.stopPropagation(); collapsed = !collapsed; }}
+							>
+								{collapsed ? 'もっと見る' : '閉じる'}
+							</button>
+						{/if}
+					</div>
+				</div>
 			{:else}
 				<div class="post-content-inner" class:post-content-clipped={isLong && collapsed && !isDetailView}>
 					<p class="post-content">
@@ -1127,11 +1168,11 @@ async function submitReport() {
 
 .post-cw-banner {
 	display: flex;
-	flex-direction: column;
 	align-items: center;
-	gap: 4px;
+	justify-content: space-between;
+	gap: 10px;
 	width: 100%;
-	padding: 12px 16px;
+	padding: 10px 12px;
 	margin: 4px 0;
 	border: 1px solid var(--color-warning, #f59e0b);
 	background: color-mix(in srgb, var(--color-warning, #f59e0b) 8%, transparent);
@@ -1141,16 +1182,71 @@ async function submitReport() {
 	text-align: center;
 	color: var(--color-text);
 	line-height: 1.4;
+	transition:
+		background 0.2s ease,
+		border-color 0.2s ease;
 }
 .post-cw-banner:hover {
 	background: color-mix(in srgb, var(--color-warning, #f59e0b) 16%, transparent);
 }
-.post-cw-banner svg {
+.post-cw-banner--revealed {
+	border-color: var(--color-border);
+	background: color-mix(in srgb, var(--color-surface, #ffffff) 96%, var(--color-text-muted));
+	color: var(--color-text-muted);
+	border-bottom-right-radius: 4px;
+	border-bottom-left-radius: 4px;
+}
+.post-cw-banner--revealed:hover {
+	background: color-mix(in srgb, var(--color-surface, #ffffff) 92%, var(--color-text-muted));
+}
+.post-cw-main {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 0;
+	gap: 8px;
+	font-weight: 700;
+}
+.post-cw-banner--revealed .post-cw-main {
+	font-weight: 500;
+}
+.post-cw-main svg {
 	color: var(--color-warning, #f59e0b);
 	flex-shrink: 0;
 }
+.post-cw-banner--revealed .post-cw-main svg {
+	color: var(--color-text-muted);
+}
 .post-cw-tap {
+	flex-shrink: 0;
 	font-size: 12px;
 	color: var(--color-text-muted);
+}
+.post-cw-content {
+	display: grid;
+	grid-template-rows: 0fr;
+	transition: grid-template-rows 0.3s ease;
+}
+.post-cw-content--revealed {
+	grid-template-rows: 1fr;
+}
+.post-cw-content-body {
+	min-height: 0;
+	overflow: hidden;
+	padding-top: 0;
+	transition: padding-top 0.3s ease;
+}
+.post-cw-content--revealed .post-cw-content-body {
+	padding-top: 8px;
+}
+
+@media (max-width: 640px) {
+	.post-cw-banner {
+		flex-direction: column;
+		align-items: stretch;
+	}
+	.post-cw-tap {
+		text-align: center;
+	}
 }
 </style>

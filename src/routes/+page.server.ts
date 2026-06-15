@@ -83,7 +83,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 			quoteAnimeId
 				? supabase
 						.from("anime")
-						.select("id, title, title_en, cover_url")
+						.select("id, title, title_en, cover_url, official_hashtag")
 						.eq("id", Number(quoteAnimeId))
 						.single()
 				: Promise.resolve({ data: null }),
@@ -121,7 +121,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 			quoteAnimeId
 				? supabase
 						.from("anime")
-						.select("id, title, title_en, cover_url")
+						.select("id, title, title_en, cover_url, official_hashtag")
 						.eq("id", Number(quoteAnimeId))
 						.single()
 				: Promise.resolve({ data: null }),

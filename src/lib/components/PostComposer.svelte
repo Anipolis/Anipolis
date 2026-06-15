@@ -13,6 +13,7 @@ interface AnimeResult {
 	title: string;
 	title_en: string | null;
 	cover_url: string | null;
+	official_hashtag?: string[] | null;
 }
 
 interface UserResult {
@@ -112,6 +113,15 @@ const canSubmit = $derived(
 		!submitting &&
 		!uploading,
 );
+
+function normalizeHashtagLabel(tag: string) {
+	const normalized = tag.trim().replace(/^#+/, "");
+	return normalized ? `#${normalized}` : "";
+}
+
+function animeQuoteChipLabel(anime: AnimeResult) {
+	return anime.official_hashtag?.map(normalizeHashtagLabel).find(Boolean) ?? normalizeHashtagLabel(anime.title);
+}
 
 async function handleFileChange(e: Event) {
 	const input = e.target as HTMLInputElement;
@@ -332,38 +342,49 @@ const handleSubmit: SubmitFunction = () => {
 				{/if}
 			</div>
 
-			<!-- 選択済みアニメプレビュー -->
-			{#if selectedAnime}
-				<div class="composer-anime-preview">
-					{#if selectedAnime.cover_url}
-						<img src={selectedAnime.cover_url} alt={selectedAnime.title} class="composer-anime-thumb">
+			{#if selectedAnime || selectedCwAnime}
+				<div class="flex flex-wrap gap-2 mt-2 mb-0.5">
+					{#if selectedAnime}
+						<span
+							class="inline-flex items-center gap-1.5 max-w-full rounded-full border border-blue-500/50 bg-blue-950/40 px-3 py-1 text-sm font-semibold leading-tight text-blue-300"
+						>
+							<span class="shrink-0" aria-hidden="true">🎬</span>
+							<span class="min-w-0 max-w-[18ch] truncate">{animeQuoteChipLabel(selectedAnime)}</span>
+							<button
+								type="button"
+								class="-mr-1 inline-flex h-5 w-5 items-center justify-center rounded-full border-0 bg-transparent p-0 text-current opacity-70 hover:bg-white/15 hover:opacity-100"
+								onclick={clearAnime}
+								aria-label="アニメ引用を削除"
+							>
+								✕
+							</button>
+						</span>
 					{/if}
-					<div class="composer-anime-info">
-						<span class="composer-anime-title">{selectedAnime.title}</span>
-						{#if selectedAnime.title_en}
-							<span class="composer-anime-title-en">{selectedAnime.title_en}</span>
-						{/if}
-					</div>
-					<button
-						type="button"
-						class="composer-anime-remove"
-						onclick={clearAnime}
-						aria-label="アニメ引用を削除"
-					>
-						✕
-					</button>
+
+					{#if selectedCwAnime}
+						<span
+							class="inline-flex items-center gap-1.5 max-w-full rounded-full border border-amber-500/50 bg-amber-950/40 px-3 py-1 text-sm font-semibold leading-tight text-amber-300"
+						>
+							<span class="shrink-0" aria-hidden="true">⚠️</span>
+							<span class="min-w-0 max-w-[34ch] truncate">ネタバレ</span>
+							<button
+								type="button"
+								class="-mr-1 inline-flex h-5 w-5 items-center justify-center rounded-full border-0 bg-transparent p-0 text-current opacity-70 hover:bg-white/15 hover:opacity-100"
+								onclick={clearCwAnime}
+								aria-label="CW解除"
+							>
+								✕
+							</button>
+						</span>
+					{/if}
 				</div>
+			{/if}
+
+			{#if selectedAnime}
 				<input type="hidden" name="anime_id" value={selectedAnime.id}>
 			{/if}
 
 			{#if selectedCwAnime}
-				<div class="composer-cw-badge">
-					<span class="i-lucide-alert-triangle composer-cw-icon" aria-hidden="true"></span>
-					<span class="composer-cw-label">ネタバレ：{selectedCwAnime.title}</span>
-					<button type="button" class="composer-cw-remove" onclick={clearCwAnime} aria-label="CW解除">
-						✕
-					</button>
-				</div>
 				<input type="hidden" name="cw_anime_id" value={selectedCwAnime.id}>
 			{/if}
 
@@ -692,37 +713,5 @@ const handleSubmit: SubmitFunction = () => {
 	top: 8px;
 	right: 8px;
 	z-index: 1;
-}
-.composer-cw-badge {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	padding: 6px 10px;
-	margin-top: 8px;
-	border: 1px solid var(--color-warning, #f59e0b);
-	background: color-mix(in srgb, var(--color-warning, #f59e0b) 10%, transparent);
-	border-radius: var(--radius-sm, 6px);
-	font-size: 13px;
-}
-.composer-cw-icon {
-	color: var(--color-warning, #f59e0b);
-	width: 14px;
-	height: 14px;
-	flex-shrink: 0;
-}
-.composer-cw-label {
-	flex: 1;
-	font-weight: 600;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-.composer-cw-remove {
-	background: none;
-	border: none;
-	cursor: pointer;
-	color: var(--color-text-muted);
-	padding: 0 2px;
-	font-size: 12px;
 }
 </style>

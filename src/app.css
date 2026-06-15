@@ -1391,6 +1391,38 @@ textarea {
 	border-radius: var(--radius);
 	padding: 20px;
 	margin-bottom: 16px;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.hashtag-back-link {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	height: 36px;
+	padding: 0 10px;
+	border-radius: 9999px;
+	color: var(--color-text-muted);
+	font-size: 13px;
+	font-weight: 700;
+	text-decoration: none;
+	transition:
+		background 0.15s,
+		color 0.15s;
+	flex-shrink: 0;
+}
+
+.hashtag-back-link:hover {
+	background: var(--color-surface-hover);
+	color: var(--color-text);
+	text-decoration: none;
+}
+
+.hashtag-back-link [class^="i-lucide"] {
+	width: 16px;
+	height: 16px;
 }
 
 .hashtag-header h1 {
@@ -2682,45 +2714,6 @@ textarea {
 }
 
 /* 笏笏 繧｢繝九Γ蠑慕畑繝励Ξ繝薙Η繝ｼ・・ostComposer・・笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏 */
-.composer-anime-preview {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	margin: 6px 0 2px;
-	padding: 8px 10px;
-	border: 1px solid var(--color-primary);
-	border-radius: var(--radius);
-	background: color-mix(in srgb, var(--color-primary) 8%, transparent);
-}
-.composer-anime-thumb {
-	width: 36px;
-	height: 50px;
-	object-fit: cover;
-	border-radius: 3px;
-	flex-shrink: 0;
-}
-.composer-anime-info {
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
-	min-width: 0;
-	flex: 1;
-}
-.composer-anime-title {
-	font-size: 13px;
-	font-weight: 600;
-	color: var(--color-text);
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-.composer-anime-title-en {
-	font-size: 11px;
-	color: var(--color-text-muted);
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
 .composer-anime-remove {
 	background: none;
 	border: none;
