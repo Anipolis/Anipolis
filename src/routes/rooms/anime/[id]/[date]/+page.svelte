@@ -18,8 +18,12 @@ let textareaEl: HTMLTextAreaElement | null = $state(null);
 let mounted = $state(false);
 let postOrder = $state<PostOrder>("oldest");
 let lastPostCount = $state(0);
+let isFollowingLatest = $state(true);
+let unreadNewPostCount = $state(0);
+let programmaticScrollTimer: ReturnType<typeof setTimeout> | undefined;
 
 const maxLen = 280;
+const latestEdgeThreshold = 80;
 const scheduledMs = $derived(new Date(data.room.scheduled_at).getTime());
 const openMs = $derived(new Date(data.room.posting_opens_at).getTime());
 const closeMs = $derived(new Date(data.room.posting_closes_at).getTime());
@@ -92,9 +96,14 @@ onMount(() => {
 	if (status === "open" && data.posts.length > 0) {
 		void focusLatestPost();
 	}
+	window.addEventListener("scroll", handleWindowScroll, { passive: true });
 });
 
-onDestroy(() => clearInterval(intervalId));
+onDestroy(() => {
+	clearInterval(intervalId);
+	if (programmaticScrollTimer) clearTimeout(programmaticScrollTimer);
+	if (typeof window !== "undefined") window.removeEventListener("scroll", handleWindowScroll);
+});
 
 $effect(() => {
 	if (form && "success" in form && form.success) postContent = "";
@@ -103,8 +112,17 @@ $effect(() => {
 $effect(() => {
 	if (!mounted || status !== "open") return;
 	if (allPosts.length === lastPostCount) return;
+	const newPostCount = allPosts.length - lastPostCount;
+	const shouldFollow = isFollowingLatest || isNearLatestEdge();
 	lastPostCount = allPosts.length;
-	if (allPosts.length > 0) void focusLatestPost();
+	if (allPosts.length === 0) return;
+	if (shouldFollow) {
+		isFollowingLatest = true;
+		unreadNewPostCount = 0;
+		void focusLatestPost(postOrder, "smooth");
+	} else {
+		unreadNewPostCount += Math.max(1, newPostCount);
+	}
 });
 
 // 受付中はライブ更新: Realtime の INSERT を購読し、受信をトリガーに差分APIを叩く。
@@ -133,17 +151,44 @@ $effect(() => {
 	};
 });
 
-async function focusLatestPost(order: PostOrder = postOrder) {
+function isNearLatestEdge(order: PostOrder = postOrder) {
+	const root = document.documentElement;
+	if (order === "newest") return window.scrollY <= latestEdgeThreshold;
+	const distanceToBottom = root.scrollHeight - (window.scrollY + window.innerHeight);
+	return distanceToBottom <= latestEdgeThreshold;
+}
+
+function handleWindowScroll() {
+	if (!mounted || status !== "open") return;
+	if (programmaticScrollTimer) return;
+	const nearLatest = isNearLatestEdge();
+	isFollowingLatest = nearLatest;
+	if (nearLatest) unreadNewPostCount = 0;
+}
+
+async function focusLatestPost(order: PostOrder = postOrder, behavior: ScrollBehavior = "auto") {
 	await tick();
 	requestAnimationFrame(() => {
 		const selector = order === "oldest" ? ".anime-room-post:last-of-type" : ".anime-room-post:first-of-type";
-		document.querySelector<HTMLElement>(selector)?.scrollIntoView({ block: "center" });
+		programmaticScrollTimer = setTimeout(() => {
+			programmaticScrollTimer = undefined;
+			isFollowingLatest = true;
+		}, 450);
+		document.querySelector<HTMLElement>(selector)?.scrollIntoView({ block: "center", behavior });
 	});
 }
 
 function setPostOrder(order: PostOrder) {
 	postOrder = order;
+	isFollowingLatest = true;
+	unreadNewPostCount = 0;
 	if (status === "open" && allPosts.length > 0) void focusLatestPost(order);
+}
+
+function resumeLatestFollow() {
+	isFollowingLatest = true;
+	unreadNewPostCount = 0;
+	if (allPosts.length > 0) void focusLatestPost(postOrder, "smooth");
 }
 
 function formatHMS(ms: number) {
@@ -276,6 +321,14 @@ function formatDate(iso: string) {
 				</div>
 			{/each}
 		{/if}
+
+		{#if status === "open" && unreadNewPostCount > 0}
+			<button type="button" class="new-posts-badge" onclick={resumeLatestFollow}>
+				<span aria-hidden="true">↓</span>
+				<span>新着の投稿があります</span>
+				<span class="new-posts-count">{unreadNewPostCount}</span>
+			</button>
+		{/if}
 	</div>
 
 	<aside class="sidebar-column">
@@ -341,14 +394,54 @@ function formatDate(iso: string) {
 	order: 2;
 }
 
-.feed-column > .composer,
-.feed-column > .anime-room-login {
-	order: 3;
-	margin-top: 16px;
+.new-posts-badge {
+	position: fixed;
+	left: 50%;
+	bottom: 24px;
+	z-index: 145;
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	max-width: calc(100vw - 32px);
+	padding: 9px 14px;
+	border: 1px solid color-mix(in srgb, var(--color-primary) 28%, transparent);
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--color-surface) 92%, var(--color-primary));
+	box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+	color: var(--color-primary);
+	font-size: 13px;
+	font-weight: 700;
+	line-height: 1.2;
+	transform: translateX(-50%);
+	animation: new-posts-pop 160ms ease-out;
 }
 
-.feed-column > .composer {
-	margin-bottom: 0;
+.new-posts-badge:hover {
+	background: color-mix(in srgb, var(--color-surface) 84%, var(--color-primary));
+}
+
+.new-posts-count {
+	display: grid;
+	min-width: 20px;
+	height: 20px;
+	place-items: center;
+	padding: 0 6px;
+	border-radius: 999px;
+	background: var(--color-primary);
+	color: white;
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+}
+
+@keyframes new-posts-pop {
+	from {
+		opacity: 0;
+		transform: translate(-50%, 8px) scale(0.96);
+	}
+	to {
+		opacity: 1;
+		transform: translate(-50%, 0) scale(1);
+	}
 }
 
 .room-order-toggle {
@@ -414,6 +507,10 @@ function formatDate(iso: string) {
 	.room-mobile-bar {
 		display: flex;
 	}
+
+	.new-posts-badge {
+		bottom: calc(76px + env(safe-area-inset-bottom));
+	}
 }
 
 /* ── サイドバー内ルーム情報パネル ── */
@@ -467,6 +564,16 @@ function formatDate(iso: string) {
 }
 
 /* ── スケジュールへ戻るボタン ── */
+.feed-column > .composer,
+.feed-column > .anime-room-login {
+	order: 3;
+	margin-top: 16px;
+}
+
+.feed-column > .composer {
+	margin-bottom: 0;
+}
+
 .anime-room-back {
 	margin-bottom: 16px;
 }
