@@ -18,8 +18,8 @@ const muteDays = [1, 2, 3, 4, 5, 6, 7] as const;
 // Which anime are currently in their notification window (client-side highlight)
 let notifyingIds = $state(new Set<string>());
 
-// Which anime rooms are currently live (broadcast started, within 90 min)
-let liveAnimeIds = $state(new Set<string>());
+// Which anime rooms are currently live, keyed by anime + room date.
+let liveRoomKeys = $state(new Set<string>());
 
 function getDefaultDayIndex(): number {
 	return new Date().getDay(); // 0=日〜6=土
@@ -169,6 +169,30 @@ function minutesUntilBroadcast(anime: Anime, now: Date): number | null {
 	return (broadcastHour - 24) * 60 + broadcastMin - currentMin;
 }
 
+function roomLiveKey(animeId: string, roomDate: string): string {
+	return `${animeId}:${roomDate}`;
+}
+
+function getLiveWindowMinutes(anime: Anime): number {
+	const durationMinutes = anime.broadcast_duration_minutes > 0 ? anime.broadcast_duration_minutes : 30;
+	const postCloseMinutes =
+		anime.broadcast_room_post_close_minutes >= 0 ? anime.broadcast_room_post_close_minutes : 30;
+	return durationMinutes + postCloseMinutes;
+}
+
+function currentLiveRoomDate(anime: Anime, now: Date): string | null {
+	if (!anime.broadcast_time || anime.broadcast_day == null) return null;
+	const mins = minutesUntilBroadcast(anime, now);
+	if (mins === null || mins > 0 || mins <= -getLiveWindowMinutes(anime)) return null;
+
+	const broadcastHour = Number(anime.broadcast_time.split(":")[0]);
+	const roomDate = new Date(now);
+	if (broadcastHour >= 24) {
+		roomDate.setDate(roomDate.getDate() - 1);
+	}
+	return toDateInputValue(roomDate);
+}
+
 function getMaxNotifyWindow(): number {
 	const s = data.notificationSettings;
 	return Math.max(s.notify_1min ? 1 : 0, s.notify_5min ? 5 : 0, s.notify_30min ? 30 : 0);
@@ -200,13 +224,11 @@ function refreshLiveIds() {
 	const next = new Set<string>();
 	for (const day of data.days) {
 		for (const anime of day.anime) {
-			const mins = minutesUntilBroadcast(anime, now);
-			if (mins !== null && mins <= 0 && mins >= -90) {
-				next.add(anime.id);
-			}
+			const roomDate = currentLiveRoomDate(anime, now);
+			if (roomDate) next.add(roomLiveKey(anime.id, roomDate));
 		}
 	}
-	liveAnimeIds = next;
+	liveRoomKeys = next;
 }
 
 // Check every 30 seconds
@@ -373,7 +395,7 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 								{#each animeGroup as anime (anime.id)}
 									{@const isSubscribed = subscribedIds.has(anime.id)}
 									{@const isNotifying = notifyingIds.has(anime.id)}
-									{@const isLive = liveAnimeIds.has(anime.id)}
+									{@const isLive = liveRoomKeys.has(roomLiveKey(anime.id, displayDate))}
 									{@const isMuted = mutedAnimeIds.has(anime.id)}
 									{@const roomMute = data.roomMuteSettings[anime.id]}
 									{@const subscribable = canSubscribe(anime)}
