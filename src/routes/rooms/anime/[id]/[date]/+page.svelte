@@ -206,15 +206,20 @@ const timerLabel = $derived.by(() => {
 	return "このルームは終了しました";
 });
 
-function formatDate(iso: string) {
-	return new Date(iso).toLocaleString("ja-JP", {
-		year: "numeric",
-		month: "short",
-		day: "numeric",
-		weekday: "short",
-		hour: "2-digit",
-		minute: "2-digit",
-	});
+const broadcastMetaLine = $derived.by(() => {
+	const station = data.anime.broadcast_station?.filter(Boolean).join(" / ");
+	const frame = `${data.room.duration_minutes}分枠`;
+	return station ? `${station} · ${frame}` : frame;
+});
+
+function formatCompactDate(iso: string) {
+	const date = new Date(iso);
+	const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
+	const month = date.getMonth() + 1;
+	const day = date.getDate();
+	const hour = String(date.getHours()).padStart(2, "0");
+	const minute = String(date.getMinutes()).padStart(2, "0");
+	return `${month}/${day}(${weekdays[date.getDay()]}) ${hour}:${minute}`;
 }
 </script>
 
@@ -317,6 +322,7 @@ function formatDate(iso: string) {
 						currentUserId={data.user?.id ?? null}
 						insideRoom={true}
 						roomContext={{ href: roomHref, title: `${data.anime.title} の放送ルーム` }}
+						broadcastStartAt={data.room.scheduled_at}
 					/>
 				</div>
 			{/each}
@@ -332,44 +338,52 @@ function formatDate(iso: string) {
 	</div>
 
 	<aside class="sidebar-column">
-		<div class="card room-info-panel">
-			<div class="room-info-top">
-				<a href="/anime/{data.anime.id}" class="room-info-cover-link" aria-label="アニメ詳細を開く">
+		<div class="mb-4 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 shadow-sm">
+			<div class="flex items-start">
+				<a href="/anime/{data.anime.id}" class="shrink-0" aria-label="アニメ詳細を開く">
 					{#if data.anime.cover_url}
-						<img src={data.anime.cover_url} alt={data.anime.title} class="room-info-cover">
+						<img
+							src={data.anime.cover_url}
+							alt={data.anime.title}
+							class="h-20 w-16 rounded-lg object-cover shadow-md"
+						>
 					{:else}
-						<div class="room-info-cover room-info-cover--placeholder"></div>
+						<div class="h-20 w-16 rounded-lg border border-zinc-800 bg-zinc-800 shadow-md"></div>
 					{/if}
 				</a>
-				<div class="room-info-text">
-					<div class="event-room-hashtag">
-						<a href="/hashtag/{data.room.hashtag}" class="hashtag-link">#{data.room.hashtag}</a>
+				<div class="flex min-h-20 min-w-0 flex-1 flex-col justify-between pl-3">
+					<div class="min-w-0">
+						<h1 class="line-clamp-1 text-sm font-bold text-zinc-100">{data.room.title}</h1>
+						<div class="mt-2 flex min-w-0 items-center gap-2">
+							{#if status === "ended"}
+								<span class="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-bold text-zinc-400">
+									終了
+								</span>
+							{/if}
+							<time class="truncate text-xs text-zinc-400"
+								>{formatCompactDate(data.room.scheduled_at)}</time
+							>
+						</div>
+						<div class="mt-1 truncate text-xs text-zinc-500">{broadcastMetaLine}</div>
 					</div>
-					<h1 class="room-info-title">{data.room.title}</h1>
-					<div class="event-room-meta">
-						<time>{formatDate(data.room.scheduled_at)}</time>
-						<span> / {data.room.duration_minutes}分枠</span>
-						<span>
-							/ 投稿受付 {formatDate(data.room.posting_opens_at)} -
-							{formatDate(data.room.posting_closes_at)}</span
+					<div class="mt-2 flex items-center justify-between gap-2">
+						<a
+							href="/hashtag/{data.room.hashtag}"
+							class="truncate text-xs text-teal-400/80 hover:text-teal-300"
 						>
-						{#if data.anime.broadcast_station?.length}
-							<span> / {data.anime.broadcast_station.join(" / ")}</span>
-						{/if}
+							#{data.room.hashtag}
+						</a>
+						<a
+							href="/schedule"
+							class="shrink-0 text-xs text-zinc-400 transition-colors hover:text-teal-400"
+						>
+							← 週間スケジュールへ戻る
+						</a>
 					</div>
 				</div>
 			</div>
-			<div class="event-timer event-timer--{status} room-timer-compact">
-				<div class="event-timer-display">{timerLabel}</div>
-				{#if status === "open"}
-					<div class="event-timer-badge">受付中</div>
-				{/if}
-			</div>
 		</div>
 
-		<div class="anime-room-back">
-			<a href="/schedule" class="btn btn-ghost">週間スケジュールへ戻る</a>
-		</div>
 		<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
 	</aside>
 </div>
@@ -513,48 +527,6 @@ function formatDate(iso: string) {
 	}
 }
 
-/* ── サイドバー内ルーム情報パネル ── */
-.room-info-panel {
-	margin-bottom: 16px;
-}
-.room-info-top {
-	display: flex;
-	gap: 10px;
-	align-items: flex-start;
-}
-.room-info-cover-link {
-	flex-shrink: 0;
-}
-.room-info-cover {
-	width: 52px;
-	height: 74px;
-	object-fit: cover;
-	border-radius: 5px;
-	border: 1px solid var(--color-border);
-	background: var(--color-border);
-	display: block;
-}
-.room-info-cover--placeholder {
-	background: var(--color-surface);
-}
-.room-info-text {
-	min-width: 0;
-}
-.room-info-title {
-	font-size: 14px;
-	font-weight: 700;
-	margin: 4px 0 4px;
-	color: var(--color-text);
-	line-height: 1.4;
-}
-.room-timer-compact {
-	margin-top: 12px;
-	padding: 10px 12px;
-}
-.room-timer-compact .event-timer-display {
-	font-size: 17px;
-}
-
 /* ── ログイン/空状態 ── */
 .anime-room-login,
 .anime-room-empty {
@@ -572,12 +544,5 @@ function formatDate(iso: string) {
 
 .feed-column > .composer {
 	margin-bottom: 0;
-}
-
-.anime-room-back {
-	margin-bottom: 16px;
-}
-.anime-room-back .btn {
-	width: 100%;
 }
 </style>

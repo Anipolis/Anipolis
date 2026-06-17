@@ -972,6 +972,16 @@ textarea {
 	overflow: hidden;
 }
 
+[data-theme="light"] .broadcast-ts-badge {
+	background-color: rgb(204 251 241 / 0.9);
+	color: rgb(17 94 89);
+	border-color: rgb(20 184 166 / 0.45);
+}
+
+[data-theme="light"] .broadcast-ts-abs {
+	color: rgb(107 114 128);
+}
+
 [data-theme="light"] .avatar {
 	background: #94a3b8;
 	color: #ffffff;

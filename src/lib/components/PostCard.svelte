@@ -5,8 +5,9 @@ import { goto } from "$app/navigation";
 import AnimeExchangeResult from "$lib/components/AnimeExchangeResult.svelte";
 import ReactionUsersPopover from "$lib/components/ReactionUsersPopover.svelte";
 import { buildAnimeRoomLabel, type Post, type ReactionType, type ReactionUser } from "$lib/types";
-import { formatRelativeTime } from "$lib/utils/format";
+import { formatBroadcastRelativeTime, formatRelativeTime } from "$lib/utils/format";
 import { parseContentParts } from "$lib/utils/hashtag";
+import BroadcastTimestamp from "./BroadcastTimestamp.svelte";
 import UserAvatar from "./UserAvatar.svelte";
 
 interface Props {
@@ -15,12 +16,26 @@ interface Props {
 	isDetailView?: boolean;
 	roomContext?: { href: string; title: string } | null;
 	insideRoom?: boolean;
+	broadcastStartAt?: string | null;
 }
 
-let { post, currentUserId = null, isDetailView = false, roomContext = null, insideRoom = false }: Props = $props();
+let {
+	post,
+	currentUserId = null,
+	isDetailView = false,
+	roomContext = null,
+	insideRoom = false,
+	broadcastStartAt = null,
+}: Props = $props();
 
 const parts = $derived(parseContentParts(post.content));
 const relativeTime = $derived(formatRelativeTime(post.created_at));
+const broadcastRelativeTime = $derived(
+	broadcastStartAt ? formatBroadcastRelativeTime(post.created_at, broadcastStartAt) : null,
+);
+const absoluteTimeStr = $derived(
+	new Date(post.created_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
+);
 const displayName = $derived(post.display_name || post.username);
 const isOwn = $derived(!!currentUserId && currentUserId === post.user_id);
 const isLoggedIn = $derived(!!currentUserId);
@@ -275,9 +290,13 @@ async function submitReport() {
 				<div class="post-display-name">@{post.username}</div>
 			</div>
 			<div class="post-header-right">
-				<span class="post-time" title={post.created_at}>
-					<time datetime={post.created_at}>{relativeTime}</time>
-				</span>
+				{#if broadcastRelativeTime}
+					<BroadcastTimestamp relativeTime={broadcastRelativeTime} absoluteTime={absoluteTimeStr} />
+				{:else}
+					<span class="post-time" title={post.created_at}>
+						<time datetime={post.created_at}>{relativeTime}</time>
+					</span>
+				{/if}
 				{#if isOwn}
 					<form
 						method="POST"
