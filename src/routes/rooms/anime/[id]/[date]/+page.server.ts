@@ -6,7 +6,13 @@ import {
 	toggleLikeAction,
 	toggleRepostAction,
 } from "$lib/server/actions";
-import { getAnime, getAnimeRankingTrending, getBroadcastRoomPosts, getBroadcastRoomSession } from "$lib/server/queries";
+import {
+	getAnime,
+	getAnimeRankingTrending,
+	getBroadcastRoomOverride,
+	getBroadcastRoomPosts,
+	getBroadcastRoomSession,
+} from "$lib/server/queries";
 import type { Anime } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -18,10 +24,10 @@ function dateKeyToDate(value: string) {
 	return date;
 }
 
-function animeIsScheduledForDate(anime: Anime, dateKey: string) {
+function animeIsScheduledForDate(anime: Anime, dateKey: string, hasOverride: boolean) {
 	const date = dateKeyToDate(dateKey);
-	if (!date || anime.broadcast_day == null) return false;
-	if (date.getDay() !== anime.broadcast_day) return false;
+	if (!date) return false;
+	if (!hasOverride && (anime.broadcast_day == null || date.getDay() !== anime.broadcast_day)) return false;
 
 	const airedFrom = anime.aired_from?.slice(0, 10) ?? null;
 	if (airedFrom && dateKey < airedFrom) return false;
@@ -49,7 +55,11 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 	const { user } = await safeGetSession();
 	const anime = await getAnime(supabase, params.id, user?.id ?? null);
 	if (!anime) throw error(404, "アニメが見つかりません");
-	if (!animeIsScheduledForDate(anime, params.date)) throw error(404, "放送ルームが見つかりません");
+
+	const override = await getBroadcastRoomOverride(supabase, params.id, params.date);
+	if (!animeIsScheduledForDate(anime, params.date, override != null)) {
+		throw error(404, "放送ルームが見つかりません");
+	}
 
 	const session = await getBroadcastRoomSession(supabase, anime.id, params.date);
 	if (!session) throw error(404, "放送ルームが見つかりません");
@@ -86,7 +96,8 @@ export const actions: Actions = {
 		if (!user) return fail(401, { message: "ログインが必要です" });
 
 		const anime = await getAnime(supabase, params.id, user.id);
-		if (!anime || !animeIsScheduledForDate(anime, params.date)) {
+		const override = await getBroadcastRoomOverride(supabase, params.id, params.date);
+		if (!anime || !animeIsScheduledForDate(anime, params.date, override != null)) {
 			return fail(404, { message: "放送ルームが見つかりません" });
 		}
 

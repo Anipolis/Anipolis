@@ -2,7 +2,8 @@
 import type { SubmitFunction } from "@sveltejs/kit";
 import { untrack } from "svelte";
 import { enhance } from "$app/forms";
-import type { Anime } from "$lib/types";
+import type { Anime, BroadcastRoomOverride } from "$lib/types";
+import { type BroadcastEpisodeSlot, resolveBroadcastEpisodeSlot } from "$lib/utils/broadcast-episodes";
 import type { ActionData, PageProps } from "./$types";
 
 let { data, form }: PageProps & { form: ActionData } = $props();
@@ -70,6 +71,7 @@ function getDisplayDayItems() {
 }
 
 let selectedDayIndex = $state(getDefaultDayIndex());
+let lastWeekStart = $state(untrack(() => data.weekStart));
 let dayTabBar = $state<HTMLElement | null>(null);
 
 $effect(() => {
@@ -99,7 +101,8 @@ $effect(() => {
 });
 
 $effect(() => {
-	data.weekStart;
+	if (data.weekStart === lastWeekStart) return;
+	lastWeekStart = data.weekStart;
 	selectedDayIndex = getDefaultDayIndex();
 });
 
@@ -116,20 +119,41 @@ function formatTime(iso: string) {
 	return new Date(iso).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
 }
 
-function getBroadcastMinutes(anime: Anime): number | null {
-	if (!anime.broadcast_time) return null;
-	const match = anime.broadcast_time.match(/^(\d{1,2}):(\d{2})/);
+function overrideForDate(anime: Anime, dateStr: string): BroadcastRoomOverride | null {
+	return data.broadcastOverrides[anime.id]?.find((override) => override.room_date.slice(0, 10) === dateStr) ?? null;
+}
+
+function effectiveBroadcastTime(anime: Anime, dateStr: string): string | null {
+	return overrideForDate(anime, dateStr)?.broadcast_time ?? anime.broadcast_time;
+}
+
+function effectiveDurationMinutes(anime: Anime, dateStr: string): number {
+	const overrideDuration = overrideForDate(anime, dateStr)?.duration_minutes;
+	return overrideDuration != null && overrideDuration > 0 ? overrideDuration : anime.broadcast_duration_minutes;
+}
+
+function effectivePostCloseMinutes(anime: Anime, dateStr: string): number {
+	const overridePostClose = overrideForDate(anime, dateStr)?.post_close_minutes;
+	return overridePostClose != null && overridePostClose >= 0
+		? overridePostClose
+		: anime.broadcast_room_post_close_minutes;
+}
+
+function getBroadcastMinutes(anime: Anime, dateStr: string): number | null {
+	const broadcastTime = effectiveBroadcastTime(anime, dateStr);
+	if (!broadcastTime) return null;
+	const match = broadcastTime.match(/^(\d{1,2}):(\d{2})/);
 	if (!match) return null;
 	return Number(match[1]) * 60 + Number(match[2]);
 }
 
-function groupAnimeByTimeBand(animeList: Anime[]): Anime[][] {
+function groupAnimeByTimeBand(animeList: Anime[], dateStr: string): Anime[][] {
 	const groups: Anime[][] = [];
 	let currentGroup: Anime[] = [];
 	let previousMinutes: number | null = null;
 
 	for (const anime of animeList) {
-		const minutes = getBroadcastMinutes(anime);
+		const minutes = getBroadcastMinutes(anime, dateStr);
 		if (
 			currentGroup.length > 0 &&
 			minutes !== null &&
@@ -149,48 +173,34 @@ function groupAnimeByTimeBand(animeList: Anime[]): Anime[][] {
 
 // Returns minutes until broadcast from now, or null if not applicable today.
 // Handles late-night times ≥ 24:00 (e.g. "25:30" = 1:30am next calendar day).
-function minutesUntilBroadcast(anime: Anime, now: Date): number | null {
-	if (!anime.broadcast_time || anime.broadcast_day == null) return null;
-	const match = anime.broadcast_time.match(/^(\d{1,2}):(\d{2})/);
+function minutesUntilBroadcast(anime: Anime, now: Date, roomDate: string): number | null {
+	const broadcastTime = effectiveBroadcastTime(anime, roomDate);
+	if (!broadcastTime) return null;
+	const match = broadcastTime.match(/^(\d{1,2}):(\d{2})/);
 	if (!match) return null;
 
 	const broadcastHour = Number(match[1]);
 	const broadcastMin = Number(match[2]);
-	const todayDay = now.getDay();
-	const currentMin = now.getHours() * 60 + now.getMinutes();
-
-	if (broadcastHour < 24) {
-		if (todayDay !== anime.broadcast_day) return null;
-		return broadcastHour * 60 + broadcastMin - currentMin;
-	}
-	// Late night: broadcast_day is the "schedule day", actual calendar day is +1
-	const actualDay = (anime.broadcast_day + 1) % 7;
-	if (todayDay !== actualDay) return null;
-	return (broadcastHour - 24) * 60 + broadcastMin - currentMin;
+	const scheduledAt = parseDateInput(roomDate);
+	scheduledAt.setHours(broadcastHour, broadcastMin, 0, 0);
+	return Math.round((scheduledAt.getTime() - now.getTime()) / 60_000);
 }
 
 function roomLiveKey(animeId: string, roomDate: string): string {
 	return `${animeId}:${roomDate}`;
 }
 
-function getLiveWindowMinutes(anime: Anime): number {
-	const durationMinutes = anime.broadcast_duration_minutes > 0 ? anime.broadcast_duration_minutes : 30;
+function getLiveWindowMinutes(anime: Anime, roomDate: string): number {
+	const durationMinutes =
+		effectiveDurationMinutes(anime, roomDate) > 0 ? effectiveDurationMinutes(anime, roomDate) : 30;
 	const postCloseMinutes =
-		anime.broadcast_room_post_close_minutes >= 0 ? anime.broadcast_room_post_close_minutes : 30;
+		effectivePostCloseMinutes(anime, roomDate) >= 0 ? effectivePostCloseMinutes(anime, roomDate) : 30;
 	return durationMinutes + postCloseMinutes;
 }
 
-function currentLiveRoomDate(anime: Anime, now: Date): string | null {
-	if (!anime.broadcast_time || anime.broadcast_day == null) return null;
-	const mins = minutesUntilBroadcast(anime, now);
-	if (mins === null || mins > 0 || mins <= -getLiveWindowMinutes(anime)) return null;
-
-	const broadcastHour = Number(anime.broadcast_time.split(":")[0]);
-	const roomDate = new Date(now);
-	if (broadcastHour >= 24) {
-		roomDate.setDate(roomDate.getDate() - 1);
-	}
-	return toDateInputValue(roomDate);
+function isRoomLive(anime: Anime, now: Date, roomDate: string): boolean {
+	const mins = minutesUntilBroadcast(anime, now, roomDate);
+	return mins !== null && mins <= 0 && mins > -getLiveWindowMinutes(anime, roomDate);
 }
 
 function getMaxNotifyWindow(): number {
@@ -210,7 +220,7 @@ function refreshNotifyingIds() {
 	for (const day of data.days) {
 		for (const anime of day.anime) {
 			if (!subscribedIds.has(anime.id)) continue;
-			const mins = minutesUntilBroadcast(anime, now);
+			const mins = minutesUntilBroadcast(anime, now, day.date);
 			if (mins !== null && mins >= 0 && mins <= maxWindow) {
 				next.add(anime.id);
 			}
@@ -224,8 +234,7 @@ function refreshLiveIds() {
 	const next = new Set<string>();
 	for (const day of data.days) {
 		for (const anime of day.anime) {
-			const roomDate = currentLiveRoomDate(anime, now);
-			if (roomDate) next.add(roomLiveKey(anime.id, roomDate));
+			if (isRoomLive(anime, now, day.date)) next.add(roomLiveKey(anime.id, day.date));
 		}
 	}
 	liveRoomKeys = next;
@@ -285,22 +294,27 @@ function canSubscribe(anime: Anime): boolean {
 	return s === "airing" || s === "upcoming";
 }
 
-function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
+function currentEpisodeForSlot(
+	anime: Anime,
+	dateStr: string,
+	overrides: BroadcastRoomOverride[] = [],
+): BroadcastEpisodeSlot | null {
 	if (!anime.aired_from) return null;
-	const airedFrom = new Date(`${anime.aired_from.slice(0, 10)}T00:00:00`);
-	const slotDate = new Date(`${dateStr}T00:00:00`);
-	// Late-night broadcasts (≥ 24:00) actually air on the next calendar day
-	const broadcastHour = anime.broadcast_time ? Number(anime.broadcast_time.split(":")[0]) : 0;
-	if (broadcastHour >= 24) slotDate.setDate(slotDate.getDate() + 1);
-	const msDiff = slotDate.getTime() - airedFrom.getTime();
-	if (msDiff < 0) return null;
-	const weeksElapsed = Math.floor(Math.round(msDiff / 86_400_000) / 7);
-	const ep = weeksElapsed + 1;
-	if (anime.episode_count) {
-		const maxEp = parseInt(anime.episode_count, 10);
-		if (!Number.isNaN(maxEp) && ep > maxEp) return maxEp;
-	}
-	return ep;
+	return resolveBroadcastEpisodeSlot({
+		date: dateStr,
+		airedFrom: anime.aired_from,
+		airedTo: anime.aired_to ?? null,
+		broadcastDay: anime.broadcast_day,
+		broadcastTime: anime.broadcast_time,
+		episodeCount: anime.episode_count,
+		overrides,
+	});
+}
+
+function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): string {
+	if (ep.start == null || ep.end == null) return ep.label ?? "";
+	const value = ep.start === ep.end ? String(ep.start) : `${ep.start}-${ep.end}`;
+	return total ? `${value}/${total}` : value;
 }
 </script>
 
@@ -390,16 +404,18 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 							</a>
 						{/each}
 
-						{#each groupAnimeByTimeBand(day.anime) as animeGroup (animeGroup[0]?.id)}
+						{#each groupAnimeByTimeBand(day.anime, displayDate) as animeGroup (animeGroup[0]?.id)}
 							<div class="anime-time-group">
 								{#each animeGroup as anime (anime.id)}
+									{@const broadcastTime = effectiveBroadcastTime(anime, displayDate)}
 									{@const isSubscribed = subscribedIds.has(anime.id)}
 									{@const isNotifying = notifyingIds.has(anime.id)}
 									{@const isLive = liveRoomKeys.has(roomLiveKey(anime.id, displayDate))}
 									{@const isMuted = mutedAnimeIds.has(anime.id)}
 									{@const roomMute = data.roomMuteSettings[anime.id]}
 									{@const subscribable = canSubscribe(anime)}
-									{@const ep = currentEpisodeForSlot(anime, displayDate)}
+									{@const ep = currentEpisodeForSlot(anime, displayDate, data.broadcastOverrides[anime.id])}
+									{@const isMarathon = ep !== null && ep.start != null && ep.end != null && ep.end !== ep.start}
 									<div
 										class="anime-slot-wrap"
 										class:anime-slot-wrap--notifying={isNotifying}
@@ -414,8 +430,7 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 												{/if}
 												{#if ep !== null}
 													<span class="slot-ep-badge"
-														>{ep}
-														{anime.episode_count ? `/${anime.episode_count}` : ""}</span
+														>{formatEpisodeBadge(ep, anime.episode_count)}</span
 													>
 												{/if}
 											</div>
@@ -424,10 +439,15 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 												{#if isLive}
 													<span class="slot-live-badge">LIVE</span>
 												{/if}
-												{#if anime.broadcast_time}
-													<span class="slot-time">{anime.broadcast_time.slice(0, 5)}</span>
+												{#if broadcastTime}
+													<span class="slot-time">{broadcastTime.slice(0, 5)}</span>
 												{/if}
 												<span class="slot-title">{anime.title}</span>
+												{#if isMarathon}
+													<span class="slot-marathon-badge"
+														>第{ep?.start}話〜第{ep?.end}話 一挙放送</span
+													>
+												{/if}
 												{#if anime.broadcast_station?.length}
 													<span class="slot-station"
 														>{anime.broadcast_station.join(" / ")}</span
@@ -912,6 +932,16 @@ function currentEpisodeForSlot(anime: Anime, dateStr: string): number | null {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	max-width: 100%;
+}
+.slot-marathon-badge {
+	display: inline-block;
+	font-size: 0.62rem;
+	font-weight: 700;
+	color: var(--accent);
+	background: color-mix(in srgb, var(--accent) 14%, transparent);
+	border-radius: 3px;
+	padding: 1px 4px;
+	width: fit-content;
 }
 
 /* Notification and spoiler mute menu */

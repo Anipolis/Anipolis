@@ -5,11 +5,18 @@ import {
 	getAnimeList,
 	getBroadcastNotificationSettings,
 	getBroadcastRoomMutes,
+	getBroadcastRoomOverridesForAnimeIds,
 	getBroadcastSubscriptions,
 	getEventsByRange,
 	isAdminUser,
 } from "$lib/server/queries";
-import type { Anime, BroadcastNotificationSettings, BroadcastRoomMuteDuration, Event } from "$lib/types";
+import type {
+	Anime,
+	BroadcastNotificationSettings,
+	BroadcastRoomMuteDuration,
+	BroadcastRoomOverride,
+	Event,
+} from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
 const DAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"] as const;
@@ -61,6 +68,18 @@ function broadcastTimeSortValue(value: string | null) {
 	return Number(match[1]) * 60 + Number(match[2]);
 }
 
+function overrideForDate(overrides: BroadcastRoomOverride[] | undefined, date: string): BroadcastRoomOverride | null {
+	return overrides?.find((override) => override.room_date.slice(0, 10) === date) ?? null;
+}
+
+function effectiveBroadcastTime(
+	anime: Anime,
+	date: string,
+	overrides: Record<string, BroadcastRoomOverride[]>,
+): string | null {
+	return overrideForDate(overrides[anime.id], date)?.broadcast_time ?? anime.broadcast_time;
+}
+
 export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 
@@ -93,6 +112,11 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 			user ? isAdminUser(supabase, user.id) : Promise.resolve(false),
 		]);
 
+	const broadcastOverrides = await getBroadcastRoomOverridesForAnimeIds(
+		supabase,
+		animeList.map((anime) => anime.id),
+	);
+
 	const days: { date: string; label: string; anime: Anime[]; events: Event[] }[] = DAY_LABELS.map((label, index) => ({
 		date: toDateInputValue(addDays(weekStart, index)),
 		label,
@@ -107,13 +131,29 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		}
 	}
 
+	for (const anime of animeList) {
+		for (const override of broadcastOverrides[anime.id] ?? []) {
+			const date = override.room_date.slice(0, 10);
+			if (date < scheduleRange.start || date > scheduleRange.end || !isAnimeOnAirDate(anime, date)) continue;
+
+			const day = days.find((candidate) => candidate.date === date);
+			if (day && !day.anime.some((scheduledAnime) => scheduledAnime.id === anime.id)) {
+				day.anime.push(anime);
+			}
+		}
+	}
+
 	for (const event of events) {
 		const day = new Date(event.scheduled_at).getDay();
 		days[day]?.events.push(event);
 	}
 
 	for (const day of days) {
-		day.anime.sort((a, b) => broadcastTimeSortValue(a.broadcast_time) - broadcastTimeSortValue(b.broadcast_time));
+		day.anime.sort(
+			(a, b) =>
+				broadcastTimeSortValue(effectiveBroadcastTime(a, day.date, broadcastOverrides)) -
+				broadcastTimeSortValue(effectiveBroadcastTime(b, day.date, broadcastOverrides)),
+		);
 		day.events.sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
 	}
 
@@ -126,6 +166,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		subscriptions,
 		mutedAnimeIds: [...mutedAnimeIds],
 		roomMuteSettings: Object.fromEntries(roomMutes.map((mute) => [mute.anime_id, mute])),
+		broadcastOverrides,
 		notificationSettings,
 		weekStart: toDateInputValue(weekStart),
 		prevWeek: toDateInputValue(addDays(weekStart, -7)),

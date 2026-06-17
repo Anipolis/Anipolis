@@ -472,6 +472,22 @@ export interface BroadcastRoomSession {
 	posting_closes_at: string;
 }
 
+export interface BroadcastRoomOverride {
+	id: string;
+	anime_id: number;
+	room_date: string;
+	broadcast_time: string | null;
+	duration_minutes: number | null;
+	pre_open_minutes: number | null;
+	post_close_minutes: number | null;
+	episode_start: number | null;
+	episode_end: number | null;
+	episode_label: string | null;
+	episode_count_increment: number | null;
+	note: string | null;
+	created_at: string;
+}
+
 export interface StoredAccount {
 	userId: string;
 	refreshToken: string;

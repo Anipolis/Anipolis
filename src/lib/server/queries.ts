@@ -8,6 +8,7 @@ import type {
 	AnimeResourceLink,
 	AnimeStatus,
 	BroadcastRoomMute,
+	BroadcastRoomOverride,
 	BroadcastRoomSession,
 	BroadcastStatus,
 	Event,
@@ -2043,6 +2044,72 @@ export async function getBroadcastRoomSession(
 		return null;
 	}
 	return (data?.[0] as BroadcastRoomSession | undefined) ?? null;
+}
+
+export async function getBroadcastRoomOverride(
+	supabase: SupabaseClient<Database>,
+	animeId: string,
+	roomDate: string,
+): Promise<BroadcastRoomOverride | null> {
+	// biome-ignore lint/suspicious/noExplicitAny: broadcast_room_overrides not yet in generated types
+	const reader = supabase as SupabaseClient<any>;
+	const { data, error } = await reader
+		.from("broadcast_room_overrides")
+		.select("*")
+		.eq("anime_id", Number(animeId))
+		.eq("room_date", roomDate)
+		.maybeSingle();
+	if (error) {
+		console.error("broadcast room override query failed:", error);
+		return null;
+	}
+	return (data as BroadcastRoomOverride | null) ?? null;
+}
+
+export async function getBroadcastRoomOverridesForAnime(
+	supabase: SupabaseClient<Database>,
+	animeId: string,
+): Promise<BroadcastRoomOverride[]> {
+	// biome-ignore lint/suspicious/noExplicitAny: broadcast_room_overrides not yet in generated types
+	const reader = supabase as SupabaseClient<any>;
+	const { data, error } = await reader
+		.from("broadcast_room_overrides")
+		.select("*")
+		.eq("anime_id", Number(animeId))
+		.order("room_date", { ascending: true });
+	if (error) {
+		console.error("broadcast room overrides query failed:", error);
+		return [];
+	}
+	return (data as BroadcastRoomOverride[] | null) ?? [];
+}
+
+export async function getBroadcastRoomOverridesForAnimeIds(
+	supabase: SupabaseClient<Database>,
+	animeIds: string[],
+): Promise<Record<string, BroadcastRoomOverride[]>> {
+	if (animeIds.length === 0) return {};
+	// biome-ignore lint/suspicious/noExplicitAny: broadcast_room_overrides not yet in generated types
+	const reader = supabase as SupabaseClient<any>;
+	const { data, error } = await reader
+		.from("broadcast_room_overrides")
+		.select("*")
+		.in(
+			"anime_id",
+			animeIds.map((id) => Number(id)),
+		)
+		.order("room_date", { ascending: true });
+	if (error) {
+		console.error("broadcast room overrides bulk query failed:", error);
+		return {};
+	}
+	const grouped: Record<string, BroadcastRoomOverride[]> = {};
+	for (const row of (data as BroadcastRoomOverride[] | null) ?? []) {
+		const key = String(row.anime_id);
+		if (!grouped[key]) grouped[key] = [];
+		grouped[key].push(row);
+	}
+	return grouped;
 }
 
 export async function getBroadcastRoomMutes(

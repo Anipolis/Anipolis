@@ -36,6 +36,33 @@ function normalizeBroadcastDuration(value: string | null | undefined) {
 	return minutes;
 }
 
+function normalizeOptionalMinutes(value: string | null | undefined, max: number) {
+	const raw = value?.trim();
+	if (!raw) return null;
+
+	const minutes = Number(raw);
+	if (!Number.isInteger(minutes) || minutes < 0 || minutes > max) return undefined;
+	return minutes;
+}
+
+function normalizeOptionalEpisode(value: string | null | undefined) {
+	const raw = value?.trim();
+	if (!raw) return null;
+
+	const episode = Number(raw);
+	if (!Number.isInteger(episode) || episode < 1) return undefined;
+	return episode;
+}
+
+function normalizeOptionalEpisodeIncrement(value: string | null | undefined) {
+	const raw = value?.trim();
+	if (!raw) return null;
+
+	const increment = Number(raw);
+	if (!Number.isInteger(increment) || increment < 0 || increment > 99) return undefined;
+	return increment;
+}
+
 function toArr(vals: FormDataEntryValue[]) {
 	return vals.map((v) => (v as string).trim()).filter(Boolean);
 }
@@ -153,4 +180,100 @@ export async function updateAnimeAction(
 
 	if (error) return fail(500, { message: `更新エラー: ${error.message}` });
 	return { success: true, animeId: String((data as { id: number }).id) };
+}
+
+type BroadcastOverrideWriteResult = { success: true } | ReturnType<typeof fail<{ message: string }>>;
+
+export async function addBroadcastOverrideAction(
+	supabase: SupabaseClient<Database>,
+	request: Request,
+	animeId: string,
+): Promise<BroadcastOverrideWriteResult> {
+	const fd = await request.formData();
+
+	const roomDate = nullableText(fd, "room_date");
+	if (!roomDate || !/^\d{4}-\d{2}-\d{2}$/.test(roomDate)) {
+		return fail(400, { message: "日付を YYYY-MM-DD 形式で入力してください" });
+	}
+
+	const broadcastTime = normalizeBroadcastTime(fd.get("broadcast_time") as string | null);
+	if (broadcastTime === undefined) {
+		return fail(400, { message: "放送時刻は 23:30 や 26:00 の形式で入力してください" });
+	}
+
+	const durationMinutes = normalizeOptionalMinutes(fd.get("duration_minutes") as string | null, 1440);
+	if (durationMinutes === undefined) {
+		return fail(400, { message: "放送時間は0〜1440分の整数で入力してください" });
+	}
+
+	const preOpenMinutes = normalizeOptionalMinutes(fd.get("pre_open_minutes") as string | null, 1440);
+	if (preOpenMinutes === undefined) {
+		return fail(400, { message: "投稿開始の前倒し時間は0〜1440分の整数で入力してください" });
+	}
+
+	const postCloseMinutes = normalizeOptionalMinutes(fd.get("post_close_minutes") as string | null, 1440);
+	if (postCloseMinutes === undefined) {
+		return fail(400, { message: "投稿終了の延長時間は0〜1440分の整数で入力してください" });
+	}
+
+	const episodeStart = normalizeOptionalEpisode(fd.get("episode_start") as string | null);
+	if (episodeStart === undefined) {
+		return fail(400, { message: "対象話数（開始）は1以上の整数で入力してください" });
+	}
+
+	const episodeEnd = normalizeOptionalEpisode(fd.get("episode_end") as string | null);
+	if (episodeEnd === undefined) {
+		return fail(400, { message: "対象話数（終了）は1以上の整数で入力してください" });
+	}
+
+	const episodeCountIncrement = normalizeOptionalEpisodeIncrement(fd.get("episode_count_increment") as string | null);
+	if (episodeCountIncrement === undefined) {
+		return fail(400, { message: "話数カウントの進み方は0以上の整数で入力してください" });
+	}
+
+	if ((episodeStart == null) !== (episodeEnd == null)) {
+		return fail(400, { message: "対象話数は開始・終了をどちらも入力するか、どちらも空にしてください" });
+	}
+
+	if (episodeStart != null && episodeEnd != null && episodeEnd < episodeStart) {
+		return fail(400, { message: "対象話数（終了）は開始以上の値を入力してください" });
+	}
+
+	// biome-ignore lint/suspicious/noExplicitAny: broadcast_room_overrides not yet in generated types
+	const writer = supabase as SupabaseClient<any>;
+	const { error } = await writer.from("broadcast_room_overrides").upsert(
+		{
+			anime_id: Number(animeId),
+			room_date: roomDate,
+			broadcast_time: broadcastTime,
+			duration_minutes: durationMinutes,
+			pre_open_minutes: preOpenMinutes,
+			post_close_minutes: postCloseMinutes,
+			episode_start: episodeStart,
+			episode_end: episodeEnd,
+			episode_label: nullableText(fd, "episode_label"),
+			episode_count_increment: episodeCountIncrement,
+			note: nullableText(fd, "note"),
+		},
+		{ onConflict: "anime_id,room_date" },
+	);
+
+	if (error) return fail(500, { message: `登録エラー: ${error.message}` });
+	return { success: true };
+}
+
+export async function deleteBroadcastOverrideAction(
+	supabase: SupabaseClient<Database>,
+	request: Request,
+): Promise<BroadcastOverrideWriteResult> {
+	const fd = await request.formData();
+	const overrideId = nullableText(fd, "override_id");
+	if (!overrideId) return fail(400, { message: "対象が見つかりません" });
+
+	// biome-ignore lint/suspicious/noExplicitAny: broadcast_room_overrides not yet in generated types
+	const writer = supabase as SupabaseClient<any>;
+	const { error } = await writer.from("broadcast_room_overrides").delete().eq("id", overrideId);
+
+	if (error) return fail(500, { message: `削除エラー: ${error.message}` });
+	return { success: true };
 }

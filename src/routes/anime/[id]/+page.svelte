@@ -3,7 +3,8 @@ import type { SubmitFunction } from "@sveltejs/kit";
 import { enhance } from "$app/forms";
 import { page } from "$app/state";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
-import type { AnimeStatus } from "$lib/types";
+import type { AnimeStatus, BroadcastRoomOverride } from "$lib/types";
+import { formatBroadcastEpisodeSlot } from "$lib/utils/broadcast-episodes";
 import type { PageProps } from "./$types";
 
 interface UserResult {
@@ -227,6 +228,7 @@ let recommendSubmitting = $state(false);
 let recommendFeedback = $state("");
 let recommendError = $state("");
 let activeAction = $state<"watchlist" | "recommend" | null>(null);
+let liveRoomDates = $state(new Set<string>());
 
 function toggleAction(action: "watchlist" | "recommend") {
 	activeAction = activeAction === action ? null : action;
@@ -285,6 +287,70 @@ const handleRecommendSubmit: SubmitFunction = () => {
 		}
 	};
 };
+
+function parseDateInput(value: string): Date {
+	return new Date(`${value}T00:00:00`);
+}
+
+function overrideForDate(dateStr: string): BroadcastRoomOverride | null {
+	return data.broadcastOverrides.find((override) => override.room_date.slice(0, 10) === dateStr) ?? null;
+}
+
+function effectiveBroadcastTime(dateStr: string): string | null {
+	return overrideForDate(dateStr)?.broadcast_time ?? data.anime.broadcast_time;
+}
+
+function effectiveDurationMinutes(dateStr: string): number {
+	const overrideDuration = overrideForDate(dateStr)?.duration_minutes;
+	return overrideDuration != null && overrideDuration > 0 ? overrideDuration : data.anime.broadcast_duration_minutes;
+}
+
+function effectivePostCloseMinutes(dateStr: string): number {
+	const overridePostClose = overrideForDate(dateStr)?.post_close_minutes;
+	return overridePostClose != null && overridePostClose >= 0
+		? overridePostClose
+		: data.anime.broadcast_room_post_close_minutes;
+}
+
+function minutesUntilBroadcast(now: Date, roomDate: string): number | null {
+	const broadcastTime = effectiveBroadcastTime(roomDate);
+	if (!broadcastTime) return null;
+	const match = broadcastTime.match(/^(\d{1,2}):(\d{2})/);
+	if (!match) return null;
+
+	const broadcastHour = Number(match[1]);
+	const broadcastMin = Number(match[2]);
+	const scheduledAt = parseDateInput(roomDate);
+	scheduledAt.setHours(broadcastHour, broadcastMin, 0, 0);
+	return Math.round((scheduledAt.getTime() - now.getTime()) / 60_000);
+}
+
+function getLiveWindowMinutes(roomDate: string): number {
+	const durationMinutes = effectiveDurationMinutes(roomDate) > 0 ? effectiveDurationMinutes(roomDate) : 30;
+	const postCloseMinutes = effectivePostCloseMinutes(roomDate) >= 0 ? effectivePostCloseMinutes(roomDate) : 30;
+	return durationMinutes + postCloseMinutes;
+}
+
+function isRoomLive(now: Date, roomDate: string): boolean {
+	const mins = minutesUntilBroadcast(now, roomDate);
+	return mins !== null && mins <= 0 && mins > -getLiveWindowMinutes(roomDate);
+}
+
+function refreshLiveRoomDates() {
+	const now = new Date();
+	const next = new Set<string>();
+	for (const episode of data.episodes) {
+		if (isRoomLive(now, episode.date)) next.add(episode.date);
+	}
+	liveRoomDates = next;
+}
+
+$effect(() => {
+	data.anime.id;
+	refreshLiveRoomDates();
+	const id = setInterval(refreshLiveRoomDates, 30_000);
+	return () => clearInterval(id);
+});
 </script>
 
 <svelte:head>
@@ -846,6 +912,119 @@ const handleRecommendSubmit: SubmitFunction = () => {
 						</div>
 					{/if}
 				</section>
+
+				<section class="broadcast-override-section">
+					<h2 class="broadcast-override-heading">イレギュラー放送設定</h2>
+					<p class="broadcast-override-hint">
+						特定の話だけ放送時刻・放送時間を変更したい場合（拡大放送・特番など）に登録します。
+					</p>
+
+					{#if data.broadcastOverrides.length > 0}
+						<ul class="broadcast-override-list">
+							{#each data.broadcastOverrides as override (override.id)}
+								<li class="broadcast-override-item">
+									<div class="broadcast-override-info">
+										<span class="broadcast-override-date">{override.room_date}</span>
+										{#if override.broadcast_time}
+											<span class="broadcast-override-tag">{override.broadcast_time}〜</span>
+										{/if}
+										{#if override.duration_minutes != null}
+											<span class="broadcast-override-tag">{override.duration_minutes}分</span>
+										{/if}
+										{#if override.episode_start != null && override.episode_end != null}
+											<span class="broadcast-override-tag">
+												{#if override.episode_start === override.episode_end}
+													第{override.episode_start}話
+												{:else}
+													第{override.episode_start}話〜第{override.episode_end}話 一挙放送
+												{/if}
+											</span>
+										{/if}
+										{#if override.episode_label}
+											<span class="broadcast-override-tag">{override.episode_label}</span>
+										{/if}
+										{#if override.episode_count_increment != null}
+											<span class="broadcast-override-tag"
+												>+{override.episode_count_increment}</span
+											>
+										{/if}
+										{#if override.note}
+											<span class="broadcast-override-note">{override.note}</span>
+										{/if}
+									</div>
+									<form method="POST" action="?/deleteBroadcastOverride" use:enhance>
+										<input type="hidden" name="override_id" value={override.id}>
+										<button type="submit" class="broadcast-override-delete">削除</button>
+									</form>
+								</li>
+							{/each}
+						</ul>
+					{/if}
+
+					<form method="POST" action="?/addBroadcastOverride" use:enhance class="broadcast-override-form">
+						<div class="broadcast-override-field">
+							<label for="override-room-date">日付</label>
+							<input id="override-room-date" type="date" name="room_date" required>
+						</div>
+						<div class="broadcast-override-field">
+							<label for="override-broadcast-time">放送時刻（任意・未指定で通常値）</label>
+							<input id="override-broadcast-time" type="text" name="broadcast_time" placeholder="23:30">
+						</div>
+						<div class="broadcast-override-field">
+							<label for="override-duration">放送時間・分（任意）</label>
+							<input
+								id="override-duration"
+								type="number"
+								name="duration_minutes"
+								min="1"
+								max="1440"
+								placeholder="60"
+							>
+						</div>
+						<div class="broadcast-override-field">
+							<label for="override-pre-open">投稿開始の前倒し・分（任意）</label>
+							<input id="override-pre-open" type="number" name="pre_open_minutes" min="0" max="1440">
+						</div>
+						<div class="broadcast-override-field">
+							<label for="override-post-close">投稿終了の延長・分（任意）</label>
+							<input id="override-post-close" type="number" name="post_close_minutes" min="0" max="1440">
+						</div>
+						<div class="broadcast-override-field">
+							<label for="override-episode-start">対象話数（開始・任意）</label>
+							<input
+								id="override-episode-start"
+								type="number"
+								name="episode_start"
+								min="1"
+								placeholder="1"
+							>
+						</div>
+						<div class="broadcast-override-field">
+							<label for="override-episode-end">対象話数（終了・任意）</label>
+							<input id="override-episode-end" type="number" name="episode_end" min="1" placeholder="2">
+						</div>
+						<div class="broadcast-override-field">
+							<label for="override-episode-label">表示ラベル（任意）</label>
+							<input id="override-episode-label" type="text" name="episode_label" placeholder="総集編">
+						</div>
+						<div class="broadcast-override-field">
+							<label for="override-episode-count-increment">話数カウント進行（任意・総集編は0）</label>
+							<input
+								id="override-episode-count-increment"
+								type="number"
+								name="episode_count_increment"
+								min="0"
+								max="99"
+								placeholder="0"
+							>
+						</div>
+						<div class="broadcast-override-field">
+							<label for="override-note">メモ（任意）</label>
+							<input id="override-note" type="text" name="note" placeholder="1時間拡大SP">
+						</div>
+						<button type="submit" class="broadcast-override-submit">登録</button>
+					</form>
+				</section>
 			{/if}
 
 			{#if data.relations.length > 0}
@@ -931,7 +1110,10 @@ const handleRecommendSubmit: SubmitFunction = () => {
 						{#each data.episodes as ep (ep.date)}
 							<li>
 								<a href="/rooms/anime/{data.anime.id}/{ep.date}" class="room-log-item">
-									<span class="room-log-ep">第{ep.number}話</span>
+									<span class="room-log-ep">{formatBroadcastEpisodeSlot(ep)}</span>
+									{#if liveRoomDates.has(ep.date)}
+										<span class="room-log-live-badge">LIVE</span>
+									{/if}
 									<span class="room-log-date">{ep.date}</span>
 								</a>
 							</li>
@@ -1372,6 +1554,113 @@ const handleRecommendSubmit: SubmitFunction = () => {
 }
 .admin-edit-form {
 	margin-top: 18px;
+}
+
+.broadcast-override-section {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding-top: 20px;
+	border-top: 1px solid var(--border);
+}
+.broadcast-override-heading {
+	font-size: 1rem;
+	font-weight: 600;
+	margin: 0;
+}
+.broadcast-override-hint {
+	font-size: 0.8rem;
+	color: var(--text-muted);
+	margin: 0;
+}
+.broadcast-override-list {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+.broadcast-override-item {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	padding: 8px 10px;
+	border-radius: 6px;
+	border: 1px solid var(--border);
+	background: var(--card-bg);
+	font-size: 0.85rem;
+}
+.broadcast-override-info {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+.broadcast-override-date {
+	font-weight: 600;
+}
+.broadcast-override-tag {
+	color: var(--text-muted);
+	font-size: 0.8rem;
+}
+.broadcast-override-note {
+	color: var(--text-muted);
+	font-size: 0.8rem;
+	font-style: italic;
+}
+.broadcast-override-delete {
+	border: 1px solid var(--border);
+	background: var(--card-bg);
+	color: var(--text);
+	border-radius: 6px;
+	padding: 4px 10px;
+	font-size: 0.78rem;
+	cursor: pointer;
+}
+.broadcast-override-delete:hover {
+	border-color: #ef4444;
+	color: #ef4444;
+}
+.broadcast-override-form {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 12px;
+}
+.broadcast-override-field {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+.broadcast-override-field label {
+	font-size: 0.75rem;
+	color: var(--text-muted);
+}
+.broadcast-override-field input {
+	height: 36px;
+	padding: 0 10px;
+	border-radius: 6px;
+	border: 1px solid var(--border);
+	background: var(--card-bg);
+	color: var(--text);
+	font-size: 0.85rem;
+}
+.broadcast-override-submit {
+	grid-column: 1 / -1;
+	height: 40px;
+	border-radius: 8px;
+	border: 1px solid var(--accent);
+	background: var(--accent);
+	color: #fff;
+	font-weight: 700;
+	font-size: 0.88rem;
+	cursor: pointer;
+	justify-self: start;
+	padding: 0 20px;
+}
+.broadcast-override-submit:hover {
+	opacity: 0.9;
 }
 
 /* Related anime */
@@ -1853,6 +2142,18 @@ a.relation-card:hover {
 .room-log-ep {
 	font-weight: 600;
 	min-width: 60px;
+}
+.room-log-live-badge {
+	display: inline-flex;
+	align-items: center;
+	height: 18px;
+	padding: 0 6px;
+	border-radius: 999px;
+	background: #ef4444;
+	color: #fff;
+	font-size: 0.66rem;
+	font-weight: 800;
+	line-height: 1;
 }
 .room-log-date {
 	color: var(--text-muted);

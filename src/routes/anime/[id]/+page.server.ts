@@ -1,15 +1,15 @@
 import { error, fail } from "@sveltejs/kit";
 import { recommendAnimeAction, removeUserAnimeEntry, upsertUserAnimeEntry } from "$lib/server/actions";
-import { updateAnimeAction } from "$lib/server/anime-admin";
-import { getAnime, getAnimeRelations, getUsersWhoListedAnime, isAdminUser } from "$lib/server/queries";
+import { addBroadcastOverrideAction, deleteBroadcastOverrideAction, updateAnimeAction } from "$lib/server/anime-admin";
+import {
+	getAnime,
+	getAnimeRelations,
+	getBroadcastRoomOverridesForAnime,
+	getUsersWhoListedAnime,
+	isAdminUser,
+} from "$lib/server/queries";
+import { generateBroadcastEpisodeSlots } from "$lib/utils/broadcast-episodes";
 import type { Actions, PageServerLoad } from "./$types";
-
-function toDateStr(date: Date): string {
-	const y = date.getFullYear();
-	const m = String(date.getMonth() + 1).padStart(2, "0");
-	const d = String(date.getDate()).padStart(2, "0");
-	return `${y}-${m}-${d}`;
-}
 
 function isEligibleForRoomLog(season: string | null): boolean {
 	if (!season) return false;
@@ -20,49 +20,34 @@ function isEligibleForRoomLog(season: string | null): boolean {
 	return y === 2026 && name !== "winter";
 }
 
-function calcBroadcastEpisodes(
-	airedFrom: string,
-	airedTo: string | null,
-	broadcastDay: number,
-): Array<{ number: number; date: string }> {
-	const start = new Date(airedFrom);
-	const today = new Date();
-	const end = airedTo ? new Date(airedTo) : today;
-	const cutoff = end < today ? end : today;
-
-	const first = new Date(start);
-	while (first.getDay() !== broadcastDay) {
-		first.setDate(first.getDate() + 1);
-	}
-
-	const dates: string[] = [];
-	const cur = new Date(first);
-	while (cur <= cutoff) {
-		dates.push(toDateStr(cur));
-		cur.setDate(cur.getDate() + 7);
-	}
-
-	return dates.reverse().map((date, i) => ({ number: dates.length - i, date }));
-}
-
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 	const anime = await getAnime(supabase, params.id, user?.id ?? null);
 
 	if (!anime) throw error(404, "アニメが見つかりません");
 
-	const [listedUsers, relations, isAdmin] = await Promise.all([
+	const [listedUsers, relations, broadcastOverrides, isAdmin] = await Promise.all([
 		getUsersWhoListedAnime(supabase, params.id),
 		getAnimeRelations(supabase, anime.mal_id),
+		getBroadcastRoomOverridesForAnime(supabase, params.id),
 		user ? isAdminUser(supabase, user.id) : Promise.resolve(false),
 	]);
 
 	const episodes =
-		isEligibleForRoomLog(anime.season) && anime.broadcast_day != null && anime.aired_from != null
-			? calcBroadcastEpisodes(anime.aired_from, anime.aired_to ?? null, anime.broadcast_day)
+		isEligibleForRoomLog(anime.season) &&
+		anime.aired_from != null &&
+		(anime.broadcast_day != null || broadcastOverrides.length > 0)
+			? generateBroadcastEpisodeSlots({
+					airedFrom: anime.aired_from,
+					airedTo: anime.aired_to ?? null,
+					broadcastDay: anime.broadcast_day,
+					broadcastTime: anime.broadcast_time,
+					episodeCount: anime.episode_count,
+					overrides: broadcastOverrides,
+				}).reverse()
 			: [];
 
-	return { anime, user, isAdmin, listedUsers, relations, episodes };
+	return { anime, user, isAdmin, listedUsers, relations, episodes, broadcastOverrides };
 };
 
 export const actions: Actions = {
@@ -93,5 +78,21 @@ export const actions: Actions = {
 		if (!anime) return fail(404, { message: "アニメが見つかりません" });
 
 		return updateAnimeAction(supabase, request, params.id, anime.cover_url);
+	},
+
+	addBroadcastOverride: async ({ request, params, locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { message: "ログインが必要です" });
+		if (!(await isAdminUser(supabase, user.id))) return fail(403, { message: "管理者権限が必要です" });
+
+		return addBroadcastOverrideAction(supabase, request, params.id);
+	},
+
+	deleteBroadcastOverride: async ({ request, locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { message: "ログインが必要です" });
+		if (!(await isAdminUser(supabase, user.id))) return fail(403, { message: "管理者権限が必要です" });
+
+		return deleteBroadcastOverrideAction(supabase, request);
 	},
 };
