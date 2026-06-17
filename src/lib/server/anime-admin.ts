@@ -86,6 +86,10 @@ function parseBroadcastStations(fd: FormData) {
 	return arr.length ? arr : null;
 }
 
+function parseRoomType(fd: FormData) {
+	return fd.get("room_type") === "global" ? "global" : "episode";
+}
+
 async function uploadInlineCover(supabase: SupabaseClient<Database>, fd: FormData, fallbackCoverUrl: string | null) {
 	let coverUrl = nullableText(fd, "cover_url") ?? fallbackCoverUrl;
 	const imageFile = fd.get("image_file");
@@ -145,6 +149,7 @@ async function buildAnimePayload(supabase: SupabaseClient<Database>, fd: FormDat
 		broadcast_time: broadcastTime,
 		broadcast_duration_minutes: broadcastDurationMinutes,
 		broadcast_station: parseBroadcastStations(fd),
+		room_type: parseRoomType(fd),
 	};
 }
 
@@ -216,6 +221,8 @@ export async function addBroadcastOverrideAction(
 		return fail(400, { message: "投稿終了の延長時間は0〜1440分の整数で入力してください" });
 	}
 
+	const isCancelled = fd.get("is_cancelled") === "on";
+
 	const episodeStart = normalizeOptionalEpisode(fd.get("episode_start") as string | null);
 	if (episodeStart === undefined) {
 		return fail(400, { message: "対象話数（開始）は1以上の整数で入力してください" });
@@ -253,6 +260,8 @@ export async function addBroadcastOverrideAction(
 			episode_end: episodeEnd,
 			episode_label: nullableText(fd, "episode_label"),
 			episode_count_increment: episodeCountIncrement,
+			is_cancelled: isCancelled,
+			announcement_label: nullableText(fd, "announcement_label"),
 			note: nullableText(fd, "note"),
 		},
 		{ onConflict: "anime_id,room_date" },

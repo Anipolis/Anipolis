@@ -666,6 +666,7 @@ export type Database = {
 					broadcast_room_pre_open_minutes: number;
 					broadcast_room_post_close_minutes: number;
 					broadcast_station: string[] | null;
+					room_type: string;
 					hidden_by_admin: boolean;
 					created_at: string;
 				};
@@ -699,6 +700,7 @@ export type Database = {
 					broadcast_room_pre_open_minutes?: number;
 					broadcast_room_post_close_minutes?: number;
 					broadcast_station?: string[] | null;
+					room_type?: string;
 					hidden_by_admin?: boolean;
 					created_at?: string;
 				};
@@ -732,6 +734,7 @@ export type Database = {
 					broadcast_room_pre_open_minutes?: number;
 					broadcast_room_post_close_minutes?: number;
 					broadcast_station?: string[] | null;
+					room_type?: string;
 					hidden_by_admin?: boolean;
 				};
 				Relationships: [];
@@ -781,6 +784,8 @@ export type Database = {
 					id: string;
 					anime_id: number;
 					room_date: string;
+					room_kind: string;
+					room_key: string;
 					scheduled_at: string;
 					duration_minutes: number;
 					posting_opens_at: string;
@@ -791,6 +796,8 @@ export type Database = {
 					id?: string;
 					anime_id: number;
 					room_date: string;
+					room_kind?: string;
+					room_key?: string;
 					scheduled_at: string;
 					duration_minutes: number;
 					posting_opens_at: string;
@@ -798,6 +805,8 @@ export type Database = {
 					created_at?: string;
 				};
 				Update: {
+					room_kind?: string;
+					room_key?: string;
 					scheduled_at?: string;
 					duration_minutes?: number;
 					posting_opens_at?: string;
@@ -982,6 +991,7 @@ export type Database = {
 					broadcast_room_pre_open_minutes: number;
 					broadcast_room_post_close_minutes: number;
 					broadcast_station: string[] | null;
+					room_type: string;
 					hidden_by_admin: boolean;
 					created_at: string;
 				};
@@ -991,6 +1001,10 @@ export type Database = {
 		Functions: {
 			ensure_broadcast_room_session: {
 				Args: { p_anime_id: number; p_room_date: string };
+				Returns: Database["public"]["Tables"]["broadcast_room_sessions"]["Row"][];
+			};
+			ensure_global_anime_lobby_session: {
+				Args: { p_anime_id: number };
 				Returns: Database["public"]["Tables"]["broadcast_room_sessions"]["Row"][];
 			};
 			get_trending_hashtags: {

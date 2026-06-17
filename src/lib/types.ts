@@ -162,6 +162,7 @@ export interface Event {
 // ----------------------------------------------------------------
 
 export type AnimeStatus = "watching" | "completed" | "plan_to_watch" | "dropped" | "on_hold";
+export type AnimeRoomType = "episode" | "global";
 export type BroadcastStatus = "airing" | "finished" | "upcoming" | "unknown";
 
 export interface UserAnimeEntry {
@@ -219,6 +220,7 @@ export interface Anime {
 	broadcast_room_pre_open_minutes: number;
 	broadcast_room_post_close_minutes: number;
 	broadcast_station: string[] | null;
+	room_type: AnimeRoomType;
 	hidden_by_admin: boolean;
 	created_at: string;
 	// 集計フィールド（クエリ時に付加）
@@ -274,7 +276,10 @@ export interface RawPost {
 	image_urls?: string[] | null;
 	anime_id?: string | number | null;
 	broadcast_room_session_id?: string | null;
-	broadcast_room_session?: { room_date: string } | { room_date: string }[] | null;
+	broadcast_room_session?:
+		| { room_date: string; room_kind?: "episode" | "global" | null; room_key?: string | null }
+		| { room_date: string; room_kind?: "episode" | "global" | null; room_key?: string | null }[]
+		| null;
 	exchange_share?: unknown;
 	anime?: {
 		id: string | number;
@@ -385,6 +390,7 @@ function buildAnimeRoomHref(
 	rawSession: RawPost["broadcast_room_session"],
 ): string | null {
 	const session = Array.isArray(rawSession) ? rawSession[0] : rawSession;
+	if (session?.room_kind === "global") return `/rooms/anime/${String(anime.id)}/lobby`;
 	return session?.room_date ? `/rooms/anime/${String(anime.id)}/${session.room_date}` : null;
 }
 
@@ -394,6 +400,7 @@ function calcEpisodeNumber(
 	broadcastTime: string | null,
 ): number | null {
 	const session = Array.isArray(rawSession) ? rawSession[0] : rawSession;
+	if (session?.room_kind === "global") return null;
 	if (!session?.room_date || !airedFrom) return null;
 	const airedFromDate = new Date(`${airedFrom.slice(0, 10)}T00:00:00`);
 	const slotDate = new Date(`${session.room_date}T00:00:00`);
@@ -466,6 +473,8 @@ export interface BroadcastRoomSession {
 	id: string;
 	anime_id: number;
 	room_date: string;
+	room_kind: "episode" | "global";
+	room_key: string;
 	scheduled_at: string;
 	duration_minutes: number;
 	posting_opens_at: string;
@@ -484,6 +493,8 @@ export interface BroadcastRoomOverride {
 	episode_end: number | null;
 	episode_label: string | null;
 	episode_count_increment: number | null;
+	is_cancelled: boolean;
+	announcement_label: string | null;
 	note: string | null;
 	created_at: string;
 }

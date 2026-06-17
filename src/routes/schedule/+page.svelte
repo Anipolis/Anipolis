@@ -388,7 +388,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 					<time>{formatDate(displayDate)}</time>
 				</div>
 				<div class="day-slots">
-					{#if day.events.length === 0 && day.anime.length === 0}
+					{#if day.events.length === 0 && day.announcements.length === 0 && day.anime.length === 0}
 						<p class="empty-day">なし</p>
 					{:else}
 						{#each day.events as event (event.id)}
@@ -402,6 +402,17 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 								<span class="slot-title">{event.title}</span>
 								<span class="slot-station">#{event.hashtag}</span>
 							</a>
+						{/each}
+
+						{#each day.announcements as announcement (`cancelled-${announcement.anime_id}-${announcement.room_date}`)}
+							<div class="event-slot broadcast-announcement-slot" role="note">
+								<span class="slot-kind">休止</span>
+								{#if announcement.broadcast_time}
+									<span class="slot-time">{announcement.broadcast_time.slice(0, 5)}</span>
+								{/if}
+								<span class="slot-title">{announcement.title}</span>
+								<span class="slot-station">{announcement.message}</span>
+							</div>
 						{/each}
 
 						{#each groupAnimeByTimeBand(day.anime, displayDate) as animeGroup (animeGroup[0]?.id)}
@@ -836,6 +847,11 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	flex-direction: column;
 	gap: 2px;
 	border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+.broadcast-announcement-slot {
+	border-style: dashed;
+	border-color: color-mix(in srgb, #f59e0b 42%, var(--border));
+	background: color-mix(in srgb, #f59e0b 8%, var(--card-bg));
 }
 .event-slot--cancelled,
 .event-list-item--cancelled {

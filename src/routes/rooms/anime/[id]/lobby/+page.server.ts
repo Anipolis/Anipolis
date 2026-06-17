@@ -9,34 +9,11 @@ import {
 import {
 	getAnime,
 	getAnimeRankingTrending,
-	getBroadcastRoomOverride,
 	getBroadcastRoomPosts,
-	getBroadcastRoomSession,
+	getGlobalAnimeLobbySession,
 } from "$lib/server/queries";
 import type { Anime } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
-
-function dateKeyToDate(value: string) {
-	const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-	if (!match) return null;
-	const date = new Date(`${value}T00:00:00`);
-	if (Number.isNaN(date.getTime())) return null;
-	return date;
-}
-
-function animeIsScheduledForDate(anime: Anime, dateKey: string, hasOverride: boolean) {
-	const date = dateKeyToDate(dateKey);
-	if (!date) return false;
-	if (!hasOverride && (anime.broadcast_day == null || date.getDay() !== anime.broadcast_day)) return false;
-
-	const airedFrom = anime.aired_from?.slice(0, 10) ?? null;
-	if (airedFrom && dateKey < airedFrom) return false;
-
-	const airedTo = anime.aired_to?.slice(0, 10) ?? null;
-	if (airedTo && dateKey > airedTo) return false;
-
-	return true;
-}
 
 function fallbackRoomHashtag(title: string) {
 	return title.replace(/\s+/g, "").replace(/[^\p{L}\p{N}_]/gu, "");
@@ -54,18 +31,10 @@ function roomHashtag(anime: Anime) {
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 	const anime = await getAnime(supabase, params.id, user?.id ?? null);
-	if (!anime) throw error(404, "アニメが見つかりません");
+	if (!anime || anime.room_type !== "global") throw error(404, "総合ロビーが見つかりません");
 
-	const override = await getBroadcastRoomOverride(supabase, params.id, params.date);
-	if (override?.is_cancelled) {
-		throw error(404, "放送ルームが見つかりません");
-	}
-	if (!animeIsScheduledForDate(anime, params.date, override != null)) {
-		throw error(404, "放送ルームが見つかりません");
-	}
-
-	const session = await getBroadcastRoomSession(supabase, anime.id, params.date);
-	if (!session) throw error(404, "放送ルームが見つかりません");
+	const session = await getGlobalAnimeLobbySession(supabase, anime.id);
+	if (!session) throw error(404, "総合ロビーが見つかりません");
 
 	const hashtag = roomHashtag(anime);
 	const [posts, trending, animeTrending] = await Promise.all([
@@ -78,14 +47,14 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 		anime,
 		room: {
 			session_id: session.id,
-			date: params.date,
-			kind: "episode",
+			date: "lobby",
+			kind: "global",
 			hashtag,
 			scheduled_at: session.scheduled_at,
 			posting_opens_at: session.posting_opens_at,
 			posting_closes_at: session.posting_closes_at,
 			duration_minutes: session.duration_minutes,
-			title: `${anime.title} 放送ルーム`,
+			title: `${anime.title} 総合ロビー`,
 		},
 		posts,
 		trending: trending.data ?? [],
@@ -100,23 +69,10 @@ export const actions: Actions = {
 		if (!user) return fail(401, { message: "ログインが必要です" });
 
 		const anime = await getAnime(supabase, params.id, user.id);
-		const override = await getBroadcastRoomOverride(supabase, params.id, params.date);
-		if (override?.is_cancelled) {
-			return fail(404, { message: "放送ルームが見つかりません" });
-		}
-		if (!anime || !animeIsScheduledForDate(anime, params.date, override != null)) {
-			return fail(404, { message: "放送ルームが見つかりません" });
-		}
+		if (!anime || anime.room_type !== "global") return fail(404, { message: "総合ロビーが見つかりません" });
 
-		const session = await getBroadcastRoomSession(supabase, anime.id, params.date);
-		if (!session) return fail(404, { message: "放送ルームが見つかりません" });
-		const now = Date.now();
-		if (now < new Date(session.posting_opens_at).getTime()) {
-			return fail(403, { message: "このルームはまだ投稿を受け付けていません" });
-		}
-		if (now > new Date(session.posting_closes_at).getTime()) {
-			return fail(403, { message: "このルームの投稿受付は終了しました" });
-		}
+		const session = await getGlobalAnimeLobbySession(supabase, anime.id);
+		if (!session) return fail(404, { message: "総合ロビーが見つかりません" });
 
 		const form = await request.formData();
 		const content = (form.get("content") as string | null)?.trim() ?? "";
@@ -139,15 +95,15 @@ export const actions: Actions = {
 		return toggleLikeAction(request, supabase, user.id);
 	},
 
-	repost: async ({ request, locals: { supabase, safeGetSession } }) => {
-		const { user } = await safeGetSession();
-		if (!user) return fail(401, { message: "ログインが必要です" });
-		return toggleRepostAction(request, supabase, user.id);
-	},
-
 	bookmark: async ({ request, locals: { supabase, safeGetSession } }) => {
 		const { user } = await safeGetSession();
 		if (!user) return fail(401, { message: "ログインが必要です" });
 		return toggleBookmarkAction(request, supabase, user.id);
+	},
+
+	repost: async ({ request, locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { message: "ログインが必要です" });
+		return toggleRepostAction(request, supabase, user.id);
 	},
 };

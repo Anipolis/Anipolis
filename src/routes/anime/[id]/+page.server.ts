@@ -35,6 +35,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 
 	const episodes =
 		isEligibleForRoomLog(anime.season) &&
+		anime.room_type === "episode" &&
 		anime.aired_from != null &&
 		(anime.broadcast_day != null || broadcastOverrides.length > 0)
 			? generateBroadcastEpisodeSlots({

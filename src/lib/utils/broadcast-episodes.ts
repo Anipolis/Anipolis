@@ -98,22 +98,26 @@ export function generateBroadcastEpisodeSlots({
 	const cap = (n: number) => (maxEp != null && !Number.isNaN(maxEp) && n > maxEp ? maxEp : n);
 
 	let episodeCounter = 1;
-	return [...slotDates].sort().map((date) => {
-		const override = overrideByDate.get(date);
-		const label = normalizedLabel(override);
+	return [...slotDates]
+		.sort()
+		.map((date): BroadcastEpisodeSlot | null => {
+			const override = overrideByDate.get(date);
+			if (override?.is_cancelled) return null;
+			const label = normalizedLabel(override);
 
-		if (override?.episode_start != null && override.episode_end != null) {
-			episodeCounter = override.episode_end + 1;
-			return { date, start: cap(override.episode_start), end: cap(override.episode_end), label };
-		}
+			if (override?.episode_start != null && override.episode_end != null) {
+				episodeCounter = override.episode_end + 1;
+				return { date, start: cap(override.episode_start), end: cap(override.episode_end), label };
+			}
 
-		const increment = episodeIncrement(override);
-		const slot = label
-			? { date, start: null, end: null, label }
-			: { date, start: cap(episodeCounter), end: cap(episodeCounter), label: null };
-		episodeCounter += increment;
-		return slot;
-	});
+			const increment = episodeIncrement(override);
+			const slot = label
+				? { date, start: null, end: null, label }
+				: { date, start: cap(episodeCounter), end: cap(episodeCounter), label: null };
+			episodeCounter += increment;
+			return slot;
+		})
+		.filter((slot): slot is BroadcastEpisodeSlot => slot !== null);
 }
 
 export function resolveBroadcastEpisodeSlot(input: ResolveBroadcastEpisodeInput): BroadcastEpisodeSlot | null {

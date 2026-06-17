@@ -29,6 +29,7 @@ const openMs = $derived(new Date(data.room.posting_opens_at).getTime());
 const closeMs = $derived(new Date(data.room.posting_closes_at).getTime());
 const openLeadMinutes = $derived(Math.round((scheduledMs - openMs) / (60 * 1000)));
 const roomHref = $derived(`/rooms/anime/${data.anime.id}/${data.room.date}`);
+const isGlobalLobby = $derived(data.room.kind === "global");
 const hashtagSuffix = $derived(` #${data.room.hashtag}`);
 const contentWithTag = $derived(
 	postContent.includes(`#${data.room.hashtag}`) ? postContent : postContent + hashtagSuffix,
@@ -200,6 +201,7 @@ function formatHMS(ms: number) {
 }
 
 const timerLabel = $derived.by(() => {
+	if (isGlobalLobby) return "総合ロビーはいつでも投稿できます";
 	if (status === "not_open") return `開場まで ${formatHMS(openMs - now)}`;
 	if (status === "open" && now < scheduledMs) return `放送開始まで ${formatHMS(scheduledMs - now)}`;
 	if (status === "open") return `投稿終了まで ${formatHMS(closeMs - now)}`;
@@ -207,6 +209,7 @@ const timerLabel = $derived.by(() => {
 });
 
 const broadcastMetaLine = $derived.by(() => {
+	if (isGlobalLobby) return "総合実況・雑談ロビー";
 	const station = data.anime.broadcast_station?.filter(Boolean).join(" / ");
 	const frame = `${data.room.duration_minutes}分枠`;
 	return station ? `${station} · ${frame}` : frame;

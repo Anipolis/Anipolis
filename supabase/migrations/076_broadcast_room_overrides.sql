@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS public.broadcast_room_overrides (
     duration_minutes integer CHECK (duration_minutes BETWEEN 1 AND 1440),
     pre_open_minutes integer CHECK (pre_open_minutes BETWEEN 0 AND 1440),
     post_close_minutes integer CHECK (post_close_minutes BETWEEN 0 AND 1440),
+    is_cancelled boolean NOT NULL DEFAULT false,
+    announcement_label text,
     note text,
     created_at timestamptz NOT NULL DEFAULT now(),
     UNIQUE (anime_id, room_date)
@@ -74,6 +76,8 @@ BEGIN
            OR EXTRACT(DOW FROM p_room_date)::integer <> target_anime.broadcast_day THEN
             RETURN;
         END IF;
+    ELSIF override_row.is_cancelled THEN
+        RETURN;
     END IF;
 
     IF (target_anime.aired_from IS NOT NULL AND p_room_date < target_anime.aired_from::date)

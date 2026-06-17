@@ -146,7 +146,7 @@ async function handleFileChange(e: Event) {
 }
 </script>
 
-<div class="register-section">
+<div class="register-section" class:register-section--edit={isEditMode}>
 	<h2 class="register-title">{isEditMode ? "作品情報を編集" : "アニメ登録"}</h2>
 
 	{#if form?.success}
@@ -166,353 +166,379 @@ async function handleFileChange(e: Event) {
         return async ({ update }) => { await update(); };
     }}
 		class="register-form"
+		class:register-form--edit={isEditMode}
 	>
-		<div class="form-row">
-			<div class="form-group form-group--wide">
-				<label for="rf-title">タイトル <span class="required">*</span></label>
-				<input id="rf-title" name="title" type="text" required class="rf-input" value={anime?.title ?? ""}>
+		<div class="basic-column basic-column--left">
+			<div class="form-row">
+				<div class="form-group form-group--wide">
+					<label for="rf-title">タイトル <span class="required">*</span></label>
+					<input id="rf-title" name="title" type="text" required class="rf-input" value={anime?.title ?? ""}>
+				</div>
+				<div class="form-group form-group--wide">
+					<label for="rf-title-en">英語タイトル</label>
+					<input id="rf-title-en" name="title_en" type="text" class="rf-input" value={anime?.title_en ?? ""}>
+				</div>
 			</div>
-			<div class="form-group form-group--wide">
-				<label for="rf-title-en">英語タイトル</label>
-				<input id="rf-title-en" name="title_en" type="text" class="rf-input" value={anime?.title_en ?? ""}>
+			<div class="form-row">
+				<div class="form-group form-group--wide">
+					<label for="rf-romaji">ローマ字タイトル</label>
+					<input
+						id="rf-romaji"
+						name="title_romaji"
+						type="text"
+						class="rf-input"
+						value={anime?.title_romaji ?? ""}
+					>
+				</div>
+				<div class="form-group">
+					<label for="rf-season">シーズン（例: 2025春）</label>
+					<input
+						id="rf-season"
+						name="season"
+						type="text"
+						placeholder="2025春"
+						class="rf-input"
+						value={anime?.season ?? ""}
+					>
+				</div>
+				<div class="form-group form-group--narrow">
+					<label for="rf-ep">話数</label>
+					<input
+						id="rf-ep"
+						name="episode_count"
+						type="number"
+						min="1"
+						class="rf-input"
+						value={anime?.episode_count ?? ""}
+					>
+				</div>
 			</div>
-		</div>
-		<div class="form-row">
-			<div class="form-group form-group--wide">
-				<label for="rf-romaji">ローマ字タイトル</label>
-				<input
-					id="rf-romaji"
-					name="title_romaji"
-					type="text"
-					class="rf-input"
-					value={anime?.title_romaji ?? ""}
-				>
-			</div>
+
 			<div class="form-group">
-				<label for="rf-season">シーズン（例: 2025春）</label>
-				<input
-					id="rf-season"
-					name="season"
-					type="text"
-					placeholder="2025春"
-					class="rf-input"
-					value={anime?.season ?? ""}
-				>
+				<label for="rf-synopsis">あらすじ</label>
+				<textarea
+					id="rf-synopsis"
+					name="synopsis"
+					rows="4"
+					class="rf-textarea"
+					value={anime?.synopsis ?? ""}
+				></textarea>
 			</div>
-			<div class="form-group form-group--narrow">
-				<label for="rf-ep">話数</label>
-				<input
-					id="rf-ep"
-					name="episode_count"
-					type="number"
-					min="1"
-					class="rf-input"
-					value={anime?.episode_count ?? ""}
-				>
+
+			<div class="form-row">
+				<div class="form-group">
+					<label for="rf-type">タイプ</label>
+					<select id="rf-type" name="type" class="rf-select">
+						<option value="">未設定</option>
+						<option value="TV" selected={anime?.type === "TV"}>TV</option>
+						<option value="映画" selected={anime?.type === "映画"}>映画</option>
+						<option value="OVA" selected={anime?.type === "OVA"}>OVA</option>
+						<option value="ONA" selected={anime?.type === "ONA"}>ONA</option>
+						<option value="特別" selected={anime?.type === "特別"}>特別</option>
+					</select>
+				</div>
+				<div class="form-group">
+					<label for="rf-source">原作</label>
+					<select id="rf-source" name="source" class="rf-select">
+						<option value="">未設定</option>
+						{#each SOURCE_OPTIONS as source}
+							<option value={source} selected={anime?.source === source}>{source}</option>
+						{/each}
+					</select>
+				</div>
+				<div class="form-group">
+					<label for="rf-room-type">ルーム種別</label>
+					<select id="rf-room-type" name="room_type" class="rf-select">
+						<option value="episode" selected={(anime?.room_type ?? "episode") === "episode"}>
+							話数別ルーム
+						</option>
+						<option value="global" selected={anime?.room_type === "global"}>総合ロビー</option>
+					</select>
+				</div>
 			</div>
 		</div>
 
-		<div class="form-group">
-			<label for="rf-synopsis">あらすじ</label>
-			<textarea
-				id="rf-synopsis"
-				name="synopsis"
-				rows="4"
-				class="rf-textarea"
-				value={anime?.synopsis ?? ""}
-			></textarea>
-		</div>
-
-		<div class="form-row">
-			<div class="form-group">
-				<label for="rf-type">タイプ</label>
-				<select id="rf-type" name="type" class="rf-select">
-					<option value="">未設定</option>
-					<option value="TV" selected={anime?.type === "TV"}>TV</option>
-					<option value="映画" selected={anime?.type === "映画"}>映画</option>
-					<option value="OVA" selected={anime?.type === "OVA"}>OVA</option>
-					<option value="ONA" selected={anime?.type === "ONA"}>ONA</option>
-					<option value="特別" selected={anime?.type === "特別"}>特別</option>
-				</select>
+		<div class="basic-column basic-column--right">
+			<div class="form-row">
+				<div class="form-group">
+					<label for="rf-aired-from">放送開始</label>
+					<input
+						id="rf-aired-from"
+						name="aired_from"
+						type="date"
+						class="rf-input"
+						value={dateValue(anime?.aired_from)}
+					>
+				</div>
+				<div class="form-group">
+					<label for="rf-aired-to">放送終了</label>
+					<input
+						id="rf-aired-to"
+						name="aired_to"
+						type="date"
+						class="rf-input"
+						value={dateValue(anime?.aired_to)}
+					>
+				</div>
 			</div>
+
+			<div class="form-row">
+				<div class="form-group">
+					<label for="rf-broadcast-day">放送曜日</label>
+					<select id="rf-broadcast-day" name="broadcast_day" class="rf-select">
+						<option value="">未設定</option>
+						<option value="0" selected={anime?.broadcast_day === 0}>日曜日</option>
+						<option value="1" selected={anime?.broadcast_day === 1}>月曜日</option>
+						<option value="2" selected={anime?.broadcast_day === 2}>火曜日</option>
+						<option value="3" selected={anime?.broadcast_day === 3}>水曜日</option>
+						<option value="4" selected={anime?.broadcast_day === 4}>木曜日</option>
+						<option value="5" selected={anime?.broadcast_day === 5}>金曜日</option>
+						<option value="6" selected={anime?.broadcast_day === 6}>土曜日</option>
+					</select>
+				</div>
+				<div class="form-group">
+					<label for="rf-broadcast-time">放送時刻 (JST)</label>
+					<input
+						id="rf-broadcast-time"
+						name="broadcast_time"
+						type="text"
+						inputmode="numeric"
+						pattern="([01]?[0-9]|2[0-9]|3[0-5]|4[0-7]):[0-5][0-9]"
+						placeholder="例: 24:30 / 26:00"
+						class="rf-input"
+						value={anime?.broadcast_time ?? ""}
+					>
+				</div>
+				<div class="form-group form-group--narrow">
+					<label for="rf-broadcast-duration">放送枠 (分)</label>
+					<input
+						id="rf-broadcast-duration"
+						name="broadcast_duration_minutes"
+						type="number"
+						min="1"
+						max="1440"
+						value={anime?.broadcast_duration_minutes ?? 30}
+						class="rf-input"
+					>
+				</div>
+			</div>
+
 			<div class="form-group">
-				<label for="rf-source">原作</label>
-				<select id="rf-source" name="source" class="rf-select">
-					<option value="">未設定</option>
-					{#each SOURCE_OPTIONS as source}
-						<option value={source} selected={anime?.source === source}>{source}</option>
+				<label for="rf-broadcast-station">放送局</label>
+				<input
+					id="rf-broadcast-station"
+					type="text"
+					name="broadcast_station"
+					class="rf-input"
+					placeholder="複数の場合はカンマ区切り（例: TBS, MX, AT-X）"
+					value={broadcastStationValue}
+				>
+			</div>
+
+			<div class="form-group">
+				<span class="field-label">ジャンル</span>
+				<div class="tag-picker">
+					{#each GENRES as g}
+						<button
+							type="button"
+							class="tag-btn"
+							class:selected={selectedGenres.includes(g)}
+							onclick={() => toggleGenre(g)}
+						>
+							{g}
+						</button>
 					{/each}
-				</select>
+				</div>
+				{#each selectedGenres as g}
+					<input type="hidden" name="genre" value={g}>
+				{/each}
 			</div>
-		</div>
 
-		<div class="form-row">
 			<div class="form-group">
-				<label for="rf-aired-from">放送開始</label>
-				<input
-					id="rf-aired-from"
-					name="aired_from"
-					type="date"
-					class="rf-input"
-					value={dateValue(anime?.aired_from)}
-				>
-			</div>
-			<div class="form-group">
-				<label for="rf-aired-to">放送終了</label>
-				<input id="rf-aired-to" name="aired_to" type="date" class="rf-input" value={dateValue(anime?.aired_to)}>
-			</div>
-		</div>
-
-		<div class="form-row">
-			<div class="form-group">
-				<label for="rf-broadcast-day">放送曜日</label>
-				<select id="rf-broadcast-day" name="broadcast_day" class="rf-select">
-					<option value="">未設定</option>
-					<option value="0" selected={anime?.broadcast_day === 0}>日曜日</option>
-					<option value="1" selected={anime?.broadcast_day === 1}>月曜日</option>
-					<option value="2" selected={anime?.broadcast_day === 2}>火曜日</option>
-					<option value="3" selected={anime?.broadcast_day === 3}>水曜日</option>
-					<option value="4" selected={anime?.broadcast_day === 4}>木曜日</option>
-					<option value="5" selected={anime?.broadcast_day === 5}>金曜日</option>
-					<option value="6" selected={anime?.broadcast_day === 6}>土曜日</option>
-				</select>
-			</div>
-			<div class="form-group">
-				<label for="rf-broadcast-time">放送時刻 (JST)</label>
-				<input
-					id="rf-broadcast-time"
-					name="broadcast_time"
-					type="text"
-					inputmode="numeric"
-					pattern="([01]?[0-9]|2[0-9]|3[0-5]|4[0-7]):[0-5][0-9]"
-					placeholder="例: 24:30 / 26:00"
-					class="rf-input"
-					value={anime?.broadcast_time ?? ""}
-				>
-			</div>
-			<div class="form-group form-group--narrow">
-				<label for="rf-broadcast-duration">放送枠 (分)</label>
-				<input
-					id="rf-broadcast-duration"
-					name="broadcast_duration_minutes"
-					type="number"
-					min="1"
-					max="1440"
-					value={anime?.broadcast_duration_minutes ?? 30}
-					class="rf-input"
-				>
-			</div>
-		</div>
-
-		<div class="form-group">
-			<label for="rf-broadcast-station">放送局</label>
-			<input
-				id="rf-broadcast-station"
-				type="text"
-				name="broadcast_station"
-				class="rf-input"
-				placeholder="複数の場合はカンマ区切り（例: TBS, MX, AT-X）"
-				value={broadcastStationValue}
-			>
-		</div>
-
-		<div class="form-group">
-			<span class="field-label">ジャンル</span>
-			<div class="tag-picker">
-				{#each GENRES as g}
+				<span class="field-label">スタジオ</span>
+				<div class="tag-input-row">
+					<input
+						type="text"
+						class="rf-input"
+						placeholder="スタジオ名を入力"
+						bind:value={studioInput}
+						onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(studios, studioInput, v => studios = v, () => studioInput = ''); } }}
+					>
 					<button
 						type="button"
-						class="tag-btn"
-						class:selected={selectedGenres.includes(g)}
-						onclick={() => toggleGenre(g)}
+						class="tag-add-btn"
+						onclick={() => addTag(studios, studioInput, v => studios = v, () => studioInput = '')}
 					>
-						{g}
+						追加
 					</button>
-				{/each}
-			</div>
-			{#each selectedGenres as g}
-				<input type="hidden" name="genre" value={g}>
-			{/each}
-		</div>
-
-		<div class="form-group">
-			<span class="field-label">スタジオ</span>
-			<div class="tag-input-row">
-				<input
-					type="text"
-					class="rf-input"
-					placeholder="スタジオ名を入力"
-					bind:value={studioInput}
-					onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(studios, studioInput, v => studios = v, () => studioInput = ''); } }}
-				>
-				<button
-					type="button"
-					class="tag-add-btn"
-					onclick={() => addTag(studios, studioInput, v => studios = v, () => studioInput = '')}
-				>
-					追加
-				</button>
-			</div>
-			<div class="tag-chips">
-				{#each studios as s}
-					<span class="tag-chip"
-						>{s}
-						<button
-							type="button"
-							class="chip-remove"
-							onclick={() => removeTag(studios, s, v => studios = v)}
+				</div>
+				<div class="tag-chips">
+					{#each studios as s}
+						<span class="tag-chip"
+							>{s}
+							<button
+								type="button"
+								class="chip-remove"
+								onclick={() => removeTag(studios, s, v => studios = v)}
+							>
+								✕
+							</button></span
 						>
-							✕
-						</button></span
-					>
-					<input type="hidden" name="studio" value={s}>
-				{/each}
+						<input type="hidden" name="studio" value={s}>
+					{/each}
+				</div>
 			</div>
-		</div>
 
-		<div class="form-group">
-			<span class="field-label">プロデューサー / 制作</span>
-			<div class="tag-input-row">
-				<input
-					type="text"
-					class="rf-input"
-					placeholder="プロデューサー名を入力"
-					bind:value={producerInput}
-					onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(producers, producerInput, v => producers = v, () => producerInput = ''); } }}
-				>
-				<button
-					type="button"
-					class="tag-add-btn"
-					onclick={() => addTag(producers, producerInput, v => producers = v, () => producerInput = '')}
-				>
-					追加
-				</button>
-			</div>
-			<div class="tag-chips">
-				{#each producers as p}
-					<span class="tag-chip"
-						>{p}
-						<button
-							type="button"
-							class="chip-remove"
-							onclick={() => removeTag(producers, p, v => producers = v)}
-						>
-							✕
-						</button></span
-					>
-					<input type="hidden" name="producer" value={p}>
-				{/each}
-			</div>
-		</div>
-
-		<div class="form-group">
-			<span class="field-label">公式ハッシュタグ</span>
-			<div class="tag-input-row">
-				<input
-					type="text"
-					class="rf-input"
-					placeholder="#アニメタグ"
-					bind:value={hashtagInput}
-					onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(hashtags, hashtagInput, v => hashtags = v, () => hashtagInput = ''); } }}
-				>
-				<button
-					type="button"
-					class="tag-add-btn"
-					onclick={() => addTag(hashtags, hashtagInput, v => hashtags = v, () => hashtagInput = '')}
-				>
-					追加
-				</button>
-			</div>
-			<div class="tag-chips">
-				{#each hashtags as h}
-					<span class="tag-chip"
-						>#{h}
-						<button
-							type="button"
-							class="chip-remove"
-							onclick={() => removeTag(hashtags, h, v => hashtags = v)}
-						>
-							✕
-						</button></span
-					>
-					<input type="hidden" name="official_hashtag" value={h}>
-				{/each}
-			</div>
-		</div>
-
-		<div class="form-row">
-			<div class="form-group form-group--wide">
-				<label for="rf-site">公式サイト URL</label>
-				<input
-					id="rf-site"
-					name="official_site_url"
-					type="url"
-					class="rf-input"
-					placeholder="https://..."
-					value={anime?.official_site_url ?? ""}
-				>
-			</div>
-			<div class="form-group form-group--wide">
-				<label for="rf-x">公式 X (Twitter) URL</label>
-				<input
-					id="rf-x"
-					name="official_x_url"
-					type="url"
-					class="rf-input"
-					placeholder="https://x.com/..."
-					value={anime?.official_x_url ?? ""}
-				>
-			</div>
-		</div>
-
-		<div class="form-row">
-			<div class="form-group form-group--wide">
-				<label for="rf-copyright">権利表記</label>
-				<input id="rf-copyright" name="copyright" type="text" class="rf-input" value={anime?.copyright ?? ""}>
-			</div>
-			<div class="form-group form-group--wide">
-				<span class="field-label">カバー画像</span>
-				<label class="cover-upload-label" class:has-preview={!!imagePreview}>
-					{#if imagePreview}
-						<img src={imagePreview} alt="カバープレビュー" class="cover-preview">
-						<span class="cover-change-hint">クリックして変更</span>
-					{:else}
-						<svg
-							width="22"
-							height="22"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="1.5"
-							aria-hidden="true"
-						>
-							<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-							<polyline points="17 8 12 3 7 8" />
-							<line x1="12" y1="3" x2="12" y2="15" />
-						</svg>
-						<span class="cover-upload-hint"
-							>{imageProcessing ? '処理中...' : '画像をアップロード（JPEG/PNG/WebP）'}</span
-						>
-					{/if}
+			<div class="form-group">
+				<span class="field-label">プロデューサー / 制作</span>
+				<div class="tag-input-row">
 					<input
-						type="file"
-						accept="image/jpeg,image/png,image/webp"
-						onchange={handleFileChange}
-						disabled={imageProcessing}
-						class="cover-file-input"
+						type="text"
+						class="rf-input"
+						placeholder="プロデューサー名を入力"
+						bind:value={producerInput}
+						onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(producers, producerInput, v => producers = v, () => producerInput = ''); } }}
 					>
-				</label>
-				{#if !imageFile}
+					<button
+						type="button"
+						class="tag-add-btn"
+						onclick={() => addTag(producers, producerInput, v => producers = v, () => producerInput = '')}
+					>
+						追加
+					</button>
+				</div>
+				<div class="tag-chips">
+					{#each producers as p}
+						<span class="tag-chip"
+							>{p}
+							<button
+								type="button"
+								class="chip-remove"
+								onclick={() => removeTag(producers, p, v => producers = v)}
+							>
+								✕
+							</button></span
+						>
+						<input type="hidden" name="producer" value={p}>
+					{/each}
+				</div>
+			</div>
+
+			<div class="form-group">
+				<span class="field-label">公式ハッシュタグ</span>
+				<div class="tag-input-row">
 					<input
-						id="rf-cover"
-						name="cover_url"
+						type="text"
+						class="rf-input"
+						placeholder="#アニメタグ"
+						bind:value={hashtagInput}
+						onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(hashtags, hashtagInput, v => hashtags = v, () => hashtagInput = ''); } }}
+					>
+					<button
+						type="button"
+						class="tag-add-btn"
+						onclick={() => addTag(hashtags, hashtagInput, v => hashtags = v, () => hashtagInput = '')}
+					>
+						追加
+					</button>
+				</div>
+				<div class="tag-chips">
+					{#each hashtags as h}
+						<span class="tag-chip"
+							>#{h}
+							<button
+								type="button"
+								class="chip-remove"
+								onclick={() => removeTag(hashtags, h, v => hashtags = v)}
+							>
+								✕
+							</button></span
+						>
+						<input type="hidden" name="official_hashtag" value={h}>
+					{/each}
+				</div>
+			</div>
+
+			<div class="form-row">
+				<div class="form-group form-group--wide">
+					<label for="rf-site">公式サイト URL</label>
+					<input
+						id="rf-site"
+						name="official_site_url"
 						type="url"
 						class="rf-input"
-						style="margin-top:6px"
-						placeholder="または画像 URL を直接入力..."
-						value={anime?.cover_url ?? ""}
+						placeholder="https://..."
+						value={anime?.official_site_url ?? ""}
 					>
-				{/if}
+				</div>
+				<div class="form-group form-group--wide">
+					<label for="rf-x">公式 X (Twitter) URL</label>
+					<input
+						id="rf-x"
+						name="official_x_url"
+						type="url"
+						class="rf-input"
+						placeholder="https://x.com/..."
+						value={anime?.official_x_url ?? ""}
+					>
+				</div>
+			</div>
+
+			<div class="form-row">
+				<div class="form-group form-group--wide">
+					<label for="rf-copyright">権利表記</label>
+					<input
+						id="rf-copyright"
+						name="copyright"
+						type="text"
+						class="rf-input"
+						value={anime?.copyright ?? ""}
+					>
+				</div>
+				<div class="form-group form-group--wide">
+					<span class="field-label">カバー画像</span>
+					<label class="cover-upload-label" class:has-preview={!!imagePreview}>
+						{#if imagePreview}
+							<img src={imagePreview} alt="カバープレビュー" class="cover-preview">
+							<span class="cover-change-hint">クリックして変更</span>
+						{:else}
+							<svg
+								width="22"
+								height="22"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.5"
+								aria-hidden="true"
+							>
+								<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+								<polyline points="17 8 12 3 7 8" />
+								<line x1="12" y1="3" x2="12" y2="15" />
+							</svg>
+							<span class="cover-upload-hint"
+								>{imageProcessing ? '処理中...' : '画像をアップロード（JPEG/PNG/WebP）'}</span
+							>
+						{/if}
+						<input
+							type="file"
+							accept="image/jpeg,image/png,image/webp"
+							onchange={handleFileChange}
+							disabled={imageProcessing}
+							class="cover-file-input"
+						>
+					</label>
+					{#if !imageFile}
+						<input
+							id="rf-cover"
+							name="cover_url"
+							type="url"
+							class="rf-input"
+							style="margin-top:6px"
+							placeholder="または画像 URL を直接入力..."
+							value={anime?.cover_url ?? ""}
+						>
+					{/if}
+				</div>
 			</div>
 		</div>
 
@@ -526,6 +552,9 @@ async function handleFileChange(e: Event) {
 <style>
 .register-section {
 	max-width: 760px;
+}
+.register-section--edit {
+	max-width: none;
 }
 .register-title {
 	font-size: 1.1rem;
@@ -558,6 +587,15 @@ async function handleFileChange(e: Event) {
 	flex-direction: column;
 	gap: 16px;
 }
+.register-form--edit {
+	gap: 18px;
+}
+.basic-column {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	min-width: 0;
+}
 .form-row {
 	display: flex;
 	gap: 12px;
@@ -568,6 +606,9 @@ async function handleFileChange(e: Event) {
 	flex-direction: column;
 	gap: 5px;
 	flex: 1 1 180px;
+}
+.basic-column > .form-group {
+	flex: 0 1 auto;
 }
 .form-group--wide {
 	flex: 2 1 240px;
@@ -766,5 +807,30 @@ async function handleFileChange(e: Event) {
 	text-align: center;
 	padding: 0 8px;
 	line-height: 1.4;
+}
+
+@media (min-width: 768px) {
+	.register-form--edit {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+		align-items: start;
+		gap: 16px 20px;
+	}
+
+	.register-form--edit .basic-column--left {
+		grid-column: 1;
+	}
+
+	.register-form--edit .basic-column--right {
+		grid-column: 2;
+	}
+
+	.register-form--edit .form-actions {
+		grid-column: 1 / -1;
+	}
+
+	.register-form--edit .form-row {
+		align-items: start;
+	}
 }
 </style>

@@ -78,11 +78,21 @@ type UserAnimeListWithProfileRow = {
 	profiles: { username: string; display_name: string | null; avatar_url: string | null; list_is_public: boolean };
 };
 
+function normalizeScore(score: number | null | undefined): number | null {
+	if (score == null || !Number.isFinite(score) || score <= 0) return null;
+	return score;
+}
+
+function normalizeAverageScore(score: number | null | undefined, count: number | null | undefined): number | null {
+	if ((count ?? 0) <= 0) return null;
+	return normalizeScore(score);
+}
+
 /** 投稿一覧系クエリで共通の SELECT 句 */
 const POST_LIST_SELECT = `id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, broadcast_room_session_id, exchange_share,
              profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
              post_hashtags ( hashtags ( name ) ),
-             broadcast_room_session:broadcast_room_sessions!posts_broadcast_room_session_id_fkey ( room_date ),
+             broadcast_room_session:broadcast_room_sessions!posts_broadcast_room_session_id_fkey ( room_date, room_kind, room_key ),
              anime:anime!posts_anime_id_fkey ( id, title, cover_url, official_hashtag, broadcast_day, broadcast_time, broadcast_duration_minutes, aired_from )`;
 
 /**
@@ -190,7 +200,7 @@ export async function enrichPostsWithCounts(
 			bookmarked_by_me: bookmarkedSet.has(raw["id"]),
 		});
 		if (post.anime_quote && post.anime_id) {
-			post.anime_quote.user_score = userScoreMap.get(post.anime_id) ?? null;
+			post.anime_quote.user_score = normalizeScore(userScoreMap.get(post.anime_id));
 		}
 		return post;
 	});
@@ -1021,7 +1031,7 @@ export async function getBookmarkedPosts(supabase: SupabaseClient<Database>, use
 			`id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, broadcast_room_session_id, exchange_share,
              profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
              post_hashtags ( hashtags ( name ) ),
-             broadcast_room_session:broadcast_room_sessions!posts_broadcast_room_session_id_fkey ( room_date ),
+             broadcast_room_session:broadcast_room_sessions!posts_broadcast_room_session_id_fkey ( room_date, room_kind, room_key ),
              anime:anime!posts_anime_id_fkey ( id, title, cover_url, official_hashtag, broadcast_day, broadcast_time, broadcast_duration_minutes, aired_from )`,
 		)
 		.in("id", postIds);
@@ -1052,7 +1062,7 @@ export async function getLikedPosts(
 			`id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, broadcast_room_session_id, exchange_share,
              profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
              post_hashtags ( hashtags ( name ) ),
-             broadcast_room_session:broadcast_room_sessions!posts_broadcast_room_session_id_fkey ( room_date ),
+             broadcast_room_session:broadcast_room_sessions!posts_broadcast_room_session_id_fkey ( room_date, room_kind, room_key ),
              anime:anime!posts_anime_id_fkey ( id, title, cover_url, official_hashtag, broadcast_day, broadcast_time, broadcast_duration_minutes, aired_from )`,
 		)
 		.in("id", postIds)
@@ -1133,6 +1143,7 @@ const ANIME_LIST_BASE_COLUMN_NAMES = [
 	"broadcast_room_post_close_minutes",
 	"aired_from",
 	"aired_to",
+	"room_type",
 	"hidden_by_admin",
 ];
 
@@ -1398,7 +1409,7 @@ async function sortAnimeListItems(
 		if (sortBy === "popular") anime.list_count = metric.primary;
 		if (sortBy === "trending") anime.recent_count = metric.primary;
 		if (sortBy === "top_rated") {
-			anime.avg_score = metric.primary;
+			anime.avg_score = normalizeAverageScore(metric.primary, metric.secondary);
 			anime.score_count = metric.secondary;
 		}
 	}
@@ -1449,7 +1460,10 @@ async function getAnimeRankingMetrics(
 	return new Map(
 		(data ?? []).map((row) => [
 			String(row.anime_id),
-			{ primary: Number(row.avg_score ?? 0), secondary: Number(row.score_count ?? 0) },
+			{
+				primary: normalizeAverageScore(Number(row.avg_score ?? 0), Number(row.score_count ?? 0)) ?? 0,
+				secondary: Number(row.score_count ?? 0),
+			},
 		]),
 	);
 }
@@ -1511,8 +1525,9 @@ export async function getAnime(
 
 	anime.list_count = (popularityRes.data as { list_count?: number } | null)?.list_count ?? 0;
 	anime.recent_count = (trendingRes.data as { recent_count?: number } | null)?.recent_count ?? 0;
-	anime.avg_score = (topRatedRes.data as { avg_score?: number | null } | null)?.avg_score ?? null;
-	anime.score_count = (topRatedRes.data as { score_count?: number } | null)?.score_count ?? 0;
+	const topRated = topRatedRes.data as { avg_score?: number | null; score_count?: number } | null;
+	anime.score_count = topRated?.score_count ?? 0;
+	anime.avg_score = normalizeAverageScore(topRated?.avg_score, anime.score_count);
 
 	if (userId) {
 		const { data: entry } = await supabase
@@ -1524,7 +1539,7 @@ export async function getAnime(
 		anime.user_entry = entry
 			? ({
 					status: entry.status as AnimeStatus,
-					score: entry.score,
+					score: normalizeScore(entry.score),
 					progress: entry.progress,
 					updated_at: entry.updated_at,
 				} satisfies UserAnimeEntry)
@@ -1611,6 +1626,7 @@ export async function getAnimeRankingTopRated(supabase: SupabaseClient<Database>
 	const { data, error } = await supabase
 		.from("anime_top_rated")
 		.select("anime_id, avg_score, score_count")
+		.gt("score_count", 0)
 		.order("avg_score", { ascending: false })
 		.order("score_count", { ascending: false })
 		.order("anime_id", { ascending: true })
@@ -1618,8 +1634,13 @@ export async function getAnimeRankingTopRated(supabase: SupabaseClient<Database>
 	if (error || !data || data.length === 0) return [];
 
 	const rankedIds = data.map((row) => String(row.anime_id));
-	const avgMap = new Map(data.map((row) => [String(row.anime_id), Number(row.avg_score)]));
 	const cntMap = new Map(data.map((row) => [String(row.anime_id), Number(row.score_count)]));
+	const avgMap = new Map(
+		data.map((row) => [
+			String(row.anime_id),
+			normalizeAverageScore(Number(row.avg_score ?? 0), Number(row.score_count ?? 0)),
+		]),
+	);
 	const animes = await fetchAnimesByIds(supabase, rankedIds);
 	return animes.map((a) => ({
 		...a,
@@ -1653,7 +1674,7 @@ export async function getUserAnimeList(
 			...toAnime(row.anime),
 			user_entry: {
 				status: row.status as AnimeStatus,
-				score: row.score as number | null,
+				score: normalizeScore(row.score as number | null),
 				progress: row.progress as number,
 				updated_at: row.updated_at as string,
 			} satisfies UserAnimeEntry,
@@ -1693,7 +1714,7 @@ export async function getUsersWhoListedAnime(
 			display_name: row.profiles.display_name as string | null,
 			avatar_url: row.profiles.avatar_url as string | null,
 			status: row.status as AnimeStatus,
-			score: row.score as number | null,
+			score: normalizeScore(row.score as number | null),
 			progress: row.progress as number,
 		}));
 }
@@ -1900,6 +1921,7 @@ function toAnime(raw: Record<string, unknown>): Anime {
 		broadcast_room_pre_open_minutes: (raw["broadcast_room_pre_open_minutes"] as number | null) ?? 5,
 		broadcast_room_post_close_minutes: (raw["broadcast_room_post_close_minutes"] as number | null) ?? 30,
 		broadcast_station: (raw["broadcast_station"] as string[] | null) ?? null,
+		room_type: raw["room_type"] === "global" ? "global" : "episode",
 		hidden_by_admin: raw["hidden_by_admin"] === true,
 		created_at: String(raw["created_at"]),
 	};
@@ -2041,6 +2063,22 @@ export async function getBroadcastRoomSession(
 	});
 	if (error) {
 		console.error("broadcast room session query failed:", error);
+		return null;
+	}
+	return (data?.[0] as BroadcastRoomSession | undefined) ?? null;
+}
+
+export async function getGlobalAnimeLobbySession(
+	supabase: SupabaseClient<Database>,
+	animeId: string,
+): Promise<BroadcastRoomSession | null> {
+	// biome-ignore lint/suspicious/noExplicitAny: generated types may lag behind the lobby-room migration
+	const reader = supabase as SupabaseClient<any>;
+	const { data, error } = await reader.rpc("ensure_global_anime_lobby_session", {
+		p_anime_id: Number(animeId),
+	});
+	if (error) {
+		console.error("global anime lobby session query failed:", error);
 		return null;
 	}
 	return (data?.[0] as BroadcastRoomSession | undefined) ?? null;

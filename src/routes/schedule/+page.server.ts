@@ -19,6 +19,15 @@ import type {
 } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
+interface BroadcastAnnouncement {
+	anime_id: string;
+	title: string;
+	cover_url: string | null;
+	room_date: string;
+	message: string;
+	broadcast_time: string | null;
+}
+
 const DAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"] as const;
 
 function startOfWeek(date: Date) {
@@ -80,6 +89,28 @@ function effectiveBroadcastTime(
 	return overrideForDate(overrides[anime.id], date)?.broadcast_time ?? anime.broadcast_time;
 }
 
+function announcementMessage(override: BroadcastRoomOverride): string {
+	return override.announcement_label?.trim() || "今週は放送休止";
+}
+
+function pushAnnouncement(
+	day: { announcements: BroadcastAnnouncement[] },
+	anime: Anime,
+	override: BroadcastRoomOverride,
+	overrides: Record<string, BroadcastRoomOverride[]>,
+) {
+	if (day.announcements.some((announcement) => announcement.anime_id === anime.id)) return;
+	const date = override.room_date.slice(0, 10);
+	day.announcements.push({
+		anime_id: anime.id,
+		title: anime.title,
+		cover_url: anime.cover_url,
+		room_date: date,
+		message: announcementMessage(override),
+		broadcast_time: effectiveBroadcastTime(anime, date, overrides),
+	});
+}
+
 export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 
@@ -117,26 +148,39 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		animeList.map((anime) => anime.id),
 	);
 
-	const days: { date: string; label: string; anime: Anime[]; events: Event[] }[] = DAY_LABELS.map((label, index) => ({
-		date: toDateInputValue(addDays(weekStart, index)),
-		label,
-		anime: [],
-		events: [],
-	}));
+	const days: { date: string; label: string; anime: Anime[]; events: Event[]; announcements: BroadcastAnnouncement[] }[] =
+		DAY_LABELS.map((label, index) => ({
+			date: toDateInputValue(addDays(weekStart, index)),
+			label,
+			anime: [],
+			events: [],
+			announcements: [],
+		}));
 
 	for (const anime of animeList.filter((a): a is Anime & { broadcast_day: number } => a.broadcast_day != null)) {
+		if (anime.room_type === "global") continue;
 		const day = days[anime.broadcast_day];
 		if (day && isAnimeOnAirDate(anime, day.date)) {
+			const override = overrideForDate(broadcastOverrides[anime.id], day.date);
+			if (override?.is_cancelled) {
+				pushAnnouncement(day, anime, override, broadcastOverrides);
+				continue;
+			}
 			day.anime.push(anime);
 		}
 	}
 
 	for (const anime of animeList) {
+		if (anime.room_type === "global") continue;
 		for (const override of broadcastOverrides[anime.id] ?? []) {
 			const date = override.room_date.slice(0, 10);
 			if (date < scheduleRange.start || date > scheduleRange.end || !isAnimeOnAirDate(anime, date)) continue;
 
 			const day = days.find((candidate) => candidate.date === date);
+			if (day && override.is_cancelled) {
+				pushAnnouncement(day, anime, override, broadcastOverrides);
+				continue;
+			}
 			if (day && !day.anime.some((scheduledAnime) => scheduledAnime.id === anime.id)) {
 				day.anime.push(anime);
 			}
@@ -153,6 +197,9 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 			(a, b) =>
 				broadcastTimeSortValue(effectiveBroadcastTime(a, day.date, broadcastOverrides)) -
 				broadcastTimeSortValue(effectiveBroadcastTime(b, day.date, broadcastOverrides)),
+		);
+		day.announcements.sort(
+			(a, b) => broadcastTimeSortValue(a.broadcast_time) - broadcastTimeSortValue(b.broadcast_time),
 		);
 		day.events.sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
 	}

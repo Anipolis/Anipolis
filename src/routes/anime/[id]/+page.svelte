@@ -155,10 +155,15 @@ let showRemoveWatchlistModal = $state(false);
 let removeWatchlistFormEl = $state<HTMLFormElement | null>(null);
 // svelte-ignore state_referenced_locally
 let adminEditOpen = $state(Boolean(form?.success || form?.message));
+let activeAdminTab = $state<"basic" | "overrides">("basic");
+let overrideFormOpen = $state(false);
 
 $effect(() => {
 	selectedStatus = data.anime.user_entry?.status ?? "plan_to_watch";
-	score = data.anime.user_entry?.score != null ? String(data.anime.user_entry.score) : "";
+	score =
+		data.anime.user_entry?.score != null && data.anime.user_entry.score > 0
+			? String(data.anime.user_entry.score)
+			: "";
 	progress = String(data.anime.user_entry?.progress ?? 0);
 });
 
@@ -868,15 +873,15 @@ $effect(() => {
 
 			<!-- Score hero -->
 			<div class="stats-grid">
-				{#if data.anime.avg_score != null}
-					<div class="stat-card stat-card--score">
-						<span class="stat-card-label">スコア</span>
+				<div class="stat-card stat-card--score">
+					<span class="stat-card-label">スコア</span>
+					{#if data.anime.avg_score != null && (data.anime.score_count ?? 0) > 0}
 						<span class="stat-card-value">★ {data.anime.avg_score.toFixed(2)}</span>
-						{#if data.anime.score_count}
-							<span class="stat-card-sub">{data.anime.score_count}件の評価</span>
-						{/if}
-					</div>
-				{/if}
+						<span class="stat-card-sub">{data.anime.score_count}件の評価</span>
+					{:else}
+						<span class="stat-card-value">—</span>
+					{/if}
+				</div>
 				{#if data.anime.list_count}
 					<div class="stat-card">
 						<span class="stat-card-label">リスト登録</span>
@@ -895,7 +900,7 @@ $effect(() => {
 			{/if}
 
 			{#if data.isAdmin}
-				<section class="admin-edit-section">
+				<section class="admin-edit-section bg-zinc-950 border border-zinc-800 rounded-2xl p-6">
 					<button
 						type="button"
 						class="admin-edit-toggle"
@@ -907,123 +912,309 @@ $effect(() => {
 						{adminEditOpen ? "作品情報フォームを閉じる" : "作品情報を編集"}
 					</button>
 					{#if adminEditOpen}
-						<div class="admin-edit-form">
-							<AnimeRegisterForm {form} mode="edit" anime={data.anime} action="?/updateAnime" />
+						<div class="admin-tab-list" role="tablist" aria-label="作品管理">
+							<button
+								type="button"
+								class="admin-tab"
+								class:admin-tab--active={activeAdminTab === "basic"}
+								role="tab"
+								aria-selected={activeAdminTab === "basic"}
+								onclick={() => {
+									activeAdminTab = "basic";
+								}}
+							>
+								📝 基本情報を編集
+							</button>
+							<button
+								type="button"
+								class="admin-tab"
+								class:admin-tab--active={activeAdminTab === "overrides"}
+								role="tab"
+								aria-selected={activeAdminTab === "overrides"}
+								onclick={() => {
+									activeAdminTab = "overrides";
+								}}
+							>
+								📅 イレギュラー放送設定
+							</button>
 						</div>
+
+						{#if activeAdminTab === "basic"}
+							<div class="admin-edit-form">
+								<AnimeRegisterForm {form} mode="edit" anime={data.anime} action="?/updateAnime" />
+							</div>
+						{:else}
+							<section class="broadcast-override-section">
+								<div>
+									<h2 class="broadcast-override-heading">イレギュラー放送設定</h2>
+									<p class="broadcast-override-hint">
+										特定の話だけ放送時刻・放送時間を変更したい場合（拡大放送・特番など）に登録します。
+									</p>
+								</div>
+
+								<div class="broadcast-override-table-wrap">
+									<table class="broadcast-override-table">
+										<thead>
+											<tr>
+												<th>日付</th>
+												<th>タイプ / 表示ラベル</th>
+												<th>対象話数</th>
+												<th>メモ</th>
+												<th><span class="sr-only">操作</span></th>
+											</tr>
+										</thead>
+										<tbody>
+											{#if data.broadcastOverrides.length > 0}
+												{#each data.broadcastOverrides as override (override.id)}
+													<tr>
+														<td class="broadcast-override-date">{override.room_date}</td>
+														<td>
+															<div class="broadcast-override-table-tags">
+																{#if override.is_cancelled}
+																	<span class="broadcast-override-tag">放送休止</span>
+																{/if}
+																{#if override.announcement_label}
+																	<span class="broadcast-override-tag"
+																		>{override.announcement_label}</span
+																	>
+																{/if}
+																{#if override.broadcast_time}
+																	<span class="broadcast-override-tag"
+																		>{override.broadcast_time}〜</span
+																	>
+																{/if}
+																{#if override.duration_minutes != null}
+																	<span class="broadcast-override-tag"
+																		>{override.duration_minutes}分</span
+																	>
+																{/if}
+															</div>
+														</td>
+														<td>
+															<div class="broadcast-override-table-tags">
+																{#if override.episode_start != null && override.episode_end != null}
+																	<span class="broadcast-override-tag">
+																		{#if override.episode_start === override.episode_end}
+																			第{override.episode_start}話
+																		{:else}
+																			第{override.episode_start}話〜第{override.episode_end}話
+																			一挙放送
+																		{/if}
+																	</span>
+																{/if}
+																{#if override.episode_label}
+																	<span class="broadcast-override-tag"
+																		>{override.episode_label}</span
+																	>
+																{/if}
+																{#if override.episode_count_increment != null}
+																	<span class="broadcast-override-tag"
+																		>+{override.episode_count_increment}</span
+																	>
+																{/if}
+															</div>
+														</td>
+														<td>
+															{#if override.note}
+																<span class="broadcast-override-note"
+																	>{override.note}</span
+																>
+															{:else}
+																<span class="broadcast-override-empty">—</span>
+															{/if}
+														</td>
+														<td class="broadcast-override-action-cell">
+															<form
+																method="POST"
+																action="?/deleteBroadcastOverride"
+																use:enhance
+															>
+																<input
+																	type="hidden"
+																	name="override_id"
+																	value={override.id}
+																>
+																<button type="submit" class="broadcast-override-delete">
+																	削除
+																</button>
+															</form>
+														</td>
+													</tr>
+												{/each}
+											{:else}
+												<tr>
+													<td colspan="5" class="broadcast-override-empty-row">
+														登録済みのイレギュラー設定はありません
+													</td>
+												</tr>
+											{/if}
+										</tbody>
+									</table>
+								</div>
+
+								{#if !overrideFormOpen}
+									<button
+										type="button"
+										class="broadcast-override-add-toggle"
+										onclick={() => {
+											overrideFormOpen = true;
+										}}
+									>
+										＋ イレギュラー設定を追加
+									</button>
+								{:else}
+									<div class="broadcast-override-accordion">
+										<form
+											method="POST"
+											action="?/addBroadcastOverride"
+											use:enhance={() => {
+												return async ({ update }) => {
+													await update();
+													overrideFormOpen = false;
+												};
+											}}
+											class="broadcast-override-form"
+										>
+											<div class="broadcast-override-field">
+												<label for="override-room-date">日付</label>
+												<input id="override-room-date" type="date" name="room_date" required>
+											</div>
+											<label class="broadcast-override-checkbox">
+												<input type="checkbox" name="is_cancelled">
+												<span>放送休止として告知する</span>
+											</label>
+											<div class="broadcast-override-field">
+												<label for="override-announcement-label">告知文（任意）</label>
+												<input
+													id="override-announcement-label"
+													type="text"
+													name="announcement_label"
+													placeholder="今週は放送休止"
+												>
+											</div>
+											<div class="broadcast-override-field">
+												<label for="override-broadcast-time"
+													>放送時刻（任意・未指定で通常値）</label
+												>
+												<input
+													id="override-broadcast-time"
+													type="text"
+													name="broadcast_time"
+													placeholder="23:30"
+												>
+											</div>
+											<div class="broadcast-override-field">
+												<label for="override-duration">放送時間・分（任意）</label>
+												<input
+													id="override-duration"
+													type="number"
+													name="duration_minutes"
+													min="1"
+													max="1440"
+													placeholder="60"
+												>
+											</div>
+											<div class="broadcast-override-field">
+												<label for="override-pre-open">投稿開始の前倒し・分（任意）</label>
+												<input
+													id="override-pre-open"
+													type="number"
+													name="pre_open_minutes"
+													min="0"
+													max="1440"
+												>
+											</div>
+											<div class="broadcast-override-field">
+												<label for="override-post-close">投稿終了の延長・分（任意）</label>
+												<input
+													id="override-post-close"
+													type="number"
+													name="post_close_minutes"
+													min="0"
+													max="1440"
+												>
+											</div>
+											<div class="broadcast-override-field">
+												<label for="override-episode-start">対象話数（開始・任意）</label>
+												<input
+													id="override-episode-start"
+													type="number"
+													name="episode_start"
+													min="1"
+													placeholder="1"
+												>
+											</div>
+											<div class="broadcast-override-field">
+												<label for="override-episode-end">対象話数（終了・任意）</label>
+												<input
+													id="override-episode-end"
+													type="number"
+													name="episode_end"
+													min="1"
+													placeholder="2"
+												>
+											</div>
+											<div class="broadcast-override-field">
+												<label for="override-episode-label">表示ラベル（任意）</label>
+												<input
+													id="override-episode-label"
+													type="text"
+													name="episode_label"
+													placeholder="総集編"
+												>
+											</div>
+											<div class="broadcast-override-field">
+												<label for="override-episode-count-increment"
+													>話数カウント進行（任意・総集編は0）</label
+												>
+												<input
+													id="override-episode-count-increment"
+													type="number"
+													name="episode_count_increment"
+													min="0"
+													max="99"
+													placeholder="0"
+												>
+											</div>
+											<div class="broadcast-override-field">
+												<label for="override-note">メモ（任意）</label>
+												<input
+													id="override-note"
+													type="text"
+													name="note"
+													placeholder="1時間拡大SP"
+												>
+											</div>
+											<div class="broadcast-override-form-actions">
+												<button type="submit" class="broadcast-override-submit">登録</button>
+												<button
+													type="button"
+													class="broadcast-override-cancel"
+													onclick={() => {
+														overrideFormOpen = false;
+													}}
+												>
+													キャンセル
+												</button>
+											</div>
+										</form>
+									</div>
+								{/if}
+							</section>
+						{/if}
 					{/if}
 				</section>
+			{/if}
 
-				<section class="broadcast-override-section">
-					<h2 class="broadcast-override-heading">イレギュラー放送設定</h2>
-					<p class="broadcast-override-hint">
-						特定の話だけ放送時刻・放送時間を変更したい場合（拡大放送・特番など）に登録します。
-					</p>
-
-					{#if data.broadcastOverrides.length > 0}
-						<ul class="broadcast-override-list">
-							{#each data.broadcastOverrides as override (override.id)}
-								<li class="broadcast-override-item">
-									<div class="broadcast-override-info">
-										<span class="broadcast-override-date">{override.room_date}</span>
-										{#if override.broadcast_time}
-											<span class="broadcast-override-tag">{override.broadcast_time}〜</span>
-										{/if}
-										{#if override.duration_minutes != null}
-											<span class="broadcast-override-tag">{override.duration_minutes}分</span>
-										{/if}
-										{#if override.episode_start != null && override.episode_end != null}
-											<span class="broadcast-override-tag">
-												{#if override.episode_start === override.episode_end}
-													第{override.episode_start}話
-												{:else}
-													第{override.episode_start}話〜第{override.episode_end}話 一挙放送
-												{/if}
-											</span>
-										{/if}
-										{#if override.episode_label}
-											<span class="broadcast-override-tag">{override.episode_label}</span>
-										{/if}
-										{#if override.episode_count_increment != null}
-											<span class="broadcast-override-tag"
-												>+{override.episode_count_increment}</span
-											>
-										{/if}
-										{#if override.note}
-											<span class="broadcast-override-note">{override.note}</span>
-										{/if}
-									</div>
-									<form method="POST" action="?/deleteBroadcastOverride" use:enhance>
-										<input type="hidden" name="override_id" value={override.id}>
-										<button type="submit" class="broadcast-override-delete">削除</button>
-									</form>
-								</li>
-							{/each}
-						</ul>
-					{/if}
-
-					<form method="POST" action="?/addBroadcastOverride" use:enhance class="broadcast-override-form">
-						<div class="broadcast-override-field">
-							<label for="override-room-date">日付</label>
-							<input id="override-room-date" type="date" name="room_date" required>
-						</div>
-						<div class="broadcast-override-field">
-							<label for="override-broadcast-time">放送時刻（任意・未指定で通常値）</label>
-							<input id="override-broadcast-time" type="text" name="broadcast_time" placeholder="23:30">
-						</div>
-						<div class="broadcast-override-field">
-							<label for="override-duration">放送時間・分（任意）</label>
-							<input
-								id="override-duration"
-								type="number"
-								name="duration_minutes"
-								min="1"
-								max="1440"
-								placeholder="60"
-							>
-						</div>
-						<div class="broadcast-override-field">
-							<label for="override-pre-open">投稿開始の前倒し・分（任意）</label>
-							<input id="override-pre-open" type="number" name="pre_open_minutes" min="0" max="1440">
-						</div>
-						<div class="broadcast-override-field">
-							<label for="override-post-close">投稿終了の延長・分（任意）</label>
-							<input id="override-post-close" type="number" name="post_close_minutes" min="0" max="1440">
-						</div>
-						<div class="broadcast-override-field">
-							<label for="override-episode-start">対象話数（開始・任意）</label>
-							<input
-								id="override-episode-start"
-								type="number"
-								name="episode_start"
-								min="1"
-								placeholder="1"
-							>
-						</div>
-						<div class="broadcast-override-field">
-							<label for="override-episode-end">対象話数（終了・任意）</label>
-							<input id="override-episode-end" type="number" name="episode_end" min="1" placeholder="2">
-						</div>
-						<div class="broadcast-override-field">
-							<label for="override-episode-label">表示ラベル（任意）</label>
-							<input id="override-episode-label" type="text" name="episode_label" placeholder="総集編">
-						</div>
-						<div class="broadcast-override-field">
-							<label for="override-episode-count-increment">話数カウント進行（任意・総集編は0）</label>
-							<input
-								id="override-episode-count-increment"
-								type="number"
-								name="episode_count_increment"
-								min="0"
-								max="99"
-								placeholder="0"
-							>
-						</div>
-						<div class="broadcast-override-field">
-							<label for="override-note">メモ（任意）</label>
-							<input id="override-note" type="text" name="note" placeholder="1時間拡大SP">
-						</div>
-						<button type="submit" class="broadcast-override-submit">登録</button>
-					</form>
+			{#if data.anime.room_type === "global"}
+				<section class="global-lobby-section">
+					<a href="/rooms/anime/{data.anime.id}/lobby" class="global-lobby-link">
+						<span class="i-lucide-messages-square" aria-hidden="true"></span>
+						<span>
+							<strong>この作品の総合実況・雑談ロビーへ入る</strong>
+							<small>話数別ではなく、作品全体の常設ルームです</small>
+						</span>
+					</a>
 				</section>
 			{/if}
 
@@ -1094,7 +1285,7 @@ $effect(() => {
 									></span>
 								</div>
 								<span class="listed-user-name">{u.display_name ?? u.username}</span>
-								{#if u.score != null}
+								{#if u.score != null && u.score > 0}
 									<span class="listed-user-score">★{u.score}</span>
 								{/if}
 							</a>
@@ -1526,8 +1717,13 @@ $effect(() => {
 }
 
 .admin-edit-section {
-	padding-top: 20px;
-	border-top: 1px solid var(--border);
+	display: flex;
+	flex-direction: column;
+	gap: 18px;
+	padding: 24px;
+	border: 1px solid #27272a;
+	border-radius: 16px;
+	background: #09090b;
 }
 .admin-edit-toggle {
 	display: inline-flex;
@@ -1552,16 +1748,51 @@ $effect(() => {
 	border-color: var(--accent);
 	color: var(--accent);
 }
+.admin-tab-list {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 8px;
+	padding: 4px;
+	border: 1px solid #27272a;
+	border-radius: 12px;
+	background: #18181b;
+}
+.admin-tab {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 40px;
+	padding: 8px 12px;
+	border: 1px solid transparent;
+	border-radius: 9px;
+	background: transparent;
+	color: #a1a1aa;
+	font-size: 0.86rem;
+	font-weight: 700;
+	cursor: pointer;
+	transition:
+		background 0.15s,
+		border-color 0.15s,
+		color 0.15s;
+}
+.admin-tab:hover {
+	color: #f4f4f5;
+	background: #27272a;
+}
+.admin-tab--active {
+	border-color: #3f3f46;
+	background: #09090b;
+	color: #f4f4f5;
+	box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+}
 .admin-edit-form {
-	margin-top: 18px;
+	min-width: 0;
 }
 
 .broadcast-override-section {
 	display: flex;
 	flex-direction: column;
-	gap: 12px;
-	padding-top: 20px;
-	border-top: 1px solid var(--border);
+	gap: 16px;
 }
 .broadcast-override-heading {
 	font-size: 1rem;
@@ -1573,47 +1804,77 @@ $effect(() => {
 	color: var(--text-muted);
 	margin: 0;
 }
-.broadcast-override-list {
-	list-style: none;
-	padding: 0;
-	margin: 0;
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
+.broadcast-override-table-wrap {
+	overflow-x: auto;
+	border: 1px solid #27272a;
+	border-radius: 12px;
+	background: #111113;
 }
-.broadcast-override-item {
+.broadcast-override-table {
+	width: 100%;
+	border-collapse: collapse;
+	min-width: 680px;
+	font-size: 0.82rem;
+}
+.broadcast-override-table th,
+.broadcast-override-table td {
+	padding: 10px 12px;
+	border-bottom: 1px solid #27272a;
+	text-align: left;
+	vertical-align: middle;
+}
+.broadcast-override-table th {
+	color: #a1a1aa;
+	font-size: 0.72rem;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	background: #18181b;
+}
+.broadcast-override-table tr:last-child td {
+	border-bottom: 0;
+}
+.broadcast-override-table-tags {
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
-	gap: 10px;
-	padding: 8px 10px;
-	border-radius: 6px;
-	border: 1px solid var(--border);
-	background: var(--card-bg);
-	font-size: 0.85rem;
-}
-.broadcast-override-info {
-	display: flex;
-	align-items: center;
-	gap: 8px;
 	flex-wrap: wrap;
+	gap: 6px;
 }
 .broadcast-override-date {
 	font-weight: 600;
+	color: #f4f4f5;
 }
 .broadcast-override-tag {
-	color: var(--text-muted);
-	font-size: 0.8rem;
+	display: inline-flex;
+	align-items: center;
+	min-height: 22px;
+	padding: 2px 8px;
+	border: 1px solid #3f3f46;
+	border-radius: 999px;
+	background: #18181b;
+	color: #d4d4d8;
+	font-size: 0.76rem;
 }
 .broadcast-override-note {
-	color: var(--text-muted);
+	color: #a1a1aa;
 	font-size: 0.8rem;
 	font-style: italic;
 }
+.broadcast-override-empty,
+.broadcast-override-empty-row {
+	color: #71717a;
+}
+.broadcast-override-empty-row {
+	padding: 18px 12px;
+	text-align: center;
+}
+.broadcast-override-action-cell {
+	width: 1%;
+	white-space: nowrap;
+}
 .broadcast-override-delete {
-	border: 1px solid var(--border);
-	background: var(--card-bg);
-	color: var(--text);
+	border: 1px solid #3f3f46;
+	background: #18181b;
+	color: #f4f4f5;
 	border-radius: 6px;
 	padding: 4px 10px;
 	font-size: 0.78rem;
@@ -1623,9 +1884,37 @@ $effect(() => {
 	border-color: #ef4444;
 	color: #ef4444;
 }
+.broadcast-override-add-toggle {
+	align-self: flex-start;
+	min-height: 40px;
+	padding: 0 16px;
+	border: 1px solid #3f3f46;
+	border-radius: 9px;
+	background: #18181b;
+	color: #f4f4f5;
+	font-size: 0.86rem;
+	font-weight: 700;
+	cursor: pointer;
+	transition:
+		background 0.15s,
+		border-color 0.15s,
+		color 0.15s;
+}
+.broadcast-override-add-toggle:hover {
+	border-color: var(--accent);
+	color: var(--accent);
+	background: #27272a;
+}
+.broadcast-override-accordion {
+	animation: override-form-enter 0.18s ease-out;
+	padding: 14px;
+	border: 1px solid #27272a;
+	border-radius: 12px;
+	background: #111113;
+}
 .broadcast-override-form {
 	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
+	grid-template-columns: repeat(1, minmax(0, 1fr));
 	gap: 12px;
 }
 .broadcast-override-field {
@@ -1635,32 +1924,131 @@ $effect(() => {
 }
 .broadcast-override-field label {
 	font-size: 0.75rem;
-	color: var(--text-muted);
+	color: #a1a1aa;
 }
 .broadcast-override-field input {
 	height: 36px;
 	padding: 0 10px;
 	border-radius: 6px;
-	border: 1px solid var(--border);
-	background: var(--card-bg);
-	color: var(--text);
+	border: 1px solid #3f3f46;
+	background: #09090b;
+	color: #f4f4f5;
 	font-size: 0.85rem;
 }
-.broadcast-override-submit {
+.broadcast-override-checkbox {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 36px;
+	font-size: 0.82rem;
+	color: #f4f4f5;
+}
+.broadcast-override-checkbox input {
+	width: 16px;
+	height: 16px;
+	accent-color: var(--accent);
+}
+.broadcast-override-form-actions {
 	grid-column: 1 / -1;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+.broadcast-override-submit,
+.broadcast-override-cancel {
 	height: 40px;
 	border-radius: 8px;
-	border: 1px solid var(--accent);
-	background: var(--accent);
-	color: #fff;
 	font-weight: 700;
 	font-size: 0.88rem;
 	cursor: pointer;
-	justify-self: start;
 	padding: 0 20px;
+}
+.broadcast-override-submit {
+	border: 1px solid var(--accent);
+	background: var(--accent);
+	color: #fff;
 }
 .broadcast-override-submit:hover {
 	opacity: 0.9;
+}
+.broadcast-override-cancel {
+	border: 1px solid #3f3f46;
+	background: transparent;
+	color: #d4d4d8;
+}
+.broadcast-override-cancel:hover {
+	background: #27272a;
+	color: #f4f4f5;
+}
+
+@keyframes override-form-enter {
+	from {
+		opacity: 0;
+		transform: translateY(-6px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@media (min-width: 768px) {
+	.broadcast-override-form {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+@media (max-width: 640px) {
+	.admin-edit-section {
+		padding: 16px;
+		border-radius: 14px;
+	}
+
+	.admin-tab-list {
+		grid-template-columns: 1fr;
+	}
+}
+
+.global-lobby-section {
+	padding-top: 20px;
+	border-top: 1px solid var(--border);
+}
+.global-lobby-link {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	width: 100%;
+	box-sizing: border-box;
+	padding: 14px 16px;
+	border-radius: 8px;
+	border: 1px solid color-mix(in srgb, #0f766e 36%, var(--border));
+	background: color-mix(in srgb, #14b8a6 13%, var(--card-bg));
+	color: var(--text);
+	text-decoration: none;
+}
+.global-lobby-link:hover {
+	border-color: #0f766e;
+	background: color-mix(in srgb, #14b8a6 18%, var(--card-bg));
+}
+.global-lobby-link > span:first-child {
+	flex: 0 0 auto;
+	font-size: 1.35rem;
+	color: #0f766e;
+}
+.global-lobby-link strong,
+.global-lobby-link small {
+	display: block;
+}
+.global-lobby-link strong {
+	font-size: 0.95rem;
+	line-height: 1.35;
+}
+.global-lobby-link small {
+	margin-top: 2px;
+	color: var(--text-muted);
+	font-size: 0.78rem;
+	line-height: 1.35;
 }
 
 /* Related anime */
