@@ -487,7 +487,7 @@ async function submitReport() {
 				<div class="anime-quote-body">
 					<span class="anime-quote-label">アニメ</span>
 					<span class="anime-quote-title">{post.anime_quote.title}</span>
-					{#if post.anime_quote.user_score !== null}
+					{#if post.anime_quote.user_score != null && post.anime_quote.user_score > 0}
 						<span class="anime-quote-score">
 							<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
 								<path

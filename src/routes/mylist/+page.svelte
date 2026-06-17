@@ -65,7 +65,10 @@ $effect(() => {
 			{
 				entry: {
 					status: anime.user_entry?.status ?? "plan_to_watch",
-					score: anime.user_entry?.score?.toString() ?? "",
+					score:
+						anime.user_entry?.score != null && anime.user_entry.score > 0
+							? anime.user_entry.score.toString()
+							: "",
 					progress: anime.user_entry?.progress ?? 0,
 				},
 			},

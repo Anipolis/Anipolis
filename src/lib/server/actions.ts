@@ -617,7 +617,8 @@ export async function upsertUserAnimeEntry(supabase: SupabaseClient<Database>, r
 	if (!animeId) return fail(400, { message: "アニメIDが不正です" });
 	if (!status) return fail(400, { message: "ステータスを選択してください" });
 
-	const score = scoreRaw ? parseFloat(scoreRaw) : null;
+	const parsedScore = scoreRaw ? parseFloat(scoreRaw) : null;
+	const score = parsedScore != null && Number.isFinite(parsedScore) && parsedScore > 0 ? parsedScore : null;
 	const progress = progressRaw ? parseInt(progressRaw, 10) : 0;
 
 	const { error } = await supabase

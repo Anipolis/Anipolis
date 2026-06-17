@@ -20,7 +20,9 @@ let {
 const episodeMax = $derived(anime.episode_count ? Number(anime.episode_count) : 9999);
 
 const origStatus = $derived(anime.user_entry?.status ?? "plan_to_watch");
-const origScore = $derived(anime.user_entry?.score?.toString() ?? "");
+const origScore = $derived(
+	anime.user_entry?.score != null && anime.user_entry.score > 0 ? anime.user_entry.score.toString() : "",
+);
 const origProgress = $derived(anime.user_entry?.progress ?? 0);
 
 const hasChanges = $derived(

@@ -40,7 +40,7 @@ let {
 					{:else}
 						<div class="anime-cover-placeholder">?</div>
 					{/if}
-					{#if anime.user_entry?.score !== null && anime.user_entry?.score !== undefined}
+					{#if anime.user_entry?.score != null && anime.user_entry.score > 0}
 						<div class="card-score">★ {anime.user_entry.score}</div>
 					{/if}
 				</div>
