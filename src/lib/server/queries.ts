@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "$lib/supabase/database.types";
+import { buildPostCardSelect } from "$lib/server/post-selects";
 import type {
 	Anime,
 	AnimeExchangeItem,
@@ -89,11 +90,7 @@ function normalizeAverageScore(score: number | null | undefined, count: number |
 }
 
 /** 投稿一覧系クエリで共通の SELECT 句 */
-const POST_LIST_SELECT = `id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, broadcast_room_session_id, exchange_share,
-             profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
-             post_hashtags ( hashtags ( name ) ),
-             broadcast_room_session:broadcast_room_sessions!posts_broadcast_room_session_id_fkey ( room_date, room_kind, room_key ),
-             anime:anime!posts_anime_id_fkey ( id, title, cover_url, official_hashtag, broadcast_day, broadcast_time, broadcast_duration_minutes, aired_from )`;
+const POST_LIST_SELECT = buildPostCardSelect();
 
 /**
  * rawPost 配列に like_count / repost_count / reply_count / liked_by_me / reposted_by_me を付加して
@@ -1027,13 +1024,7 @@ export async function getBookmarkedPosts(supabase: SupabaseClient<Database>, use
 	if (postIds.length === 0) return [];
 	const { data: rawPosts } = await supabase
 		.from("posts")
-		.select(
-			`id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, broadcast_room_session_id, exchange_share,
-             profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
-             post_hashtags ( hashtags ( name ) ),
-             broadcast_room_session:broadcast_room_sessions!posts_broadcast_room_session_id_fkey ( room_date, room_kind, room_key ),
-             anime:anime!posts_anime_id_fkey ( id, title, cover_url, official_hashtag, broadcast_day, broadcast_time, broadcast_duration_minutes, aired_from )`,
-		)
+		.select(POST_LIST_SELECT)
 		.in("id", postIds);
 	// ブックマーク保存順を維持するため postIds の順序に並べ直す
 	const orderMap = new Map(postIds.map((id, i) => [id, i]));
@@ -1058,13 +1049,7 @@ export async function getLikedPosts(
 	if (postIds.length === 0) return [];
 	const { data: rawPosts } = await supabase
 		.from("posts")
-		.select(
-			`id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, broadcast_room_session_id, exchange_share,
-             profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
-             post_hashtags ( hashtags ( name ) ),
-             broadcast_room_session:broadcast_room_sessions!posts_broadcast_room_session_id_fkey ( room_date, room_kind, room_key ),
-             anime:anime!posts_anime_id_fkey ( id, title, cover_url, official_hashtag, broadcast_day, broadcast_time, broadcast_duration_minutes, aired_from )`,
-		)
+		.select(POST_LIST_SELECT)
 		.in("id", postIds)
 		.order("created_at", { ascending: false });
 	return enrichPostsWithCounts(supabase, (rawPosts ?? []) as unknown as RawPost[], currentUserId);

@@ -8,16 +8,11 @@ import {
 	toggleRepostAction,
 } from "$lib/server/actions";
 import { enrichPostsWithCounts, getAnimeRankingTrending } from "$lib/server/queries";
+import { buildPostCardSelect } from "$lib/server/post-selects";
 import type { RawPost } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
-const POSTS_SELECT = `
-    id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, broadcast_room_session_id, exchange_share,
-    profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
-    post_hashtags ( hashtags ( name ) ),
-    broadcast_room_session:broadcast_room_sessions!posts_broadcast_room_session_id_fkey ( room_date, room_kind, room_key ),
-    anime:anime!posts_anime_id_fkey ( id, title, cover_url, official_hashtag, broadcast_day, broadcast_time, broadcast_duration_minutes, aired_from )
-` as const;
+const POSTS_SELECT = buildPostCardSelect();
 
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
@@ -27,11 +22,12 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 	const { data: rawPost } = await postReader.from("posts").select(POSTS_SELECT).eq("id", params.id).maybeSingle();
 
 	if (!rawPost) error(404, "投稿が見つかりません");
+	const post = rawPost as unknown as RawPost;
 
 	// 親投稿・リプライを並列取得
 	const [rawParentRes, rawRepliesRes, trendingResult, animeTrending] = await Promise.all([
-		rawPost.parent_id
-			? postReader.from("posts").select(POSTS_SELECT).eq("id", rawPost.parent_id).maybeSingle()
+		post.parent_id
+			? postReader.from("posts").select(POSTS_SELECT).eq("id", post.parent_id).maybeSingle()
 			: Promise.resolve({ data: null }),
 
 		postReader
@@ -47,13 +43,13 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 	const rawReplies = rawRepliesRes.data ?? [];
 
 	// 全投稿を一度に enrich（バッチクエリを最小化）
-	const rawAll = [rawPost, ...(rawParent ? [rawParent] : []), ...rawReplies] as unknown as RawPost[];
+	const rawAll = [post, ...(rawParent ? [rawParent] : []), ...rawReplies] as unknown as RawPost[];
 	const enriched = await enrichPostsWithCounts(supabase, rawAll, user?.id ?? null, { includeMutedRoomPosts: true });
 
 	const enrichedPost = enriched.find((p) => p.id === params.id);
 	if (!enrichedPost) error(404, "投稿が見つかりません");
-	const enrichedParent = rawPost.parent_id ? (enriched.find((p) => p.id === rawPost.parent_id) ?? null) : null;
-	const enrichedReplies = enriched.filter((p) => p.id !== params.id && p.id !== rawPost.parent_id);
+	const enrichedParent = post.parent_id ? (enriched.find((p) => p.id === post.parent_id) ?? null) : null;
+	const enrichedReplies = enriched.filter((p) => p.id !== params.id && p.id !== post.parent_id);
 
 	return {
 		post: enrichedPost,

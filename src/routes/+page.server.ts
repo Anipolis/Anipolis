@@ -13,27 +13,13 @@ import {
 	getFollowingIds,
 	getUserAnimeList,
 } from "$lib/server/queries";
+import { buildPostCardSelect } from "$lib/server/post-selects";
 import type { AnimeExchangeShare, RawPost } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
-const POSTS_SELECT_WITH_EXCHANGE_AND_CW = `id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, broadcast_room_session_id, exchange_share,
-	profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
-	post_hashtags ( hashtags ( name ) ),
-	broadcast_room_session:broadcast_room_sessions!posts_broadcast_room_session_id_fkey ( room_date, room_kind, room_key ),
-	anime:anime!posts_anime_id_fkey ( id, title, cover_url, official_hashtag, broadcast_day, broadcast_time, broadcast_duration_minutes, aired_from ),
-	cw_anime:anime!posts_cw_anime_id_fkey ( id, title, cover_url )`;
-
-const POSTS_SELECT_WITH_EXCHANGE = `id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, broadcast_room_session_id, exchange_share,
-	profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
-	post_hashtags ( hashtags ( name ) ),
-	broadcast_room_session:broadcast_room_sessions!posts_broadcast_room_session_id_fkey ( room_date, room_kind, room_key ),
-	anime:anime!posts_anime_id_fkey ( id, title, cover_url, official_hashtag, broadcast_day, broadcast_time, broadcast_duration_minutes, aired_from )`;
-
-const POSTS_SELECT_BASE = `id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, broadcast_room_session_id,
-	profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
-	post_hashtags ( hashtags ( name ) ),
-	broadcast_room_session:broadcast_room_sessions!posts_broadcast_room_session_id_fkey ( room_date, room_kind, room_key ),
-	anime:anime!posts_anime_id_fkey ( id, title, cover_url, official_hashtag, broadcast_day, broadcast_time, broadcast_duration_minutes, aired_from )`;
+const POSTS_SELECT_WITH_EXCHANGE_AND_CW = buildPostCardSelect({ exchangeShare: true, cwAnime: true });
+const POSTS_SELECT_WITH_EXCHANGE = buildPostCardSelect({ exchangeShare: true });
+const POSTS_SELECT_BASE = buildPostCardSelect({ exchangeShare: false });
 
 export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession }, parent }) => {
 	const { profile } = await parent();
