@@ -17,6 +17,12 @@ import type {
 	BroadcastRoomOverride,
 	Event,
 } from "$lib/types";
+import {
+	broadcastTimeSortValue,
+	effectiveBroadcastTime,
+	overrideForRoomDate,
+	roomDateKey,
+} from "$lib/utils/broadcast-room";
 import type { Actions, PageServerLoad } from "./$types";
 
 interface BroadcastAnnouncement {
@@ -71,24 +77,6 @@ function isAnimeOnAirDate(anime: Anime, date: string) {
 	return true;
 }
 
-function broadcastTimeSortValue(value: string | null) {
-	const match = value?.match(/^(\d{1,2}):([0-5]\d)/);
-	if (!match) return Number.POSITIVE_INFINITY;
-	return Number(match[1]) * 60 + Number(match[2]);
-}
-
-function overrideForDate(overrides: BroadcastRoomOverride[] | undefined, date: string): BroadcastRoomOverride | null {
-	return overrides?.find((override) => override.room_date.slice(0, 10) === date) ?? null;
-}
-
-function effectiveBroadcastTime(
-	anime: Anime,
-	date: string,
-	overrides: Record<string, BroadcastRoomOverride[]>,
-): string | null {
-	return overrideForDate(overrides[anime.id], date)?.broadcast_time ?? anime.broadcast_time;
-}
-
 function announcementMessage(override: BroadcastRoomOverride): string {
 	return override.announcement_label?.trim() || "今週は放送休止";
 }
@@ -100,14 +88,14 @@ function pushAnnouncement(
 	overrides: Record<string, BroadcastRoomOverride[]>,
 ) {
 	if (day.announcements.some((announcement) => announcement.anime_id === anime.id)) return;
-	const date = override.room_date.slice(0, 10);
+	const date = roomDateKey(override.room_date);
 	day.announcements.push({
 		anime_id: anime.id,
 		title: anime.title,
 		cover_url: anime.cover_url,
 		room_date: date,
 		message: announcementMessage(override),
-		broadcast_time: effectiveBroadcastTime(anime, date, overrides),
+		broadcast_time: effectiveBroadcastTime(anime, date, overrides[anime.id]),
 	});
 }
 
@@ -148,20 +136,25 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		animeList.map((anime) => anime.id),
 	);
 
-	const days: { date: string; label: string; anime: Anime[]; events: Event[]; announcements: BroadcastAnnouncement[] }[] =
-		DAY_LABELS.map((label, index) => ({
-			date: toDateInputValue(addDays(weekStart, index)),
-			label,
-			anime: [],
-			events: [],
-			announcements: [],
-		}));
+	const days: {
+		date: string;
+		label: string;
+		anime: Anime[];
+		events: Event[];
+		announcements: BroadcastAnnouncement[];
+	}[] = DAY_LABELS.map((label, index) => ({
+		date: toDateInputValue(addDays(weekStart, index)),
+		label,
+		anime: [],
+		events: [],
+		announcements: [],
+	}));
 
 	for (const anime of animeList.filter((a): a is Anime & { broadcast_day: number } => a.broadcast_day != null)) {
 		if (anime.room_type === "global") continue;
 		const day = days[anime.broadcast_day];
 		if (day && isAnimeOnAirDate(anime, day.date)) {
-			const override = overrideForDate(broadcastOverrides[anime.id], day.date);
+			const override = overrideForRoomDate(broadcastOverrides[anime.id], day.date);
 			if (override?.is_cancelled) {
 				pushAnnouncement(day, anime, override, broadcastOverrides);
 				continue;
@@ -173,7 +166,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	for (const anime of animeList) {
 		if (anime.room_type === "global") continue;
 		for (const override of broadcastOverrides[anime.id] ?? []) {
-			const date = override.room_date.slice(0, 10);
+			const date = roomDateKey(override.room_date);
 			if (date < scheduleRange.start || date > scheduleRange.end || !isAnimeOnAirDate(anime, date)) continue;
 
 			const day = days.find((candidate) => candidate.date === date);
@@ -195,8 +188,8 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	for (const day of days) {
 		day.anime.sort(
 			(a, b) =>
-				broadcastTimeSortValue(effectiveBroadcastTime(a, day.date, broadcastOverrides)) -
-				broadcastTimeSortValue(effectiveBroadcastTime(b, day.date, broadcastOverrides)),
+				broadcastTimeSortValue(effectiveBroadcastTime(a, day.date, broadcastOverrides[a.id])) -
+				broadcastTimeSortValue(effectiveBroadcastTime(b, day.date, broadcastOverrides[b.id])),
 		);
 		day.announcements.sort(
 			(a, b) => broadcastTimeSortValue(a.broadcast_time) - broadcastTimeSortValue(b.broadcast_time),

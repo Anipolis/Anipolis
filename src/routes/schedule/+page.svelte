@@ -4,6 +4,13 @@ import { untrack } from "svelte";
 import { enhance } from "$app/forms";
 import type { Anime, BroadcastRoomOverride } from "$lib/types";
 import { type BroadcastEpisodeSlot, resolveBroadcastEpisodeSlot } from "$lib/utils/broadcast-episodes";
+import {
+	broadcastTimeMinutes,
+	effectiveBroadcastTime as resolveEffectiveBroadcastTime,
+	isRoomLive as resolveIsRoomLive,
+	minutesUntilBroadcast as resolveMinutesUntilBroadcast,
+	roomLiveKey,
+} from "$lib/utils/broadcast-room";
 import type { ActionData, PageProps } from "./$types";
 
 let { data, form }: PageProps & { form: ActionData } = $props();
@@ -119,32 +126,12 @@ function formatTime(iso: string) {
 	return new Date(iso).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
 }
 
-function overrideForDate(anime: Anime, dateStr: string): BroadcastRoomOverride | null {
-	return data.broadcastOverrides[anime.id]?.find((override) => override.room_date.slice(0, 10) === dateStr) ?? null;
-}
-
 function effectiveBroadcastTime(anime: Anime, dateStr: string): string | null {
-	return overrideForDate(anime, dateStr)?.broadcast_time ?? anime.broadcast_time;
-}
-
-function effectiveDurationMinutes(anime: Anime, dateStr: string): number {
-	const overrideDuration = overrideForDate(anime, dateStr)?.duration_minutes;
-	return overrideDuration != null && overrideDuration > 0 ? overrideDuration : anime.broadcast_duration_minutes;
-}
-
-function effectivePostCloseMinutes(anime: Anime, dateStr: string): number {
-	const overridePostClose = overrideForDate(anime, dateStr)?.post_close_minutes;
-	return overridePostClose != null && overridePostClose >= 0
-		? overridePostClose
-		: anime.broadcast_room_post_close_minutes;
+	return resolveEffectiveBroadcastTime(anime, dateStr, data.broadcastOverrides[anime.id]);
 }
 
 function getBroadcastMinutes(anime: Anime, dateStr: string): number | null {
-	const broadcastTime = effectiveBroadcastTime(anime, dateStr);
-	if (!broadcastTime) return null;
-	const match = broadcastTime.match(/^(\d{1,2}):(\d{2})/);
-	if (!match) return null;
-	return Number(match[1]) * 60 + Number(match[2]);
+	return broadcastTimeMinutes(effectiveBroadcastTime(anime, dateStr));
 }
 
 function groupAnimeByTimeBand(animeList: Anime[], dateStr: string): Anime[][] {
@@ -171,36 +158,12 @@ function groupAnimeByTimeBand(animeList: Anime[], dateStr: string): Anime[][] {
 	return groups;
 }
 
-// Returns minutes until broadcast from now, or null if not applicable today.
-// Handles late-night times ≥ 24:00 (e.g. "25:30" = 1:30am next calendar day).
 function minutesUntilBroadcast(anime: Anime, now: Date, roomDate: string): number | null {
-	const broadcastTime = effectiveBroadcastTime(anime, roomDate);
-	if (!broadcastTime) return null;
-	const match = broadcastTime.match(/^(\d{1,2}):(\d{2})/);
-	if (!match) return null;
-
-	const broadcastHour = Number(match[1]);
-	const broadcastMin = Number(match[2]);
-	const scheduledAt = parseDateInput(roomDate);
-	scheduledAt.setHours(broadcastHour, broadcastMin, 0, 0);
-	return Math.round((scheduledAt.getTime() - now.getTime()) / 60_000);
-}
-
-function roomLiveKey(animeId: string, roomDate: string): string {
-	return `${animeId}:${roomDate}`;
-}
-
-function getLiveWindowMinutes(anime: Anime, roomDate: string): number {
-	const durationMinutes =
-		effectiveDurationMinutes(anime, roomDate) > 0 ? effectiveDurationMinutes(anime, roomDate) : 30;
-	const postCloseMinutes =
-		effectivePostCloseMinutes(anime, roomDate) >= 0 ? effectivePostCloseMinutes(anime, roomDate) : 30;
-	return durationMinutes + postCloseMinutes;
+	return resolveMinutesUntilBroadcast(anime, now, roomDate, data.broadcastOverrides[anime.id]);
 }
 
 function isRoomLive(anime: Anime, now: Date, roomDate: string): boolean {
-	const mins = minutesUntilBroadcast(anime, now, roomDate);
-	return mins !== null && mins <= 0 && mins > -getLiveWindowMinutes(anime, roomDate);
+	return resolveIsRoomLive(anime, now, roomDate, data.broadcastOverrides[anime.id]);
 }
 
 function getMaxNotifyWindow(): number {
