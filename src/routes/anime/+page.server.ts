@@ -1,5 +1,6 @@
 ﻿import { fail } from "@sveltejs/kit";
 import { registerAnimeAction } from "$lib/server/anime-admin";
+import { buildAnimeListOptions, parseAnimeListFilters } from "$lib/server/anime-list-filters";
 import {
 	getAnimeList,
 	getAnimeRankingPopularity,
@@ -10,25 +11,6 @@ import {
 } from "$lib/server/queries";
 import type { Anime, AnimeListItem } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
-
-type Tab = "popular" | "trending" | "top_rated" | "mylist" | "airing" | "upcoming" | "register";
-type SeasonChip = "" | "冬" | "春" | "夏" | "秋";
-
-function parseGenres(value: string | null): string[] {
-	return [
-		...new Set(
-			(value ?? "")
-				.split(",")
-				.map((genre) => genre.trim())
-				.filter(Boolean),
-		),
-	];
-}
-
-function normalizeSeasonChip(value: string | null): SeasonChip {
-	const season = value?.trim();
-	return season === "冬" || season === "春" || season === "夏" || season === "秋" ? season : "";
-}
 
 /** Anime 全フィールドを HTML に埋め込まず、カード描画に必要な8フィールドだけへ射影する。 */
 function toAnimeListItem(a: Anime): AnimeListItem {
@@ -47,36 +29,12 @@ function toAnimeListItem(a: Anime): AnimeListItem {
 export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 	const isAdmin = user ? await isAdminUser(supabase, user.id) : false;
-	const tab = (url.searchParams.get("tab") as Tab) ?? "popular";
-	const search = url.searchParams.get("search")?.trim() ?? "";
-	const genres = parseGenres(url.searchParams.get("genres") ?? url.searchParams.get("genre"));
-	const seasonParam = url.searchParams.get("season")?.trim() ?? "";
-	const broadcastYearParam = (url.searchParams.get("year") ?? url.searchParams.get("broadcastYear"))?.trim() ?? "";
-	const broadcastYear = /^\d{4}$/.test(broadcastYearParam) ? broadcastYearParam : "";
-	const broadcastSeason = normalizeSeasonChip(
-		url.searchParams.get("season") ?? url.searchParams.get("broadcastSeason"),
-	);
-	const season = broadcastSeason ? "" : seasonParam;
-	const studio = url.searchParams.get("studio")?.trim() ?? "";
-	const producer = url.searchParams.get("producer")?.trim() ?? "";
-	const source = url.searchParams.get("source")?.trim() ?? "";
+	const filters = parseAnimeListFilters(url.searchParams);
+	const { tab, search, genre, genres, season, broadcastYear, broadcastSeason, studio, producer, source } = filters;
 
 	let animes: Anime[];
-	const hasSearchFilters = Boolean(
-		search || genres.length || season || broadcastYear || broadcastSeason || studio || producer || source,
-	);
 
-	if (hasSearchFilters) {
-		const filters: NonNullable<Parameters<typeof getAnimeList>[1]> = {
-			limit: 1000,
-			userId: user?.id ?? null,
-		};
-		if (tab === "trending") filters.sortBy = "trending";
-		else if (tab === "top_rated") filters.sortBy = "top_rated";
-		else if (tab === "mylist") filters.sortBy = "created";
-		else filters.sortBy = "popular";
-		if (tab === "airing") filters.broadcastStatus = "airing";
-		if (tab === "upcoming") filters.broadcastStatus = "upcoming";
+	if (filters.hasSearchFilters) {
 		if (tab === "mylist") {
 			if (!user) {
 				animes = [];
@@ -84,7 +42,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 					animes: [],
 					tab,
 					search,
-					genre: genres.join(","),
+					genre,
 					genres,
 					season,
 					broadcastYear,
@@ -96,17 +54,8 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 					isAdmin,
 				};
 			}
-			filters.listedByUserId = user.id;
 		}
-		if (search) filters.query = search;
-		if (genres.length) filters.genres = genres;
-		if (season) filters.season = season;
-		if (broadcastYear) filters.broadcastYear = broadcastYear;
-		if (broadcastSeason) filters.broadcastSeason = broadcastSeason;
-		if (studio) filters.studio = studio;
-		if (producer) filters.producer = producer;
-		if (source) filters.source = source;
-		animes = await getAnimeList(supabase, filters);
+		animes = await getAnimeList(supabase, buildAnimeListOptions(filters, user?.id ?? null));
 	} else if (tab === "mylist") {
 		animes = user ? await getUserAnimeList(supabase, user.id) : [];
 	} else if (tab === "trending") {
@@ -136,7 +85,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		animes: animes.map(toAnimeListItem),
 		tab,
 		search,
-		genre: genres.join(","),
+		genre,
 		genres,
 		season,
 		broadcastYear,
