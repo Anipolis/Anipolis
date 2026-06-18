@@ -1,5 +1,6 @@
 ﻿<script lang="ts">
 import { enhance } from "$app/forms";
+import { ANIME_GENRES, ANIME_SOURCE_OPTIONS } from "$lib/anime-vocabulary";
 import type { Anime } from "$lib/types";
 
 type FormResult = { success?: boolean; animeId?: string | number; message?: string } | null | undefined;
@@ -15,46 +16,8 @@ let {
 	action?: string;
 } = $props();
 
-const GENRES = [
-	"アクション",
-	"アドベンチャー",
-	"コメディ",
-	"ドラマ",
-	"ファンタジー",
-	"ホラー",
-	"ミステリー",
-	"ロマンス",
-	"SF",
-	"スポーツ",
-	"日常",
-	"魔法少女",
-	"メカ",
-	"音楽",
-	"学園",
-	"歴史",
-	"異世界",
-	"ハーレム",
-	"ガールズラブ",
-	"心理",
-];
-
-const SOURCE_OPTIONS = [
-	"漫画",
-	"ライトノベル",
-	"小説",
-	"ビジュアルノベル",
-	"ゲーム",
-	"オリジナル",
-	"4コマ漫画",
-	"Web漫画",
-	"メディアミックス",
-	"カードゲーム",
-	"書籍",
-	"絵本",
-	"音楽",
-	"ラジオ",
-	"その他",
-];
+const GENRES = [...ANIME_GENRES];
+const SOURCE_OPTIONS = [...ANIME_SOURCE_OPTIONS];
 
 // svelte-ignore state_referenced_locally
 let selectedGenres = $state<string[]>(anime?.genre ?? []);

@@ -1,0 +1,76 @@
+export const ANIME_GENRES = [
+	"アクション",
+	"アドベンチャー",
+	"受賞歴あり",
+	"コメディ",
+	"ドラマ",
+	"ファンタジー",
+	"ホラー",
+	"ミステリー",
+	"ロマンス",
+	"SF",
+	"スポーツ",
+	"日常",
+	"超自然",
+	"サスペンス",
+	"グルメ",
+	"魔法少女",
+	"メカ",
+	"音楽",
+	"学園",
+	"歴史",
+	"異世界",
+	"ハーレム",
+	"ボーイズラブ",
+	"ガールズラブ",
+	"心理",
+	"転生",
+	"吸血鬼",
+	"少年向け",
+	"少女向け",
+	"青年向け",
+	"女性向け",
+	"子ども向け",
+] as const;
+
+export const ANIME_SOURCE_OPTIONS = [
+	"漫画",
+	"ライトノベル",
+	"小説",
+	"ビジュアルノベル",
+	"ゲーム",
+	"オリジナル",
+	"4コマ漫画",
+	"Web漫画",
+	"メディアミックス",
+	"カードゲーム",
+	"書籍",
+	"絵本",
+	"音楽",
+	"ラジオ",
+	"その他",
+] as const;
+
+export const JIKAN_SOURCE_JA_BY_EN: Record<string, (typeof ANIME_SOURCE_OPTIONS)[number]> = {
+	"4-koma manga": "4コマ漫画",
+	book: "書籍",
+	"card game": "カードゲーム",
+	game: "ゲーム",
+	"light novel": "ライトノベル",
+	manga: "漫画",
+	"mixed media": "メディアミックス",
+	music: "音楽",
+	novel: "小説",
+	original: "オリジナル",
+	other: "その他",
+	"picture book": "絵本",
+	radio: "ラジオ",
+	"visual novel": "ビジュアルノベル",
+	"web manga": "Web漫画",
+};
+
+export function translateAnimeSource(source: string | null | undefined): string | null {
+	const normalized = source?.trim();
+	if (!normalized) return null;
+	return JIKAN_SOURCE_JA_BY_EN[normalized.toLowerCase()] ?? normalized;
+}
