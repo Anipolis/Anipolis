@@ -106,8 +106,7 @@ async function getOrCreateProfile(supabase: SupabaseClient<Database>, user: User
 	return created;
 }
 
-export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, cookies, depends, url }) => {
-	depends("broadcast:notifications");
+export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, cookies, url }) => {
 	const { session, user } = await safeGetSession();
 
 	const profile = user ? await getOrCreateProfile(supabase, user) : null;

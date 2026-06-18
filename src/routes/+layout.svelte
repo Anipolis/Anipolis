@@ -11,6 +11,30 @@ import "virtual:uno.css";
 import "../app.css";
 
 let { data, children }: LayoutProps = $props();
+let unreadNotificationCount = $state(0);
+let unreadBroadcastNotificationCount = $state(0);
+
+async function refreshNotificationCounts() {
+	if (!data.session) {
+		unreadNotificationCount = 0;
+		unreadBroadcastNotificationCount = 0;
+		return;
+	}
+
+	const response = await fetch("/api/notifications/unread-counts");
+	if (!response.ok) return;
+	const counts = (await response.json()) as {
+		unreadNotificationCount?: number;
+		unreadBroadcastNotificationCount?: number;
+	};
+	unreadNotificationCount = counts.unreadNotificationCount ?? 0;
+	unreadBroadcastNotificationCount = counts.unreadBroadcastNotificationCount ?? 0;
+}
+
+$effect(() => {
+	unreadNotificationCount = data.unreadNotificationCount ?? 0;
+	unreadBroadcastNotificationCount = data.unreadBroadcastNotificationCount ?? 0;
+});
 
 onMount(() => {
 	const {
@@ -19,7 +43,7 @@ onMount(() => {
 		invalidate("supabase:auth");
 	});
 	const notificationInterval = setInterval(() => {
-		if (data.session) void invalidate("broadcast:notifications");
+		void refreshNotificationCounts();
 	}, 30_000);
 	return () => {
 		subscription.unsubscribe();
@@ -43,8 +67,8 @@ function handleFabClick() {
 		supabase={data.supabase}
 		session={data.session}
 		profile={data.profile}
-		unreadNotificationCount={data.unreadNotificationCount}
-		unreadBroadcastNotificationCount={data.unreadBroadcastNotificationCount}
+		{unreadNotificationCount}
+		{unreadBroadcastNotificationCount}
 		pendingReportsCount={data.pendingReportsCount}
 		extraAccounts={data.extraAccounts}
 	/>
@@ -53,7 +77,7 @@ function handleFabClick() {
 	</div>
 </div>
 
-<MobileBottomNav session={data.session} unreadNotificationCount={data.unreadNotificationCount} />
+<MobileBottomNav session={data.session} {unreadNotificationCount} />
 <MobileSwipeNavigation session={data.session} />
 
 <!-- FAB: compose post (mobile only) -->

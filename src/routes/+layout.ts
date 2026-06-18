@@ -5,7 +5,6 @@ import type { LayoutLoad } from "./$types";
 
 export const load: LayoutLoad = async ({ data, depends, fetch }) => {
 	depends("supabase:auth");
-	depends("broadcast:notifications");
 
 	const supabase = isBrowser()
 		? createBrowserClient<Database>(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY)
