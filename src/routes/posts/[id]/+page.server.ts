@@ -7,8 +7,8 @@ import {
 	toggleLikeAction,
 	toggleRepostAction,
 } from "$lib/server/actions";
-import { enrichPostsWithCounts, getAnimeRankingTrending } from "$lib/server/queries";
 import { buildPostCardSelect } from "$lib/server/post-selects";
+import { enrichPostsWithCounts, getAnimeRankingTrending } from "$lib/server/queries";
 import type { RawPost } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 

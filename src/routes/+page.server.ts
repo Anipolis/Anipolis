@@ -6,6 +6,7 @@ import {
 	toggleLikeAction,
 	toggleRepostAction,
 } from "$lib/server/actions";
+import { buildPostCardSelect } from "$lib/server/post-selects";
 import {
 	enrichPostsWithCounts,
 	getAnimeExchangeShareForUser,
@@ -13,7 +14,6 @@ import {
 	getFollowingIds,
 	getUserAnimeList,
 } from "$lib/server/queries";
-import { buildPostCardSelect } from "$lib/server/post-selects";
 import type { AnimeExchangeShare, RawPost } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 

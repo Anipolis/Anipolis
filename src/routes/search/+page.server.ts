@@ -1,7 +1,7 @@
 ﻿import { fail } from "@sveltejs/kit";
 import { deletePostAction, toggleBookmarkAction, toggleLikeAction, toggleRepostAction } from "$lib/server/actions";
-import { enrichPostsWithCounts, getAnimeRankingTrending, quoteOrFilterValue } from "$lib/server/queries";
 import { buildPostCardSelect } from "$lib/server/post-selects";
+import { enrichPostsWithCounts, getAnimeRankingTrending, quoteOrFilterValue } from "$lib/server/queries";
 import type { RawPost } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
