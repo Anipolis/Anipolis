@@ -839,6 +839,52 @@ export async function removeBroadcastRoomMute(supabase: SupabaseClient<Database>
 	return { roomMuteSuccess: true };
 }
 
+export async function upsertAnimeMute(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+	animeId: string,
+	muteType: "period" | "always",
+	periodDays: number | null,
+	isRepeat: boolean,
+	roomDate: string | null,
+) {
+	if (!animeId || Number.isNaN(Number(animeId))) return fail(400, { message: "アニメが見つかりません" });
+
+	let mutedUntil: string | null = null;
+	if (muteType === "period" && periodDays != null && !isRepeat) {
+		const base = roomDate ? new Date(`${roomDate}T00:00:00`) : new Date();
+		mutedUntil = new Date(base.getTime() + periodDays * 24 * 60 * 60 * 1000).toISOString();
+	}
+
+	const record = {
+		user_id: userId,
+		anime_id: Number(animeId),
+		mute_type: muteType,
+		period_days: muteType === "period" ? periodDays : null,
+		is_repeat: isRepeat,
+		muted_until: mutedUntil,
+		updated_at: new Date().toISOString(),
+	};
+	// biome-ignore lint/suspicious/noExplicitAny: anime_mutes not yet in auto-generated DB types
+	const { error } = await (supabase as any).from("anime_mutes").upsert(record, { onConflict: "user_id,anime_id" });
+	if (error) {
+		console.error("anime mute upsert error:", error);
+		return fail(500, { message: "ミュート設定に失敗しました" });
+	}
+	return { roomMuteSuccess: true };
+}
+
+export async function removeAnimeMute(supabase: SupabaseClient<Database>, userId: string, animeId: string) {
+	// biome-ignore lint/suspicious/noExplicitAny: anime_mutes not yet in auto-generated DB types
+	const { error } = await (supabase as any)
+		.from("anime_mutes")
+		.delete()
+		.eq("user_id", userId)
+		.eq("anime_id", Number(animeId));
+	if (error) return fail(500, { message: "ミュート解除に失敗しました" });
+	return { roomMuteSuccess: true };
+}
+
 // linked_accounts は自動生成型未収録のためテーブル名のみ型アサーション使用
 export async function linkAccounts(
 	serviceClient: SupabaseClient<Database>,

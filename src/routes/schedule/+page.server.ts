@@ -1,22 +1,16 @@
 import { fail, redirect } from "@sveltejs/kit";
-import { createEventAction, toggleBroadcastSubscription, upsertBroadcastRoomMute } from "$lib/server/actions";
+import { createEventAction, removeAnimeMute, toggleBroadcastSubscription, upsertAnimeMute } from "$lib/server/actions";
 import {
-	getActiveBroadcastRoomMuteAnimeIds,
+	getActiveAnimeMuteIds,
 	getAnimeList,
+	getAnimeMutes,
 	getBroadcastNotificationSettings,
-	getBroadcastRoomMutes,
 	getBroadcastRoomOverridesForAnimeIds,
 	getBroadcastSubscriptions,
 	getEventsByRange,
 	isAdminUser,
 } from "$lib/server/queries";
-import type {
-	Anime,
-	BroadcastNotificationSettings,
-	BroadcastRoomMuteDuration,
-	BroadcastRoomOverride,
-	Event,
-} from "$lib/types";
+import type { Anime, BroadcastNotificationSettings, BroadcastRoomOverride, Event } from "$lib/types";
 import {
 	broadcastTimeSortValue,
 	effectiveBroadcastTime,
@@ -126,8 +120,8 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 						notify_5min: true,
 						notify_30min: false,
 					} as BroadcastNotificationSettings),
-			user ? getActiveBroadcastRoomMuteAnimeIds(supabase, user.id) : Promise.resolve(new Set<string>()),
-			user ? getBroadcastRoomMutes(supabase, user.id) : Promise.resolve([]),
+			user ? getActiveAnimeMuteIds(supabase, user.id) : Promise.resolve(new Set<string>()),
+			user ? getAnimeMutes(supabase, user.id) : Promise.resolve([]),
 			user ? isAdminUser(supabase, user.id) : Promise.resolve(false),
 		]);
 
@@ -217,12 +211,6 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	};
 };
 
-function toMuteDuration(value: FormDataEntryValue | null): BroadcastRoomMuteDuration | null {
-	if (value === "event_end") return value;
-	const days = Number(value);
-	return days >= 1 && days <= 7 && Number.isInteger(days) ? (days as 1 | 2 | 3 | 4 | 5 | 6 | 7) : null;
-}
-
 export const actions: Actions = {
 	createEvent: async ({ request, locals: { supabase, safeGetSession } }) => {
 		const { user } = await safeGetSession();
@@ -255,16 +243,38 @@ export const actions: Actions = {
 
 		const form = await request.formData();
 		const animeId = (form.get("anime_id") as string | null)?.trim() ?? "";
-		const roomDate = (form.get("room_date") as string | null)?.trim() ?? "";
-		const duration = toMuteDuration(form.get("duration"));
+		const roomDate = (form.get("room_date") as string | null)?.trim() ?? null;
+		const duration = form.get("duration") as string | null;
 		const repeatWeekly = form.get("repeat_weekly") === "true";
-		if (!animeId || !roomDate) return fail(400, { message: "放送ルームが見つかりません" });
-		if (!duration) return fail(400, { message: "ミュート期間を選択してください" });
+		if (!animeId) return fail(400, { message: "放送ルームが見つかりません" });
 
-		const result = await upsertBroadcastRoomMute(supabase, user.id, animeId, roomDate, duration, repeatWeekly);
-		if ("status" in result) {
-			return fail(result.status, { ...result.data, roomMuteError: true });
+		// Map legacy chip values to new anime_mutes schema.
+		// repeat_weekly is an option for period mutes, not a separate "always" mode.
+		const muteType = duration === "event_end" ? "always" : "period";
+		const periodDays = muteType === "period" && duration ? Number(duration) : null;
+		if (muteType === "period" && (periodDays == null || periodDays < 1 || periodDays > 7)) {
+			return fail(400, { message: "ミュート期間を選択してください" });
 		}
+
+		const result = await upsertAnimeMute(
+			supabase,
+			user.id,
+			animeId,
+			muteType,
+			periodDays,
+			muteType === "period" && repeatWeekly,
+			roomDate,
+		);
+		if ("status" in result) return fail(result.status, { ...result.data, roomMuteError: true });
 		return result;
+	},
+	removeBroadcastRoomMute: async ({ request, locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { message: "ログインが必要です" });
+
+		const form = await request.formData();
+		const animeId = (form.get("anime_id") as string | null)?.trim() ?? "";
+		if (!animeId) return fail(400, { message: "ミュート設定が見つかりません" });
+		return removeAnimeMute(supabase, user.id, animeId);
 	},
 };

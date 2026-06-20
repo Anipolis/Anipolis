@@ -469,6 +469,20 @@ export interface BroadcastRoomMute {
 	updated_at: string;
 }
 
+export type AnimeMuteType = "period" | "always";
+
+export interface AnimeMute {
+	id: string;
+	anime_id: string;
+	anime_title: string;
+	anime_cover_url: string | null;
+	mute_type: AnimeMuteType;
+	period_days: number | null;
+	is_repeat: boolean;
+	muted_until: string | null;
+	created_at: string;
+}
+
 export interface BroadcastRoomSession {
 	id: string;
 	anime_id: number;
