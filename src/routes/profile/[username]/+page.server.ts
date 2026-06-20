@@ -6,6 +6,7 @@ import {
 	toggleLikeAction,
 	toggleRepostAction,
 } from "$lib/server/actions";
+import { buildPostCardSelect } from "$lib/server/post-selects";
 import {
 	checkIsFollowing,
 	enrichPostsWithCounts,
@@ -15,7 +16,6 @@ import {
 	getLikedPosts,
 	getUserAnimeList,
 } from "$lib/server/queries";
-import { buildPostCardSelect } from "$lib/server/post-selects";
 import type { RawPost } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -26,6 +26,10 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 	if (!profile) {
 		error(404, "ユーザーが見つかりません");
 	}
+	const profileWithHeader = {
+		...profile,
+		header_url: (profile as typeof profile & { header_url?: string | null }).header_url ?? null,
+	};
 
 	const isOwn = user?.id === profile.id;
 	const isFollowing = user && user.id !== profile.id ? await checkIsFollowing(supabase, user.id, profile.id) : false;
@@ -80,7 +84,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 	]);
 
 	return {
-		profile,
+		profile: profileWithHeader,
 		posts,
 		imagePosts,
 		likedPosts,

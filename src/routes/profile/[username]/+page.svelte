@@ -15,6 +15,7 @@ let { data, form }: PageProps = $props();
 
 const { profile, posts, imagePosts, isOwn, canViewContent } = $derived(data);
 const displayName = $derived(profile.display_name ?? profile.username);
+const profileSocialImage = $derived(profile.header_url ?? profile.avatar_url);
 
 let isFollowing = $state(false);
 let followRequestStatus = $state<"none" | "pending">("none");
@@ -23,6 +24,9 @@ let editDisplayName = $state(untrack(() => data.profile.display_name ?? ""));
 let editBio = $state(untrack(() => data.profile.bio ?? ""));
 let editProfileId = $state(untrack(() => data.profile.id));
 let profileSubmitting = $state(false);
+let headerUploading = $state(false);
+let headerMessage = $state("");
+let headerPreviewUrl = $state<string | null>(null);
 let showProfileEditModal = $state(false);
 let showUserReportModal = $state(false);
 let reportReason = $state("harassment");
@@ -48,6 +52,7 @@ const activeTab = $derived(
 	requestedTab === "images" || requestedTab === "list" || requestedTab === "likes" ? requestedTab : "posts",
 );
 const bioRemaining = $derived(160 - editBio.length);
+const editableHeaderUrl = $derived(headerPreviewUrl ?? profile.header_url);
 
 const handleProfileSubmit: SubmitFunction = () => {
 	profileSubmitting = true;
@@ -75,10 +80,66 @@ function openProfileEditModal() {
 }
 
 function closeProfileEditModal() {
-	if (profileSubmitting) return;
+	if (profileSubmitting || headerUploading) return;
 	showProfileEditModal = false;
+	headerMessage = "";
 	editDisplayName = data.profile.display_name ?? "";
 	editBio = data.profile.bio ?? "";
+}
+
+async function updateHeaderImage(event: Event) {
+	const input = event.currentTarget as HTMLInputElement;
+	const file = input.files?.[0];
+	if (!file) return;
+
+	headerMessage = "";
+	if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+		headerMessage = "JPEG、PNG、WebP形式の画像を選択してください。";
+		input.value = "";
+		return;
+	}
+	if (file.size > 5 * 1024 * 1024) {
+		headerMessage = "画像は5MB以内にしてください。";
+		input.value = "";
+		return;
+	}
+
+	const previewUrl = URL.createObjectURL(file);
+	headerPreviewUrl = previewUrl;
+	headerUploading = true;
+	try {
+		const body = new FormData();
+		body.append("file", file);
+		const response = await fetch("/api/upload/profile-header", { method: "POST", body });
+		const result = (await response.json().catch(() => ({}))) as { message?: string };
+		if (!response.ok) throw new Error(result.message ?? "ヘッダー画像の更新に失敗しました");
+		await invalidateAll();
+		headerMessage = "ヘッダー画像を更新しました。";
+	} catch (uploadError) {
+		headerMessage = uploadError instanceof Error ? uploadError.message : "ヘッダー画像の更新に失敗しました";
+	} finally {
+		headerUploading = false;
+		headerPreviewUrl = null;
+		URL.revokeObjectURL(previewUrl);
+		input.value = "";
+	}
+}
+
+async function removeHeaderImage() {
+	if (headerUploading || !profile.header_url) return;
+	headerUploading = true;
+	headerMessage = "";
+	try {
+		const response = await fetch("/api/upload/profile-header", { method: "DELETE" });
+		const result = (await response.json().catch(() => ({}))) as { message?: string };
+		if (!response.ok) throw new Error(result.message ?? "ヘッダー画像の削除に失敗しました");
+		await invalidateAll();
+		headerMessage = "ヘッダー画像を削除しました。";
+	} catch (removeError) {
+		headerMessage = removeError instanceof Error ? removeError.message : "ヘッダー画像の削除に失敗しました";
+	} finally {
+		headerUploading = false;
+	}
 }
 
 async function submitUserReport() {
@@ -149,62 +210,66 @@ const grouped = $derived(
 	<meta property="og:description" content={profile.bio ?? `@${profile.username}のAnipolisプロフィール`}>
 	<meta property="og:type" content="website">
 	<meta property="og:url" content={page.url.href}>
-	{#if profile.avatar_url}
-		<meta property="og:image" content={profile.avatar_url}>
+	{#if profileSocialImage}
+		<meta property="og:image" content={profileSocialImage}>
 	{/if}
 </svelte:head>
 
 <div class="page-container">
 	<main class="feed-column">
 		<div class="profile-header">
-			<UserAvatar src={profile.avatar_url} username={profile.username} size="lg" />
-			<div class="profile-info">
-				<div class="profile-display-name">{displayName}</div>
-				<div class="profile-username">
-					@{profile.username}
-					{#if profile.is_private}
-						<span class="profile-lock-badge" title="鍵アカウント">鍵</span>
+			{#if profile.header_url}
+				<img class="profile-header-image" src={profile.header_url} alt="{displayName}のヘッダー画像">
+			{/if}
+			<div class="profile-header-content">
+				<UserAvatar src={profile.avatar_url} username={profile.username} size="lg" />
+				<div class="profile-info">
+					<div class="profile-display-name">{displayName}</div>
+					<div class="profile-username">
+						@{profile.username}
+						{#if profile.is_private}
+							<span class="profile-lock-badge" title="鍵アカウント">鍵</span>
+						{/if}
+					</div>
+					{#if profile.bio}
+						<p class="profile-bio">{profile.bio}</p>
 					{/if}
-				</div>
-				{#if profile.bio}
-					<p class="profile-bio">{profile.bio}</p>
-				{/if}
-				<div class="profile-stats">
-					<span class="profile-stat">
-						<strong>{posts.length}</strong>
-						<span>投稿</span>
-					</span>
-					<a href="/profile/{profile.username}/followers" class="profile-stat profile-stat--link">
-						<strong>{followerCount}</strong>
-						<span>フォロワー</span>
-					</a>
-					<a href="/profile/{profile.username}/following" class="profile-stat profile-stat--link">
-						<strong>{data.followCounts.following}</strong>
-						<span>フォロー中</span>
-					</a>
-					{#if canViewContent && (profile.list_is_public || isOwn)}
+					<div class="profile-stats">
 						<span class="profile-stat">
-							<strong>{animeList.length}</strong>
-							<span>アニメ</span>
+							<strong>{posts.length}</strong>
+							<span>投稿</span>
 						</span>
-					{/if}
-				</div>
+						<a href="/profile/{profile.username}/followers" class="profile-stat profile-stat--link">
+							<strong>{followerCount}</strong>
+							<span>フォロワー</span>
+						</a>
+						<a href="/profile/{profile.username}/following" class="profile-stat profile-stat--link">
+							<strong>{data.followCounts.following}</strong>
+							<span>フォロー中</span>
+						</a>
+						{#if canViewContent && (profile.list_is_public || isOwn)}
+							<span class="profile-stat">
+								<strong>{animeList.length}</strong>
+								<span>アニメ</span>
+							</span>
+						{/if}
+					</div>
 
-				{#if isOwn}
-					<button
-						type="button"
-						class="btn btn-outline"
-						style="margin-top: 12px; font-size: 13px;"
-						onclick={openProfileEditModal}
-					>
-						プロフィールを編集
-					</button>
-				{:else if data.user}
-					<div class="profile-actions">
-						<form
-							method="POST"
-							action="?/follow"
-							use:enhance={() => {
+					{#if isOwn}
+						<button
+							type="button"
+							class="btn btn-outline"
+							style="margin-top: 12px; font-size: 13px;"
+							onclick={openProfileEditModal}
+						>
+							プロフィールを編集
+						</button>
+					{:else if data.user}
+						<div class="profile-actions">
+							<form
+								method="POST"
+								action="?/follow"
+								use:enhance={() => {
                             return async ({ result }) => {
                                 if (result.type === 'success' && result.data) {
                                     const payload = result.data as { followed: boolean; requestStatus?: "none" | "pending" };
@@ -218,27 +283,28 @@ const grouped = $derived(
                                 }
                             };
                         }}
-						>
-							<input type="hidden" name="target_id" value={profile.id}>
-							<button
-								type="submit"
-								class="btn {isFollowing || followRequestStatus === 'pending' ? 'btn-outline' : 'btn-primary'}"
-								disabled={followRequestStatus === 'pending'}
-								style="font-size: 13px;"
 							>
-								{isFollowing ? 'フォロー中' : followRequestStatus === 'pending' ? '申請中' : profile.is_private ? 'フォロー申請' : 'フォローする'}
+								<input type="hidden" name="target_id" value={profile.id}>
+								<button
+									type="submit"
+									class="btn {isFollowing || followRequestStatus === 'pending' ? 'btn-outline' : 'btn-primary'}"
+									disabled={followRequestStatus === 'pending'}
+									style="font-size: 13px;"
+								>
+									{isFollowing ? 'フォロー中' : followRequestStatus === 'pending' ? '申請中' : profile.is_private ? 'フォロー申請' : 'フォローする'}
+								</button>
+							</form>
+							<button
+								type="button"
+								class="btn btn-outline"
+								style="font-size: 13px;"
+								onclick={() => (showUserReportModal = true)}
+							>
+								通報
 							</button>
-						</form>
-						<button
-							type="button"
-							class="btn btn-outline"
-							style="font-size: 13px;"
-							onclick={() => (showUserReportModal = true)}
-						>
-							通報
-						</button>
-					</div>
-				{/if}
+						</div>
+					{/if}
+				</div>
 			</div>
 		</div>
 
@@ -336,6 +402,42 @@ const grouped = $derived(
 							{/if}
 
 							<div class="field">
+								<span class="field-label">ヘッダー画像</span>
+								<div class="profile-header-editor">
+									{#if editableHeaderUrl}
+										<img src={editableHeaderUrl} alt="ヘッダー画像のプレビュー">
+									{:else}
+										<div class="profile-header-editor-empty">ヘッダー画像は未設定です</div>
+									{/if}
+								</div>
+								<div class="profile-header-editor-actions">
+									<label class="btn btn-outline profile-header-file-button">
+										{headerUploading ? '処理中...' : '画像を選択'}
+										<input
+											type="file"
+											accept="image/jpeg,image/png,image/webp"
+											disabled={headerUploading}
+											onchange={updateHeaderImage}
+										>
+									</label>
+									{#if profile.header_url}
+										<button
+											type="button"
+											class="btn btn-ghost"
+											disabled={headerUploading}
+											onclick={removeHeaderImage}
+										>
+											削除
+										</button>
+									{/if}
+								</div>
+								<p class="field-hint">横長の画像を推奨します。JPEG、PNG、WebP・最大5MB。</p>
+								{#if headerMessage}
+									<p class="profile-header-editor-message" aria-live="polite">{headerMessage}</p>
+								{/if}
+							</div>
+
+							<div class="field">
 								<label for="display_name" class="field-label">表示名</label>
 								<input
 									id="display_name"
@@ -380,12 +482,16 @@ const grouped = $derived(
 							<button
 								type="button"
 								class="btn btn-ghost"
-								disabled={profileSubmitting}
+								disabled={profileSubmitting || headerUploading}
 								onclick={closeProfileEditModal}
 							>
 								キャンセル
 							</button>
-							<button type="submit" class="btn btn-primary" disabled={profileSubmitting}>
+							<button
+								type="submit"
+								class="btn btn-primary"
+								disabled={profileSubmitting || headerUploading}
+							>
 								{profileSubmitting ? '保存中...' : '保存する'}
 							</button>
 						</div>
@@ -742,6 +848,59 @@ const grouped = $derived(
 	flex-direction: column;
 	gap: 16px;
 	padding: 14px;
+}
+
+.profile-header-editor {
+	overflow: hidden;
+	width: 100%;
+	aspect-ratio: 3 / 1;
+	border: 1px solid var(--color-border, var(--border, #334155));
+	border-radius: 8px;
+	background: var(--color-bg, var(--bg, #0f172a));
+}
+
+.profile-header-editor img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.profile-header-editor-empty {
+	display: grid;
+	place-items: center;
+	height: 100%;
+	color: var(--color-text-muted, var(--fg-muted, #94a3b8));
+	font-size: 13px;
+}
+
+.profile-header-editor-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 10px;
+}
+
+.profile-header-file-button {
+	position: relative;
+	cursor: pointer;
+	font-size: 13px;
+}
+
+.profile-header-file-button input {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+.profile-header-editor-message {
+	margin: 6px 0 0;
+	color: var(--color-text-secondary, var(--fg-muted, #94a3b8));
+	font-size: 13px;
 }
 
 .tab-lock {
