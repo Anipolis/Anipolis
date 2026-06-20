@@ -610,6 +610,16 @@ function toDateOnly(value: string | null | undefined) {
 	return date.toISOString().slice(0, 10);
 }
 
+function shiftDateOnly(value: string | null, days: number) {
+	if (!value || days === 0) return value;
+
+	const date = new Date(`${value}T00:00:00.000Z`);
+	if (Number.isNaN(date.getTime())) return value;
+
+	date.setUTCDate(date.getUTCDate() + days);
+	return date.toISOString().slice(0, 10);
+}
+
 function normalizeNameList(items: NamedResource[] | null | undefined) {
 	return [...new Set((items ?? []).map((item) => item.name?.trim()).filter((name): name is string => Boolean(name)))];
 }
@@ -659,17 +669,18 @@ function normalizeBroadcastSchedule(broadcast: JikanAnime["broadcast"]) {
 	const broadcastTime = normalizeBroadcastTime(broadcast?.time);
 
 	if (broadcastDay === null || broadcastTime === null) {
-		return { broadcast_day: broadcastDay, broadcast_time: broadcastTime };
+		return { broadcast_day: broadcastDay, broadcast_time: broadcastTime, aired_date_offset_days: 0 };
 	}
 
 	const hour = Number.parseInt(broadcastTime.slice(0, 2), 10);
 	if (hour >= LATE_NIGHT_EXTENSION_END_HOUR) {
-		return { broadcast_day: broadcastDay, broadcast_time: broadcastTime };
+		return { broadcast_day: broadcastDay, broadcast_time: broadcastTime, aired_date_offset_days: 0 };
 	}
 
 	return {
 		broadcast_day: (broadcastDay + 6) % 7,
 		broadcast_time: `${String(hour + 24).padStart(2, "0")}${broadcastTime.slice(2)}`,
+		aired_date_offset_days: -1,
 	};
 }
 
@@ -807,14 +818,14 @@ function mapJikanAnime(anime: JikanAnime, year: number, season: SeasonName): Ani
 	const titleJapanese = anime.title_japanese?.trim() || findTitleByType(anime, "Japanese");
 	const titleEnglish = anime.title_english?.trim() || findTitleByType(anime, "English");
 	const titleRomaji = anime.title?.trim() || findTitleByType(anime, "Default");
-	const airedFrom = toDateOnly(anime.aired?.from);
-	const airedTo = toDateOnly(anime.aired?.to);
 	const studioEn = normalizeNameList(anime.studios);
 	const studioJa = translateNameList(studioEn, STUDIO_JA_BY_EN);
 	const genreEn = normalizeNameList(anime.genres);
 	const genreJa = translateNameList(genreEn, GENRE_JA_BY_EN);
 	const officialSiteUrl = findOfficialSiteUrl(anime.external);
 	const broadcastSchedule = normalizeBroadcastSchedule(anime.broadcast);
+	const airedFrom = shiftDateOnly(toDateOnly(anime.aired?.from), broadcastSchedule.aired_date_offset_days);
+	const airedTo = shiftDateOnly(toDateOnly(anime.aired?.to), broadcastSchedule.aired_date_offset_days);
 
 	return {
 		mal_id: anime.mal_id,
