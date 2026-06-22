@@ -133,31 +133,48 @@ function effectiveBroadcastTime(anime: Anime, dateStr: string): string | null {
 	return resolveEffectiveBroadcastTime(anime, dateStr, data.broadcastOverrides[anime.id]);
 }
 
-function getBroadcastMinutes(anime: Anime, dateStr: string): number | null {
-	return broadcastTimeMinutes(effectiveBroadcastTime(anime, dateStr));
+type ScheduleItem =
+	| { type: "anime"; anime: Anime }
+	| {
+			type: "suspension";
+			anime_id: string;
+			title: string;
+			room_date: string;
+			message: string;
+			broadcast_time: string | null;
+	  };
+
+function getScheduleItems(day: (typeof data.days)[number], dateStr: string): ScheduleItem[] {
+	return [
+		...day.anime.map((anime): ScheduleItem => ({ type: "anime", anime })),
+		...day.announcements.map((announcement): ScheduleItem => ({ type: "suspension", ...announcement })),
+	].sort((a, b) => {
+		const aTime = a.type === "anime" ? effectiveBroadcastTime(a.anime, dateStr) : a.broadcast_time;
+		const bTime = b.type === "anime" ? effectiveBroadcastTime(b.anime, dateStr) : b.broadcast_time;
+		return (
+			(broadcastTimeMinutes(aTime) ?? Number.MAX_SAFE_INTEGER) -
+			(broadcastTimeMinutes(bTime) ?? Number.MAX_SAFE_INTEGER)
+		);
+	});
+}
+function scheduleItemMinutes(item: ScheduleItem, dateStr: string): number | null {
+	const time = item.type === "anime" ? effectiveBroadcastTime(item.anime, dateStr) : item.broadcast_time;
+	return broadcastTimeMinutes(time);
 }
 
-function groupAnimeByTimeBand(animeList: Anime[], dateStr: string): Anime[][] {
-	const groups: Anime[][] = [];
-	let currentGroup: Anime[] = [];
-	let previousMinutes: number | null = null;
-
-	for (const anime of animeList) {
-		const minutes = getBroadcastMinutes(anime, dateStr);
-		if (
-			currentGroup.length > 0 &&
-			minutes !== null &&
-			previousMinutes !== null &&
-			Math.abs(minutes - previousMinutes) <= 10
-		) {
-			currentGroup.push(anime);
+function groupScheduleItemsByTimeBand(day: (typeof data.days)[number], dateStr: string): ScheduleItem[][] {
+	const groups: ScheduleItem[][] = [];
+	for (const item of getScheduleItems(day, dateStr)) {
+		const currentGroup = groups.at(-1);
+		const previousItem = currentGroup?.at(-1);
+		const minutes = scheduleItemMinutes(item, dateStr);
+		const previousMinutes = previousItem ? scheduleItemMinutes(previousItem, dateStr) : null;
+		if (currentGroup && minutes !== null && previousMinutes !== null && Math.abs(minutes - previousMinutes) <= 10) {
+			currentGroup.push(item);
 		} else {
-			currentGroup = [anime];
-			groups.push(currentGroup);
+			groups.push([item]);
 		}
-		previousMinutes = minutes;
 	}
-
 	return groups;
 }
 
@@ -337,7 +354,6 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	<header class="schedule-header">
 		<div>
 			<h1>放送スケジュール</h1>
-			<p class="schedule-subtitle">放送中のアニメと同時視聴イベントをまとめて確認できます。</p>
 		</div>
 		<div class="schedule-actions">
 			<div class="week-nav">
@@ -352,6 +368,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 						前週
 					</span>
 				{/if}
+				<h1 class="mobile-schedule-title">放送スケジュール</h1>
 				{#if data.canGoNext}
 					<a class="week-nav-btn" href="/schedule?week={data.nextWeek}" aria-label="次の週">
 						翌週
@@ -365,9 +382,14 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 				{/if}
 			</div>
 			{#if data.isAdmin}
-				<button type="button" class="btn btn-primary create-event-btn" onclick={() => (showEventDialog = true)}>
+				<button
+					type="button"
+					class="btn btn-primary create-event-btn"
+					onclick={() => (showEventDialog = true)}
+					aria-label="イベント作成"
+				>
 					<span class="i-lucide-calendar-plus" aria-hidden="true"></span>
-					イベント作成
+					<span class="create-event-label">イベント作成</span>
 				</button>
 			{/if}
 		</div>
@@ -417,129 +439,144 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 							</a>
 						{/each}
 
-						{#each day.announcements as announcement (`cancelled-${announcement.anime_id}-${announcement.room_date}`)}
-							<div class="event-slot broadcast-announcement-slot" role="note">
-								<span class="slot-kind">休止</span>
-								{#if announcement.broadcast_time}
-									<span class="slot-time">{announcement.broadcast_time.slice(0, 5)}</span>
-								{/if}
-								<span class="slot-title">{announcement.title}</span>
-								<span class="slot-station">{announcement.message}</span>
-							</div>
-						{/each}
-
-						{#each groupAnimeByTimeBand(day.anime, displayDate) as animeGroup (animeGroup[0]?.id)}
+						{#each groupScheduleItemsByTimeBand(day, displayDate) as itemGroup, groupIndex (groupIndex)}
 							<div class="anime-time-group">
-								{#each animeGroup as anime (anime.id)}
-									{@const broadcastTime = effectiveBroadcastTime(anime, displayDate)}
-									{@const isSubscribed = subscribedIds.has(anime.id)}
-									{@const isNotifying = notifyingIds.has(anime.id)}
-									{@const isLive = liveRoomKeys.has(roomLiveKey(anime.id, displayDate))}
-									{@const isMuted = mutedAnimeIds.has(anime.id)}
-									{@const roomMute = roomMuteSettings[anime.id]}
-									{@const subscribable = canSubscribe(anime)}
-									{@const ep = currentEpisodeForSlot(anime, displayDate, data.broadcastOverrides[anime.id])}
-									{@const isMarathon = ep !== null && ep.start != null && ep.end != null && ep.end !== ep.start}
-									{@const epBadge = ep !== null ? formatEpisodeBadge(ep, anime.episode_count) : null}
-									{@const episodeLabel = epBadge !== null ? (anime.episode_count ? epBadge : `#${epBadge}`) : null}
-									{@const stationLabel = anime.broadcast_station?.length ? anime.broadcast_station.join(" / ") : null}
-									<div
-										class="anime-slot-wrap"
-										class:anime-slot-wrap--notifying={isNotifying}
-										class:anime-slot-wrap--menu-open={openAlertMenu === alertKey(anime.id, displayDate)}
-									>
-										<a href="/rooms/anime/{anime.id}/{displayDate}" class="anime-slot">
-											<div class="slot-cover-wrap">
-												{#if anime.cover_url}
-													<img src={anime.cover_url} alt={anime.title} class="slot-cover">
-												{:else}
-													<div class="slot-cover slot-cover--placeholder"></div>
-												{/if}
+								{#each itemGroup as item (item.type === "anime" ? item.anime.id : `suspension-${item.anime_id}-${item.room_date}`)}
+									{#if item.type === "suspension"}
+										<div class="anime-slot-wrap anime-slot-wrap--suspension" role="note">
+											<div class="anime-slot anime-slot--suspension">
+												<div class="slot-cover-wrap">
+													<div class="slot-cover slot-cover--suspension" aria-hidden="true">
+														<span>休</span>
+														<span>止</span>
+													</div>
+												</div>
+												<div class="slot-info slot-info--suspension">
+													<div class="slot-meta-row slot-meta-row--suspension">
+														{#if item.broadcast_time}
+															<span class="slot-time slot-time--suspension"
+																>{item.broadcast_time.slice(0, 5)}</span
+															>
+														{/if}
+														<span class="slot-suspension-badge">休止</span>
+													</div>
+													<span class="slot-title slot-title--suspension">{item.title}</span>
+													<span class="slot-bottom slot-reason">{item.message}</span>
+												</div>
 											</div>
-											<div class="slot-info">
-												<div class="slot-meta-row">
-													{#if broadcastTime}
-														<span class="slot-time">{broadcastTime.slice(0, 5)}</span>
-													{/if}
-													{#if isLive}
-														<span class="slot-live-badge">LIVE</span>
+										</div>
+									{:else}
+										{@const anime = item.anime}
+										{@const broadcastTime = effectiveBroadcastTime(anime, displayDate)}
+										{@const isSubscribed = subscribedIds.has(anime.id)}
+										{@const isNotifying = notifyingIds.has(anime.id)}
+										{@const isLive = liveRoomKeys.has(roomLiveKey(anime.id, displayDate))}
+										{@const isMuted = mutedAnimeIds.has(anime.id)}
+										{@const roomMute = roomMuteSettings[anime.id]}
+										{@const subscribable = canSubscribe(anime)}
+										{@const ep = currentEpisodeForSlot(anime, displayDate, data.broadcastOverrides[anime.id])}
+										{@const isMarathon = ep !== null && ep.start != null && ep.end != null && ep.end !== ep.start}
+										{@const epBadge = ep !== null ? formatEpisodeBadge(ep, anime.episode_count) : null}
+										{@const episodeLabel = epBadge !== null ? (anime.episode_count ? epBadge : `#${epBadge}`) : null}
+										{@const stationLabel = anime.broadcast_station?.length ? anime.broadcast_station.join(" / ") : null}
+										<div
+											class="anime-slot-wrap"
+											class:anime-slot-wrap--notifying={isNotifying}
+											class:anime-slot-wrap--menu-open={openAlertMenu === alertKey(anime.id, displayDate)}
+										>
+											<a href="/rooms/anime/{anime.id}/{displayDate}" class="anime-slot">
+												<div class="slot-cover-wrap">
+													{#if anime.cover_url}
+														<img src={anime.cover_url} alt={anime.title} class="slot-cover">
+													{:else}
+														<div class="slot-cover slot-cover--placeholder"></div>
 													{/if}
 												</div>
-												<span class="slot-title">{anime.title}</span>
-												{#if isMarathon}
-													<span class="slot-marathon-badge"
-														>第{ep?.start}話〜第{ep?.end}話 一挙放送</span
-													>
-												{/if}
-												{#if episodeLabel || stationLabel}
-													<span class="slot-bottom"
-														>{[episodeLabel, stationLabel].filter(Boolean).join(" · ")}</span
-													>
-												{/if}
-											</div>
-										</a>
-										{#if data.user}
-											<div class="room-alert-control">
-												<button
-													type="button"
-													class="notify-btn"
-													class:notify-btn--active={isSubscribed}
-													class:notify-btn--muted={isMuted}
-													title={isMuted ? "ミュート中。通知またはミュートを設定" : "通知またはミュートを設定"}
-													aria-label={isMuted ? "ミュート中。通知またはミュートを設定" : "通知またはミュートを設定"}
-													aria-expanded={openAlertMenu === alertKey(anime.id, displayDate)}
-													onclick={() => {
+												<div class="slot-info">
+													<div class="slot-meta-row">
+														{#if broadcastTime}
+															<span class="slot-time">{broadcastTime.slice(0, 5)}</span>
+														{/if}
+														{#if isLive}
+															<span class="slot-live-badge">LIVE</span>
+														{/if}
+													</div>
+													<span class="slot-title">{anime.title}</span>
+													{#if isMarathon}
+														<span class="slot-marathon-badge"
+															>第{ep?.start}話〜第{ep?.end}話 一挙放送</span
+														>
+													{/if}
+													{#if episodeLabel || stationLabel}
+														<span class="slot-bottom"
+															>{[episodeLabel, stationLabel].filter(Boolean).join(" · ")}</span
+														>
+													{/if}
+												</div>
+											</a>
+											{#if data.user}
+												<div class="room-alert-control">
+													<button
+														type="button"
+														class="notify-btn"
+														class:notify-btn--active={isSubscribed}
+														class:notify-btn--muted={isMuted}
+														title={isMuted ? "ミュート中。通知またはミュートを設定" : "通知またはミュートを設定"}
+														aria-label={isMuted ? "ミュート中。通知またはミュートを設定" : "通知またはミュートを設定"}
+														aria-expanded={openAlertMenu === alertKey(anime.id, displayDate)}
+														onclick={() => {
 														const key = alertKey(anime.id, displayDate);
 														openAlertMenu = openAlertMenu === key ? null : key;
 													}}
-												>
-													{#if isMuted}
-														<svg
-															width="13"
-															height="13"
-															viewBox="0 0 24 24"
-															fill="none"
-															stroke="currentColor"
-															stroke-width="2"
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															aria-hidden="true"
-														>
-															<path d="M10.268 21a2 2 0 0 0 3.464 0" />
-															<path d="M17 17H4s3-2 3-9a5 5 0 0 1 .6-2.4" />
-															<path d="M9.3 3.3A6 6 0 0 1 18 8c0 2.2.3 3.9.8 5.2" />
-															<path d="m2 2 20 20" />
-														</svg>
-													{:else if isSubscribed}
-														<svg
-															width="13"
-															height="13"
-															viewBox="0 0 24 24"
-															fill="currentColor"
-															stroke="currentColor"
-															stroke-width="1"
-															aria-hidden="true"
-														>
-															<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-															<path d="M13.73 21a2 2 0 0 1-3.46 0" />
-														</svg>
-													{:else}
-														<svg
-															width="13"
-															height="13"
-															viewBox="0 0 24 24"
-															fill="none"
-															stroke="currentColor"
-															stroke-width="2"
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															aria-hidden="true"
-														>
-															<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-															<path d="M13.73 21a2 2 0 0 1-3.46 0" />
-														</svg>
-													{/if}
-												</button>
+													>
+														{#if isMuted}
+															<svg
+																width="13"
+																height="13"
+																viewBox="0 0 24 24"
+																fill="none"
+																stroke="currentColor"
+																stroke-width="2"
+																stroke-linecap="round"
+																stroke-linejoin="round"
+																aria-hidden="true"
+															>
+																<path d="M10.268 21a2 2 0 0 0 3.464 0" />
+																<path d="M17 17H4s3-2 3-9a5 5 0 0 1 .6-2.4" />
+																<path d="M9.3 3.3A6 6 0 0 1 18 8c0 2.2.3 3.9.8 5.2" />
+																<path d="m2 2 20 20" />
+															</svg>
+														{:else if isSubscribed}
+															<svg
+																width="13"
+																height="13"
+																viewBox="0 0 24 24"
+																fill="currentColor"
+																stroke="currentColor"
+																stroke-width="1"
+																aria-hidden="true"
+															>
+																<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+																<path d="M13.73 21a2 2 0 0 1-3.46 0" />
+															</svg>
+														{:else}
+															<svg
+																width="13"
+																height="13"
+																viewBox="0 0 24 24"
+																fill="none"
+																stroke="currentColor"
+																stroke-width="2"
+																stroke-linecap="round"
+																stroke-linejoin="round"
+																aria-hidden="true"
+															>
+																<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+																<path d="M13.73 21a2 2 0 0 1-3.46 0" />
+															</svg>
+														{/if}
+													</button>
+												</div>
 												{#if openAlertMenu === alertKey(anime.id, displayDate)}
 													<div class="room-alert-menu" aria-label="ルーム設定">
 														{#if subscribable}
@@ -673,9 +710,9 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 														</div>
 													</div>
 												{/if}
-											</div>
-										{/if}
-									</div>
+											{/if}
+										</div>
+									{/if}
 								{/each}
 							</div>
 						{/each}
@@ -684,37 +721,6 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 			</div>
 		{/each}
 	</div>
-
-	<section class="event-strip" aria-label="今週のイベント">
-		<div class="event-strip-header">
-			<h2>今週のイベント</h2>
-			<span>{data.events.length}件</span>
-		</div>
-		{#if data.events.length > 0}
-			<div class="event-list">
-				{#each data.events as event}
-					<a
-						href="/events/{event.id}"
-						class="event-list-item"
-						class:event-list-item--cancelled={event.is_cancelled}
-					>
-						<time>
-							{new Date(event.scheduled_at).toLocaleDateString("ja-JP", {
-								weekday: "short",
-								month: "numeric",
-								day: "numeric",
-							})}
-							{formatTime(event.scheduled_at)}
-						</time>
-						<strong>{event.title}</strong>
-						<span>#{event.hashtag}</span>
-					</a>
-				{/each}
-			</div>
-		{:else}
-			<p class="panel-muted">今週のイベントはまだありません。</p>
-		{/if}
-	</section>
 </div>
 
 {#if showEventDialog && data.isAdmin}
@@ -794,11 +800,6 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	color: var(--text);
 	margin: 0 0 4px;
 }
-.schedule-subtitle {
-	font-size: 0.82rem;
-	color: var(--text-muted);
-	margin: 0;
-}
 .schedule-actions {
 	display: flex;
 	align-items: center;
@@ -815,6 +816,9 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	justify-content: space-between;
 	gap: 1rem;
 	min-width: 144px;
+}
+.mobile-schedule-title {
+	display: none;
 }
 .week-nav-btn {
 	min-width: 58px;
@@ -944,13 +948,8 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	gap: 2px;
 	border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
 }
-.broadcast-announcement-slot {
-	border-style: dashed;
-	border-color: color-mix(in srgb, #f59e0b 42%, var(--border));
-	background: color-mix(in srgb, #f59e0b 8%, var(--card-bg));
-}
-.event-slot--cancelled,
-.event-list-item--cancelled {
+
+.event-slot--cancelled {
 	opacity: 0.55;
 	text-decoration: line-through;
 }
@@ -970,6 +969,26 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 .slot-cover--placeholder {
 	background: var(--border);
 }
+.anime-slot-wrap--suspension {
+	opacity: 0.5;
+}
+.anime-slot-wrap .anime-slot--suspension {
+	border: 1px dashed color-mix(in srgb, #71717a 55%, var(--border));
+}
+.slot-cover--suspension {
+	height: 100%;
+	background: color-mix(in srgb, #27272a 40%, transparent);
+	border: 1px solid color-mix(in srgb, #3f3f46 30%, transparent);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 2px;
+	color: #71717a;
+	font-size: 0.72rem;
+	font-weight: 700;
+	line-height: 1;
+}
 .slot-info {
 	flex: 1;
 	min-width: 0;
@@ -978,11 +997,48 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	flex-direction: column;
 	overflow: hidden;
 }
+.slot-info--suspension {
+	justify-content: space-between;
+	height: 100%;
+}
 .slot-meta-row {
 	display: flex;
 	align-items: center;
 	gap: 4px;
 	padding-right: 28px;
+}
+.slot-meta-row--suspension {
+	padding-right: 0;
+}
+.slot-time--suspension {
+	color: color-mix(in srgb, #14b8a6 70%, transparent);
+}
+.slot-suspension-badge {
+	margin-left: auto;
+	flex-shrink: 0;
+	font-size: 0.625rem;
+	font-weight: 700;
+	line-height: 1.4;
+	color: #a1a1aa;
+	background: #27272a;
+	border-radius: 4px;
+	padding: 2px 6px;
+}
+.slot-title--suspension {
+	color: #a1a1aa;
+	font-weight: 500;
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	line-clamp: 2;
+	overflow: hidden;
+}
+.slot-reason {
+	font-size: 0.625rem;
+	color: #71717a;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	overflow: hidden;
 }
 .slot-live-badge {
 	margin-left: auto;
@@ -1103,8 +1159,8 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 }
 .room-alert-menu {
 	position: absolute;
-	top: 26px;
-	right: 0;
+	top: 30px;
+	right: 4px;
 	z-index: 5;
 	width: 240px;
 	padding: 12px;
@@ -1232,53 +1288,6 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 .menu-settings-link-anchor:hover {
 	color: var(--accent);
 }
-.event-strip {
-	margin-top: 14px;
-	border: 1px solid var(--border);
-	border-radius: 8px;
-	background: var(--card-bg);
-	padding: 12px;
-}
-.event-strip-header {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 8px;
-	margin-bottom: 8px;
-}
-.event-strip h2 {
-	font-size: 0.95rem;
-	margin: 0;
-	color: var(--text);
-}
-.event-strip-header span {
-	font-size: 0.75rem;
-	color: var(--text-muted);
-}
-.event-list {
-	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-	gap: 8px;
-}
-.event-list-item {
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
-	padding: 8px;
-	border: 1px solid var(--border);
-	border-radius: 6px;
-	color: var(--text);
-	text-decoration: none;
-}
-.event-list-item time,
-.event-list-item span,
-.panel-muted {
-	font-size: 0.76rem;
-	color: var(--text-muted);
-}
-.event-list-item strong {
-	font-size: 0.84rem;
-}
 .dialog-backdrop {
 	position: fixed;
 	inset: 0;
@@ -1358,13 +1367,51 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 }
 
 @media (max-width: 960px) {
+	.schedule-page {
+		padding-bottom: 80px;
+	}
 	.schedule-header {
-		align-items: flex-start;
-		flex-direction: column;
+		padding: 8px 0 6px;
+	}
+	.schedule-header > div:first-child {
+		display: none;
 	}
 	.schedule-actions {
 		width: 100%;
-		justify-content: space-between;
+		justify-content: center;
+	}
+	.week-nav {
+		display: grid;
+		grid-template-columns: 58px minmax(0, 1fr) 58px;
+		gap: 8px;
+		width: 100%;
+	}
+	.mobile-schedule-title {
+		display: block;
+		align-self: center;
+		margin: 0;
+		font-size: 1rem;
+		line-height: 1.2;
+		text-align: center;
+		white-space: nowrap;
+	}
+	.create-event-btn {
+		position: fixed;
+		top: 6px;
+		right: 52px;
+		z-index: 161;
+		width: 40px;
+		height: 40px;
+		padding: 0;
+		border: none;
+		border-radius: var(--radius-sm, 6px);
+		background: transparent;
+		color: var(--text);
+		box-shadow: none;
+		justify-content: center;
+	}
+	.create-event-label {
+		display: none;
 	}
 	.schedule-grid {
 		grid-template-columns: 1fr;
@@ -1420,24 +1467,17 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 		width: 100%;
 		max-width: 388px;
 	}
+	.anime-time-group > .anime-slot-wrap:nth-child(odd) .room-alert-menu {
+		left: 4px;
+		right: auto;
+		width: min(240px, calc(100vw - 32px));
+	}
 	.anime-slot {
 		height: 98px;
 		padding: 4px 4px 4px 0;
 	}
 	.slot-cover-wrap {
 		width: 68px;
-	}
-}
-@media (max-width: 520px) {
-	.schedule-actions {
-		align-items: stretch;
-		flex-direction: column;
-	}
-	.week-nav {
-		justify-content: space-between;
-	}
-	.create-event-btn {
-		justify-content: center;
 	}
 }
 </style>
