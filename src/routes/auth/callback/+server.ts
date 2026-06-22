@@ -1,6 +1,7 @@
 import { redirect } from "@sveltejs/kit";
 import { env } from "$env/dynamic/private";
-import { verifyGuildMembership } from "$lib/server/discord";
+import { env as publicEnv } from "$env/dynamic/public";
+import { isBetaMember, verifyGuildMembership } from "$lib/server/discord";
 import { createServiceRoleClient } from "$lib/server/supabase-admin";
 import type { RequestHandler } from "./$types";
 
@@ -10,7 +11,9 @@ import type { RequestHandler } from "./$types";
  *
  * Discord ログイン時のみ、対象サーバーへの所属を Bot トークンで検証し、
  * メンバーであれば app_metadata.beta_member=true を付与する。
- * google / メールログインはこの検証をスキップする（β中はゲートで弾かれる）。
+ * クローズドβ中は、Discord 所属検証を通っていないユーザー（Google / メール等）の
+ * セッションをここで破棄する。hooks のゲートは遷移を弾くだけでログアウトはさせず、
+ * セッションが残ると「ログインできてしまう」状態になるため、明示的に signOut する。
  */
 export const GET: RequestHandler = async ({ url, locals: { supabase } }) => {
 	const code = url.searchParams.get("code");
@@ -26,6 +29,9 @@ export const GET: RequestHandler = async ({ url, locals: { supabase } }) => {
 		data: { user },
 	} = await supabase.auth.getUser();
 	if (!user) redirect(303, "/");
+
+	// 既に beta_member を持つ既存ユーザーは検証通過済みとして扱う（再ログイン時）
+	let betaGranted = isBetaMember(user);
 
 	// Discord ログインのみ所属検証を行う
 	const discordIdentity = user.identities?.find((identity) => identity.provider === "discord");
@@ -63,6 +69,15 @@ export const GET: RequestHandler = async ({ url, locals: { supabase } }) => {
 			await supabase.auth.signOut();
 			redirect(303, "/auth?error=not_member");
 		}
+
+		betaGranted = true;
+	}
+
+	// クローズドβ：所属検証を通っていないユーザー（Google / メール等）は
+	// セッションを破棄してログインを成立させない。
+	if (publicEnv["PUBLIC_CLOSED_BETA"] === "true" && !betaGranted) {
+		await supabase.auth.signOut();
+		redirect(303, "/auth?error=not_member");
 	}
 
 	redirect(303, safeNext);
