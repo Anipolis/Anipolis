@@ -1,10 +1,13 @@
 <script lang="ts">
 import type { SubmitFunction } from "@sveltejs/kit";
+import { tick } from "svelte";
+import { fade, scale } from "svelte/transition";
 import { enhance } from "$app/forms";
 import { page } from "$app/state";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
-import type { AnimeStatus, BroadcastRoomOverride } from "$lib/types";
-import { formatBroadcastEpisodeSlot } from "$lib/utils/broadcast-episodes";
+import MyListModal from "$lib/components/MyListModal.svelte";
+import type { BroadcastRoomOverride } from "$lib/types";
+import { formatBroadcastEpisodeNumber, formatBroadcastEpisodeSlot } from "$lib/utils/broadcast-episodes";
 import type { PageProps } from "./$types";
 
 interface UserResult {
@@ -34,20 +37,24 @@ const displayResources = $derived(
 		data.anime.official_x_url,
 	),
 );
+// スマホ版左カラム用: ラベルを廃した、タップ検索可能な静的メタ情報チップ
+const compactMetaLinks = $derived([
+	...displayStudios.map((s) => ({ text: s, href: `/anime?studio=${encodeURIComponent(s)}` })),
+	...(data.anime.source
+		? [{ text: data.anime.source, href: `/anime?source=${encodeURIComponent(data.anime.source)}` }]
+		: []),
+	...displayGenres.map((g) => ({ text: g, href: `/anime?genre=${encodeURIComponent(g)}` })),
+	...(data.anime.producer ?? []).map((p) => ({ text: p, href: `/anime?producer=${encodeURIComponent(p)}` })),
+]);
 const prequelRelations = $derived(data.relations.filter((relation) => relation.relation_type === "Prequel"));
 const sequelRelations = $derived(data.relations.filter((relation) => relation.relation_type === "Sequel"));
 const otherRelations = $derived(
 	data.relations.filter((relation) => relation.relation_type !== "Prequel" && relation.relation_type !== "Sequel"),
 );
 const animeListHref = $derived(getAnimeListHref());
-
-const statusOptions: { value: AnimeStatus; label: string }[] = [
-	{ value: "watching", label: "視聴中" },
-	{ value: "completed", label: "完了" },
-	{ value: "plan_to_watch", label: "視聴予定" },
-	{ value: "on_hold", label: "一時停止" },
-	{ value: "dropped", label: "断念" },
-];
+const sortedRoomLogs = $derived([...data.episodes].sort((a, b) => a.date.localeCompare(b.date)));
+const latestRoomLog = $derived(sortedRoomLogs.at(-1));
+const isAnimeAiring = $derived(data.anime.computed_broadcast_status === "airing");
 
 const broadcastLabels: Record<string, string> = {
 	airing: "放送中",
@@ -66,7 +73,7 @@ const listedUserStatusLabels: Record<string, string> = {
 	watching: "視聴中",
 	completed: "完了",
 	plan_to_watch: "視聴予定",
-	on_hold: "中断中",
+	on_hold: "中断",
 	dropped: "断念",
 };
 
@@ -148,28 +155,23 @@ function isMalUrl(url: string) {
 	}
 }
 
-let selectedStatus = $state<AnimeStatus>("plan_to_watch");
-let score = $state<string>("");
-let progress = $state<string>("0");
-let showRemoveWatchlistModal = $state(false);
-let removeWatchlistFormEl = $state<HTMLFormElement | null>(null);
+let myListModalOpen = $state(false);
+let showUserListModal = $state(false);
 // svelte-ignore state_referenced_locally
 let adminEditOpen = $state(Boolean(form?.success || form?.message));
 let activeAdminTab = $state<"basic" | "overrides">("basic");
 let overrideFormOpen = $state(false);
-
-$effect(() => {
-	selectedStatus = data.anime.user_entry?.status ?? "plan_to_watch";
-	score =
-		data.anime.user_entry?.score != null && data.anime.user_entry.score > 0
-			? String(data.anime.user_entry.score)
-			: "";
-	progress = String(data.anime.user_entry?.progress ?? 0);
-});
-
 $effect(() => {
 	if (form?.success || form?.message) adminEditOpen = true;
 });
+
+function handleUserListKeydown(event: KeyboardEvent) {
+	if (event.key === "Escape" && showUserListModal) showUserListModal = false;
+}
+
+function handleUserListBackdropClick(event: MouseEvent) {
+	if (event.target === event.currentTarget) showUserListModal = false;
+}
 
 let coverUrl = $state("");
 
@@ -456,6 +458,45 @@ $effect(() => {
 					<p class="copyright-notice">{data.anime.copyright}</p>
 				{/if}
 			</div>
+			<!-- スマホ版のみ: 画像下に圧縮メタ＋ハッシュタグ＋公式アイコンを集約（PC版は .prod-info を使用） -->
+			<div class="mobile-meta">
+				{#if compactMetaLinks.length}
+					<div class="mobile-meta-chips">
+						{#each compactMetaLinks as item (item.href + item.text)}
+							<a href={item.href} class="mobile-meta-chip">{item.text}</a>
+						{/each}
+					</div>
+				{/if}
+				{#if data.anime.official_hashtag?.length}
+					<div class="mobile-hashtags">
+						{#each data.anime.official_hashtag as tag}
+							<a href="/hashtag/{tag.replace(/^#/, '')}" class="mobile-hashtag"
+								>#{tag.replace(/^#/, '')}</a
+							>
+						{/each}
+					</div>
+				{/if}
+				{#if displayOfficialLinks.length}
+					<div class="mobile-official-icons">
+						{#each displayOfficialLinks as link (link.url)}
+							<a
+								href={link.url}
+								target="_blank"
+								rel="noopener noreferrer"
+								class="mobile-icon-link"
+								aria-label={link.name}
+								title={link.name}
+							>
+								{#if link.name.includes("公式サイト")}
+									<span class="i-lucide-globe-2" aria-hidden="true"></span>
+								{:else}
+									𝕏
+								{/if}
+							</a>
+						{/each}
+					</div>
+				{/if}
+			</div>
 			<div class="left-panel-info">
 				{#if coverError}
 					<p class="cover-error">{coverError}</p>
@@ -554,9 +595,34 @@ $effect(() => {
 			</div>
 		</aside>
 
-		<!-- Main: score, synopsis, watchlist -->
-		<div class="main-content">
+		<!-- Right column: スマホ版はアクション専用リモコン / PC版はmain上部に従来配置 -->
+		<div class="remote">
+			<!-- Score hero -->
+			<div class="stats-grid">
+				<div class="stat-card stat-card--score">
+					<span class="stat-card-label">スコア</span>
+					{#if data.anime.avg_score != null && (data.anime.score_count ?? 0) > 0}
+						<span class="stat-card-value">★ {data.anime.avg_score.toFixed(2)}</span>
+						<span class="stat-card-sub">{data.anime.score_count}件の評価</span>
+					{:else}
+						<span class="stat-card-value">—</span>
+					{/if}
+				</div>
+				{#if data.anime.list_count}
+					<button
+						type="button"
+						class="stat-card stat-card--interactive"
+						onclick={() => (showUserListModal = true)}
+						aria-haspopup="dialog"
+					>
+						<span class="stat-card-label">リスト登録</span>
+						<span class="stat-card-value">{data.anime.list_count}</span>
+						<span class="stat-card-sub">ユーザー</span>
+					</button>
+				{/if}
+			</div>
 			<!-- アクションバー -->
+
 			{#if data.user}
 				<div class="action-bar">
 					<a href="/?quote_anime={data.anime.id}#compose" class="action-bar-btn">
@@ -578,9 +644,9 @@ $effect(() => {
 					<button
 						type="button"
 						class="action-bar-btn"
-						class:active={activeAction === 'watchlist'}
-						onclick={() => toggleAction('watchlist')}
-						aria-pressed={activeAction === 'watchlist'}
+						class:active={myListModalOpen}
+						onclick={() => (myListModalOpen = true)}
+						aria-pressed={myListModalOpen}
 					>
 						<svg
 							width="18"
@@ -621,172 +687,33 @@ $effect(() => {
 						<span>推薦</span>
 					</button>
 				</div>
+			{/if}
+			{#if data.isAdmin}
+				<button
+					type="button"
+					class="remote-admin-btn"
+					aria-expanded={adminEditOpen}
+					onclick={async () => {
+						adminEditOpen = !adminEditOpen;
+						if (adminEditOpen) {
+							await tick();
+							document
+								.getElementById("admin-edit-section")
+								?.scrollIntoView({ behavior: "smooth", block: "start" });
+						}
+					}}
+				>
+					{adminEditOpen ? "作品情報フォームを閉じる" : "作品情報を編集"}
+				</button>
+			{/if}
+		</div>
 
+		<!-- Main: synopsis, panels, relations, room log -->
+		<div class="main-content">
+			{#if data.user}
 				{#if activeAction}
 					<div class="action-panel">
-						{#if activeAction === 'watchlist'}
-							{#if form?.message}
-								<p class="form-error">{form.message}</p>
-							{/if}
-
-							<form method="POST" action="?/upsertWatchlist" use:enhance>
-								<input type="hidden" name="anime_id" value={data.anime.id}>
-
-								<div class="form-row">
-									<label class="form-label">
-										ステータス
-										<select name="status" bind:value={selectedStatus} class="form-select">
-											{#each statusOptions as opt}
-												<option value={opt.value}>{opt.label}</option>
-											{/each}
-										</select>
-									</label>
-
-									<label class="form-label">
-										スコア (1〜10)
-										<input
-											type="number"
-											name="score"
-											min="1"
-											max="10"
-											step="0.5"
-											bind:value={score}
-											placeholder="未評価"
-											class="form-input"
-										>
-									</label>
-
-									{#if data.anime.episode_count}
-										<label class="form-label">
-											進捗 ({data.anime.episode_count}話中)
-											<input
-												type="number"
-												name="progress"
-												min="0"
-												max={data.anime.episode_count}
-												bind:value={progress}
-												class="form-input"
-											>
-										</label>
-									{:else}
-										<label class="form-label">
-											進捗
-											<input
-												type="number"
-												name="progress"
-												min="0"
-												bind:value={progress}
-												class="form-input"
-											>
-										</label>
-									{/if}
-								</div>
-
-								<div class="form-actions">
-									<button
-										type="submit"
-										class="btn-primary {data.anime.user_entry ? 'btn-primary--update' : 'btn-primary--add'}"
-									>
-										{#if data.anime.user_entry}
-											<svg
-												aria-hidden="true"
-												xmlns="http://www.w3.org/2000/svg"
-												width="16"
-												height="16"
-												viewBox="0 0 24 24"
-												fill="none"
-												stroke="currentColor"
-												stroke-width="2.5"
-												stroke-linecap="round"
-												stroke-linejoin="round"
-											>
-												<path d="M20 6L9 17l-5-5" />
-											</svg>
-											更新
-										{:else}
-											<svg
-												aria-hidden="true"
-												xmlns="http://www.w3.org/2000/svg"
-												width="16"
-												height="16"
-												viewBox="0 0 24 24"
-												fill="none"
-												stroke="currentColor"
-												stroke-width="2.5"
-												stroke-linecap="round"
-												stroke-linejoin="round"
-											>
-												<line x1="12" y1="5" x2="12" y2="19" />
-												<line x1="5" y1="12" x2="19" y2="12" />
-											</svg>
-											マイリストに追加
-										{/if}
-									</button>
-
-									{#if data.anime.user_entry}
-										<button
-											type="button"
-											class="btn-danger"
-											onclick={() => (showRemoveWatchlistModal = true)}
-										>
-											削除
-										</button>
-									{/if}
-								</div>
-							</form>
-
-							<form
-								method="POST"
-								action="?/removeWatchlist"
-								bind:this={removeWatchlistFormEl}
-								style="display:none"
-							>
-								<input type="hidden" name="anime_id" value={data.anime.id}>
-							</form>
-
-							{#if showRemoveWatchlistModal}
-								<!-- svelte-ignore a11y_click_events_have_key_events -->
-								<div
-									class="remove-watchlist-modal-overlay"
-									role="presentation"
-									onclick={() => (showRemoveWatchlistModal = false)}
-								>
-									<div
-										class="remove-watchlist-modal-card"
-										role="dialog"
-										aria-modal="true"
-										aria-labelledby="remove-watchlist-modal-title"
-										tabindex="-1"
-										onclick={(e) => e.stopPropagation()}
-									>
-										<div class="remove-watchlist-modal-header">
-											<span id="remove-watchlist-modal-title" class="remove-watchlist-modal-title"
-												>マイリストから削除</span
-											>
-										</div>
-										<div class="remove-watchlist-modal-body">
-											<p>このアニメをマイリストから削除しますか？</p>
-										</div>
-										<div class="remove-watchlist-modal-footer">
-											<button
-												type="button"
-												class="btn btn-ghost"
-												onclick={() => (showRemoveWatchlistModal = false)}
-											>
-												キャンセル
-											</button>
-											<button
-												type="button"
-												class="btn btn-danger"
-												onclick={() => { showRemoveWatchlistModal = false; removeWatchlistFormEl?.requestSubmit(); }}
-											>
-												削除する
-											</button>
-										</div>
-									</div>
-								</div>
-							{/if}
-						{:else if activeAction === 'recommend'}
+						{#if activeAction === 'recommend'}
 							{#if form?.recommendMessage || recommendError}
 								<p class="form-error">{recommendError || form?.recommendMessage}</p>
 							{/if}
@@ -871,26 +798,6 @@ $effect(() => {
 				{/if}
 			{/if}
 
-			<!-- Score hero -->
-			<div class="stats-grid">
-				<div class="stat-card stat-card--score">
-					<span class="stat-card-label">スコア</span>
-					{#if data.anime.avg_score != null && (data.anime.score_count ?? 0) > 0}
-						<span class="stat-card-value">★ {data.anime.avg_score.toFixed(2)}</span>
-						<span class="stat-card-sub">{data.anime.score_count}件の評価</span>
-					{:else}
-						<span class="stat-card-value">—</span>
-					{/if}
-				</div>
-				{#if data.anime.list_count}
-					<div class="stat-card">
-						<span class="stat-card-label">リスト登録</span>
-						<span class="stat-card-value">{data.anime.list_count}</span>
-						<span class="stat-card-sub">ユーザー</span>
-					</div>
-				{/if}
-			</div>
-
 			<!-- Synopsis -->
 			{#if data.anime.synopsis}
 				<section class="synopsis">
@@ -900,7 +807,11 @@ $effect(() => {
 			{/if}
 
 			{#if data.isAdmin}
-				<section class="admin-edit-section bg-zinc-950 border border-zinc-800 rounded-2xl p-6">
+				<section
+					id="admin-edit-section"
+					class="admin-edit-section"
+					class:admin-edit-section--open={adminEditOpen}
+				>
 					<button
 						type="button"
 						class="admin-edit-toggle"
@@ -923,7 +834,8 @@ $effect(() => {
 									activeAdminTab = "basic";
 								}}
 							>
-								📝 基本情報を編集
+								<span class="i-lucide-file-pen-line" aria-hidden="true"></span>
+								基本情報を編集
 							</button>
 							<button
 								type="button"
@@ -935,7 +847,8 @@ $effect(() => {
 									activeAdminTab = "overrides";
 								}}
 							>
-								📅 イレギュラー放送設定
+								<span class="i-lucide-calendar-cog" aria-hidden="true"></span>
+								イレギュラー放送設定
 							</button>
 						</div>
 
@@ -1261,47 +1174,36 @@ $effect(() => {
 				</section>
 			{/if}
 
-			{#if data.listedUsers.length > 0}
-				<section class="listed-users-section">
-					<h2 class="listed-users-heading">
-						リスト登録中のユーザー
-						<span class="listed-users-count">{data.listedUsers.length}</span>
-					</h2>
-					<div class="listed-users-grid">
-						{#each data.listedUsers as u (u.user_id)}
-							<a href="/profile/{u.username}" class="listed-user-card">
-								<div class="listed-user-avatar">
-									{#if u.avatar_url}
-										<img src={u.avatar_url} alt={u.username}>
-									{:else}
-										<div class="listed-user-avatar-fallback">
-											{(u.display_name ?? u.username).charAt(0).toUpperCase()}
-										</div>
-									{/if}
-									<span
-										class="listed-user-status-dot"
-										style="background: {listedUserStatusColors[u.status] ?? 'var(--fg-muted)'};"
-										title={listedUserStatusLabels[u.status] ?? u.status}
-									></span>
-								</div>
-								<span class="listed-user-name">{u.display_name ?? u.username}</span>
-								{#if u.score != null && u.score > 0}
-									<span class="listed-user-score">★{u.score}</span>
-								{/if}
-							</a>
-						{/each}
-					</div>
-				</section>
-			{/if}
-
 			{#if data.episodes.length > 0}
 				<section class="room-log-section">
 					<h2 class="room-log-heading">ルームログ</h2>
 					<ol class="room-log-list">
-						{#each data.episodes as ep (ep.date)}
+						{#if isAnimeAiring && latestRoomLog}
+							<li class="room-log-latest-slot">
+								<a
+									href="/rooms/anime/{data.anime.id}/{latestRoomLog.date}"
+									class="room-log-item room-log-item--latest"
+								>
+									<span class="room-log-latest-label">
+										<span class="i-lucide-zap" aria-hidden="true"></span>
+										Latest
+									</span>
+									<span class="room-log-ep">{formatBroadcastEpisodeSlot(latestRoomLog)}</span>
+									<span class="room-log-ep-compact"
+										>{formatBroadcastEpisodeNumber(latestRoomLog)}</span
+									>
+									{#if liveRoomDates.has(latestRoomLog.date)}
+										<span class="room-log-live-badge">LIVE</span>
+									{/if}
+									<span class="room-log-date">{latestRoomLog.date}</span>
+								</a>
+							</li>
+						{/if}
+						{#each sortedRoomLogs as ep (ep.date)}
 							<li>
 								<a href="/rooms/anime/{data.anime.id}/{ep.date}" class="room-log-item">
 									<span class="room-log-ep">{formatBroadcastEpisodeSlot(ep)}</span>
+									<span class="room-log-ep-compact">{formatBroadcastEpisodeNumber(ep)}</span>
 									{#if liveRoomDates.has(ep.date)}
 										<span class="room-log-live-badge">LIVE</span>
 									{/if}
@@ -1316,55 +1218,77 @@ $effect(() => {
 	</div>
 </div>
 
+<svelte:window onkeydown={handleUserListKeydown} />
+
+{#if showUserListModal}
+	<div
+		class="user-list-modal-backdrop"
+		role="presentation"
+		onclick={handleUserListBackdropClick}
+		transition:fade={{ duration: 180 }}
+	>
+		<div
+			class="user-list-modal"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="user-list-modal-title"
+			tabindex="-1"
+			in:scale={{ duration: 200, start: 0.95 }}
+		>
+			<header class="user-list-modal-header">
+				<h2 id="user-list-modal-title">リスト登録中のユーザー <span>({data.listedUsers.length}人)</span></h2>
+				<button
+					type="button"
+					class="user-list-modal-close"
+					onclick={() => (showUserListModal = false)}
+					aria-label="閉じる"
+				>
+					<svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
+						<path d="M18 6 6 18M6 6l12 12" />
+					</svg>
+				</button>
+			</header>
+
+			<div class="listed-users-list">
+				{#each data.listedUsers as u (u.user_id)}
+					<a href="/profile/{u.username}" class="listed-user-card">
+						<div class="listed-user-avatar">
+							{#if u.avatar_url}
+								<img src={u.avatar_url} alt="{u.display_name ?? u.username}のアバター">
+							{:else}
+								<div class="listed-user-avatar-fallback">
+									{(u.display_name ?? u.username).charAt(0).toUpperCase()}
+								</div>
+							{/if}
+							<span
+								class="listed-user-status-dot"
+								style="background: {listedUserStatusColors[u.status] ?? 'var(--fg-muted)'};"
+								title={listedUserStatusLabels[u.status] ?? u.status}
+							></span>
+						</div>
+						<div class="listed-user-details">
+							<span class="listed-user-name">{u.display_name ?? u.username}</span>
+							<span class="listed-user-handle">@{u.username}</span>
+						</div>
+						{#if u.score != null && u.score > 0}
+							<span class="listed-user-score">★ {u.score}</span>
+						{/if}
+					</a>
+				{/each}
+			</div>
+		</div>
+	</div>
+{/if}
+
+<MyListModal
+	open={myListModalOpen}
+	animeId={data.anime.id}
+	animeTitle={data.anime.title}
+	episodeCount={data.anime.episode_count}
+	entry={data.anime.user_entry}
+	onclose={() => { myListModalOpen = false; }}
+/>
 <style>
-.remove-watchlist-modal-overlay {
-	position: fixed;
-	inset: 0;
-	z-index: 1000;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	padding: 16px;
-	background: rgba(0, 0, 0, 0.58);
-	backdrop-filter: blur(3px);
-}
-
-.remove-watchlist-modal-card {
-	width: min(360px, 100%);
-	border: 1px solid var(--color-border);
-	border-radius: 12px;
-	background: var(--color-bg-card);
-	box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
-}
-
-.remove-watchlist-modal-header {
-	padding: 16px 16px 0;
-}
-
-.remove-watchlist-modal-title {
-	font-size: 15px;
-	font-weight: 800;
-}
-
-.remove-watchlist-modal-body {
-	padding: 12px 16px 16px;
-	color: var(--color-text-secondary);
-	font-size: 14px;
-}
-
-.remove-watchlist-modal-body p {
-	margin: 0;
-}
-
-.remove-watchlist-modal-footer {
-	display: flex;
-	align-items: center;
-	justify-content: flex-end;
-	gap: 8px;
-	padding: 12px 16px;
-	border-top: 1px solid var(--color-border);
-}
-
 .detail-page {
 	width: 100%;
 	box-sizing: border-box;
@@ -1393,9 +1317,10 @@ $effect(() => {
 	width: 100%;
 	box-sizing: border-box;
 	grid-template-columns: 220px minmax(0, 1fr);
-	grid-template-rows: auto 1fr;
+	grid-template-rows: auto auto 1fr;
 	grid-template-areas:
 		"left title"
+		"left remote"
 		"left main";
 	column-gap: 32px;
 	row-gap: 24px;
@@ -1600,6 +1525,24 @@ $effect(() => {
 	min-width: 0;
 }
 
+/* Action remote column (PC: main上部 / スマホ: 右カラム) */
+.remote {
+	grid-area: remote;
+	display: flex;
+	flex-direction: column;
+	gap: 24px;
+	min-width: 0;
+}
+/* スマホ版のみ表示するリモコン内の管理者編集トグル */
+.remote-admin-btn {
+	display: none;
+}
+
+/* スマホ版のみ表示する画像下の圧縮メタ（PC版は .prod-info を使用） */
+.mobile-meta {
+	display: none;
+}
+
 .title-block {
 	grid-area: title;
 	display: flex;
@@ -1683,6 +1626,29 @@ $effect(() => {
 	border-radius: 10px;
 	min-width: 120px;
 }
+.stat-card--interactive {
+	font: inherit;
+	color: inherit;
+	text-align: left;
+	cursor: pointer;
+	transition:
+		transform 0.15s,
+		background 0.15s,
+		border-color 0.15s;
+}
+.stat-card--interactive:hover {
+	background: var(--hover-bg);
+	border-color: var(--color-border-hover);
+}
+.stat-card--interactive:active {
+	transform: scale(0.95);
+}
+.stat-card--interactive:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+	background: var(--hover-bg);
+	border-color: var(--accent);
+}
 .stat-card-label {
 	font-size: 0.72rem;
 	font-weight: 600;
@@ -1721,9 +1687,9 @@ $effect(() => {
 	flex-direction: column;
 	gap: 18px;
 	padding: 24px;
-	border: 1px solid #27272a;
+	border: 1px solid var(--border);
 	border-radius: 16px;
-	background: #09090b;
+	background: var(--card-bg);
 }
 .admin-edit-toggle {
 	display: inline-flex;
@@ -1753,20 +1719,21 @@ $effect(() => {
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 	gap: 8px;
 	padding: 4px;
-	border: 1px solid #27272a;
+	border: 1px solid var(--border);
 	border-radius: 12px;
-	background: #18181b;
+	background: var(--hover-bg);
 }
 .admin-tab {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
+	gap: 7px;
 	min-height: 40px;
 	padding: 8px 12px;
 	border: 1px solid transparent;
 	border-radius: 9px;
 	background: transparent;
-	color: #a1a1aa;
+	color: var(--text-muted);
 	font-size: 0.86rem;
 	font-weight: 700;
 	cursor: pointer;
@@ -1776,13 +1743,13 @@ $effect(() => {
 		color 0.15s;
 }
 .admin-tab:hover {
-	color: #f4f4f5;
-	background: #27272a;
+	color: var(--text);
+	background: var(--card-bg);
 }
 .admin-tab--active {
-	border-color: #3f3f46;
-	background: #09090b;
-	color: #f4f4f5;
+	border-color: var(--color-border-hover);
+	background: var(--card-bg);
+	color: var(--text);
 	box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
 }
 .admin-edit-form {
@@ -2097,8 +2064,8 @@ a.relation-card:hover {
 }
 .relation-card img {
 	width: 34px;
-	height: 48px;
-	object-fit: cover;
+	display: block;
+	image-rendering: auto;
 	border-radius: 4px;
 	flex-shrink: 0;
 }
@@ -2124,11 +2091,9 @@ a.relation-card:hover {
 /* Action bar */
 .action-bar {
 	display: flex;
+	gap: 10px;
 	width: 100%;
 	min-width: 0;
-	border: 1px solid var(--border);
-	border-radius: 10px;
-	overflow: hidden;
 }
 .action-bar-btn {
 	flex: 1;
@@ -2139,9 +2104,9 @@ a.relation-card:hover {
 	justify-content: center;
 	gap: 4px;
 	padding: 12px 8px;
-	background: none;
-	border: none;
-	border-right: 1px solid var(--border);
+	background: var(--card-bg);
+	border: 1px solid var(--border);
+	border-radius: 10px;
 	cursor: pointer;
 	color: var(--text-muted);
 	text-decoration: none;
@@ -2151,9 +2116,7 @@ a.relation-card:hover {
 		background 0.12s,
 		color 0.12s;
 }
-.action-bar-btn:last-child {
-	border-right: none;
-}
+
 .action-bar-btn:hover {
 	background: var(--hover-bg);
 	color: var(--text);
@@ -2167,8 +2130,7 @@ a.relation-card:hover {
 	min-width: 0;
 	box-sizing: border-box;
 	border: 1px solid var(--border);
-	border-top: none;
-	border-radius: 0 0 10px 10px;
+	border-radius: 10px;
 	padding: 18px 16px;
 	background: var(--card-bg);
 	margin-bottom: 24px;
@@ -2201,9 +2163,6 @@ a.relation-card:hover {
 	color: var(--text);
 	font-size: 0.9rem;
 	min-width: 130px;
-}
-.form-input[type="number"] {
-	width: 100px;
 }
 
 .form-actions {
@@ -2308,7 +2267,7 @@ a.relation-card:hover {
 .recommend-user-result img,
 .recommend-user-avatar-fallback {
 	width: 24px;
-	height: 24px;
+	aspect-ratio: 1;
 	border-radius: 50%;
 	object-fit: cover;
 	flex-shrink: 0;
@@ -2395,45 +2354,91 @@ a.relation-card:hover {
 	transform: none;
 }
 
-/* Listed users */
-.listed-users-section {
-	display: flex;
-	flex-direction: column;
-	gap: 12px;
-}
-
-.listed-users-heading {
+/* Listed users modal */
+.user-list-modal-backdrop {
+	position: fixed;
+	inset: 0;
+	z-index: 50;
 	display: flex;
 	align-items: center;
-	gap: 8px;
-	font-size: 1rem;
-	font-weight: 600;
-	margin: 0;
+	justify-content: center;
+	padding: 16px;
+	background: rgba(0, 0, 0, 0.7);
+	backdrop-filter: blur(4px);
 }
-
-.listed-users-count {
-	font-size: 0.8rem;
-	font-weight: 400;
-	color: var(--text-muted);
-	background: var(--hover-bg);
-	padding: 1px 8px;
-	border-radius: 10px;
+.user-list-modal {
+	width: 100%;
+	max-width: 448px;
+	padding: 24px;
+	border: 1px solid #27272a;
+	border-radius: 16px;
+	background: #18181b;
+	box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.65);
 }
-
-.listed-users-grid {
+.user-list-modal-header {
 	display: flex;
-	flex-wrap: wrap;
-	gap: 10px;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	margin-bottom: 20px;
+}
+.user-list-modal-header h2 {
+	margin: 0;
+	font-size: 1rem;
+	font-weight: 700;
+}
+.user-list-modal-header h2 span {
+	color: var(--text-muted);
+	font-weight: 500;
+}
+.user-list-modal-close {
+	display: grid;
+	place-items: center;
+	width: 34px;
+	height: 34px;
+	flex-shrink: 0;
+	padding: 0;
+	border: 0;
+	border-radius: 999px;
+	background: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+}
+.user-list-modal-close:hover {
+	background: #27272a;
+	color: var(--text);
+}
+.user-list-modal-close:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+.user-list-modal-close svg {
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 2;
+	stroke-linecap: round;
+}
+.listed-users-list {
+	display: flex;
+	max-height: 240px;
+	flex-direction: column;
+	gap: 12px;
+	overflow-y: auto;
+	padding-right: 4px;
 }
 
 .listed-user-card {
 	display: flex;
-	flex-direction: column;
 	align-items: center;
-	gap: 5px;
+	gap: 12px;
+	padding: 8px;
+	border-radius: 10px;
 	text-decoration: none;
 	color: inherit;
-	width: 64px;
+	transition: background 0.12s;
+}
+.listed-user-card:hover {
+	background: #27272a;
 }
 
 .listed-user-avatar {
@@ -2446,7 +2451,7 @@ a.relation-card:hover {
 .listed-user-avatar img,
 .listed-user-avatar-fallback {
 	width: 44px;
-	height: 44px;
+	aspect-ratio: 1;
 	border-radius: 50%;
 	object-fit: cover;
 }
@@ -2468,18 +2473,30 @@ a.relation-card:hover {
 	width: 10px;
 	height: 10px;
 	border-radius: 50%;
-	border: 2px solid var(--bg);
+	border: 2px solid #18181b;
 }
 
+.listed-user-details {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	flex-direction: column;
+	gap: 2px;
+}
 .listed-user-name {
-	font-size: 0.7rem;
-	color: var(--text-muted);
-	text-align: center;
-	max-width: 64px;
+	font-size: 0.9rem;
+	font-weight: 600;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	transition: color 0.12s;
+}
+.listed-user-handle {
+	color: var(--text-muted);
+	font-size: 0.75rem;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .listed-user-card:hover .listed-user-name {
@@ -2507,31 +2524,69 @@ a.relation-card:hover {
 	list-style: none;
 	padding: 0;
 	margin: 0;
-	display: flex;
-	flex-direction: column;
-	gap: 4px;
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+	gap: 8px;
 }
 .room-log-item {
+	position: relative;
 	display: flex;
+	flex-direction: column;
 	align-items: center;
-	gap: 10px;
-	padding: 6px 10px;
-	border-radius: 6px;
+	justify-content: center;
+	gap: 7px;
+	aspect-ratio: 1;
+	padding: 10px 6px;
+	border-radius: 10px;
 	text-decoration: none;
 	color: var(--text);
 	border: 1px solid var(--border);
 	background: var(--card-bg);
 	font-size: 0.85rem;
-	transition: background 0.12s;
+	transition:
+		transform 0.12s,
+		background 0.12s,
+		border-color 0.12s;
 }
 .room-log-item:hover {
 	background: var(--hover-bg);
+	border-color: var(--text-muted);
+	transform: translateY(-2px);
+}
+.room-log-item--latest {
+	border-color: color-mix(in srgb, #2dd4bf 50%, var(--border));
+	background: color-mix(in srgb, #2dd4bf 6%, var(--card-bg));
+}
+.room-log-item--latest:hover {
+	border-color: color-mix(in srgb, #2dd4bf 70%, var(--border));
+	background: color-mix(in srgb, #2dd4bf 10%, var(--card-bg));
+}
+.room-log-latest-slot + li {
+	grid-column-start: 1;
+}
+.room-log-latest-label {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	color: #5eead4;
+	font-size: 0.65rem;
+	font-weight: 750;
+	line-height: 1;
 }
 .room-log-ep {
-	font-weight: 600;
-	min-width: 60px;
+	font-size: 1rem;
+	font-weight: 750;
+	line-height: 1.2;
+	text-align: center;
+}
+/* スマホ版のみ使用する数字のみの短縮表示 */
+.room-log-ep-compact {
+	display: none;
 }
 .room-log-live-badge {
+	position: absolute;
+	top: 6px;
+	right: 6px;
 	display: inline-flex;
 	align-items: center;
 	height: 18px;
@@ -2545,32 +2600,160 @@ a.relation-card:hover {
 }
 .room-log-date {
 	color: var(--text-muted);
-	font-size: 0.8rem;
+	font-size: 0.68rem;
+	line-height: 1;
 }
 
 /* Responsive */
 @media (max-width: 768px) {
+	/* 左=情報カラム / 右=アクションリモコン の2カラム。title/mainは全幅 */
 	.anime-layout {
-		display: flex;
+		display: grid;
+		grid-template-columns: minmax(0, 150px) minmax(0, 1fr);
+		grid-template-rows: auto auto auto;
+		grid-template-areas:
+			"title title"
+			"left remote"
+			"main main";
+		align-items: start;
+		column-gap: 14px;
+		row-gap: 16px;
+	}
+	/* 左カラム: カバー画像の下に静的データを縦積み */
+	.left-panel {
 		flex-direction: column;
 		align-items: stretch;
-		gap: 16px;
-	}
-	.left-panel {
-		flex-direction: row;
-		align-items: flex-start;
-		gap: 12px;
+		gap: 10px;
 	}
 	.cover-col {
-		width: 48%;
-		flex-shrink: 0;
+		width: 100%;
 	}
 	.anime-cover {
 		max-width: none;
 	}
-	.left-panel-info {
-		flex: 1;
+	/* PC版の冗長なラベル付きdlは隠し、圧縮メタを表示（Resourcesは維持） */
+	.left-panel-info .prod-info {
+		display: none;
+	}
+	.mobile-meta {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		margin-top: 8px;
+	}
+	.mobile-meta-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 5px;
+	}
+	.mobile-meta-chip {
+		font-size: 11px;
+		line-height: 1.3;
+		padding: 2px 7px;
+		border-radius: 10px;
+		background: var(--hover-bg);
+		color: var(--text-muted);
+		border: 1px solid var(--border);
+		text-decoration: none;
+		transition:
+			background 0.15s,
+			color 0.15s,
+			border-color 0.15s;
+	}
+	.mobile-meta-chip:hover,
+	.mobile-meta-chip:active {
+		background: var(--accent);
+		color: #fff;
+		border-color: var(--accent);
+	}
+	.mobile-hashtags {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+	}
+	.mobile-hashtag {
+		font-size: 11px;
+		color: var(--accent);
+		text-decoration: none;
+	}
+	.mobile-hashtag:hover {
+		text-decoration: underline;
+	}
+	.mobile-official-icons {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		margin-top: 2px;
+	}
+	.mobile-icon-link {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 30px;
+		height: 30px;
+		border-radius: 50%;
+		border: 1px solid var(--border);
+		background: var(--hover-bg);
+		color: var(--text);
+		font-size: 0.95rem;
+		text-decoration: none;
+		transition:
+			background 0.15s,
+			border-color 0.15s;
+	}
+	.mobile-icon-link [class^="i-lucide"] {
+		width: 1em;
+		height: 1em;
+	}
+	.mobile-icon-link:hover {
+		border-color: var(--accent);
+		background: var(--card-bg);
+	}
+	/* 右カラム: 純粋なアクションリモコン化（スコア＋リストを横並び→ボタン→管理者） */
+	.remote {
+		gap: 12px;
+	}
+	.remote .stats-grid {
+		gap: 8px;
+		flex-wrap: nowrap;
+	}
+	.remote .stat-card {
+		flex: 1 1 0;
 		min-width: 0;
+		padding: 10px 12px;
+	}
+	.remote .stat-card-value {
+		font-size: 1.35rem;
+	}
+	.remote .action-bar {
+		gap: 8px;
+	}
+	.remote .action-bar-btn {
+		padding: 10px 4px;
+		font-size: 0.68rem;
+	}
+	.remote-admin-btn {
+		display: inline-block;
+		align-self: flex-start;
+		margin-top: 2px;
+		padding: 4px 0;
+		border: 0;
+		background: none;
+		color: var(--text-muted);
+		font-size: 11px;
+		text-align: left;
+		cursor: pointer;
+	}
+	.remote-admin-btn:hover {
+		color: var(--text);
+		text-decoration: underline;
+	}
+	/* スマホではカード内トグルを隠し、リモコン側ボタンで開閉。閉時はカードを畳む */
+	.admin-edit-toggle {
+		display: none;
+	}
+	.admin-edit-section:not(.admin-edit-section--open) {
+		display: none;
 	}
 	.detail-page {
 		padding-left: 14px;
@@ -2583,11 +2766,41 @@ a.relation-card:hover {
 	.recommend-submit {
 		width: 100%;
 	}
+	/* ルームログ: 数字のみの小型ボックスで一覧性を向上 */
+	.room-log-list {
+		grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+		gap: 6px;
+	}
+	.room-log-item {
+		gap: 0;
+		padding: 4px;
+		border-radius: 8px;
+	}
+	.room-log-ep,
+	.room-log-date,
+	.room-log-latest-label {
+		display: none;
+	}
+	.room-log-ep-compact {
+		display: block;
+		font-size: 0.9rem;
+		font-weight: 750;
+		line-height: 1.1;
+		text-align: center;
+	}
+	.room-log-live-badge {
+		top: 3px;
+		right: 3px;
+		height: 14px;
+		padding: 0 4px;
+		font-size: 0.55rem;
+	}
 }
 
 @media (max-width: 480px) {
-	.cover-col {
-		width: 40%;
+	.anime-layout {
+		grid-template-columns: minmax(0, 128px) minmax(0, 1fr);
+		column-gap: 10px;
 	}
 	.anime-title {
 		font-size: 1.1rem;

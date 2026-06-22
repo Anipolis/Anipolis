@@ -240,7 +240,15 @@ export interface Anime {
  */
 export type AnimeListItem = Pick<
 	Anime,
-	"id" | "title" | "title_en" | "cover_url" | "season" | "broadcast_day" | "computed_broadcast_status" | "user_entry"
+	| "id"
+	| "title"
+	| "title_en"
+	| "cover_url"
+	| "season"
+	| "episode_count"
+	| "broadcast_day"
+	| "computed_broadcast_status"
+	| "user_entry"
 >;
 
 export interface AnimeExchangeItem {

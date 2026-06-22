@@ -12,7 +12,7 @@ import {
 import type { Anime, AnimeListItem } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
-/** Anime 全フィールドを HTML に埋め込まず、カード描画に必要な8フィールドだけへ射影する。 */
+/** Anime 全フィールドを HTML に埋め込まず、カード描画に必要な9フィールドだけへ射影する。 */
 function toAnimeListItem(a: Anime): AnimeListItem {
 	return {
 		id: a.id,
@@ -20,6 +20,7 @@ function toAnimeListItem(a: Anime): AnimeListItem {
 		title_en: a.title_en,
 		cover_url: a.cover_url,
 		season: a.season,
+		episode_count: a.episode_count,
 		broadcast_day: a.broadcast_day,
 		computed_broadcast_status: a.computed_broadcast_status,
 		user_entry: a.user_entry ?? null,
