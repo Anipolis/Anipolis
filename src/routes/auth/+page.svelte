@@ -47,7 +47,7 @@ const next = $derived(data.next ?? "/");
 
 			{#if activeMode === 'add_account'}
 				<p class="auth-info-text">別のAnipolisアカウントのメールアドレスとパスワードを入力してください。</p>
-				<form method="POST" action="?/addAccount" class="auth-form">
+				<form method="POST" action="?/addAccount&mode=add_account" class="auth-form">
 					<div class="field">
 						<label for="add-email" class="field-label">メールアドレス</label>
 						<input

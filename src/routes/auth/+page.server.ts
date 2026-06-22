@@ -200,7 +200,9 @@ export const actions: Actions = {
 			.eq("linked_user_id", targetUserId)
 			.maybeSingle();
 
-		if (existingLink && getExtraAccounts(cookies).some((a) => a.userId === targetUserId)) {
+		const alreadyInCookie = getExtraAccounts(cookies).some((a) => a.userId === targetUserId);
+
+		if (existingLink && alreadyInCookie) {
 			await supabase.auth.refreshSession({ refresh_token: ownerRefreshToken });
 			return fail(400, { mode: "add_account", message: "このアカウントはすでに追加されています" });
 		}
@@ -218,11 +220,22 @@ export const actions: Actions = {
 		});
 
 		if (restoreError) {
-			redirect(303, "/auth?mode=login");
+			return fail(500, {
+				mode: "add_account",
+				message: "セッションの復元に失敗しました。再度ログインしてください",
+			});
 		}
 
-		// DB にリンクを記録（双方向）
-		await linkAccounts(serviceClient, ownerUser.id, targetUserId, count ?? 0);
+		// DB リンクがまだなければ作成（既存の場合は upsert をスキップして制限トリガーの誤発火を回避）
+		if (!existingLink) {
+			const { error: linkError } = await linkAccounts(serviceClient, ownerUser.id, targetUserId, count ?? 0);
+			if (linkError) {
+				return fail(500, {
+					mode: "add_account",
+					message: "アカウントのリンクに失敗しました。しばらく経ってから再試行してください",
+				});
+			}
+		}
 
 		// Cookie にアカウント B を保存
 		const existing = getExtraAccounts(cookies);

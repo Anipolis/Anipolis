@@ -891,10 +891,11 @@ export async function linkAccounts(
 	userIdA: string,
 	userIdB: string,
 	displayOrderForA: number,
-): Promise<void> {
+): Promise<{ error: string | null }> {
 	// biome-ignore lint/suspicious/noExplicitAny: linked_accounts not yet in auto-generated DB types
-	await (serviceClient as SupabaseClient<any>).from("linked_accounts").upsert([
+	const { error } = await (serviceClient as SupabaseClient<any>).from("linked_accounts").upsert([
 		{ owner_user_id: userIdA, linked_user_id: userIdB, display_order: displayOrderForA },
 		{ owner_user_id: userIdB, linked_user_id: userIdA, display_order: 0 },
 	]);
+	return { error: error ? error.message : null };
 }
