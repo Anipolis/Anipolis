@@ -1,7 +1,6 @@
 import { fail, redirect } from "@sveltejs/kit";
 import { removeUserAnimeEntry, upsertUserAnimeEntry } from "$lib/server/actions";
-import { getUserAnimeList } from "$lib/server/queries";
-import type { Anime } from "$lib/types";
+import { getAnimeRankingTrending, getUserAnimeList } from "$lib/server/queries";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession } }) => {
@@ -16,12 +15,13 @@ export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession 
 
 	if (!profile) redirect(302, "/");
 
-	const animeList = await getUserAnimeList(supabase, user.id).catch((err) => {
-		console.error("[mylist] animeList fetch error:", err);
-		return [] as Anime[];
-	});
+	const [animeList, trendingResult, animeTrending] = await Promise.all([
+		getUserAnimeList(supabase, user.id),
+		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
+		getAnimeRankingTrending(supabase, 5),
+	]);
 
-	return { animeList, profile, user };
+	return { animeList, profile, user, trending: trendingResult.data ?? [], animeTrending };
 };
 
 export const actions: Actions = {

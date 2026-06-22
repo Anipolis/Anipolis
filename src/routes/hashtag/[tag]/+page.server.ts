@@ -1,8 +1,11 @@
 ﻿import { fail } from "@sveltejs/kit";
 import { deletePostAction, toggleBookmarkAction, toggleLikeAction, toggleRepostAction } from "$lib/server/actions";
-import { enrichPostsWithCounts } from "$lib/server/queries";
-import type { Post } from "$lib/types";
+import { buildPostCardSelect } from "$lib/server/post-selects";
+import { enrichPostsWithCounts, getAnimeRankingTrending } from "$lib/server/queries";
+import type { RawPost } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
+
+const POSTS_SELECT = buildPostCardSelect();
 
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
@@ -10,7 +13,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 
 	const { data: hashtag } = await supabase.from("hashtags").select("id").eq("name", tag).maybeSingle();
 
-	const [postsResult, trendingResult] = await Promise.all([
+	const [postsResult, trendingResult, animeTrending] = await Promise.all([
 		(async () => {
 			if (!hashtag) return { data: [] };
 
@@ -21,30 +24,23 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 
 			return supabase
 				.from("posts")
-				.select(
-					`id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, exchange_share,
-                     profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
-                     post_hashtags ( hashtags ( name ) ),
-                     anime:anime!posts_anime_id_fkey ( id, title, cover_url, broadcast_day, broadcast_time )`,
-				)
+				.select(POSTS_SELECT)
 				.in("id", postIds)
 				.order("created_at", { ascending: false })
 				.limit(50);
 		})(),
 
 		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
+		getAnimeRankingTrending(supabase, 5),
 	]);
 
-	const posts = (async () => {
-		if (!hashtag) return [] as Post[];
-		const rawPosts = postsResult.data ?? [];
-		return enrichPostsWithCounts(supabase, rawPosts, user?.id ?? null);
-	})().catch((err) => {
-		console.error("[hashtag] posts fetch error:", err);
-		return [] as Post[];
-	});
+	const posts = await enrichPostsWithCounts(
+		supabase,
+		(postsResult.data ?? []) as unknown as RawPost[],
+		user?.id ?? null,
+	);
 
-	return { tag, posts, trending: trendingResult.data ?? [], user };
+	return { tag, posts, trending: trendingResult.data ?? [], animeTrending };
 };
 
 export const actions: Actions = {

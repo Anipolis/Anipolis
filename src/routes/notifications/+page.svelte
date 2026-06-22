@@ -1,4 +1,5 @@
 <script lang="ts">
+import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
 import { formatRelativeTime } from "$lib/utils/format";
 import type { PageProps } from "./$types";
@@ -15,14 +16,29 @@ function notificationLabel(type: string): string {
 	if (type === "follow_request") return "さんからフォロー申請が届きました";
 	return "";
 }
+
+function formatBroadcastTime(value: string | null): string {
+	if (!value) return "";
+	return new Date(value).toLocaleString("ja-JP", {
+		month: "numeric",
+		day: "numeric",
+		hour: "2-digit",
+		minute: "2-digit",
+	});
+}
+
+function broadcastLabel(value: string | null): string {
+	if (value && new Date(value).getTime() <= Date.now()) return "の放送ルームが開始しました";
+	return "の放送ルームがまもなく開始します";
+}
 </script>
 
 <svelte:head> <title>通知 - Anipolis</title> </svelte:head>
 
 <div class="page-container">
-	<main class="notifications-column">
-		<header class="page-header">
-			<h1 class="page-title">通知</h1>
+	<main class="feed-column notifications-column">
+		<header class="notifications-header">
+			<h1>通知</h1>
 		</header>
 
 		{#await data.notifications}
@@ -31,14 +47,38 @@ function notificationLabel(type: string): string {
 				<span>読み込み中…</span>
 			</div>
 		{:then notifications}
-			{#if notifications.length === 0}
-				<div class="notification-empty">
-					<p>通知はありません</p>
-				</div>
-			{:else}
-				<ul class="notification-list">
-					{#each notifications as notif (notif.id)}
-						<li class="notification-item">
+			<ul class="notification-list">
+				{#each notifications as notif (notif.id)}
+					<li class="notification-item">
+						{#if notif.type === 'broadcast'}
+							<div class="notification-room-icon" aria-hidden="true">
+								<span class="i-lucide-calendar-clock"></span>
+							</div>
+							<div class="notification-body">
+								<p class="notification-text">
+									<strong>{notif.broadcast_anime_title ?? '登録したアニメ'}</strong>
+									{broadcastLabel(notif.broadcast_scheduled_at)}
+								</p>
+								{#if notif.broadcast_anime_id && notif.broadcast_room_date}
+									<a
+										href="/rooms/anime/{notif.broadcast_anime_id}/{notif.broadcast_room_date}"
+										class="notification-anime-preview"
+									>
+										{#if notif.broadcast_anime_cover_url}
+											<img
+												src={notif.broadcast_anime_cover_url}
+												alt={notif.broadcast_anime_title ?? '放送作品'}
+											>
+										{/if}
+										<span>
+											<strong>{notif.broadcast_anime_title ?? '放送ルーム'}</strong>
+											<small>{formatBroadcastTime(notif.broadcast_scheduled_at)} 開始</small>
+										</span>
+									</a>
+								{/if}
+								<span class="notification-time">{formatRelativeTime(notif.created_at)}</span>
+							</div>
+						{:else}
 							<a href="/profile/{notif.actor_username}" class="notification-avatar">
 								<UserAvatar src={notif.actor_avatar_url} username={notif.actor_username} size="md" />
 							</a>
@@ -52,8 +92,8 @@ function notificationLabel(type: string): string {
 								{#if notif.post_content && notif.post_id}
 									<a href="/posts/{notif.post_id}" class="notification-post-preview">
 										{notif.post_content.length > 80
-										? `${notif.post_content.slice(0, 80)}…`
-										: notif.post_content}
+											? `${notif.post_content.slice(0, 80)}…`
+											: notif.post_content}
 									</a>
 								{/if}
 								{#if notif.type === 'anime_recommendation' && notif.recommendation_anime_id}
@@ -62,10 +102,6 @@ function notificationLabel(type: string): string {
 											<img
 												src={notif.recommendation_anime_cover_url}
 												alt={notif.recommendation_anime_title ?? '推薦作品'}
-												width="34"
-												height="48"
-												loading="lazy"
-												decoding="async"
 											>
 										{/if}
 										<span> <strong>{notif.recommendation_anime_title ?? '推薦作品'}</strong> </span>
@@ -76,19 +112,32 @@ function notificationLabel(type: string): string {
 								{/if}
 								<span class="notification-time">{formatRelativeTime(notif.created_at)}</span>
 							</div>
-						</li>
-					{/each}
-				</ul>
-			{/if}
+						{/if}
+					</li>
+				{/each}
+			</ul>
 		{/await}
 	</main>
+
+	<aside class="sidebar-column">
+		<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
+	</aside>
 </div>
 
 <style>
 .notifications-column {
-	max-width: 600px;
-	margin: 0 auto;
-	padding: 0 16px;
+	padding: 0;
+}
+
+.notifications-header {
+	padding: 1rem 0;
+	border-bottom: 1px solid var(--border);
+}
+
+.notifications-header h1 {
+	font-size: 1.25rem;
+	font-weight: 700;
+	margin: 0;
 }
 
 .notification-list {
@@ -105,6 +154,18 @@ function notificationLabel(type: string): string {
 }
 
 .notification-avatar {
+	flex-shrink: 0;
+}
+
+.notification-room-icon {
+	display: grid;
+	place-items: center;
+	width: 40px;
+	height: 40px;
+	border-radius: 9999px;
+	background: color-mix(in srgb, var(--accent, #6366f1) 16%, transparent);
+	color: var(--accent, #6366f1);
+	font-size: 20px;
 	flex-shrink: 0;
 }
 
@@ -167,8 +228,8 @@ function notificationLabel(type: string): string {
 
 .notification-anime-preview img {
 	width: 34px;
-	height: 48px;
-	object-fit: cover;
+	display: block;
+	image-rendering: auto;
 	border-radius: 4px;
 	flex-shrink: 0;
 }
@@ -190,6 +251,11 @@ function notificationLabel(type: string): string {
 	font-size: 13px;
 }
 
+.notification-anime-preview small {
+	font-size: 12px;
+	color: var(--color-text-muted);
+}
+
 .notification-action-link {
 	width: fit-content;
 	font-size: 13px;
@@ -204,12 +270,6 @@ function notificationLabel(type: string): string {
 
 .notification-time {
 	font-size: 12px;
-	color: var(--color-text-muted);
-}
-
-.notification-empty {
-	padding: 2rem 1rem;
-	text-align: center;
 	color: var(--color-text-muted);
 }
 </style>

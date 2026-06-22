@@ -1,3 +1,4 @@
+﻿import type { SupabaseClient } from "@supabase/supabase-js";
 import { error, fail } from "@sveltejs/kit";
 import {
 	deletePostAction,
@@ -6,31 +7,34 @@ import {
 	toggleLikeAction,
 	toggleRepostAction,
 } from "$lib/server/actions";
-import { enrichPostsWithCounts } from "$lib/server/queries";
+import { buildPostCardSelect } from "$lib/server/post-selects";
+import { enrichPostsWithCounts, getAnimeRankingTrending } from "$lib/server/queries";
 import type { Post, RawPost } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
-const POSTS_SELECT = `
-    id, content, created_at, user_id, parent_id, quoted_post_id, image_urls, anime_id, exchange_share,
-    profiles!posts_user_id_fkey ( username, display_name, avatar_url ),
-    post_hashtags ( hashtags ( name ) ),
-    anime:anime!posts_anime_id_fkey ( id, title, cover_url, broadcast_day, broadcast_time )
-` as const;
+const POSTS_SELECT = buildPostCardSelect();
 
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
+	// biome-ignore lint/suspicious/noExplicitAny: migration 061 columns are not present in generated Supabase types yet
+	const postReader = supabase as SupabaseClient<any>;
 
-	const { data: rawPost } = await supabase.from("posts").select(POSTS_SELECT).eq("id", params.id).maybeSingle();
+	const { data: rawPost } = await postReader.from("posts").select(POSTS_SELECT).eq("id", params.id).maybeSingle();
 
 	if (!rawPost) error(404, "投稿が見つかりません");
+	const post = rawPost as unknown as RawPost;
+
+	const [trendingResult, animeTrending] = await Promise.all([
+		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
+		getAnimeRankingTrending(supabase, 5),
+	]);
 
 	const enrichedDataPromise = (async () => {
 		const [rawParentRes, rawRepliesRes] = await Promise.all([
-			rawPost.parent_id
-				? supabase.from("posts").select(POSTS_SELECT).eq("id", rawPost.parent_id).maybeSingle()
+			post.parent_id
+				? postReader.from("posts").select(POSTS_SELECT).eq("id", post.parent_id).maybeSingle()
 				: Promise.resolve({ data: null }),
-
-			supabase
+			postReader
 				.from("posts")
 				.select(POSTS_SELECT)
 				.eq("parent_id", params.id)
@@ -39,21 +43,17 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 
 		const rawParent = rawParentRes.data;
 		const rawReplies = rawRepliesRes.data ?? [];
-
-		const rawAll: RawPost[] = [rawPost, ...(rawParent ? [rawParent] : []), ...rawReplies];
-		const enriched = await enrichPostsWithCounts(supabase, rawAll, user?.id ?? null);
-
-		const enrichedPost = enriched.find((post) => post.id === params.id);
+		const rawAll = [post, ...(rawParent ? [rawParent] : []), ...rawReplies] as unknown as RawPost[];
+		const enriched = await enrichPostsWithCounts(supabase, rawAll, user?.id ?? null, {
+			includeMutedRoomPosts: true,
+		});
+		const enrichedPost = enriched.find((item) => item.id === params.id);
 		if (!enrichedPost) throw new Error("post not found after enrich");
-		const enrichedParent = rawPost.parent_id
-			? (enriched.find((post) => post.id === rawPost.parent_id) ?? null)
-			: null;
-		const enrichedReplies = enriched.filter((post) => post.id !== params.id && post.id !== rawPost.parent_id);
 
 		return {
 			post: enrichedPost,
-			parentPost: enrichedParent,
-			replies: enrichedReplies,
+			parentPost: post.parent_id ? (enriched.find((item) => item.id === post.parent_id) ?? null) : null,
+			replies: enriched.filter((item) => item.id !== params.id && item.id !== post.parent_id),
 		};
 	})().catch((err) => {
 		console.error("[posts/id] enrich error:", err);
@@ -63,7 +63,9 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 	return {
 		enrichedData: enrichedDataPromise,
 		currentUserId: user?.id ?? null,
-		rawPostId: params.id,
+		trending: trendingResult.data ?? [],
+		animeTrending,
+		post: { content: post.content, image_urls: post.image_urls },
 	};
 };
 

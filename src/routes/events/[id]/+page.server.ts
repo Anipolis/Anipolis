@@ -6,16 +6,17 @@ import {
 	toggleLikeAction,
 	toggleRepostAction,
 } from "$lib/server/actions";
-import { getEvent, getEventPosts } from "$lib/server/queries";
+import { getAnimeRankingTrending, getEvent, getEventPosts } from "$lib/server/queries";
 import type { Post } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 
-	const [event, trending] = await Promise.all([
+	const [event, trending, animeTrending] = await Promise.all([
 		getEvent(supabase, params.id),
 		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
+		getAnimeRankingTrending(supabase, 5),
 	]);
 
 	if (!event) throw error(404, "イベントが見つかりません");
@@ -25,7 +26,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 		return [] as Post[];
 	});
 
-	return { event, posts, trending: trending.data ?? [], user };
+	return { event, posts, trending: trending.data ?? [], animeTrending, user };
 };
 
 export const actions: Actions = {

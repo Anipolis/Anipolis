@@ -1,4 +1,4 @@
-:root {
+﻿:root {
 	--color-bg: #0d0d0d;
 	--color-surface: #161616;
 	--color-surface-hover: #1c1c1c;
@@ -7,8 +7,8 @@
 	--color-text: #e8e8e8;
 	--color-text-muted: #a3a3a3;
 	--color-text-secondary: #c7c7c7;
-	--color-accent: #8b5cf6;
-	--color-accent-hover: #a78bfa;
+	--color-accent: #8ab5f9;
+	--color-accent-hover: #a8caff;
 	--color-danger: #ef4444;
 	--color-error-bg: rgba(239, 68, 68, 0.1);
 	--color-error-border: rgba(239, 68, 68, 0.3);
@@ -16,9 +16,10 @@
 	--color-success-bg: rgba(34, 197, 94, 0.1);
 	--color-success-border: rgba(34, 197, 94, 0.3);
 	--color-success-text: #86efac;
+	--anipolis-logo-image: url("/anipolis-logo-sub.png");
 	--nav-height: 0px;
-	--content-max: 880px;
-	--feed-width: 600px;
+	--content-max: 960px;
+	--feed-width: 680px;
 	--sidebar-width: 260px;
 	--icon-bar-width: 240px;
 	--radius: 12px;
@@ -50,16 +51,16 @@
 }
 
 [data-theme="light"] {
-	--color-bg: #f5f5f5;
+	--color-bg: #f8fafc;
 	--color-surface: #ffffff;
-	--color-surface-hover: #f0f0f0;
-	--color-border: #e2e2e2;
-	--color-border-hover: #c0c0c0;
-	--color-text: #1a1a1a;
-	--color-text-muted: #5f6368;
-	--color-text-secondary: #3f3f46;
-	--color-accent: #7c3aed;
-	--color-accent-hover: #6d28d9;
+	--color-surface-hover: #f1f5f9;
+	--color-border: #cbd5e1;
+	--color-border-hover: #94a3b8;
+	--color-text: #0f172a;
+	--color-text-muted: #64748b;
+	--color-text-secondary: #334155;
+	--color-accent: #19448e;
+	--color-accent-hover: #132f62;
 	--color-danger: #dc2626;
 	--color-error-bg: rgba(220, 38, 38, 0.08);
 	--color-error-border: rgba(220, 38, 38, 0.25);
@@ -67,6 +68,7 @@
 	--color-success-bg: rgba(21, 128, 61, 0.08);
 	--color-success-border: rgba(21, 128, 61, 0.25);
 	--color-success-text: #15803d;
+	--anipolis-logo-image: url("/anipolis-logo.png");
 	--status-watching: #15803d;
 	--status-plan: #1d4ed8;
 	--status-on-hold: #a16207;
@@ -84,6 +86,10 @@
 
 html {
 	-webkit-text-size-adjust: 100%;
+	width: 100%;
+	overflow-x: clip;
+	overscroll-behavior-x: none;
+	scrollbar-gutter: stable;
 }
 
 body {
@@ -94,6 +100,61 @@ body {
 	font-size: 15px;
 	line-height: 1.6;
 	min-height: 100vh;
+	width: 100%;
+	overflow-x: clip;
+	overscroll-behavior-x: none;
+}
+
+html[data-swipe-direction="next"]::view-transition-old(root) {
+	animation: anipolis-swipe-next-old 0.28s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+html[data-swipe-direction="next"]::view-transition-new(root) {
+	animation: anipolis-swipe-next-new 0.28s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+html[data-swipe-direction="prev"]::view-transition-old(root) {
+	animation: anipolis-swipe-prev-old 0.28s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+html[data-swipe-direction="prev"]::view-transition-new(root) {
+	animation: anipolis-swipe-prev-new 0.28s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+@keyframes anipolis-swipe-next-old {
+	from {
+		transform: translateX(0);
+	}
+	to {
+		transform: translateX(-22%);
+	}
+}
+
+@keyframes anipolis-swipe-next-new {
+	from {
+		transform: translateX(100%);
+	}
+	to {
+		transform: translateX(0);
+	}
+}
+
+@keyframes anipolis-swipe-prev-old {
+	from {
+		transform: translateX(0);
+	}
+	to {
+		transform: translateX(22%);
+	}
+}
+
+@keyframes anipolis-swipe-prev-new {
+	from {
+		transform: translateX(-100%);
+	}
+	to {
+		transform: translateX(0);
+	}
 }
 
 a {
@@ -127,17 +188,22 @@ textarea {
 	display: flex;
 	flex-direction: row;
 	min-height: 100vh;
+	width: 100%;
+	max-width: 100vw;
+	overflow-x: clip;
 }
 
 .app-main {
 	flex: 1;
 	min-width: 0;
+	max-width: 100vw;
 	display: flex;
 	flex-direction: column;
 	padding-left: var(--icon-bar-width);
 }
 
 .page-container {
+	width: 100%;
 	max-width: var(--content-max);
 	margin: 0 auto;
 	padding: 0;
@@ -168,10 +234,13 @@ textarea {
 	}
 }
 
-@media (max-width: 640px) {
+@media (max-width: 960px) {
 	.page-container {
 		padding: 0 12px;
-		padding-top: calc(var(--nav-height) + 8px);
+		padding-top: 12px;
+		padding-bottom: 80px;
+		max-width: 100vw;
+		overflow-x: clip;
 	}
 }
 
@@ -277,8 +346,46 @@ textarea {
 }
 
 .sidebar-btn.active {
-	background: color-mix(in srgb, var(--color-accent) 15%, transparent);
+	background: color-mix(in srgb, var(--color-accent) 10%, transparent);
 	color: var(--color-accent);
+}
+
+[data-theme="light"] .sidebar-btn {
+	color: #475569;
+}
+
+[data-theme="light"] .sidebar-btn.active {
+	background: color-mix(in srgb, #8ab5f9 18%, transparent);
+	color: var(--color-accent);
+}
+
+[data-theme="light"] .sidebar-btn.active .sidebar-btn-label {
+	font-weight: 700;
+}
+
+/* Active: solid/filled icons */
+[data-theme="light"] .sidebar-btn.active svg path,
+[data-theme="light"] .sidebar-btn.active svg polygon,
+[data-theme="light"] .sidebar-btn.active svg circle,
+[data-theme="light"] .sidebar-btn.active svg rect {
+	fill: currentColor;
+	stroke: none;
+}
+
+/* Home icon door: keep as white cutout */
+[data-theme="light"] .sidebar-btn.active svg polyline {
+	fill: none;
+	stroke: #fff;
+	stroke-width: 2;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+/* Exchange icon (open line paths only): keep stroke, make bolder */
+[data-theme="light"] .sidebar-btn.active svg.icon-lines path {
+	fill: none !important;
+	stroke: currentColor !important;
+	stroke-width: 2.5;
 }
 
 .sidebar-btn.danger:hover {
@@ -316,42 +423,28 @@ textarea {
 	pointer-events: none;
 }
 
-.sidebar-toggle {
-	display: none;
+.sidebar-indicator {
+	position: absolute;
+	top: 8px;
+	left: 29px;
+	width: 9px;
+	height: 9px;
+	border: 2px solid var(--color-bg);
+	border-radius: 9999px;
+	background: var(--color-accent);
+	pointer-events: none;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 960px) {
 	.icon-sidebar {
-		display: flex;
-		transform: translateX(-100%);
-		transition: transform 0.2s ease;
-	}
-	:root:not(.sidebar-collapsed) .icon-sidebar {
-		transform: translateX(0);
+		display: none;
 	}
 	.app-layout {
 		flex-direction: column;
 	}
 	.app-main {
 		padding-left: 0;
-	}
-	.sidebar-toggle {
-		position: fixed;
-		top: calc(var(--nav-height) + 12px);
-		left: 12px;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 36px;
-		height: 36px;
-		border: 1px solid var(--color-border);
-		border-radius: 9999px;
-		background: var(--color-surface);
-		color: var(--color-text);
-		z-index: 220;
-	}
-	:root:not(.sidebar-collapsed) .sidebar-toggle {
-		left: calc(var(--icon-bar-width) - 18px);
+		padding-top: 52px;
 	}
 }
 
@@ -372,12 +465,17 @@ textarea {
 .btn-primary {
 	background: var(--color-accent);
 	color: #fff;
+	box-shadow: 0 2px 8px rgba(25, 68, 142, 0.2);
+	transition:
+		background 0.2s ease,
+		box-shadow 0.2s ease;
 }
 
 .btn-primary:hover {
 	background: var(--color-accent-hover);
 	text-decoration: none;
 	color: #fff;
+	box-shadow: 0 4px 14px rgba(25, 68, 142, 0.3);
 }
 
 .btn-outline {
@@ -387,7 +485,7 @@ textarea {
 }
 
 .btn-outline:hover {
-	background: rgba(139, 92, 246, 0.1);
+	background: color-mix(in srgb, var(--color-accent) 10%, transparent);
 	text-decoration: none;
 }
 
@@ -499,7 +597,7 @@ textarea {
 }
 .composer-image-preview img {
 	width: 100%;
-	height: 100%;
+	aspect-ratio: 1;
 	object-fit: cover;
 }
 .composer-image-remove {
@@ -523,7 +621,7 @@ textarea {
 	background: rgba(0, 0, 0, 0.85);
 }
 
-/* --- 投稿画像グリッド --- */
+/* --- 謚慕ｨｿ逕ｻ蜒上げ繝ｪ繝・ラ --- */
 .post-images {
 	display: grid;
 	grid-template-columns: repeat(2, 1fr);
@@ -550,15 +648,18 @@ textarea {
 }
 .post-image {
 	width: 100%;
-	height: 100%;
+	aspect-ratio: 16 / 9;
 	object-fit: cover;
 	transition: opacity 0.15s;
+}
+.post-images-single .post-image {
+	aspect-ratio: auto;
 }
 .post-image:hover {
 	opacity: 0.9;
 }
 
-/* ライトボックス */
+/* 繝ｩ繧､繝医・繝・け繧ｹ */
 .lightbox-overlay {
 	position: fixed;
 	inset: 0;
@@ -634,7 +735,7 @@ textarea {
 	text-align: center;
 	font-size: 15px;
 	font-weight: 500;
-	color: var(--color-text-muted);
+	color: var(--color-text-secondary);
 	text-decoration: none;
 	transition:
 		color 0.15s,
@@ -665,6 +766,7 @@ textarea {
 	padding: 16px;
 	position: relative;
 	transition: background 0.1s;
+	-webkit-tap-highlight-color: transparent;
 }
 
 .post-card-modal-open {
@@ -697,15 +799,41 @@ textarea {
 	min-width: 0;
 }
 
-.post-card:hover {
-	background: var(--color-surface);
+.post-card--detail {
+	display: grid;
+	grid-template-columns: 40px minmax(0, 1fr);
+	row-gap: 0;
+}
+
+.post-card--detail .post-avatar-link {
+	grid-column: 1;
+	grid-row: 1;
+}
+
+.post-card--detail .post-body {
+	display: contents;
+}
+
+.post-card--detail .post-body > * {
+	grid-column: 1 / -1;
+}
+
+@media (hover: hover) {
+	.post-card:hover {
+		background: var(--color-surface);
+	}
 }
 
 .post-header {
 	display: flex;
-	align-items: center;
+	align-items: flex-start;
 	gap: 10px;
 	margin-bottom: 10px;
+}
+
+.post-card--detail .post-header {
+	grid-column: 2;
+	grid-row: 1;
 }
 
 .post-meta {
@@ -716,6 +844,7 @@ textarea {
 .post-username {
 	font-weight: 600;
 	font-size: 14px;
+	line-height: 1.25;
 	color: var(--color-text);
 	text-decoration: none;
 }
@@ -727,6 +856,7 @@ textarea {
 
 .post-display-name {
 	font-size: 13px;
+	line-height: 1.25;
 	color: var(--color-text-muted);
 }
 
@@ -742,34 +872,84 @@ textarea {
 	color: var(--color-text-muted);
 }
 
-.post-delete-btn {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	width: 24px;
-	height: 24px;
+.post-kebab-wrapper {
+	position: relative;
+}
+
+.post-kebab-btn {
+	display: grid;
+	place-items: center;
+	width: 28px;
+	height: 28px;
 	border-radius: 50%;
-	font-size: 11px;
 	color: var(--color-text-muted);
-	opacity: 0;
+	background: none;
+	border: none;
+	cursor: pointer;
 	transition:
-		opacity 0.15s,
 		background 0.15s,
 		color 0.15s;
 }
 
-.post-card:hover .post-delete-btn {
-	opacity: 1;
+.post-kebab-btn:hover {
+	background: var(--color-bg-hover);
+	color: var(--color-text);
 }
 
-.post-delete-btn:hover {
-	background: rgba(239, 68, 68, 0.15);
+.post-kebab-backdrop {
+	position: fixed;
+	inset: 0;
+	z-index: 200;
+	border: none;
+	background: transparent;
+	cursor: default;
+}
+
+.post-kebab-menu {
+	position: absolute;
+	top: calc(100% + 4px);
+	right: 0;
+	z-index: 201;
+	min-width: 140px;
+	border: 1px solid var(--color-border);
+	border-radius: 10px;
+	background: var(--color-bg-card);
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+	overflow: hidden;
+}
+
+.post-kebab-item {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	padding: 10px 14px;
+	background: none;
+	border: none;
+	cursor: pointer;
+	font-size: 14px;
+	color: var(--color-text);
+	text-align: left;
+	font-family: inherit;
+	transition: background 0.12s;
+}
+
+.post-kebab-item:hover {
+	background: var(--color-bg-hover);
+}
+
+.post-kebab-item--danger {
 	color: var(--color-danger);
 }
 
-.post-delete-btn:disabled {
-	opacity: 0.4;
-	cursor: not-allowed;
+.post-kebab-item--danger:hover {
+	background: rgba(239, 68, 68, 0.1);
+}
+
+.post-kebab-item [class^="i-lucide"] {
+	flex-shrink: 0;
+	width: 15px;
+	height: 15px;
 }
 
 .post-card.deleting {
@@ -809,9 +989,24 @@ textarea {
 	overflow: hidden;
 }
 
+[data-theme="light"] .broadcast-ts-badge {
+	background-color: rgb(204 251 241 / 0.9);
+	color: rgb(17 94 89);
+	border-color: rgb(20 184 166 / 0.45);
+}
+
+[data-theme="light"] .broadcast-ts-abs {
+	color: rgb(107 114 128);
+}
+
+[data-theme="light"] .avatar {
+	background: #94a3b8;
+	color: #ffffff;
+}
+
 .avatar img {
 	width: 100%;
-	height: 100%;
+	aspect-ratio: 1;
 	object-fit: cover;
 	border-radius: 50%;
 }
@@ -846,6 +1041,21 @@ textarea {
 	font-size: 16px;
 	font-weight: 700;
 	border-bottom: 1px solid var(--color-border);
+}
+
+.trending-subheader {
+	padding: 14px 16px 10px;
+	border-top: 1px solid var(--color-border);
+	border-bottom: 1px solid var(--color-border);
+	color: var(--color-text-muted);
+	font-size: 13px;
+	font-weight: 700;
+}
+
+.trending-empty {
+	padding: 16px;
+	color: var(--color-text-muted);
+	font-size: 14px;
 }
 
 .trending-item {
@@ -886,6 +1096,30 @@ textarea {
 .trending-count {
 	font-size: 12px;
 	color: var(--color-text-muted);
+}
+
+.anime-trending-item {
+	gap: 8px;
+}
+
+.anime-trending-cover {
+	width: 44px;
+	flex-shrink: 0;
+	border-radius: 4px;
+	display: block;
+	image-rendering: auto;
+	background: var(--color-border);
+}
+
+.anime-trending-title {
+	flex: 1;
+	min-width: 0;
+	color: var(--color-text);
+	font-size: 14px;
+	font-weight: 600;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 /* --- Section title --- */
@@ -1056,11 +1290,27 @@ textarea {
 	background: var(--color-surface);
 	border: 1px solid var(--color-border);
 	border-radius: var(--radius);
-	padding: 24px;
 	margin-bottom: 16px;
+	overflow: hidden;
+}
+
+.profile-header-image {
+	display: block;
+	width: 100%;
+	aspect-ratio: 3 / 1;
+	max-height: 240px;
+	object-fit: cover;
+}
+
+.profile-header-image--empty {
+	background: var(--color-surface-hover);
+}
+
+.profile-header-content {
 	display: flex;
 	align-items: center;
 	gap: 16px;
+	padding: 24px;
 }
 
 .profile-info {
@@ -1184,6 +1434,38 @@ textarea {
 	border-radius: var(--radius);
 	padding: 20px;
 	margin-bottom: 16px;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.hashtag-back-link {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	height: 36px;
+	padding: 0 10px;
+	border-radius: 9999px;
+	color: var(--color-text-muted);
+	font-size: 13px;
+	font-weight: 700;
+	text-decoration: none;
+	transition:
+		background 0.15s,
+		color 0.15s;
+	flex-shrink: 0;
+}
+
+.hashtag-back-link:hover {
+	background: var(--color-surface-hover);
+	color: var(--color-text);
+	text-decoration: none;
+}
+
+.hashtag-back-link [class^="i-lucide"] {
+	width: 16px;
+	height: 16px;
 }
 
 .hashtag-header h1 {
@@ -1352,7 +1634,7 @@ textarea {
 	}
 }
 
-/* フォームフィールド */
+/* 繝輔か繝ｼ繝繝輔ぅ繝ｼ繝ｫ繝・*/
 
 .field {
 	margin-bottom: 20px;
@@ -1395,6 +1677,45 @@ textarea {
 
 .field-input.field-error {
 	border-color: var(--color-danger);
+}
+
+.password-input-wrap {
+	position: relative;
+}
+
+.password-input {
+	padding-right: 44px;
+}
+
+.password-toggle {
+	position: absolute;
+	top: 50%;
+	right: 8px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	padding: 0;
+	border: none;
+	background: transparent;
+	color: var(--color-text-muted);
+	cursor: pointer;
+	transform: translateY(-50%);
+}
+
+.password-toggle:hover {
+	color: var(--color-text);
+}
+
+.password-toggle:focus-visible {
+	outline: 2px solid var(--color-accent);
+	outline-offset: 2px;
+}
+
+.password-toggle [class^="i-lucide"] {
+	width: 18px;
+	height: 18px;
 }
 
 .field-input-prefix {
@@ -1517,7 +1838,7 @@ textarea {
 	color: var(--color-danger);
 }
 
-/* 成功フラッシュ */
+/* 謌仙粥繝輔Λ繝・す繝･ */
 .flash-success {
 	background: var(--color-success-bg);
 	border: 1px solid var(--color-success-border);
@@ -1531,11 +1852,31 @@ textarea {
 /* --- Post footer (reply button) --- */
 
 .post-footer {
-	display: flex;
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
 	align-items: center;
-	gap: 16px;
+	gap: 0;
 	margin-top: 10px;
 	padding-top: 8px;
+}
+
+.post-footer-item {
+	display: flex;
+	min-width: 0;
+	justify-content: flex-start;
+	align-items: center;
+}
+
+.post-footer-item > :first-child {
+	margin-left: -8px;
+}
+
+.post-footer-item:last-child > :first-child {
+	margin-left: 0;
+}
+
+.post-bookmark-btn {
+	padding-right: 0;
 }
 
 /* --- Post action buttons (reply / repost / like) --- */
@@ -1563,18 +1904,18 @@ textarea {
 	opacity: 0.5;
 }
 
-/* リプライ */
+/* 繝ｪ繝励Λ繧､ */
 .post-reply-btn {
-	margin-left: -8px;
+	margin-left: 0;
 }
 
 .post-reply-btn:hover {
 	color: var(--color-accent);
-	background: rgba(139, 92, 246, 0.1);
+	background: color-mix(in srgb, var(--color-accent) 10%, transparent);
 	text-decoration: none;
 }
 
-/* リポスト */
+/* 繝ｪ繝昴せ繝・*/
 .post-repost-btn:not(:disabled):hover {
 	color: #22c55e;
 	background: rgba(34, 197, 94, 0.1);
@@ -1584,7 +1925,7 @@ textarea {
 	color: #22c55e;
 }
 
-/* いいね */
+/* 縺・＞縺ｭ */
 .post-like-btn:not(:disabled):hover {
 	color: #f43f5e;
 	background: rgba(244, 63, 94, 0.1);
@@ -1594,11 +1935,227 @@ textarea {
 	color: #f43f5e;
 }
 
+.reaction-action-group {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+}
+
+.post-footer-item > .reaction-action-group {
+	margin-left: -6.5px;
+}
+
+.reaction-action-group form {
+	display: inline-flex;
+}
+
+.reaction-count-button,
+.reaction-count-static {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	margin-left: 4px;
+	padding: 0;
+	border: none;
+	background: none;
+	color: var(--color-text-muted);
+	font: inherit;
+	font-size: 13px;
+	line-height: 1.2;
+}
+
+.reaction-count-button {
+	cursor: pointer;
+	border-radius: var(--radius-sm);
+}
+
+.reaction-count-static {
+	height: 28px;
+	margin-left: 2px;
+}
+
+.reaction-icon-hitbox {
+	position: relative;
+	width: 28px;
+	height: 28px;
+	touch-action: manipulation;
+	margin: -3.5px 0;
+	padding: 6.5px;
+}
+
+.reaction-count-hitbox {
+	position: relative;
+	z-index: 1;
+	min-width: 28px;
+	min-height: 28px;
+	touch-action: manipulation;
+	/* Counts use a compact target while retaining separation from the action icon. */
+	margin-top: -3.5px;
+	margin-bottom: -3.5px;
+}
+
+.reaction-icon-hitbox::before {
+	position: absolute;
+	pointer-events: none;
+	content: "";
+	border-radius: var(--radius-sm);
+}
+
+.reaction-icon-hitbox::before {
+	top: 0;
+	right: 0;
+	bottom: 0;
+	left: 0;
+}
+
+.post-repost-btn.reaction-icon-hitbox:not(:disabled):hover,
+.post-like-btn.reaction-icon-hitbox:not(:disabled):hover {
+	background: none;
+}
+
+.post-repost-count.reaction-count-hitbox:hover {
+	color: #22c55e;
+	background: rgba(34, 197, 94, 0.1);
+}
+
+.post-like-count.reaction-count-hitbox:hover {
+	color: #f43f5e;
+	background: rgba(244, 63, 94, 0.1);
+}
+
+.post-repost-btn.reaction-icon-hitbox:not(:disabled):hover::before {
+	background: rgba(34, 197, 94, 0.1);
+}
+
+.post-like-btn.reaction-icon-hitbox:not(:disabled):hover::before {
+	background: rgba(244, 63, 94, 0.1);
+}
+
+.reaction-popover-backdrop {
+	position: fixed;
+	inset: 0;
+	z-index: 100;
+	border: none;
+	background: transparent;
+}
+
+.reaction-popover {
+	position: absolute;
+	bottom: calc(100% + 8px);
+	left: 0;
+	z-index: 101;
+	width: min(300px, calc(100vw - 32px));
+	overflow: hidden;
+	border: 1px solid var(--color-border, #313244);
+	border-radius: 12px;
+	background: var(--color-bg-card, #1e1e2e);
+	box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+}
+
+.reaction-popover-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 10px 10px 10px 14px;
+	border-bottom: 1px solid var(--color-border, #313244);
+	color: var(--color-text);
+	font-size: 14px;
+}
+
+.reaction-popover-close {
+	display: inline-flex;
+	padding: 5px;
+	border: none;
+	border-radius: var(--radius-sm);
+	background: none;
+	color: var(--color-text-muted);
+	cursor: pointer;
+}
+
+.reaction-popover-close:hover {
+	background: var(--color-bg-hover, #313244);
+	color: var(--color-text);
+}
+
+.reaction-popover-list {
+	max-height: 280px;
+	overflow-y: auto;
+}
+
+.reaction-user {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 10px 12px;
+	color: var(--color-text);
+	text-decoration: none;
+}
+
+.reaction-user:hover {
+	background: var(--color-bg-hover, #313244);
+	text-decoration: none;
+}
+
+.reaction-user-names {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	font-size: 13px;
+}
+
+.reaction-user-names strong,
+.reaction-user-names span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.reaction-user-names span,
+.reaction-popover-status {
+	color: var(--color-text-muted);
+}
+
+.reaction-popover-status {
+	margin: 0;
+	padding: 22px 14px;
+	text-align: center;
+	font-size: 13px;
+}
+
+.reaction-popover-error {
+	color: #f87171;
+}
+
 .post-card-clickable {
 	cursor: pointer;
 }
 
 /* --- Post detail / thread view --- */
+
+.post-detail-back {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 40px;
+	height: 40px;
+	margin-bottom: 8px;
+	border-radius: 50%;
+	color: var(--color-text-secondary);
+	transition:
+		background 0.15s,
+		color 0.15s;
+}
+
+.post-detail-back:hover {
+	background: var(--color-bg-hover);
+	color: var(--color-text);
+}
+
+.post-detail-back:focus-visible {
+	outline: 2px solid var(--color-accent);
+	outline-offset: 2px;
+}
 
 .thread-parent {
 	position: relative;
@@ -1640,10 +2197,10 @@ textarea {
 }
 
 /* ================================================================
-   カレンダー / イベント視聴ルーム
+   繧ｫ繝ｬ繝ｳ繝繝ｼ / 繧､繝吶Φ繝郁ｦ冶・繝ｫ繝ｼ繝
    ================================================================ */
 
-/* ── Nav カレンダーボタン ──────────────────────────────────────── */
+/* 笏笏 Nav 繧ｫ繝ｬ繝ｳ繝繝ｼ繝懊ち繝ｳ 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏 */
 .nav-icon-btn {
 	display: flex;
 	align-items: center;
@@ -1662,7 +2219,7 @@ textarea {
 	color: var(--color-text);
 }
 
-/* ── カレンダーページ専用レイアウト ──────────────────────────────── */
+/* 笏笏 繧ｫ繝ｬ繝ｳ繝繝ｼ繝壹・繧ｸ蟆ら畑繝ｬ繧､繧｢繧ｦ繝・笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏 */
 .calendar-page-container {
 	max-width: 1600px;
 	width: 100%;
@@ -1695,7 +2252,7 @@ textarea {
 	}
 }
 
-/* ── カレンダーカード ────────────────────────────────────────────── */
+/* 笏笏 繧ｫ繝ｬ繝ｳ繝繝ｼ繧ｫ繝ｼ繝・笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏 */
 .calendar-card {
 	padding: 0;
 	overflow: hidden;
@@ -1807,7 +2364,7 @@ textarea {
 	text-overflow: ellipsis;
 }
 
-/* ── イベント一覧 ───────────────────────────────────────────────── */
+/* 笏笏 繧､繝吶Φ繝井ｸ隕ｧ 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏 */
 .section-heading {
 	font-size: 15px;
 	font-weight: 600;
@@ -1865,7 +2422,7 @@ textarea {
 	margin-top: 1px;
 }
 
-/* ── イベント作成フォーム ──────────────────────────────────────── */
+/* 笏笏 繧､繝吶Φ繝井ｽ懈・繝輔か繝ｼ繝 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏 */
 .event-form {
 	display: flex;
 	flex-direction: column;
@@ -1906,7 +2463,7 @@ textarea {
 	color: var(--color-danger, #ef4444);
 }
 
-/* ── イベントルームヘッダー ─────────────────────────────────────── */
+/* 笏笏 繧､繝吶Φ繝医Ν繝ｼ繝繝倥ャ繝繝ｼ 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏 */
 .event-room-header {
 	margin-bottom: 0;
 }
@@ -1952,7 +2509,7 @@ textarea {
 	margin: 0 0 8px;
 }
 
-/* ── ライブタイマー ────────────────────────────────────────────── */
+/* 笏笏 繝ｩ繧､繝悶ち繧､繝槭・ 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏 */
 .event-timer {
 	display: flex;
 	align-items: center;
@@ -1997,7 +2554,7 @@ textarea {
 	}
 }
 
-/* ── イベント投稿フィード ──────────────────────────────────────── */
+/* 笏笏 繧､繝吶Φ繝域兜遞ｿ繝輔ぅ繝ｼ繝・笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏 */
 .event-posts-header {
 	display: flex;
 	align-items: center;
@@ -2008,14 +2565,14 @@ textarea {
 	color: var(--color-text-muted);
 }
 
-/* ── コンポーザーヒント ────────────────────────────────────────── */
+/* 笏笏 繧ｳ繝ｳ繝昴・繧ｶ繝ｼ繝偵Φ繝・笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏 */
 .composer-hint {
 	font-size: 12px;
 	color: var(--color-text-muted);
 	margin: 6px 0 0;
 }
 
-/* ── 汎用 ──────────────────────────────────────────────────────── */
+/* 笏笏 豎守畑 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏 */
 .btn-danger {
 	background: #ef4444;
 	color: #fff;
@@ -2025,7 +2582,7 @@ textarea {
 	background: #dc2626;
 }
 
-/* ── アニメ引用カード（PostCard） ───────────────────────────────── */
+/* 笏笏 繧｢繝九Γ蠑慕畑繧ｫ繝ｼ繝会ｼ・ostCard・・笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏 */
 .anime-quote-card {
 	display: flex;
 	align-items: center;
@@ -2156,8 +2713,8 @@ textarea {
 
 .anime-quote-cover {
 	width: 44px;
-	height: 62px;
-	object-fit: cover;
+	display: block;
+	image-rendering: auto;
 	border-radius: 4px;
 	flex-shrink: 0;
 	background: var(--color-border);
@@ -2199,46 +2756,7 @@ textarea {
 	color: var(--status-score);
 }
 
-/* ── アニメ引用プレビュー（PostComposer） ───────────────────────── */
-.composer-anime-preview {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	margin: 6px 0 2px;
-	padding: 8px 10px;
-	border: 1px solid var(--color-primary);
-	border-radius: var(--radius);
-	background: color-mix(in srgb, var(--color-primary) 8%, transparent);
-}
-.composer-anime-thumb {
-	width: 36px;
-	height: 50px;
-	object-fit: cover;
-	border-radius: 3px;
-	flex-shrink: 0;
-}
-.composer-anime-info {
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
-	min-width: 0;
-	flex: 1;
-}
-.composer-anime-title {
-	font-size: 13px;
-	font-weight: 600;
-	color: var(--color-text);
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-.composer-anime-title-en {
-	font-size: 11px;
-	color: var(--color-text-muted);
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
+/* 笏笏 繧｢繝九Γ蠑慕畑繝励Ξ繝薙Η繝ｼ・・ostComposer・・笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏 */
 .composer-anime-remove {
 	background: none;
 	border: none;
@@ -2257,7 +2775,7 @@ textarea {
 	color: var(--color-primary);
 }
 
-/* ── アニメ検索モーダル ─────────────────────────────────────────── */
+/* 笏笏 繧｢繝九Γ讀懃ｴ｢繝｢繝ｼ繝繝ｫ 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏 */
 .anime-search-overlay {
 	position: fixed;
 	inset: 0;
@@ -2347,8 +2865,8 @@ textarea {
 }
 .anime-search-thumb {
 	width: 36px;
-	height: 50px;
-	object-fit: cover;
+	display: block;
+	image-rendering: auto;
 	border-radius: 3px;
 	flex-shrink: 0;
 	background: var(--color-border);
@@ -2581,8 +3099,7 @@ form + .repost-menu-item {
 }
 
 /* ----------------------------------------------------------------
-   引用リポスト — 埋め込み表示カード
-   ---------------------------------------------------------------- */
+   蠑慕畑繝ｪ繝昴せ繝・窶・蝓九ａ霎ｼ縺ｿ陦ｨ遉ｺ繧ｫ繝ｼ繝・   ---------------------------------------------------------------- */
 .quoted-post {
 	display: block;
 	margin-top: 10px;
@@ -2631,4 +3148,102 @@ form + .repost-menu-item {
 	line-clamp: 3;
 	-webkit-box-orient: vertical;
 	overflow: hidden;
+}
+
+/* ============================================================
+   MOBILE RESPONSIVE (≤960px additions)
+   ============================================================ */
+
+@media (max-width: 960px) {
+	body {
+		font-size: 14px;
+	}
+
+	/* Touch target: post action buttons */
+	.post-action-btn {
+		padding: 10px 8px;
+		min-height: 40px;
+	}
+
+	.reaction-icon-hitbox {
+		min-height: 28px;
+		padding: 6.5px;
+	}
+
+	/* Profile header: stack on mobile */
+	.profile-header-content {
+		flex-direction: column;
+		align-items: center;
+		text-align: center;
+		padding: 16px;
+		gap: 12px;
+	}
+
+	.profile-header-image {
+		aspect-ratio: 2 / 1;
+	}
+
+	.profile-stats {
+		justify-content: center;
+		gap: 16px;
+	}
+
+	/* Feed column fills full width (960px rule already handles this for the right sidebar-column,
+	   but on mobile the feed-column itself should be full width) */
+	.feed-column {
+		flex: 1;
+		width: 100%;
+	}
+
+	/* Search form: column on mobile */
+	.global-search-form {
+		align-items: stretch;
+		flex-direction: column;
+	}
+
+	/* Post images: ensure full width on small screens */
+	.post-images {
+		max-width: 100%;
+	}
+}
+
+/* Small phone adjustments (≤480px) */
+@media (max-width: 480px) {
+	body {
+		font-size: 13px;
+	}
+
+	.page-container {
+		padding: 0 8px;
+		padding-top: 8px;
+		padding-bottom: 80px;
+	}
+
+	.post-card {
+		padding: 10px 12px;
+	}
+
+	.profile-display-name {
+		font-size: 18px;
+	}
+}
+
+/* Ultra-small phone adjustments (≤375px) */
+@media (max-width: 375px) {
+	.page-container {
+		padding: 0 6px;
+		padding-top: 6px;
+		padding-bottom: 80px;
+	}
+
+	.post-card {
+		padding: 8px 10px;
+	}
+}
+
+/* Compact landscape keeps the mobile shell until the desktop breakpoint. */
+@media (max-width: 960px) and (orientation: landscape) {
+	.page-container {
+		padding-bottom: 16px;
+	}
 }

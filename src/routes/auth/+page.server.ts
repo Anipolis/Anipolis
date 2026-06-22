@@ -1,5 +1,7 @@
 import { fail, redirect } from "@sveltejs/kit";
+import { env as publicEnv } from "$env/dynamic/public";
 import { linkAccounts } from "$lib/server/actions";
+import { isBetaMember } from "$lib/server/discord";
 import { getExtraAccounts, setExtraAccounts } from "$lib/server/multi-account";
 import { createServiceRoleClient } from "$lib/server/supabase-admin";
 import type { Actions, PageServerLoad } from "./$types";
@@ -24,9 +26,16 @@ export const load: PageServerLoad = async ({ url, locals: { safeGetSession } }) 
 	// add_account はログイン済みユーザーのみアクセス可
 	if (mode === "add_account" && !user) redirect(303, "/auth?mode=login");
 	// login/register はログイン済みならリダイレクト
-	if (mode !== "add_account" && user) redirect(303, next);
+	// ベータ資格を持つログインユーザーのみリダイレクトする。
+	// 未資格ユーザーは /auth に留め、not_member メッセージを表示できるようにする（ループ防止）。
+	if (mode !== "add_account" && user && isBetaMember(user)) redirect(303, next);
 
-	return { mode, next };
+	return {
+		mode,
+		next,
+		closedBeta: publicEnv["PUBLIC_CLOSED_BETA"] === "true",
+		error: url.searchParams.get("error"),
+	};
 };
 
 export const actions: Actions = {
@@ -200,7 +209,9 @@ export const actions: Actions = {
 			.eq("linked_user_id", targetUserId)
 			.maybeSingle();
 
-		if (existingLink) {
+		const alreadyInCookie = getExtraAccounts(cookies).some((a) => a.userId === targetUserId);
+
+		if (existingLink && alreadyInCookie) {
 			await supabase.auth.refreshSession({ refresh_token: ownerRefreshToken });
 			return fail(400, { mode: "add_account", message: "このアカウントはすでに追加されています" });
 		}
@@ -224,11 +235,22 @@ export const actions: Actions = {
 		});
 
 		if (restoreError) {
-			redirect(303, "/auth?mode=login");
+			return fail(500, {
+				mode: "add_account",
+				message: "セッションの復元に失敗しました。再度ログインしてください",
+			});
 		}
 
-		// DB にリンクを記録（双方向）
-		await linkAccounts(serviceClient, ownerUser.id, targetUserId, count ?? 0);
+		// DB リンクがまだなければ作成（既存の場合は upsert をスキップして制限トリガーの誤発火を回避）
+		if (!existingLink) {
+			const { error: linkError } = await linkAccounts(serviceClient, ownerUser.id, targetUserId, count ?? 0);
+			if (linkError) {
+				return fail(500, {
+					mode: "add_account",
+					message: "アカウントのリンクに失敗しました。しばらく経ってから再試行してください",
+				});
+			}
+		}
 
 		// Cookie にアカウント B を保存
 		const existing = getExtraAccounts(cookies);
@@ -260,6 +282,23 @@ export const actions: Actions = {
 
 		if (error || !data.url) {
 			return fail(400, { mode: "login", message: "Googleログインを開始できませんでした" });
+		}
+
+		redirect(303, data.url);
+	},
+
+	discord: async ({ request, url, locals: { supabase } }) => {
+		const form = await request.formData();
+		const next = getSafeNext(form.get("next"));
+		const redirectTo = `${url.origin}/auth/callback?next=${encodeURIComponent(next)}`;
+
+		const { data, error } = await supabase.auth.signInWithOAuth({
+			provider: "discord",
+			options: { redirectTo, scopes: "identify email" },
+		});
+
+		if (error || !data.url) {
+			return fail(400, { mode: "login", message: "Discordログインを開始できませんでした" });
 		}
 
 		redirect(303, data.url);

@@ -5,12 +5,22 @@ import type { AnimeExchangeShareAnime } from "$lib/types";
 interface Props {
 	offeredAnime: AnimeExchangeShareAnime;
 	receivedAnime: AnimeExchangeShareAnime;
+	offeredComment?: string | null;
+	receivedComment?: string | null;
 	mode?: "full" | "timeline";
 	linkCards?: boolean;
 	actions?: Snippet;
 }
 
-let { offeredAnime, receivedAnime, mode = "full", linkCards = true, actions }: Props = $props();
+let {
+	offeredAnime,
+	receivedAnime,
+	offeredComment = null,
+	receivedComment = null,
+	mode = "full",
+	linkCards = true,
+	actions,
+}: Props = $props();
 
 function animeHref(animeId: string) {
 	return `/anime/${animeId}`;
@@ -42,6 +52,9 @@ function animeHref(animeId: string) {
 					{#if offeredAnime.title_en}
 						<small>{offeredAnime.title_en}</small>
 					{/if}
+					{#if offeredComment}
+						<p class="exchange-result-comment">{offeredComment}</p>
+					{/if}
 				</div>
 			</a>
 		{:else}
@@ -66,6 +79,9 @@ function animeHref(animeId: string) {
 					<strong>{offeredAnime.title}</strong>
 					{#if offeredAnime.title_en}
 						<small>{offeredAnime.title_en}</small>
+					{/if}
+					{#if offeredComment}
+						<p class="exchange-result-comment">{offeredComment}</p>
 					{/if}
 				</div>
 			</div>
@@ -97,6 +113,9 @@ function animeHref(animeId: string) {
 					{#if receivedAnime.title_en}
 						<small>{receivedAnime.title_en}</small>
 					{/if}
+					{#if receivedComment}
+						<p class="exchange-result-comment">{receivedComment}</p>
+					{/if}
 				</div>
 			</a>
 		{:else}
@@ -122,6 +141,9 @@ function animeHref(animeId: string) {
 					<strong>{receivedAnime.title}</strong>
 					{#if receivedAnime.title_en}
 						<small>{receivedAnime.title_en}</small>
+					{/if}
+					{#if receivedComment}
+						<p class="exchange-result-comment">{receivedComment}</p>
 					{/if}
 				</div>
 			</div>
@@ -186,12 +208,15 @@ a.exchange-result-card:hover {
 .exchange-result-cover-wrap {
 	width: 74px;
 	aspect-ratio: 2 / 3;
+	overflow: hidden;
 }
 
 .exchange-result-cover {
 	width: 100%;
-	height: 100%;
-	object-fit: cover;
+	display: block;
+	image-rendering: auto;
+	-webkit-backface-visibility: hidden;
+	backface-visibility: hidden;
 	border-radius: 6px;
 	background: var(--color-border);
 	box-shadow: 0 10px 26px rgba(0, 0, 0, 0.26);
@@ -237,6 +262,14 @@ a.exchange-result-card:hover {
 	line-height: 1.35;
 	line-clamp: 1;
 	-webkit-line-clamp: 1;
+}
+
+.exchange-result-comment {
+	margin: 3px 0 0;
+	color: var(--color-text);
+	font-size: 0.78rem;
+	line-height: 1.45;
+	overflow-wrap: anywhere;
 }
 
 .exchange-swap-icon {
@@ -310,7 +343,8 @@ a.exchange-result-card:hover {
 }
 
 .anime-exchange-result--timeline .exchange-result-copy span,
-.anime-exchange-result--timeline .exchange-result-copy small {
+.anime-exchange-result--timeline .exchange-result-copy small,
+.anime-exchange-result--timeline .exchange-result-comment {
 	font-size: 0.68rem;
 }
 

@@ -1,4 +1,5 @@
 import { json } from "@sveltejs/kit";
+import { buildTitleSearchFilter } from "$lib/server/queries";
 import type { RequestHandler } from "./$types";
 
 export const GET: RequestHandler = async ({ url, locals: { supabase } }) => {
@@ -11,8 +12,8 @@ export const GET: RequestHandler = async ({ url, locals: { supabase } }) => {
 
 	const { data } = await supabase
 		.from("anime")
-		.select("id, title, title_en, cover_url")
-		.or(`title.ilike.%${sanitizedQuery}%,title_en.ilike.%${sanitizedQuery}%`)
+		.select("id, title, title_en, cover_url, official_hashtag")
+		.or(buildTitleSearchFilter(sanitizedQuery))
 		.order("title", { ascending: true })
 		.limit(10);
 

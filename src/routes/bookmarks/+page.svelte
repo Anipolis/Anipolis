@@ -1,42 +1,36 @@
 <script lang="ts">
 import PostCard from "$lib/components/PostCard.svelte";
-import PostCardSkeleton from "$lib/components/PostCardSkeleton.svelte";
+import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();
 </script>
 
-<div class="bookmarks-page">
-	<header class="page-header">
-		<h1 class="page-title">ブックマーク</h1>
-	</header>
+<div class="page-container">
+	<main class="feed-column bookmarks-page">
+		<header class="bookmarks-header">
+			<h1>ブックマーク</h1>
+		</header>
 
-	{#await data.posts}
-		<div class="posts-loading-spinner" aria-label="投稿を読み込み中">
-			<div class="spinner" aria-hidden="true"></div>
-			<span>読み込み中…</span>
-		</div>
-		{#each { length: 5 } as _, i (i)}
-			<PostCardSkeleton />
-		{/each}
-	{:then posts}
-		{#if posts.length === 0}
+		{#if data.posts.length === 0}
 			<p class="empty">保存した投稿はまだありません</p>
 		{:else}
 			<div class="post-list">
-				{#each posts as post (post.id)}
+				{#each data.posts as post (post.id)}
 					<PostCard {post} currentUserId={data.userId} />
 				{/each}
 			</div>
 		{/if}
-	{/await}
+	</main>
+
+	<aside class="sidebar-column">
+		<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
+	</aside>
 </div>
 
 <style>
 .bookmarks-page {
-	max-width: 600px;
-	margin: 0 auto;
-	padding: 0 1rem;
+	padding: 0;
 }
 
 .empty {

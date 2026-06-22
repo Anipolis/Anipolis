@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { translateAnimeSource } from "../src/lib/anime-vocabulary.ts";
 import { isHttpUrl as isHttpUrlUtil, isMalUrl } from "../src/lib/utils/url.js";
 
 type SeasonName = "winter" | "spring" | "summer" | "fall";
@@ -157,7 +158,6 @@ const REQUEST_WAIT_MAX_MS = 1_000;
 const RETRY_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
 const MAX_RETRIES = 5;
 const UPSERT_BATCH_SIZE = 100;
-const _MAL_HOME_URL = "https://myanimelist.net/";
 const BLOCKED_RESOURCE_KEYWORDS = ["namuwiki", "bangumi"];
 const BLOCKED_TYPES = new Set(["music", "pv", "cm"]);
 const FINITE_RELEASE_TYPES = new Set(["movie", "ona", "ova", "tvspecial", "special"]);
@@ -611,6 +611,16 @@ function toDateOnly(value: string | null | undefined) {
 	return date.toISOString().slice(0, 10);
 }
 
+function shiftDateOnly(value: string | null, days: number) {
+	if (!value || days === 0) return value;
+
+	const date = new Date(`${value}T00:00:00.000Z`);
+	if (Number.isNaN(date.getTime())) return value;
+
+	date.setUTCDate(date.getUTCDate() + days);
+	return date.toISOString().slice(0, 10);
+}
+
 function normalizeNameList(items: NamedResource[] | null | undefined) {
 	return [...new Set((items ?? []).map((item) => item.name?.trim()).filter((name): name is string => Boolean(name)))];
 }
@@ -660,17 +670,18 @@ function normalizeBroadcastSchedule(broadcast: JikanAnime["broadcast"]) {
 	const broadcastTime = normalizeBroadcastTime(broadcast?.time);
 
 	if (broadcastDay === null || broadcastTime === null) {
-		return { broadcast_day: broadcastDay, broadcast_time: broadcastTime };
+		return { broadcast_day: broadcastDay, broadcast_time: broadcastTime, aired_date_offset_days: 0 };
 	}
 
 	const hour = Number.parseInt(broadcastTime.slice(0, 2), 10);
 	if (hour >= LATE_NIGHT_EXTENSION_END_HOUR) {
-		return { broadcast_day: broadcastDay, broadcast_time: broadcastTime };
+		return { broadcast_day: broadcastDay, broadcast_time: broadcastTime, aired_date_offset_days: 0 };
 	}
 
 	return {
 		broadcast_day: (broadcastDay + 6) % 7,
 		broadcast_time: `${String(hour + 24).padStart(2, "0")}${broadcastTime.slice(2)}`,
+		aired_date_offset_days: -1,
 	};
 }
 
@@ -765,10 +776,12 @@ function dedupeResourceLinks(resources: AnimeResourceLink[]) {
 	return deduped;
 }
 
+function removeMalResourceLinks(resources: AnimeResourceLink[]) {
+	return resources.filter((resource) => resource.name.toLowerCase() !== "mal" && !isMalUrl(resource.url));
+}
+
 function buildAnimeResources(anime: JikanAnime) {
 	const resources: AnimeResourceLink[] = [];
-
-	if (anime.mal_id) resources.push({ name: "MAL", url: `https://myanimelist.net/anime/${anime.mal_id}` });
 
 	for (const link of anime.resources ?? []) {
 		const normalized = normalizeResourceLink(link);
@@ -786,14 +799,14 @@ function mapJikanAnime(anime: JikanAnime, year: number, season: SeasonName): Ani
 	const titleJapanese = anime.title_japanese?.trim() || findTitleByType(anime, "Japanese");
 	const titleEnglish = anime.title_english?.trim() || findTitleByType(anime, "English");
 	const titleRomaji = anime.title?.trim() || findTitleByType(anime, "Default");
-	const airedFrom = toDateOnly(anime.aired?.from);
-	const airedTo = toDateOnly(anime.aired?.to);
 	const studioEn = normalizeNameList(anime.studios);
 	const studioJa = translateNameList(studioEn, STUDIO_JA_BY_EN);
 	const genreEn = normalizeNameList(anime.genres);
 	const genreJa = translateNameList(genreEn, GENRE_JA_BY_EN);
 	const officialSiteUrl = findOfficialSiteUrl(anime.external);
 	const broadcastSchedule = normalizeBroadcastSchedule(anime.broadcast);
+	const airedFrom = shiftDateOnly(toDateOnly(anime.aired?.from), broadcastSchedule.aired_date_offset_days);
+	const airedTo = shiftDateOnly(toDateOnly(anime.aired?.to), broadcastSchedule.aired_date_offset_days);
 
 	return {
 		mal_id: anime.mal_id,
@@ -806,7 +819,7 @@ function mapJikanAnime(anime: JikanAnime, year: number, season: SeasonName): Ani
 		aired_from: airedFrom,
 		aired_to: airedTo,
 		season: `${year}-${season}`,
-		source: anime.source ?? null,
+		source: translateAnimeSource(anime.source),
 		studio: studioJa,
 		studio_en: studioEn,
 		genre: genreJa,
@@ -953,7 +966,7 @@ async function preserveExistingValuesOnPartialFailures(
 			{
 				official_site_url: row.official_site_url,
 				official_x_url: row.official_x_url,
-				resources: row.resources ?? [],
+				resources: removeMalResourceLinks(row.resources ?? []),
 				cover_url: row.cover_url,
 			},
 		]),

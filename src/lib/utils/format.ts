@@ -16,6 +16,17 @@ export function formatRelativeTime(dateString: string): string {
 	return date.toLocaleDateString("ja-JP", { month: "short", day: "numeric" });
 }
 
+export function formatBroadcastRelativeTime(commentCreatedAt: string | Date, broadcastStartAt: string | Date): string {
+	const commentMs = new Date(commentCreatedAt).getTime();
+	const broadcastMs = new Date(broadcastStartAt).getTime();
+	const diffSeconds = Math.round((commentMs - broadcastMs) / 1000);
+	const sign = diffSeconds < 0 ? "-" : "+";
+	const abs = Math.abs(diffSeconds);
+	const minutes = Math.floor(abs / 60);
+	const seconds = abs % 60;
+	return `${sign}${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
 /**
  * 投稿文字数のクラス名を返す（色変化用）
  */

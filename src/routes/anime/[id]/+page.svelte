@@ -1,7 +1,13 @@
 <script lang="ts">
 import type { SubmitFunction } from "@sveltejs/kit";
+import { tick } from "svelte";
+import { fade, scale } from "svelte/transition";
 import { enhance } from "$app/forms";
-import type { AnimeStatus } from "$lib/types";
+import { page } from "$app/state";
+import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
+import MyListModal from "$lib/components/MyListModal.svelte";
+import type { BroadcastRoomOverride } from "$lib/types";
+import { formatBroadcastEpisodeNumber, formatBroadcastEpisodeSlot } from "$lib/utils/broadcast-episodes";
 import type { PageProps } from "./$types";
 
 interface UserResult {
@@ -15,6 +21,11 @@ let { data, form }: PageProps = $props();
 
 const displayStudios = $derived(data.anime.studio ?? []);
 const displayGenres = $derived(data.anime.genre ?? []);
+const ogDescription = $derived(
+	displayGenres.length > 0
+		? `${displayGenres.slice(0, 3).join(" · ")} — Anipolis`
+		: `${data.anime.title}の情報・視聴記録 — Anipolis`,
+);
 const displayOfficialLinks = $derived(
 	buildDisplayOfficialLinks(data.anime.official_site_url, data.anime.official_x_url),
 );
@@ -26,19 +37,24 @@ const displayResources = $derived(
 		data.anime.official_x_url,
 	),
 );
+// スマホ版左カラム用: ラベルを廃した、タップ検索可能な静的メタ情報チップ
+const compactMetaLinks = $derived([
+	...displayStudios.map((s) => ({ text: s, href: `/anime?studio=${encodeURIComponent(s)}` })),
+	...(data.anime.source
+		? [{ text: data.anime.source, href: `/anime?source=${encodeURIComponent(data.anime.source)}` }]
+		: []),
+	...displayGenres.map((g) => ({ text: g, href: `/anime?genre=${encodeURIComponent(g)}` })),
+	...(data.anime.producer ?? []).map((p) => ({ text: p, href: `/anime?producer=${encodeURIComponent(p)}` })),
+]);
 const prequelRelations = $derived(data.relations.filter((relation) => relation.relation_type === "Prequel"));
 const sequelRelations = $derived(data.relations.filter((relation) => relation.relation_type === "Sequel"));
 const otherRelations = $derived(
 	data.relations.filter((relation) => relation.relation_type !== "Prequel" && relation.relation_type !== "Sequel"),
 );
-
-const statusOptions: { value: AnimeStatus; label: string }[] = [
-	{ value: "watching", label: "視聴中" },
-	{ value: "completed", label: "完了" },
-	{ value: "plan_to_watch", label: "視聴予定" },
-	{ value: "on_hold", label: "一時停止" },
-	{ value: "dropped", label: "断念" },
-];
+const animeListHref = $derived(getAnimeListHref());
+const sortedRoomLogs = $derived([...data.episodes].sort((a, b) => a.date.localeCompare(b.date)));
+const latestRoomLog = $derived(sortedRoomLogs.at(-1));
+const isAnimeAiring = $derived(data.anime.computed_broadcast_status === "airing");
 
 const broadcastLabels: Record<string, string> = {
 	airing: "放送中",
@@ -57,9 +73,22 @@ const listedUserStatusLabels: Record<string, string> = {
 	watching: "視聴中",
 	completed: "完了",
 	plan_to_watch: "視聴予定",
-	on_hold: "中断中",
+	on_hold: "中断",
 	dropped: "断念",
 };
+
+function getAnimeListHref() {
+	const from = page.url.searchParams.get("from");
+	if (!from) return "/anime";
+
+	try {
+		const url = new URL(from, page.url.origin);
+		if (url.origin !== page.url.origin || url.pathname !== "/anime") return "/anime";
+		return `${url.pathname}${url.search}`;
+	} catch {
+		return "/anime";
+	}
+}
 
 function formatAiredPeriod(airedFrom: string | null, airedTo: string | null): string | null {
 	if (!airedFrom) return null;
@@ -91,7 +120,7 @@ function buildDisplayResources(
 			.filter((resource) => resource.name && isHttpUrl(resource.url))
 			.map((resource) => {
 				if (isMalUrl(resource.url) || resource.name.toLowerCase() === "mal") {
-					return { name: "MAL", url: malId ? `https://myanimelist.net/anime/${malId}` : resource.url };
+					return null;
 				}
 				if (resource.name === "Home" || resource.name.toLowerCase() === "official site") {
 					return null;
@@ -115,17 +144,23 @@ function dedupeLinks(links: { name: string; url: string }[]) {
 	});
 }
 
-let selectedStatus = $state<AnimeStatus>("plan_to_watch");
-let score = $state<string>("");
-let progress = $state<string>("0");
-let showRemoveWatchlistModal = $state(false);
-let removeWatchlistFormEl = $state<HTMLFormElement | null>(null);
-
+let myListModalOpen = $state(false);
+let showUserListModal = $state(false);
+// svelte-ignore state_referenced_locally
+let adminEditOpen = $state(Boolean(form?.success || form?.message));
+let activeAdminTab = $state<"basic" | "overrides">("basic");
+let overrideFormOpen = $state(false);
 $effect(() => {
-	selectedStatus = data.anime.user_entry?.status ?? "plan_to_watch";
-	score = data.anime.user_entry?.score != null ? String(data.anime.user_entry.score) : "";
-	progress = String(data.anime.user_entry?.progress ?? 0);
+	if (form?.success || form?.message) adminEditOpen = true;
 });
+
+function handleUserListKeydown(event: KeyboardEvent) {
+	if (event.key === "Escape" && showUserListModal) showUserListModal = false;
+}
+
+function handleUserListBackdropClick(event: MouseEvent) {
+	if (event.target === event.currentTarget) showUserListModal = false;
+}
 
 let coverUrl = $state("");
 
@@ -188,6 +223,12 @@ let recipientDebounce = $state<ReturnType<typeof setTimeout> | null>(null);
 let recommendSubmitting = $state(false);
 let recommendFeedback = $state("");
 let recommendError = $state("");
+let activeAction = $state<"watchlist" | "recommend" | null>(null);
+let liveRoomDates = $state(new Set<string>());
+
+function toggleAction(action: "watchlist" | "recommend") {
+	activeAction = activeAction === action ? null : action;
+}
 
 function handleRecipientInput() {
 	selectedRecipient = null;
@@ -242,198 +283,341 @@ const handleRecommendSubmit: SubmitFunction = () => {
 		}
 	};
 };
+
+function parseDateInput(value: string): Date {
+	return new Date(`${value}T00:00:00`);
+}
+
+function overrideForDate(dateStr: string): BroadcastRoomOverride | null {
+	return data.broadcastOverrides.find((override) => override.room_date.slice(0, 10) === dateStr) ?? null;
+}
+
+function effectiveBroadcastTime(dateStr: string): string | null {
+	return overrideForDate(dateStr)?.broadcast_time ?? data.anime.broadcast_time;
+}
+
+function effectiveDurationMinutes(dateStr: string): number {
+	const overrideDuration = overrideForDate(dateStr)?.duration_minutes;
+	return overrideDuration != null && overrideDuration > 0 ? overrideDuration : data.anime.broadcast_duration_minutes;
+}
+
+function effectivePostCloseMinutes(dateStr: string): number {
+	const overridePostClose = overrideForDate(dateStr)?.post_close_minutes;
+	return overridePostClose != null && overridePostClose >= 0
+		? overridePostClose
+		: data.anime.broadcast_room_post_close_minutes;
+}
+
+function minutesUntilBroadcast(now: Date, roomDate: string): number | null {
+	const broadcastTime = effectiveBroadcastTime(roomDate);
+	if (!broadcastTime) return null;
+	const match = broadcastTime.match(/^(\d{1,2}):(\d{2})/);
+	if (!match) return null;
+
+	const broadcastHour = Number(match[1]);
+	const broadcastMin = Number(match[2]);
+	const scheduledAt = parseDateInput(roomDate);
+	scheduledAt.setHours(broadcastHour, broadcastMin, 0, 0);
+	return Math.round((scheduledAt.getTime() - now.getTime()) / 60_000);
+}
+
+function getLiveWindowMinutes(roomDate: string): number {
+	const durationMinutes = effectiveDurationMinutes(roomDate) > 0 ? effectiveDurationMinutes(roomDate) : 30;
+	const postCloseMinutes = effectivePostCloseMinutes(roomDate) >= 0 ? effectivePostCloseMinutes(roomDate) : 30;
+	return durationMinutes + postCloseMinutes;
+}
+
+function isRoomLive(now: Date, roomDate: string): boolean {
+	const mins = minutesUntilBroadcast(now, roomDate);
+	return mins !== null && mins <= 0 && mins > -getLiveWindowMinutes(roomDate);
+}
+
+function refreshLiveRoomDates() {
+	const now = new Date();
+	const next = new Set<string>();
+	for (const episode of data.episodes) {
+		if (isRoomLive(now, episode.date)) next.add(episode.date);
+	}
+	liveRoomDates = next;
+}
+
+$effect(() => {
+	data.anime.id;
+	refreshLiveRoomDates();
+	const id = setInterval(refreshLiveRoomDates, 30_000);
+	return () => clearInterval(id);
+});
 </script>
 
-<svelte:head> <title>{data.anime.title} — Anipolis</title> </svelte:head>
+<svelte:head>
+	<title>{data.anime.title} — Anipolis</title>
+	<meta property="og:title" content="{data.anime.title} — Anipolis">
+	<meta property="og:description" content={ogDescription}>
+	<meta property="og:type" content="website">
+	<meta property="og:url" content={page.url.href}>
+	{#if data.anime.cover_url}
+		<meta property="og:image" content={data.anime.cover_url}>
+		<meta name="twitter:card" content="summary_large_image">
+	{/if}
+</svelte:head>
 
 <div class="detail-page">
-	<a href="/anime" class="back-link">← アニメ一覧</a>
+	<a href={animeListHref} class="back-link">← アニメ一覧</a>
 
 	<div class="anime-layout">
+		<div class="title-block">
+			<h1 class="anime-title">{data.anime.title}</h1>
+			{#if data.anime.title_en}
+				<p class="anime-title-en">{data.anime.title_en}</p>
+			{/if}
+			<div class="meta-row">
+				<span class="status-badge status-{data.anime.computed_broadcast_status}">
+					{broadcastLabels[data.anime.computed_broadcast_status] ?? data.anime.computed_broadcast_status}
+				</span>
+				{#if data.anime.type}
+					<span class="meta-chip">{data.anime.type}</span>
+				{/if}
+				{#if data.anime.season}
+					<a href="/anime?season={encodeURIComponent(data.anime.season)}" class="meta-chip meta-chip--link"
+						>{data.anime.season}</a
+					>
+				{/if}
+				{#if data.anime.episode_count}
+					<span class="meta-chip">{data.anime.episode_count}話</span>
+				{/if}
+				{#if data.anime.aired_from}
+					<span class="meta-chip aired">
+						{formatAiredPeriod(data.anime.aired_from, data.anime.aired_to)}
+					</span>
+				{/if}
+			</div>
+		</div>
+
 		<!-- Left: Cover + production info -->
 		<aside class="left-panel">
-			<div class="anime-cover">
-				{#if coverUrl}
-					<img src={coverUrl} alt={data.anime.title} decoding="async">
-				{:else}
-					<div class="anime-cover-placeholder">
-						<svg
-							width="56"
-							height="56"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="1.5"
-							aria-hidden="true"
-						>
-							<rect x="2" y="2" width="20" height="20" rx="2" />
-							<path d="M10 8l6 4-6 4V8z" />
-						</svg>
-					</div>
-				{/if}
-				{#if data.isAdmin}
-					<label class="cover-upload-btn" title="カバー画像を変更" class:uploading={coverUploading}>
-						{#if coverUploading}
-							<span>...</span>
-						{:else}
+			<div class="cover-col">
+				<div class="anime-cover">
+					{#if coverUrl}
+						<img src={coverUrl} alt={data.anime.title}>
+					{:else}
+						<div class="anime-cover-placeholder">
 							<svg
-								width="16"
-								height="16"
+								width="56"
+								height="56"
 								viewBox="0 0 24 24"
 								fill="none"
 								stroke="currentColor"
-								stroke-width="2"
+								stroke-width="1.5"
 								aria-hidden="true"
 							>
-								<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-								<polyline points="17 8 12 3 7 8" />
-								<line x1="12" y1="3" x2="12" y2="15" />
+								<rect x="2" y="2" width="20" height="20" rx="2" />
+								<path d="M10 8l6 4-6 4V8z" />
 							</svg>
-						{/if}
-						<input
-							type="file"
-							accept="image/jpeg,image/png,image/webp"
-							onchange={uploadCover}
-							disabled={coverUploading}
-						>
-					</label>
+						</div>
+					{/if}
+					{#if data.isAdmin}
+						<label class="cover-upload-btn" title="カバー画像を変更" class:uploading={coverUploading}>
+							{#if coverUploading}
+								<span>...</span>
+							{:else}
+								<svg
+									width="16"
+									height="16"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									aria-hidden="true"
+								>
+									<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+									<polyline points="17 8 12 3 7 8" />
+									<line x1="12" y1="3" x2="12" y2="15" />
+								</svg>
+							{/if}
+							<input
+								type="file"
+								accept="image/jpeg,image/png,image/webp"
+								onchange={uploadCover}
+								disabled={coverUploading}
+							>
+						</label>
+					{/if}
+				</div>
+				{#if data.anime.copyright}
+					<p class="copyright-notice">{data.anime.copyright}</p>
 				{/if}
 			</div>
-			{#if coverError}
-				<p class="cover-error">{coverError}</p>
-			{/if}
-
-			{#if data.anime.copyright}
-				<p class="copyright-notice">{data.anime.copyright}</p>
-			{/if}
-
-			<!-- Production info below cover -->
-			{#if displayStudios.length || data.anime.producer?.length || data.anime.source || displayGenres.length || data.anime.official_hashtag?.length || displayOfficialLinks.length}
-				<dl class="prod-info">
-					{#if displayStudios.length}
-						<div class="prod-row prod-row--wrap">
-							<dt>スタジオ</dt>
-							<dd class="genre-list">
-								{#each displayStudios as s}
-									<a href="/anime?studio={encodeURIComponent(s)}" class="genre-chip">{s}</a>
-								{/each}
-							</dd>
-						</div>
-					{/if}
-					{#if data.anime.producer?.length}
-						<div class="prod-row prod-row--wrap">
-							<dt>制作</dt>
-							<dd class="genre-list">
-								{#each data.anime.producer as p}
-									<a href="/anime?producer={encodeURIComponent(p)}" class="genre-chip">{p}</a>
-								{/each}
-							</dd>
-						</div>
-					{/if}
-					{#if data.anime.source}
-						<div class="prod-row">
-							<dt>原作</dt>
-							<dd>{data.anime.source}</dd>
-						</div>
-					{/if}
-					{#if displayGenres.length}
-						<div class="prod-row prod-row--wrap">
-							<dt>ジャンル</dt>
-							<dd class="genre-list">
-								{#each displayGenres as g}
-									<a href="/anime?genre={encodeURIComponent(g)}" class="genre-chip">{g}</a>
-								{/each}
-							</dd>
-						</div>
-					{/if}
-					{#if data.anime.official_hashtag?.length}
-						<div class="prod-row prod-row--wrap">
-							<dt>ハッシュタグ</dt>
-							<dd class="genre-list">
-								{#each data.anime.official_hashtag as tag}
-									<a href="/hashtag/{tag.replace(/^#/, '')}" class="hashtag-link"
-										>#{tag.replace(/^#/, '')}</a
-									>
-								{/each}
-							</dd>
-						</div>
-					{/if}
-					{#if displayOfficialLinks.length}
-						<div class="prod-row prod-row--wrap">
-							<dt>公式リンク</dt>
-							<dd class="links-list">
-								{#each displayOfficialLinks as resource (resource.url)}
-									<a
-										href={resource.url}
-										target="_blank"
-										rel="noopener noreferrer"
-										class="official-link"
-										>{resource.name}</a
-									>
-								{/each}
-							</dd>
-						</div>
-					{/if}
-				</dl>
-			{/if}
-			{#if displayResources.length}
-				<div class="resource-links">
-					<div class="resource-links-title">Resources</div>
-					<div class="links-list">
-						{#each displayResources as resource (resource.url)}
-							<a
-								href={resource.url}
-								target="_blank"
-								rel="noopener noreferrer"
-								class:resource-link--muted={resource.name === 'MAL'}
-								class="official-link resource-link"
-								>{resource.name}</a
+			<!-- スマホ版のみ: 画像下に圧縮メタ＋ハッシュタグ＋公式アイコンを集約（PC版は .prod-info を使用） -->
+			<div class="mobile-meta">
+				{#if compactMetaLinks.length}
+					<div class="mobile-meta-chips">
+						{#each compactMetaLinks as item (item.href + item.text)}
+							<a href={item.href} class="mobile-meta-chip">{item.text}</a>
+						{/each}
+					</div>
+				{/if}
+				{#if data.anime.official_hashtag?.length}
+					<div class="mobile-hashtags">
+						{#each data.anime.official_hashtag as tag}
+							<a href="/hashtag/{tag.replace(/^#/, '')}" class="mobile-hashtag"
+								>#{tag.replace(/^#/, '')}</a
 							>
 						{/each}
 					</div>
-				</div>
-			{/if}
+				{/if}
+				{#if displayOfficialLinks.length}
+					<div class="mobile-official-icons">
+						{#each displayOfficialLinks as link (link.url)}
+							<a
+								href={link.url}
+								target="_blank"
+								rel="noopener noreferrer"
+								class="mobile-icon-link"
+								aria-label={link.name}
+								title={link.name}
+							>
+								{#if link.name.includes("公式サイト")}
+									<span class="i-lucide-globe-2" aria-hidden="true"></span>
+								{:else}
+									𝕏
+								{/if}
+							</a>
+						{/each}
+					</div>
+				{/if}
+			</div>
+			<div class="left-panel-info">
+				{#if coverError}
+					<p class="cover-error">{coverError}</p>
+				{/if}
+
+				<!-- Production info below cover -->
+				{#if displayStudios.length || data.anime.producer?.length || data.anime.source || displayGenres.length || data.anime.official_hashtag?.length || displayOfficialLinks.length}
+					<dl class="prod-info">
+						{#if displayStudios.length}
+							<div class="prod-row prod-row--wrap">
+								<dt>スタジオ</dt>
+								<dd class="genre-list">
+									{#each displayStudios as s}
+										<a href="/anime?studio={encodeURIComponent(s)}" class="genre-chip">{s}</a>
+									{/each}
+								</dd>
+							</div>
+						{/if}
+						{#if data.anime.producer?.length}
+							<div class="prod-row prod-row--wrap">
+								<dt>制作</dt>
+								<dd class="genre-list">
+									{#each data.anime.producer as p}
+										<a href="/anime?producer={encodeURIComponent(p)}" class="genre-chip">{p}</a>
+									{/each}
+								</dd>
+							</div>
+						{/if}
+						{#if data.anime.source}
+							<div class="prod-row">
+								<dt>原作</dt>
+								<dd>
+									<a href="/anime?source={encodeURIComponent(data.anime.source)}" class="genre-chip"
+										>{data.anime.source}</a
+									>
+								</dd>
+							</div>
+						{/if}
+						{#if displayGenres.length}
+							<div class="prod-row prod-row--wrap">
+								<dt>ジャンル</dt>
+								<dd class="genre-list">
+									{#each displayGenres as g}
+										<a href="/anime?genre={encodeURIComponent(g)}" class="genre-chip">{g}</a>
+									{/each}
+								</dd>
+							</div>
+						{/if}
+						{#if data.anime.official_hashtag?.length}
+							<div class="prod-row prod-row--wrap">
+								<dt>ハッシュタグ</dt>
+								<dd class="genre-list">
+									{#each data.anime.official_hashtag as tag}
+										<a href="/hashtag/{tag.replace(/^#/, '')}" class="hashtag-link"
+											>#{tag.replace(/^#/, '')}</a
+										>
+									{/each}
+								</dd>
+							</div>
+						{/if}
+						{#if displayOfficialLinks.length}
+							<div class="prod-row prod-row--wrap">
+								<dt>公式リンク</dt>
+								<dd class="links-list">
+									{#each displayOfficialLinks as resource (resource.url)}
+										<a
+											href={resource.url}
+											target="_blank"
+											rel="noopener noreferrer"
+											class="official-link"
+											>{resource.name}</a
+										>
+									{/each}
+								</dd>
+							</div>
+						{/if}
+					</dl>
+				{/if}
+				{#if displayResources.length}
+					<div class="resource-links">
+						<div class="resource-links-title">Resources</div>
+						<div class="links-list">
+							{#each displayResources as resource (resource.url)}
+								<a
+									href={resource.url}
+									target="_blank"
+									rel="noopener noreferrer"
+									class:resource-link--muted={resource.name === 'MAL'}
+									class="official-link resource-link"
+									>{resource.name}</a
+								>
+							{/each}
+						</div>
+					</div>
+				{/if}
+			</div>
 		</aside>
 
-		<!-- Main: title, score, synopsis, watchlist -->
-		<div class="main-content">
-			<div class="title-block">
-				<h1 class="anime-title">{data.anime.title}</h1>
-				{#if data.anime.title_en}
-					<p class="anime-title-en">{data.anime.title_en}</p>
-				{/if}
-				<div class="meta-row">
-					<span class="status-badge status-{data.anime.computed_broadcast_status}">
-						{broadcastLabels[data.anime.computed_broadcast_status] ?? data.anime.computed_broadcast_status}
-					</span>
-					{#if data.anime.type}
-						<span class="meta-chip">{data.anime.type}</span>
-					{/if}
-					{#if data.anime.season}
-						<a
-							href="/anime?season={encodeURIComponent(data.anime.season)}"
-							class="meta-chip meta-chip--link"
-							>{data.anime.season}</a
-						>
-					{/if}
-					{#if data.anime.episode_count}
-						<span class="meta-chip">{data.anime.episode_count}話</span>
-					{/if}
-					{#if data.anime.aired_from}
-						<span class="meta-chip aired">
-							{formatAiredPeriod(data.anime.aired_from, data.anime.aired_to)}
-						</span>
+		<!-- Right column: スマホ版はアクション専用リモコン / PC版はmain上部に従来配置 -->
+		<div class="remote">
+			<!-- Score hero -->
+			<div class="stats-grid">
+				<div class="stat-card stat-card--score">
+					<span class="stat-card-label">スコア</span>
+					{#if data.anime.avg_score != null && (data.anime.score_count ?? 0) > 0}
+						<span class="stat-card-value">★ {data.anime.avg_score.toFixed(2)}</span>
+						<span class="stat-card-sub">{data.anime.score_count}件の評価</span>
+					{:else}
+						<span class="stat-card-value">—</span>
 					{/if}
 				</div>
+				{#if data.anime.list_count}
+					<button
+						type="button"
+						class="stat-card stat-card--interactive"
+						onclick={() => (showUserListModal = true)}
+						aria-haspopup="dialog"
+					>
+						<span class="stat-card-label">リスト登録</span>
+						<span class="stat-card-value">{data.anime.list_count}</span>
+						<span class="stat-card-sub">ユーザー</span>
+					</button>
+				{/if}
 			</div>
+			<!-- アクションバー -->
 
-			<!-- 引用投稿 -->
 			{#if data.user}
-				<div class="quote-post-bar">
-					<a href="/?quote_anime={data.anime.id}" class="btn-quote-post">
+				<div class="action-bar">
+					<a href="/?quote_anime={data.anime.id}#compose" class="action-bar-btn">
 						<svg
-							width="15"
-							height="15"
+							width="18"
+							height="18"
 							viewBox="0 0 24 24"
 							fill="none"
 							stroke="currentColor"
@@ -444,36 +628,495 @@ const handleRecommendSubmit: SubmitFunction = () => {
 						>
 							<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
 						</svg>
-						この作品について投稿
+						<span>投稿</span>
 					</a>
+					<button
+						type="button"
+						class="action-bar-btn"
+						class:active={myListModalOpen}
+						onclick={() => (myListModalOpen = true)}
+						aria-pressed={myListModalOpen}
+					>
+						<svg
+							width="18"
+							height="18"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+						>
+							<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+						</svg>
+						<span>マイリスト</span>
+					</button>
+					<button
+						type="button"
+						class="action-bar-btn"
+						class:active={activeAction === 'recommend'}
+						onclick={() => toggleAction('recommend')}
+						aria-pressed={activeAction === 'recommend'}
+					>
+						<svg
+							width="18"
+							height="18"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+						>
+							<line x1="22" y1="2" x2="11" y2="13" />
+							<polygon points="22 2 15 22 11 13 2 9 22 2" />
+						</svg>
+						<span>推薦</span>
+					</button>
 				</div>
 			{/if}
+			{#if data.isAdmin}
+				<button
+					type="button"
+					class="remote-admin-btn"
+					aria-expanded={adminEditOpen}
+					onclick={async () => {
+						adminEditOpen = !adminEditOpen;
+						if (adminEditOpen) {
+							await tick();
+							document
+								.getElementById("admin-edit-section")
+								?.scrollIntoView({ behavior: "smooth", block: "start" });
+						}
+					}}
+				>
+					{adminEditOpen ? "作品情報フォームを閉じる" : "作品情報を編集"}
+				</button>
+			{/if}
+		</div>
 
-			<!-- Score hero -->
-			<div class="stats-grid">
-				{#if data.anime.avg_score != null}
-					<div class="stat-card stat-card--score">
-						<span class="stat-card-label">スコア</span>
-						<span class="stat-card-value">★ {data.anime.avg_score.toFixed(2)}</span>
-						{#if data.anime.score_count}
-							<span class="stat-card-sub">{data.anime.score_count}件の評価</span>
+		<!-- Main: synopsis, panels, relations, room log -->
+		<div class="main-content">
+			{#if data.user}
+				{#if activeAction}
+					<div class="action-panel">
+						{#if activeAction === 'recommend'}
+							{#if form?.recommendMessage || recommendError}
+								<p class="form-error">{recommendError || form?.recommendMessage}</p>
+							{/if}
+							{#if form?.recommendSuccess || recommendFeedback}
+								<p class="form-success">{recommendFeedback || '推薦を送信しました'}</p>
+							{/if}
+
+							<form
+								method="POST"
+								action="?/recommendAnime"
+								use:enhance={handleRecommendSubmit}
+								class="recommend-form"
+							>
+								<input type="hidden" name="anime_id" value={data.anime.id}>
+								<input type="hidden" name="recipient_id" value={selectedRecipient?.id ?? ''}>
+
+								<div class="recommend-recipient-field">
+									<label class="form-label">
+										相手
+										<input
+											type="search"
+											class="form-input recommend-user-input"
+											placeholder="@username"
+											bind:value={recipientQuery}
+											oninput={handleRecipientInput}
+											autocomplete="off"
+										>
+									</label>
+
+									{#if selectedRecipient}
+										<div class="selected-recipient">
+											{#if selectedRecipient.avatar_url}
+												<img
+													src={selectedRecipient.avatar_url}
+													alt={selectedRecipient.username}
+												>
+											{/if}
+											<span>{selectedRecipient.display_name ?? selectedRecipient.username}</span>
+											<button type="button" onclick={clearRecipient} aria-label="相手をクリア">
+												×
+											</button>
+										</div>
+									{/if}
+
+									{#if recipientResults.length > 0}
+										<div class="recommend-user-results">
+											{#each recipientResults as user (user.id)}
+												<button
+													type="button"
+													class="recommend-user-result"
+													onclick={() => selectRecipient(user)}
+												>
+													{#if user.avatar_url}
+														<img src={user.avatar_url} alt={user.username}>
+													{:else}
+														<span class="recommend-user-avatar-fallback">
+															{(user.display_name ?? user.username).charAt(0).toUpperCase()}
+														</span>
+													{/if}
+													<span>
+														<strong>{user.display_name ?? user.username}</strong>
+														<small>@{user.username}</small>
+													</span>
+												</button>
+											{/each}
+										</div>
+									{:else if recipientSearching}
+										<p class="recommend-search-hint">検索中…</p>
+									{/if}
+								</div>
+
+								<button
+									type="submit"
+									class="btn-primary recommend-submit"
+									disabled={!selectedRecipient || recommendSubmitting}
+								>
+									{recommendSubmitting ? '送信中…' : '推薦する'}
+								</button>
+							</form>
 						{/if}
 					</div>
 				{/if}
-				{#if data.anime.list_count}
-					<div class="stat-card">
-						<span class="stat-card-label">リスト登録</span>
-						<span class="stat-card-value">{data.anime.list_count}</span>
-						<span class="stat-card-sub">ユーザー</span>
-					</div>
-				{/if}
-			</div>
+			{/if}
 
 			<!-- Synopsis -->
 			{#if data.anime.synopsis}
 				<section class="synopsis">
 					<h2>あらすじ</h2>
 					<p>{data.anime.synopsis}</p>
+				</section>
+			{/if}
+
+			{#if data.isAdmin}
+				<section
+					id="admin-edit-section"
+					class="admin-edit-section"
+					class:admin-edit-section--open={adminEditOpen}
+				>
+					<button
+						type="button"
+						class="admin-edit-toggle"
+						aria-expanded={adminEditOpen}
+						onclick={() => {
+							adminEditOpen = !adminEditOpen;
+						}}
+					>
+						{adminEditOpen ? "作品情報フォームを閉じる" : "作品情報を編集"}
+					</button>
+					{#if adminEditOpen}
+						<div class="admin-tab-list" role="tablist" aria-label="作品管理">
+							<button
+								type="button"
+								class="admin-tab"
+								class:admin-tab--active={activeAdminTab === "basic"}
+								role="tab"
+								aria-selected={activeAdminTab === "basic"}
+								onclick={() => {
+									activeAdminTab = "basic";
+								}}
+							>
+								<span class="i-lucide-file-pen-line" aria-hidden="true"></span>
+								基本情報を編集
+							</button>
+							<button
+								type="button"
+								class="admin-tab"
+								class:admin-tab--active={activeAdminTab === "overrides"}
+								role="tab"
+								aria-selected={activeAdminTab === "overrides"}
+								onclick={() => {
+									activeAdminTab = "overrides";
+								}}
+							>
+								<span class="i-lucide-calendar-cog" aria-hidden="true"></span>
+								イレギュラー放送設定
+							</button>
+						</div>
+
+						{#if activeAdminTab === "basic"}
+							<div class="admin-edit-form">
+								<AnimeRegisterForm {form} mode="edit" anime={data.anime} action="?/updateAnime" />
+							</div>
+						{:else}
+							<section class="broadcast-override-section">
+								<div>
+									<h2 class="broadcast-override-heading">イレギュラー放送設定</h2>
+									<p class="broadcast-override-hint">
+										特定の話だけ放送時刻・放送時間を変更したい場合（拡大放送・特番など）に登録します。
+									</p>
+								</div>
+
+								<div class="broadcast-override-table-wrap">
+									<table class="broadcast-override-table">
+										<thead>
+											<tr>
+												<th>日付</th>
+												<th>タイプ / 表示ラベル</th>
+												<th>対象話数</th>
+												<th>メモ</th>
+												<th><span class="sr-only">操作</span></th>
+											</tr>
+										</thead>
+										<tbody>
+											{#if data.broadcastOverrides.length > 0}
+												{#each data.broadcastOverrides as override (override.id)}
+													<tr>
+														<td class="broadcast-override-date">{override.room_date}</td>
+														<td>
+															<div class="broadcast-override-table-tags">
+																{#if override.is_cancelled}
+																	<span class="broadcast-override-tag">放送休止</span>
+																{/if}
+																{#if override.announcement_label}
+																	<span class="broadcast-override-tag"
+																		>{override.announcement_label}</span
+																	>
+																{/if}
+																{#if override.broadcast_time}
+																	<span class="broadcast-override-tag"
+																		>{override.broadcast_time}〜</span
+																	>
+																{/if}
+																{#if override.duration_minutes != null}
+																	<span class="broadcast-override-tag"
+																		>{override.duration_minutes}分</span
+																	>
+																{/if}
+															</div>
+														</td>
+														<td>
+															<div class="broadcast-override-table-tags">
+																{#if override.episode_start != null && override.episode_end != null}
+																	<span class="broadcast-override-tag">
+																		{#if override.episode_start === override.episode_end}
+																			第{override.episode_start}話
+																		{:else}
+																			第{override.episode_start}話〜第{override.episode_end}話
+																			一挙放送
+																		{/if}
+																	</span>
+																{/if}
+																{#if override.episode_label}
+																	<span class="broadcast-override-tag"
+																		>{override.episode_label}</span
+																	>
+																{/if}
+																{#if override.episode_count_increment != null}
+																	<span class="broadcast-override-tag"
+																		>+{override.episode_count_increment}</span
+																	>
+																{/if}
+															</div>
+														</td>
+														<td>
+															{#if override.note}
+																<span class="broadcast-override-note"
+																	>{override.note}</span
+																>
+															{:else}
+																<span class="broadcast-override-empty">—</span>
+															{/if}
+														</td>
+														<td class="broadcast-override-action-cell">
+															<form
+																method="POST"
+																action="?/deleteBroadcastOverride"
+																use:enhance
+															>
+																<input
+																	type="hidden"
+																	name="override_id"
+																	value={override.id}
+																>
+																<button type="submit" class="broadcast-override-delete">
+																	削除
+																</button>
+															</form>
+														</td>
+													</tr>
+												{/each}
+											{:else}
+												<tr>
+													<td colspan="5" class="broadcast-override-empty-row">
+														登録済みのイレギュラー設定はありません
+													</td>
+												</tr>
+											{/if}
+										</tbody>
+									</table>
+								</div>
+
+								{#if !overrideFormOpen}
+									<button
+										type="button"
+										class="broadcast-override-add-toggle"
+										onclick={() => {
+											overrideFormOpen = true;
+										}}
+									>
+										＋ イレギュラー設定を追加
+									</button>
+								{:else}
+									<div class="broadcast-override-accordion">
+										<form
+											method="POST"
+											action="?/addBroadcastOverride"
+											use:enhance={() => {
+												return async ({ update }) => {
+													await update();
+													overrideFormOpen = false;
+												};
+											}}
+											class="broadcast-override-form"
+										>
+											<div class="broadcast-override-field">
+												<label for="override-room-date">日付</label>
+												<input id="override-room-date" type="date" name="room_date" required>
+											</div>
+											<label class="broadcast-override-checkbox">
+												<input type="checkbox" name="is_cancelled">
+												<span>放送休止として告知する</span>
+											</label>
+											<div class="broadcast-override-field">
+												<label for="override-announcement-label">告知文（任意）</label>
+												<input
+													id="override-announcement-label"
+													type="text"
+													name="announcement_label"
+													placeholder="今週は放送休止"
+												>
+											</div>
+											<div class="broadcast-override-field">
+												<label for="override-broadcast-time"
+													>放送時刻（任意・未指定で通常値）</label
+												>
+												<input
+													id="override-broadcast-time"
+													type="text"
+													name="broadcast_time"
+													placeholder="23:30"
+												>
+											</div>
+											<div class="broadcast-override-field">
+												<label for="override-duration">放送時間・分（任意）</label>
+												<input
+													id="override-duration"
+													type="number"
+													name="duration_minutes"
+													min="1"
+													max="1440"
+													placeholder="60"
+												>
+											</div>
+											<div class="broadcast-override-field">
+												<label for="override-pre-open">投稿開始の前倒し・分（任意）</label>
+												<input
+													id="override-pre-open"
+													type="number"
+													name="pre_open_minutes"
+													min="0"
+													max="1440"
+												>
+											</div>
+											<div class="broadcast-override-field">
+												<label for="override-post-close">投稿終了の延長・分（任意）</label>
+												<input
+													id="override-post-close"
+													type="number"
+													name="post_close_minutes"
+													min="0"
+													max="1440"
+												>
+											</div>
+											<div class="broadcast-override-field">
+												<label for="override-episode-start">対象話数（開始・任意）</label>
+												<input
+													id="override-episode-start"
+													type="number"
+													name="episode_start"
+													min="1"
+													placeholder="1"
+												>
+											</div>
+											<div class="broadcast-override-field">
+												<label for="override-episode-end">対象話数（終了・任意）</label>
+												<input
+													id="override-episode-end"
+													type="number"
+													name="episode_end"
+													min="1"
+													placeholder="2"
+												>
+											</div>
+											<div class="broadcast-override-field">
+												<label for="override-episode-label">表示ラベル（任意）</label>
+												<input
+													id="override-episode-label"
+													type="text"
+													name="episode_label"
+													placeholder="総集編"
+												>
+											</div>
+											<div class="broadcast-override-field">
+												<label for="override-episode-count-increment"
+													>話数カウント進行（任意・総集編は0）</label
+												>
+												<input
+													id="override-episode-count-increment"
+													type="number"
+													name="episode_count_increment"
+													min="0"
+													max="99"
+													placeholder="0"
+												>
+											</div>
+											<div class="broadcast-override-field">
+												<label for="override-note">メモ（任意）</label>
+												<input
+													id="override-note"
+													type="text"
+													name="note"
+													placeholder="1時間拡大SP"
+												>
+											</div>
+											<div class="broadcast-override-form-actions">
+												<button type="submit" class="broadcast-override-submit">登録</button>
+												<button
+													type="button"
+													class="broadcast-override-cancel"
+													onclick={() => {
+														overrideFormOpen = false;
+													}}
+												>
+													キャンセル
+												</button>
+											</div>
+										</form>
+									</div>
+								{/if}
+							</section>
+						{/if}
+					{/if}
+				</section>
+			{/if}
+
+			{#if data.anime.room_type === "global"}
+				<section class="global-lobby-section">
+					<a href="/rooms/anime/{data.anime.id}/lobby" class="global-lobby-link">
+						<span class="i-lucide-messages-square" aria-hidden="true"></span>
+						<span>
+							<strong>この作品の総合実況・雑談ロビーへ入る</strong>
+							<small>話数別ではなく、作品全体の常設ルームです</small>
+						</span>
+					</a>
 				</section>
 			{/if}
 
@@ -520,311 +1163,39 @@ const handleRecommendSubmit: SubmitFunction = () => {
 				</section>
 			{/if}
 
-			<!-- Watchlist -->
-			{#if data.user}
-				<section class="watchlist-section">
-					<h2>マイリスト</h2>
-
-					{#if form?.message}
-						<p class="form-error">{form.message}</p>
-					{/if}
-
-					<form method="POST" action="?/upsertWatchlist" use:enhance>
-						<input type="hidden" name="anime_id" value={data.anime.id}>
-
-						<div class="form-row">
-							<label class="form-label">
-								ステータス
-								<select name="status" bind:value={selectedStatus} class="form-select">
-									{#each statusOptions as opt}
-										<option value={opt.value}>{opt.label}</option>
-									{/each}
-								</select>
-							</label>
-
-							<label class="form-label">
-								スコア (1〜10)
-								<input
-									type="number"
-									name="score"
-									min="1"
-									max="10"
-									step="0.5"
-									bind:value={score}
-									placeholder="未評価"
-									class="form-input"
-								>
-							</label>
-
-							{#if data.anime.episode_count}
-								<label class="form-label">
-									進捗 ({data.anime.episode_count}話中)
-									<input
-										type="number"
-										name="progress"
-										min="0"
-										max={data.anime.episode_count}
-										bind:value={progress}
-										class="form-input"
-									>
-								</label>
-							{:else}
-								<label class="form-label">
-									進捗
-									<input
-										type="number"
-										name="progress"
-										min="0"
-										bind:value={progress}
-										class="form-input"
-									>
-								</label>
-							{/if}
-						</div>
-
-						<div class="form-actions">
-							<button
-								type="submit"
-								class="btn-primary {data.anime.user_entry ? 'btn-primary--update' : 'btn-primary--add'}"
-							>
-								{#if data.anime.user_entry}
-									<svg
-										aria-hidden="true"
-										xmlns="http://www.w3.org/2000/svg"
-										width="16"
-										height="16"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="2.5"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-									>
-										<path d="M20 6L9 17l-5-5" />
-									</svg>
-									更新
-								{:else}
-									<svg
-										aria-hidden="true"
-										xmlns="http://www.w3.org/2000/svg"
-										width="16"
-										height="16"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="2.5"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-									>
-										<line x1="12" y1="5" x2="12" y2="19" />
-										<line x1="5" y1="12" x2="19" y2="12" />
-									</svg>
-									マイリストに追加
-								{/if}
-							</button>
-
-							{#if data.anime.user_entry}
-								<button
-									type="button"
-									class="btn-danger"
-									onclick={() => (showRemoveWatchlistModal = true)}
-								>
-									削除
-								</button>
-							{/if}
-						</div>
-					</form>
-
-					<form
-						method="POST"
-						action="?/removeWatchlist"
-						bind:this={removeWatchlistFormEl}
-						style="display:none"
-					>
-						<input type="hidden" name="anime_id" value={data.anime.id}>
-					</form>
-
-					{#if showRemoveWatchlistModal}
-						<!-- svelte-ignore a11y_click_events_have_key_events -->
-						<div
-							class="remove-watchlist-modal-overlay"
-							role="presentation"
-							onclick={() => (showRemoveWatchlistModal = false)}
-						>
-							<div
-								class="remove-watchlist-modal-card"
-								role="dialog"
-								aria-modal="true"
-								aria-labelledby="remove-watchlist-modal-title"
-								tabindex="-1"
-								onclick={(e) => e.stopPropagation()}
-							>
-								<div class="remove-watchlist-modal-header">
-									<span id="remove-watchlist-modal-title" class="remove-watchlist-modal-title"
-										>マイリストから削除</span
-									>
-								</div>
-								<div class="remove-watchlist-modal-body">
-									<p>このアニメをマイリストから削除しますか？</p>
-								</div>
-								<div class="remove-watchlist-modal-footer">
-									<button
-										type="button"
-										class="btn btn-ghost"
-										onclick={() => (showRemoveWatchlistModal = false)}
-									>
-										キャンセル
-									</button>
-									<button
-										type="button"
-										class="btn btn-danger"
-										onclick={() => { showRemoveWatchlistModal = false; removeWatchlistFormEl?.requestSubmit(); }}
-									>
-										削除する
-									</button>
-								</div>
-							</div>
-						</div>
-					{/if}
-				</section>
-			{:else}
-				<section class="watchlist-section watchlist-section--guest">
-					<p class="login-prompt"><a href="/" class="login-prompt-link">ログイン</a>してマイリストに追加</p>
-				</section>
-			{/if}
-
-			{#if data.user}
-				<section class="recommend-section">
-					<h2>作品を推薦</h2>
-
-					{#if form?.recommendMessage || recommendError}
-						<p class="form-error">{recommendError || form?.recommendMessage}</p>
-					{/if}
-					{#if form?.recommendSuccess || recommendFeedback}
-						<p class="form-success">{recommendFeedback || '推薦を送信しました'}</p>
-					{/if}
-
-					<form
-						method="POST"
-						action="?/recommendAnime"
-						use:enhance={handleRecommendSubmit}
-						class="recommend-form"
-					>
-						<input type="hidden" name="anime_id" value={data.anime.id}>
-						<input type="hidden" name="recipient_id" value={selectedRecipient?.id ?? ''}>
-
-						<div class="recommend-recipient-field">
-							<label class="form-label">
-								相手
-								<input
-									type="search"
-									class="form-input recommend-user-input"
-									placeholder="@username"
-									bind:value={recipientQuery}
-									oninput={handleRecipientInput}
-									autocomplete="off"
-								>
-							</label>
-
-							{#if selectedRecipient}
-								<div class="selected-recipient">
-									{#if selectedRecipient.avatar_url}
-										<img
-											src={selectedRecipient.avatar_url}
-											alt={selectedRecipient.username}
-											loading="lazy"
-											decoding="async"
-										>
-									{/if}
-									<span>{selectedRecipient.display_name ?? selectedRecipient.username}</span>
-									<button type="button" onclick={clearRecipient} aria-label="相手をクリア">×</button>
-								</div>
-							{/if}
-
-							{#if recipientResults.length > 0}
-								<div class="recommend-user-results">
-									{#each recipientResults as user (user.id)}
-										<button
-											type="button"
-											class="recommend-user-result"
-											onclick={() => selectRecipient(user)}
-										>
-											{#if user.avatar_url}
-												<img
-													src={user.avatar_url}
-													alt={user.username}
-													loading="lazy"
-													decoding="async"
-												>
-											{:else}
-												<span class="recommend-user-avatar-fallback">
-													{(user.display_name ?? user.username).charAt(0).toUpperCase()}
-												</span>
-											{/if}
-											<span>
-												<strong>{user.display_name ?? user.username}</strong>
-												<small>@{user.username}</small>
-											</span>
-										</button>
-									{/each}
-								</div>
-							{:else if recipientSearching}
-								<p class="recommend-search-hint">検索中…</p>
-							{/if}
-						</div>
-
-						<button
-							type="submit"
-							class="btn-primary recommend-submit"
-							disabled={!selectedRecipient || recommendSubmitting}
-						>
-							{recommendSubmitting ? '送信中…' : '推薦する'}
-						</button>
-					</form>
-				</section>
-			{/if}
-
-			{#if data.listedUsers.length > 0}
-				<section class="listed-users-section">
-					<h2 class="listed-users-heading">
-						リスト登録中のユーザー
-						<span class="listed-users-count">{data.listedUsers.length}</span>
-					</h2>
-					<div class="listed-users-grid">
-						{#each data.listedUsers as u (u.user_id)}
-							<a href="/profile/{u.username}" class="listed-user-card">
-								<div class="listed-user-avatar">
-									{#if u.avatar_url}
-										<img src={u.avatar_url} alt={u.username} loading="lazy" decoding="async">
-									{:else}
-										<div class="listed-user-avatar-fallback">
-											{(u.display_name ?? u.username).charAt(0).toUpperCase()}
-										</div>
-									{/if}
-									<span
-										class="listed-user-status-dot"
-										style="background: {listedUserStatusColors[u.status] ?? 'var(--fg-muted)'};"
-										title={listedUserStatusLabels[u.status] ?? u.status}
-									></span>
-								</div>
-								<span class="listed-user-name">{u.display_name ?? u.username}</span>
-								{#if u.score != null}
-									<span class="listed-user-score">★{u.score}</span>
-								{/if}
-							</a>
-						{/each}
-					</div>
-				</section>
-			{/if}
-
 			{#if data.episodes.length > 0}
 				<section class="room-log-section">
 					<h2 class="room-log-heading">ルームログ</h2>
 					<ol class="room-log-list">
-						{#each data.episodes as ep (ep.date)}
+						{#if isAnimeAiring && latestRoomLog}
+							<li class="room-log-latest-slot">
+								<a
+									href="/rooms/anime/{data.anime.id}/{latestRoomLog.date}"
+									class="room-log-item room-log-item--latest"
+								>
+									<span class="room-log-latest-label">
+										<span class="i-lucide-zap" aria-hidden="true"></span>
+										Latest
+									</span>
+									<span class="room-log-ep">{formatBroadcastEpisodeSlot(latestRoomLog)}</span>
+									<span class="room-log-ep-compact"
+										>{formatBroadcastEpisodeNumber(latestRoomLog)}</span
+									>
+									{#if liveRoomDates.has(latestRoomLog.date)}
+										<span class="room-log-live-badge">LIVE</span>
+									{/if}
+									<span class="room-log-date">{latestRoomLog.date}</span>
+								</a>
+							</li>
+						{/if}
+						{#each sortedRoomLogs as ep (ep.date)}
 							<li>
 								<a href="/rooms/anime/{data.anime.id}/{ep.date}" class="room-log-item">
-									<span class="room-log-ep">第{ep.number}話</span>
+									<span class="room-log-ep">{formatBroadcastEpisodeSlot(ep)}</span>
+									<span class="room-log-ep-compact">{formatBroadcastEpisodeNumber(ep)}</span>
+									{#if liveRoomDates.has(ep.date)}
+										<span class="room-log-live-badge">LIVE</span>
+									{/if}
 									<span class="room-log-date">{ep.date}</span>
 								</a>
 							</li>
@@ -836,56 +1207,80 @@ const handleRecommendSubmit: SubmitFunction = () => {
 	</div>
 </div>
 
+<svelte:window onkeydown={handleUserListKeydown} />
+
+{#if showUserListModal}
+	<div
+		class="user-list-modal-backdrop"
+		role="presentation"
+		onclick={handleUserListBackdropClick}
+		transition:fade={{ duration: 180 }}
+	>
+		<div
+			class="user-list-modal"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="user-list-modal-title"
+			tabindex="-1"
+			in:scale={{ duration: 200, start: 0.95 }}
+		>
+			<header class="user-list-modal-header">
+				<h2 id="user-list-modal-title">リスト登録中のユーザー <span>({data.listedUsers.length}人)</span></h2>
+				<button
+					type="button"
+					class="user-list-modal-close"
+					onclick={() => (showUserListModal = false)}
+					aria-label="閉じる"
+				>
+					<svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
+						<path d="M18 6 6 18M6 6l12 12" />
+					</svg>
+				</button>
+			</header>
+
+			<div class="listed-users-list">
+				{#each data.listedUsers as u (u.user_id)}
+					<a href="/profile/{u.username}" class="listed-user-card">
+						<div class="listed-user-avatar">
+							{#if u.avatar_url}
+								<img src={u.avatar_url} alt="{u.display_name ?? u.username}のアバター">
+							{:else}
+								<div class="listed-user-avatar-fallback">
+									{(u.display_name ?? u.username).charAt(0).toUpperCase()}
+								</div>
+							{/if}
+							<span
+								class="listed-user-status-dot"
+								style="background: {listedUserStatusColors[u.status] ?? 'var(--fg-muted)'};"
+								title={listedUserStatusLabels[u.status] ?? u.status}
+							></span>
+						</div>
+						<div class="listed-user-details">
+							<span class="listed-user-name">{u.display_name ?? u.username}</span>
+							<span class="listed-user-handle">@{u.username}</span>
+						</div>
+						{#if u.score != null && u.score > 0}
+							<span class="listed-user-score">★ {u.score}</span>
+						{/if}
+					</a>
+				{/each}
+			</div>
+		</div>
+	</div>
+{/if}
+
+<MyListModal
+	open={myListModalOpen}
+	animeId={data.anime.id}
+	animeTitle={data.anime.title}
+	episodeCount={data.anime.episode_count}
+	entry={data.anime.user_entry}
+	onclose={() => { myListModalOpen = false; }}
+/>
 <style>
-.remove-watchlist-modal-overlay {
-	position: fixed;
-	inset: 0;
-	z-index: 1000;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	padding: 16px;
-	background: rgba(0, 0, 0, 0.58);
-	backdrop-filter: blur(3px);
-}
-
-.remove-watchlist-modal-card {
-	width: min(360px, 100%);
-	border: 1px solid var(--color-border);
-	border-radius: 12px;
-	background: var(--color-bg-card);
-	box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
-}
-
-.remove-watchlist-modal-header {
-	padding: 16px 16px 0;
-}
-
-.remove-watchlist-modal-title {
-	font-size: 15px;
-	font-weight: 800;
-}
-
-.remove-watchlist-modal-body {
-	padding: 12px 16px 16px;
-	color: var(--color-text-secondary);
-	font-size: 14px;
-}
-
-.remove-watchlist-modal-body p {
-	margin: 0;
-}
-
-.remove-watchlist-modal-footer {
-	display: flex;
-	align-items: center;
-	justify-content: flex-end;
-	gap: 8px;
-	padding: 12px 16px;
-	border-top: 1px solid var(--color-border);
-}
-
 .detail-page {
+	width: 100%;
+	box-sizing: border-box;
 	padding-top: calc(var(--nav-height) + 24px);
 	padding-bottom: 48px;
 	padding-left: 24px;
@@ -908,13 +1303,34 @@ const handleRecommendSubmit: SubmitFunction = () => {
 /* Two-column layout */
 .anime-layout {
 	display: grid;
-	grid-template-columns: 220px 1fr;
-	gap: 32px;
+	width: 100%;
+	box-sizing: border-box;
+	grid-template-columns: 220px minmax(0, 1fr);
+	grid-template-rows: auto auto 1fr;
+	grid-template-areas:
+		"left title"
+		"left remote"
+		"left main";
+	column-gap: 32px;
+	row-gap: 24px;
 	align-items: flex-start;
 }
 
 /* ── Left panel ── */
 .left-panel {
+	grid-area: left;
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.cover-col {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.left-panel-info {
 	display: flex;
 	flex-direction: column;
 	gap: 16px;
@@ -1090,12 +1506,34 @@ const handleRecommendSubmit: SubmitFunction = () => {
 
 /* ── Main content ── */
 .main-content {
+	grid-area: main;
 	display: flex;
 	flex-direction: column;
 	gap: 24px;
+	width: 100%;
+	min-width: 0;
+}
+
+/* Action remote column (PC: main上部 / スマホ: 右カラム) */
+.remote {
+	grid-area: remote;
+	display: flex;
+	flex-direction: column;
+	gap: 24px;
+	min-width: 0;
+}
+/* スマホ版のみ表示するリモコン内の管理者編集トグル */
+.remote-admin-btn {
+	display: none;
+}
+
+/* スマホ版のみ表示する画像下の圧縮メタ（PC版は .prod-info を使用） */
+.mobile-meta {
+	display: none;
 }
 
 .title-block {
+	grid-area: title;
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
@@ -1177,6 +1615,29 @@ const handleRecommendSubmit: SubmitFunction = () => {
 	border-radius: 10px;
 	min-width: 120px;
 }
+.stat-card--interactive {
+	font: inherit;
+	color: inherit;
+	text-align: left;
+	cursor: pointer;
+	transition:
+		transform 0.15s,
+		background 0.15s,
+		border-color 0.15s;
+}
+.stat-card--interactive:hover {
+	background: var(--hover-bg);
+	border-color: var(--color-border-hover);
+}
+.stat-card--interactive:active {
+	transform: scale(0.95);
+}
+.stat-card--interactive:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+	background: var(--hover-bg);
+	border-color: var(--accent);
+}
 .stat-card-label {
 	font-size: 0.72rem;
 	font-weight: 600;
@@ -1208,6 +1669,342 @@ const handleRecommendSubmit: SubmitFunction = () => {
 	line-height: 1.7;
 	color: var(--text-secondary, var(--text));
 	margin: 0;
+}
+
+.admin-edit-section {
+	display: flex;
+	flex-direction: column;
+	gap: 18px;
+	padding: 24px;
+	border: 1px solid var(--border);
+	border-radius: 16px;
+	background: var(--card-bg);
+}
+.admin-edit-toggle {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 40px;
+	padding: 9px 16px;
+	border-radius: 8px;
+	border: 1px solid var(--border);
+	background: var(--card-bg);
+	color: var(--text);
+	font-size: 0.88rem;
+	font-weight: 700;
+	cursor: pointer;
+	transition:
+		background 0.15s,
+		border-color 0.15s,
+		color 0.15s;
+}
+.admin-edit-toggle:hover {
+	background: var(--hover-bg);
+	border-color: var(--accent);
+	color: var(--accent);
+}
+.admin-tab-list {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 8px;
+	padding: 4px;
+	border: 1px solid var(--border);
+	border-radius: 12px;
+	background: var(--hover-bg);
+}
+.admin-tab {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 7px;
+	min-height: 40px;
+	padding: 8px 12px;
+	border: 1px solid transparent;
+	border-radius: 9px;
+	background: transparent;
+	color: var(--text-muted);
+	font-size: 0.86rem;
+	font-weight: 700;
+	cursor: pointer;
+	transition:
+		background 0.15s,
+		border-color 0.15s,
+		color 0.15s;
+}
+.admin-tab:hover {
+	color: var(--text);
+	background: var(--card-bg);
+}
+.admin-tab--active {
+	border-color: var(--color-border-hover);
+	background: var(--card-bg);
+	color: var(--text);
+	box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+}
+.admin-edit-form {
+	min-width: 0;
+}
+
+.broadcast-override-section {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+.broadcast-override-heading {
+	font-size: 1rem;
+	font-weight: 600;
+	margin: 0;
+}
+.broadcast-override-hint {
+	font-size: 0.8rem;
+	color: var(--text-muted);
+	margin: 0;
+}
+.broadcast-override-table-wrap {
+	overflow-x: auto;
+	border: 1px solid #27272a;
+	border-radius: 12px;
+	background: #111113;
+}
+.broadcast-override-table {
+	width: 100%;
+	border-collapse: collapse;
+	min-width: 680px;
+	font-size: 0.82rem;
+}
+.broadcast-override-table th,
+.broadcast-override-table td {
+	padding: 10px 12px;
+	border-bottom: 1px solid #27272a;
+	text-align: left;
+	vertical-align: middle;
+}
+.broadcast-override-table th {
+	color: #a1a1aa;
+	font-size: 0.72rem;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	background: #18181b;
+}
+.broadcast-override-table tr:last-child td {
+	border-bottom: 0;
+}
+.broadcast-override-table-tags {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+.broadcast-override-date {
+	font-weight: 600;
+	color: #f4f4f5;
+}
+.broadcast-override-tag {
+	display: inline-flex;
+	align-items: center;
+	min-height: 22px;
+	padding: 2px 8px;
+	border: 1px solid #3f3f46;
+	border-radius: 999px;
+	background: #18181b;
+	color: #d4d4d8;
+	font-size: 0.76rem;
+}
+.broadcast-override-note {
+	color: #a1a1aa;
+	font-size: 0.8rem;
+	font-style: italic;
+}
+.broadcast-override-empty,
+.broadcast-override-empty-row {
+	color: #71717a;
+}
+.broadcast-override-empty-row {
+	padding: 18px 12px;
+	text-align: center;
+}
+.broadcast-override-action-cell {
+	width: 1%;
+	white-space: nowrap;
+}
+.broadcast-override-delete {
+	border: 1px solid #3f3f46;
+	background: #18181b;
+	color: #f4f4f5;
+	border-radius: 6px;
+	padding: 4px 10px;
+	font-size: 0.78rem;
+	cursor: pointer;
+}
+.broadcast-override-delete:hover {
+	border-color: #ef4444;
+	color: #ef4444;
+}
+.broadcast-override-add-toggle {
+	align-self: flex-start;
+	min-height: 40px;
+	padding: 0 16px;
+	border: 1px solid #3f3f46;
+	border-radius: 9px;
+	background: #18181b;
+	color: #f4f4f5;
+	font-size: 0.86rem;
+	font-weight: 700;
+	cursor: pointer;
+	transition:
+		background 0.15s,
+		border-color 0.15s,
+		color 0.15s;
+}
+.broadcast-override-add-toggle:hover {
+	border-color: var(--accent);
+	color: var(--accent);
+	background: #27272a;
+}
+.broadcast-override-accordion {
+	animation: override-form-enter 0.18s ease-out;
+	padding: 14px;
+	border: 1px solid #27272a;
+	border-radius: 12px;
+	background: #111113;
+}
+.broadcast-override-form {
+	display: grid;
+	grid-template-columns: repeat(1, minmax(0, 1fr));
+	gap: 12px;
+}
+.broadcast-override-field {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+.broadcast-override-field label {
+	font-size: 0.75rem;
+	color: #a1a1aa;
+}
+.broadcast-override-field input {
+	height: 36px;
+	padding: 0 10px;
+	border-radius: 6px;
+	border: 1px solid #3f3f46;
+	background: #09090b;
+	color: #f4f4f5;
+	font-size: 0.85rem;
+}
+.broadcast-override-checkbox {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 36px;
+	font-size: 0.82rem;
+	color: #f4f4f5;
+}
+.broadcast-override-checkbox input {
+	width: 16px;
+	height: 16px;
+	accent-color: var(--accent);
+}
+.broadcast-override-form-actions {
+	grid-column: 1 / -1;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+.broadcast-override-submit,
+.broadcast-override-cancel {
+	height: 40px;
+	border-radius: 8px;
+	font-weight: 700;
+	font-size: 0.88rem;
+	cursor: pointer;
+	padding: 0 20px;
+}
+.broadcast-override-submit {
+	border: 1px solid var(--accent);
+	background: var(--accent);
+	color: #fff;
+}
+.broadcast-override-submit:hover {
+	opacity: 0.9;
+}
+.broadcast-override-cancel {
+	border: 1px solid #3f3f46;
+	background: transparent;
+	color: #d4d4d8;
+}
+.broadcast-override-cancel:hover {
+	background: #27272a;
+	color: #f4f4f5;
+}
+
+@keyframes override-form-enter {
+	from {
+		opacity: 0;
+		transform: translateY(-6px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@media (min-width: 768px) {
+	.broadcast-override-form {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+@media (max-width: 640px) {
+	.admin-edit-section {
+		padding: 16px;
+		border-radius: 14px;
+	}
+
+	.admin-tab-list {
+		grid-template-columns: 1fr;
+	}
+}
+
+.global-lobby-section {
+	padding-top: 20px;
+	border-top: 1px solid var(--border);
+}
+.global-lobby-link {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	width: 100%;
+	box-sizing: border-box;
+	padding: 14px 16px;
+	border-radius: 8px;
+	border: 1px solid color-mix(in srgb, #0f766e 36%, var(--border));
+	background: color-mix(in srgb, #14b8a6 13%, var(--card-bg));
+	color: var(--text);
+	text-decoration: none;
+}
+.global-lobby-link:hover {
+	border-color: #0f766e;
+	background: color-mix(in srgb, #14b8a6 18%, var(--card-bg));
+}
+.global-lobby-link > span:first-child {
+	flex: 0 0 auto;
+	font-size: 1.35rem;
+	color: #0f766e;
+}
+.global-lobby-link strong,
+.global-lobby-link small {
+	display: block;
+}
+.global-lobby-link strong {
+	font-size: 0.95rem;
+	line-height: 1.35;
+}
+.global-lobby-link small {
+	margin-top: 2px;
+	color: var(--text-muted);
+	font-size: 0.78rem;
+	line-height: 1.35;
 }
 
 /* Related anime */
@@ -1256,8 +2053,8 @@ a.relation-card:hover {
 }
 .relation-card img {
 	width: 34px;
-	height: 48px;
-	object-fit: cover;
+	display: block;
+	image-rendering: auto;
 	border-radius: 4px;
 	flex-shrink: 0;
 }
@@ -1280,44 +2077,74 @@ a.relation-card:hover {
 	color: var(--text-muted);
 }
 
-/* Watchlist */
-.watchlist-section {
-	border: 1px solid var(--color-accent);
-	border-radius: 12px;
-	padding: 20px;
-	background: var(--color-surface);
-	box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 12%, transparent);
-}
-.watchlist-section h2 {
-	font-size: 1rem;
-	font-weight: 700;
-	margin: 0 0 14px;
-	color: var(--color-accent);
+/* Action bar */
+.action-bar {
 	display: flex;
-	align-items: center;
-	gap: 6px;
+	gap: 10px;
+	width: 100%;
+	min-width: 0;
 }
-.watchlist-section h2::before {
-	content: "★";
-	font-size: 0.9rem;
+.action-bar-btn {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	padding: 12px 8px;
+	background: var(--card-bg);
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	cursor: pointer;
+	color: var(--text-muted);
+	text-decoration: none;
+	text-align: center;
+	font-size: 0.78rem;
+	transition:
+		background 0.12s,
+		color 0.12s;
 }
 
+.action-bar-btn:hover {
+	background: var(--hover-bg);
+	color: var(--text);
+}
+.action-bar-btn.active {
+	background: var(--accent);
+	color: #fff;
+}
+.action-panel {
+	width: 100%;
+	min-width: 0;
+	box-sizing: border-box;
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	padding: 18px 16px;
+	background: var(--card-bg);
+	margin-bottom: 24px;
+}
 .form-row {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 14px;
+	min-width: 0;
 	margin-bottom: 14px;
 }
 .form-label {
 	display: flex;
+	flex: 1 1 130px;
 	flex-direction: column;
 	gap: 4px;
+	min-width: 0;
 	font-size: 0.82rem;
 	color: var(--color-text-muted);
 	font-weight: 500;
 }
 .form-select,
 .form-input {
+	width: 100%;
+	box-sizing: border-box;
 	padding: 6px 10px;
 	border-radius: 6px;
 	border: 1px solid var(--color-border);
@@ -1325,9 +2152,6 @@ a.relation-card:hover {
 	color: var(--text);
 	font-size: 0.9rem;
 	min-width: 130px;
-}
-.form-input[type="number"] {
-	width: 100px;
 }
 
 .form-actions {
@@ -1395,46 +2219,13 @@ a.relation-card:hover {
 	font-size: 0.85rem;
 	margin: 0 0 10px;
 }
-.watchlist-section--guest {
-	border-color: var(--color-border);
-	box-shadow: none;
-}
-.login-prompt {
-	color: var(--color-text-muted);
-	font-size: 0.9rem;
-	margin: 0;
-}
-.login-prompt-link {
-	color: #fff;
-	background: var(--accent);
-	padding: 2px 10px;
-	border-radius: 5px;
-	font-weight: 600;
-	text-decoration: none;
-	margin-right: 4px;
-}
-.login-prompt-link:hover {
-	opacity: 0.85;
-}
-
-.recommend-section {
-	border: 1px solid var(--color-border);
-	border-radius: 8px;
-	padding: 18px;
-	background: var(--color-surface);
-}
-
-.recommend-section h2 {
-	font-size: 1rem;
-	font-weight: 700;
-	margin: 0 0 14px;
-}
 
 .recommend-form {
 	display: grid;
 	grid-template-columns: minmax(180px, 320px) auto;
 	gap: 12px;
 	align-items: end;
+	min-width: 0;
 }
 
 .recommend-recipient-field {
@@ -1465,7 +2256,7 @@ a.relation-card:hover {
 .recommend-user-result img,
 .recommend-user-avatar-fallback {
 	width: 24px;
-	height: 24px;
+	aspect-ratio: 1;
 	border-radius: 50%;
 	object-fit: cover;
 	flex-shrink: 0;
@@ -1552,45 +2343,91 @@ a.relation-card:hover {
 	transform: none;
 }
 
-/* Listed users */
-.listed-users-section {
-	display: flex;
-	flex-direction: column;
-	gap: 12px;
-}
-
-.listed-users-heading {
+/* Listed users modal */
+.user-list-modal-backdrop {
+	position: fixed;
+	inset: 0;
+	z-index: 50;
 	display: flex;
 	align-items: center;
-	gap: 8px;
-	font-size: 1rem;
-	font-weight: 600;
-	margin: 0;
+	justify-content: center;
+	padding: 16px;
+	background: rgba(0, 0, 0, 0.7);
+	backdrop-filter: blur(4px);
 }
-
-.listed-users-count {
-	font-size: 0.8rem;
-	font-weight: 400;
-	color: var(--color-text-muted);
-	background: var(--color-surface-hover);
-	padding: 1px 8px;
-	border-radius: 10px;
+.user-list-modal {
+	width: 100%;
+	max-width: 448px;
+	padding: 24px;
+	border: 1px solid #27272a;
+	border-radius: 16px;
+	background: #18181b;
+	box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.65);
 }
-
-.listed-users-grid {
+.user-list-modal-header {
 	display: flex;
-	flex-wrap: wrap;
-	gap: 10px;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	margin-bottom: 20px;
+}
+.user-list-modal-header h2 {
+	margin: 0;
+	font-size: 1rem;
+	font-weight: 700;
+}
+.user-list-modal-header h2 span {
+	color: var(--text-muted);
+	font-weight: 500;
+}
+.user-list-modal-close {
+	display: grid;
+	place-items: center;
+	width: 34px;
+	height: 34px;
+	flex-shrink: 0;
+	padding: 0;
+	border: 0;
+	border-radius: 999px;
+	background: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+}
+.user-list-modal-close:hover {
+	background: #27272a;
+	color: var(--text);
+}
+.user-list-modal-close:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+.user-list-modal-close svg {
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 2;
+	stroke-linecap: round;
+}
+.listed-users-list {
+	display: flex;
+	max-height: 240px;
+	flex-direction: column;
+	gap: 12px;
+	overflow-y: auto;
+	padding-right: 4px;
 }
 
 .listed-user-card {
 	display: flex;
-	flex-direction: column;
 	align-items: center;
-	gap: 5px;
+	gap: 12px;
+	padding: 8px;
+	border-radius: 10px;
 	text-decoration: none;
 	color: inherit;
-	width: 64px;
+	transition: background 0.12s;
+}
+.listed-user-card:hover {
+	background: #27272a;
 }
 
 .listed-user-avatar {
@@ -1603,7 +2440,7 @@ a.relation-card:hover {
 .listed-user-avatar img,
 .listed-user-avatar-fallback {
 	width: 44px;
-	height: 44px;
+	aspect-ratio: 1;
 	border-radius: 50%;
 	object-fit: cover;
 }
@@ -1625,18 +2462,30 @@ a.relation-card:hover {
 	width: 10px;
 	height: 10px;
 	border-radius: 50%;
-	border: 2px solid var(--bg);
+	border: 2px solid #18181b;
 }
 
+.listed-user-details {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	flex-direction: column;
+	gap: 2px;
+}
 .listed-user-name {
-	font-size: 0.7rem;
-	color: var(--color-text-muted);
-	text-align: center;
-	max-width: 64px;
+	font-size: 0.9rem;
+	font-weight: 600;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	transition: color 0.12s;
+}
+.listed-user-handle {
+	color: var(--text-muted);
+	font-size: 0.75rem;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .listed-user-card:hover .listed-user-name {
@@ -1664,42 +2513,236 @@ a.relation-card:hover {
 	list-style: none;
 	padding: 0;
 	margin: 0;
-	display: flex;
-	flex-direction: column;
-	gap: 4px;
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+	gap: 8px;
 }
 .room-log-item {
+	position: relative;
 	display: flex;
+	flex-direction: column;
 	align-items: center;
-	gap: 10px;
-	padding: 6px 10px;
-	border-radius: 6px;
+	justify-content: center;
+	gap: 7px;
+	aspect-ratio: 1;
+	padding: 10px 6px;
+	border-radius: 10px;
 	text-decoration: none;
 	color: var(--text);
 	border: 1px solid var(--border);
 	background: var(--card-bg);
 	font-size: 0.85rem;
-	transition: background 0.12s;
+	transition:
+		transform 0.12s,
+		background 0.12s,
+		border-color 0.12s;
 }
 .room-log-item:hover {
 	background: var(--hover-bg);
+	border-color: var(--text-muted);
+	transform: translateY(-2px);
+}
+.room-log-item--latest {
+	border-color: color-mix(in srgb, #2dd4bf 50%, var(--border));
+	background: color-mix(in srgb, #2dd4bf 6%, var(--card-bg));
+}
+.room-log-item--latest:hover {
+	border-color: color-mix(in srgb, #2dd4bf 70%, var(--border));
+	background: color-mix(in srgb, #2dd4bf 10%, var(--card-bg));
+}
+.room-log-latest-slot + li {
+	grid-column-start: 1;
+}
+.room-log-latest-label {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	color: #5eead4;
+	font-size: 0.65rem;
+	font-weight: 750;
+	line-height: 1;
 }
 .room-log-ep {
-	font-weight: 600;
-	min-width: 60px;
+	font-size: 1rem;
+	font-weight: 750;
+	line-height: 1.2;
+	text-align: center;
+}
+/* スマホ版のみ使用する数字のみの短縮表示 */
+.room-log-ep-compact {
+	display: none;
+}
+.room-log-live-badge {
+	position: absolute;
+	top: 6px;
+	right: 6px;
+	display: inline-flex;
+	align-items: center;
+	height: 18px;
+	padding: 0 6px;
+	border-radius: 999px;
+	background: #ef4444;
+	color: #fff;
+	font-size: 0.66rem;
+	font-weight: 800;
+	line-height: 1;
 }
 .room-log-date {
 	color: var(--text-muted);
-	font-size: 0.8rem;
+	font-size: 0.68rem;
+	line-height: 1;
 }
 
 /* Responsive */
-@media (max-width: 700px) {
+@media (max-width: 768px) {
+	/* 左=情報カラム / 右=アクションリモコン の2カラム。title/mainは全幅 */
 	.anime-layout {
-		grid-template-columns: 1fr;
+		display: grid;
+		grid-template-columns: minmax(0, 150px) minmax(0, 1fr);
+		grid-template-rows: auto auto auto;
+		grid-template-areas:
+			"title title"
+			"left remote"
+			"main main";
+		align-items: start;
+		column-gap: 14px;
+		row-gap: 16px;
+	}
+	/* 左カラム: カバー画像の下に静的データを縦積み */
+	.left-panel {
+		flex-direction: column;
+		align-items: stretch;
+		gap: 10px;
+	}
+	.cover-col {
+		width: 100%;
 	}
 	.anime-cover {
-		max-width: 200px;
+		max-width: none;
+	}
+	/* PC版の冗長なラベル付きdlは隠し、圧縮メタを表示（Resourcesは維持） */
+	.left-panel-info .prod-info {
+		display: none;
+	}
+	.mobile-meta {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		margin-top: 8px;
+	}
+	.mobile-meta-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 5px;
+	}
+	.mobile-meta-chip {
+		font-size: 11px;
+		line-height: 1.3;
+		padding: 2px 7px;
+		border-radius: 10px;
+		background: var(--hover-bg);
+		color: var(--text-muted);
+		border: 1px solid var(--border);
+		text-decoration: none;
+		transition:
+			background 0.15s,
+			color 0.15s,
+			border-color 0.15s;
+	}
+	.mobile-meta-chip:hover,
+	.mobile-meta-chip:active {
+		background: var(--accent);
+		color: #fff;
+		border-color: var(--accent);
+	}
+	.mobile-hashtags {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+	}
+	.mobile-hashtag {
+		font-size: 11px;
+		color: var(--accent);
+		text-decoration: none;
+	}
+	.mobile-hashtag:hover {
+		text-decoration: underline;
+	}
+	.mobile-official-icons {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		margin-top: 2px;
+	}
+	.mobile-icon-link {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 30px;
+		height: 30px;
+		border-radius: 50%;
+		border: 1px solid var(--border);
+		background: var(--hover-bg);
+		color: var(--text);
+		font-size: 0.95rem;
+		text-decoration: none;
+		transition:
+			background 0.15s,
+			border-color 0.15s;
+	}
+	.mobile-icon-link [class^="i-lucide"] {
+		width: 1em;
+		height: 1em;
+	}
+	.mobile-icon-link:hover {
+		border-color: var(--accent);
+		background: var(--card-bg);
+	}
+	/* 右カラム: 純粋なアクションリモコン化（スコア＋リストを横並び→ボタン→管理者） */
+	.remote {
+		gap: 12px;
+	}
+	.remote .stats-grid {
+		gap: 8px;
+		flex-wrap: nowrap;
+	}
+	.remote .stat-card {
+		flex: 1 1 0;
+		min-width: 0;
+		padding: 10px 12px;
+	}
+	.remote .stat-card-value {
+		font-size: 1.35rem;
+	}
+	.remote .action-bar {
+		gap: 8px;
+	}
+	.remote .action-bar-btn {
+		padding: 10px 4px;
+		font-size: 0.68rem;
+	}
+	.remote-admin-btn {
+		display: inline-block;
+		align-self: flex-start;
+		margin-top: 2px;
+		padding: 4px 0;
+		border: 0;
+		background: none;
+		color: var(--text-muted);
+		font-size: 11px;
+		text-align: left;
+		cursor: pointer;
+	}
+	.remote-admin-btn:hover {
+		color: var(--text);
+		text-decoration: underline;
+	}
+	/* スマホではカード内トグルを隠し、リモコン側ボタンで開閉。閉時はカードを畳む */
+	.admin-edit-toggle {
+		display: none;
+	}
+	.admin-edit-section:not(.admin-edit-section--open) {
+		display: none;
 	}
 	.detail-page {
 		padding-left: 14px;
@@ -1711,6 +2754,49 @@ a.relation-card:hover {
 	}
 	.recommend-submit {
 		width: 100%;
+	}
+	/* ルームログ: 数字のみの小型ボックスで一覧性を向上 */
+	.room-log-list {
+		grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+		gap: 6px;
+	}
+	.room-log-item {
+		gap: 0;
+		padding: 4px;
+		border-radius: 8px;
+	}
+	.room-log-ep,
+	.room-log-date,
+	.room-log-latest-label {
+		display: none;
+	}
+	.room-log-ep-compact {
+		display: block;
+		font-size: 0.9rem;
+		font-weight: 750;
+		line-height: 1.1;
+		text-align: center;
+	}
+	.room-log-live-badge {
+		top: 3px;
+		right: 3px;
+		height: 14px;
+		padding: 0 4px;
+		font-size: 0.55rem;
+	}
+}
+
+@media (max-width: 480px) {
+	.anime-layout {
+		grid-template-columns: minmax(0, 128px) minmax(0, 1fr);
+		column-gap: 10px;
+	}
+	.anime-title {
+		font-size: 1.1rem;
+	}
+	.detail-page {
+		padding-left: 8px;
+		padding-right: 8px;
 	}
 }
 </style>

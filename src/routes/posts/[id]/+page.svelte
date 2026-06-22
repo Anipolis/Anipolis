@@ -1,8 +1,10 @@
 <script lang="ts">
 import type { SubmitFunction } from "@sveltejs/kit";
 import { enhance } from "$app/forms";
+import { page } from "$app/state";
 import PostCard from "$lib/components/PostCard.svelte";
 import PostCardSkeleton from "$lib/components/PostCardSkeleton.svelte";
+import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
 import { charCountClass } from "$lib/utils/format";
 import type { PageProps } from "./$types";
@@ -32,17 +34,43 @@ const handleReply: SubmitFunction = () => {
 // Update title once data resolves
 $effect(() => {
 	const promise = data.enrichedData;
-	promise.then((enriched) => {
+	promise.then((enriched: { post?: { display_name?: string | null; username?: string | null } }) => {
 		const name = enriched.post?.display_name || enriched.post?.username;
 		if (name) pageTitle = `${name}の投稿 — Anipolis`;
 	});
 });
 </script>
 
-<svelte:head> <title>{pageTitle}</title> </svelte:head>
+<svelte:head>
+	<title>{pageTitle}</title>
+	<meta property="og:title" content={pageTitle}>
+	<meta property="og:description" content={data.post.content.slice(0, 120)}>
+	<meta property="og:type" content="website">
+	<meta property="og:url" content={page.url.href}>
+	{#if data.post.image_urls?.[0]}
+		<meta property="og:image" content={data.post.image_urls[0]}>
+		<meta name="twitter:card" content="summary_large_image">
+	{/if}
+</svelte:head>
 
-<div class="page-container" style="justify-content: center;">
-	<main style="flex: 0 1 600px; min-width: 0;">
+<div class="page-container">
+	<main class="feed-column">
+		<a href="/" class="post-detail-back" aria-label="タイムラインに戻る">
+			<svg
+				width="18"
+				height="18"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				aria-hidden="true"
+			>
+				<path d="m15 18-6-6 6-6" />
+			</svg>
+		</a>
+
 		{#await data.enrichedData}
 			<div class="posts-loading-spinner" aria-label="読み込み中">
 				<div class="spinner" aria-hidden="true"></div>
@@ -120,4 +148,8 @@ $effect(() => {
 			{/if}
 		{/await}
 	</main>
+
+	<aside class="sidebar-column">
+		<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
+	</aside>
 </div>

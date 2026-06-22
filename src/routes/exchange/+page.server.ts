@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fail, redirect } from "@sveltejs/kit";
+import { getAnimeRankingTrending } from "$lib/server/queries";
 import type { Database } from "$lib/supabase/database.types";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -8,6 +9,7 @@ interface ExchangeItem {
 	status: "waiting" | "matched" | "cancelled";
 	created_at: string;
 	matched_at: string | null;
+	comment: string | null;
 	received_entry_id: string | null;
 	offered_anime: {
 		id: string;
@@ -21,6 +23,7 @@ interface ExchangeItem {
 		title_en: string | null;
 		cover_url: string | null;
 	} | null;
+	received_comment: string | null;
 }
 
 type ExchangeRow = {
@@ -28,6 +31,7 @@ type ExchangeRow = {
 	status?: unknown;
 	created_at?: unknown;
 	matched_at?: unknown;
+	comment?: unknown;
 	received_entry_id?: unknown;
 	anime?: unknown;
 };
@@ -64,9 +68,11 @@ function toExchangeItem(raw: ExchangeRow): ExchangeItem | null {
 		status,
 		created_at: String(raw.created_at),
 		matched_at: typeof raw.matched_at === "string" ? raw.matched_at : null,
+		comment: typeof raw.comment === "string" ? raw.comment : null,
 		received_entry_id: raw.received_entry_id ? String(raw.received_entry_id) : null,
 		offered_anime: offered,
 		received_anime: null,
+		received_comment: null,
 	};
 }
 
@@ -78,6 +84,7 @@ async function getExchangeEntries(supabase: SupabaseClient<Database>, userId: st
 			status,
 			created_at,
 			matched_at,
+			comment,
 			received_entry_id,
 			anime:anime_exchange_entries_anime_id_fkey (
 				id,
@@ -104,6 +111,7 @@ async function getExchangeEntries(supabase: SupabaseClient<Database>, userId: st
 		.from("anime_exchange_entries")
 		.select(`
 			id,
+			comment,
 			anime:anime_exchange_entries_anime_id_fkey (
 				id,
 				title,
@@ -115,20 +123,31 @@ async function getExchangeEntries(supabase: SupabaseClient<Database>, userId: st
 
 	if (receivedError || !receivedRows) return entries;
 
-	const receivedAnimeByEntryId = new Map<
+	const receivedEntryById = new Map<
 		string,
-		{ id: string; title: string; title_en: string | null; cover_url: string | null }
+		{
+			anime: { id: string; title: string; title_en: string | null; cover_url: string | null };
+			comment: string | null;
+		}
 	>();
 	for (const row of receivedRows as unknown as ExchangeRow[]) {
 		const animeValue = Array.isArray(row.anime) ? row.anime[0] : row.anime;
 		const anime = toExchangeAnime(animeValue);
 		if (!anime || !row.id) continue;
-		receivedAnimeByEntryId.set(String(row.id), anime);
+		receivedEntryById.set(String(row.id), {
+			anime,
+			comment: typeof row.comment === "string" ? row.comment : null,
+		});
 	}
 
 	return entries.map((entry) => ({
 		...entry,
-		received_anime: entry.received_entry_id ? (receivedAnimeByEntryId.get(entry.received_entry_id) ?? null) : null,
+		received_anime: entry.received_entry_id
+			? (receivedEntryById.get(entry.received_entry_id)?.anime ?? null)
+			: null,
+		received_comment: entry.received_entry_id
+			? (receivedEntryById.get(entry.received_entry_id)?.comment ?? null)
+			: null,
 	}));
 }
 
@@ -136,21 +155,19 @@ export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession 
 	const { user } = await safeGetSession();
 	if (!user) throw redirect(302, "/");
 
-	const exchangeDataPromise = (async () => {
-		const exchanges = await getExchangeEntries(supabase, user.id);
-		return {
-			exchanges,
-			waitingExchange: exchanges.find((e) => e.status === "waiting") ?? null,
-			latestMatchedExchange: exchanges.find((e) => e.status === "matched" && e.received_anime) ?? null,
-		};
-	})().catch((err) => {
-		console.error("[exchange] error:", err);
-		return { exchanges: [], waitingExchange: null, latestMatchedExchange: null };
-	});
-
-	const { exchanges, waitingExchange, latestMatchedExchange } = await exchangeDataPromise;
-
-	return { user, exchanges, waitingExchange, latestMatchedExchange };
+	const [exchanges, trendingResult, animeTrending] = await Promise.all([
+		getExchangeEntries(supabase, user.id),
+		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
+		getAnimeRankingTrending(supabase, 5),
+	]);
+	return {
+		user,
+		exchanges,
+		waitingExchange: exchanges.find((entry) => entry.status === "waiting") ?? null,
+		latestMatchedExchange: exchanges.find((entry) => entry.status === "matched" && entry.received_anime) ?? null,
+		trending: trendingResult.data ?? [],
+		animeTrending,
+	};
 };
 
 export const actions: Actions = {
@@ -160,11 +177,19 @@ export const actions: Actions = {
 
 		const form = await request.formData();
 		const animeId = (form.get("anime_id") as string | null)?.trim() ?? "";
+		const comment = ((form.get("comment") as string | null)?.trim() ?? "") || null;
 		if (!animeId || Number.isNaN(Number(animeId))) {
 			return fail(400, { exchangeMessage: "アニメを選択してください" });
 		}
 
-		const { data, error } = await supabase.rpc("create_anime_exchange", { p_anime_id: Number(animeId) });
+		if (comment && comment.length > 120) {
+			return fail(400, { exchangeMessage: "コメントは120文字以内で入力してください" });
+		}
+
+		const { data, error } = await supabase.rpc("create_anime_exchange", {
+			p_anime_id: Number(animeId),
+			p_comment: comment,
+		});
 		if (error) {
 			if (String(error.message).includes("anime not found")) {
 				return fail(404, { exchangeMessage: "アニメが見つかりません" });

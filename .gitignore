@@ -13,6 +13,9 @@ node_modules/
 # Vitest reports
 coverage/
 
+# Local logs
+*.log
+
 # Supabase temporary metadata
 supabase/.temp/
 

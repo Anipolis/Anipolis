@@ -1,5 +1,6 @@
 <script lang="ts">
 import AnimeExchangeResult from "$lib/components/AnimeExchangeResult.svelte";
+import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
 import { formatRelativeTime } from "$lib/utils/format";
 import type { PageProps } from "./$types";
@@ -12,55 +13,60 @@ const relativeTime = $derived(formatRelativeTime(data.createdAt));
 
 <svelte:head> <title>交換結果 - Anipolis</title> </svelte:head>
 
-<div class="exchange-result-page">
-	<main class="exchange-result-shell">
-		<header class="exchange-result-header">
-			<a href="/profile/{data.author.username}" class="exchange-result-author">
-				<UserAvatar src={data.author.avatar_url} username={data.author.username} size="md" />
-				<span>
-					<strong>{displayName}</strong>
-					<small>@{data.author.username} · {relativeTime}</small>
-				</span>
-			</a>
-			<a href="/posts/{data.postId}" class="exchange-result-post-link">投稿を見る</a>
-		</header>
-
-		<section class="exchange-result-main">
-			<div class="exchange-result-title">
-				<span>匿名アニメ交換</span>
-				<h1>交換完了</h1>
-			</div>
-
-			<AnimeExchangeResult
-				offeredAnime={data.exchangeShare.offered_anime}
-				receivedAnime={data.exchangeShare.received_anime}
-			/>
-
-			<div class="exchange-result-actions">
-				<a
-					href="/anime/{data.exchangeShare.offered_anime.id}"
-					class="exchange-result-button exchange-result-button--ghost"
-				>
-					贈ったアニメを見る
+<div class="page-container">
+	<main class="feed-column exchange-result-page">
+		<div class="exchange-result-shell">
+			<header class="exchange-result-header">
+				<a href="/profile/{data.author.username}" class="exchange-result-author">
+					<UserAvatar src={data.author.avatar_url} username={data.author.username} size="md" />
+					<span>
+						<strong>{displayName}</strong>
+						<small>@{data.author.username} · {relativeTime}</small>
+					</span>
 				</a>
-				<a href="/anime/{data.exchangeShare.received_anime.id}" class="exchange-result-button">
-					受け取ったアニメを見る
-				</a>
-				<a href="/exchange" class="exchange-result-button exchange-result-button--ghost"> 交換してみる </a>
-			</div>
-		</section>
+				<a href="/posts/{data.postId}" class="exchange-result-post-link">投稿を見る</a>
+			</header>
+
+			<section class="exchange-result-main">
+				<div class="exchange-result-title">
+					<span>匿名アニメトレード</span>
+					<h1>交換完了</h1>
+				</div>
+
+				<AnimeExchangeResult
+					offeredAnime={data.exchangeShare.offered_anime}
+					receivedAnime={data.exchangeShare.received_anime}
+					offeredComment={data.exchangeShare.offered_comment}
+					receivedComment={data.exchangeShare.received_comment}
+				/>
+
+				<div class="exchange-result-actions">
+					<a
+						href="/anime/{data.exchangeShare.offered_anime.id}"
+						class="exchange-result-button exchange-result-button--ghost"
+					>
+						贈ったアニメを見る
+					</a>
+					<a href="/anime/{data.exchangeShare.received_anime.id}" class="exchange-result-button">
+						受け取ったアニメを見る
+					</a>
+					<a href="/exchange" class="exchange-result-button exchange-result-button--ghost"> 交換してみる </a>
+				</div>
+			</section>
+		</div>
 	</main>
+
+	<aside class="sidebar-column">
+		<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
+	</aside>
 </div>
 
 <style>
 .exchange-result-page {
-	min-height: 100vh;
-	padding: calc(var(--nav-height) + 24px) 16px 48px;
+	padding: 0;
 }
 
 .exchange-result-shell {
-	max-width: 860px;
-	margin: 0 auto;
 	display: flex;
 	flex-direction: column;
 	gap: 16px;

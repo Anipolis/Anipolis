@@ -1,43 +1,18 @@
 <script lang="ts">
-import { enhance } from "$app/forms";
-import { formatRelativeTime } from "$lib/utils/format";
 import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();
 
-const reasonLabels = {
+const reasonLabels: Record<string, string> = {
 	spam: "スパム",
 	harassment: "嫌がらせ",
 	sexual: "性的コンテンツ",
 	violence: "暴力的コンテンツ",
-	illegal: "違法・危険行為",
+	illegal: "違法・法令違反行為",
 	other: "その他",
 };
 
-const statusLabels = {
-	open: "未対応",
-	reviewing: "確認中",
-	resolved: "対応済み",
-	rejected: "却下",
-};
-
-const moderationLabels = {
-	active: "制限なし",
-	restricted: "制限",
-	banned: "BAN",
-};
-
-function toDateTimeLocal(value: string | null) {
-	if (!value) return "";
-	const date = new Date(value);
-	if (Number.isNaN(date.getTime())) return "";
-	const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-	return local.toISOString().slice(0, 16);
-}
-
 const dashboard = $derived(data.dashboard);
-const postReports = $derived(dashboard?.postReports ?? []);
-const accountReports = $derived(dashboard?.accountReports ?? []);
 </script>
 
 <svelte:head> <title>Admin - Anipolis</title> </svelte:head>
@@ -51,7 +26,7 @@ const accountReports = $derived(dashboard?.accountReports ?? []);
 	</header>
 
 	{#if dashboard}
-		<section class="admin-stats" aria-label="運営指標">
+		<section class="admin-stats" aria-label="統計情報">
 			<div class="admin-stat admin-stat-alert">
 				<span>未対応</span>
 				<strong>{dashboard.stats.openReports}</strong>
@@ -113,191 +88,22 @@ const accountReports = $derived(dashboard?.accountReports ?? []);
 		</section>
 	{/if}
 
-	<section class="admin-section">
-		<div class="admin-section-header">
-			<h2>投稿通報</h2>
-			{#if postReports.length > 0}
-				<span class="report-count">{postReports.length}</span>
-			{/if}
-		</div>
-
-		{#if postReports.length === 0}
-			<p class="admin-empty">投稿への通報はありません。</p>
-		{:else}
-			<div class="report-list">
-				{#each postReports as report}
-					<article class="report-item">
-						<div class="report-main">
-							<div class="report-topline">
-								<span class="status-pill status-{report.status}">{statusLabels[report.status]}</span>
-								<span>{reasonLabels[report.reason]}</span>
-								<time datetime={report.created_at}>{formatRelativeTime(report.created_at)}</time>
-							</div>
-							<div class="report-target">
-								<a href="/posts/{report.target_id}">投稿 #{report.target_id.slice(0, 8)}</a>
-								{#if report.target_username}
-									<span
-										>投稿者
-										<a href="/profile/{report.target_username}">@{report.target_username}</a></span
-									>
-								{/if}
-								<span>報告者 @{report.reporter_username}</span>
-								{#if report.target_moderation_status && report.target_moderation_status !== 'active'}
-									<span class="moderation-pill moderation-{report.target_moderation_status}">
-										{moderationLabels[report.target_moderation_status]}
-									</span>
-								{/if}
-							</div>
-							{#if report.post_content}
-								<p class="report-content">{report.post_content}</p>
-							{/if}
-							{#if report.details}
-								<p class="report-details">{report.details}</p>
-							{/if}
-						</div>
-
-						<form method="POST" action="?/updateReportStatus" class="report-actions" use:enhance>
-							<input type="hidden" name="report_id" value={report.id}>
-							<select name="status" aria-label="ステータス">
-								{#each Object.entries(statusLabels) as [ value, label ]}
-									<option {value} selected={value === report.status}>{label}</option>
-								{/each}
-							</select>
-							<button type="submit" class="btn btn-primary">更新</button>
-						</form>
-
-						{#if report.target_user_id}
-							<details class="moderation-disclosure">
-								<summary>アカウント措置</summary>
-								<form
-									method="POST"
-									action="?/updateAccountModeration"
-									class="moderation-actions"
-									use:enhance
-								>
-									<input type="hidden" name="report_id" value={report.id}>
-									<input type="hidden" name="target_user_id" value={report.target_user_id}>
-									<select name="moderation_status" aria-label="アカウント措置">
-										{#each Object.entries(moderationLabels) as [ value, label ]}
-											<option
-												{value}
-												selected={value === (report.target_moderation_status ?? 'active')}
-											>
-												{label}
-											</option>
-										{/each}
-									</select>
-									<input
-										type="datetime-local"
-										name="moderation_until"
-										aria-label="制限期限"
-										value={toDateTimeLocal(report.target_moderation_until)}
-									>
-									<input
-										type="text"
-										name="moderation_reason"
-										maxlength="500"
-										placeholder="措置理由"
-										value={report.target_moderation_reason ?? ''}
-									>
-									<button type="submit" class="btn btn-danger">適用</button>
-								</form>
-							</details>
-						{/if}
-					</article>
-				{/each}
+	<div class="nav-links">
+		<a href="/admin/reports/posts" class="nav-link">
+			<div class="nav-link-body">
+				<span class="nav-link-label">投稿通報</span>
+				<span class="nav-link-sub">通報された投稿の一覧・対応</span>
 			</div>
-		{/if}
-	</section>
-
-	<section class="admin-section">
-		<div class="admin-section-header">
-			<h2>アカウント通報</h2>
-			{#if accountReports.length > 0}
-				<span class="report-count">{accountReports.length}</span>
-			{/if}
-		</div>
-
-		{#if accountReports.length === 0}
-			<p class="admin-empty">アカウントへの通報はありません。</p>
-		{:else}
-			<div class="report-list">
-				{#each accountReports as report}
-					<article class="report-item">
-						<div class="report-main">
-							<div class="report-topline">
-								<span class="status-pill status-{report.status}">{statusLabels[report.status]}</span>
-								<span>{reasonLabels[report.reason]}</span>
-								<time datetime={report.created_at}>{formatRelativeTime(report.created_at)}</time>
-							</div>
-							<div class="report-target">
-								{#if report.target_username}
-									<a href="/profile/{report.target_username}">@{report.target_username}</a>
-								{:else}
-									<span>ユーザー #{report.target_id.slice(0, 8)}</span>
-								{/if}
-								<span>報告者 @{report.reporter_username}</span>
-								{#if report.target_moderation_status}
-									<span class="moderation-pill moderation-{report.target_moderation_status}">
-										{moderationLabels[report.target_moderation_status]}
-									</span>
-								{/if}
-							</div>
-							{#if report.details}
-								<p class="report-details">{report.details}</p>
-							{/if}
-						</div>
-
-						<form method="POST" action="?/updateReportStatus" class="report-actions" use:enhance>
-							<input type="hidden" name="report_id" value={report.id}>
-							<select name="status" aria-label="ステータス">
-								{#each Object.entries(statusLabels) as [ value, label ]}
-									<option {value} selected={value === report.status}>{label}</option>
-								{/each}
-							</select>
-							<button type="submit" class="btn btn-primary">更新</button>
-						</form>
-
-						{#if report.target_user_id}
-							<form
-								method="POST"
-								action="?/updateAccountModeration"
-								class="moderation-actions"
-								use:enhance
-							>
-								<input type="hidden" name="report_id" value={report.id}>
-								<input type="hidden" name="target_user_id" value={report.target_user_id}>
-								<select name="moderation_status" aria-label="アカウント措置">
-									{#each Object.entries(moderationLabels) as [ value, label ]}
-										<option
-											{value}
-											selected={value === (report.target_moderation_status ?? 'active')}
-										>
-											{label}
-										</option>
-									{/each}
-								</select>
-								<input
-									type="datetime-local"
-									name="moderation_until"
-									aria-label="制限期限"
-									value={toDateTimeLocal(report.target_moderation_until)}
-								>
-								<input
-									type="text"
-									name="moderation_reason"
-									maxlength="500"
-									placeholder="措置理由"
-									value={report.target_moderation_reason ?? ''}
-								>
-								<button type="submit" class="btn btn-danger">適用</button>
-							</form>
-						{/if}
-					</article>
-				{/each}
+			<span class="nav-link-arrow">→</span>
+		</a>
+		<a href="/admin/reports/accounts" class="nav-link">
+			<div class="nav-link-body">
+				<span class="nav-link-label">アカウント通報</span>
+				<span class="nav-link-sub">通報されたアカウントの一覧・対応</span>
 			</div>
-		{/if}
-	</section>
+			<span class="nav-link-arrow">→</span>
+		</a>
+	</div>
 </main>
 
 <style>
@@ -331,7 +137,7 @@ const accountReports = $derived(dashboard?.accountReports ?? []);
 
 .admin-stats {
 	display: grid;
-	grid-template-columns: repeat(4, minmax(0, 1fr));
+	grid-template-columns: repeat(5, minmax(0, 1fr));
 	gap: 10px;
 	margin-bottom: 18px;
 }
@@ -383,45 +189,6 @@ const accountReports = $derived(dashboard?.accountReports ?? []);
 	font-size: 16px;
 }
 
-.report-count {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	min-width: 22px;
-	height: 22px;
-	padding: 0 6px;
-	border-radius: 999px;
-	background: color-mix(in srgb, var(--color-accent) 16%, transparent);
-	color: var(--color-accent);
-	font-size: 12px;
-	font-weight: 800;
-}
-
-.moderation-disclosure {
-	grid-column: 1 / -1;
-}
-
-.moderation-disclosure summary {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	padding: 6px 10px;
-	border: 1px solid var(--color-border);
-	border-radius: 6px;
-	color: var(--color-text-muted);
-	font-size: 13px;
-	cursor: pointer;
-	user-select: none;
-}
-
-.moderation-disclosure summary:hover {
-	color: var(--color-text);
-}
-
-.moderation-disclosure[open] summary {
-	margin-bottom: 8px;
-}
-
 .admin-empty {
 	padding: 24px 16px;
 	color: var(--color-text-muted);
@@ -443,145 +210,64 @@ const accountReports = $derived(dashboard?.accountReports ?? []);
 	background: var(--color-surface);
 }
 
-.report-list {
-	display: flex;
-	flex-direction: column;
-}
-
-.report-item {
+/* Nav links */
+.nav-links {
 	display: grid;
-	grid-template-columns: 1fr auto;
-	gap: 16px;
-	padding: 16px;
-	border-bottom: 1px solid var(--color-border);
+	grid-template-columns: 1fr 1fr;
+	gap: 12px;
+	margin-top: 16px;
 }
 
-.report-item:last-child {
-	border-bottom: 0;
-}
-
-.report-topline,
-.report-target {
+.nav-link {
 	display: flex;
-	flex-wrap: wrap;
 	align-items: center;
-	gap: 8px;
-	color: var(--color-text-muted);
-	font-size: 13px;
-}
-
-.report-target {
-	margin-top: 8px;
-}
-
-.status-pill {
-	display: inline-flex;
-	align-items: center;
-	min-height: 24px;
-	padding: 2px 8px;
-	border-radius: 999px;
-	font-size: 12px;
-	font-weight: 800;
-}
-
-.status-open {
-	background: color-mix(in srgb, var(--color-danger) 14%, transparent);
-	color: var(--color-danger);
-}
-
-.status-reviewing {
-	background: color-mix(in srgb, #f59e0b 18%, transparent);
-	color: #f59e0b;
-}
-
-.status-resolved {
-	background: color-mix(in srgb, #34d399 16%, transparent);
-	color: #34d399;
-}
-
-.status-rejected {
-	background: var(--color-border);
-	color: var(--color-text-muted);
-}
-
-.moderation-pill {
-	display: inline-flex;
-	align-items: center;
-	min-height: 22px;
-	padding: 2px 8px;
-	border-radius: 999px;
-	font-size: 11px;
-	font-weight: 800;
-	text-transform: uppercase;
-}
-
-.moderation-active {
-	background: var(--color-border);
-	color: var(--color-text-muted);
-}
-
-.moderation-restricted {
-	background: color-mix(in srgb, #f59e0b 18%, transparent);
-	color: #f59e0b;
-}
-
-.moderation-banned {
-	background: color-mix(in srgb, var(--color-danger) 14%, transparent);
-	color: var(--color-danger);
-}
-
-.report-content,
-.report-details {
-	margin: 10px 0 0;
-	word-break: break-word;
-}
-
-.report-content {
-	color: var(--color-text);
-}
-
-.report-details {
-	color: var(--color-text-secondary);
-	font-size: 14px;
-}
-
-.report-actions {
-	display: flex;
-	align-items: flex-start;
-	gap: 8px;
-}
-
-.moderation-actions {
-	grid-column: 1 / -1;
-	display: grid;
-	grid-template-columns: minmax(120px, 160px) minmax(160px, 220px) minmax(180px, 1fr) auto;
-	gap: 8px;
-	align-items: start;
-}
-
-.report-actions select,
-.moderation-actions select,
-.moderation-actions input {
-	min-height: 36px;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 20px;
 	border: 1px solid var(--color-border);
 	border-radius: 8px;
-	background: var(--color-bg);
-	color: var(--color-text);
-	padding: 0 10px;
+	background: var(--color-surface);
+	text-decoration: none;
+	color: inherit;
+	transition:
+		background 0.1s,
+		border-color 0.1s;
+}
+
+.nav-link:hover {
+	background: color-mix(in srgb, var(--color-accent) 5%, var(--color-surface));
+	border-color: var(--color-accent);
+}
+
+.nav-link-body {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.nav-link-label {
+	font-size: 16px;
+	font-weight: 700;
+}
+
+.nav-link-sub {
+	font-size: 12px;
+	color: var(--color-text-muted);
+}
+
+.nav-link-arrow {
+	font-size: 20px;
+	color: var(--color-accent);
+	flex-shrink: 0;
 }
 
 @media (max-width: 900px) {
-	.admin-stats,
+	.admin-stats {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+
 	.reason-list {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
-	}
-
-	.report-item {
-		grid-template-columns: 1fr;
-	}
-
-	.moderation-actions {
-		grid-template-columns: 1fr;
 	}
 }
 
@@ -591,8 +277,12 @@ const accountReports = $derived(dashboard?.accountReports ?? []);
 		padding-top: calc(var(--nav-height) + 12px);
 	}
 
-	.admin-stats,
-	.reason-list {
+	.admin-stats {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.reason-list,
+	.nav-links {
 		grid-template-columns: 1fr;
 	}
 }

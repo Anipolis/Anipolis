@@ -1,5 +1,6 @@
 <script lang="ts">
 import { enhance } from "$app/forms";
+import SettingsBackLink from "$lib/components/SettingsBackLink.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
 import { formatRelativeTime } from "$lib/utils/format";
 import type { PageProps } from "./$types";
@@ -12,12 +13,12 @@ let { data, form }: PageProps = $props();
 <div class="page-container" style="justify-content: center;">
 	<main style="flex: 0 1 640px; min-width: 0;">
 		<div class="settings-card">
+			<SettingsBackLink />
 			<div class="settings-header-row">
 				<div>
 					<h1 class="settings-title">フォロー申請</h1>
 					<p class="settings-subtitle">{data.requests.length}件の未対応申請</p>
 				</div>
-				<a href="/settings" class="btn btn-ghost">設定へ戻る</a>
 			</div>
 
 			{#if form && "message" in form}

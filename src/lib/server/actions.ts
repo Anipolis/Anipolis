@@ -1,8 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fail } from "@sveltejs/kit";
+import { createServiceRoleClient } from "$lib/server/supabase-admin";
+import { publicUrlToStoragePath } from "$lib/server/upload";
 import type { Database, Json } from "$lib/supabase/database.types";
-import type { AnimeExchangeShare, AnimeStatus } from "$lib/types";
-import { extractHashtags, extractMentions } from "$lib/utils/hashtag";
+import type { AnimeExchangeShare, AnimeStatus, BroadcastRoomMuteDuration } from "$lib/types";
+import { extractHashtags } from "$lib/utils/hashtag";
 
 const reportStatuses = new Set(["open", "reviewing", "resolved", "rejected"]);
 const moderationStatuses = new Set(["active", "restricted", "banned"]);
@@ -63,6 +65,8 @@ export async function insertPostWithHashtags(
 	animeId: string | null = null,
 	quotedPostId: string | null = null,
 	exchangeShare: AnimeExchangeShare | null = null,
+	broadcastRoomSessionId: string | null = null,
+	cwAnimeId: string | null = null,
 ) {
 	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
 	if (moderationFailure) return moderationFailure;
@@ -82,14 +86,16 @@ export async function insertPostWithHashtags(
 		if (!quotedPost) return fail(404, { message: "引用元の投稿を表示できません" });
 	}
 
-	const postContent = exchangeShare && content.length === 0 ? "アニメ交換の結果を共有しました" : content;
+	const postContent = exchangeShare && content.length === 0 ? "アニメトレードの結果を共有しました" : content;
 	const basePost = {
 		user_id: userId,
 		content: postContent,
 		parent_id: parentId,
 		image_urls: imageUrls,
 		anime_id: animeId ? Number(animeId) : null,
+		cw_anime_id: cwAnimeId ? Number(cwAnimeId) : null,
 		quoted_post_id: quotedPostId || null,
+		broadcast_room_session_id: broadcastRoomSessionId,
 	};
 	const postPayload = exchangeShare ? { ...basePost, exchange_share: exchangeShare as unknown as Json } : basePost;
 
@@ -100,44 +106,22 @@ export async function insertPostWithHashtags(
 		return fail(500, { message: exchangeShare ? "交換結果つき投稿の保存に失敗しました" : "投稿に失敗しました" });
 	}
 
+	// ハッシュタグを一括登録（既存タグは ON CONFLICT DO NOTHING）。
+	// タグごとの insert+select ループは実況時の余分な往復になるため一括化している。
+	// メンション通知は DB トリガー notify_on_mention（migration 026）が生成する。
 	const tags = extractHashtags(postContent);
-	const mentionedUsernames = extractMentions(postContent);
-
-	// ハッシュタグとメンションユーザーを並列取得
-	const [, mentionedUsersResult] = await Promise.all([
-		tags.length > 0
-			? supabase.from("hashtags").upsert(
-					tags.map((t) => ({ name: t })),
-					{ onConflict: "name", ignoreDuplicates: true },
-				)
-			: Promise.resolve(null),
-		mentionedUsernames.length > 0
-			? supabase.from("profiles").select("id").in("username", mentionedUsernames)
-			: Promise.resolve({ data: [] as { id: string }[] }),
-	]);
-
-	// ハッシュタグIDを一括取得してpost_hashtagsを一括挿入
 	if (tags.length > 0) {
-		const { data: hashtagRows } = await supabase.from("hashtags").select("id, name").in("name", tags);
-		if (hashtagRows && hashtagRows.length > 0) {
-			await supabase
-				.from("post_hashtags")
-				.insert(hashtagRows.map((h) => ({ post_id: post.id, hashtag_id: h.id })));
-		}
-	}
-
-	// メンション通知を一括挿入（エラーは無視）
-	const mentionedUsers = mentionedUsersResult?.data ?? [];
-	const toNotify = mentionedUsers.filter((u) => u.id !== userId);
-	if (toNotify.length > 0) {
-		await supabase.from("notifications").insert(
-			toNotify.map((u) => ({
-				recipient_id: u.id,
-				actor_id: userId,
-				type: "mention" as const,
-				post_id: post.id,
-			})),
+		await supabase.from("hashtags").upsert(
+			tags.map((name) => ({ name })),
+			{ onConflict: "name", ignoreDuplicates: true },
 		);
+		const { data: hashtagRows } = await supabase.from("hashtags").select("id").in("name", tags);
+		if (hashtagRows && hashtagRows.length > 0) {
+			await supabase.from("post_hashtags").upsert(
+				hashtagRows.map((h) => ({ post_id: post.id, hashtag_id: h.id })),
+				{ onConflict: "post_id,hashtag_id", ignoreDuplicates: true },
+			);
+		}
 	}
 
 	return { success: true, postId: post.id };
@@ -152,11 +136,31 @@ export async function deletePostAction(request: Request, supabase: SupabaseClien
 
 	if (!postId) return fail(400, { message: "投稿IDが不正です" });
 
+	// 添付画像のクリーンアップ用に削除前へ控える
+	const { data: post } = await supabase
+		.from("posts")
+		.select("image_urls")
+		.eq("id", postId)
+		.eq("user_id", userId)
+		.maybeSingle();
+
 	const { error } = await supabase.from("posts").delete().eq("id", postId).eq("user_id", userId);
 
 	if (error) return fail(500, { message: "削除に失敗しました" });
 
+	await removePostImages(supabase, post?.image_urls ?? []);
+
 	return { deleted: true };
+}
+
+/** 投稿に添付されていた画像をストレージから削除する（ベストエフォート） */
+async function removePostImages(supabase: SupabaseClient<Database>, imageUrls: string[]): Promise<void> {
+	const paths = imageUrls
+		.map((url) => publicUrlToStoragePath(url, "post-images"))
+		.filter((path): path is string => path !== null);
+	if (paths.length === 0) return;
+	const { error } = await supabase.storage.from("post-images").remove(paths);
+	if (error) console.error("post image cleanup error:", error);
 }
 
 /**
@@ -367,6 +371,81 @@ export async function updateAccountModerationAction(
 	return { moderated: true };
 }
 
+/**
+ * 管理者による投稿削除（投稿者以外の投稿も削除可）
+ */
+export async function adminDeletePostAction(request: Request, supabase: SupabaseClient<Database>, adminId: string) {
+	const form = await request.formData();
+	const postId = (form.get("post_id") as string | null)?.trim() ?? "";
+	const reportId = (form.get("report_id") as string | null)?.trim() || null;
+
+	if (!postId) return fail(400, { message: "投稿IDが不正です" });
+
+	// 添付画像のクリーンアップ用に削除前へ控える
+	const { data: post } = await supabase.from("posts").select("image_urls").eq("id", postId).maybeSingle();
+
+	const { error } = await supabase.from("posts").delete().eq("id", postId);
+	if (error) return fail(500, { message: "投稿の削除に失敗しました" });
+
+	// 他ユーザーのフォルダはストレージ RLS で消せないため service role で削除する
+	await removePostImages(createServiceRoleClient(), post?.image_urls ?? []);
+
+	await supabase.from("admin_audit_logs").insert({
+		admin_id: adminId,
+		action: "post_delete",
+		target_type: "post",
+		target_id: postId,
+		metadata: { report_id: reportId },
+	});
+
+	if (reportId) {
+		await supabase
+			.from("reports")
+			.update({ status: "resolved" })
+			.eq("id", reportId)
+			.in("status", ["open", "reviewing"]);
+	}
+
+	return { deleted: true };
+}
+
+/**
+ * 管理者による投稿の表示/非表示切り替え
+ */
+export async function adminTogglePostVisibilityAction(
+	request: Request,
+	supabase: SupabaseClient<Database>,
+	adminId: string,
+) {
+	const form = await request.formData();
+	const postId = (form.get("post_id") as string | null)?.trim() ?? "";
+	const reportId = (form.get("report_id") as string | null)?.trim() || null;
+	const hide = form.get("hide") === "1";
+
+	if (!postId) return fail(400, { message: "投稿IDが不正です" });
+
+	const { error } = await supabase.from("posts").update({ hidden_by_admin: hide }).eq("id", postId);
+	if (error) return fail(500, { message: "投稿の表示状態の変更に失敗しました" });
+
+	await supabase.from("admin_audit_logs").insert({
+		admin_id: adminId,
+		action: hide ? "post_hide" : "post_unhide",
+		target_type: "post",
+		target_id: postId,
+		metadata: { report_id: reportId },
+	});
+
+	if (reportId && hide) {
+		await supabase
+			.from("reports")
+			.update({ status: "resolved" })
+			.eq("id", reportId)
+			.in("status", ["open", "reviewing"]);
+	}
+
+	return { hidden: hide };
+}
+
 // ================================================================
 // イベント視聴ルーム アクション
 // ================================================================
@@ -560,7 +639,8 @@ export async function upsertUserAnimeEntry(supabase: SupabaseClient<Database>, r
 	if (!animeId) return fail(400, { message: "アニメIDが不正です" });
 	if (!status) return fail(400, { message: "ステータスを選択してください" });
 
-	const score = scoreRaw ? parseFloat(scoreRaw) : null;
+	const parsedScore = scoreRaw ? parseFloat(scoreRaw) : null;
+	const score = parsedScore != null && Number.isFinite(parsedScore) && parsedScore > 0 ? parsedScore : null;
 	const progress = progressRaw ? parseInt(progressRaw, 10) : 0;
 
 	const { error } = await supabase
@@ -627,12 +707,20 @@ export async function exchangeAnimeAction(supabase: SupabaseClient<Database>, re
 
 	const form = await request.formData();
 	const animeId = (form.get("anime_id") as string | null)?.trim() ?? "";
+	const comment = ((form.get("comment") as string | null)?.trim() ?? "") || null;
 
 	if (!animeId || Number.isNaN(Number(animeId))) {
 		return fail(400, { exchangeMessage: "アニメを選択してください" });
 	}
 
-	const { data, error } = await supabase.rpc("create_anime_exchange", { p_anime_id: Number(animeId) });
+	if (comment && comment.length > 120) {
+		return fail(400, { exchangeMessage: "コメントは120文字以内で入力してください" });
+	}
+
+	const { data, error } = await supabase.rpc("create_anime_exchange", {
+		p_anime_id: Number(animeId),
+		p_comment: comment,
+	});
 
 	if (error) {
 		if (error.message.includes("anime not found")) {
@@ -765,17 +853,129 @@ export async function updateNotificationSettingsAction(
 	await updateBroadcastNotificationSettings(supabase, userId, settings);
 }
 
+export async function upsertBroadcastRoomMute(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+	animeId: string,
+	roomDate: string,
+	duration: BroadcastRoomMuteDuration,
+	repeatWeekly = false,
+) {
+	if (!animeId || Number.isNaN(Number(animeId))) return fail(400, { message: "アニメが見つかりません" });
+
+	const { data: sessions } = await supabase.rpc("ensure_broadcast_room_session", {
+		p_anime_id: Number(animeId),
+		p_room_date: roomDate,
+	});
+	const session = sessions?.[0];
+	if (!session) return fail(404, { message: "放送ルームが見つかりません" });
+	if (repeatWeekly && duration === "event_end") {
+		return fail(400, { message: "毎週繰り返す場合は、1日から7日のミュート期間を選択してください" });
+	}
+
+	const now = new Date();
+	const mutedUntil =
+		duration === "event_end"
+			? new Date(session.posting_closes_at)
+			: new Date(
+					(repeatWeekly
+						? new Date(session.scheduled_at).getTime()
+						: Math.max(now.getTime(), new Date(session.scheduled_at).getTime())) +
+						duration * 24 * 60 * 60 * 1000,
+				);
+	if (!repeatWeekly && mutedUntil <= now) {
+		return fail(400, { message: "終了済みのルームは「イベント終了まで」に設定できません" });
+	}
+
+	const roomMute = {
+		user_id: userId,
+		anime_id: Number(animeId),
+		room_date: roomDate,
+		room_session_id: session.id,
+		duration_days: duration === "event_end" ? null : duration,
+		mute_until_event_end: duration === "event_end",
+		repeat_weekly: repeatWeekly,
+		muted_until: mutedUntil.toISOString(),
+		updated_at: now.toISOString(),
+	};
+	const roomMutesTable = supabase.from("broadcast_room_mutes") as unknown as {
+		upsert: (value: typeof roomMute, options: { onConflict: string }) => PromiseLike<{ error: unknown }>;
+	};
+	const { error } = await roomMutesTable.upsert(roomMute, { onConflict: "user_id,anime_id" });
+	if (error) {
+		console.error("broadcast room mute upsert error:", error);
+		return fail(500, { message: "ルームのミュート設定に失敗しました" });
+	}
+	return { roomMuteSuccess: true };
+}
+
+export async function removeBroadcastRoomMute(supabase: SupabaseClient<Database>, userId: string, animeId: string) {
+	const { error } = await supabase
+		.from("broadcast_room_mutes")
+		.delete()
+		.eq("user_id", userId)
+		.eq("anime_id", Number(animeId));
+	if (error) return fail(500, { message: "ルームのミュート解除に失敗しました" });
+	return { roomMuteSuccess: true };
+}
+
+export async function upsertAnimeMute(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+	animeId: string,
+	muteType: "period" | "always",
+	periodDays: number | null,
+	isRepeat: boolean,
+	roomDate: string | null,
+) {
+	if (!animeId || Number.isNaN(Number(animeId))) return fail(400, { message: "アニメが見つかりません" });
+
+	let mutedUntil: string | null = null;
+	if (muteType === "period" && periodDays != null && !isRepeat) {
+		const base = roomDate ? new Date(`${roomDate}T00:00:00`) : new Date();
+		mutedUntil = new Date(base.getTime() + periodDays * 24 * 60 * 60 * 1000).toISOString();
+	}
+
+	const record = {
+		user_id: userId,
+		anime_id: Number(animeId),
+		mute_type: muteType,
+		period_days: muteType === "period" ? periodDays : null,
+		is_repeat: isRepeat,
+		muted_until: mutedUntil,
+		updated_at: new Date().toISOString(),
+	};
+	// biome-ignore lint/suspicious/noExplicitAny: anime_mutes not yet in auto-generated DB types
+	const { error } = await (supabase as any).from("anime_mutes").upsert(record, { onConflict: "user_id,anime_id" });
+	if (error) {
+		console.error("anime mute upsert error:", error);
+		return fail(500, { message: "ミュート設定に失敗しました" });
+	}
+	return { roomMuteSuccess: true };
+}
+
+export async function removeAnimeMute(supabase: SupabaseClient<Database>, userId: string, animeId: string) {
+	// biome-ignore lint/suspicious/noExplicitAny: anime_mutes not yet in auto-generated DB types
+	const { error } = await (supabase as any)
+		.from("anime_mutes")
+		.delete()
+		.eq("user_id", userId)
+		.eq("anime_id", Number(animeId));
+	if (error) return fail(500, { message: "ミュート解除に失敗しました" });
+	return { roomMuteSuccess: true };
+}
+
 // linked_accounts は自動生成型未収録のためテーブル名のみ型アサーション使用
 export async function linkAccounts(
 	serviceClient: SupabaseClient<Database>,
 	userIdA: string,
 	userIdB: string,
 	displayOrderForA: number,
-): Promise<void> {
+): Promise<{ error: string | null }> {
 	// biome-ignore lint/suspicious/noExplicitAny: linked_accounts not yet in auto-generated DB types
 	const { error } = await (serviceClient as SupabaseClient<any>).from("linked_accounts").upsert([
 		{ owner_user_id: userIdA, linked_user_id: userIdB, display_order: displayOrderForA },
 		{ owner_user_id: userIdB, linked_user_id: userIdA, display_order: 0 },
 	]);
-	if (error) throw error;
+	return { error: error ? error.message : null };
 }

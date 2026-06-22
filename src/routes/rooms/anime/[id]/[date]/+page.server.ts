@@ -6,7 +6,13 @@ import {
 	toggleLikeAction,
 	toggleRepostAction,
 } from "$lib/server/actions";
-import { getAnime, getEventPosts } from "$lib/server/queries";
+import {
+	getAnime,
+	getAnimeRankingTrending,
+	getBroadcastRoomOverride,
+	getBroadcastRoomPosts,
+	getBroadcastRoomSession,
+} from "$lib/server/queries";
 import type { Anime } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -18,10 +24,10 @@ function dateKeyToDate(value: string) {
 	return date;
 }
 
-function animeIsScheduledForDate(anime: Anime, dateKey: string) {
+function animeIsScheduledForDate(anime: Anime, dateKey: string, hasOverride: boolean) {
 	const date = dateKeyToDate(dateKey);
-	if (!date || anime.broadcast_day == null) return false;
-	if (date.getDay() !== anime.broadcast_day) return false;
+	if (!date) return false;
+	if (!hasOverride && (anime.broadcast_day == null || date.getDay() !== anime.broadcast_day)) return false;
 
 	const airedFrom = anime.aired_from?.slice(0, 10) ?? null;
 	if (airedFrom && dateKey < airedFrom) return false;
@@ -45,41 +51,45 @@ function roomHashtag(anime: Anime) {
 	return officialHashtag ?? fallbackRoomHashtag(anime.title);
 }
 
-function scheduledAtIso(dateKey: string, time: string | null) {
-	const match = time?.match(/^(\d{1,2}):([0-5]\d)/);
-	if (!match) return `${dateKey}T00:00:00+09:00`;
-
-	const dateParts = dateKey.split("-").map(Number);
-	const [year, month, day] = dateParts;
-	if (year == null || month == null || day == null) return `${dateKey}T00:00:00+09:00`;
-
-	const hour = Number(match[1]);
-	const minute = Number(match[2]);
-	return new Date(Date.UTC(year, month - 1, day, hour - 9, minute)).toISOString();
-}
-
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 	const anime = await getAnime(supabase, params.id, user?.id ?? null);
 	if (!anime) throw error(404, "アニメが見つかりません");
-	if (!animeIsScheduledForDate(anime, params.date)) throw error(404, "放送ルームが見つかりません");
+
+	const override = await getBroadcastRoomOverride(supabase, params.id, params.date);
+	if (override?.is_cancelled) {
+		throw error(404, "放送ルームが見つかりません");
+	}
+	if (!animeIsScheduledForDate(anime, params.date, override != null)) {
+		throw error(404, "放送ルームが見つかりません");
+	}
+
+	const session = await getBroadcastRoomSession(supabase, anime.id, params.date);
+	if (!session) throw error(404, "放送ルームが見つかりません");
 
 	const hashtag = roomHashtag(anime);
-	const [posts, trending] = await Promise.all([
-		getEventPosts(supabase, hashtag, user?.id ?? null),
+	const [posts, trending, animeTrending] = await Promise.all([
+		getBroadcastRoomPosts(supabase, session.id, user?.id ?? null, { limit: 100, ascending: true }),
 		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
+		getAnimeRankingTrending(supabase, 5),
 	]);
 
 	return {
 		anime,
 		room: {
+			session_id: session.id,
 			date: params.date,
+			kind: "episode",
 			hashtag,
-			scheduled_at: scheduledAtIso(params.date, anime.broadcast_time),
+			scheduled_at: session.scheduled_at,
+			posting_opens_at: session.posting_opens_at,
+			posting_closes_at: session.posting_closes_at,
+			duration_minutes: session.duration_minutes,
 			title: `${anime.title} 放送ルーム`,
 		},
 		posts,
 		trending: trending.data ?? [],
+		animeTrending,
 		user,
 	};
 };
@@ -90,8 +100,22 @@ export const actions: Actions = {
 		if (!user) return fail(401, { message: "ログインが必要です" });
 
 		const anime = await getAnime(supabase, params.id, user.id);
-		if (!anime || !animeIsScheduledForDate(anime, params.date)) {
+		const override = await getBroadcastRoomOverride(supabase, params.id, params.date);
+		if (override?.is_cancelled) {
 			return fail(404, { message: "放送ルームが見つかりません" });
+		}
+		if (!anime || !animeIsScheduledForDate(anime, params.date, override != null)) {
+			return fail(404, { message: "放送ルームが見つかりません" });
+		}
+
+		const session = await getBroadcastRoomSession(supabase, anime.id, params.date);
+		if (!session) return fail(404, { message: "放送ルームが見つかりません" });
+		const now = Date.now();
+		if (now < new Date(session.posting_opens_at).getTime()) {
+			return fail(403, { message: "このルームはまだ投稿を受け付けていません" });
+		}
+		if (now > new Date(session.posting_closes_at).getTime()) {
+			return fail(403, { message: "このルームの投稿受付は終了しました" });
 		}
 
 		const form = await request.formData();
@@ -100,7 +124,7 @@ export const actions: Actions = {
 		const hasTag = content.toLowerCase().includes(`#${hashtag.toLowerCase()}`);
 		const finalContent = hasTag ? content : `${content} #${hashtag}`;
 
-		return insertPostWithHashtags(supabase, user.id, finalContent, null, [], anime.id);
+		return insertPostWithHashtags(supabase, user.id, finalContent, null, [], anime.id, null, null, session.id);
 	},
 
 	deletePost: async ({ request, locals: { supabase, safeGetSession } }) => {

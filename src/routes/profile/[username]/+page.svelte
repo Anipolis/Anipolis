@@ -4,6 +4,7 @@ import { untrack } from "svelte";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
+import AnimeStatusSection from "$lib/components/AnimeStatusSection.svelte";
 import PostCard from "$lib/components/PostCard.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
@@ -14,13 +15,19 @@ let { data, form }: PageProps = $props();
 
 const { profile, posts, imagePosts, isOwn, canViewContent } = $derived(data);
 const displayName = $derived(profile.display_name ?? profile.username);
+const profileSocialImage = $derived(profile.header_url ?? profile.avatar_url);
 
 let isFollowing = $state(false);
 let followRequestStatus = $state<"none" | "pending">("none");
 let followerCount = $state(0);
 let editDisplayName = $state(untrack(() => data.profile.display_name ?? ""));
 let editBio = $state(untrack(() => data.profile.bio ?? ""));
+let editProfileId = $state(untrack(() => data.profile.id));
 let profileSubmitting = $state(false);
+let headerUploading = $state(false);
+let headerMessage = $state("");
+let headerPreviewUrl = $state<string | null>(null);
+let showProfileEditModal = $state(false);
 let showUserReportModal = $state(false);
 let reportReason = $state("harassment");
 let reportDetails = $state("");
@@ -33,10 +40,19 @@ $effect(() => {
 	followerCount = data.followCounts.followers;
 });
 
+$effect(() => {
+	if (editProfileId === data.profile.id) return;
+	editProfileId = data.profile.id;
+	editDisplayName = data.profile.display_name ?? "";
+	editBio = data.profile.bio ?? "";
+});
+
+const requestedTab = $derived(page.url.searchParams.get("tab"));
 const activeTab = $derived(
-	(page.url.searchParams.get("tab") ?? "posts") as "posts" | "images" | "list" | "likes" | "edit",
+	requestedTab === "images" || requestedTab === "list" || requestedTab === "likes" ? requestedTab : "posts",
 );
 const bioRemaining = $derived(160 - editBio.length);
+const editableHeaderUrl = $derived(headerPreviewUrl ?? profile.header_url);
 
 const handleProfileSubmit: SubmitFunction = () => {
 	profileSubmitting = true;
@@ -46,9 +62,85 @@ const handleProfileSubmit: SubmitFunction = () => {
 		if (result.type === "success") {
 			editDisplayName = data.profile.display_name ?? "";
 			editBio = data.profile.bio ?? "";
+			showProfileEditModal = false;
 		}
 	};
 };
+
+$effect(() => {
+	if (isOwn && (page.url.searchParams.get("edit") === "profile" || page.url.searchParams.get("tab") === "edit")) {
+		showProfileEditModal = true;
+	}
+});
+
+function openProfileEditModal() {
+	editDisplayName = data.profile.display_name ?? "";
+	editBio = data.profile.bio ?? "";
+	showProfileEditModal = true;
+}
+
+function closeProfileEditModal() {
+	if (profileSubmitting || headerUploading) return;
+	showProfileEditModal = false;
+	headerMessage = "";
+	editDisplayName = data.profile.display_name ?? "";
+	editBio = data.profile.bio ?? "";
+}
+
+async function updateHeaderImage(event: Event) {
+	const input = event.currentTarget as HTMLInputElement;
+	const file = input.files?.[0];
+	if (!file) return;
+
+	headerMessage = "";
+	if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+		headerMessage = "JPEG、PNG、WebP形式の画像を選択してください。";
+		input.value = "";
+		return;
+	}
+	if (file.size > 5 * 1024 * 1024) {
+		headerMessage = "画像は5MB以内にしてください。";
+		input.value = "";
+		return;
+	}
+
+	const previewUrl = URL.createObjectURL(file);
+	headerPreviewUrl = previewUrl;
+	headerUploading = true;
+	try {
+		const body = new FormData();
+		body.append("file", file);
+		const response = await fetch("/api/upload/profile-header", { method: "POST", body });
+		const result = (await response.json().catch(() => ({}))) as { message?: string };
+		if (!response.ok) throw new Error(result.message ?? "ヘッダー画像の更新に失敗しました");
+		await invalidateAll();
+		headerMessage = "ヘッダー画像を更新しました。";
+	} catch (uploadError) {
+		headerMessage = uploadError instanceof Error ? uploadError.message : "ヘッダー画像の更新に失敗しました";
+	} finally {
+		headerUploading = false;
+		headerPreviewUrl = null;
+		URL.revokeObjectURL(previewUrl);
+		input.value = "";
+	}
+}
+
+async function removeHeaderImage() {
+	if (headerUploading || !profile.header_url) return;
+	headerUploading = true;
+	headerMessage = "";
+	try {
+		const response = await fetch("/api/upload/profile-header", { method: "DELETE" });
+		const result = (await response.json().catch(() => ({}))) as { message?: string };
+		if (!response.ok) throw new Error(result.message ?? "ヘッダー画像の削除に失敗しました");
+		await invalidateAll();
+		headerMessage = "ヘッダー画像を削除しました。";
+	} catch (removeError) {
+		headerMessage = removeError instanceof Error ? removeError.message : "ヘッダー画像の削除に失敗しました";
+	} finally {
+		headerUploading = false;
+	}
+}
 
 async function submitUserReport() {
 	if (reportSubmitting) return;
@@ -94,16 +186,16 @@ const statusLabel: Record<AnimeStatus, string> = {
 	watching: "視聴中",
 	completed: "完了",
 	plan_to_watch: "視聴予定",
-	on_hold: "中断中",
+	on_hold: "中断",
 	dropped: "断念",
 };
 
 const statusIcon: Record<AnimeStatus, string> = {
-	watching: "▶",
-	completed: "✓",
-	plan_to_watch: "📋",
-	on_hold: "⏸",
-	dropped: "✕",
+	watching: "i-lucide-circle-play",
+	completed: "i-lucide-circle-check",
+	plan_to_watch: "i-lucide-clipboard-list",
+	on_hold: "i-lucide-circle-pause",
+	dropped: "i-lucide-circle-x",
 };
 
 const animeList = $derived((data.animeList ?? []) as Anime[]);
@@ -119,60 +211,76 @@ const grouped = $derived(
 );
 </script>
 
-<svelte:head> <title>{displayName} (@{profile.username}) — Anipolis</title> </svelte:head>
+<svelte:head>
+	<title>{displayName} (@{profile.username}) — Anipolis</title>
+	<meta property="og:title" content="{displayName} (@{profile.username}) — Anipolis">
+	<meta property="og:description" content={profile.bio ?? `@${profile.username}のAnipolisプロフィール`}>
+	<meta property="og:type" content="website">
+	<meta property="og:url" content={page.url.href}>
+	{#if profileSocialImage}
+		<meta property="og:image" content={profileSocialImage}>
+	{/if}
+</svelte:head>
 
 <svelte:window onkeydown={handleReportModalKeydown} />
 
 <div class="page-container">
 	<main class="feed-column">
 		<div class="profile-header">
-			<UserAvatar src={profile.avatar_url} username={profile.username} size="lg" />
-			<div class="profile-info">
-				<div class="profile-display-name">{displayName}</div>
-				<div class="profile-username">
-					@{profile.username}
-					{#if profile.is_private}
-						<span class="profile-lock-badge" title="鍵アカウント">鍵</span>
+			{#if profile.header_url}
+				<img class="profile-header-image" src={profile.header_url} alt="{displayName}のヘッダー画像">
+			{:else}
+				<div class="profile-header-image profile-header-image--empty" aria-hidden="true"></div>
+			{/if}
+			<div class="profile-header-content">
+				<UserAvatar src={profile.avatar_url} username={profile.username} size="lg" />
+				<div class="profile-info">
+					<div class="profile-display-name">{displayName}</div>
+					<div class="profile-username">
+						@{profile.username}
+						{#if profile.is_private}
+							<span class="profile-lock-badge" title="鍵アカウント">鍵</span>
+						{/if}
+					</div>
+					{#if profile.bio}
+						<p class="profile-bio">{profile.bio}</p>
 					{/if}
-				</div>
-				{#if profile.bio}
-					<p class="profile-bio">{profile.bio}</p>
-				{/if}
-				<div class="profile-stats">
-					<span class="profile-stat">
-						<strong>{posts.length}</strong>
-						<span>投稿</span>
-					</span>
-					<a href="/profile/{profile.username}/followers" class="profile-stat profile-stat--link">
-						<strong>{followerCount}</strong>
-						<span>フォロワー</span>
-					</a>
-					<a href="/profile/{profile.username}/following" class="profile-stat profile-stat--link">
-						<strong>{data.followCounts.following}</strong>
-						<span>フォロー中</span>
-					</a>
-					{#if canViewContent && (profile.list_is_public || isOwn)}
+					<div class="profile-stats">
 						<span class="profile-stat">
-							<strong>{animeList.length}</strong>
-							<span>アニメ</span>
+							<strong>{posts.length}</strong>
+							<span>投稿</span>
 						</span>
-					{/if}
-				</div>
+						<a href="/profile/{profile.username}/followers" class="profile-stat profile-stat--link">
+							<strong>{followerCount}</strong>
+							<span>フォロワー</span>
+						</a>
+						<a href="/profile/{profile.username}/following" class="profile-stat profile-stat--link">
+							<strong>{data.followCounts.following}</strong>
+							<span>フォロー中</span>
+						</a>
+						{#if canViewContent && (profile.list_is_public || isOwn)}
+							<span class="profile-stat">
+								<strong>{animeList.length}</strong>
+								<span>アニメ</span>
+							</span>
+						{/if}
+					</div>
 
-				{#if isOwn}
-					<a
-						href="/profile/{profile.username}?tab=edit"
-						class="btn btn-outline"
-						style="margin-top: 12px; font-size: 13px;"
-					>
-						プロフィールを編集
-					</a>
-				{:else if data.user}
-					<div class="profile-actions">
-						<form
-							method="POST"
-							action="?/follow"
-							use:enhance={() => {
+					{#if isOwn}
+						<button
+							type="button"
+							class="btn btn-outline"
+							style="margin-top: 12px; font-size: 13px;"
+							onclick={openProfileEditModal}
+						>
+							プロフィールを編集
+						</button>
+					{:else if data.user}
+						<div class="profile-actions">
+							<form
+								method="POST"
+								action="?/follow"
+								use:enhance={() => {
                             return async ({ result }) => {
                                 if (result.type === 'success' && result.data) {
                                     const payload = result.data as { followed: boolean; requestStatus?: "none" | "pending" };
@@ -186,27 +294,28 @@ const grouped = $derived(
                                 }
                             };
                         }}
-						>
-							<input type="hidden" name="target_id" value={profile.id}>
-							<button
-								type="submit"
-								class="btn {isFollowing || followRequestStatus === 'pending' ? 'btn-outline' : 'btn-primary'}"
-								disabled={followRequestStatus === 'pending'}
-								style="font-size: 13px;"
 							>
-								{isFollowing ? 'フォロー中' : followRequestStatus === 'pending' ? '申請中' : profile.is_private ? 'フォロー申請' : 'フォローする'}
+								<input type="hidden" name="target_id" value={profile.id}>
+								<button
+									type="submit"
+									class="btn {isFollowing || followRequestStatus === 'pending' ? 'btn-outline' : 'btn-primary'}"
+									disabled={followRequestStatus === 'pending'}
+									style="font-size: 13px;"
+								>
+									{isFollowing ? 'フォロー中' : followRequestStatus === 'pending' ? '申請中' : profile.is_private ? 'フォロー申請' : 'フォローする'}
+								</button>
+							</form>
+							<button
+								type="button"
+								class="btn btn-outline"
+								style="font-size: 13px;"
+								onclick={() => (showUserReportModal = true)}
+							>
+								通報
 							</button>
-						</form>
-						<button
-							type="button"
-							class="btn btn-outline"
-							style="font-size: 13px;"
-							onclick={() => (showUserReportModal = true)}
-						>
-							通報
-						</button>
-					</div>
-				{/if}
+						</div>
+					{/if}
+				</div>
 			</div>
 		</div>
 
@@ -266,6 +375,142 @@ const grouped = $derived(
 			</div>
 		{/if}
 
+		{#if showProfileEditModal && isOwn}
+			<div class="profile-edit-modal-overlay" role="presentation" onclick={closeProfileEditModal}>
+				<div
+					class="profile-edit-modal-card"
+					role="dialog"
+					aria-modal="true"
+					aria-labelledby="profile-edit-title"
+					tabindex="-1"
+					onclick={(event) => event.stopPropagation()}
+					onkeydown={(event) => {
+						event.stopPropagation();
+						if (event.key === "Escape") closeProfileEditModal();
+					}}
+				>
+					<div class="profile-edit-modal-header">
+						<span id="profile-edit-title" class="profile-edit-modal-title">プロフィールを編集</span>
+						<button
+							type="button"
+							class="profile-edit-modal-close"
+							aria-label="閉じる"
+							disabled={profileSubmitting}
+							onclick={closeProfileEditModal}
+						>
+							×
+						</button>
+					</div>
+
+					<form method="POST" action="?/updateProfile" use:enhance={handleProfileSubmit}>
+						<div class="profile-edit-modal-body">
+							{#if form?.success}
+								<div class="flash-success">プロフィールを更新しました。</div>
+							{/if}
+
+							{#if form && 'message' in form && !('field' in form)}
+								<div class="flash-error">{form.message}</div>
+							{/if}
+
+							<div class="field">
+								<span class="field-label">ヘッダー画像</span>
+								<div class="profile-header-editor">
+									{#if editableHeaderUrl}
+										<img src={editableHeaderUrl} alt="ヘッダー画像のプレビュー">
+									{:else}
+										<div class="profile-header-editor-empty">ヘッダー画像は未設定です</div>
+									{/if}
+								</div>
+								<div class="profile-header-editor-actions">
+									<label class="btn btn-outline profile-header-file-button">
+										{headerUploading ? '処理中...' : '画像を選択'}
+										<input
+											type="file"
+											accept="image/jpeg,image/png,image/webp"
+											disabled={headerUploading}
+											onchange={updateHeaderImage}
+										>
+									</label>
+									{#if profile.header_url}
+										<button
+											type="button"
+											class="btn btn-ghost"
+											disabled={headerUploading}
+											onclick={removeHeaderImage}
+										>
+											削除
+										</button>
+									{/if}
+								</div>
+								<p class="field-hint">横長の画像を推奨します。JPEG、PNG、WebP・最大5MB。</p>
+								{#if headerMessage}
+									<p class="profile-header-editor-message" aria-live="polite">{headerMessage}</p>
+								{/if}
+							</div>
+
+							<div class="field">
+								<label for="display_name" class="field-label">表示名</label>
+								<input
+									id="display_name"
+									name="display_name"
+									type="text"
+									class="field-input"
+									class:field-error={form && 'field' in form && form.field === 'display_name'}
+									placeholder="アニメ太郎"
+									maxlength="50"
+									bind:value={editDisplayName}
+								>
+								{#if form && 'field' in form && form.field === 'display_name'}
+									<p class="field-error-msg">{form.message}</p>
+								{:else}
+									<p class="field-hint">タイムラインやプロフィールで表示される名前です。</p>
+								{/if}
+							</div>
+
+							<div class="field">
+								<label for="bio" class="field-label">自己紹介</label>
+								<textarea
+									id="bio"
+									name="bio"
+									class="field-textarea"
+									class:field-error={form && 'field' in form && form.field === 'bio'}
+									placeholder="好きな作品や今見ているアニメなど"
+									rows="3"
+									maxlength="160"
+									bind:value={editBio}
+								></textarea>
+								<p class="field-hint" class:danger={bioRemaining < 0}>
+									{#if form && 'field' in form && form.field === 'bio'}
+										{form.message}
+									{:else}
+										残り {bioRemaining} 文字
+									{/if}
+								</p>
+							</div>
+						</div>
+
+						<div class="profile-edit-modal-footer">
+							<button
+								type="button"
+								class="btn btn-ghost"
+								disabled={profileSubmitting || headerUploading}
+								onclick={closeProfileEditModal}
+							>
+								キャンセル
+							</button>
+							<button
+								type="submit"
+								class="btn btn-primary"
+								disabled={profileSubmitting || headerUploading}
+							>
+								{profileSubmitting ? '保存中...' : '保存する'}
+							</button>
+						</div>
+					</form>
+				</div>
+			</div>
+		{/if}
+
 		<!-- タブ -->
 		<nav class="profile-tabs" aria-label="プロフィールタブ">
 			<a href="/profile/{profile.username}" class="profile-tab" class:active={activeTab === 'posts'}>投稿</a>
@@ -275,15 +520,12 @@ const grouped = $derived(
 			<a href="/profile/{profile.username}?tab=list" class="profile-tab" class:active={activeTab === 'list'}>
 				マイリスト
 				{#if !canViewContent || (!profile.list_is_public && !isOwn)}
-					<span class="tab-lock">🔒</span>
+					<span class="tab-lock i-lucide-lock-keyhole" aria-hidden="true"></span>
 				{/if}
 			</a>
-			<a href="/profile/{profile.username}?tab=likes" class="profile-tab" class:active={activeTab === 'likes'}
-				>いいね</a
-			>
 			{#if isOwn}
-				<a href="/profile/{profile.username}?tab=edit" class="profile-tab" class:active={activeTab === 'edit'}
-					>編集</a
+				<a href="/profile/{profile.username}?tab=likes" class="profile-tab" class:active={activeTab === 'likes'}
+					>いいね</a
 				>
 			{/if}
 		</nav>
@@ -359,52 +601,13 @@ const grouped = $derived(
 
 				{#each statusOrder as status}
 					{#if grouped[status].length > 0}
-						<section class="status-section status-section--{status}">
-							<h3 class="status-heading">
-								<span class="status-icon">{statusIcon[status]}</span>
-								{statusLabel[status]}
-								<span class="status-count">{grouped[status].length}</span>
-							</h3>
-							<div class="anime-list">
-								{#each grouped[status] as anime (anime.id)}
-									<a href="/anime/{anime.id}" class="anime-row">
-										<div class="anime-cover">
-											{#if anime.cover_url}
-												<img
-													src={anime.cover_url}
-													alt={anime.title}
-													loading="lazy"
-													decoding="async"
-												>
-											{:else}
-												<div class="anime-cover-placeholder">?</div>
-											{/if}
-										</div>
-										<div class="anime-info">
-											<div class="anime-title">{anime.title}</div>
-											<div class="anime-meta">
-												{#if anime.episode_count}
-													<span class="meta-progress"
-														>{anime.user_entry?.progress ?? 0}
-														/ {anime.episode_count} 話</span
-													>
-												{:else if (anime.user_entry?.progress ?? 0) > 0}
-													<span class="meta-progress">{anime.user_entry?.progress} 話</span>
-												{/if}
-												{#if anime.user_entry?.score !== null && anime.user_entry?.score !== undefined}
-													<span class="meta-score">★ {anime.user_entry.score}</span>
-												{/if}
-											</div>
-										</div>
-										{#if anime.user_entry?.updated_at}
-											<div class="anime-updated">
-												{new Date(anime.user_entry.updated_at).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' })}
-											</div>
-										{/if}
-									</a>
-								{/each}
-							</div>
-						</section>
+						<AnimeStatusSection
+							{status}
+							animes={grouped[status]}
+							{statusLabel}
+							{statusIcon}
+							headingLevel={3}
+						/>
 					{/if}
 				{/each}
 			{/if}
@@ -412,9 +615,9 @@ const grouped = $derived(
 
 		<!-- いいねタブ -->
 		{#if activeTab === 'likes'}
-			{#if !canViewContent}
+			{#if !isOwn}
 				<div class="empty-state profile-private-state">
-					<p>このアカウントのいいねはフォロワーだけが見ることができます</p>
+					<p>他のユーザーのいいねは表示できません</p>
 				</div>
 			{:else if data.likedPosts.length === 0}
 				<div class="empty-state">
@@ -426,76 +629,10 @@ const grouped = $derived(
 				{/each}
 			{/if}
 		{/if}
-
-		<!-- 編集タブ -->
-		{#if activeTab === 'edit' && isOwn}
-			<section class="profile-edit-panel">
-				{#if form?.success}
-					<div class="flash-success">プロフィールを更新しました。</div>
-				{/if}
-
-				{#if form && 'message' in form && !('field' in form)}
-					<div class="flash-error">{form.message}</div>
-				{/if}
-
-				<form method="POST" action="?/updateProfile" use:enhance={handleProfileSubmit}>
-					<div class="field">
-						<label for="display_name" class="field-label">表示名</label>
-						<input
-							id="display_name"
-							name="display_name"
-							type="text"
-							class="field-input"
-							class:field-error={form && 'field' in form && form.field === 'display_name'}
-							placeholder="アニメ太郎"
-							maxlength="50"
-							bind:value={editDisplayName}
-						>
-						{#if form && 'field' in form && form.field === 'display_name'}
-							<p class="field-error-msg">{form.message}</p>
-						{:else}
-							<p class="field-hint">タイムラインやプロフィールで表示される名前です。</p>
-						{/if}
-					</div>
-
-					<div class="field">
-						<label for="bio" class="field-label">自己紹介</label>
-						<textarea
-							id="bio"
-							name="bio"
-							class="field-textarea"
-							class:field-error={form && 'field' in form && form.field === 'bio'}
-							placeholder="好きな作品や今見ているアニメなど"
-							rows="3"
-							maxlength="160"
-							bind:value={editBio}
-						></textarea>
-						<p class="field-hint" class:danger={bioRemaining < 0}>
-							{#if form && 'field' in form && form.field === 'bio'}
-								{form.message}
-							{:else}
-								残り {bioRemaining} 文字
-							{/if}
-						</p>
-					</div>
-
-					<div class="profile-edit-actions">
-						<a href="/profile/{profile.username}" class="btn btn-ghost">キャンセル</a>
-						<button type="submit" class="btn btn-primary" disabled={profileSubmitting}>
-							{profileSubmitting ? '保存中...' : '保存する'}
-						</button>
-					</div>
-				</form>
-			</section>
-		{:else if activeTab === 'edit'}
-			<div class="empty-state">
-				<p>プロフィール編集は本人だけが利用できます。</p>
-			</div>
-		{/if}
 	</main>
 
 	<aside class="sidebar-column">
-		<TrendingPanel trending={data.trending} />
+		<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
 	</aside>
 </div>
 
@@ -556,10 +693,6 @@ const grouped = $derived(
 	color: var(--color-accent);
 	border-bottom-color: var(--color-accent);
 	font-weight: 700;
-}
-
-.profile-edit-panel {
-	padding: 20px 4px;
 }
 
 .report-modal-overlay {
@@ -657,11 +790,128 @@ const grouped = $derived(
 	font-size: 13px;
 }
 
-.profile-edit-actions {
+.profile-edit-modal-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 100;
 	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 16px;
+	background: rgb(15 23 42 / 0.68);
+}
+
+.profile-edit-modal-card {
+	width: min(100%, 520px);
+	max-height: calc(100vh - 32px);
+	overflow: auto;
+	border: 1px solid var(--color-border, var(--border, #334155));
+	border-radius: 8px;
+	background: var(--color-surface, var(--surface, #1e293b));
+	box-shadow: 0 24px 60px rgb(0 0 0 / 0.36);
+}
+
+.profile-edit-modal-header,
+.profile-edit-modal-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 12px 14px;
+	border-bottom: 1px solid var(--color-border, var(--border, #334155));
+}
+
+.profile-edit-modal-footer {
 	justify-content: flex-end;
-	gap: 10px;
-	margin-top: 18px;
+	border-top: 1px solid var(--color-border, var(--border, #334155));
+	border-bottom: 0;
+}
+
+.profile-edit-modal-title {
+	font-size: 15px;
+	font-weight: 800;
+}
+
+.profile-edit-modal-close {
+	width: 32px;
+	height: 32px;
+	border: 0;
+	border-radius: 999px;
+	background: transparent;
+	color: var(--color-text-muted, var(--fg-muted, #94a3b8));
+	cursor: pointer;
+	font-size: 20px;
+	line-height: 1;
+}
+
+.profile-edit-modal-close:hover:not(:disabled) {
+	background: var(--color-border, var(--border, #334155));
+	color: var(--color-text, var(--fg, #e2e8f0));
+}
+
+.profile-edit-modal-close:disabled {
+	cursor: not-allowed;
+	opacity: 0.55;
+}
+
+.profile-edit-modal-body {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	padding: 14px;
+}
+
+.profile-header-editor {
+	overflow: hidden;
+	width: 100%;
+	aspect-ratio: 3 / 1;
+	border: 1px solid var(--color-border, var(--border, #334155));
+	border-radius: 8px;
+	background: var(--color-bg, var(--bg, #0f172a));
+}
+
+.profile-header-editor img {
+	display: block;
+	width: 100%;
+	aspect-ratio: 3 / 1;
+	object-fit: cover;
+}
+
+.profile-header-editor-empty {
+	display: grid;
+	place-items: center;
+	height: 100%;
+	color: var(--color-text-muted, var(--fg-muted, #94a3b8));
+	font-size: 13px;
+}
+
+.profile-header-editor-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 10px;
+}
+
+.profile-header-file-button {
+	position: relative;
+	cursor: pointer;
+	font-size: 13px;
+}
+
+.profile-header-file-button input {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+.profile-header-editor-message {
+	margin: 6px 0 0;
+	color: var(--color-text-secondary, var(--fg-muted, #94a3b8));
+	font-size: 13px;
 }
 
 .tab-lock {
@@ -705,127 +955,5 @@ const grouped = $derived(
 
 .list-manage-link:hover {
 	text-decoration: underline;
-}
-
-.status-section {
-	margin-bottom: 24px;
-}
-
-.status-heading {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	font-size: 0.85rem;
-	font-weight: 700;
-	padding: 8px 4px;
-	margin: 0 0 4px;
-	border-bottom: 1px solid var(--color-border);
-	color: var(--color-text);
-}
-
-.status-section--watching .status-icon {
-	color: var(--status-watching);
-}
-.status-section--completed .status-icon {
-	color: var(--color-accent);
-}
-.status-section--plan_to_watch .status-icon {
-	color: var(--status-plan);
-}
-.status-section--on_hold .status-icon {
-	color: var(--status-on-hold);
-}
-.status-section--dropped .status-icon {
-	color: var(--status-dropped);
-}
-
-.status-count {
-	margin-left: auto;
-	font-size: 0.75rem;
-	color: var(--color-text-muted);
-	font-weight: 400;
-}
-
-.anime-list {
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
-}
-
-.anime-row {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	padding: 6px 8px;
-	border-radius: 6px;
-	text-decoration: none;
-	color: inherit;
-	transition: background 0.12s;
-}
-
-.anime-row:hover {
-	background: color-mix(in srgb, var(--color-text) 6%, transparent);
-}
-
-.anime-cover {
-	width: 36px;
-	aspect-ratio: 2 / 3;
-	border-radius: 3px;
-	overflow: hidden;
-	flex-shrink: 0;
-	background: var(--color-surface);
-}
-
-.anime-cover img {
-	width: 100%;
-	height: auto;
-	image-rendering: auto;
-}
-
-.anime-cover-placeholder {
-	width: 100%;
-	height: 100%;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	color: var(--color-text-muted);
-}
-
-.anime-info {
-	flex: 1;
-	min-width: 0;
-}
-
-.anime-title {
-	font-size: 0.85rem;
-	font-weight: 500;
-	color: var(--color-text);
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	margin-bottom: 3px;
-}
-
-.anime-meta {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	font-size: 0.75rem;
-}
-
-.meta-progress {
-	color: var(--color-text-muted);
-}
-
-.meta-score {
-	color: var(--status-score);
-	font-weight: 600;
-}
-
-.anime-updated {
-	font-size: 0.72rem;
-	color: var(--color-text-muted);
-	flex-shrink: 0;
-	white-space: nowrap;
 }
 </style>
