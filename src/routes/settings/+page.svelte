@@ -1,17 +1,23 @@
 <script lang="ts">
+import { goto } from "$app/navigation";
+import { page } from "$app/state";
 import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();
 
 type SectionId = "account" | "privacy" | "rooms";
 
-let activeSection = $state<SectionId>("account");
-
 const sections: { id: SectionId; label: string }[] = [
 	{ id: "account", label: "アカウント" },
 	{ id: "privacy", label: "プライバシーと安全" },
 	{ id: "rooms", label: "ルーム" },
 ];
+
+const activeSection = $derived(
+	(sections.some((s) => s.id === page.url.searchParams.get("section"))
+		? page.url.searchParams.get("section")
+		: "account") as SectionId,
+);
 
 type Item = { label: string; description: string; href: string };
 
@@ -82,9 +88,7 @@ const activeLabel = $derived(sections.find((s) => s.id === activeSection)?.label
 									type="button"
 									class="settings-nav-item"
 									class:active={activeSection === section.id}
-									onclick={() => {
-										activeSection = section.id;
-									}}
+									onclick={() => goto(`?section=${section.id}`, { replaceState: true })}
 									aria-current={activeSection === section.id ? "page" : undefined}
 								>
 									{section.label}
