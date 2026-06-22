@@ -1,5 +1,7 @@
 import { fail, redirect } from "@sveltejs/kit";
+import { env as publicEnv } from "$env/dynamic/public";
 import { linkAccounts } from "$lib/server/actions";
+import { isBetaMember } from "$lib/server/discord";
 import { getExtraAccounts, setExtraAccounts } from "$lib/server/multi-account";
 import { createServiceRoleClient } from "$lib/server/supabase-admin";
 import type { Actions, PageServerLoad } from "./$types";
@@ -24,9 +26,16 @@ export const load: PageServerLoad = async ({ url, locals: { safeGetSession } }) 
 	// add_account はログイン済みユーザーのみアクセス可
 	if (mode === "add_account" && !user) redirect(303, "/auth?mode=login");
 	// login/register はログイン済みならリダイレクト
-	if (mode !== "add_account" && user) redirect(303, next);
+	// ベータ資格を持つログインユーザーのみリダイレクトする。
+	// 未資格ユーザーは /auth に留め、not_member メッセージを表示できるようにする（ループ防止）。
+	if (mode !== "add_account" && user && isBetaMember(user)) redirect(303, next);
 
-	return { mode, next };
+	return {
+		mode,
+		next,
+		closedBeta: publicEnv["PUBLIC_CLOSED_BETA"] === "true",
+		error: url.searchParams.get("error"),
+	};
 };
 
 export const actions: Actions = {
@@ -267,6 +276,23 @@ export const actions: Actions = {
 
 		if (error || !data.url) {
 			return fail(400, { mode: "login", message: "Googleログインを開始できませんでした" });
+		}
+
+		redirect(303, data.url);
+	},
+
+	discord: async ({ request, url, locals: { supabase } }) => {
+		const form = await request.formData();
+		const next = getSafeNext(form.get("next"));
+		const redirectTo = `${url.origin}/auth/callback?next=${encodeURIComponent(next)}`;
+
+		const { data, error } = await supabase.auth.signInWithOAuth({
+			provider: "discord",
+			options: { redirectTo, scopes: "identify email" },
+		});
+
+		if (error || !data.url) {
+			return fail(400, { mode: "login", message: "Discordログインを開始できませんでした" });
 		}
 
 		redirect(303, data.url);

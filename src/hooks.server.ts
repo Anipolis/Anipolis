@@ -1,7 +1,15 @@
 import { createServerClient } from "@supabase/ssr";
-import { type Handle, json } from "@sveltejs/kit";
+import { type Handle, json, redirect } from "@sveltejs/kit";
 import { PUBLIC_SUPABASE_ANON_KEY, PUBLIC_SUPABASE_URL } from "$env/static/public";
+import { isBetaMember } from "$lib/server/discord";
 import { isApiRateLimited } from "$lib/server/rate-limit";
+
+// クローズドβ：これらのプレフィックス配下は未資格ユーザーでもアクセス可
+const PUBLIC_PATH_PREFIXES = ["/auth"];
+
+function isPublicPath(pathname: string): boolean {
+	return PUBLIC_PATH_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
 
 export const handle: Handle = async ({ event, resolve }) => {
 	if (event.url.pathname.startsWith("/api/")) {
@@ -44,6 +52,15 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 		return { session, user };
 	};
+
+	// クローズドβ：所属検証済み（app_metadata.beta_member）でないログインユーザーを遮断する。
+	// 未ログインユーザーや公開パス（/auth 配下）は対象外。検証は /auth/callback で1度だけ行う。
+	if (event.route.id && !isPublicPath(event.url.pathname)) {
+		const { user } = await event.locals.safeGetSession();
+		if (user && !isBetaMember(user)) {
+			redirect(303, "/auth?error=not_member");
+		}
+	}
 
 	return resolve(event, {
 		filterSerializedResponseHeaders(name) {
