@@ -2,6 +2,7 @@
 import { onDestroy, onMount } from "svelte";
 import { enhance } from "$app/forms";
 import PostCard from "$lib/components/PostCard.svelte";
+import PostCardSkeleton from "$lib/components/PostCardSkeleton.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import type { ActionData, PageData } from "./$types";
 
@@ -155,21 +156,29 @@ function formatDate(iso: string): string {
 		{/if}
 
 		<!-- ── 投稿フィード ── -->
-		<div class="event-posts-header">
-			<span class="event-posts-count">{data.posts.length}件の実況</span>
-		</div>
+		<div class="event-posts-header"><span class="event-posts-count">…件の実況</span></div>
 
-		{#if data.posts.length === 0}
-			<div class="card" style="text-align:center; color:var(--color-muted); padding:32px;">
-				まだ実況投稿はありません。<br>
-				#{data.event.hashtag}
-				で最初の実況をしよう！
+		{#await data.posts}
+			<div class="posts-loading-spinner" aria-label="投稿を読み込み中">
+				<div class="spinner" aria-hidden="true"></div>
+				<span>読み込み中…</span>
 			</div>
-		{:else}
-			{#each data.posts as post (post.id)}
-				<PostCard {post} currentUserId={data.user?.id ?? null} />
+			{#each { length: 5 } as _, i (i)}
+				<PostCardSkeleton />
 			{/each}
-		{/if}
+		{:then posts}
+			{#if posts.length === 0}
+				<div class="card" style="text-align:center; color:var(--color-muted); padding:32px;">
+					まだ実況投稿はありません。<br>
+					#{data.event.hashtag}
+					で最初の実況をしよう！
+				</div>
+			{:else}
+				{#each posts as post (post.id)}
+					<PostCard {post} currentUserId={data.user?.id ?? null} />
+				{/each}
+			{/if}
+		{/await}
 	</div>
 
 	<!-- サイドバー：トレンド -->

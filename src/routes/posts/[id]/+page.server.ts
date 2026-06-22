@@ -9,7 +9,7 @@ import {
 } from "$lib/server/actions";
 import { buildPostCardSelect } from "$lib/server/post-selects";
 import { enrichPostsWithCounts, getAnimeRankingTrending } from "$lib/server/queries";
-import type { RawPost } from "$lib/types";
+import type { Post, RawPost } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
 const POSTS_SELECT = buildPostCardSelect();
@@ -24,40 +24,48 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 	if (!rawPost) error(404, "投稿が見つかりません");
 	const post = rawPost as unknown as RawPost;
 
-	// 親投稿・リプライを並列取得
-	const [rawParentRes, rawRepliesRes, trendingResult, animeTrending] = await Promise.all([
-		post.parent_id
-			? postReader.from("posts").select(POSTS_SELECT).eq("id", post.parent_id).maybeSingle()
-			: Promise.resolve({ data: null }),
-
-		postReader
-			.from("posts")
-			.select(POSTS_SELECT)
-			.eq("parent_id", params.id)
-			.order("created_at", { ascending: true }),
+	const [trendingResult, animeTrending] = await Promise.all([
 		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
 		getAnimeRankingTrending(supabase, 5),
 	]);
 
-	const rawParent = rawParentRes.data;
-	const rawReplies = rawRepliesRes.data ?? [];
+	const enrichedDataPromise = (async () => {
+		const [rawParentRes, rawRepliesRes] = await Promise.all([
+			post.parent_id
+				? postReader.from("posts").select(POSTS_SELECT).eq("id", post.parent_id).maybeSingle()
+				: Promise.resolve({ data: null }),
+			postReader
+				.from("posts")
+				.select(POSTS_SELECT)
+				.eq("parent_id", params.id)
+				.order("created_at", { ascending: true }),
+		]);
 
-	// 全投稿を一度に enrich（バッチクエリを最小化）
-	const rawAll = [post, ...(rawParent ? [rawParent] : []), ...rawReplies] as unknown as RawPost[];
-	const enriched = await enrichPostsWithCounts(supabase, rawAll, user?.id ?? null, { includeMutedRoomPosts: true });
+		const rawParent = rawParentRes.data;
+		const rawReplies = rawRepliesRes.data ?? [];
+		const rawAll = [post, ...(rawParent ? [rawParent] : []), ...rawReplies] as unknown as RawPost[];
+		const enriched = await enrichPostsWithCounts(supabase, rawAll, user?.id ?? null, {
+			includeMutedRoomPosts: true,
+		});
+		const enrichedPost = enriched.find((item) => item.id === params.id);
+		if (!enrichedPost) throw new Error("post not found after enrich");
 
-	const enrichedPost = enriched.find((p) => p.id === params.id);
-	if (!enrichedPost) error(404, "投稿が見つかりません");
-	const enrichedParent = post.parent_id ? (enriched.find((p) => p.id === post.parent_id) ?? null) : null;
-	const enrichedReplies = enriched.filter((p) => p.id !== params.id && p.id !== post.parent_id);
+		return {
+			post: enrichedPost,
+			parentPost: post.parent_id ? (enriched.find((item) => item.id === post.parent_id) ?? null) : null,
+			replies: enriched.filter((item) => item.id !== params.id && item.id !== post.parent_id),
+		};
+	})().catch((err) => {
+		console.error("[posts/id] enrich error:", err);
+		return { post: null as unknown as Post, parentPost: null, replies: [] as Post[] };
+	});
 
 	return {
-		post: enrichedPost,
-		parentPost: enrichedParent,
-		replies: enrichedReplies,
+		enrichedData: enrichedDataPromise,
 		currentUserId: user?.id ?? null,
 		trending: trendingResult.data ?? [],
 		animeTrending,
+		post: { content: post.content, image_urls: post.image_urls },
 	};
 };
 

@@ -1,9 +1,10 @@
 <script lang="ts">
 import UserAvatar from "$lib/components/UserAvatar.svelte";
+import UserCardSkeleton from "$lib/components/UserCardSkeleton.svelte";
 import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();
-const { profile, following } = $derived(data);
+const { profile } = $derived(data);
 const displayName = $derived(profile.display_name ?? profile.username);
 </script>
 
@@ -32,33 +33,43 @@ const displayName = $derived(profile.display_name ?? profile.username);
 			<p class="page-subtitle">{data.followCounts.following}人</p>
 		</div>
 
-		{#if following.length === 0}
-			<div class="empty-state">
-				<p>まだフォローしているユーザーがいません</p>
+		{#await data.following}
+			<div class="posts-loading-spinner" aria-label="読み込み中">
+				<div class="spinner" aria-hidden="true"></div>
+				<span>読み込み中…</span>
 			</div>
-		{:else}
-			<div class="user-list">
-				{#each following as user (user.id)}
-					<a href="/profile/{user.username}" class="user-card">
-						<UserAvatar src={user.avatar_url} username={user.username} size="md" />
-						<div class="user-info">
-							<div class="user-display-name">{user.display_name ?? user.username}</div>
-							<div class="user-username">@{user.username}</div>
-							{#if user.bio}
-								<p class="user-bio">{user.bio}</p>
-							{/if}
-						</div>
-					</a>
-				{/each}
-			</div>
-		{/if}
+			{#each { length: 5 } as _, i (i)}
+				<UserCardSkeleton />
+			{/each}
+		{:then following}
+			{#if following.length === 0}
+				<div class="empty-state">
+					<p>まだフォローしているユーザーがいません</p>
+				</div>
+			{:else}
+				<div class="user-list">
+					{#each following as user (user.id)}
+						<a href="/profile/{user.username}" class="user-card">
+							<UserAvatar src={user.avatar_url} username={user.username} size="md" />
+							<div class="user-info">
+								<div class="user-display-name">{user.display_name ?? user.username}</div>
+								<div class="user-username">@{user.username}</div>
+								{#if user.bio}
+									<p class="user-bio">{user.bio}</p>
+								{/if}
+							</div>
+						</a>
+					{/each}
+				</div>
+			{/if}
+		{/await}
 	</main>
 </div>
 
 <style>
 .page-header {
 	padding: 16px 0 12px;
-	border-bottom: 1px solid var(--border, #334155);
+	border-bottom: 1px solid var(--color-border);
 	margin-bottom: 4px;
 }
 
@@ -66,33 +77,33 @@ const displayName = $derived(profile.display_name ?? profile.username);
 	display: inline-flex;
 	align-items: center;
 	gap: 8px;
-	color: var(--fg-muted, #94a3b8);
+	color: var(--color-text-muted);
 	text-decoration: none;
 	font-size: 0.85rem;
 	margin-bottom: 8px;
 }
 
 .back-link:hover {
-	color: var(--fg, #e2e8f0);
+	color: var(--color-text);
 }
 
 .page-title {
 	font-size: 1.1rem;
 	font-weight: 700;
 	margin: 0 0 2px;
-	color: var(--fg, #e2e8f0);
+	color: var(--color-text);
 }
 
 .page-subtitle {
 	font-size: 0.8rem;
-	color: var(--fg-muted, #94a3b8);
+	color: var(--color-text-muted);
 	margin: 0;
 }
 
 .empty-state {
 	text-align: center;
 	padding: 48px 0;
-	color: var(--fg-muted, #94a3b8);
+	color: var(--color-text-muted);
 }
 
 .user-list {
@@ -105,14 +116,14 @@ const displayName = $derived(profile.display_name ?? profile.username);
 	align-items: flex-start;
 	gap: 12px;
 	padding: 14px 4px;
-	border-bottom: 1px solid var(--border, #334155);
+	border-bottom: 1px solid var(--color-border);
 	text-decoration: none;
 	color: inherit;
 	transition: background 0.12s;
 }
 
 .user-card:hover {
-	background: color-mix(in srgb, var(--fg, #e2e8f0) 4%, transparent);
+	background: color-mix(in srgb, var(--color-text) 4%, transparent);
 }
 
 .user-info {
@@ -123,18 +134,18 @@ const displayName = $derived(profile.display_name ?? profile.username);
 .user-display-name {
 	font-size: 0.95rem;
 	font-weight: 700;
-	color: var(--fg, #e2e8f0);
+	color: var(--color-text);
 }
 
 .user-username {
 	font-size: 0.82rem;
-	color: var(--fg-muted, #94a3b8);
+	color: var(--color-text-muted);
 	margin-bottom: 4px;
 }
 
 .user-bio {
 	font-size: 0.85rem;
-	color: var(--fg-muted, #94a3b8);
+	color: var(--color-text-muted);
 	margin: 0;
 	display: -webkit-box;
 	-webkit-line-clamp: 2;

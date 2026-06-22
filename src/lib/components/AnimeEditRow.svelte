@@ -21,7 +21,10 @@ let {
 	onRemove: () => void;
 } = $props();
 
-const episodeMax = $derived(anime.episode_count ? Number(anime.episode_count) : 9999);
+const episodeMax = $derived.by(() => {
+	const parsed = Number.parseInt(String(anime.episode_count), 10);
+	return Number.isNaN(parsed) ? 9999 : parsed;
+});
 let removeForm: HTMLFormElement;
 let deleteConfirmOpen = $state(false);
 
@@ -40,7 +43,7 @@ function confirmRemove() {
 <div class="anime-row-edit">
 	<a href="/anime/{anime.id}" class="edit-cover" tabindex="-1">
 		{#if anime.cover_url}
-			<img src={anime.cover_url} alt={anime.title}>
+			<img src={anime.cover_url} alt={anime.title} loading="lazy" decoding="async">
 		{:else}
 			<div class="anime-cover-placeholder">?</div>
 		{/if}

@@ -7,6 +7,7 @@ import {
 	toggleRepostAction,
 } from "$lib/server/actions";
 import { getAnimeRankingTrending, getEvent, getEventPosts } from "$lib/server/queries";
+import type { Post } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
@@ -20,7 +21,10 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 
 	if (!event) throw error(404, "イベントが見つかりません");
 
-	const posts = await getEventPosts(supabase, event.hashtag, user?.id ?? null);
+	const posts = getEventPosts(supabase, event.hashtag, user?.id ?? null).catch((err) => {
+		console.error("[events/[id]] posts fetch error:", err);
+		return [] as Post[];
+	});
 
 	return { event, posts, trending: trending.data ?? [], animeTrending, user };
 };

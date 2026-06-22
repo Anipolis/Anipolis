@@ -9,7 +9,7 @@ export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession 
 
 	await parent();
 
-	// ページ読み込み時に全通知を既読にする
+	// ページ読み込み時に全通知を既読にする（必ず await する）
 	await markAllNotificationsRead(supabase, user.id);
 
 	const [notifications, trendingResult, animeTrending] = await Promise.all([

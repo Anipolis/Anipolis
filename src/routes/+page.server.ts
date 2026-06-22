@@ -22,8 +22,8 @@ const POSTS_SELECT_WITH_EXCHANGE = buildPostCardSelect({ exchangeShare: true });
 const POSTS_SELECT_BASE = buildPostCardSelect({ exchangeShare: false });
 
 export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession }, parent }) => {
-	const { profile } = await parent();
-	const { user } = await safeGetSession();
+	// parent()を早めに発火（まだawaitしない）し、キャッシュ済みのsafeGetSessionでuserを並列取得
+	const [{ profile }, { user }] = await Promise.all([parent(), safeGetSession()]);
 
 	const tab = url.searchParams.get("tab") === "following" && user ? "following" : "all";
 	const quoteAnimeId = url.searchParams.get("quote_anime");
@@ -117,11 +117,10 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 			user ? getUserAnimeList(supabase, user.id, "watching") : Promise.resolve([]),
 		]);
 
-	const posts = await enrichPostsWithCounts(
-		supabase,
-		(postsResult.data ?? []) as unknown as RawPost[],
-		user?.id ?? null,
-	);
+	// Cast to RawPost[] - postsResult.data is expected to be an array of raw post objects
+	// with nested joins from Supabase (posts + profiles + anime + quoted_post via enrichPostsWithCounts)
+	const rawPosts = Array.isArray(postsResult.data) ? (postsResult.data as unknown as RawPost[]) : [];
+	const posts = await enrichPostsWithCounts(supabase, rawPosts, user?.id ?? null);
 
 	return {
 		posts,

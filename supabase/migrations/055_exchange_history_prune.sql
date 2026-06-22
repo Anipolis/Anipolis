@@ -62,16 +62,14 @@ BEGIN
 
     -- Prune old matched/cancelled entries, keeping the 5 most recent.
     -- ON DELETE SET NULL handles any partner references gracefully.
+    WITH ranked AS (
+        SELECT id, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY created_at DESC) AS rn
+          FROM public.anime_exchange_entries
+         WHERE user_id = current_user_id
+           AND status IN ('matched', 'cancelled')
+    )
     DELETE FROM public.anime_exchange_entries
-     WHERE user_id = current_user_id
-       AND status IN ('matched', 'cancelled')
-       AND id NOT IN (
-           SELECT id FROM public.anime_exchange_entries
-            WHERE user_id = current_user_id
-              AND status IN ('matched', 'cancelled')
-            ORDER BY created_at DESC
-            LIMIT 5
-       );
+     WHERE id IN (SELECT id FROM ranked WHERE rn > 5);
 
     RETURN NEXT;
 END;

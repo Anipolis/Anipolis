@@ -175,14 +175,14 @@ export async function enrichPostsWithCounts(
 	const bookmarkedSet = new Set((myBookmarksRes.data ?? []).map((r) => r.post_id));
 
 	// ── アニメ引用がある投稿のスコアを一括取得 ────────────────────
-	const animeIds = [...new Set(visibleRawPosts.map((p) => p.anime_id).filter(Boolean))] as string[];
+	const animeIds = Array.from(new Set(visibleRawPosts.map((p) => p.anime_id).filter((n): n is number => n != null)));
 	const userScoreMap = new Map<string, number | null>();
 	if (userId && animeIds.length > 0) {
 		const { data: entries } = await supabase
 			.from("user_anime_list")
 			.select("anime_id, score")
 			.eq("user_id", userId)
-			.in("anime_id", animeIds.map(Number));
+			.in("anime_id", animeIds);
 		for (const e of entries ?? []) {
 			userScoreMap.set(String(e.anime_id), e.score);
 		}
@@ -1545,7 +1545,8 @@ export async function getAnimeRelations(
 
 	if (error || !data) return [];
 
-	const rows = data as unknown as Omit<AnimeRelation, "anime">[];
+	type AnimeRelationRow = { relation_type: string; related_anime_mal_id: number; related_title: string };
+	const rows = data as unknown as AnimeRelationRow[];
 	const relatedMalIds = [...new Set(rows.map((row) => row.related_anime_mal_id))];
 	const { data: relatedAnimes } =
 		relatedMalIds.length > 0

@@ -1,6 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { type Handle, json, redirect } from "@sveltejs/kit";
-import { PUBLIC_SUPABASE_ANON_KEY, PUBLIC_SUPABASE_URL } from "$env/static/public";
+import { env as publicEnv } from "$env/dynamic/public";
 import { isBetaMember } from "$lib/server/discord";
 import { isApiRateLimited } from "$lib/server/rate-limit";
 
@@ -12,6 +12,10 @@ function isPublicPath(pathname: string): boolean {
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
+	const supabaseUrl = publicEnv["PUBLIC_SUPABASE_URL"];
+	const supabaseKey = publicEnv["PUBLIC_SUPABASE_PUBLISHABLE_KEY"] ?? publicEnv["PUBLIC_SUPABASE_ANON_KEY"];
+	if (!supabaseUrl || !supabaseKey) throw new Error("Supabase public environment variables are not configured");
+
 	if (event.url.pathname.startsWith("/api/")) {
 		let clientKey = "unknown";
 		try {
@@ -24,7 +28,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 		}
 	}
 
-	event.locals.supabase = createServerClient(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY, {
+	event.locals.supabase = createServerClient(supabaseUrl, supabaseKey, {
 		cookies: {
 			getAll() {
 				return event.cookies.getAll();
@@ -37,7 +41,9 @@ export const handle: Handle = async ({ event, resolve }) => {
 		},
 	});
 
-	event.locals.safeGetSession = async () => {
+	// 同一リクエスト内でのPromiseキャッシュ（layout + page の両方で呼ばれても Auth リクエストは1回）
+	let _sessionPromise: ReturnType<typeof computeSession> | undefined;
+	const computeSession = async () => {
 		const {
 			data: { user },
 			error,
@@ -51,6 +57,10 @@ export const handle: Handle = async ({ event, resolve }) => {
 		} = await event.locals.supabase.auth.getSession();
 
 		return { session, user };
+	};
+	event.locals.safeGetSession = () => {
+		_sessionPromise ??= computeSession();
+		return _sessionPromise;
 	};
 
 	// クローズドβ：所属検証済み（app_metadata.beta_member）でないログインユーザーを遮断する。

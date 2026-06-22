@@ -155,9 +155,10 @@ async function submitUserReport() {
 		fd.append("details", reportDetails.trim());
 
 		const res = await fetch("/api/reports", { method: "POST", body: fd });
-		const body = await res.json().catch(() => ({}));
+		const body: Record<string, unknown> = await res.json().catch(() => ({}));
 		if (!res.ok) {
-			reportMessage = body.message ?? "通報の送信に失敗しました";
+			reportMessage =
+				(typeof body["message"] === "string" ? body["message"] : null) ?? "通報の送信に失敗しました";
 		} else {
 			reportMessage = "通報を受け付けました";
 			reportDetails = "";
@@ -171,6 +172,12 @@ async function submitUserReport() {
 	}
 
 	reportSubmitting = false;
+}
+
+function handleReportModalKeydown(event: KeyboardEvent) {
+	if (showUserReportModal && event.key === "Escape") {
+		showUserReportModal = false;
+	}
 }
 
 const statusOrder: AnimeStatus[] = ["watching", "completed", "plan_to_watch", "on_hold", "dropped"];
@@ -214,6 +221,8 @@ const grouped = $derived(
 		<meta property="og:image" content={profileSocialImage}>
 	{/if}
 </svelte:head>
+
+<svelte:window onkeydown={handleReportModalKeydown} />
 
 <div class="page-container">
 	<main class="feed-column">
@@ -503,7 +512,7 @@ const grouped = $derived(
 		{/if}
 
 		<!-- タブ -->
-		<div class="profile-tabs">
+		<nav class="profile-tabs" aria-label="プロフィールタブ">
 			<a href="/profile/{profile.username}" class="profile-tab" class:active={activeTab === 'posts'}>投稿</a>
 			<a href="/profile/{profile.username}?tab=images" class="profile-tab" class:active={activeTab === 'images'}
 				>画像</a
@@ -519,7 +528,7 @@ const grouped = $derived(
 					>いいね</a
 				>
 			{/if}
-		</div>
+		</nav>
 
 		<!-- 投稿タブ -->
 		{#if activeTab === 'posts'}
@@ -646,9 +655,9 @@ const grouped = $derived(
 	align-items: center;
 	margin-left: 6px;
 	padding: 1px 6px;
-	border: 1px solid var(--border, #334155);
+	border: 1px solid var(--color-border);
 	border-radius: 999px;
-	color: var(--fg-muted, #94a3b8);
+	color: var(--color-text-muted);
 	font-size: 0.72rem;
 	font-weight: 700;
 	vertical-align: middle;
@@ -656,7 +665,7 @@ const grouped = $derived(
 
 .profile-tabs {
 	display: flex;
-	border-bottom: 1px solid var(--border, #334155);
+	border-bottom: 1px solid var(--color-border);
 	margin: 16px 0 0;
 }
 
@@ -664,7 +673,7 @@ const grouped = $derived(
 	padding: 10px 20px;
 	font-size: 0.9rem;
 	font-weight: 500;
-	color: var(--fg-muted, #94a3b8);
+	color: var(--color-text-muted);
 	text-decoration: none;
 	border-bottom: 2px solid transparent;
 	margin-bottom: -1px;
@@ -677,12 +686,12 @@ const grouped = $derived(
 }
 
 .profile-tab:hover {
-	color: var(--fg, #e2e8f0);
+	color: var(--color-text);
 }
 
 .profile-tab.active {
-	color: var(--accent, #6366f1);
-	border-bottom-color: var(--accent, #6366f1);
+	color: var(--color-accent);
+	border-bottom-color: var(--color-accent);
 	font-weight: 700;
 }
 
@@ -912,7 +921,7 @@ const grouped = $derived(
 .empty-state {
 	text-align: center;
 	padding: 48px 0;
-	color: var(--fg-muted, #94a3b8);
+	color: var(--color-text-muted);
 }
 
 .list-private {
@@ -927,20 +936,20 @@ const grouped = $derived(
 	justify-content: space-between;
 	padding: 12px 4px;
 	font-size: 0.85rem;
-	color: var(--fg-muted, #94a3b8);
+	color: var(--color-text-muted);
 }
 
 .list-summary strong {
-	color: var(--fg, #e2e8f0);
+	color: var(--color-text);
 }
 
 .profile-stat--link:hover strong {
-	color: var(--accent, #6366f1);
+	color: var(--color-accent);
 }
 
 .list-manage-link {
 	font-size: 0.8rem;
-	color: var(--accent, #6366f1);
+	color: var(--color-accent);
 	text-decoration: none;
 }
 

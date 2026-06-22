@@ -18,7 +18,10 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		return { query: "", posts: [], users: [], user, trending: trendingResult.data ?? [], animeTrending };
 	}
 
-	const pattern = `%${query}%`;
+	// PostgREST の .or() フィルター文字列にカンマを含む入力を補間すると
+	// フィルター構文が破壊されるためサニタイズする（% はワイルドカード扱いを避けるため除去）
+	const sanitized = query.replace(/[%,]/g, "");
+	const pattern = `%${sanitized}%`;
 
 	const [postsResult, usersResult, trendingResult, animeTrending] = await Promise.all([
 		supabase

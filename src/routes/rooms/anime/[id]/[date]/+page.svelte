@@ -530,7 +530,7 @@ function formatCompactDate(iso: string) {
 .anime-room-login,
 .anime-room-empty {
 	text-align: center;
-	color: var(--color-muted);
+	color: var(--color-text-muted);
 	padding: 24px;
 }
 

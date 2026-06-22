@@ -41,6 +41,8 @@ function toggleTheme() {
 
 const displayName = $derived(profile?.display_name || profile?.username || session?.user?.email?.split("@")[0] || "");
 
+const notificationCount = $derived(unreadNotificationCount);
+
 async function handleLogout() {
 	menuOpen = false;
 	mobileAccountMenuOpen = false;
@@ -438,7 +440,7 @@ function isActive(path: string): boolean {
 		<span class="sidebar-logo-text">Anipolis</span>
 	</a>
 
-	<nav class="sidebar-nav">
+	<nav class="sidebar-nav" aria-label="メインナビゲーション">
 		<a href="/" class="sidebar-btn" class:active={isActive('/')} aria-label="ホーム" title="ホーム">
 			<svg
 				width="22"
@@ -497,8 +499,8 @@ function isActive(path: string): boolean {
 					<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
 					<path d="M13.73 21a2 2 0 0 1-3.46 0" />
 				</svg>
-				{#if unreadNotificationCount > 0}
-					<span class="sidebar-badge">{unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}</span>
+				{#if notificationCount > 0}
+					<span class="sidebar-badge">{notificationCount > 99 ? '99+' : notificationCount}</span>
 				{/if}
 				<span class="sidebar-btn-label">通知</span>
 			</a>

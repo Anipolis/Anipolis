@@ -29,6 +29,8 @@ export async function getCurrentModerationStatus(
 	const until = data?.restricted_until ?? null;
 
 	if (status === "restricted" && until && new Date(until).getTime() <= Date.now()) {
+		// 期限切れのため DB を非同期更新（管理ダッシュボードの統計に古い制限が混入するのを防ぐ）
+		supabase.from("account_moderation").update({ status: "active" }).eq("user_id", userId);
 		return { moderation_status: "active", moderation_until: until };
 	}
 
@@ -180,7 +182,12 @@ export async function toggleLikeAction(request: Request, supabase: SupabaseClien
 		.maybeSingle();
 
 	if (existing) {
-		await supabase.from("likes").delete().eq("post_id", postId).eq("user_id", userId);
+		const { error: deleteError } = await supabase
+			.from("likes")
+			.delete()
+			.eq("post_id", postId)
+			.eq("user_id", userId);
+		if (deleteError) return fail(500, { message: "いいねの解除に失敗しました" });
 		return { liked: false };
 	}
 
@@ -190,7 +197,7 @@ export async function toggleLikeAction(request: Request, supabase: SupabaseClien
 }
 
 /**
- * リポストのトグル — 既にリポスト済みなら削除、未リポストなら挿入
+ * ブックマークのトグル — 既にブックマーク済みなら削除、未ブックマークなら挿入
  */
 export async function toggleBookmarkAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
 	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
@@ -208,7 +215,12 @@ export async function toggleBookmarkAction(request: Request, supabase: SupabaseC
 		.maybeSingle();
 
 	if (existing) {
-		await supabase.from("bookmarks").delete().eq("post_id", postId).eq("user_id", userId);
+		const { error: deleteError } = await supabase
+			.from("bookmarks")
+			.delete()
+			.eq("post_id", postId)
+			.eq("user_id", userId);
+		if (deleteError) return fail(500, { message: "ブックマークの解除に失敗しました" });
 		return { bookmarked: false };
 	}
 
@@ -233,7 +245,12 @@ export async function toggleRepostAction(request: Request, supabase: SupabaseCli
 		.maybeSingle();
 
 	if (existing) {
-		await supabase.from("reposts").delete().eq("post_id", postId).eq("user_id", userId);
+		const { error: deleteError } = await supabase
+			.from("reposts")
+			.delete()
+			.eq("post_id", postId)
+			.eq("user_id", userId);
+		if (deleteError) return fail(500, { message: "リポストの解除に失敗しました" });
 		return { reposted: false };
 	}
 
@@ -522,7 +539,12 @@ export async function toggleFollowAction(request: Request, supabase: SupabaseCli
 		.maybeSingle();
 
 	if (existing) {
-		await supabase.from("follows").delete().eq("follower_id", userId).eq("following_id", targetId);
+		const { error: deleteError } = await supabase
+			.from("follows")
+			.delete()
+			.eq("follower_id", userId)
+			.eq("following_id", targetId);
+		if (deleteError) return fail(500, { message: "フォロー解除に失敗しました" });
 		await supabase.from("follow_requests").delete().eq("requester_id", userId).eq("target_id", targetId);
 		return { followed: false, requestStatus: "none" };
 	}
@@ -687,7 +709,6 @@ export async function exchangeAnimeAction(supabase: SupabaseClient<Database>, re
 	const animeId = (form.get("anime_id") as string | null)?.trim() ?? "";
 	const comment = ((form.get("comment") as string | null)?.trim() ?? "") || null;
 
-	if (!userId) return fail(401, { exchangeMessage: "ログインが必要です" });
 	if (!animeId || Number.isNaN(Number(animeId))) {
 		return fail(400, { exchangeMessage: "アニメを選択してください" });
 	}
@@ -739,23 +760,34 @@ export async function toggleBroadcastSubscription(
 	userId: string,
 	animeId: string,
 ): Promise<{ subscribed: boolean }> {
-	const { data: existing } = await supabase
+	const numericAnimeId = Number(animeId);
+	if (!Number.isFinite(numericAnimeId)) {
+		throw new Error("Invalid anime_id");
+	}
+
+	const { data: existing, error: selectError } = await supabase
 		.from("broadcast_notification_subscriptions")
 		.select("anime_id")
 		.eq("user_id", userId)
-		.eq("anime_id", Number(animeId))
+		.eq("anime_id", numericAnimeId)
 		.maybeSingle();
 
+	if (selectError) throw selectError;
+
 	if (existing) {
-		await supabase
+		const { error: deleteError } = await supabase
 			.from("broadcast_notification_subscriptions")
 			.delete()
 			.eq("user_id", userId)
-			.eq("anime_id", Number(animeId));
+			.eq("anime_id", numericAnimeId);
+		if (deleteError) throw deleteError;
 		return { subscribed: false };
 	}
 
-	await supabase.from("broadcast_notification_subscriptions").insert({ user_id: userId, anime_id: Number(animeId) });
+	const { error: insertError } = await supabase
+		.from("broadcast_notification_subscriptions")
+		.insert({ user_id: userId, anime_id: numericAnimeId });
+	if (insertError) throw insertError;
 	return { subscribed: true };
 }
 
@@ -764,13 +796,61 @@ export async function updateBroadcastNotificationSettings(
 	userId: string,
 	settings: import("$lib/types").BroadcastNotificationSettings,
 ): Promise<void> {
-	await supabase.from("broadcast_notification_settings").upsert({
+	const { error } = await supabase.from("broadcast_notification_settings").upsert({
 		user_id: userId,
 		notify_1min: settings.notify_1min,
 		notify_5min: settings.notify_5min,
 		notify_30min: settings.notify_30min,
 		updated_at: new Date().toISOString(),
 	});
+	if (error) throw error;
+}
+
+export async function setPasswordAction(
+	request: Request,
+	supabase: SupabaseClient<Database>,
+	_userId: string,
+): Promise<{ success: true } | { error: string; field?: string }> {
+	const form = await request.formData();
+	const password = (form.get("password") as string | null) ?? "";
+	const confirm = (form.get("confirm") as string | null) ?? "";
+
+	const MIN_PASSWORD_LENGTH = 6;
+
+	if (password.length < MIN_PASSWORD_LENGTH) {
+		return {
+			error: `パスワードは${MIN_PASSWORD_LENGTH}文字以上で入力してください`,
+			field: "password",
+		};
+	}
+	if (password !== confirm) {
+		return {
+			error: "パスワードが一致しません",
+			field: "confirm",
+		};
+	}
+
+	const { error } = await supabase.auth.updateUser({ password });
+	if (error) {
+		return { error: "パスワードの設定に失敗しました" };
+	}
+
+	return { success: true };
+}
+
+export async function updateNotificationSettingsAction(
+	request: Request,
+	supabase: SupabaseClient<Database>,
+	userId: string,
+): Promise<void> {
+	const form = await request.formData();
+	const settings = {
+		notify_1min: form.get("notify_1min") === "on",
+		notify_5min: form.get("notify_5min") === "on",
+		notify_30min: form.get("notify_30min") === "on",
+	};
+
+	await updateBroadcastNotificationSettings(supabase, userId, settings);
 }
 
 export async function upsertBroadcastRoomMute(

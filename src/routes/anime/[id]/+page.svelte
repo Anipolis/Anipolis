@@ -64,7 +64,7 @@ const broadcastLabels: Record<string, string> = {
 };
 const listedUserStatusColors: Record<string, string> = {
 	watching: "#34d399",
-	completed: "var(--accent, #6366f1)",
+	completed: "var(--color-accent)",
 	plan_to_watch: "#60a5fa",
 	on_hold: "#fbbf24",
 	dropped: "#f87171",
@@ -95,9 +95,7 @@ function formatAiredPeriod(airedFrom: string | null, airedTo: string | null): st
 	return `${airedFrom.slice(0, 10)} 〜 ${airedTo ? airedTo.slice(0, 10) : "未定"}`;
 }
 
-function isHttpUrl(url: string | null | undefined): url is string {
-	return typeof url === "string" && /^https?:\/\//i.test(url);
-}
+import { isHttpUrl, isMalUrl } from "$lib/utils/url";
 
 function buildDisplayOfficialLinks(officialSiteUrl: string | null, officialXUrl: string | null) {
 	const links: { name: string; url: string }[] = [];
@@ -144,15 +142,6 @@ function dedupeLinks(links: { name: string; url: string }[]) {
 		seen.add(key);
 		return true;
 	});
-}
-
-function isMalUrl(url: string) {
-	try {
-		const hostname = new URL(url).hostname.toLowerCase();
-		return hostname === "myanimelist.net" || hostname.endsWith(".myanimelist.net");
-	} catch {
-		return false;
-	}
 }
 
 let myListModalOpen = $state(false);
@@ -1303,7 +1292,7 @@ $effect(() => {
 .back-link {
 	display: inline-block;
 	margin-bottom: 20px;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 	text-decoration: none;
 	font-size: 0.9rem;
 }
@@ -1352,8 +1341,8 @@ $effect(() => {
 	aspect-ratio: 1 / 1.414;
 	border-radius: 10px;
 	overflow: hidden;
-	background: var(--card-bg);
-	border: 1px solid var(--border);
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
 	position: relative;
 }
 .anime-cover img {
@@ -1369,8 +1358,8 @@ $effect(() => {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	color: var(--text-muted);
-	background: var(--hover-bg);
+	color: var(--color-text-muted);
+	background: var(--color-surface-hover);
 }
 
 .cover-upload-btn {
@@ -1412,8 +1401,8 @@ $effect(() => {
 	gap: 10px;
 	margin: 0;
 	padding: 14px;
-	background: var(--card-bg);
-	border: 1px solid var(--border);
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
 	border-radius: 8px;
 }
 .prod-row {
@@ -1423,7 +1412,7 @@ $effect(() => {
 	font-size: 0.8rem;
 }
 .prod-row dt {
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 	font-weight: 600;
 	font-size: 0.72rem;
 	text-transform: uppercase;
@@ -1443,9 +1432,9 @@ $effect(() => {
 	font-size: 0.72rem;
 	padding: 2px 7px;
 	border-radius: 10px;
-	background: var(--hover-bg);
-	color: var(--text-muted);
-	border: 1px solid var(--border);
+	background: var(--color-surface-hover);
+	color: var(--color-text-muted);
+	border: 1px solid var(--color-border);
 	text-decoration: none;
 	transition:
 		background 0.15s,
@@ -1497,11 +1486,11 @@ $effect(() => {
 }
 .copyright {
 	font-size: 0.72rem;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 }
 .copyright-notice {
 	font-size: 0.68rem;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 	line-height: 1.4;
 	margin: 6px 0 0;
 	word-break: break-all;
@@ -1557,7 +1546,7 @@ $effect(() => {
 }
 .anime-title-en {
 	font-size: 0.88rem;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 	margin: 0;
 }
 
@@ -1582,8 +1571,8 @@ $effect(() => {
 	color: var(--status-plan);
 }
 .status-finished {
-	background: var(--hover-bg);
-	color: var(--text-muted);
+	background: var(--color-surface-hover);
+	color: var(--color-text-muted);
 }
 .status-unknown {
 	background: var(--hover-bg);
@@ -1593,8 +1582,8 @@ $effect(() => {
 	font-size: 0.78rem;
 	padding: 3px 9px;
 	border-radius: 4px;
-	background: var(--hover-bg);
-	color: var(--text-muted);
+	background: var(--color-surface-hover);
+	color: var(--color-text-muted);
 }
 .meta-chip.aired {
 	font-size: 0.75rem;
@@ -1621,8 +1610,8 @@ $effect(() => {
 	flex-direction: column;
 	gap: 4px;
 	padding: 16px 24px;
-	background: var(--card-bg);
-	border: 1px solid var(--border);
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
 	border-radius: 10px;
 	min-width: 120px;
 }
@@ -1654,7 +1643,7 @@ $effect(() => {
 	font-weight: 600;
 	text-transform: uppercase;
 	letter-spacing: 0.05em;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 }
 .stat-card-value {
 	font-size: 1.8rem;
@@ -1666,7 +1655,7 @@ $effect(() => {
 }
 .stat-card-sub {
 	font-size: 0.75rem;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 }
 
 /* Synopsis */
@@ -2149,7 +2138,7 @@ a.relation-card:hover {
 	gap: 4px;
 	min-width: 0;
 	font-size: 0.82rem;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 	font-weight: 500;
 }
 .form-select,
@@ -2158,7 +2147,7 @@ a.relation-card:hover {
 	box-sizing: border-box;
 	padding: 6px 10px;
 	border-radius: 6px;
-	border: 1px solid var(--border);
+	border: 1px solid var(--color-border);
 	background: var(--bg);
 	color: var(--text);
 	font-size: 0.9rem;
@@ -2188,7 +2177,7 @@ a.relation-card:hover {
 		background 0.15s,
 		transform 0.1s,
 		box-shadow 0.15s;
-	box-shadow: 0 2px 8px color-mix(in srgb, var(--accent, #6366f1) 40%, transparent);
+	box-shadow: 0 2px 8px color-mix(in srgb, var(--color-accent) 40%, transparent);
 }
 .btn-primary--add {
 	background: var(--accent);
@@ -2196,12 +2185,12 @@ a.relation-card:hover {
 	justify-content: center;
 }
 .btn-primary--update {
-	background: color-mix(in srgb, var(--accent, #6366f1) 75%, #000);
+	background: color-mix(in srgb, var(--color-accent) 75%, #000);
 }
 .btn-primary:hover {
 	opacity: 0.92;
 	transform: translateY(-1px);
-	box-shadow: 0 4px 14px color-mix(in srgb, var(--accent, #6366f1) 50%, transparent);
+	box-shadow: 0 4px 14px color-mix(in srgb, var(--color-accent) 50%, transparent);
 }
 .btn-primary:active {
 	transform: translateY(0);
@@ -2255,11 +2244,11 @@ a.relation-card:hover {
 	gap: 6px;
 	margin-top: 8px;
 	padding: 4px 8px;
-	border: 1px solid var(--border);
+	border: 1px solid var(--color-border);
 	border-radius: 999px;
 	font-size: 0.78rem;
 	color: var(--text);
-	background: var(--hover-bg);
+	background: var(--color-surface-hover);
 	max-width: 100%;
 }
 
@@ -2276,7 +2265,7 @@ a.relation-card:hover {
 .selected-recipient button {
 	border: none;
 	background: transparent;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 	cursor: pointer;
 	font-size: 1rem;
 	line-height: 1;
@@ -2288,8 +2277,8 @@ a.relation-card:hover {
 	top: calc(100% + 6px);
 	left: 0;
 	right: 0;
-	background: var(--card-bg);
-	border: 1px solid var(--border);
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
 	border-radius: 8px;
 	box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
 	max-height: 240px;
@@ -2310,7 +2299,7 @@ a.relation-card:hover {
 }
 
 .recommend-user-result:hover {
-	background: var(--hover-bg);
+	background: var(--color-surface-hover);
 }
 
 .recommend-user-result span:last-child {
@@ -2328,7 +2317,7 @@ a.relation-card:hover {
 
 .recommend-user-result small,
 .recommend-search-hint {
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 	font-size: 0.74rem;
 }
 
@@ -2336,8 +2325,8 @@ a.relation-card:hover {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	background: var(--hover-bg);
-	color: var(--text-muted);
+	background: var(--color-surface-hover);
+	color: var(--color-text-muted);
 	font-weight: 700;
 }
 
@@ -2460,8 +2449,8 @@ a.relation-card:hover {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	background: var(--hover-bg);
-	color: var(--text-muted);
+	background: var(--color-surface-hover);
+	color: var(--color-text-muted);
 	font-weight: 700;
 	font-size: 1.1rem;
 }

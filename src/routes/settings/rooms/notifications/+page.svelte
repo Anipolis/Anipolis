@@ -15,8 +15,11 @@ let saving = $state(false);
 const settingsSubmit: SubmitFunction = () => {
 	saving = true;
 	return async ({ update }) => {
-		saving = false;
-		await update({ reset: false });
+		try {
+			await update({ reset: false });
+		} finally {
+			saving = false;
+		}
 	};
 };
 </script>
@@ -82,7 +85,7 @@ const settingsSubmit: SubmitFunction = () => {
 .settings-section {
 	padding-top: 18px;
 	margin-top: 18px;
-	border-top: 1px solid var(--border, #334155);
+	border-top: 1px solid var(--color-border);
 }
 .settings-section-title {
 	margin: 0 0 8px;
@@ -100,7 +103,7 @@ const settingsSubmit: SubmitFunction = () => {
 	align-items: center;
 	gap: 12px;
 	padding: 12px 0;
-	border-bottom: 1px solid var(--border, #334155);
+	border-bottom: 1px solid var(--color-border);
 	cursor: pointer;
 }
 .toggle-row input {
@@ -114,7 +117,7 @@ const settingsSubmit: SubmitFunction = () => {
 }
 .toggle-row small {
 	margin-top: 2px;
-	color: var(--text-muted, #94a3b8);
+	color: var(--color-text-muted);
 	font-size: 0.82rem;
 }
 .settings-actions {

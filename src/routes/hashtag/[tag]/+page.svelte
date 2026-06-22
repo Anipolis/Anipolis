@@ -2,6 +2,7 @@
 import { browser } from "$app/environment";
 import { goto } from "$app/navigation";
 import PostCard from "$lib/components/PostCard.svelte";
+import PostCardSkeleton from "$lib/components/PostCardSkeleton.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import type { PageProps } from "./$types";
 
@@ -34,15 +35,25 @@ function handleBackClick(event: MouseEvent) {
 			</div>
 		</div>
 
-		{#if data.posts.length === 0}
-			<div class="empty-state">
-				<p>#{data.tag} の投稿はまだありません</p>
+		{#await data.posts}
+			<div class="posts-loading-spinner" aria-label="投稿を読み込み中">
+				<div class="spinner" aria-hidden="true"></div>
+				<span>読み込み中…</span>
 			</div>
-		{:else}
-			{#each data.posts as post (post.id)}
-				<PostCard {post} currentUserId={data.user?.id ?? null} />
+			{#each { length: 5 } as _, i (i)}
+				<PostCardSkeleton />
 			{/each}
-		{/if}
+		{:then posts}
+			{#if posts.length === 0}
+				<div class="empty-state">
+					<p>#{data.tag} の投稿はまだありません</p>
+				</div>
+			{:else}
+				{#each posts as post (post.id)}
+					<PostCard {post} currentUserId={data.user?.id ?? null} />
+				{/each}
+			{/if}
+		{/await}
 	</main>
 
 	<aside class="sidebar-column">

@@ -417,7 +417,7 @@ $effect(() => {
 /* 表示切り替え */
 .view-toggle {
 	display: flex;
-	background: color-mix(in srgb, var(--fg, #e2e8f0) 8%, transparent);
+	background: color-mix(in srgb, var(--color-text) 8%, transparent);
 	border-radius: 8px;
 	padding: 3px;
 	gap: 2px;
@@ -434,20 +434,20 @@ $effect(() => {
 	cursor: pointer;
 	border: none;
 	background: transparent;
-	color: var(--fg-muted, #94a3b8);
+	color: var(--color-text-muted);
 	transition:
 		background 0.12s,
 		color 0.12s;
 }
 
 .view-btn.active {
-	background: var(--surface, #1e293b);
-	color: var(--fg, #e2e8f0);
+	background: var(--color-surface);
+	color: var(--color-text);
 	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 .view-btn:hover:not(.active) {
-	color: var(--fg, #e2e8f0);
+	color: var(--color-text);
 }
 
 .visibility-btn {
@@ -466,13 +466,13 @@ $effect(() => {
 }
 
 .visibility-btn.public {
-	background: color-mix(in srgb, var(--accent, #6366f1) 15%, transparent);
-	color: var(--accent, #6366f1);
+	background: color-mix(in srgb, var(--color-accent) 15%, transparent);
+	color: var(--color-accent);
 }
 
 .visibility-btn.private {
-	background: color-mix(in srgb, var(--fg, #e2e8f0) 10%, transparent);
-	color: var(--fg-muted, #94a3b8);
+	background: color-mix(in srgb, var(--color-text) 10%, transparent);
+	color: var(--color-text-muted);
 }
 
 .visibility-btn:hover {
@@ -482,7 +482,7 @@ $effect(() => {
 .mylist-empty {
 	text-align: center;
 	padding: 60px 0;
-	color: var(--fg-muted, #94a3b8);
+	color: var(--color-text-muted);
 }
 
 .mobile-status-empty {
@@ -490,7 +490,7 @@ $effect(() => {
 }
 
 .mylist-empty a {
-	color: var(--accent, #6366f1);
+	color: var(--color-accent);
 }
 
 .status-section {
@@ -505,8 +505,8 @@ $effect(() => {
 	font-weight: 700;
 	padding: 8px 0;
 	margin: 0 0 8px;
-	border-bottom: 1px solid var(--border, #334155);
-	color: var(--fg, #e2e8f0);
+	border-bottom: 1px solid var(--color-border);
+	color: var(--color-text);
 }
 
 .status-icon,
@@ -520,7 +520,7 @@ $effect(() => {
 	color: var(--status-watching);
 }
 .status-section--completed .status-icon {
-	color: var(--accent, #6366f1);
+	color: var(--color-accent);
 }
 .status-section--plan_to_watch .status-icon {
 	color: var(--status-plan);
@@ -535,7 +535,7 @@ $effect(() => {
 .status-count {
 	margin-left: auto;
 	font-size: 0.8rem;
-	color: var(--fg-muted, #94a3b8);
+	color: var(--color-text-muted);
 	font-weight: 400;
 }
 

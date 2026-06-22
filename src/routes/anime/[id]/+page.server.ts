@@ -22,15 +22,18 @@ function isEligibleForRoomLog(season: string | null): boolean {
 
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
-	const anime = await getAnime(supabase, params.id, user?.id ?? null);
+
+	const [anime, listedUsers, isAdmin] = await Promise.all([
+		getAnime(supabase, params.id, user?.id ?? null),
+		getUsersWhoListedAnime(supabase, params.id),
+		user ? isAdminUser(supabase, user.id) : Promise.resolve(false),
+	]);
 
 	if (!anime) throw error(404, "アニメが見つかりません");
 
-	const [listedUsers, relations, broadcastOverrides, isAdmin] = await Promise.all([
-		getUsersWhoListedAnime(supabase, params.id),
+	const [relations, broadcastOverrides] = await Promise.all([
 		getAnimeRelations(supabase, anime.mal_id),
 		getBroadcastRoomOverridesForAnime(supabase, params.id),
-		user ? isAdminUser(supabase, user.id) : Promise.resolve(false),
 	]);
 
 	const episodes =

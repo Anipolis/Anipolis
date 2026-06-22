@@ -1,4 +1,4 @@
-﻿<script lang="ts">
+<script lang="ts">
 import type { SubmitFunction } from "@sveltejs/kit";
 import { untrack } from "svelte";
 import { enhance } from "$app/forms";
@@ -797,7 +797,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 .schedule-header h1 {
 	font-size: 1.2rem;
 	font-weight: 700;
-	color: var(--text);
+	color: var(--color-text);
 	margin: 0 0 4px;
 }
 .schedule-actions {
@@ -829,8 +829,8 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	gap: 0.15rem;
 	border: 1px solid var(--border);
 	border-radius: 6px;
-	color: var(--text);
-	background: var(--card-bg);
+	color: var(--color-text);
+	background: var(--color-surface);
 	text-decoration: none;
 }
 .week-nav-btn--disabled {
@@ -856,7 +856,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	font-weight: 700;
 	padding: 6px 8px;
 	border-radius: 6px 6px 0 0;
-	border: 1px solid var(--border);
+	border: 1px solid var(--color-border);
 	border-bottom: none;
 }
 .day-heading time {
@@ -864,17 +864,17 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	color: color-mix(in srgb, currentColor 72%, transparent);
 }
 .day-slots {
-	border: 1px solid var(--border);
+	border: 1px solid var(--color-border);
 	border-radius: 0 0 6px 6px;
 	padding: 6px 0;
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
 	min-height: 120px;
-	background: color-mix(in srgb, var(--card-bg) 78%, transparent);
+	background: color-mix(in srgb, var(--color-surface) 78%, transparent);
 }
 .empty-day {
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 	font-size: 0.8rem;
 	text-align: center;
 	padding: 8px 0;
@@ -917,10 +917,10 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	align-items: flex-start;
 	padding: 6px;
 	border-radius: 6px;
-	border: 1px solid var(--border);
-	background: var(--card-bg);
+	border: 1px solid var(--color-border);
+	background: var(--color-surface);
 	text-decoration: none;
-	color: var(--text);
+	color: var(--color-text);
 	transition: background 0.12s;
 	width: 100%;
 	box-sizing: border-box;
@@ -941,12 +941,12 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 }
 .anime-slot:hover,
 .event-slot:hover {
-	background: var(--hover-bg);
+	background: var(--color-surface-hover);
 }
 .event-slot {
 	flex-direction: column;
 	gap: 2px;
-	border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+	border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-border));
 }
 
 .event-slot--cancelled {
@@ -967,7 +967,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	display: block;
 }
 .slot-cover--placeholder {
-	background: var(--border);
+	background: var(--color-border);
 }
 .anime-slot-wrap--suspension {
 	opacity: 0.5;
@@ -1065,7 +1065,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 .slot-kind {
 	font-size: 0.62rem;
 	font-weight: 800;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 	letter-spacing: 0;
 }
 @keyframes live-pulse {
@@ -1080,7 +1080,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 .slot-time {
 	font-size: 0.72rem;
 	font-weight: 700;
-	color: var(--accent);
+	color: var(--color-accent);
 }
 .slot-title {
 	font-size: 0.73rem;
@@ -1098,7 +1098,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 }
 .slot-station {
 	font-size: 0.7rem;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -1129,9 +1129,9 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	align-items: center;
 	justify-content: center;
 	border-radius: 4px;
-	background: var(--card-bg);
-	border: 1px solid var(--border);
-	color: var(--text-muted);
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
+	color: var(--color-text-muted);
 	cursor: pointer;
 	transition:
 		background 0.1s,
@@ -1140,13 +1140,13 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	padding: 0;
 }
 .notify-btn:hover {
-	background: var(--hover-bg);
-	color: var(--text);
+	background: var(--color-surface-hover);
+	color: var(--color-text);
 }
 .notify-btn--active {
-	background: color-mix(in srgb, var(--accent) 15%, var(--card-bg));
-	border-color: var(--accent);
-	color: var(--accent);
+	background: color-mix(in srgb, var(--color-accent) 15%, var(--color-surface));
+	border-color: var(--color-accent);
+	color: var(--color-accent);
 }
 .notify-btn--muted {
 	background: color-mix(in srgb, #ef4444 13%, var(--card-bg));
@@ -1311,9 +1311,9 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	width: min(520px, 100%);
 	max-height: min(720px, calc(100vh - 2rem));
 	overflow-y: auto;
-	border: 1px solid var(--border);
+	border: 1px solid var(--color-border);
 	border-radius: 8px;
-	background: var(--card-bg);
+	background: var(--color-surface);
 	padding: 16px;
 	box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
 }
@@ -1335,11 +1335,11 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	align-items: center;
 	justify-content: center;
 	border-radius: 6px;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 }
 .dialog-close:hover {
-	background: var(--hover-bg);
-	color: var(--text);
+	background: var(--color-surface-hover);
+	color: var(--color-text);
 }
 .event-form {
 	display: flex;
@@ -1352,13 +1352,13 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	gap: 4px;
 	font-size: 0.75rem;
 	font-weight: 700;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 }
 .event-form textarea {
 	resize: vertical;
 }
 .form-error {
-	color: var(--danger, #ef4444);
+	color: var(--color-danger);
 	font-size: 0.8rem;
 	margin: 0 0 8px;
 }

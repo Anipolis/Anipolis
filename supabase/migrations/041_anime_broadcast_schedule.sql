@@ -6,6 +6,6 @@
 ALTER TABLE anime
   ADD COLUMN broadcast_day     smallint CHECK (broadcast_day BETWEEN 0 AND 6),
   ADD COLUMN broadcast_time    text CHECK (
-    broadcast_time IS NULL OR broadcast_time ~ '^([01]?[0-9]|2[0-9]|3[0-5]|4[0-7]):[0-5][0-9]$'
+    broadcast_time IS NULL OR broadcast_time ~ '^([01]?[0-9]|2[0-6]):[0-5][0-9]$'
   ),
   ADD COLUMN broadcast_station text[];

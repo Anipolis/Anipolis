@@ -322,6 +322,7 @@ const handleSubmit: SubmitFunction = () => {
 					bind:value={content}
 					maxlength={MAX_LENGTH + 10}
 					oninput={handleContentInput}
+					aria-label="投稿内容"
 				></textarea>
 
 				{#if mentionDropdownOpen && mentionResults.length > 0}
@@ -582,8 +583,9 @@ const handleSubmit: SubmitFunction = () => {
 				placeholder="タイトルで検索…"
 				bind:value={animeQuery}
 				oninput={handleAnimeQueryInput}
+				aria-label="アニメタイトルで検索"
 			>
-			<div class="anime-search-results">
+			<div class="anime-search-results" aria-live="polite" aria-busy={animeSearching}>
 				{#if animeSearching}
 					<p class="anime-search-empty">検索中…</p>
 				{:else if animeQuery.trim().length > 0 && animeResults.length === 0}
@@ -592,7 +594,13 @@ const handleSubmit: SubmitFunction = () => {
 					{#each animeResults as anime}
 						<button type="button" class="anime-search-item" onclick={() => selectAnime(anime)}>
 							{#if anime.cover_url}
-								<img src={anime.cover_url} alt={anime.title} class="anime-search-thumb">
+								<img
+									src={anime.cover_url}
+									alt={anime.title}
+									class="anime-search-thumb"
+									loading="lazy"
+									decoding="async"
+								>
 							{:else}
 								<div class="anime-search-thumb anime-search-thumb-empty"></div>
 							{/if}
@@ -668,8 +676,8 @@ const handleSubmit: SubmitFunction = () => {
 	top: 100%;
 	left: 0;
 	right: 0;
-	background: var(--bg-card, #1e1e2e);
-	border: 1px solid var(--border, #313244);
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
 	border-radius: 8px;
 	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 	z-index: 50;
@@ -689,16 +697,16 @@ const handleSubmit: SubmitFunction = () => {
 	color: inherit;
 }
 .mention-dropdown-item:hover {
-	background: var(--bg-hover, #313244);
+	background: var(--color-surface-hover);
 }
 .mention-dropdown-username {
 	font-weight: 600;
 	font-size: 0.9rem;
-	color: var(--accent, #89b4fa);
+	color: var(--color-accent);
 }
 .mention-dropdown-displayname {
 	font-size: 0.8rem;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 }
 .composer-exchange-preview {
 	position: relative;

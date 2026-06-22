@@ -41,13 +41,14 @@ function broadcastLabel(value: string | null): string {
 			<h1>通知</h1>
 		</header>
 
-		{#if data.notifications.length === 0}
-			<div class="empty-state">
-				<p>通知はありません</p>
+		{#await data.notifications}
+			<div class="posts-loading-spinner" aria-label="通知を読み込み中">
+				<div class="spinner" aria-hidden="true"></div>
+				<span>読み込み中…</span>
 			</div>
-		{:else}
+		{:then notifications}
 			<ul class="notification-list">
-				{#each data.notifications as notif (notif.id)}
+				{#each notifications as notif (notif.id)}
 					<li class="notification-item">
 						{#if notif.type === 'broadcast'}
 							<div class="notification-room-icon" aria-hidden="true">
@@ -115,7 +116,7 @@ function broadcastLabel(value: string | null): string {
 					</li>
 				{/each}
 			</ul>
-		{/if}
+		{/await}
 	</main>
 
 	<aside class="sidebar-column">
@@ -218,11 +219,11 @@ function broadcastLabel(value: string | null): string {
 	border-radius: 8px;
 	color: inherit;
 	text-decoration: none;
-	background: var(--card-bg, transparent);
+	background: var(--color-surface);
 }
 
 .notification-anime-preview:hover {
-	border-color: var(--accent, #6366f1);
+	border-color: var(--color-accent);
 }
 
 .notification-anime-preview img {
@@ -259,7 +260,7 @@ function broadcastLabel(value: string | null): string {
 	width: fit-content;
 	font-size: 13px;
 	font-weight: 700;
-	color: var(--accent, #6366f1);
+	color: var(--color-accent, #6366f1);
 	text-decoration: none;
 }
 

@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { translateAnimeSource } from "../src/lib/anime-vocabulary.ts";
+import { isHttpUrl as isHttpUrlUtil, isMalUrl } from "../src/lib/utils/url.js";
 
 type SeasonName = "winter" | "spring" | "summer" | "fall";
 
@@ -749,20 +750,9 @@ function findOfficialXUrl(external: ExternalLink[] | null | undefined) {
 	);
 }
 
-function isHttpUrl(value: string | null | undefined) {
-	if (!value) return false;
-
-	try {
-		const protocol = new URL(value).protocol;
-		return protocol === "http:" || protocol === "https:";
-	} catch {
-		return false;
-	}
-}
-
 function normalizeResourceLink(link: ExternalLink): AnimeResourceLink | null {
 	const url = link.url?.trim();
-	if (!isHttpUrl(url)) return null;
+	if (!isHttpUrlUtil(url)) return null;
 	if (isMalUrl(url)) return null;
 
 	const name = (link.name ?? link.title ?? link.type ?? "").trim();
@@ -770,15 +760,6 @@ function normalizeResourceLink(link: ExternalLink): AnimeResourceLink | null {
 	if (name.toLowerCase() === "mal" || name.toLowerCase().includes("myanimelist")) return null;
 
 	return { name, url: url as string };
-}
-
-function isMalUrl(value: string) {
-	try {
-		const hostname = new URL(value).hostname.toLowerCase();
-		return hostname === "myanimelist.net" || hostname.endsWith(".myanimelist.net");
-	} catch {
-		return false;
-	}
 }
 
 function dedupeResourceLinks(resources: AnimeResourceLink[]) {

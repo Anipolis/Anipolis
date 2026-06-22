@@ -10,6 +10,12 @@
 	--color-accent: #8ab5f9;
 	--color-accent-hover: #a8caff;
 	--color-danger: #ef4444;
+	--color-error-bg: rgba(239, 68, 68, 0.1);
+	--color-error-border: rgba(239, 68, 68, 0.3);
+	--color-error-text: #fca5a5;
+	--color-success-bg: rgba(34, 197, 94, 0.1);
+	--color-success-border: rgba(34, 197, 94, 0.3);
+	--color-success-text: #86efac;
 	--anipolis-logo-image: url("/anipolis-logo-sub.png");
 	--nav-height: 0px;
 	--content-max: 960px;
@@ -56,6 +62,12 @@
 	--color-accent: #19448e;
 	--color-accent-hover: #132f62;
 	--color-danger: #dc2626;
+	--color-error-bg: rgba(220, 38, 38, 0.08);
+	--color-error-border: rgba(220, 38, 38, 0.25);
+	--color-error-text: #dc2626;
+	--color-success-bg: rgba(21, 128, 61, 0.08);
+	--color-success-border: rgba(21, 128, 61, 0.25);
+	--color-success-text: #15803d;
 	--anipolis-logo-image: url("/anipolis-logo.png");
 	--status-watching: #15803d;
 	--status-plan: #1d4ed8;
@@ -1340,9 +1352,9 @@ textarea {
 /* --- Error / flash messages --- */
 
 .flash-error {
-	background: rgba(239, 68, 68, 0.1);
-	border: 1px solid rgba(239, 68, 68, 0.3);
-	color: #fca5a5;
+	background: var(--color-error-bg);
+	border: 1px solid var(--color-error-border);
+	color: var(--color-error-text);
 	border-radius: var(--radius-sm);
 	padding: 10px 14px;
 	font-size: 14px;
@@ -1828,9 +1840,9 @@ textarea {
 
 /* 謌仙粥繝輔Λ繝・す繝･ */
 .flash-success {
-	background: rgba(34, 197, 94, 0.1);
-	border: 1px solid rgba(34, 197, 94, 0.3);
-	color: #86efac;
+	background: var(--color-success-bg);
+	border: 1px solid var(--color-success-border);
+	color: var(--color-success-text);
 	border-radius: var(--radius-sm);
 	padding: 10px 14px;
 	font-size: 14px;

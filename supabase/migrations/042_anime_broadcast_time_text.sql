@@ -26,5 +26,5 @@ ALTER TABLE anime
 ALTER TABLE anime
   ADD CONSTRAINT anime_broadcast_time_format
   CHECK (
-    broadcast_time IS NULL OR broadcast_time ~ '^([01]?[0-9]|2[0-9]|3[0-5]|4[0-7]):[0-5][0-9]$'
+    broadcast_time IS NULL OR broadcast_time ~ '^([01]?[0-9]|2[0-6]):[0-5][0-9]$'
   );

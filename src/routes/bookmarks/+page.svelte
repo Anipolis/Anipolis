@@ -33,21 +33,10 @@ let { data }: PageProps = $props();
 	padding: 0;
 }
 
-.bookmarks-header {
-	padding: 1rem 0;
-	border-bottom: 1px solid var(--border);
-}
-
-.bookmarks-header h1 {
-	font-size: 1.25rem;
-	font-weight: 700;
-	margin: 0;
-}
-
 .empty {
-	padding: 3rem 1rem;
+	padding: 48px 16px;
 	text-align: center;
-	color: var(--text-muted);
+	color: var(--color-text-muted);
 }
 
 .post-list {

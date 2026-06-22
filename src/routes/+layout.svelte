@@ -13,6 +13,7 @@ import "../app.css";
 let { data, children }: LayoutProps = $props();
 let unreadNotificationCount = $state(0);
 let unreadBroadcastNotificationCount = $state(0);
+let pendingReportsCount = $state(0);
 
 async function refreshNotificationCounts() {
 	if (!data.session) {
@@ -32,8 +33,19 @@ async function refreshNotificationCounts() {
 }
 
 $effect(() => {
-	unreadNotificationCount = data.unreadNotificationCount ?? 0;
-	unreadBroadcastNotificationCount = data.unreadBroadcastNotificationCount ?? 0;
+	let active = true;
+	void Promise.resolve(data.unreadNotificationCount ?? 0).then((count) => {
+		if (active) unreadNotificationCount = count;
+	});
+	void Promise.resolve(data.unreadBroadcastNotificationCount ?? 0).then((count) => {
+		if (active) unreadBroadcastNotificationCount = count;
+	});
+	void Promise.resolve(data.pendingReportsCount ?? 0).then((count) => {
+		if (active) pendingReportsCount = count;
+	});
+	return () => {
+		active = false;
+	};
 });
 
 onMount(() => {
@@ -69,10 +81,10 @@ function handleFabClick() {
 		profile={data.profile}
 		{unreadNotificationCount}
 		{unreadBroadcastNotificationCount}
-		pendingReportsCount={data.pendingReportsCount}
+		{pendingReportsCount}
 		extraAccounts={data.extraAccounts}
 	/>
-	<div class="app-main">
+	<div class="app-main" id="main-content" tabindex="-1">
 		{@render children()}
 	</div>
 </div>

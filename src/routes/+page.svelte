@@ -1,10 +1,14 @@
 <script lang="ts">
 import { goto } from "$app/navigation";
 import PostCard from "$lib/components/PostCard.svelte";
+import PostCardSkeleton from "$lib/components/PostCardSkeleton.svelte";
 import PostComposer from "$lib/components/PostComposer.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import { composeOpen } from "$lib/stores/compose";
 import type { PageProps } from "./$types";
+
+/** スケルトンの枚数（タイムラインの典型的な表示密度に合わせた仮枠） */
+const SKELETON_COUNT = 5;
 
 let { data }: PageProps = $props();
 
@@ -177,19 +181,35 @@ $effect(() => {
 			</div>
 		{/if}
 
-		{#if data.posts.length === 0}
-			<div class="empty-state">
-				{#if data.tab === 'following'}
-					<p>フォロー中のユーザーの投稿がありません。<br>気になるユーザーをフォローしてみましょう！</p>
-				{:else}
-					<p>まだ投稿がありません。最初の投稿をしてみましょう！</p>
-				{/if}
+		<!--
+			data.posts は deferred Promise。
+			- 待機中: スピナー + スケルトンカードを表示してレイアウトシフトを最小化
+			- 解決後: 実際の投稿カードに差し替え
+			- エラー時: 再読み込みを促すメッセージ
+		-->
+		{#await data.posts}
+			<div class="posts-loading-spinner" aria-label="投稿を読み込み中">
+				<div class="spinner" aria-hidden="true"></div>
+				<span>読み込み中…</span>
 			</div>
-		{:else}
-			{#each data.posts as post (post.id)}
-				<PostCard {post} currentUserId={data.user?.id ?? null} />
+			{#each { length: SKELETON_COUNT } as _, i (i)}
+				<PostCardSkeleton />
 			{/each}
-		{/if}
+		{:then posts}
+			{#if posts.length === 0}
+				<div class="empty-state">
+					{#if data.tab === 'following'}
+						<p>フォロー中のユーザーの投稿がありません。<br>気になるユーザーをフォローしてみましょう！</p>
+					{:else}
+						<p>まだ投稿がありません。最初の投稿をしてみましょう！</p>
+					{/if}
+				</div>
+			{:else}
+				{#each posts as post (post.id)}
+					<PostCard {post} currentUserId={data.user?.id ?? null} />
+				{/each}
+			{/if}
+		{/await}
 	</main>
 
 	<aside class="sidebar-column">

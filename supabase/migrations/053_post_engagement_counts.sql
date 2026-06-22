@@ -13,6 +13,7 @@ SET search_path = public
 AS $$
   WITH target_posts AS (
     SELECT DISTINCT unnest(target_post_ids) AS post_id
+    WHERE unnest(target_post_ids) IS NOT NULL
   ),
   like_counts AS (
     SELECT likes.post_id, COUNT(*) AS like_count

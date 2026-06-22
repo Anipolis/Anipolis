@@ -113,15 +113,6 @@ export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, c
 	// 放送通知の生成は migration 070 の pg_cron ジョブ（毎分）に移行済み
 	if (user && url.pathname === "/notifications") await markAllNotificationsRead(supabase, user.id);
 
-	const [unreadNotificationCount, unreadBroadcastNotificationCount] = user
-		? await Promise.all([
-				getUnreadNotificationCount(supabase, user.id),
-				getUnreadBroadcastNotificationCount(supabase, user.id),
-			])
-		: [0, 0];
-
-	const pendingReportsCount = profile?.is_admin ? await getPendingReportsCount(supabase) : 0;
-
 	const filteredCookies = cookies.getAll().filter(({ name }) => /^sb-.+-auth-token/.test(name));
 	const storedExtraAccounts = getExtraAccounts(cookies);
 	let extraAccounts: StoredAccount[] = [];
@@ -159,14 +150,22 @@ export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, c
 		}
 	}
 
+	// ── 通知カウントを deferred Promise として返す ─────────────────
+	// await せずに Promise のまま返すことで SvelteKit のストリーミング機能を
+	// 利用し、子ルートの load（page.server.ts）が parent() を await した際に
+	// これらのカウント取得を待たずに開始できるようにする。
+	// バッジ表示はページコンテンツより後から描画されてよい副次情報のため
+	// ストリーミングが適切。
 	return {
 		session,
 		user,
 		profile,
-		unreadNotificationCount,
-		unreadBroadcastNotificationCount,
-		pendingReportsCount,
 		cookies: filteredCookies,
+		unreadNotificationCount: user ? getUnreadNotificationCount(supabase, user.id) : Promise.resolve(0),
+		unreadBroadcastNotificationCount: user
+			? getUnreadBroadcastNotificationCount(supabase, user.id)
+			: Promise.resolve(0),
+		pendingReportsCount: profile?.is_admin ? getPendingReportsCount(supabase) : Promise.resolve(0),
 		extraAccounts,
 	};
 };

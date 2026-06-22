@@ -12,7 +12,7 @@ const initial = $derived(username ? (username[0] ?? "?").toUpperCase() : "?");
 
 <div class="avatar avatar-{size}" aria-label={username}>
 	{#if src}
-		<img {src} alt={username} referrerpolicy="no-referrer">
+		<img {src} alt={username} referrerpolicy="no-referrer" decoding="async">
 	{:else}
 		{initial}
 	{/if}

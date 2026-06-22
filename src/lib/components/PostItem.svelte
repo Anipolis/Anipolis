@@ -70,6 +70,7 @@ function closeQuoteModal() {
 			src={post.user.icon}
 			alt={post.user.name}
 			class="aspect-square w-12 shrink-0 rounded-full bg-[var(--color-border)]"
+			decoding="async"
 		>
 
 		<div class="min-w-0 flex-1">
@@ -214,6 +215,7 @@ function closeQuoteModal() {
 							src={post.user.icon}
 							alt={post.user.name}
 							class="aspect-square w-5 rounded-full bg-[var(--color-border)]"
+							decoding="async"
 						>
 						<span class="text-xs font-bold text-[var(--color-text)]">{post.user.name}</span>
 					</div>
