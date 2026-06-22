@@ -10,6 +10,7 @@
 	--color-accent: #8ab5f9;
 	--color-accent-hover: #a8caff;
 	--color-danger: #ef4444;
+	--anipolis-logo-image: url("/anipolis-logo-sub.png");
 	--nav-height: 0px;
 	--content-max: 960px;
 	--feed-width: 680px;
@@ -55,6 +56,7 @@
 	--color-accent: #19448e;
 	--color-accent-hover: #132f62;
 	--color-danger: #dc2626;
+	--anipolis-logo-image: url("/anipolis-logo.png");
 	--status-watching: #15803d;
 	--status-plan: #1d4ed8;
 	--status-on-hold: #a16207;

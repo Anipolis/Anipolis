@@ -115,21 +115,7 @@ function isActive(path: string): boolean {
 		</svg>
 	</button>
 	<a href="/" class="mobile-header-logo" aria-label="Anipolis ホーム">
-		<svg
-			width="22"
-			height="22"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="2"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			aria-hidden="true"
-		>
-			<polygon
-				points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"
-			/>
-		</svg>
+		<span class="anipolis-logo-icon size-22" aria-hidden="true"></span>
 		<span>Anipolis</span>
 	</a>
 	<button
@@ -189,21 +175,7 @@ function isActive(path: string): boolean {
 <div class="mobile-drawer" class:open={drawerOpen} role="dialog" aria-modal="true" aria-label="ナビゲーション">
 	<div class="mobile-drawer-header">
 		<a href="/" class="mobile-drawer-logo" onclick={closeDrawer}>
-			<svg
-				width="22"
-				height="22"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-				aria-hidden="true"
-			>
-				<polygon
-					points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"
-				/>
-			</svg>
+			<span class="anipolis-logo-icon size-22" aria-hidden="true"></span>
 			<span>Anipolis</span>
 		</a>
 		<!-- svelte-ignore a11y_consider_explicit_label -->
@@ -228,21 +200,7 @@ function isActive(path: string): boolean {
 	<nav class="mobile-drawer-nav">
 		{#if session}
 			<a href="/anime" class="mobile-drawer-btn" class:active={isActive('/anime')} onclick={closeDrawer}>
-				<svg
-					width="20"
-					height="20"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<polygon
-						points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"
-					/>
-				</svg>
+				<span class="anipolis-logo-icon size-20" aria-hidden="true"></span>
 				アニメ
 			</a>
 
@@ -476,21 +434,7 @@ function isActive(path: string): boolean {
 
 <aside class="icon-sidebar">
 	<a href="/" class="sidebar-logo" aria-label="Anipolis ホーム" title="Anipolis">
-		<svg
-			width="28"
-			height="28"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="2"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			aria-hidden="true"
-		>
-			<polygon
-				points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"
-			/>
-		</svg>
+		<span class="anipolis-logo-icon size-28" aria-hidden="true"></span>
 		<span class="sidebar-logo-text">Anipolis</span>
 	</a>
 
@@ -561,21 +505,7 @@ function isActive(path: string): boolean {
 		{/if}
 
 		<a href="/anime" class="sidebar-btn" class:active={isActive('/anime')} aria-label="アニメ" title="アニメ">
-			<svg
-				width="22"
-				height="22"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-				aria-hidden="true"
-			>
-				<polygon
-					points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"
-				/>
-			</svg>
+			<span class="anipolis-logo-icon size-22" aria-hidden="true"></span>
 			<span class="sidebar-btn-label">アニメ</span>
 		</a>
 
@@ -974,6 +904,27 @@ function isActive(path: string): boolean {
 	text-decoration: none;
 	font-size: 16px;
 	font-weight: 700;
+}
+
+.anipolis-logo-icon {
+	display: block;
+	flex-shrink: 0;
+	background: center / contain no-repeat var(--anipolis-logo-image);
+}
+
+.anipolis-logo-icon.size-20 {
+	width: 20px;
+	height: 20px;
+}
+
+.anipolis-logo-icon.size-22 {
+	width: 22px;
+	height: 22px;
+}
+
+.anipolis-logo-icon.size-28 {
+	width: 28px;
+	height: 28px;
 }
 
 /* --- Mobile drawer --- */
