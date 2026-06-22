@@ -29,7 +29,7 @@ const relativeTime = $derived(formatRelativeTime(data.createdAt));
 
 			<section class="exchange-result-main">
 				<div class="exchange-result-title">
-					<span>匿名アニメ交換</span>
+					<span>匿名アニメトレード</span>
 					<h1>交換完了</h1>
 				</div>
 

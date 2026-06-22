@@ -59,8 +59,8 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 
 	const buildExchangeInitialContent = (exchangeShare: AnimeExchangeShare | null) =>
 		exchangeShare?.received_anime.title
-			? `アニメ交換で「${exchangeShare.received_anime.title}」がおすすめとして届きました！ #アニメ交換`
-			: "アニメ交換でおすすめが届きました！ #アニメ交換";
+			? `アニメトレードで「${exchangeShare.received_anime.title}」がおすすめとして届きました！ #アニメトレード`
+			: "アニメトレードでおすすめが届きました！ #アニメトレード";
 
 	if (tab === "following" && followingIds !== null && followingIds.length === 0) {
 		const [trendingResult, animeTrending, quoteAnimeResult, exchangeShare, watchingAnime] = await Promise.all([

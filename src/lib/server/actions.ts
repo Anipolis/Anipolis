@@ -84,7 +84,7 @@ export async function insertPostWithHashtags(
 		if (!quotedPost) return fail(404, { message: "引用元の投稿を表示できません" });
 	}
 
-	const postContent = exchangeShare && content.length === 0 ? "アニメ交換の結果を共有しました" : content;
+	const postContent = exchangeShare && content.length === 0 ? "アニメトレードの結果を共有しました" : content;
 	const basePost = {
 		user_id: userId,
 		content: postContent,

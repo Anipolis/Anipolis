@@ -141,7 +141,7 @@ const handleExchangeSubmit: SubmitFunction = () => {
 			<header class="exchange-header">
 				<div>
 					<p class="exchange-kicker">交流</p>
-					<h1>アニメ交換</h1>
+					<h1>アニメトレード</h1>
 				</div>
 				<a href="/anime" class="exchange-link">作品を探す</a>
 			</header>
