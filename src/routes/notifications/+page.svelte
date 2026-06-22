@@ -37,7 +37,9 @@ function broadcastLabel(value: string | null): string {
 
 <div class="page-container">
 	<main class="feed-column notifications-column">
-		<h1 class="notifications-title">通知</h1>
+		<header class="notifications-header">
+			<h1>通知</h1>
+		</header>
 
 		{#if data.notifications.length === 0}
 			<div class="empty-state">
@@ -126,12 +128,15 @@ function broadcastLabel(value: string | null): string {
 	padding: 0;
 }
 
-.notifications-title {
-	font-size: 20px;
+.notifications-header {
+	padding: 1rem 0;
+	border-bottom: 1px solid var(--border);
+}
+
+.notifications-header h1 {
+	font-size: 1.25rem;
 	font-weight: 700;
-	padding: 16px 0;
-	border-bottom: 1px solid var(--color-border);
-	margin: 0 0 8px;
+	margin: 0;
 }
 
 .notification-list {
@@ -222,8 +227,8 @@ function broadcastLabel(value: string | null): string {
 
 .notification-anime-preview img {
 	width: 34px;
-	height: 48px;
-	object-fit: cover;
+	display: block;
+	image-rendering: auto;
 	border-radius: 4px;
 	flex-shrink: 0;
 }

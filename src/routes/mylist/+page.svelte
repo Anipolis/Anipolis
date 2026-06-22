@@ -14,16 +14,24 @@ const statusLabel: Record<AnimeStatus, string> = {
 	watching: "視聴中",
 	completed: "完了",
 	plan_to_watch: "視聴予定",
-	on_hold: "中断中",
+	on_hold: "中断",
+	dropped: "断念",
+};
+
+const mobileStatusLabel: Record<AnimeStatus, string> = {
+	watching: "視聴中",
+	completed: "完了",
+	plan_to_watch: "予定",
+	on_hold: "中断",
 	dropped: "断念",
 };
 
 const statusIcon: Record<AnimeStatus, string> = {
-	watching: "▶",
-	completed: "✓",
-	plan_to_watch: "📋",
-	on_hold: "⏸",
-	dropped: "✕",
+	watching: "i-lucide-circle-play",
+	completed: "i-lucide-circle-check",
+	plan_to_watch: "i-lucide-clipboard-list",
+	on_hold: "i-lucide-circle-pause",
+	dropped: "i-lucide-circle-x",
 };
 
 let isPublic = $state(false);
@@ -84,7 +92,6 @@ $effect(() => {
 		<div class="mylist-container">
 			<header class="mylist-header">
 				<div class="mylist-title-row">
-					<h1 class="mylist-title">★ マイリスト</h1>
 					<div class="header-actions">
 						<!-- 表示切り替え -->
 						<div class="view-toggle">
@@ -195,6 +202,69 @@ $effect(() => {
 						</form>
 					</div>
 				</div>
+
+				<div class="mobile-header-row">
+					<div class="mobile-header-controls">
+						<form
+							class="mobile-visibility-form"
+							method="POST"
+							action="?/toggleVisibility"
+							use:enhance={() => {
+								return ({ result }) => {
+									if (result.type === 'success' && result.data) {
+										isPublic = (result.data as { list_is_public: boolean }).list_is_public;
+									}
+								};
+							}}
+						>
+							<button
+								type="submit"
+								class="mobile-visibility-btn"
+								class:active={isPublic}
+								disabled={isPublic}
+								aria-label="マイリストを公開する"
+								aria-pressed={isPublic}
+							>
+								公開
+							</button>
+							<button
+								type="submit"
+								class="mobile-visibility-btn"
+								class:active={!isPublic}
+								disabled={!isPublic}
+								aria-label="マイリストを非公開にする"
+								aria-pressed={!isPublic}
+							>
+								非公開
+							</button>
+						</form>
+
+						<div class="mobile-view-toggle" aria-label="表示モード">
+							<button
+								type="button"
+								class="mobile-view-btn"
+								class:active={viewMode === 'list'}
+								onclick={() => (viewMode = 'list')}
+								aria-label="一覧表示"
+								aria-pressed={viewMode === 'list'}
+								title="一覧"
+							>
+								<span class="i-lucide-list" aria-hidden="true"></span>
+							</button>
+							<button
+								type="button"
+								class="mobile-view-btn"
+								class:active={viewMode === 'edit'}
+								onclick={() => (viewMode = 'edit')}
+								aria-label="編集表示"
+								aria-pressed={viewMode === 'edit'}
+								title="編集"
+							>
+								<span class="i-lucide-pencil" aria-hidden="true"></span>
+							</button>
+						</div>
+					</div>
+				</div>
 			</header>
 
 			<!-- モバイル用ステータスタブバー -->
@@ -206,8 +276,9 @@ $effect(() => {
 						class:active={selectedStatus === status}
 						onclick={() => (selectedStatus = status)}
 					>
-						<span class="tab-icon">{statusIcon[status]}</span>
-						{statusLabel[status]}
+						<span class="tab-icon {statusIcon[status]}" aria-hidden="true"></span>
+						<span class="tab-label desktop-tab-label">{statusLabel[status]}</span>
+						<span class="tab-label mobile-tab-label">{mobileStatusLabel[status]}</span>
 						<span class="tab-count">{grouped[status].length}</span>
 					</button>
 				{/each}
@@ -231,7 +302,7 @@ $effect(() => {
 							{:else}
 								<section class="status-section status-section--{status}">
 									<h2 class="status-heading">
-										<span class="status-icon">{statusIcon[status]}</span>
+										<span class="status-icon {statusIcon[status]}" aria-hidden="true"></span>
 										{statusLabel[status]}
 										<span class="status-count">{grouped[status].length}</span>
 									</h2>
@@ -284,17 +355,16 @@ $effect(() => {
 	margin-bottom: 14px;
 }
 
-.mylist-title {
-	font-size: 1.5rem;
-	font-weight: 700;
-	color: var(--accent, #6366f1);
-	margin: 0;
-}
-
 .header-actions {
 	display: flex;
 	align-items: center;
 	gap: 10px;
+	margin-left: auto;
+}
+
+.mobile-header-row,
+.mobile-tab-label {
+	display: none;
 }
 
 /* 表示切り替え */
@@ -390,6 +460,13 @@ $effect(() => {
 	margin: 0 0 8px;
 	border-bottom: 1px solid var(--border, #334155);
 	color: var(--fg, #e2e8f0);
+}
+
+.status-icon,
+.tab-icon {
+	width: 1em;
+	height: 1em;
+	flex: 0 0 auto;
 }
 
 .status-section--watching .status-icon {
@@ -489,8 +566,145 @@ $effect(() => {
 }
 
 @media (max-width: 600px) {
+	.mylist-header {
+		margin-bottom: 2px;
+	}
+
+	.mylist-title-row {
+		display: none;
+	}
+
+	.mobile-header-row {
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		min-height: 34px;
+		padding: 2px 0 5px;
+	}
+
+	.mobile-header-controls {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+	}
+
+	.mobile-visibility-btn,
+	.mobile-view-btn {
+		display: inline-grid;
+		place-items: center;
+		height: 30px;
+		padding: 0;
+		border: 0;
+		border-radius: 0;
+		background: transparent;
+		color: var(--fg-muted, #94a3b8);
+		cursor: pointer;
+		font-size: 0.82rem;
+		line-height: 1;
+	}
+
+	.mobile-visibility-form {
+		display: flex;
+		overflow: hidden;
+		border: 1px solid var(--border, #334155);
+		border-radius: 7px;
+	}
+
+	.mobile-visibility-btn {
+		width: 44px;
+		font-size: 11px;
+		font-weight: 600;
+	}
+
+	.mobile-visibility-btn + .mobile-visibility-btn {
+		border-left: 1px solid var(--border, #334155);
+	}
+
+	.mobile-visibility-btn.active {
+		background: color-mix(in srgb, var(--accent, #6366f1) 16%, transparent);
+		color: var(--accent, #6366f1);
+		cursor: default;
+		opacity: 1;
+	}
+
+	.mobile-view-toggle {
+		display: flex;
+		flex: 0 0 auto;
+		overflow: hidden;
+		border: 1px solid var(--border, #334155);
+		border-radius: 7px;
+	}
+
+	.mobile-view-btn {
+		width: 34px;
+		font-size: 0.9rem;
+	}
+
+	.mobile-view-btn + .mobile-view-btn {
+		border-left: 1px solid var(--border, #334155);
+	}
+
+	.mobile-view-btn.active {
+		background: color-mix(in srgb, var(--accent, #6366f1) 16%, transparent);
+		color: var(--accent, #6366f1);
+	}
+
 	.status-tab-bar {
 		display: flex;
+		width: 100%;
+		overflow: hidden;
+		gap: 0;
+		padding: 0;
+		margin-bottom: 8px;
+		border-bottom: 1px solid var(--border, #334155);
+	}
+
+	.status-tab {
+		position: relative;
+		display: flex;
+		flex: 1 1 20%;
+		justify-content: center;
+		min-width: 0;
+		gap: 3px;
+		padding: 8px 0;
+		border-radius: 0;
+		background: transparent;
+		font-size: 11px;
+		line-height: 1;
+		text-align: center;
+	}
+
+	.status-tab.active,
+	.status-tab--watching.active,
+	.status-tab--plan_to_watch.active,
+	.status-tab--on_hold.active,
+	.status-tab--dropped.active {
+		background: transparent;
+	}
+
+	.status-tab.active::after {
+		position: absolute;
+		right: 5px;
+		bottom: -1px;
+		left: 5px;
+		height: 2px;
+		border-radius: 2px 2px 0 0;
+		background: currentColor;
+		content: "";
+	}
+
+	.tab-icon,
+	.desktop-tab-label {
+		display: none;
+	}
+
+	.mobile-tab-label {
+		display: inline;
+	}
+
+	.tab-count {
+		font-size: 10px;
+		opacity: 0.75;
 	}
 
 	.mobile-hidden {

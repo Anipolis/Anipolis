@@ -19,13 +19,13 @@ let {
 <section class="status-section status-section--{status}">
 	{#if headingLevel === 2}
 		<h2 class="status-heading">
-			<span class="status-icon">{statusIcon[status]}</span>
+			<span class="status-icon {statusIcon[status]}" aria-hidden="true"></span>
 			{statusLabel[status]}
 			<span class="status-count">{animes.length}</span>
 		</h2>
 	{:else}
 		<h3 class="status-heading">
-			<span class="status-icon">{statusIcon[status]}</span>
+			<span class="status-icon {statusIcon[status]}" aria-hidden="true"></span>
 			{statusLabel[status]}
 			<span class="status-count">{animes.length}</span>
 		</h3>
@@ -72,6 +72,12 @@ let {
 	margin: 0 0 8px;
 	border-bottom: 1px solid var(--border, #334155);
 	color: var(--fg, #e2e8f0);
+}
+
+.status-icon {
+	width: 1em;
+	height: 1em;
+	flex: 0 0 auto;
 }
 
 .status-section--watching .status-icon {
@@ -134,9 +140,8 @@ let {
 
 .card-cover img {
 	width: 100%;
-	height: 100%;
 	display: block;
-	object-fit: cover;
+	image-rendering: auto;
 }
 
 .anime-cover-placeholder {

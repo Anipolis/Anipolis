@@ -179,16 +179,16 @@ const statusLabel: Record<AnimeStatus, string> = {
 	watching: "視聴中",
 	completed: "完了",
 	plan_to_watch: "視聴予定",
-	on_hold: "中断中",
+	on_hold: "中断",
 	dropped: "断念",
 };
 
 const statusIcon: Record<AnimeStatus, string> = {
-	watching: "▶",
-	completed: "✓",
-	plan_to_watch: "📋",
-	on_hold: "⏸",
-	dropped: "✕",
+	watching: "i-lucide-circle-play",
+	completed: "i-lucide-circle-check",
+	plan_to_watch: "i-lucide-clipboard-list",
+	on_hold: "i-lucide-circle-pause",
+	dropped: "i-lucide-circle-x",
 };
 
 const animeList = $derived((data.animeList ?? []) as Anime[]);
@@ -220,6 +220,8 @@ const grouped = $derived(
 		<div class="profile-header">
 			{#if profile.header_url}
 				<img class="profile-header-image" src={profile.header_url} alt="{displayName}のヘッダー画像">
+			{:else}
+				<div class="profile-header-image profile-header-image--empty" aria-hidden="true"></div>
 			{/if}
 			<div class="profile-header-content">
 				<UserAvatar src={profile.avatar_url} username={profile.username} size="lg" />
@@ -509,7 +511,7 @@ const grouped = $derived(
 			<a href="/profile/{profile.username}?tab=list" class="profile-tab" class:active={activeTab === 'list'}>
 				マイリスト
 				{#if !canViewContent || (!profile.list_is_public && !isOwn)}
-					<span class="tab-lock">🔒</span>
+					<span class="tab-lock i-lucide-lock-keyhole" aria-hidden="true"></span>
 				{/if}
 			</a>
 			{#if isOwn}
@@ -862,7 +864,7 @@ const grouped = $derived(
 .profile-header-editor img {
 	display: block;
 	width: 100%;
-	height: 100%;
+	aspect-ratio: 3 / 1;
 	object-fit: cover;
 }
 

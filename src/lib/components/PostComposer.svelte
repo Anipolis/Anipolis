@@ -348,7 +348,7 @@ const handleSubmit: SubmitFunction = () => {
 						<span
 							class="inline-flex items-center gap-1.5 max-w-full rounded-full border border-blue-500/50 bg-blue-950/40 px-3 py-1 text-sm font-semibold leading-tight text-blue-300"
 						>
-							<span class="shrink-0" aria-hidden="true">🎬</span>
+							<span class="i-lucide-clapperboard shrink-0" aria-hidden="true"></span>
 							<span class="min-w-0 max-w-[18ch] truncate">{animeQuoteChipLabel(selectedAnime)}</span>
 							<button
 								type="button"
@@ -365,7 +365,7 @@ const handleSubmit: SubmitFunction = () => {
 						<span
 							class="inline-flex items-center gap-1.5 max-w-full rounded-full border border-amber-500/50 bg-amber-950/40 px-3 py-1 text-sm font-semibold leading-tight text-amber-300"
 						>
-							<span class="shrink-0" aria-hidden="true">⚠️</span>
+							<span class="i-lucide-triangle-alert shrink-0" aria-hidden="true"></span>
 							<span class="min-w-0 max-w-[34ch] truncate">ネタバレ</span>
 							<button
 								type="button"

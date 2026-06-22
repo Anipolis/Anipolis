@@ -223,7 +223,7 @@ textarea {
 @media (max-width: 960px) {
 	.page-container {
 		padding: 0 12px;
-		padding-top: calc(52px + 12px);
+		padding-top: 12px;
 		padding-bottom: 80px;
 		max-width: 100vw;
 		overflow-x: clip;
@@ -583,7 +583,7 @@ textarea {
 }
 .composer-image-preview img {
 	width: 100%;
-	height: 100%;
+	aspect-ratio: 1;
 	object-fit: cover;
 }
 .composer-image-remove {
@@ -634,9 +634,12 @@ textarea {
 }
 .post-image {
 	width: 100%;
-	height: 100%;
+	aspect-ratio: 16 / 9;
 	object-fit: cover;
 	transition: opacity 0.15s;
+}
+.post-images-single .post-image {
+	aspect-ratio: auto;
 }
 .post-image:hover {
 	opacity: 0.9;
@@ -989,7 +992,7 @@ textarea {
 
 .avatar img {
 	width: 100%;
-	height: 100%;
+	aspect-ratio: 1;
 	object-fit: cover;
 	border-radius: 50%;
 }
@@ -1087,10 +1090,10 @@ textarea {
 
 .anime-trending-cover {
 	width: 44px;
-	height: 60px;
 	flex-shrink: 0;
 	border-radius: 4px;
-	object-fit: cover;
+	display: block;
+	image-rendering: auto;
 	background: var(--color-border);
 }
 
@@ -1283,6 +1286,10 @@ textarea {
 	aspect-ratio: 3 / 1;
 	max-height: 240px;
 	object-fit: cover;
+}
+
+.profile-header-image--empty {
+	background: var(--color-surface-hover);
 }
 
 .profile-header-content {
@@ -2692,8 +2699,8 @@ textarea {
 
 .anime-quote-cover {
 	width: 44px;
-	height: 62px;
-	object-fit: cover;
+	display: block;
+	image-rendering: auto;
 	border-radius: 4px;
 	flex-shrink: 0;
 	background: var(--color-border);
@@ -2844,8 +2851,8 @@ textarea {
 }
 .anime-search-thumb {
 	width: 36px;
-	height: 50px;
-	object-fit: cover;
+	display: block;
+	image-rendering: auto;
 	border-radius: 3px;
 	flex-shrink: 0;
 	background: var(--color-border);
@@ -3194,7 +3201,7 @@ form + .repost-menu-item {
 
 	.page-container {
 		padding: 0 8px;
-		padding-top: calc(52px + 8px);
+		padding-top: 8px;
 		padding-bottom: 80px;
 	}
 
@@ -3211,7 +3218,7 @@ form + .repost-menu-item {
 @media (max-width: 375px) {
 	.page-container {
 		padding: 0 6px;
-		padding-top: calc(52px + 6px);
+		padding-top: 6px;
 		padding-bottom: 80px;
 	}
 
