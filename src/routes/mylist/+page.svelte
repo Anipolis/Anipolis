@@ -1,5 +1,7 @@
 <script lang="ts">
+import { untrack } from "svelte";
 import { enhance } from "$app/forms";
+import { invalidateAll } from "$app/navigation";
 import AnimeEditRow from "$lib/components/AnimeEditRow.svelte";
 import AnimeStatusSection from "$lib/components/AnimeStatusSection.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
@@ -65,12 +67,55 @@ let selectedStatus = $state<AnimeStatus>("watching");
 type EntryState = { status: AnimeStatus; score: string; progress: number };
 type EditRow = { entry: EntryState };
 let editRows = $state<Record<string, EditRow>>({});
+const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+async function saveEditRow(animeId: string, entry: EntryState) {
+	const formData = new FormData();
+	formData.set("anime_id", animeId);
+	formData.set("status", entry.status);
+	formData.set("score", entry.score);
+	formData.set("progress", entry.progress.toString());
+
+	const response = await fetch("?/upsertWatchlist", { method: "POST", body: formData });
+	if (!response.ok) {
+		console.error(`Failed to auto-save anime ${animeId}`);
+		return;
+	}
+
+	await invalidateAll();
+}
+
+function handleAutoSave(animeId: string, updatedFields: Partial<EntryState>) {
+	const editRow = editRows[animeId];
+	if (!editRow) return;
+
+	const latestEntry = { ...editRow.entry, ...updatedFields };
+	editRow.entry = latestEntry;
+
+	const existingTimer = debounceTimers.get(animeId);
+	if (existingTimer) clearTimeout(existingTimer);
+
+	debounceTimers.set(
+		animeId,
+		setTimeout(() => {
+			debounceTimers.delete(animeId);
+			void saveEditRow(animeId, latestEntry);
+		}, 500),
+	);
+}
+
+function cancelAutoSave(animeId: string) {
+	const timer = debounceTimers.get(animeId);
+	if (timer) clearTimeout(timer);
+	debounceTimers.delete(animeId);
+}
 
 $effect(() => {
+	const currentRows = untrack(() => editRows);
 	editRows = Object.fromEntries(
 		data.animeList.map((anime) => [
 			anime.id,
-			{
+			currentRows[anime.id] ?? {
 				entry: {
 					status: anime.user_entry?.status ?? "plan_to_watch",
 					score:
@@ -315,6 +360,8 @@ $effect(() => {
 													bind:entry={editRow.entry}
 													{statusOrder}
 													{statusLabel}
+													onAutoSave={(updatedFields) => handleAutoSave(anime.id, updatedFields)}
+													onRemove={() => cancelAutoSave(anime.id)}
 												/>
 											{/if}
 										{/each}
