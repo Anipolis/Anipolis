@@ -345,11 +345,7 @@ function formatCompactDate(iso: string) {
 			<div class="flex items-start">
 				<a href="/anime/{data.anime.id}" class="shrink-0" aria-label="アニメ詳細を開く">
 					{#if data.anime.cover_url}
-						<img
-							src={data.anime.cover_url}
-							alt={data.anime.title}
-							class="h-20 w-16 rounded-lg object-cover shadow-md"
-						>
+						<img src={data.anime.cover_url} alt={data.anime.title} class="block w-16 rounded-lg shadow-md">
 					{:else}
 						<div class="h-20 w-16 rounded-lg border border-zinc-800 bg-zinc-800 shadow-md"></div>
 					{/if}

@@ -561,11 +561,21 @@ const handleExchangeSubmit: SubmitFunction = () => {
 .history-cover-empty,
 .instant-result img {
 	width: 40px;
-	height: 56px;
 	border-radius: 4px;
-	object-fit: cover;
 	background: var(--color-border);
 	flex: 0 0 auto;
+}
+.anime-result img,
+.selected-anime img,
+.history-anime img,
+.instant-result img {
+	display: block;
+	image-rendering: auto;
+}
+.anime-result-cover,
+.received-cover-empty,
+.history-cover-empty {
+	aspect-ratio: 5 / 7;
 }
 
 .anime-result span:last-child {

@@ -748,9 +748,8 @@ async function handleFileChange(e: Event) {
 }
 .cover-preview {
 	width: 100%;
-	height: 100%;
-	object-fit: contain;
-	object-position: center;
+	display: block;
+	image-rendering: auto;
 }
 .cover-change-hint {
 	position: absolute;

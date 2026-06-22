@@ -185,7 +185,7 @@ a.exchange-result-card:hover {
 
 .exchange-result-cover {
 	width: 100%;
-	object-fit: cover;
+	display: block;
 	image-rendering: auto;
 	-webkit-backface-visibility: hidden;
 	backface-visibility: hidden;

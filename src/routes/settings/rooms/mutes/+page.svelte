@@ -242,12 +242,15 @@ const removeSubmit: SubmitFunction = () => {
 }
 .mute-cover {
 	width: 36px;
-	height: 52px;
-	object-fit: cover;
 	border-radius: 4px;
 	flex-shrink: 0;
 }
+.mute-cover:is(img) {
+	display: block;
+	image-rendering: auto;
+}
 .mute-cover--placeholder {
+	aspect-ratio: 9 / 13;
 	background: var(--border);
 }
 .mute-meta {

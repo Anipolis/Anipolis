@@ -66,7 +66,11 @@ function closeQuoteModal() {
 >
 	<div class="flex gap-3">
 		<!-- User Icon -->
-		<img src={post.user.icon} alt={post.user.name} class="h-12 w-12 shrink-0 rounded-full bg-[var(--color-border)]">
+		<img
+			src={post.user.icon}
+			alt={post.user.name}
+			class="aspect-square w-12 shrink-0 rounded-full bg-[var(--color-border)]"
+		>
 
 		<div class="min-w-0 flex-1">
 			<!-- Header: Username + Time -->
@@ -209,7 +213,7 @@ function closeQuoteModal() {
 						<img
 							src={post.user.icon}
 							alt={post.user.name}
-							class="h-5 w-5 rounded-full bg-[var(--color-border)]"
+							class="aspect-square w-5 rounded-full bg-[var(--color-border)]"
 						>
 						<span class="text-xs font-bold text-[var(--color-text)]">{post.user.name}</span>
 					</div>
