@@ -872,8 +872,10 @@ export async function completeProfileSetupAction(
 	userId: string,
 ): Promise<ProfileSetupResult> {
 	const form = await request.formData();
-	const username = (form.get("username") as string | null)?.trim().toLowerCase() ?? "";
-	const displayName = (form.get("display_name") as string | null)?.trim() ?? "";
+	const usernameEntry = form.get("username");
+	const displayNameEntry = form.get("display_name");
+	const username = typeof usernameEntry === "string" ? usernameEntry.trim().toLowerCase() : "";
+	const displayName = typeof displayNameEntry === "string" ? displayNameEntry.trim() : "";
 	const values = { username, display_name: displayName };
 
 	if (!ONBOARDING_USERNAME_PATTERN.test(username)) {
@@ -894,16 +896,26 @@ export async function completeProfileSetupAction(
 		};
 	}
 
-	const { error } = await supabase
+	// setup_completed=false を更新条件に含め、ワンタイム保証する。
+	// load ガードを通らない action 直叩き時の再実行（パスワード確認を回避した
+	// ユーザー名変更など）を防ぐ。
+	const { data, error } = await supabase
 		.from("profiles")
 		.update({ username, display_name: displayName || null, setup_completed: true })
-		.eq("id", userId);
+		.eq("id", userId)
+		.eq("setup_completed", false)
+		.select("id");
 
 	if (error) {
 		if (error.code === "23505") {
 			return { error: "このユーザー名はすでに使用されています", status: 400, field: "username", values };
 		}
 		return { error: "保存に失敗しました。しばらく経ってから再試行してください", status: 500, values };
+	}
+
+	// 0件更新 = 既にオンボーディング完了済み
+	if (!data || data.length === 0) {
+		return { error: "オンボーディングはすでに完了しています", status: 409, values };
 	}
 
 	return { success: true };
@@ -914,9 +926,14 @@ export async function skipProfileSetupAction(
 	supabase: SupabaseClient<Database>,
 	userId: string,
 ): Promise<{ success: true } | { error: string }> {
-	const { error } = await supabase.from("profiles").update({ setup_completed: true }).eq("id", userId);
+	const { data, error } = await supabase
+		.from("profiles")
+		.update({ setup_completed: true })
+		.eq("id", userId)
+		.eq("setup_completed", false)
+		.select("id");
 
-	if (error) return { error: "スキップに失敗しました" };
+	if (error || !data || data.length === 0) return { error: "スキップに失敗しました" };
 
 	return { success: true };
 }
