@@ -7,7 +7,9 @@ ALTER TABLE public.profiles
     ADD COLUMN IF NOT EXISTS setup_completed boolean NOT NULL DEFAULT false;
 
 -- Existing accounts already have chosen names; don't force them through onboarding.
-UPDATE public.profiles SET setup_completed = true WHERE setup_completed = false;
+UPDATE public.profiles
+SET setup_completed = true
+WHERE setup_completed = false;
 
 -- Redefine handle_new_user (supersedes 082) to set setup_completed on creation.
 CREATE OR REPLACE FUNCTION public.handle_new_user()

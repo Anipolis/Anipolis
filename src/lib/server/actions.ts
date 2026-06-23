@@ -853,6 +853,74 @@ export async function updateNotificationSettingsAction(
 	await updateBroadcastNotificationSettings(supabase, userId, settings);
 }
 
+const ONBOARDING_USERNAME_PATTERN = /^[a-zA-Z0-9_]{3,20}$/;
+const ONBOARDING_MAX_DISPLAY_NAME_LENGTH = 50;
+
+type ProfileSetupResult =
+	| { success: true }
+	| {
+			error: string;
+			status: number;
+			field?: "username" | "display_name";
+			values: { username: string; display_name: string };
+	  };
+
+/** 初回オンボーディング：ユーザー名・表示名を確定し setup_completed を立てる */
+export async function completeProfileSetupAction(
+	request: Request,
+	supabase: SupabaseClient<Database>,
+	userId: string,
+): Promise<ProfileSetupResult> {
+	const form = await request.formData();
+	const username = (form.get("username") as string | null)?.trim().toLowerCase() ?? "";
+	const displayName = (form.get("display_name") as string | null)?.trim() ?? "";
+	const values = { username, display_name: displayName };
+
+	if (!ONBOARDING_USERNAME_PATTERN.test(username)) {
+		return {
+			error: "ユーザー名は3〜20文字の半角英数字・アンダースコアのみ使用できます",
+			status: 400,
+			field: "username",
+			values,
+		};
+	}
+
+	if (displayName.length > ONBOARDING_MAX_DISPLAY_NAME_LENGTH) {
+		return {
+			error: "表示名は50文字以内で入力してください",
+			status: 400,
+			field: "display_name",
+			values,
+		};
+	}
+
+	const { error } = await supabase
+		.from("profiles")
+		.update({ username, display_name: displayName || null, setup_completed: true })
+		.eq("id", userId);
+
+	if (error) {
+		if (error.code === "23505") {
+			return { error: "このユーザー名はすでに使用されています", status: 400, field: "username", values };
+		}
+		return { error: "保存に失敗しました。しばらく経ってから再試行してください", status: 500, values };
+	}
+
+	return { success: true };
+}
+
+/** 初回オンボーディングをスキップし、ランダムなユーザー名のまま完了扱いにする */
+export async function skipProfileSetupAction(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+): Promise<{ success: true } | { error: string }> {
+	const { error } = await supabase.from("profiles").update({ setup_completed: true }).eq("id", userId);
+
+	if (error) return { error: "スキップに失敗しました" };
+
+	return { success: true };
+}
+
 export async function upsertBroadcastRoomMute(
 	supabase: SupabaseClient<Database>,
 	userId: string,

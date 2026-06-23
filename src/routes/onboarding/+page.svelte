@@ -33,7 +33,7 @@ const onSubmit: SubmitFunction = () => {
 			</p>
 
 			{#if form && "message" in form && !("field" in form)}
-				<div class="flash-error">{form.message}</div>
+				<div class="flash-error" role="alert">{form.message}</div>
 			{/if}
 
 			<form method="POST" action="?/save" use:enhance={onSubmit}>
