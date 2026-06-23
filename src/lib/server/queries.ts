@@ -1039,47 +1039,73 @@ type ProfileRepostContext = {
 	avatar_url: string | null;
 };
 
-export async function getProfileTimelinePosts(
+type TimelinePostsWithRepostsResult = {
+	posts: Post[];
+	error: unknown | null;
+};
+
+export async function getTimelinePostsWithReposts(
 	supabase: SupabaseClient<Database>,
-	profile: ProfileRepostContext,
+	profiles: ProfileRepostContext[],
 	currentUserId: string | null,
-	limit = 50,
-): Promise<Post[]> {
-	const [ownPostsResult, repostRowsResult] = await Promise.all([
+	options: { limit?: number; select?: string } = {},
+): Promise<TimelinePostsWithRepostsResult> {
+	if (profiles.length === 0) return { posts: [], error: null };
+
+	const limit = options.limit ?? 50;
+	const select = options.select ?? POST_LIST_SELECT;
+	const profileIds = profiles.map((profile) => profile.id);
+	const firstProfileId = profileIds[0];
+	if (!firstProfileId) return { posts: [], error: null };
+	const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
+
+	const buildProfileFilter = <
+		T extends { eq: (column: string, value: string) => T; in: (column: string, values: string[]) => T },
+	>(
+		query: T,
+	) => (profileIds.length === 1 ? query.eq("user_id", firstProfileId) : query.in("user_id", profileIds));
+
+	const ownPostsQuery = buildProfileFilter(
 		supabase
 			.from("posts")
-			.select(POST_LIST_SELECT)
-			.eq("user_id", profile.id)
+			.select(select)
 			.is("parent_id", null)
 			.order("created_at", { ascending: false })
 			.limit(limit),
+	);
+	const repostRowsQuery = buildProfileFilter(
 		supabase
 			.from("reposts")
-			.select("post_id, created_at")
-			.eq("user_id", profile.id)
+			.select("post_id, user_id, created_at")
 			.order("created_at", { ascending: false })
 			.limit(limit),
-	]);
+	);
+
+	const [ownPostsResult, repostRowsResult] = await Promise.all([ownPostsQuery, repostRowsQuery]);
 
 	if (ownPostsResult.error) {
-		console.error("[profile] own posts query failed:", ownPostsResult.error);
+		return { posts: [], error: ownPostsResult.error };
 	}
 	if (repostRowsResult.error) {
-		console.error("[profile] repost rows query failed:", repostRowsResult.error);
+		return { posts: [], error: repostRowsResult.error };
 	}
 
 	const ownPosts = (ownPostsResult.data ?? []) as unknown as RawPost[];
 	const ownPostIds = new Set(ownPosts.map((post) => post.id));
 	const repostRows = repostRowsResult.data ?? [];
-	const repostPostIds = [...new Set(repostRows.map((row) => row.post_id).filter((id) => !ownPostIds.has(id)))];
+	const repostPostIds = [
+		...new Set(
+			repostRows.filter((row) => profiles.length > 1 || !ownPostIds.has(row.post_id)).map((row) => row.post_id),
+		),
+	];
 
 	const repostedPostsResult =
 		repostPostIds.length > 0
-			? await supabase.from("posts").select(POST_LIST_SELECT).in("id", repostPostIds)
+			? await supabase.from("posts").select(select).in("id", repostPostIds)
 			: { data: [] as unknown[], error: null };
 
 	if (repostedPostsResult.error) {
-		console.error("[profile] reposted posts query failed:", repostedPostsResult.error);
+		return { posts: [], error: repostedPostsResult.error };
 	}
 
 	const repostedPostById = new Map(
@@ -1095,16 +1121,26 @@ export async function getProfileTimelinePosts(
 		...repostRows
 			.map((row) => {
 				const post = repostedPostById.get(row.post_id);
-				if (!post) return null;
+				const repostProfile = profileById.get(row.user_id);
+				if (!post || !repostProfile) return null;
 				return {
 					kind: "repost" as const,
 					sortAt: row.created_at,
 					post,
 					repostedAt: row.created_at,
+					profile: repostProfile,
 				};
 			})
 			.filter(
-				(item): item is { kind: "repost"; sortAt: string; post: RawPost; repostedAt: string } => item !== null,
+				(
+					item,
+				): item is {
+					kind: "repost";
+					sortAt: string;
+					post: RawPost;
+					repostedAt: string;
+					profile: ProfileRepostContext;
+				} => item !== null,
 			),
 	]
 		.sort((a, b) => new Date(b.sortAt).getTime() - new Date(a.sortAt).getTime())
@@ -1115,16 +1151,29 @@ export async function getProfileTimelinePosts(
 		repost_context:
 			item.kind === "repost"
 				? {
-						user_id: profile.id,
-						username: profile.username,
-						display_name: profile.display_name,
-						avatar_url: profile.avatar_url,
+						user_id: item.profile.id,
+						username: item.profile.username,
+						display_name: item.profile.display_name,
+						avatar_url: item.profile.avatar_url,
 						created_at: item.repostedAt,
 					}
 				: null,
 	}));
 
-	return enrichPostsWithCounts(supabase, rawTimelinePosts, currentUserId);
+	return { posts: await enrichPostsWithCounts(supabase, rawTimelinePosts, currentUserId), error: null };
+}
+
+export async function getProfileTimelinePosts(
+	supabase: SupabaseClient<Database>,
+	profile: ProfileRepostContext,
+	currentUserId: string | null,
+	limit = 50,
+): Promise<Post[]> {
+	const result = await getTimelinePostsWithReposts(supabase, [profile], currentUserId, { limit });
+	if (result.error) {
+		console.error("[profile] timeline posts query failed:", result.error);
+	}
+	return result.posts;
 }
 
 export async function getLikedPosts(

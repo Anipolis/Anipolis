@@ -46,6 +46,7 @@ const effectiveRoomContext = $derived(
 			? { href: post.anime_quote.room_href, title: buildAnimeRoomLabel(post.anime_quote) }
 			: null),
 );
+const showsContextStack = $derived(!isDetailView && (!!post.repost_context || (!!effectiveRoomContext && !insideRoom)));
 const cwContentId = $derived(`post-cw-content-${post.id}`);
 
 const isLong = $derived(post.content.length > 300 || (post.content.match(/\n/g)?.length ?? 0) >= 5);
@@ -268,25 +269,33 @@ async function submitReport() {
 	class:post-card-clickable={!isDetailView}
 	class:post-card-modal-open={showDeleteModal || showExchangeModal || showQuoteModal || showReportModal || !!lightboxUrl}
 	class:post-card--with-room={!!effectiveRoomContext && !insideRoom}
-	class:post-card--reposted={!!post.repost_context && !isDetailView}
+	class:post-card--with-context={showsContextStack}
 	onclick={handleCardClick}
 >
 	{#if !isDetailView}
 		<a href="/posts/{post.id}" class="post-card-hitarea" aria-label="投稿詳細を開く"></a>
 	{/if}
 
-	{#if post.repost_context && !isDetailView}
-		<a
-			href="/profile/{post.repost_context.username}"
-			class="post-repost-context"
-			onclick={(e) => e.stopPropagation()}
-		>
-			<span class="i-lucide-repeat-2" aria-hidden="true"></span>
-			<span>{repostContextDisplayName}さんがリポスト</span>
-		</a>
-	{/if}
-
-	{#if effectiveRoomContext && !insideRoom}
+	{#if showsContextStack}
+		<div class="post-context-stack">
+			{#if post.repost_context}
+				<a
+					href="/profile/{post.repost_context.username}"
+					class="post-repost-context"
+					onclick={(e) => e.stopPropagation()}
+				>
+					<span class="i-lucide-repeat-2" aria-hidden="true"></span>
+					<span>{repostContextDisplayName}さんがリポスト</span>
+				</a>
+			{/if}
+			{#if effectiveRoomContext && !insideRoom}
+				<a href={effectiveRoomContext.href} class="post-room-link" onclick={(e) => e.stopPropagation()}>
+					<span class="i-lucide-door-open" aria-hidden="true"></span>
+					<span>{effectiveRoomContext.title}</span>
+				</a>
+			{/if}
+		</div>
+	{:else if effectiveRoomContext && !insideRoom}
 		<a href={effectiveRoomContext.href} class="post-room-link" onclick={(e) => e.stopPropagation()}>
 			<span class="i-lucide-door-open" aria-hidden="true"></span>
 			<span>{effectiveRoomContext.title}</span>
@@ -968,11 +977,21 @@ async function submitReport() {
 
 <style>
 .post-card--with-room,
-.post-card--reposted {
+.post-card--with-context {
 	--post-content-offset: 50px;
 	flex-wrap: wrap;
 	column-gap: 10px;
 	row-gap: 2px;
+}
+
+.post-context-stack {
+	flex: 0 0 calc(100% - var(--post-content-offset));
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+	width: fit-content;
+	max-width: calc(100% - var(--post-content-offset));
+	margin: -4px 0 2px var(--post-content-offset);
 }
 
 .post-room-link,
@@ -989,6 +1008,13 @@ async function submitReport() {
 	font-weight: 700;
 	line-height: 1.2;
 	text-decoration: none;
+}
+
+.post-context-stack .post-room-link,
+.post-context-stack .post-repost-context {
+	flex: 0 1 auto;
+	max-width: 100%;
+	margin: 0;
 }
 
 .post-room-link:hover,
