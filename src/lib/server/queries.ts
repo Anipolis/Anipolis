@@ -94,6 +94,52 @@ function normalizeAverageScore(score: number | null | undefined, count: number |
 const POST_LIST_SELECT = buildPostCardSelect();
 
 /**
+ * リクエストスコープのミュート設定キャッシュ。
+ *
+ * supabase クライアントは `hooks.server.ts` でリクエストごとに新規生成されるため、
+ * クライアントオブジェクトをキーにすることで「同一リクエスト内でのみ」設定を共有できる。
+ * WeakMap なのでクライアントが GC されればエントリも自動的に解放される。
+ *
+ * ユーザーのミュート設定はリクエスト内で不変なのに、`enrichPostsWithCounts` が
+ * 複数回呼ばれるルート（プロフィール: posts / imagePosts / likes で最大3回）では
+ * 毎回 muted_words / anime_mutes を取得し直していた。これをメモ化して 1 回にまとめる。
+ */
+const muteSettingsCache = new WeakMap<
+	object,
+	Map<string, { mutedWords?: Promise<string[]>; animeMuteIds?: Promise<Set<string>> }>
+>();
+
+function getMuteCacheEntry(supabase: SupabaseClient<Database>, userId: string) {
+	let byUser = muteSettingsCache.get(supabase);
+	if (!byUser) {
+		byUser = new Map();
+		muteSettingsCache.set(supabase, byUser);
+	}
+	let entry = byUser.get(userId);
+	if (!entry) {
+		entry = {};
+		byUser.set(userId, entry);
+	}
+	return entry;
+}
+
+/** リクエストスコープでメモ化された getMutedWords */
+function getMutedWordsCached(supabase: SupabaseClient<Database>, userId: string | null): Promise<string[]> {
+	if (!userId) return getMutedWords(supabase, userId);
+	const entry = getMuteCacheEntry(supabase, userId);
+	if (!entry.mutedWords) entry.mutedWords = getMutedWords(supabase, userId);
+	return entry.mutedWords;
+}
+
+/** リクエストスコープでメモ化された getActiveAnimeMuteIds */
+function getActiveAnimeMuteIdsCached(supabase: SupabaseClient<Database>, userId: string | null): Promise<Set<string>> {
+	if (!userId) return getActiveAnimeMuteIds(supabase, userId);
+	const entry = getMuteCacheEntry(supabase, userId);
+	if (!entry.animeMuteIds) entry.animeMuteIds = getActiveAnimeMuteIds(supabase, userId);
+	return entry.animeMuteIds;
+}
+
+/**
  * rawPost 配列に like_count / repost_count / reply_count / liked_by_me / reposted_by_me を付加して
  * Post[] に変換する共通ヘルパー。
  * 全ルートサーバー（タイムライン・プロフィール・ハッシュタグ・検索・詳細）で使い回す。
@@ -106,10 +152,10 @@ export async function enrichPostsWithCounts(
 ): Promise<Post[]> {
 	if (rawPosts.length === 0) return [];
 
-	const mutedWordsPromise = getMutedWords(supabase, userId);
+	const mutedWordsPromise = getMutedWordsCached(supabase, userId);
 	const mutedRoomAnimeIdsPromise = options.includeMutedRoomPosts
 		? Promise.resolve(new Set<string>())
-		: getActiveAnimeMuteIds(supabase, userId);
+		: getActiveAnimeMuteIdsCached(supabase, userId);
 
 	type QuotedPostRow = {
 		id: string;
