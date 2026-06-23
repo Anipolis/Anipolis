@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fail } from "@sveltejs/kit";
 import { createServiceRoleClient } from "$lib/server/supabase-admin";
-import { publicUrlToStoragePath } from "$lib/server/upload";
+import { publicUrlToStoragePath, validateImageBuffer } from "$lib/server/upload";
 import type { Database, Json } from "$lib/supabase/database.types";
 import type { AnimeExchangeShare, AnimeStatus, BroadcastRoomMuteDuration } from "$lib/types";
 import { extractHashtags } from "$lib/utils/hashtag";
@@ -851,6 +851,139 @@ export async function updateNotificationSettingsAction(
 	};
 
 	await updateBroadcastNotificationSettings(supabase, userId, settings);
+}
+
+const ONBOARDING_USERNAME_PATTERN = /^[a-zA-Z0-9_]{3,20}$/;
+const ONBOARDING_MAX_DISPLAY_NAME_LENGTH = 50;
+const ONBOARDING_ALLOWED_AVATAR_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+const ONBOARDING_MAX_AVATAR_SIZE = 2 * 1024 * 1024;
+
+type ProfileSetupResult =
+	| { success: true }
+	| {
+			error: string;
+			status: number;
+			field?: "username" | "display_name" | "avatar";
+			values: { username: string; display_name: string };
+	  };
+
+type ProfileSetupOptions = {
+	oauthAvatarUrl?: string | null;
+};
+
+async function uploadOnboardingAvatar(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+	file: File,
+): Promise<{ url: string; path: string; stalePaths: string[] } | { error: string }> {
+	if (!ONBOARDING_ALLOWED_AVATAR_TYPES.includes(file.type as (typeof ONBOARDING_ALLOWED_AVATAR_TYPES)[number])) {
+		return { error: "対応していないファイル形式です（JPEG/PNG/WebP）" };
+	}
+	if (file.size > ONBOARDING_MAX_AVATAR_SIZE) {
+		return { error: "画像は2MB以内にしてください" };
+	}
+
+	const arrayBuffer = await file.arrayBuffer();
+	const validated = validateImageBuffer(arrayBuffer, ONBOARDING_ALLOWED_AVATAR_TYPES);
+	if (!validated) {
+		return { error: "対応していないファイル形式です（JPEG/PNG/WebP）" };
+	}
+
+	const { data: existingFiles } = await supabase.storage.from("profile-avatars").list(userId);
+	const path = `${userId}/avatar_${Date.now()}.${validated.ext}`;
+	const { error } = await supabase.storage
+		.from("profile-avatars")
+		.upload(path, arrayBuffer, { contentType: validated.mime, upsert: true });
+	if (error) {
+		console.error("onboarding avatar upload error:", error);
+		return { error: "画像のアップロードに失敗しました" };
+	}
+
+	const {
+		data: { publicUrl },
+	} = supabase.storage.from("profile-avatars").getPublicUrl(path);
+	const stalePaths = (existingFiles ?? [])
+		.map((file) => `${userId}/${file.name}`)
+		.filter((existingPath) => existingPath !== path);
+	return { url: publicUrl, path, stalePaths };
+}
+
+/** 初回オンボーディング：ユーザーが確認した公開プロフィールを初めて作成する */
+export async function completeProfileSetupAction(
+	requestOrForm: Request | FormData,
+	supabase: SupabaseClient<Database>,
+	userId: string,
+	options: ProfileSetupOptions = {},
+): Promise<ProfileSetupResult> {
+	const form = requestOrForm instanceof FormData ? requestOrForm : await requestOrForm.formData();
+	const usernameEntry = form.get("username");
+	const displayNameEntry = form.get("display_name");
+	const avatarChoiceEntry = form.get("avatar_choice");
+	const avatarFileEntry = form.get("avatar_file");
+	const username = typeof usernameEntry === "string" ? usernameEntry.trim().toLowerCase() : "";
+	const displayName = typeof displayNameEntry === "string" ? displayNameEntry.trim() : "";
+	const avatarChoice = typeof avatarChoiceEntry === "string" ? avatarChoiceEntry : "none";
+	const values = { username, display_name: displayName };
+
+	if (!ONBOARDING_USERNAME_PATTERN.test(username)) {
+		return {
+			error: "ユーザー名は3〜20文字の半角英数字・アンダースコアのみ使用できます",
+			status: 400,
+			field: "username",
+			values,
+		};
+	}
+
+	if (displayName.length > ONBOARDING_MAX_DISPLAY_NAME_LENGTH) {
+		return {
+			error: "表示名は50文字以内で入力してください",
+			status: 400,
+			field: "display_name",
+			values,
+		};
+	}
+
+	let avatarUrl: string | null = null;
+	let uploadedAvatarPath: string | null = null;
+	let staleAvatarPaths: string[] = [];
+	if (avatarChoice === "oauth") {
+		avatarUrl = options.oauthAvatarUrl ?? null;
+	} else if (avatarChoice === "upload") {
+		if (!(avatarFileEntry instanceof File) || avatarFileEntry.size === 0) {
+			return { error: "プロフィール画像を選択してください", status: 400, field: "avatar", values };
+		}
+		const uploaded = await uploadOnboardingAvatar(supabase, userId, avatarFileEntry);
+		if ("error" in uploaded) {
+			return { error: uploaded.error, status: 400, field: "avatar", values };
+		}
+		avatarUrl = uploaded.url;
+		uploadedAvatarPath = uploaded.path;
+		staleAvatarPaths = uploaded.stalePaths;
+	}
+
+	const { error } = await supabase
+		.from("profiles")
+		.insert({ id: userId, username, display_name: displayName || null, avatar_url: avatarUrl });
+
+	if (error) {
+		if (uploadedAvatarPath) {
+			await supabase.storage.from("profile-avatars").remove([uploadedAvatarPath]);
+		}
+		if (error.code === "23505") {
+			if (error.message.includes("username")) {
+				return { error: "このユーザー名はすでに使用されています", status: 400, field: "username", values };
+			}
+			return { error: "オンボーディングはすでに完了しています", status: 409, values };
+		}
+		return { error: "保存に失敗しました。しばらく経ってから再試行してください", status: 500, values };
+	}
+
+	if (staleAvatarPaths.length > 0) {
+		const { error: cleanupError } = await supabase.storage.from("profile-avatars").remove(staleAvatarPaths);
+		if (cleanupError) console.error("onboarding stale avatar cleanup error:", cleanupError);
+	}
+
+	return { success: true };
 }
 
 export async function upsertBroadcastRoomMute(
