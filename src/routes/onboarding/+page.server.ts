@@ -1,17 +1,67 @@
 import { fail, redirect } from "@sveltejs/kit";
-import { completeProfileSetupAction, skipProfileSetupAction } from "$lib/server/actions";
+import { completeProfileSetupAction } from "$lib/server/actions";
 import type { Actions, PageServerLoad } from "./$types";
 
-export const load: PageServerLoad = async ({ parent }) => {
+const USERNAME_PATTERN = /^[a-zA-Z0-9_]{3,20}$/;
+
+function getSafeNext(raw: FormDataEntryValue | string | null): string {
+	const next = typeof raw === "string" ? raw : "/";
+	return next.startsWith("/") && !next.startsWith("//") && !next.includes(":/") ? next : "/";
+}
+
+function getMetadataString(metadata: Record<string, unknown>, key: string): string | null {
+	const value = metadata[key];
+	return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function getUsernameCandidate(value: string | null | undefined): string {
+	const candidate = (value ?? "").trim().toLowerCase();
+	return USERNAME_PATTERN.test(candidate) ? candidate : "";
+}
+
+function getOnboardingMetadata(user: NonNullable<Awaited<ReturnType<App.Locals["safeGetSession"]>>["user"]>) {
+	const metadata = user.user_metadata as Record<string, unknown>;
+	const rawUsername = getMetadataString(metadata, "user_name") ?? user.email?.split("@")[0] ?? null;
+	const displayName =
+		getMetadataString(metadata, "full_name") ??
+		getMetadataString(metadata, "name") ??
+		getMetadataString(metadata, "user_name") ??
+		"";
+	const avatarUrl = getMetadataString(metadata, "avatar_url") ?? getMetadataString(metadata, "picture");
+
+	return { rawUsername, displayName, avatarUrl };
+}
+
+async function getOnboardingDefaults(
+	supabase: App.Locals["supabase"],
+	user: NonNullable<Awaited<ReturnType<App.Locals["safeGetSession"]>>["user"]>,
+) {
+	const metadata = getOnboardingMetadata(user);
+	const usernameCandidate = getUsernameCandidate(metadata.rawUsername);
+	if (!usernameCandidate) return { username: "", displayName: metadata.displayName, avatarUrl: metadata.avatarUrl };
+
+	const { data: existing } = await supabase
+		.from("profiles")
+		.select("id")
+		.eq("username", usernameCandidate)
+		.maybeSingle();
+	return {
+		username: existing ? "" : usernameCandidate,
+		displayName: metadata.displayName,
+		avatarUrl: metadata.avatarUrl,
+	};
+}
+
+export const load: PageServerLoad = async ({ parent, url, locals: { supabase } }) => {
 	const { user, profile } = await parent();
 	if (!user) redirect(303, "/auth");
-	if (!profile) redirect(303, "/");
-	// 既に初期設定済みなら通常画面へ
-	if (profile.setup_completed) redirect(303, "/");
+	const next = getSafeNext(url.searchParams.get("next"));
+	if (profile) redirect(303, next);
 
+	const defaults = await getOnboardingDefaults(supabase, user);
 	return {
-		username: profile.username,
-		displayName: profile.display_name ?? "",
+		...defaults,
+		next,
 	};
 };
 
@@ -20,7 +70,12 @@ export const actions: Actions = {
 		const { user } = await safeGetSession();
 		if (!user) return fail(401, { username: "", display_name: "", message: "ログインが必要です" });
 
-		const result = await completeProfileSetupAction(request, supabase, user.id);
+		const form = await request.formData();
+		const next = getSafeNext(form.get("next"));
+		const metadata = getOnboardingMetadata(user);
+		const result = await completeProfileSetupAction(form, supabase, user.id, {
+			oauthAvatarUrl: metadata.avatarUrl,
+		});
 		if ("error" in result) {
 			return fail(result.status, {
 				...result.values,
@@ -29,18 +84,6 @@ export const actions: Actions = {
 			});
 		}
 
-		redirect(303, "/");
-	},
-
-	skip: async ({ locals: { supabase, safeGetSession } }) => {
-		const { user } = await safeGetSession();
-		if (!user) return fail(401, { username: "", display_name: "", message: "ログインが必要です" });
-
-		const result = await skipProfileSetupAction(supabase, user.id);
-		if ("error" in result) {
-			return fail(500, { username: "", display_name: "", message: result.error });
-		}
-
-		redirect(303, "/");
+		redirect(303, next);
 	},
 };

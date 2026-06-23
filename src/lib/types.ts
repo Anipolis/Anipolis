@@ -12,7 +12,6 @@ export interface Profile {
 	list_is_public: boolean;
 	is_private: boolean;
 	is_admin?: boolean;
-	setup_completed?: boolean;
 }
 
 export interface UserAnimeListEntry {
