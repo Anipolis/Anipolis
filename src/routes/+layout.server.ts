@@ -1,6 +1,7 @@
 import { randomInt } from "node:crypto";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import type { ServerLoad } from "@sveltejs/kit";
+import { redirect } from "@sveltejs/kit";
 import { markAllNotificationsRead } from "$lib/server/actions";
 import { getExtraAccounts, setExtraAccounts } from "$lib/server/multi-account";
 import {
@@ -16,15 +17,24 @@ type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 const RANDOM_USERNAME_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789";
 const RANDOM_USERNAME_LENGTH = 7;
 
-function isGoogleUser(user: User): boolean {
+const EXTERNAL_OAUTH_PROVIDERS = ["google", "discord"];
+
+// 初回オンボーディング誘導を免除するパス（オンボーディング画面自身と認証フロー）
+const ONBOARDING_EXEMPT_PREFIXES = ["/onboarding", "/auth"];
+
+function isExternalOAuthUser(user: User): boolean {
 	const providers = user.app_metadata.providers;
 	const providerList = typeof providers === "string" ? [providers] : Array.isArray(providers) ? providers : [];
 
 	return (
-		user.app_metadata.provider === "google" ||
-		providerList.includes("google") ||
-		user.identities?.some((identity) => identity.provider === "google") === true
+		EXTERNAL_OAUTH_PROVIDERS.includes(user.app_metadata.provider ?? "") ||
+		providerList.some((provider) => EXTERNAL_OAUTH_PROVIDERS.includes(provider)) ||
+		user.identities?.some((identity) => EXTERNAL_OAUTH_PROVIDERS.includes(identity.provider)) === true
 	);
+}
+
+function isOnboardingExempt(pathname: string): boolean {
+	return ONBOARDING_EXEMPT_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
 function generateRandomUsername(): string {
@@ -56,7 +66,7 @@ async function getOrCreateProfile(supabase: SupabaseClient<Database>, user: User
 
 	if (existing) return existing;
 
-	if (isGoogleUser(user)) {
+	if (isExternalOAuthUser(user)) {
 		const username = await generateAvailableRandomUsername(supabase);
 		const { data: created } = await supabase
 			.from("profiles")
@@ -66,6 +76,7 @@ async function getOrCreateProfile(supabase: SupabaseClient<Database>, user: User
 					username,
 					display_name: username,
 					avatar_url: (user.user_metadata?.["avatar_url"] as string | null | undefined) ?? null,
+					setup_completed: false,
 				},
 				{ onConflict: "id" },
 			)
@@ -81,7 +92,7 @@ async function getOrCreateProfile(supabase: SupabaseClient<Database>, user: User
 		avatar_url?: string | null;
 	};
 
-	// Google ログイン後にトリガーが未実行の場合に備えて手動作成
+	// メール/パスワードユーザーでトリガーが未実行の場合に備えて手動作成
 	const rawBase =
 		(metadata.user_name || user.email?.split("@")[0] || "user").replace(/[^a-zA-Z0-9_]/g, "").slice(0, 14) ||
 		"user";
@@ -97,6 +108,8 @@ async function getOrCreateProfile(supabase: SupabaseClient<Database>, user: User
 				username,
 				display_name: metadata.full_name ?? username,
 				avatar_url: metadata.avatar_url ?? null,
+				// メール登録はユーザーが明示的に名前を選択済みのため完了扱い
+				setup_completed: true,
 			},
 			{ onConflict: "id" },
 		)
@@ -110,6 +123,13 @@ export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, c
 	const { session, user } = await safeGetSession();
 
 	const profile = user ? await getOrCreateProfile(supabase, user) : null;
+
+	// 初回オンボーディング誘導：外部 OAuth で作られたランダムユーザー名のままの
+	// ユーザーを設定画面へ誘導する。免除パス（/onboarding・/auth）以外で発火。
+	if (profile && profile.setup_completed === false && !isOnboardingExempt(url.pathname)) {
+		redirect(303, "/onboarding");
+	}
+
 	// 放送通知の生成は migration 070 の pg_cron ジョブ（毎分）に移行済み
 	if (user && url.pathname === "/notifications") await markAllNotificationsRead(supabase, user.id);
 

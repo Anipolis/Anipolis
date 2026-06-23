@@ -14,6 +14,7 @@ export type Database = {
 					list_is_public: boolean;
 					is_private: boolean;
 					is_admin: boolean;
+					setup_completed: boolean;
 				};
 				Insert: {
 					id: string;
@@ -25,6 +26,7 @@ export type Database = {
 					list_is_public?: boolean;
 					is_private?: boolean;
 					is_admin?: boolean;
+					setup_completed?: boolean;
 				};
 				Update: {
 					username?: string;
@@ -34,6 +36,7 @@ export type Database = {
 					list_is_public?: boolean;
 					is_private?: boolean;
 					is_admin?: boolean;
+					setup_completed?: boolean;
 				};
 				Relationships: [];
 			};
