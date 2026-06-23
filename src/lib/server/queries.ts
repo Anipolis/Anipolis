@@ -1144,6 +1144,7 @@ export async function getTimelinePostsWithReposts(
 			),
 	]
 		.sort((a, b) => new Date(b.sortAt).getTime() - new Date(a.sortAt).getTime())
+		.filter((item, index, items) => items.findIndex((candidate) => candidate.post.id === item.post.id) === index)
 		.slice(0, limit);
 
 	const rawTimelinePosts = timelineItems.map((item) => ({

@@ -30,21 +30,14 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	const quoteAnimeId = url.searchParams.get("quote_anime");
 	const shareExchangeId = url.searchParams.get("share_exchange");
 	const followingProfiles = tab === "following" && user ? await getFollowingProfiles(supabase, user.id) : null;
-	const followingIds = followingProfiles?.map((followingProfile) => followingProfile.id) ?? null;
 
 	const buildPostsQuery = (select: string) => {
-		let query = supabase
+		return supabase
 			.from("posts")
 			.select(select)
 			.is("parent_id", null)
 			.order("created_at", { ascending: false })
 			.limit(50);
-
-		if (tab === "following" && followingIds !== null) {
-			query = query.in("user_id", followingIds);
-		}
-
-		return query;
 	};
 
 	const fetchPosts = async (): Promise<Post[]> => {
@@ -92,7 +85,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 			? `アニメトレードで「${exchangeShare.received_anime.title}」がおすすめとして届きました！ #アニメトレード`
 			: "アニメトレードでおすすめが届きました！ #アニメトレード";
 
-	if (tab === "following" && followingIds !== null && followingIds.length === 0) {
+	if (tab === "following" && followingProfiles !== null && followingProfiles.length === 0) {
 		const [trendingResult, animeTrending, quoteAnimeResult, exchangeShare, watchingAnime] = await Promise.all([
 			supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
 			getAnimeRankingTrending(supabase, 5),
