@@ -8,6 +8,12 @@ import type { Actions, PageServerLoad } from "./$types";
 
 const MIN_PASSWORD_LENGTH = 6;
 
+// クローズドβ中は Discord ログインのみ許可する。
+// UI は非表示だがアクションエンドポイントは直接 POST 可能なため、サーバー側でも遮断する。
+function isClosedBeta(): boolean {
+	return publicEnv["PUBLIC_CLOSED_BETA"] === "true";
+}
+
 function getSafeNext(raw: FormDataEntryValue | string | null): string {
 	const next = typeof raw === "string" ? raw : "/";
 	return next.startsWith("/") && !next.startsWith("//") && !next.includes(":/") ? next : "/";
@@ -40,6 +46,9 @@ export const load: PageServerLoad = async ({ url, locals: { safeGetSession } }) 
 
 export const actions: Actions = {
 	login: async ({ request, locals: { supabase } }) => {
+		if (isClosedBeta()) {
+			return fail(403, { mode: "login", email: "", message: "現在はDiscordログインのみご利用いただけます" });
+		}
 		const form = await request.formData();
 		const email = (form.get("email") as string | null)?.trim() ?? "";
 		const password = (form.get("password") as string | null) ?? "";
@@ -63,6 +72,15 @@ export const actions: Actions = {
 	},
 
 	register: async ({ request, locals: { supabase } }) => {
+		if (isClosedBeta()) {
+			return fail(403, {
+				mode: "register",
+				email: "",
+				username: "",
+				display_name: "",
+				message: "現在はDiscordログインのみご利用いただけます",
+			});
+		}
 		const form = await request.formData();
 		const email = (form.get("email") as string | null)?.trim() ?? "";
 		const password = (form.get("password") as string | null) ?? "";
@@ -271,6 +289,9 @@ export const actions: Actions = {
 	},
 
 	google: async ({ request, url, locals: { supabase } }) => {
+		if (isClosedBeta()) {
+			return fail(403, { mode: "login", email: "", message: "現在はDiscordログインのみご利用いただけます" });
+		}
 		const form = await request.formData();
 		const next = getSafeNext(form.get("next"));
 		const redirectTo = `${url.origin}/auth/callback?next=${encodeURIComponent(next)}`;
