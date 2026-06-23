@@ -20,6 +20,7 @@ const profileSocialImage = $derived(profile.header_url ?? profile.avatar_url);
 let isFollowing = $state(false);
 let followRequestStatus = $state<"none" | "pending">("none");
 let followerCount = $state(0);
+let isProcessing = $state(false);
 let editDisplayName = $state(untrack(() => data.profile.display_name ?? ""));
 let editBio = $state(untrack(() => data.profile.bio ?? ""));
 let editProfileId = $state(untrack(() => data.profile.id));
@@ -281,16 +282,22 @@ const grouped = $derived(
 								method="POST"
 								action="?/follow"
 								use:enhance={() => {
+                            if (isProcessing) return;
+                            isProcessing = true;
                             return async ({ result }) => {
-                                if (result.type === 'success' && result.data) {
-                                    const payload = result.data as { followed: boolean; requestStatus?: "none" | "pending" };
-                                    const followed = payload.followed;
-                                    isFollowing = followed;
-                                    followRequestStatus = payload.requestStatus ?? "none";
-                                    if (followed !== data.isFollowing) {
-                                        followerCount += followed ? 1 : -1;
+                                try {
+                                    if (result.type === 'success' && result.data) {
+                                        const payload = result.data as { followed: boolean; requestStatus?: "none" | "pending" };
+                                        const followed = payload.followed;
+                                        isFollowing = followed;
+                                        followRequestStatus = payload.requestStatus ?? "none";
+                                        if (followed !== data.isFollowing) {
+                                            followerCount += followed ? 1 : -1;
+                                        }
+                                        await invalidateAll();
                                     }
-                                    await invalidateAll();
+                                } finally {
+                                    isProcessing = false;
                                 }
                             };
                         }}
@@ -299,7 +306,7 @@ const grouped = $derived(
 								<button
 									type="submit"
 									class="btn {isFollowing || followRequestStatus === 'pending' ? 'btn-outline' : 'btn-primary'}"
-									disabled={followRequestStatus === 'pending'}
+									disabled={isProcessing || followRequestStatus === 'pending'}
 									style="font-size: 13px;"
 								>
 									{isFollowing ? 'フォロー中' : followRequestStatus === 'pending' ? '申請中' : profile.is_private ? 'フォロー申請' : 'フォローする'}
@@ -648,6 +655,12 @@ const grouped = $derived(
 	align-items: center;
 	gap: 8px;
 	margin-top: 12px;
+}
+
+.profile-actions .btn[disabled] {
+	pointer-events: none;
+	opacity: 0.6;
+	cursor: not-allowed;
 }
 
 .profile-lock-badge {
