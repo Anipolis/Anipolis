@@ -79,6 +79,14 @@ export interface QuotedPost {
 	avatar_url: string | null;
 }
 
+export interface RepostContext {
+	user_id: string;
+	username: string;
+	display_name: string | null;
+	avatar_url: string | null;
+	created_at: string;
+}
+
 export interface Post {
 	id: string;
 	user_id: string;
@@ -103,6 +111,7 @@ export interface Post {
 	exchange_share: AnimeExchangeShare | null;
 	cw_anime_id: string | null;
 	cw_anime: { id: string; title: string; cover_url: string | null } | null;
+	repost_context: RepostContext | null;
 }
 
 export type ReactionType = "like" | "repost";
@@ -301,6 +310,7 @@ export interface RawPost {
 	} | null;
 	cw_anime_id?: string | number | null;
 	cw_anime?: { id: string | number; title: string; cover_url: string | null } | null;
+	repost_context?: RepostContext | null;
 	profiles: {
 		username: string;
 		display_name: string | null;
@@ -390,6 +400,7 @@ export function toPost(
 		cw_anime: raw.cw_anime
 			? { id: String(raw.cw_anime.id), title: raw.cw_anime.title, cover_url: raw.cw_anime.cover_url ?? null }
 			: null,
+		repost_context: raw.repost_context ?? null,
 	};
 }
 

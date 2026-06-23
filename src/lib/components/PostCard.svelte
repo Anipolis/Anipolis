@@ -37,6 +37,7 @@ const absoluteTimeStr = $derived(
 	new Date(post.created_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
 );
 const displayName = $derived(post.display_name || post.username);
+const repostContextDisplayName = $derived(post.repost_context?.display_name || post.repost_context?.username);
 const isOwn = $derived(!!currentUserId && currentUserId === post.user_id);
 const isLoggedIn = $derived(!!currentUserId);
 const effectiveRoomContext = $derived(
@@ -267,10 +268,22 @@ async function submitReport() {
 	class:post-card-clickable={!isDetailView}
 	class:post-card-modal-open={showDeleteModal || showExchangeModal || showQuoteModal || showReportModal || !!lightboxUrl}
 	class:post-card--with-room={!!effectiveRoomContext && !insideRoom}
+	class:post-card--reposted={!!post.repost_context && !isDetailView}
 	onclick={handleCardClick}
 >
 	{#if !isDetailView}
 		<a href="/posts/{post.id}" class="post-card-hitarea" aria-label="投稿詳細を開く"></a>
+	{/if}
+
+	{#if post.repost_context && !isDetailView}
+		<a
+			href="/profile/{post.repost_context.username}"
+			class="post-repost-context"
+			onclick={(e) => e.stopPropagation()}
+		>
+			<span class="i-lucide-repeat-2" aria-hidden="true"></span>
+			<span>{repostContextDisplayName}さんがリポスト</span>
+		</a>
 	{/if}
 
 	{#if effectiveRoomContext && !insideRoom}
@@ -954,14 +967,16 @@ async function submitReport() {
 </article>
 
 <style>
-.post-card--with-room {
+.post-card--with-room,
+.post-card--reposted {
 	--post-content-offset: 50px;
 	flex-wrap: wrap;
 	column-gap: 10px;
 	row-gap: 2px;
 }
 
-.post-room-link {
+.post-room-link,
+.post-repost-context {
 	flex: 0 0 calc(100% - var(--post-content-offset));
 	display: inline-flex;
 	align-items: center;
@@ -976,18 +991,21 @@ async function submitReport() {
 	text-decoration: none;
 }
 
-.post-room-link:hover {
+.post-room-link:hover,
+.post-repost-context:hover {
 	color: var(--color-text-secondary);
 	text-decoration: underline;
 }
 
-.post-room-link span:last-child {
+.post-room-link span:last-child,
+.post-repost-context span:last-child {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 
-.post-room-link [class^="i-lucide"] {
+.post-room-link [class^="i-lucide"],
+.post-repost-context [class^="i-lucide"] {
 	flex-shrink: 0;
 	width: 13px;
 	height: 13px;

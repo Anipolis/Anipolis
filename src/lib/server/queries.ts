@@ -1032,6 +1032,101 @@ export async function getBookmarkedPosts(supabase: SupabaseClient<Database>, use
 	return enrichPostsWithCounts(supabase, sorted, userId);
 }
 
+type ProfileRepostContext = {
+	id: string;
+	username: string;
+	display_name: string | null;
+	avatar_url: string | null;
+};
+
+export async function getProfileTimelinePosts(
+	supabase: SupabaseClient<Database>,
+	profile: ProfileRepostContext,
+	currentUserId: string | null,
+	limit = 50,
+): Promise<Post[]> {
+	const [ownPostsResult, repostRowsResult] = await Promise.all([
+		supabase
+			.from("posts")
+			.select(POST_LIST_SELECT)
+			.eq("user_id", profile.id)
+			.is("parent_id", null)
+			.order("created_at", { ascending: false })
+			.limit(limit),
+		supabase
+			.from("reposts")
+			.select("post_id, created_at")
+			.eq("user_id", profile.id)
+			.order("created_at", { ascending: false })
+			.limit(limit),
+	]);
+
+	if (ownPostsResult.error) {
+		console.error("[profile] own posts query failed:", ownPostsResult.error);
+	}
+	if (repostRowsResult.error) {
+		console.error("[profile] repost rows query failed:", repostRowsResult.error);
+	}
+
+	const ownPosts = (ownPostsResult.data ?? []) as unknown as RawPost[];
+	const ownPostIds = new Set(ownPosts.map((post) => post.id));
+	const repostRows = repostRowsResult.data ?? [];
+	const repostPostIds = [...new Set(repostRows.map((row) => row.post_id).filter((id) => !ownPostIds.has(id)))];
+
+	const repostedPostsResult =
+		repostPostIds.length > 0
+			? await supabase.from("posts").select(POST_LIST_SELECT).in("id", repostPostIds)
+			: { data: [] as unknown[], error: null };
+
+	if (repostedPostsResult.error) {
+		console.error("[profile] reposted posts query failed:", repostedPostsResult.error);
+	}
+
+	const repostedPostById = new Map(
+		((repostedPostsResult.data ?? []) as unknown as RawPost[]).map((post) => [post.id, post]),
+	);
+
+	const timelineItems = [
+		...ownPosts.map((post) => ({
+			kind: "post" as const,
+			sortAt: post.created_at,
+			post,
+		})),
+		...repostRows
+			.map((row) => {
+				const post = repostedPostById.get(row.post_id);
+				if (!post) return null;
+				return {
+					kind: "repost" as const,
+					sortAt: row.created_at,
+					post,
+					repostedAt: row.created_at,
+				};
+			})
+			.filter(
+				(item): item is { kind: "repost"; sortAt: string; post: RawPost; repostedAt: string } => item !== null,
+			),
+	]
+		.sort((a, b) => new Date(b.sortAt).getTime() - new Date(a.sortAt).getTime())
+		.slice(0, limit);
+
+	const rawTimelinePosts = timelineItems.map((item) => ({
+		...item.post,
+		repost_context:
+			item.kind === "repost"
+				? {
+						user_id: profile.id,
+						username: profile.username,
+						display_name: profile.display_name,
+						avatar_url: profile.avatar_url,
+						created_at: item.repostedAt,
+					}
+				: null,
+	}));
+
+	return enrichPostsWithCounts(supabase, rawTimelinePosts, currentUserId);
+}
+
 export async function getLikedPosts(
 	supabase: SupabaseClient<Database>,
 	profileId: string,
