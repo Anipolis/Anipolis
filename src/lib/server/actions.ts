@@ -875,7 +875,7 @@ async function uploadOnboardingAvatar(
 	supabase: SupabaseClient<Database>,
 	userId: string,
 	file: File,
-): Promise<{ url: string; path: string } | { error: string }> {
+): Promise<{ url: string; path: string; stalePaths: string[] } | { error: string }> {
 	if (!ONBOARDING_ALLOWED_AVATAR_TYPES.includes(file.type as (typeof ONBOARDING_ALLOWED_AVATAR_TYPES)[number])) {
 		return { error: "対応していないファイル形式です（JPEG/PNG/WebP）" };
 	}
@@ -889,6 +889,7 @@ async function uploadOnboardingAvatar(
 		return { error: "対応していないファイル形式です（JPEG/PNG/WebP）" };
 	}
 
+	const { data: existingFiles } = await supabase.storage.from("profile-avatars").list(userId);
 	const path = `${userId}/avatar_${Date.now()}.${validated.ext}`;
 	const { error } = await supabase.storage
 		.from("profile-avatars")
@@ -901,7 +902,10 @@ async function uploadOnboardingAvatar(
 	const {
 		data: { publicUrl },
 	} = supabase.storage.from("profile-avatars").getPublicUrl(path);
-	return { url: publicUrl, path };
+	const stalePaths = (existingFiles ?? [])
+		.map((file) => `${userId}/${file.name}`)
+		.filter((existingPath) => existingPath !== path);
+	return { url: publicUrl, path, stalePaths };
 }
 
 /** 初回オンボーディング：ユーザーが確認した公開プロフィールを初めて作成する */
@@ -941,6 +945,7 @@ export async function completeProfileSetupAction(
 
 	let avatarUrl: string | null = null;
 	let uploadedAvatarPath: string | null = null;
+	let staleAvatarPaths: string[] = [];
 	if (avatarChoice === "oauth") {
 		avatarUrl = options.oauthAvatarUrl ?? null;
 	} else if (avatarChoice === "upload") {
@@ -953,6 +958,7 @@ export async function completeProfileSetupAction(
 		}
 		avatarUrl = uploaded.url;
 		uploadedAvatarPath = uploaded.path;
+		staleAvatarPaths = uploaded.stalePaths;
 	}
 
 	const { error } = await supabase
@@ -970,6 +976,11 @@ export async function completeProfileSetupAction(
 			return { error: "オンボーディングはすでに完了しています", status: 409, values };
 		}
 		return { error: "保存に失敗しました。しばらく経ってから再試行してください", status: 500, values };
+	}
+
+	if (staleAvatarPaths.length > 0) {
+		const { error: cleanupError } = await supabase.storage.from("profile-avatars").remove(staleAvatarPaths);
+		if (cleanupError) console.error("onboarding stale avatar cleanup error:", cleanupError);
 	}
 
 	return { success: true };

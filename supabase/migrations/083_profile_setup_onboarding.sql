@@ -13,6 +13,7 @@ AS $$
 DECLARE
     base_username  text;
     final_username text;
+    fallback_username text;
     is_google      boolean := false;
     is_discord     boolean := false;
 BEGIN
@@ -65,13 +66,25 @@ BEGIN
     base_username := left(base_username, 20);
     final_username := base_username;
 
-    INSERT INTO public.profiles (id, username, display_name, avatar_url)
-    VALUES (
-        new.id,
-        final_username,
-        COALESCE(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', final_username),
-        new.raw_user_meta_data->>'avatar_url'
-    );
+    BEGIN
+        INSERT INTO public.profiles (id, username, display_name, avatar_url)
+        VALUES (
+            new.id,
+            final_username,
+            COALESCE(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', final_username),
+            new.raw_user_meta_data->>'avatar_url'
+        );
+    EXCEPTION
+        WHEN unique_violation THEN
+            fallback_username := 'user_' || substr(replace(new.id::text, '-', ''), 1, 15);
+            INSERT INTO public.profiles (id, username, display_name, avatar_url)
+            VALUES (
+                new.id,
+                fallback_username,
+                COALESCE(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', final_username),
+                new.raw_user_meta_data->>'avatar_url'
+            );
+    END;
 
     RETURN new;
 END;
