@@ -17,19 +17,28 @@ type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 const RANDOM_USERNAME_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789";
 const RANDOM_USERNAME_LENGTH = 7;
 
-const EXTERNAL_OAUTH_PROVIDERS = ["google", "discord"];
-
 // 初回オンボーディング誘導を免除するパス（オンボーディング画面自身と認証フロー）
 const ONBOARDING_EXEMPT_PREFIXES = ["/onboarding", "/auth"];
 
-function isExternalOAuthUser(user: User): boolean {
+function isGoogleUser(user: User): boolean {
 	const providers = user.app_metadata.providers;
 	const providerList = typeof providers === "string" ? [providers] : Array.isArray(providers) ? providers : [];
 
 	return (
-		EXTERNAL_OAUTH_PROVIDERS.includes(user.app_metadata.provider ?? "") ||
-		providerList.some((provider) => EXTERNAL_OAUTH_PROVIDERS.includes(provider)) ||
-		user.identities?.some((identity) => EXTERNAL_OAUTH_PROVIDERS.includes(identity.provider)) === true
+		user.app_metadata.provider === "google" ||
+		providerList.includes("google") ||
+		user.identities?.some((identity) => identity.provider === "google") === true
+	);
+}
+
+function isDiscordUser(user: User): boolean {
+	const providers = user.app_metadata.providers;
+	const providerList = typeof providers === "string" ? [providers] : Array.isArray(providers) ? providers : [];
+
+	return (
+		user.app_metadata.provider === "discord" ||
+		providerList.includes("discord") ||
+		user.identities?.some((identity) => identity.provider === "discord") === true
 	);
 }
 
@@ -59,14 +68,15 @@ async function generateAvailableRandomUsername(supabase: SupabaseClient<Database
 }
 
 /**
- * プロフィールを取得し、なければ Google メタデータから自動作成する
+ * プロフィールを取得し、なければプロバイダのメタデータから自動作成する
  */
 async function getOrCreateProfile(supabase: SupabaseClient<Database>, user: User): Promise<Profile | null> {
 	const { data: existing } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
 
 	if (existing) return existing;
 
-	if (isExternalOAuthUser(user)) {
+	// Google: 匿名ランダムハンドル（トリガー 063 と同等のフォールバック）
+	if (isGoogleUser(user)) {
 		const username = await generateAvailableRandomUsername(supabase);
 		const { data: created } = await supabase
 			.from("profiles")
@@ -92,7 +102,9 @@ async function getOrCreateProfile(supabase: SupabaseClient<Database>, user: User
 		avatar_url?: string | null;
 	};
 
-	// メール/パスワードユーザーでトリガーが未実行の場合に備えて手動作成
+	// Discord / メールユーザーでトリガーが未実行の場合のフォールバック。
+	// Discord の username（一意）とニックネーム（full_name）をそのまま使う。
+	const isDiscord = isDiscordUser(user);
 	const rawBase =
 		(metadata.user_name || user.email?.split("@")[0] || "user").replace(/[^a-zA-Z0-9_]/g, "").slice(0, 14) ||
 		"user";
@@ -108,8 +120,8 @@ async function getOrCreateProfile(supabase: SupabaseClient<Database>, user: User
 				username,
 				display_name: metadata.full_name ?? username,
 				avatar_url: metadata.avatar_url ?? null,
-				// メール登録はユーザーが明示的に名前を選択済みのため完了扱い
-				setup_completed: true,
+				// Discord は onboarding で確認・編集、メール登録は確定済み
+				setup_completed: !isDiscord,
 			},
 			{ onConflict: "id" },
 		)

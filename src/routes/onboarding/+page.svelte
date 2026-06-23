@@ -29,7 +29,7 @@ const onSubmit: SubmitFunction = () => {
 			</div>
 
 			<p class="field-hint" style="margin-bottom: 1.25rem;">
-				ユーザー名と表示名は仮の値が設定されています。あとから設定画面でいつでも変更できます。
+				ログイン情報をもとに初期値を入れています。必要に応じて変更してください。あとから設定画面でも変更できます。
 			</p>
 
 			{#if form && "message" in form && !("field" in form)}
