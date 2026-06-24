@@ -614,7 +614,7 @@ $effect(() => {
 
 			{#if data.user}
 				<div class="action-bar">
-					<a href="/?quote_anime={data.anime.id}#compose" class="action-bar-btn">
+					<a href="/?quote_anime={data.anime.id}#compose" class="action-bar-btn action-bar-btn--link">
 						<svg
 							width="18"
 							height="18"
@@ -626,9 +626,10 @@ $effect(() => {
 							stroke-linejoin="round"
 							aria-hidden="true"
 						>
-							<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+							<path d="M12 20h9" />
+							<path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
 						</svg>
-						<span>投稿</span>
+						<span>投稿する</span>
 					</a>
 					<button
 						type="button"
@@ -1590,6 +1591,8 @@ $effect(() => {
 }
 .meta-chip--link {
 	text-decoration: none;
+	color: var(--accent);
+	background: color-mix(in srgb, var(--accent) 10%, var(--color-surface-hover));
 	transition:
 		background 0.15s,
 		color 0.15s;
@@ -2113,6 +2116,9 @@ a.relation-card:hover {
 .action-bar-btn.active {
 	background: var(--accent);
 	color: #fff;
+}
+.action-bar-btn--link {
+	border-style: dashed;
 }
 .action-panel {
 	width: 100%;
