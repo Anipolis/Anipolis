@@ -6,10 +6,8 @@ import {
 	toggleLikeAction,
 	toggleRepostAction,
 } from "$lib/server/actions";
-import { buildPostCardSelect } from "$lib/server/post-selects";
 import {
 	checkIsFollowing,
-	enrichPostsWithCounts,
 	getAnimeRankingTrending,
 	getFollowCounts,
 	getFollowRequestStatus,
@@ -17,7 +15,6 @@ import {
 	getProfileTimelinePosts,
 	getUserAnimeList,
 } from "$lib/server/queries";
-import type { RawPost } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ params, url, locals: { supabase, safeGetSession } }) => {
@@ -43,9 +40,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 	const canViewContent = isOwn || !profile.is_private || isFollowing;
 	const activeTab = url.searchParams.get("tab") ?? "posts";
 
-	const postSelect = buildPostCardSelect();
-
-	const [posts, rawImagePostsResult, followCounts, trendingResult, animeTrending, animeList] = await Promise.all([
+	const [posts, followCounts, trendingResult, animeTrending, animeList] = await Promise.all([
 		canViewContent
 			? getProfileTimelinePosts(
 					supabase,
@@ -59,17 +54,6 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 				)
 			: Promise.resolve([]),
 
-		canViewContent
-			? supabase
-					.from("posts")
-					.select(postSelect)
-					.eq("user_id", profile.id)
-					.is("parent_id", null)
-					.not("image_urls", "eq", "{}")
-					.order("created_at", { ascending: false })
-					.limit(50)
-			: Promise.resolve({ data: [] }),
-
 		getFollowCounts(supabase, profile.id),
 
 		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
@@ -81,10 +65,12 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 			: Promise.resolve([]),
 	]);
 
-	const [imagePosts, likedPosts] = await Promise.all([
-		enrichPostsWithCounts(supabase, (rawImagePostsResult.data ?? []) as unknown as RawPost[], user?.id ?? null),
-		isOwn && activeTab === "likes" ? getLikedPosts(supabase, profile.id, user?.id ?? null) : Promise.resolve([]),
-	]);
+	const likedPosts =
+		isOwn && activeTab === "likes"
+			? await getLikedPosts(supabase, profile.id, user?.id ?? null)
+			: [];
+
+	const imagePosts = posts.filter((post) => post.image_urls.length > 0);
 
 	return {
 		profile: profileWithHeader,
