@@ -120,7 +120,7 @@ const removeSubmit: SubmitFunction = () => {
 			</div>
 
 			{#if form?.message}
-				<div class="flash-error">{form.message}</div>
+				<div class="flash-error" role="alert">{form.message}</div>
 			{/if}
 			{#if form?.roomMuteSuccess && !editingAnimeId}
 				<div class="flash-success">ミュート設定を保存しました。</div>
