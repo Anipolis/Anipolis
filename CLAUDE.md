@@ -44,14 +44,12 @@ The Supabase CLI is installed as a project dev dependency and configured by `sup
 pnpm exec supabase login
 pnpm exec supabase link --project-ref <project-ref>
 pnpm supabase:migrations
-pnpm supabase:db:push:dry-run
-pnpm supabase:db:push
 pnpm supabase:types
 ```
 
-Use `pnpm supabase:start` / `pnpm supabase:stop` for the local stack. Docker is required. Demo seeds are disabled by default.
+Demo seeds are disabled by default.
 
-Before the first remote `db push`, run `pnpm exec supabase migration list` and reconcile the pre-existing manually applied migration history. Do not guess migration repair status or rename already-applied migrations without confirming the remote history.
+Remote migration push and local database reset are intentionally not exposed as package scripts yet. The existing migrations were applied manually and include duplicate/non-timestamp versions, so the remote history must be inspected and baselined first. Do not run `db push`, repair history, or rename applied migrations without confirming the remote state.
 
 RLS is enforced for all tables. The `posts` select policy uses `USING (true)` — all posts are publicly readable.
 

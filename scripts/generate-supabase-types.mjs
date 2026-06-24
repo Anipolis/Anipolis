@@ -2,8 +2,11 @@ import { spawnSync } from "node:child_process";
 import { existsSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const executable = process.platform === "win32" ? "supabase.cmd" : "supabase";
-const result = spawnSync(executable, ["gen", "types", "typescript", "--linked", "--schema", "public"], {
+const cliArguments = ["exec", "supabase", "gen", "types", "typescript", "--linked", "--schema", "public"];
+const windows = process.platform === "win32";
+const executable = windows ? (process.env.ComSpec ?? "cmd.exe") : "pnpm";
+const arguments_ = windows ? ["/d", "/s", "/c", `pnpm ${cliArguments.join(" ")}`] : cliArguments;
+const result = spawnSync(executable, arguments_, {
 	encoding: "utf8",
 	stdio: ["inherit", "pipe", "inherit"],
 });

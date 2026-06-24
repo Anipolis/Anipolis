@@ -285,13 +285,7 @@ pnpm install         # Install dependencies
 pnpm dev             # Start the SvelteKit dev server
 pnpm build           # Production build
 pnpm preview         # Preview the production build
-pnpm supabase:start  # Start the local Supabase stack (Docker required)
-pnpm supabase:stop   # Stop the local Supabase stack
-pnpm supabase:status # Show local Supabase service status
-pnpm supabase:db:reset # Rebuild the local DB from migrations
-pnpm supabase:db:diff # Inspect local schema changes as SQL
-pnpm supabase:db:push:dry-run # Preview remote migration changes
-pnpm supabase:db:push # Push pending migrations to the linked remote project
+pnpm supabase:version # Show the installed Supabase CLI version
 pnpm supabase:migrations # Compare local and remote migration history
 pnpm supabase:types  # Regenerate src/lib/supabase/database.types.ts from the linked project
 pnpm check:biome     # Biome check with --write
@@ -308,7 +302,7 @@ Notes:
 - Because Biome writes fixes, expect formatting changes if files violate formatter rules.
 - There is no separate format script in `package.json`; formatting is currently folded into `check:biome`.
 - First-time setup requires `pnpm exec supabase login` and `pnpm exec supabase link --project-ref <project-ref>`.
-- Before the first remote `db push`, inspect `pnpm exec supabase migration list` and reconcile the historical migrations that were applied manually. Do not repair history or rename applied migrations without confirming the remote state.
+- Remote migration push and local DB reset are intentionally not exposed as package scripts yet. Inspect `pnpm supabase:migrations` and baseline the historical manually applied migrations first. Do not run `db push`, repair history, or rename applied migrations without confirming the remote state.
 
 ## Safety Rules
 
