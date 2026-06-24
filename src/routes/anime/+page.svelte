@@ -1464,6 +1464,12 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	}
 }
 
+@media (max-width: 420px) {
+	.anime-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
 @media (max-width: 768px) and (orientation: landscape) {
 	.anime-list-surface {
 		padding-bottom: 0;
