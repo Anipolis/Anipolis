@@ -38,7 +38,20 @@ All DB access goes through `src/lib/server/queries.ts` (read) and `src/lib/serve
 
 ### Supabase / Migrations
 
-The app connects to **remote Supabase** (supabase.co). The Supabase CLI is **not linked** — there is no `config.toml`. Migrations in `supabase/migrations/` are applied manually via the Supabase Dashboard SQL editor or a one-off Node script using `SUPABASE_SERVICE_ROLE_KEY` from `.env`.
+The Supabase CLI is installed as a project dev dependency and configured by `supabase/config.toml`.
+
+```bash
+pnpm exec supabase login
+pnpm exec supabase link --project-ref <project-ref>
+pnpm supabase:migrations
+pnpm supabase:db:push:dry-run
+pnpm supabase:db:push
+pnpm supabase:types
+```
+
+Use `pnpm supabase:start` / `pnpm supabase:stop` for the local stack. Docker is required. Demo seeds are disabled by default.
+
+Before the first remote `db push`, run `pnpm exec supabase migration list` and reconcile the pre-existing manually applied migration history. Do not guess migration repair status or rename already-applied migrations without confirming the remote history.
 
 RLS is enforced for all tables. The `posts` select policy uses `USING (true)` — all posts are publicly readable.
 
