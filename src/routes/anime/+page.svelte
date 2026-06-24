@@ -759,9 +759,13 @@ function isAiringToday(anime: AnimeListItem): boolean {
 							</div>
 							<div class="anime-info">
 								<p class="anime-title">{anime.title}</p>
-								{#if anime.title_en}
-									<p class="anime-title-en">{anime.title_en}</p>
-								{/if}
+								<p
+									class="anime-title-en"
+									class:anime-title-en--placeholder={!anime.title_en}
+									aria-hidden={anime.title_en ? undefined : "true"}
+								>
+									{anime.title_en ?? '\u00A0'}
+								</p>
 								<div class="anime-meta">
 									<span class="anime-status-badge status-{anime.computed_broadcast_status}"
 										>{animeStatusBadge(anime)}</span
@@ -770,11 +774,13 @@ function isAiringToday(anime: AnimeListItem): boolean {
 										<span class="anime-season">{anime.season}</span>
 									{/if}
 								</div>
-								{#if anime.user_entry}
-									<span class="mylist-badge"
-										>{statusLabels[anime.user_entry.status as AnimeStatus]}</span
-									>
-								{/if}
+								<div class="mylist-badge-slot">
+									{#if anime.user_entry}
+										<span class="mylist-badge"
+											>{statusLabels[anime.user_entry.status as AnimeStatus]}</span
+										>
+									{/if}
+								</div>
 							</div>
 						</a>
 					{/each}
@@ -1512,7 +1518,6 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	flex-direction: column;
 	gap: 4px;
 	flex: 1;
-	min-height: calc(0.85rem * 1.3 * 2 + 0.72rem * 1.2 + 28px);
 }
 .anime-title {
 	font-size: 0.85rem;
@@ -1529,20 +1534,27 @@ function isAiringToday(anime: AnimeListItem): boolean {
 .anime-title-en {
 	font-size: 0.72rem;
 	line-height: 1.2;
+	min-height: calc(0.72rem * 1.2);
 	color: var(--text-muted);
 	margin: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
+.anime-title-en--placeholder {
+	visibility: hidden;
+}
 .anime-meta {
 	display: flex;
-	flex-wrap: wrap;
+	flex-wrap: nowrap;
 	gap: 4px;
 	align-items: center;
 	margin-top: auto;
+	min-height: calc(0.72rem * 1.6 + 2px);
+	min-width: 0;
 }
 .anime-status-badge {
+	flex-shrink: 0;
 	font-size: 0.7rem;
 	padding: 1px 5px;
 	border-radius: 3px;
@@ -1582,6 +1594,14 @@ function isAiringToday(anime: AnimeListItem): boolean {
 .anime-season {
 	font-size: 0.72rem;
 	color: var(--color-text-muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.mylist-badge-slot {
+	display: flex;
+	align-items: flex-start;
+	min-height: calc(0.7rem * 1.6 + 2px);
 }
 .mylist-badge {
 	font-size: 0.7rem;
