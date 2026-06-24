@@ -1081,7 +1081,7 @@ export async function getTimelinePostsWithReposts(
 	supabase: SupabaseClient<Database>,
 	profiles: ProfileRepostContext[],
 	currentUserId: string | null,
-	options: { limit?: number; select?: string } = {},
+	options: { limit?: number; select?: string; before?: string } = {},
 ): Promise<TimelinePostsWithRepostsResult> {
 	if (profiles.length === 0) return { posts: [], error: null };
 
@@ -1093,10 +1093,18 @@ export async function getTimelinePostsWithReposts(
 	const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
 
 	const buildProfileFilter = <
-		T extends { eq: (column: string, value: string) => T; in: (column: string, values: string[]) => T },
+		T extends {
+			eq: (column: string, value: string) => T;
+			in: (column: string, values: string[]) => T;
+			lt: (column: string, value: string) => T;
+		},
 	>(
 		query: T,
-	) => (profileIds.length === 1 ? query.eq("user_id", firstProfileId) : query.in("user_id", profileIds));
+	) => {
+		let q = profileIds.length === 1 ? query.eq("user_id", firstProfileId) : query.in("user_id", profileIds);
+		if (options.before) q = q.lt("created_at", options.before);
+		return q;
+	};
 
 	const ownPostsQuery = buildProfileFilter(
 		supabase
