@@ -6,17 +6,15 @@ import {
 	toggleLikeAction,
 	toggleRepostAction,
 } from "$lib/server/actions";
-import { buildPostCardSelect } from "$lib/server/post-selects";
 import {
 	checkIsFollowing,
-	enrichPostsWithCounts,
 	getAnimeRankingTrending,
 	getFollowCounts,
 	getFollowRequestStatus,
 	getLikedPosts,
+	getProfileTimelinePosts,
 	getUserAnimeList,
 } from "$lib/server/queries";
-import type { RawPost } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ params, url, locals: { supabase, safeGetSession } }) => {
@@ -40,19 +38,21 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 	]);
 	const followRequestStatus = isFollowing ? ("none" as const) : rawFollowRequestStatus;
 	const canViewContent = isOwn || !profile.is_private || isFollowing;
+	const activeTab = url.searchParams.get("tab") ?? "posts";
 
-	const postSelect = buildPostCardSelect();
-
-	const [rawPostsResult, followCounts, trendingResult, animeTrending, animeList] = await Promise.all([
+	const [posts, followCounts, trendingResult, animeTrending, animeList] = await Promise.all([
 		canViewContent
-			? supabase
-					.from("posts")
-					.select(postSelect)
-					.eq("user_id", profile.id)
-					.is("parent_id", null)
-					.order("created_at", { ascending: false })
-					.limit(50)
-			: Promise.resolve({ data: [] }),
+			? getProfileTimelinePosts(
+					supabase,
+					{
+						id: profile.id,
+						username: profile.username,
+						display_name: profile.display_name,
+						avatar_url: profile.avatar_url,
+					},
+					user?.id ?? null,
+				)
+			: Promise.resolve([]),
 
 		getFollowCounts(supabase, profile.id),
 
@@ -65,15 +65,9 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 			: Promise.resolve([]),
 	]);
 
-	const activeTab = url.searchParams.get("tab") ?? "posts";
+	const likedPosts =
+		isOwn && activeTab === "likes" ? await getLikedPosts(supabase, profile.id, user?.id ?? null) : [];
 
-	const [posts, likedPosts] = await Promise.all([
-		enrichPostsWithCounts(supabase, (rawPostsResult.data ?? []) as unknown as RawPost[], user?.id ?? null),
-		isOwn && activeTab === "likes" ? getLikedPosts(supabase, profile.id, user?.id ?? null) : Promise.resolve([]),
-	]);
-
-	// 画像投稿タブは通常投稿リストの部分集合なので、追加クエリ・追加enrichをせず
-	// enrich済みの posts から画像つきのものを派生させる（DB往復ゼロ）。
 	const imagePosts = posts.filter((post) => post.image_urls.length > 0);
 
 	return {
