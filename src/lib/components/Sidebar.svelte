@@ -1170,7 +1170,7 @@ function isActive(path: string): boolean {
 	width: 100%;
 	padding: 10px 16px;
 	font-size: 0.9rem;
-	color: var(--fg, #f1f5f9);
+	color: var(--color-text);
 	background: none;
 	border: none;
 	cursor: pointer;
@@ -1183,7 +1183,10 @@ function isActive(path: string): boolean {
 .account-menu-item:hover,
 .account-menu-item:focus {
 	background: var(--color-surface-hover);
-	color: var(--color-text);
+}
+
+.account-menu-item:active {
+	background: color-mix(in srgb, var(--color-accent) 14%, var(--color-surface));
 }
 
 .account-menu-item:focus {
