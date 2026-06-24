@@ -1,16 +1,7 @@
 import { fail, redirect } from "@sveltejs/kit";
-import { removeAnimeMute, upsertAnimeMute } from "$lib/server/actions";
+import { parsePositiveInt, removeAnimeMuteAction, updateAnimeMuteAction } from "$lib/server/actions";
 import { getAnimeMutes } from "$lib/server/queries";
 import type { Actions, PageServerLoad } from "./$types";
-
-/** 文字列を正の整数に正規化する。整数でない・0以下・桁あふれは null を返す。 */
-function parsePositiveInt(value: string | null): number | null {
-	if (value == null) return null;
-	const trimmed = value.trim();
-	if (!/^\d+$/.test(trimmed)) return null;
-	const n = Number(trimmed);
-	return Number.isSafeInteger(n) && n > 0 ? n : null;
-}
 
 export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
@@ -82,35 +73,12 @@ export const actions: Actions = {
 	updateAnimeMute: async ({ request, locals: { supabase, safeGetSession } }) => {
 		const { user } = await safeGetSession();
 		if (!user) return fail(401, { message: "ログインが必要です" });
-
-		const form = await request.formData();
-		const animeId = (form.get("anime_id") as string | null)?.trim() ?? "";
-		const muteType = form.get("mute_type") as string | null;
-		if (!animeId || (muteType !== "period" && muteType !== "always")) {
-			return fail(400, { message: "入力内容を確認してください" });
-		}
-		const periodDays =
-			muteType === "period" ? parsePositiveInt((form.get("period_days") as string | null) ?? "3") : null;
-		if (muteType === "period" && (periodDays == null || periodDays < 1 || periodDays > 7)) {
-			return fail(400, { message: "ミュート期間を選択してください（1〜7日）" });
-		}
-		const isRepeat = form.get("is_repeat") === "on";
-
-		const result = await upsertAnimeMute(supabase, user.id, animeId, muteType, periodDays, isRepeat, null);
-		if ("status" in result) return fail(result.status, result.data as Record<string, unknown>);
-		return result;
+		return updateAnimeMuteAction(request, supabase, user.id);
 	},
 
 	removeAnimeMute: async ({ request, locals: { supabase, safeGetSession } }) => {
 		const { user } = await safeGetSession();
 		if (!user) return fail(401, { message: "ログインが必要です" });
-
-		const form = await request.formData();
-		const animeId = (form.get("anime_id") as string | null)?.trim() ?? "";
-		if (!animeId) return fail(400, { message: "ミュート設定が見つかりません" });
-
-		const result = await removeAnimeMute(supabase, user.id, animeId);
-		if ("status" in result) return fail(result.status, result.data as Record<string, unknown>);
-		return result;
+		return removeAnimeMuteAction(request, supabase, user.id);
 	},
 };
