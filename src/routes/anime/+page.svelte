@@ -1518,6 +1518,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	font-size: 0.85rem;
 	font-weight: 600;
 	line-height: 1.3;
+	min-height: calc(0.85rem * 1.3 * 2);
 	margin: 0;
 	display: -webkit-box;
 	-webkit-line-clamp: 2;
