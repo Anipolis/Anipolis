@@ -1020,6 +1020,18 @@ export type Database = {
 					reply_count: number;
 				}[];
 			};
+			get_post_counts: {
+				Args: { p_post_ids: string[]; p_user_id?: string | null };
+				Returns: {
+					post_id: string;
+					like_count: number;
+					repost_count: number;
+					reply_count: number;
+					liked_by_me: boolean;
+					reposted_by_me: boolean;
+					bookmarked_by_me: boolean;
+				}[];
+			};
 			create_anime_exchange: {
 				Args: { p_anime_id: number; p_comment?: string | null };
 				Returns: {
