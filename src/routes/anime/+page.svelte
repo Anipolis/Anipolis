@@ -767,12 +767,18 @@ function isAiringToday(anime: AnimeListItem): boolean {
 									{anime.title_en ?? '\u00A0'}
 								</p>
 								<div class="anime-meta">
-									<span class="anime-status-badge status-{anime.computed_broadcast_status}"
-										>{animeStatusBadge(anime)}</span
+									<div class="anime-status-slot">
+										<span class="anime-status-badge status-{anime.computed_broadcast_status}"
+											>{animeStatusBadge(anime)}</span
+										>
+									</div>
+									<span
+										class="anime-season"
+										class:anime-season--placeholder={!anime.season}
+										aria-hidden={anime.season ? undefined : "true"}
 									>
-									{#if anime.season}
-										<span class="anime-season">{anime.season}</span>
-									{/if}
+										{anime.season ?? '\u00A0'}
+									</span>
 								</div>
 								<div class="mylist-badge-slot">
 									{#if anime.user_entry}
@@ -1523,7 +1529,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	font-size: 0.85rem;
 	font-weight: 600;
 	line-height: 1.3;
-	min-height: calc(0.85rem * 1.3 * 2);
+	height: calc(0.85rem * 1.3 * 2);
 	margin: 0;
 	display: -webkit-box;
 	-webkit-line-clamp: 2;
@@ -1534,7 +1540,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 .anime-title-en {
 	font-size: 0.72rem;
 	line-height: 1.2;
-	min-height: calc(0.72rem * 1.2);
+	height: calc(0.72rem * 1.2);
 	color: var(--text-muted);
 	margin: 0;
 	overflow: hidden;
@@ -1545,20 +1551,23 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	visibility: hidden;
 }
 .anime-meta {
-	display: flex;
-	flex-wrap: nowrap;
+	display: grid;
+	grid-template-rows: repeat(2, calc(0.72rem * 1.6 + 2px));
 	gap: 4px;
-	align-items: center;
-	margin-top: auto;
-	min-height: calc(0.72rem * 1.6 + 2px);
+	min-width: 0;
+}
+.anime-status-slot {
+	display: flex;
+	align-items: flex-start;
 	min-width: 0;
 }
 .anime-status-badge {
-	flex-shrink: 0;
 	font-size: 0.7rem;
 	padding: 1px 5px;
 	border-radius: 3px;
 	font-weight: 600;
+	line-height: 1.6;
+	white-space: nowrap;
 }
 .status-airing {
 	background: color-mix(in srgb, var(--status-watching) 15%, transparent);
@@ -1593,23 +1602,29 @@ function isAiringToday(anime: AnimeListItem): boolean {
 
 .anime-season {
 	font-size: 0.72rem;
+	line-height: 1.6;
 	color: var(--color-text-muted);
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
+.anime-season--placeholder {
+	visibility: hidden;
+}
 .mylist-badge-slot {
 	display: flex;
 	align-items: flex-start;
-	min-height: calc(0.7rem * 1.6 + 2px);
+	height: calc(0.7rem * 1.6 + 2px);
 }
 .mylist-badge {
 	font-size: 0.7rem;
+	line-height: 1.6;
 	padding: 1px 5px;
 	border-radius: 3px;
 	background: var(--accent-muted, #19448e22);
 	color: var(--accent);
 	width: fit-content;
+	white-space: nowrap;
 }
 
 .empty-state {
