@@ -49,7 +49,7 @@ pnpm supabase:types
 
 Demo seeds are disabled by default.
 
-Remote migration push and local database reset are intentionally not exposed as package scripts yet. The existing migrations were applied manually and include duplicate/non-timestamp versions, so the remote history must be inspected and baselined first. Do not run `db push`, repair history, or rename applied migrations without confirming the remote state.
+Remote migration push and local database reset are intentionally disabled in `supabase/config.toml` and are not exposed as package scripts yet. The existing migrations were applied manually and include duplicate/non-timestamp versions, so the remote history must be inspected and baselined first. Do not enable migrations, run `db push`, repair history, or rename applied migrations without confirming the remote state.
 
 RLS is enforced for all tables. The `posts` select policy uses `USING (true)` — all posts are publicly readable.
 
