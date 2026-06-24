@@ -578,6 +578,12 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 													</button>
 												</div>
 												{#if openAlertMenu === alertKey(anime.id, displayDate)}
+													<button
+														type="button"
+														class="alert-menu-backdrop"
+														aria-label="閉じる"
+														onclick={() => (openAlertMenu = null)}
+													></button>
 													<div class="room-alert-menu" aria-label="ルーム設定">
 														{#if subscribable}
 															<form
@@ -1156,6 +1162,19 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 .notify-btn--muted:hover {
 	background: color-mix(in srgb, #ef4444 18%, var(--card-bg));
 	color: #dc2626;
+}
+/* Transparent full-screen catcher: taps outside the menu close it
+   (and stop the underlying slot link from opening a room). */
+.alert-menu-backdrop {
+	position: fixed;
+	inset: 0;
+	z-index: 4;
+	width: 100%;
+	height: 100%;
+	padding: 0;
+	border: none;
+	background: transparent;
+	cursor: default;
 }
 .room-alert-menu {
 	position: absolute;

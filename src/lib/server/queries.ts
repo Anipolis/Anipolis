@@ -196,29 +196,16 @@ export async function enrichPostsWithCounts(
 
 	const postIds = visibleRawPosts.map((p) => p.id as string);
 
-	// ── 並列バッチクエリ ──────────────────────────────────────────
-	const [countsRes, myLikesRes, myRepostsRes, myBookmarksRes] = await Promise.all([
-		supabase.rpc("get_post_engagement_counts", { target_post_ids: postIds }),
-		// ログイン中ユーザーのいいね一覧
-		userId
-			? supabase.from("likes").select("post_id").eq("user_id", userId).in("post_id", postIds)
-			: Promise.resolve({ data: [] as { post_id: string }[] }),
+	// ── 件数＋自分のリアクション有無を単一RPCで取得（DB往復 4→1）──────
+	// get_post_counts は like/repost/reply の件数に加え、
+	// liked_by_me / reposted_by_me / bookmarked_by_me を1クエリで返す。
+	// p_user_id が NULL（未ログイン）の場合は各 *_by_me が全て false になる。
+	const { data: countsData } = await supabase.rpc("get_post_counts", {
+		p_post_ids: postIds,
+		p_user_id: userId,
+	});
 
-		// ログイン中ユーザーのリポスト一覧
-		userId
-			? supabase.from("reposts").select("post_id").eq("user_id", userId).in("post_id", postIds)
-			: Promise.resolve({ data: [] as { post_id: string }[] }),
-
-		userId
-			? supabase.from("bookmarks").select("post_id").eq("user_id", userId).in("post_id", postIds)
-			: Promise.resolve({ data: [] as { post_id: string }[] }),
-	]);
-
-	const countsByPostId = new Map((countsRes.data ?? []).map((row) => [row.post_id, row]));
-
-	const likedSet = new Set((myLikesRes.data ?? []).map((r) => r.post_id));
-	const repostedSet = new Set((myRepostsRes.data ?? []).map((r) => r.post_id));
-	const bookmarkedSet = new Set((myBookmarksRes.data ?? []).map((r) => r.post_id));
+	const countsByPostId = new Map((countsData ?? []).map((row) => [row.post_id, row]));
 
 	// ── アニメ引用がある投稿のスコアを一括取得 ────────────────────
 	const animeIds = Array.from(new Set(visibleRawPosts.map((p) => p.anime_id).filter((n): n is number => n != null)));
@@ -239,9 +226,9 @@ export async function enrichPostsWithCounts(
 			like_count: countsByPostId.get(raw["id"])?.like_count ?? 0,
 			repost_count: countsByPostId.get(raw["id"])?.repost_count ?? 0,
 			reply_count: countsByPostId.get(raw["id"])?.reply_count ?? 0,
-			liked_by_me: likedSet.has(raw["id"]),
-			reposted_by_me: repostedSet.has(raw["id"]),
-			bookmarked_by_me: bookmarkedSet.has(raw["id"]),
+			liked_by_me: countsByPostId.get(raw["id"])?.liked_by_me ?? false,
+			reposted_by_me: countsByPostId.get(raw["id"])?.reposted_by_me ?? false,
+			bookmarked_by_me: countsByPostId.get(raw["id"])?.bookmarked_by_me ?? false,
 		});
 		if (post.anime_quote && post.anime_id) {
 			post.anime_quote.user_score = normalizeScore(userScoreMap.get(post.anime_id));
