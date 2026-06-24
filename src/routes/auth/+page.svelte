@@ -47,7 +47,7 @@ const next = $derived(data.next ?? "/");
 
 			{#if data.error === 'not_member'}
 				<div class="flash-error">
-					このDiscordサーバーのメンバーのみ参加できます。サーバーに参加してから、もう一度お試しください。
+					このサービスは現在、クローズドβテスト中です。テストに参加しているメンバーのみ利用できます。
 				</div>
 			{/if}
 
