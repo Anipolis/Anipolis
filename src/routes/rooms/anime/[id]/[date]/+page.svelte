@@ -397,7 +397,7 @@ function formatCompactDate(iso: string) {
 }
 
 .room-summary-status {
-	background: var(--color-surface);
+	background: var(--color-surface-hover);
 	color: var(--color-text-secondary);
 }
 
