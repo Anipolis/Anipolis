@@ -12,6 +12,7 @@ const GENRES = [...ANIME_GENRES];
 const SOURCE_OPTIONS = [...ANIME_SOURCE_OPTIONS];
 
 const tabs = [
+	{ id: "all", label: "すべて" },
 	{ id: "popular", label: "人気" },
 	{ id: "trending", label: "トレンド" },
 	{ id: "top_rated", label: "高評価" },
@@ -564,16 +565,28 @@ function isAiringToday(anime: AnimeListItem): boolean {
 				</div>
 				<div class="filter-group filter-group--year">
 					<label for="filter-broadcast-year" class="filter-label">放送年</label>
-					<input
-						id="filter-broadcast-year"
-						name="broadcastYear"
-						type="number"
-						min="1900"
-						max="2100"
-						class="filter-input"
-						placeholder="例: 2025"
-						value={data.broadcastYear ?? ''}
-					>
+					<div class="filter-year-wrap">
+						<input
+							id="filter-broadcast-year"
+							name="broadcastYear"
+							type="number"
+							min="1900"
+							max="2100"
+							class="filter-input"
+							placeholder="例: 2025"
+							value={data.broadcastYear ?? ''}
+						>
+						<button
+							type="button"
+							class="filter-year-today-btn"
+							onclick={(e) => {
+								const input = (e.currentTarget.closest('.filter-year-wrap') as HTMLElement)?.querySelector('input') as HTMLInputElement | null;
+								if (input) { input.value = String(new Date().getFullYear()); input.form?.requestSubmit(); }
+							}}
+						>
+							今年
+						</button>
+					</div>
 				</div>
 				<div class="filter-group">
 					<label for="filter-broadcast-season" class="filter-label">放送シーズン</label>
@@ -616,6 +629,16 @@ function isAiringToday(anime: AnimeListItem): boolean {
 						{/each}
 					</select>
 				</div>
+				{#if data.genre || data.broadcastYear || data.broadcastSeason || data.studio || data.producer || data.source}
+					<div class="filter-group filter-group--reset">
+						<a
+							href="/anime{data.tab && data.tab !== 'popular' ? `?tab=${data.tab}` : ''}"
+							class="filter-reset-btn"
+							title="フィルターをリセット"
+							>✕ リセット</a
+						>
+					</div>
+				{/if}
 			</div>
 		</form>
 
@@ -1240,7 +1263,50 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	max-width: 220px;
 }
 .filter-group--year {
-	flex: 0 1 120px;
+	flex: 0 1 160px;
+}
+.filter-year-wrap {
+	display: flex;
+	gap: 4px;
+	align-items: stretch;
+}
+.filter-year-wrap .filter-input {
+	flex: 1;
+	min-width: 0;
+}
+.filter-year-today-btn {
+	padding: 7px 8px;
+	border-radius: 8px;
+	border: 1px solid var(--color-border);
+	background: var(--color-surface-hover);
+	color: var(--color-text-muted);
+	font-size: 0.78rem;
+	cursor: pointer;
+	white-space: nowrap;
+	transition: background 0.12s;
+}
+.filter-year-today-btn:hover {
+	background: var(--color-accent);
+	color: #fff;
+	border-color: var(--color-accent);
+}
+.filter-group--reset {
+	flex: 0 0 auto;
+	min-width: unset;
+	justify-content: flex-end;
+}
+.filter-reset-btn {
+	padding: 7px 12px;
+	border-radius: 8px;
+	border: 1px solid var(--color-border);
+	color: var(--color-text-muted);
+	text-decoration: none;
+	font-size: 0.82rem;
+	white-space: nowrap;
+	transition: background 0.12s;
+}
+.filter-reset-btn:hover {
+	background: var(--color-surface-hover);
 }
 .filter-label {
 	font-size: 0.75rem;
