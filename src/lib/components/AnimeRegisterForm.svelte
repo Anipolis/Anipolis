@@ -607,6 +607,12 @@ async function handleFileChange(e: Event) {
 .rf-select:focus {
 	border-color: var(--color-accent);
 }
+.rf-input:focus-visible,
+.rf-textarea:focus-visible,
+.rf-select:focus-visible {
+	outline: 2px solid var(--color-accent);
+	outline-offset: 2px;
+}
 .rf-textarea {
 	resize: vertical;
 }

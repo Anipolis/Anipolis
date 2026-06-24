@@ -1189,6 +1189,10 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	border-color: var(--color-accent);
 	box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 15%, transparent);
 }
+.search-input:focus-visible {
+	outline: 2px solid var(--color-accent);
+	outline-offset: 2px;
+}
 .search-btn {
 	padding: 9px 18px;
 	border-radius: 8px;
@@ -1267,6 +1271,11 @@ function isAiringToday(anime: AnimeListItem): boolean {
 .filter-input:focus {
 	border-color: var(--color-accent);
 	box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 15%, transparent);
+}
+.filter-select:focus-visible,
+.filter-input:focus-visible {
+	outline: 2px solid var(--color-accent);
+	outline-offset: 2px;
 }
 
 .filter-clear {
@@ -1851,6 +1860,10 @@ function isAiringToday(anime: AnimeListItem): boolean {
 .filter-sheet-input:focus {
 	border-color: var(--accent);
 	box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+.filter-sheet-input:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
 }
 .filter-sheet-clear {
 	align-self: flex-start;
