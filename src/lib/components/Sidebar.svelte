@@ -1182,9 +1182,8 @@ function isActive(path: string): boolean {
 
 .account-menu-item:hover,
 .account-menu-item:focus {
-	background: var(--surface-hover, #263348);
-	color: var(--fg, #f1f5f9);
-	text-decoration: none;
+	background: var(--color-surface-hover);
+	color: var(--color-text);
 }
 
 .account-menu-item:focus {
@@ -1192,7 +1191,7 @@ function isActive(path: string): boolean {
 }
 
 .account-menu-item:focus-visible {
-	outline: 2px solid var(--accent, #6366f1);
+	outline: 2px solid var(--color-accent);
 	outline-offset: -3px;
 }
 
