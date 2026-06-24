@@ -1270,10 +1270,6 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	gap: 4px;
 	align-items: stretch;
 }
-.filter-year-wrap .filter-input {
-	flex: 1;
-	min-width: 0;
-}
 .filter-year-today-btn {
 	padding: 7px 8px;
 	border-radius: 8px;
@@ -1333,6 +1329,10 @@ function isAiringToday(anime: AnimeListItem): boolean {
 .filter-input:focus {
 	border-color: var(--color-accent);
 	box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 15%, transparent);
+}
+.filter-year-wrap .filter-input {
+	flex: 1;
+	min-width: 0;
 }
 
 .filter-clear {
