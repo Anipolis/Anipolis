@@ -84,9 +84,9 @@ function handleFabClick() {
 		{pendingReportsCount}
 		extraAccounts={data.extraAccounts}
 	/>
-	<div class="app-main" id="main-content" tabindex="-1">
+	<main class="app-main" id="main-content" tabindex="-1">
 		{@render children()}
-	</div>
+	</main>
 </div>
 
 <MobileBottomNav session={data.session} {unreadNotificationCount} />
