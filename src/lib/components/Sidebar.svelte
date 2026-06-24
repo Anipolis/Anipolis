@@ -1177,10 +1177,23 @@ function isActive(path: string): boolean {
 	text-decoration: none;
 	text-align: left;
 	transition: background 0.12s;
+	-webkit-tap-highlight-color: transparent;
 }
 
-.account-menu-item:hover {
+.account-menu-item:hover,
+.account-menu-item:focus {
 	background: var(--surface-hover, #263348);
+	color: var(--fg, #f1f5f9);
+	text-decoration: none;
+}
+
+.account-menu-item:focus {
+	outline: none;
+}
+
+.account-menu-item:focus-visible {
+	outline: 2px solid var(--accent, #6366f1);
+	outline-offset: -3px;
 }
 
 .account-menu-current {
