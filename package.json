@@ -20,8 +20,6 @@
 		"check": "pnpm check:biome && pnpm check:svelte && pnpm check:types && pnpm check:anime-view",
 		"test:unit": "vitest --run --coverage",
 		"test": "pnpm test:unit",
-		"supabase:version": "supabase --version",
-		"supabase:migrations": "supabase migration list",
 		"supabase:types": "node scripts/generate-supabase-types.mjs",
 		"lint": "biome check .",
 		"lint:fix": "biome check . --write",
