@@ -1192,9 +1192,11 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	gap: 8px;
 }
 
-.day-col:first-child .room-alert-menu {
-	left: 4px;
-	right: auto;
+@media (min-width: 961px) {
+	.day-col:first-child .room-alert-menu {
+		left: 4px;
+		right: auto;
+	}
 }
 
 .notify-toggle {
