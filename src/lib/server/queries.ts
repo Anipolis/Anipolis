@@ -94,6 +94,52 @@ function normalizeAverageScore(score: number | null | undefined, count: number |
 const POST_LIST_SELECT = buildPostCardSelect();
 
 /**
+ * リクエストスコープのミュート設定キャッシュ。
+ *
+ * supabase クライアントは `hooks.server.ts` でリクエストごとに新規生成されるため、
+ * クライアントオブジェクトをキーにすることで「同一リクエスト内でのみ」設定を共有できる。
+ * WeakMap なのでクライアントが GC されればエントリも自動的に解放される。
+ *
+ * ユーザーのミュート設定はリクエスト内で不変なのに、`enrichPostsWithCounts` が
+ * 複数回呼ばれるルート（プロフィール: posts / imagePosts / likes で最大3回）では
+ * 毎回 muted_words / anime_mutes を取得し直していた。これをメモ化して 1 回にまとめる。
+ */
+const muteSettingsCache = new WeakMap<
+	object,
+	Map<string, { mutedWords?: Promise<string[]>; animeMuteIds?: Promise<Set<string>> }>
+>();
+
+function getMuteCacheEntry(supabase: SupabaseClient<Database>, userId: string) {
+	let byUser = muteSettingsCache.get(supabase);
+	if (!byUser) {
+		byUser = new Map();
+		muteSettingsCache.set(supabase, byUser);
+	}
+	let entry = byUser.get(userId);
+	if (!entry) {
+		entry = {};
+		byUser.set(userId, entry);
+	}
+	return entry;
+}
+
+/** リクエストスコープでメモ化された getMutedWords */
+function getMutedWordsCached(supabase: SupabaseClient<Database>, userId: string | null): Promise<string[]> {
+	if (!userId) return getMutedWords(supabase, userId);
+	const entry = getMuteCacheEntry(supabase, userId);
+	if (!entry.mutedWords) entry.mutedWords = getMutedWords(supabase, userId);
+	return entry.mutedWords;
+}
+
+/** リクエストスコープでメモ化された getActiveAnimeMuteIds */
+function getActiveAnimeMuteIdsCached(supabase: SupabaseClient<Database>, userId: string | null): Promise<Set<string>> {
+	if (!userId) return getActiveAnimeMuteIds(supabase, userId);
+	const entry = getMuteCacheEntry(supabase, userId);
+	if (!entry.animeMuteIds) entry.animeMuteIds = getActiveAnimeMuteIds(supabase, userId);
+	return entry.animeMuteIds;
+}
+
+/**
  * rawPost 配列に like_count / repost_count / reply_count / liked_by_me / reposted_by_me を付加して
  * Post[] に変換する共通ヘルパー。
  * 全ルートサーバー（タイムライン・プロフィール・ハッシュタグ・検索・詳細）で使い回す。
@@ -106,10 +152,10 @@ export async function enrichPostsWithCounts(
 ): Promise<Post[]> {
 	if (rawPosts.length === 0) return [];
 
-	const mutedWordsPromise = getMutedWords(supabase, userId);
+	const mutedWordsPromise = getMutedWordsCached(supabase, userId);
 	const mutedRoomAnimeIdsPromise = options.includeMutedRoomPosts
 		? Promise.resolve(new Set<string>())
-		: getActiveAnimeMuteIds(supabase, userId);
+		: getActiveAnimeMuteIdsCached(supabase, userId);
 
 	type QuotedPostRow = {
 		id: string;
@@ -150,29 +196,16 @@ export async function enrichPostsWithCounts(
 
 	const postIds = visibleRawPosts.map((p) => p.id as string);
 
-	// ── 並列バッチクエリ ──────────────────────────────────────────
-	const [countsRes, myLikesRes, myRepostsRes, myBookmarksRes] = await Promise.all([
-		supabase.rpc("get_post_engagement_counts", { target_post_ids: postIds }),
-		// ログイン中ユーザーのいいね一覧
-		userId
-			? supabase.from("likes").select("post_id").eq("user_id", userId).in("post_id", postIds)
-			: Promise.resolve({ data: [] as { post_id: string }[] }),
+	// ── 件数＋自分のリアクション有無を単一RPCで取得（DB往復 4→1）──────
+	// get_post_counts は like/repost/reply の件数に加え、
+	// liked_by_me / reposted_by_me / bookmarked_by_me を1クエリで返す。
+	// p_user_id が NULL（未ログイン）の場合は各 *_by_me が全て false になる。
+	const { data: countsData } = await supabase.rpc("get_post_counts", {
+		p_post_ids: postIds,
+		p_user_id: userId,
+	});
 
-		// ログイン中ユーザーのリポスト一覧
-		userId
-			? supabase.from("reposts").select("post_id").eq("user_id", userId).in("post_id", postIds)
-			: Promise.resolve({ data: [] as { post_id: string }[] }),
-
-		userId
-			? supabase.from("bookmarks").select("post_id").eq("user_id", userId).in("post_id", postIds)
-			: Promise.resolve({ data: [] as { post_id: string }[] }),
-	]);
-
-	const countsByPostId = new Map((countsRes.data ?? []).map((row) => [row.post_id, row]));
-
-	const likedSet = new Set((myLikesRes.data ?? []).map((r) => r.post_id));
-	const repostedSet = new Set((myRepostsRes.data ?? []).map((r) => r.post_id));
-	const bookmarkedSet = new Set((myBookmarksRes.data ?? []).map((r) => r.post_id));
+	const countsByPostId = new Map((countsData ?? []).map((row) => [row.post_id, row]));
 
 	// ── アニメ引用がある投稿のスコアを一括取得 ────────────────────
 	const animeIds = Array.from(new Set(visibleRawPosts.map((p) => p.anime_id).filter((n): n is number => n != null)));
@@ -193,9 +226,9 @@ export async function enrichPostsWithCounts(
 			like_count: countsByPostId.get(raw["id"])?.like_count ?? 0,
 			repost_count: countsByPostId.get(raw["id"])?.repost_count ?? 0,
 			reply_count: countsByPostId.get(raw["id"])?.reply_count ?? 0,
-			liked_by_me: likedSet.has(raw["id"]),
-			reposted_by_me: repostedSet.has(raw["id"]),
-			bookmarked_by_me: bookmarkedSet.has(raw["id"]),
+			liked_by_me: countsByPostId.get(raw["id"])?.liked_by_me ?? false,
+			reposted_by_me: countsByPostId.get(raw["id"])?.reposted_by_me ?? false,
+			bookmarked_by_me: countsByPostId.get(raw["id"])?.bookmarked_by_me ?? false,
 		});
 		if (post.anime_quote && post.anime_id) {
 			post.anime_quote.user_score = normalizeScore(userScoreMap.get(post.anime_id));

@@ -11,6 +11,12 @@
 --   p_post_ids  : カウント対象の投稿IDリスト
 --   p_user_id   : ログイン中ユーザーのID（NULLの場合はliked/reposted/bookmarked は全てfalse）
 --
+-- セキュリティ:
+--   SECURITY DEFINER のため RLS をバイパスする。user_likes/user_reposts/user_bookmarks
+--   各CTEに AND p_user_id = auth.uid() を追加することで、呼び出し元が自分以外の
+--   UUID を p_user_id に渡しても *_by_me が常に false になるよう防御している。
+--   （NULL = auth.uid() は NULL であり偽になるため、未ログイン時も安全）
+--
 -- 返り値（1行 = 1投稿）:
 --   post_id, like_count, repost_count, reply_count,
 --   liked_by_me, reposted_by_me, bookmarked_by_me
@@ -60,18 +66,21 @@ AS $$
         FROM likes
         WHERE user_id = p_user_id
           AND post_id = ANY(p_post_ids)
+          AND p_user_id = auth.uid()
     ),
     user_reposts AS (
         SELECT post_id
         FROM reposts
         WHERE user_id = p_user_id
           AND post_id = ANY(p_post_ids)
+          AND p_user_id = auth.uid()
     ),
     user_bookmarks AS (
         SELECT post_id
         FROM bookmarks
         WHERE user_id = p_user_id
           AND post_id = ANY(p_post_ids)
+          AND p_user_id = auth.uid()
     )
     SELECT
         ids.id                          AS post_id,
