@@ -2,7 +2,7 @@
 	"$schema": "https://biomejs.dev/schemas/2.4.15/schema.json",
 	"files": {
 		"ignoreUnknown": true,
-		"includes": ["**", "!**/package.json", "!supabase", "!.claude/**"]
+		"includes": ["**", "!**/package.json", "!supabase", "!.claude"]
 	},
 	"vcs": {
 		"enabled": true,

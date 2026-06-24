@@ -66,9 +66,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 	]);
 
 	const likedPosts =
-		isOwn && activeTab === "likes"
-			? await getLikedPosts(supabase, profile.id, user?.id ?? null)
-			: [];
+		isOwn && activeTab === "likes" ? await getLikedPosts(supabase, profile.id, user?.id ?? null) : [];
 
 	const imagePosts = posts.filter((post) => post.image_urls.length > 0);
 
