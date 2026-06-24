@@ -1313,6 +1313,10 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	color: #fff;
 	border-color: var(--color-accent);
 }
+.tab-btn.active:hover {
+	background: var(--color-accent-hover);
+	border-color: var(--color-accent-hover);
+}
 
 .anime-list-surface {
 	display: flex;
@@ -1833,6 +1837,10 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	background: var(--accent);
 	border-color: var(--accent);
 	color: #fff;
+}
+.season-chip--active:hover {
+	background: var(--accent);
+	border-color: var(--accent);
 }
 .filter-sheet-input {
 	padding: 9px 12px;
