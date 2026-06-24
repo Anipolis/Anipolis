@@ -3,6 +3,15 @@ import { removeAnimeMute, upsertAnimeMute } from "$lib/server/actions";
 import { getAnimeMutes } from "$lib/server/queries";
 import type { Actions, PageServerLoad } from "./$types";
 
+/** 文字列を正の整数に正規化する。整数でない・0以下・桁あふれは null を返す。 */
+function parsePositiveInt(value: string | null): number | null {
+	if (value == null) return null;
+	const trimmed = value.trim();
+	if (!/^\d+$/.test(trimmed)) return null;
+	const n = Number(trimmed);
+	return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+
 export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 	if (!user) redirect(303, "/");
@@ -16,8 +25,8 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		getAnimeMutes(supabase, user.id),
 	]);
 
-	const virtualAnimeId = url.searchParams.get("anime_id");
-	const stagedAnimeId = virtualAnimeId && !Number.isNaN(Number(virtualAnimeId)) ? virtualAnimeId : null;
+	const parsedAnimeId = parsePositiveInt(url.searchParams.get("anime_id"));
+	const stagedAnimeId = parsedAnimeId !== null ? String(parsedAnimeId) : null;
 	let virtualAnime: { id: string; title: string; cover_url: string | null } | null = null;
 	if (stagedAnimeId && !mutes.find((m) => m.anime_id === stagedAnimeId)) {
 		const { data } = await supabase
@@ -80,7 +89,8 @@ export const actions: Actions = {
 		if (!animeId || (muteType !== "period" && muteType !== "always")) {
 			return fail(400, { message: "入力内容を確認してください" });
 		}
-		const periodDays = muteType === "period" ? Number(form.get("period_days") ?? 3) : null;
+		const periodDays =
+			muteType === "period" ? parsePositiveInt((form.get("period_days") as string | null) ?? "3") : null;
 		if (muteType === "period" && (periodDays == null || periodDays < 1 || periodDays > 7)) {
 			return fail(400, { message: "ミュート期間を選択してください（1〜7日）" });
 		}
