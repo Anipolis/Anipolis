@@ -52,6 +52,8 @@ export interface AnimeExchangeShare {
 	received_anime: AnimeExchangeShareAnime;
 	offered_comment: string | null;
 	received_comment: string | null;
+	offered_subjective_tags: string[];
+	received_subjective_tags: string[];
 }
 
 type AnimeExchangeShareRaw = {
@@ -60,6 +62,8 @@ type AnimeExchangeShareRaw = {
 	received_anime?: unknown;
 	offered_comment?: unknown;
 	received_comment?: unknown;
+	offered_subjective_tags?: unknown;
+	received_subjective_tags?: unknown;
 };
 
 type AnimeExchangeShareAnimeRaw = {
@@ -266,6 +270,7 @@ export interface AnimeExchangeItem {
 	created_at: string;
 	matched_at: string | null;
 	comment: string | null;
+	subjective_tags: string[];
 	offered_anime: {
 		id: string;
 		title: string;
@@ -279,6 +284,7 @@ export interface AnimeExchangeItem {
 		cover_url: string | null;
 	} | null;
 	received_comment: string | null;
+	received_subjective_tags: string[];
 }
 
 // ----------------------------------------------------------------
@@ -439,6 +445,18 @@ export function buildAnimeRoomLabel(anime: Pick<AnimeQuote, "title" | "official_
 	return anime.episode_number != null ? `${tag}　${anime.episode_number}話` : tag;
 }
 
+function toStringArray(value: unknown) {
+	if (!Array.isArray(value)) return [];
+	const values: string[] = [];
+	for (const item of value) {
+		if (typeof item !== "string") continue;
+		const text = item.trim();
+		if (!text || values.includes(text)) continue;
+		values.push(text);
+	}
+	return values;
+}
+
 function toAnimeExchangeShare(value: unknown): AnimeExchangeShare | null {
 	if (!value || typeof value !== "object") return null;
 	const raw = value as AnimeExchangeShareRaw;
@@ -452,6 +470,8 @@ function toAnimeExchangeShare(value: unknown): AnimeExchangeShare | null {
 		received_anime: received,
 		offered_comment: typeof raw.offered_comment === "string" ? raw.offered_comment : null,
 		received_comment: typeof raw.received_comment === "string" ? raw.received_comment : null,
+		offered_subjective_tags: toStringArray(raw.offered_subjective_tags),
+		received_subjective_tags: toStringArray(raw.received_subjective_tags),
 	};
 }
 

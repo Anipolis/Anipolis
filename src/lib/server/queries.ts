@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { toExchangeSubjectiveTags } from "$lib/exchange-tags";
 import { buildPostCardSelect } from "$lib/server/post-selects";
 import type { Database } from "$lib/supabase/database.types";
 import type {
@@ -1920,6 +1921,7 @@ export async function getAnimeExchangeEntries(
             created_at,
             matched_at,
             comment,
+            subjective_tags,
             received_entry_id,
             anime:anime_exchange_entries_anime_id_fkey (
                 id,
@@ -1951,6 +1953,7 @@ export async function getAnimeExchangeEntries(
 		.select(`
 			id,
 			comment,
+			subjective_tags,
 			anime:anime_exchange_entries_anime_id_fkey (
 				id,
 				title,
@@ -1962,7 +1965,10 @@ export async function getAnimeExchangeEntries(
 
 	if (receivedError || !receivedRows) return baseItems;
 
-	const receivedEntryById = new Map<string, Pick<AnimeExchangeItem, "received_anime" | "received_comment">>();
+	const receivedEntryById = new Map<
+		string,
+		Pick<AnimeExchangeItem, "received_anime" | "received_comment" | "received_subjective_tags">
+	>();
 	for (const row of receivedRows as Record<string, unknown>[]) {
 		const animeValue = row["anime"];
 		const anime = Array.isArray(animeValue) ? animeValue[0] : animeValue;
@@ -1976,6 +1982,9 @@ export async function getAnimeExchangeEntries(
 				cover_url: typeof animeRecord["cover_url"] === "string" ? animeRecord["cover_url"] : null,
 			},
 			received_comment: typeof row["comment"] === "string" ? row["comment"] : null,
+			received_subjective_tags: toExchangeSubjectiveTags(
+				Array.isArray(row["subjective_tags"]) ? row["subjective_tags"] : [],
+			),
 		});
 	}
 
@@ -1989,7 +1998,16 @@ export async function getAnimeExchangeEntries(
 			typeof receivedEntryId === "string" && receivedEntryId.length > 0
 				? (receivedEntryById.get(receivedEntryId)?.received_comment ?? null)
 				: null;
-		return { ...item, received_anime: receivedAnime, received_comment: receivedComment };
+		const receivedSubjectiveTags =
+			typeof receivedEntryId === "string" && receivedEntryId.length > 0
+				? (receivedEntryById.get(receivedEntryId)?.received_subjective_tags ?? [])
+				: [];
+		return {
+			...item,
+			received_anime: receivedAnime,
+			received_comment: receivedComment,
+			received_subjective_tags: receivedSubjectiveTags,
+		};
 	});
 }
 
@@ -2008,7 +2026,7 @@ function toExchangeShareAnime(value: unknown): AnimeExchangeShare["offered_anime
 	};
 }
 
-const EXCHANGE_SHARE_SELECT = `comment, received_entry_id,
+const EXCHANGE_SHARE_SELECT = `comment, subjective_tags, received_entry_id,
             anime:anime_exchange_entries_anime_id_fkey ( id, title, title_en, cover_url )`;
 
 export async function getAnimeExchangeShareForUser(
@@ -2038,8 +2056,10 @@ export async function getAnimeExchangeShareForUser(
 		.maybeSingle();
 
 	const receivedRecord = received as Record<string, unknown> | null;
-	const receivedAnime = receivedRecord ? toExchangeShareAnime(receivedRecord["anime"]) : null;
+	if (!receivedRecord) return null;
+	const receivedAnime = toExchangeShareAnime(receivedRecord["anime"]);
 	if (!receivedAnime) return null;
+	const receivedSubjectiveTagsRaw = receivedRecord["subjective_tags"];
 
 	return {
 		type: "anime_exchange",
@@ -2048,6 +2068,12 @@ export async function getAnimeExchangeShareForUser(
 		offered_comment: typeof entryRecord["comment"] === "string" ? entryRecord["comment"] : null,
 		received_comment:
 			typeof receivedRecord?.["comment"] === "string" ? (receivedRecord["comment"] as string) : null,
+		offered_subjective_tags: toExchangeSubjectiveTags(
+			Array.isArray(entryRecord["subjective_tags"]) ? entryRecord["subjective_tags"] : [],
+		),
+		received_subjective_tags: toExchangeSubjectiveTags(
+			Array.isArray(receivedSubjectiveTagsRaw) ? receivedSubjectiveTagsRaw : [],
+		),
 	};
 }
 
@@ -2128,6 +2154,7 @@ function toAnimeExchangeItem(raw: Record<string, unknown>): AnimeExchangeItem | 
 		created_at: String(raw["created_at"]),
 		matched_at: (raw["matched_at"] as string | null) ?? null,
 		comment: typeof raw["comment"] === "string" ? raw["comment"] : null,
+		subjective_tags: toExchangeSubjectiveTags(Array.isArray(raw["subjective_tags"]) ? raw["subjective_tags"] : []),
 		offered_anime: {
 			id: String(offeredRecord["id"]),
 			title: String(offeredRecord["title"]),
@@ -2136,6 +2163,7 @@ function toAnimeExchangeItem(raw: Record<string, unknown>): AnimeExchangeItem | 
 		},
 		received_anime: null,
 		received_comment: null,
+		received_subjective_tags: [],
 	};
 }
 
