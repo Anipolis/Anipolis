@@ -396,13 +396,15 @@ const handleSubmit: SubmitFunction = () => {
 						receivedAnime={selectedExchangeShare.received_anime}
 						offeredComment={selectedExchangeShare.offered_comment}
 						receivedComment={selectedExchangeShare.received_comment}
+						offeredSubjectiveTags={selectedExchangeShare.offered_subjective_tags}
+						receivedSubjectiveTags={selectedExchangeShare.received_subjective_tags}
 						mode="timeline"
 					/>
 					<button
 						type="button"
 						class="composer-anime-remove"
 						onclick={clearExchangeShare}
-						aria-label="交換結果の共有を削除"
+						aria-label="トレード結果の共有を削除"
 					>
 						✕
 					</button>

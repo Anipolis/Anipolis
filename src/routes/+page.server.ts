@@ -180,7 +180,7 @@ export const actions: Actions = {
 			imageUrls = [];
 		}
 		const exchangeShare = exchangeId ? await getAnimeExchangeShareForUser(supabase, user.id, exchangeId) : null;
-		if (exchangeId && !exchangeShare) return fail(404, { message: "共有する交換結果が見つかりません" });
+		if (exchangeId && !exchangeShare) return fail(404, { message: "共有するトレード結果が見つかりません" });
 
 		return insertPostWithHashtags(
 			supabase,

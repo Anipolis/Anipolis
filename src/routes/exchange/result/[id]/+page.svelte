@@ -11,7 +11,7 @@ const displayName = $derived(data.author.display_name || data.author.username);
 const relativeTime = $derived(formatRelativeTime(data.createdAt));
 </script>
 
-<svelte:head> <title>交換結果 - Anipolis</title> </svelte:head>
+<svelte:head> <title>トレード結果 - Anipolis</title> </svelte:head>
 
 <div class="page-container">
 	<main class="feed-column exchange-result-page">
@@ -30,7 +30,7 @@ const relativeTime = $derived(formatRelativeTime(data.createdAt));
 			<section class="exchange-result-main">
 				<div class="exchange-result-title">
 					<span>匿名アニメトレード</span>
-					<h1>交換完了</h1>
+					<h1>トレード完了</h1>
 				</div>
 
 				<AnimeExchangeResult
@@ -38,6 +38,8 @@ const relativeTime = $derived(formatRelativeTime(data.createdAt));
 					receivedAnime={data.exchangeShare.received_anime}
 					offeredComment={data.exchangeShare.offered_comment}
 					receivedComment={data.exchangeShare.received_comment}
+					offeredSubjectiveTags={data.exchangeShare.offered_subjective_tags}
+					receivedSubjectiveTags={data.exchangeShare.received_subjective_tags}
 				/>
 
 				<div class="exchange-result-actions">
@@ -50,7 +52,9 @@ const relativeTime = $derived(formatRelativeTime(data.createdAt));
 					<a href="/anime/{data.exchangeShare.received_anime.id}" class="exchange-result-button">
 						受け取ったアニメを見る
 					</a>
-					<a href="/exchange" class="exchange-result-button exchange-result-button--ghost"> 交換してみる </a>
+					<a href="/exchange" class="exchange-result-button exchange-result-button--ghost">
+						トレードしてみる
+					</a>
 				</div>
 			</section>
 		</div>
