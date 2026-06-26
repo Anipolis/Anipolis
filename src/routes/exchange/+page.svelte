@@ -1,8 +1,13 @@
 <script lang="ts">
 import type { SubmitFunction } from "@sveltejs/kit";
+import { onDestroy } from "svelte";
 import { enhance } from "$app/forms";
 import AnimeExchangeResult from "$lib/components/AnimeExchangeResult.svelte";
+import MyListModal from "$lib/components/MyListModal.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
+import WaitingStatus from "$lib/components/WaitingStatus.svelte";
+import { EXCHANGE_SUBJECTIVE_TAG_OPTIONS, MAX_EXCHANGE_SUBJECTIVE_TAGS } from "$lib/exchange-tags";
+import type { UserAnimeEntry } from "$lib/types";
 import type { PageProps } from "./$types";
 
 interface AnimeResult {
@@ -12,36 +17,110 @@ interface AnimeResult {
 	cover_url: string | null;
 }
 
-interface ExchangeReceivedAnime {
+type MyListModalAnime = {
 	id: string;
 	title: string;
-	cover_url: string | null;
-}
+	episode_count?: string | null;
+	user_entry?: UserAnimeEntry | null;
+};
 
 let { data, form }: PageProps = $props();
 
 let animeQuery = $state("");
 let animeResults = $state<AnimeResult[]>([]);
 let exchangeComment = $state("");
+let selectedSubjectiveTags = $state<string[]>([]);
 let selectedAnime = $state<AnimeResult | null>(null);
 let animeSearching = $state(false);
 let searchDebounce = $state<ReturnType<typeof setTimeout> | null>(null);
 let exchangeSubmitting = $state(false);
 let exchangeFeedback = $state("");
 let exchangeError = $state("");
-let latestReceived = $state<ExchangeReceivedAnime | null>(null);
-let listSubmitting = $state(false);
-let listFeedback = $state("");
-let listError = $state("");
+let exchangeTagMessage = $state("");
+let cancelSubmitting = $state(false);
+let cancelFeedback = $state("");
+let cancelError = $state("");
+let myListModalAnime = $state<MyListModalAnime | null>(null);
+let enhancedActionHandled = $state(false);
+let feedbackClearTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingMatchedExchange = $state(false);
+let activeMatchedExchangeId = $state<string | null>(null);
+let lastWaitingExchangeId = $state<string | null>(null);
+let trackedInitialWaitingExchange = $state(false);
 
-const canExchange = $derived(Boolean(selectedAnime) && !exchangeSubmitting);
+const activeMatchedExchange = $derived(
+	data.latestMatchedExchange?.received_anime && data.latestMatchedExchange.id === activeMatchedExchangeId
+		? data.latestMatchedExchange
+		: null,
+);
+const tradeStatus = $derived(activeMatchedExchange ? "MATCHED" : data.waitingExchange ? "WAITING" : "IDLE");
+const canExchange = $derived(tradeStatus === "IDLE" && Boolean(selectedAnime) && !exchangeSubmitting);
 const commentRemaining = $derived(120 - exchangeComment.length);
+const selectedSubjectiveTagCount = $derived(selectedSubjectiveTags.length);
+const latestCompletedOfferedAnimeId = $derived(
+	data.exchanges.find((entry) => entry.status === "matched")?.offered_anime.id ?? null,
+);
+const showRepeatAnimeWarning = $derived(Boolean(selectedAnime && latestCompletedOfferedAnimeId === selectedAnime.id));
+
+function clearFeedbackTimer() {
+	if (feedbackClearTimer) {
+		clearTimeout(feedbackClearTimer);
+		feedbackClearTimer = null;
+	}
+}
+
+function clearActionFeedback() {
+	clearFeedbackTimer();
+	exchangeFeedback = "";
+	cancelFeedback = "";
+}
+
+function showTransientActionFeedback(type: "exchange" | "cancel", message: string) {
+	clearActionFeedback();
+	if (type === "exchange") {
+		exchangeFeedback = message;
+	} else {
+		cancelFeedback = message;
+	}
+
+	feedbackClearTimer = setTimeout(() => {
+		if (type === "exchange" && exchangeFeedback === message) {
+			exchangeFeedback = "";
+		}
+		if (type === "cancel" && cancelFeedback === message) {
+			cancelFeedback = "";
+		}
+		feedbackClearTimer = null;
+	}, 4000);
+}
+
+onDestroy(clearFeedbackTimer);
+
+$effect(() => {
+	if (pendingMatchedExchange && data.latestMatchedExchange?.received_anime) {
+		activeMatchedExchangeId = data.latestMatchedExchange.id;
+		pendingMatchedExchange = false;
+	}
+});
+
+$effect(() => {
+	const currentWaitingExchangeId = data.waitingExchange?.id ?? null;
+	if (!trackedInitialWaitingExchange) {
+		lastWaitingExchangeId = currentWaitingExchangeId;
+		trackedInitialWaitingExchange = true;
+		return;
+	}
+	if (lastWaitingExchangeId && !currentWaitingExchangeId && data.latestMatchedExchange?.received_anime) {
+		activeMatchedExchangeId = data.latestMatchedExchange.id;
+	}
+	lastWaitingExchangeId = currentWaitingExchangeId;
+});
 
 function handleAnimeQueryInput() {
 	selectedAnime = null;
-	exchangeFeedback = "";
+	clearActionFeedback();
 	exchangeError = "";
-	latestReceived = null;
+	exchangeTagMessage = "";
 	if (searchDebounce) clearTimeout(searchDebounce);
 	const q = animeQuery.trim();
 	if (!q) {
@@ -64,9 +143,9 @@ function selectAnime(anime: AnimeResult) {
 	selectedAnime = anime;
 	animeQuery = anime.title;
 	animeResults = [];
-	exchangeFeedback = "";
+	clearActionFeedback();
 	exchangeError = "";
-	latestReceived = null;
+	exchangeTagMessage = "";
 }
 
 function clearAnime() {
@@ -75,35 +154,47 @@ function clearAnime() {
 	animeResults = [];
 }
 
-const handleAddToMyListSubmit: SubmitFunction = () => {
-	listSubmitting = true;
-	listFeedback = "";
-	listError = "";
+function isSubjectiveTagSelected(tag: string) {
+	return selectedSubjectiveTags.includes(tag);
+}
 
-	return async ({ result, update }) => {
-		listSubmitting = false;
+function toggleSubjectiveTag(tag: string) {
+	exchangeTagMessage = "";
+	if (isSubjectiveTagSelected(tag)) {
+		selectedSubjectiveTags = selectedSubjectiveTags.filter((selectedTag) => selectedTag !== tag);
+		return;
+	}
 
-		if (result.type === "failure") {
-			listError = (result.data as { listMessage?: string })?.listMessage ?? "マイリスト更新に失敗しました";
-			return;
-		}
+	if (selectedSubjectiveTagCount >= MAX_EXCHANGE_SUBJECTIVE_TAGS) {
+		exchangeTagMessage = "タグは3個まで選択できます";
+		return;
+	}
 
-		listFeedback = "マイリストに追加しました";
-		await update();
-	};
-};
+	selectedSubjectiveTags = [...selectedSubjectiveTags, tag];
+}
+
+function openMyListModal(anime: MyListModalAnime) {
+	myListModalAnime = anime;
+}
+
+function closeMyListModal() {
+	myListModalAnime = null;
+}
 
 const handleExchangeSubmit: SubmitFunction = () => {
+	enhancedActionHandled = true;
 	exchangeSubmitting = true;
-	exchangeFeedback = "";
+	clearActionFeedback();
 	exchangeError = "";
-	latestReceived = null;
+	exchangeTagMessage = "";
+	cancelError = "";
+	pendingMatchedExchange = false;
 
 	return async ({ result, update }) => {
 		exchangeSubmitting = false;
 
 		if (result.type === "failure") {
-			exchangeError = (result.data as { exchangeMessage?: string })?.exchangeMessage ?? "交換に失敗しました";
+			exchangeError = (result.data as { exchangeMessage?: string })?.exchangeMessage ?? "トレードに失敗しました";
 			return;
 		}
 
@@ -115,151 +206,262 @@ const handleExchangeSubmit: SubmitFunction = () => {
 					})
 				: undefined;
 
-		if (payload?.exchangeMatched && payload.receivedAnime?.id && payload.receivedAnime?.title) {
-			latestReceived = {
-				id: payload.receivedAnime.id,
-				title: payload.receivedAnime.title,
-				cover_url: payload.receivedAnime.cover_url ?? null,
-			};
-			exchangeFeedback = `「${payload.receivedAnime.title}」が返ってきました！`;
+		if (payload?.exchangeMatched) {
+			pendingMatchedExchange = true;
 		} else {
-			exchangeFeedback = "おすすめをプールに追加しました。次の交換で受け取れます。";
+			showTransientActionFeedback("exchange", "おすすめを預かりました");
 		}
 
 		clearAnime();
 		exchangeComment = "";
+		selectedSubjectiveTags = [];
+		await update();
+	};
+};
+
+function handleStartAnotherTrade() {
+	activeMatchedExchangeId = null;
+	pendingMatchedExchange = false;
+	clearActionFeedback();
+}
+
+const handleCancelExchangeSubmit: SubmitFunction = () => {
+	enhancedActionHandled = true;
+	cancelSubmitting = true;
+	clearActionFeedback();
+	exchangeError = "";
+	exchangeTagMessage = "";
+	cancelError = "";
+
+	return async ({ result, update }) => {
+		cancelSubmitting = false;
+
+		if (result.type === "failure") {
+			cancelError =
+				(result.data as { cancelMessage?: string })?.cancelMessage ?? "マッチングのキャンセルに失敗しました";
+			await update();
+			return;
+		}
+
+		showTransientActionFeedback("cancel", "マッチングをキャンセルしました");
+		clearAnime();
+		exchangeComment = "";
+		selectedSubjectiveTags = [];
 		await update();
 	};
 };
 </script>
 
-<svelte:head> <title>交流 - Anipolis</title> </svelte:head>
+<svelte:head> <title>トレード - Anipolis</title> </svelte:head>
 
 <div class="page-container">
 	<main class="feed-column exchange-page">
 		<div class="exchange-container">
 			<header class="exchange-header">
 				<div>
-					<p class="exchange-kicker">交流</p>
 					<h1>アニメトレード</h1>
 				</div>
-				<a href="/anime" class="exchange-link">作品を探す</a>
+				<div class="exchange-header-actions">
+					<a href="/exchange/history" class="exchange-link">履歴</a>
+					<a href="/anime" class="exchange-link">作品を探す</a>
+				</div>
 			</header>
 
-			<section class="exchange-panel">
+			<section class="exchange-panel" class:exchange-panel--status={tradeStatus !== "IDLE"}>
 				<div class="exchange-copy">
 					<h2>1作品を渡して、1作品を受け取る</h2>
-					<p>あなたのおすすめは匿名でプールに入り、先に入っていた誰かのおすすめが返ってきます。</p>
 				</div>
 
-				{#if data.waitingExchange}
-					<div class="waiting-strip">
-						<span class="waiting-dot"></span>
-						<span>「{data.waitingExchange.offered_anime.title}」は次の交換相手を待機中です</span>
-					</div>
-				{/if}
-
-				{#if form?.exchangeMessage || exchangeError}
+				{#if exchangeError || (!enhancedActionHandled && form?.exchangeMessage)}
 					<p class="form-error">{exchangeError || form?.exchangeMessage}</p>
 				{/if}
-				{#if form?.exchangeSuccess || exchangeFeedback}
-					<p class="form-success">{exchangeFeedback || "交換を受け付けました"}</p>
+				{#if exchangeFeedback || (!enhancedActionHandled && form?.exchangeSuccess)}
+					<p class="form-success">{exchangeFeedback || "おすすめを預かりました"}</p>
 				{/if}
-				{#if listError}
-					<p class="form-error">{listError}</p>
+				{#if cancelError || (!enhancedActionHandled && form?.cancelMessage)}
+					<p class="form-error">{cancelError || form?.cancelMessage}</p>
 				{/if}
-				{#if listFeedback}
-					<p class="form-success">{listFeedback}</p>
-				{/if}
-
-				{#if latestReceived}
-					<div class="instant-result">
-						{#if latestReceived.cover_url}
-							<img src={latestReceived.cover_url} alt={latestReceived.title}>
-						{:else}
-							<div class="received-cover-empty"></div>
-						{/if}
-						<div>
-							<span class="history-label">今回返ってきた作品</span>
-							<a href="/anime/{latestReceived.id}" class="received-title">{latestReceived.title}</a>
-						</div>
-					</div>
+				{#if cancelFeedback || (!enhancedActionHandled && form?.cancelSuccess)}
+					<p class="form-success">{cancelFeedback || "マッチングをキャンセルしました"}</p>
 				{/if}
 
-				<form method="POST" action="?/exchangeAnime" use:enhance={handleExchangeSubmit} class="exchange-form">
-					<div class="anime-picker">
-						<label for="anime-query">渡したいアニメ</label>
-						<input
-							id="anime-query"
-							class="exchange-input"
-							type="search"
-							placeholder="タイトルで検索"
-							bind:value={animeQuery}
-							oninput={handleAnimeQueryInput}
-						>
-						{#if animeResults.length > 0}
-							<div class="anime-results">
-								{#each animeResults as anime (anime.id)}
-									<button type="button" class="anime-result" onclick={() => selectAnime(anime)}>
-										{#if anime.cover_url}
-											<img src={anime.cover_url} alt={anime.title}>
-										{:else}
-											<span class="anime-result-cover"></span>
-										{/if}
-										<span>
-											<strong>{anime.title}</strong>
-											{#if anime.title_en}
-												<small>{anime.title_en}</small>
+				{#if tradeStatus === "IDLE"}
+					<form
+						method="POST"
+						action="?/exchangeAnime"
+						use:enhance={handleExchangeSubmit}
+						class="exchange-form"
+					>
+						<div class="anime-picker">
+							<input
+								id="anime-query"
+								class="exchange-input"
+								type="search"
+								placeholder="渡したいアニメをタイトルで検索"
+								aria-label="渡したいアニメをタイトルで検索"
+								bind:value={animeQuery}
+								oninput={handleAnimeQueryInput}
+							>
+							{#if animeResults.length > 0}
+								<div class="anime-results">
+									{#each animeResults as anime (anime.id)}
+										<button type="button" class="anime-result" onclick={() => selectAnime(anime)}>
+											{#if anime.cover_url}
+												<img src={anime.cover_url} alt={anime.title}>
+											{:else}
+												<span class="anime-result-cover"></span>
 											{/if}
-										</span>
+											<span>
+												<strong>{anime.title}</strong>
+												{#if anime.title_en}
+													<small>{anime.title_en}</small>
+												{/if}
+											</span>
+										</button>
+									{/each}
+								</div>
+							{:else if animeSearching}
+								<p class="search-hint">検索中…</p>
+							{/if}
+							{#if selectedAnime}
+								<div class="selected-anime">
+									{#if selectedAnime.cover_url}
+										<img src={selectedAnime.cover_url} alt={selectedAnime.title}>
+									{/if}
+									<span>{selectedAnime.title}</span>
+									<button type="button" onclick={clearAnime} aria-label="選択を解除">×</button>
+								</div>
+								<input type="hidden" name="anime_id" value={selectedAnime.id}>
+							{/if}
+							{#if showRepeatAnimeWarning}
+								<p class="exchange-repeat-warning" role="status">
+									<span class="i-lucide-megaphone" aria-hidden="true"></span>
+									この作品はトレードが集中しています。別のアニメを贈ってみませんか？
+								</p>
+							{/if}
+						</div>
+
+						<div class="exchange-comment-field">
+							<textarea
+								id="exchange-comment"
+								name="comment"
+								class="exchange-comment-input"
+								placeholder="一言メッセージ（任意）"
+								aria-label="一言メッセージ（任意）"
+								rows="2"
+								maxlength="120"
+								bind:value={exchangeComment}
+							></textarea>
+							<small class:comment-over={commentRemaining < 0}>{commentRemaining}</small>
+						</div>
+
+						<div class="exchange-tag-field">
+							<div class="exchange-tag-header">
+								<span>主観タグ</span>
+								<small>{selectedSubjectiveTagCount}/{MAX_EXCHANGE_SUBJECTIVE_TAGS}</small>
+							</div>
+							<div class="exchange-tag-options">
+								{#each EXCHANGE_SUBJECTIVE_TAG_OPTIONS as tag}
+									{@const selected = isSubjectiveTagSelected(tag)}
+									<button
+										type="button"
+										class="exchange-tag-chip"
+										class:exchange-tag-chip--selected={selected}
+										class:exchange-tag-chip--locked={!selected && selectedSubjectiveTagCount >= MAX_EXCHANGE_SUBJECTIVE_TAGS}
+										aria-pressed={selected}
+										aria-disabled={!selected && selectedSubjectiveTagCount >= MAX_EXCHANGE_SUBJECTIVE_TAGS}
+										onclick={() => toggleSubjectiveTag(tag)}
+									>
+										{tag}
 									</button>
 								{/each}
 							</div>
-						{:else if animeSearching}
-							<p class="search-hint">検索中…</p>
-						{/if}
-					</div>
-
-					<div class="exchange-comment-field">
-						<label for="exchange-comment">一言コメント</label>
-						<textarea
-							id="exchange-comment"
-							name="comment"
-							class="exchange-comment-input"
-							placeholder="この作品をすすめたい理由を一言"
-							rows="2"
-							maxlength="120"
-							bind:value={exchangeComment}
-						></textarea>
-						<small class:comment-over={commentRemaining < 0}>{commentRemaining}</small>
-					</div>
-
-					{#if selectedAnime}
-						<div class="selected-anime">
-							{#if selectedAnime.cover_url}
-								<img src={selectedAnime.cover_url} alt={selectedAnime.title}>
+							{#if exchangeTagMessage}
+								<small class="exchange-tag-message">{exchangeTagMessage}</small>
 							{/if}
-							<span>{selectedAnime.title}</span>
-							<button type="button" onclick={clearAnime} aria-label="選択を解除">×</button>
+							{#each selectedSubjectiveTags as tag}
+								<input type="hidden" name="subjective_tags" value={tag}>
+							{/each}
 						</div>
-						<input type="hidden" name="anime_id" value={selectedAnime.id}>
-					{/if}
 
-					<button type="submit" class="exchange-submit" disabled={!canExchange}>
-						{exchangeSubmitting ? "交換中…" : "交換する"}
-					</button>
-				</form>
+						<button type="submit" class="exchange-submit" disabled={!canExchange}>
+							{exchangeSubmitting ? "トレード中…" : "トレードする"}
+						</button>
+					</form>
+				{:else if activeMatchedExchange?.received_anime}
+					{@const matchedExchange = activeMatchedExchange}
+					{@const matchedReceivedAnime = activeMatchedExchange.received_anime}
+					<WaitingStatus
+						mode="matched"
+						offeredAnime={matchedExchange.offered_anime}
+						comment={matchedExchange.comment}
+						subjectiveTags={matchedExchange.subjective_tags}
+						receivedAnime={matchedReceivedAnime}
+						receivedComment={matchedExchange.received_comment}
+						receivedSubjectiveTags={matchedExchange.received_subjective_tags}
+					>
+						{#snippet receivedCardActions()}
+							<div class="received-card-action">
+								<button
+									type="button"
+									class="btn-action"
+									onclick={() => openMyListModal(matchedReceivedAnime)}
+								>
+									マイリストに追加
+								</button>
+							</div>
+						{/snippet}
+						{#snippet actions()}
+							<div class="exchange-matched-actions">
+								<button
+									type="button"
+									class="btn-action btn-action--ghost"
+									onclick={handleStartAnotherTrade}
+								>
+									もう一度トレードする
+								</button>
+								<a href="/?share_exchange={matchedExchange.id}#compose" class="btn-action">
+									結果をシェアする
+								</a>
+							</div>
+						{/snippet}
+					</WaitingStatus>
+				{:else if data.waitingExchange}
+					<WaitingStatus
+						offeredAnime={data.waitingExchange.offered_anime}
+						comment={data.waitingExchange.comment}
+						subjectiveTags={data.waitingExchange.subjective_tags}
+					>
+						{#snippet actions()}
+							<form
+								class="exchange-waiting-actions"
+								method="POST"
+								action="?/cancelExchange"
+								use:enhance={handleCancelExchangeSubmit}
+							>
+								<button
+									type="submit"
+									class="btn-action btn-action--danger-ghost"
+									disabled={cancelSubmitting}
+								>
+									<span class="i-lucide-x" aria-hidden="true"></span>
+									{cancelSubmitting ? "キャンセル中…" : "マッチングをやめる"}
+								</button>
+							</form>
+						{/snippet}
+					</WaitingStatus>
+				{/if}
 			</section>
 
-			{#if data.latestMatchedExchange}
+			{#if data.latestMatchedExchange && !activeMatchedExchange}
 				{@const latestMatchedExchange = data.latestMatchedExchange}
 				{#if latestMatchedExchange.received_anime}
 					{@const receivedAnime = latestMatchedExchange.received_anime}
 					<section class="received-section">
 						<div class="received-section-header">
 							<div>
-								<span class="received-label">交換完了</span>
-								<h2>最近の交換結果</h2>
+								<span class="received-label">トレード完了</span>
+								<h2>最近のトレード結果</h2>
 							</div>
 						</div>
 						<AnimeExchangeResult
@@ -267,7 +469,20 @@ const handleExchangeSubmit: SubmitFunction = () => {
 							{receivedAnime}
 							offeredComment={latestMatchedExchange.comment}
 							receivedComment={latestMatchedExchange.received_comment}
+							offeredSubjectiveTags={latestMatchedExchange.subjective_tags}
+							receivedSubjectiveTags={latestMatchedExchange.received_subjective_tags}
 						>
+							{#snippet receivedCardActions()}
+								<div class="received-card-action">
+									<button
+										type="button"
+										class="btn-action"
+										onclick={() => openMyListModal(receivedAnime)}
+									>
+										マイリストに追加
+									</button>
+								</div>
+							{/snippet}
 							{#snippet actions()}
 								<a
 									href="/?share_exchange={latestMatchedExchange.id}#compose"
@@ -275,79 +490,25 @@ const handleExchangeSubmit: SubmitFunction = () => {
 								>
 									結果をシェアする
 								</a>
-								<form
-									class="received-action-push"
-									method="POST"
-									action="?/addToMyList"
-									use:enhance={handleAddToMyListSubmit}
-								>
-									<input type="hidden" name="anime_id" value={receivedAnime.id}>
-									<input type="hidden" name="status" value="plan_to_watch">
-									<input type="hidden" name="progress" value="0">
-									<button type="submit" class="btn-action" disabled={listSubmitting}>
-										{listSubmitting ? "追加中…" : "マイリストに追加"}
-									</button>
-								</form>
 							{/snippet}
 						</AnimeExchangeResult>
 					</section>
 				{/if}
 			{/if}
-
-			<section class="history-section">
-				<h2>交換履歴</h2>
-				{#if data.exchanges.length === 0}
-					<p class="empty-history">まだ交換履歴はありません。</p>
-				{:else}
-					<div class="history-list">
-						{#each data.exchanges as exchange (exchange.id)}
-							<article class="history-item">
-								<div class="history-anime">
-									{#if exchange.offered_anime.cover_url}
-										<img src={exchange.offered_anime.cover_url} alt={exchange.offered_anime.title}>
-									{:else}
-										<span class="history-cover-empty"></span>
-									{/if}
-									<div>
-										<span class="history-label">渡した作品</span>
-										<a href="/anime/{exchange.offered_anime.id}">{exchange.offered_anime.title}</a>
-										{#if exchange.comment}
-											<p class="history-comment">{exchange.comment}</p>
-										{/if}
-									</div>
-								</div>
-								<div class="history-arrow">→</div>
-								<div class="history-anime">
-									{#if exchange.received_anime?.cover_url}
-										<img
-											src={exchange.received_anime.cover_url}
-											alt={exchange.received_anime.title}
-										>
-									{:else}
-										<span class="history-cover-empty"></span>
-									{/if}
-									<div>
-										<span class="history-label"
-											>{exchange.status === "waiting" ? "待機中" : "届いたおすすめ"}</span
-										>
-										{#if exchange.received_anime}
-											<a href="/anime/{exchange.received_anime.id}"
-												>{exchange.received_anime.title}</a
-											>
-											{#if exchange.received_comment}
-												<p class="history-comment">{exchange.received_comment}</p>
-											{/if}
-										{:else}
-											<span class="history-muted">次の交換相手を待っています</span>
-										{/if}
-									</div>
-								</div>
-							</article>
-						{/each}
-					</div>
-				{/if}
-			</section>
 		</div>
+
+		{#if myListModalAnime}
+			<MyListModal
+				open
+				animeId={myListModalAnime.id}
+				animeTitle={myListModalAnime.title}
+				episodeCount={myListModalAnime.episode_count ?? null}
+				entry={myListModalAnime.user_entry ?? null}
+				action="/anime?/upsertWatchlist"
+				variant="status-only"
+				onclose={closeMyListModal}
+			/>
+		{/if}
 	</main>
 
 	<aside class="sidebar-column">
@@ -363,7 +524,7 @@ const handleExchangeSubmit: SubmitFunction = () => {
 .exchange-container {
 	display: flex;
 	flex-direction: column;
-	gap: 20px;
+	gap: 24px;
 }
 
 .exchange-header {
@@ -373,17 +534,9 @@ const handleExchangeSubmit: SubmitFunction = () => {
 	gap: 16px;
 }
 
-.exchange-kicker {
-	color: var(--color-accent);
-	font-size: 0.82rem;
-	font-weight: 700;
-	margin: 0 0 2px;
-}
-
 .exchange-header h1,
 .exchange-copy h2,
-.received-section h2,
-.history-section h2 {
+.received-section h2 {
 	margin: 0;
 	color: var(--color-text);
 }
@@ -393,25 +546,33 @@ const handleExchangeSubmit: SubmitFunction = () => {
 	line-height: 1.2;
 }
 
+.exchange-header-actions {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+}
+
 .exchange-link {
 	color: var(--color-accent);
 	font-weight: 700;
 	font-size: 0.9rem;
 }
 
-.exchange-panel,
-.history-item,
-.instant-result {
+.exchange-panel {
 	background: var(--color-surface);
 	border: 1px solid var(--color-border);
 	border-radius: 8px;
-}
-
-.exchange-panel {
 	padding: 20px;
 	display: flex;
 	flex-direction: column;
-	gap: 16px;
+	gap: 20px;
+}
+
+.exchange-panel--status {
+	padding: 0;
+	border: 0;
+	background: transparent;
+	gap: 12px;
 }
 
 .exchange-copy {
@@ -421,42 +582,8 @@ const handleExchangeSubmit: SubmitFunction = () => {
 }
 
 .exchange-copy h2,
-.received-section h2,
-.history-section h2 {
+.received-section h2 {
 	font-size: 1rem;
-}
-
-.exchange-copy p {
-	color: var(--color-text-muted);
-	font-size: 0.9rem;
-	margin: 0;
-	line-height: 1.7;
-}
-
-.waiting-strip {
-	display: inline-flex;
-	align-items: center;
-	gap: 8px;
-	padding: 10px 12px;
-	border-radius: 8px;
-	background: color-mix(in srgb, var(--status-plan) 12%, transparent);
-	color: var(--color-text);
-	font-size: 0.86rem;
-}
-
-.waiting-dot {
-	width: 8px;
-	height: 8px;
-	border-radius: 50%;
-	background: var(--status-plan);
-	flex: 0 0 auto;
-}
-
-.instant-result {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	padding: 12px;
 }
 
 .exchange-form {
@@ -468,21 +595,22 @@ const handleExchangeSubmit: SubmitFunction = () => {
 
 .anime-picker {
 	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
 	min-width: 0;
 }
 
-.anime-picker label,
-.exchange-comment-field label {
-	display: block;
-	color: var(--color-text-muted);
-	font-size: 0.8rem;
-	font-weight: 700;
-	margin-bottom: 6px;
-}
-
-.exchange-comment-field {
+.exchange-comment-field,
+.exchange-tag-field {
 	grid-column: 1 / -1;
 	min-width: 0;
+}
+
+.exchange-tag-field {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
 }
 
 .exchange-input,
@@ -512,6 +640,68 @@ const handleExchangeSubmit: SubmitFunction = () => {
 
 .exchange-comment-field small.comment-over {
 	color: var(--color-danger);
+}
+
+.exchange-tag-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	color: var(--color-text-muted);
+	font-size: 0.78rem;
+	font-weight: 800;
+}
+
+.exchange-tag-header small {
+	font-size: 0.74rem;
+	font-weight: 700;
+}
+
+.exchange-tag-options {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.exchange-tag-chip {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 32px;
+	padding: 0 10px;
+	border: 1px solid color-mix(in srgb, var(--color-accent) 24%, var(--color-border));
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--color-surface-hover) 80%, transparent);
+	color: var(--color-text);
+	font-size: 0.82rem;
+	font-weight: 700;
+	line-height: 1;
+	transition:
+		background 0.16s ease,
+		border-color 0.16s ease,
+		color 0.16s ease,
+		opacity 0.16s ease;
+}
+
+.exchange-tag-chip:hover {
+	border-color: var(--color-accent);
+	background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+
+.exchange-tag-chip--selected {
+	border-color: var(--color-accent);
+	background: var(--color-accent);
+	color: #fff;
+}
+
+.exchange-tag-chip--locked:not(.exchange-tag-chip--selected) {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+
+.exchange-tag-message {
+	color: var(--color-danger);
+	font-size: 0.75rem;
 }
 
 .exchange-input:focus,
@@ -555,26 +745,18 @@ const handleExchangeSubmit: SubmitFunction = () => {
 
 .anime-result img,
 .anime-result-cover,
-.selected-anime img,
-.received-cover-empty,
-.history-anime img,
-.history-cover-empty,
-.instant-result img {
+.selected-anime img {
 	width: 40px;
 	border-radius: 4px;
 	background: var(--color-border);
 	flex: 0 0 auto;
 }
 .anime-result img,
-.selected-anime img,
-.history-anime img,
-.instant-result img {
+.selected-anime img {
 	display: block;
 	image-rendering: auto;
 }
-.anime-result-cover,
-.received-cover-empty,
-.history-cover-empty {
+.anime-result-cover {
 	aspect-ratio: 5 / 7;
 }
 
@@ -592,16 +774,12 @@ const handleExchangeSubmit: SubmitFunction = () => {
 }
 
 .anime-result small,
-.search-hint,
-.history-label,
-.history-muted,
-.empty-history {
+.search-hint {
 	color: var(--color-text-muted);
 	font-size: 0.8rem;
 }
 
 .selected-anime {
-	grid-column: 1 / -1;
 	display: inline-flex;
 	align-items: center;
 	gap: 10px;
@@ -625,11 +803,29 @@ const handleExchangeSubmit: SubmitFunction = () => {
 	font-size: 1.1rem;
 }
 
+.exchange-repeat-warning {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0;
+	color: var(--color-text-muted);
+	font-size: 0.82rem;
+	font-weight: 700;
+	line-height: 1.45;
+}
+
+.exchange-repeat-warning :global(.i-lucide-megaphone) {
+	color: var(--status-plan);
+	flex: 0 0 auto;
+	font-size: 1rem;
+}
+
 .exchange-submit,
 .btn-action {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
+	gap: 8px;
 	min-height: 42px;
 	padding: 0 18px;
 	border-radius: 8px;
@@ -637,6 +833,10 @@ const handleExchangeSubmit: SubmitFunction = () => {
 	color: #fff;
 	font-weight: 700;
 	white-space: nowrap;
+}
+
+.exchange-submit {
+	align-self: start;
 }
 
 .exchange-submit:disabled,
@@ -659,8 +859,7 @@ const handleExchangeSubmit: SubmitFunction = () => {
 	color: var(--status-watching);
 }
 
-.received-section,
-.history-section {
+.received-section {
 	display: flex;
 	flex-direction: column;
 	gap: 12px;
@@ -673,21 +872,24 @@ const handleExchangeSubmit: SubmitFunction = () => {
 	gap: 12px;
 }
 
-.received-cover-empty {
-	width: 82px;
-	height: 116px;
-}
-
 .received-label {
 	color: var(--status-watching);
 	font-size: 0.78rem;
 	font-weight: 800;
 }
 
-.received-title {
-	color: var(--color-text);
-	font-size: 1.1rem;
-	font-weight: 800;
+.exchange-waiting-actions {
+	display: flex;
+	justify-content: center;
+	margin: 0;
+}
+
+.exchange-matched-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	align-items: center;
+	justify-content: center;
 }
 
 .btn-action {
@@ -701,84 +903,40 @@ const handleExchangeSubmit: SubmitFunction = () => {
 	border: 1px solid var(--color-accent);
 }
 
-.received-action-push {
-	margin-left: auto;
+.btn-action--danger-ghost {
+	min-height: 34px;
+	padding-inline: 12px;
+	background: transparent;
+	color: var(--color-danger);
+	border: 1px solid color-mix(in srgb, var(--color-danger) 52%, var(--color-border));
 }
 
-.history-list {
-	display: flex;
-	flex-direction: column;
-	gap: 10px;
+.btn-action--danger-ghost:hover {
+	background: color-mix(in srgb, var(--color-danger) 10%, transparent);
+	border-color: var(--color-danger);
 }
 
-.history-item {
-	display: grid;
-	grid-template-columns: minmax(0, 1fr) 24px minmax(0, 1fr);
-	gap: 10px;
-	align-items: center;
-	padding: 12px;
+.btn-action--danger-ghost :global(.i-lucide-x) {
+	font-size: 1rem;
 }
 
-.history-anime {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	min-width: 0;
-}
-
-.history-anime div {
-	min-width: 0;
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
-}
-
-.history-anime a,
-.history-muted {
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.history-anime a {
-	color: var(--color-text);
-	font-weight: 700;
-	font-size: 0.9rem;
-}
-
-.history-comment {
-	margin: 3px 0 0;
-	color: var(--color-text-muted);
-	font-size: 0.78rem;
-	line-height: 1.45;
-	overflow-wrap: anywhere;
-}
-
-.history-arrow {
-	color: var(--color-text-muted);
-	text-align: center;
+.received-card-action,
+.received-card-action .btn-action {
+	width: 100%;
 }
 
 @media (max-width: 640px) {
-	.exchange-header,
-	.instant-result {
+	.exchange-header {
 		align-items: flex-start;
 		flex-direction: column;
 	}
 
-	.exchange-form,
-	.history-item {
+	.exchange-form {
 		grid-template-columns: 1fr;
 	}
 
 	.exchange-submit {
 		width: 100%;
-	}
-
-	.history-arrow {
-		text-align: left;
-		transform: rotate(90deg);
-		width: 24px;
 	}
 }
 </style>
