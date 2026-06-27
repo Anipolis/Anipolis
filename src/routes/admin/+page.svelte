@@ -103,6 +103,13 @@ const dashboard = $derived(data.dashboard);
 			</div>
 			<span class="nav-link-arrow">→</span>
 		</a>
+		<a href="/admin/room-experiments" class="nav-link">
+			<div class="nav-link-body">
+				<span class="nav-link-label">放送回ルーム検証</span>
+				<span class="nav-link-sub">対象作品の入室・滞在・投稿KPIを確認</span>
+			</div>
+			<span class="nav-link-arrow">→</span>
+		</a>
 	</div>
 </main>
 

@@ -38,6 +38,9 @@ const charCount = $derived(contentWithTag.length);
 const overLimit = $derived(charCount > maxLen);
 // ライブ更新で受信した投稿（load 由来の data.posts とは別に保持し、ID でマージする）
 let extraPosts = $state<Post[]>([]);
+let roomExperimentVisitId: string | null = null;
+let roomExperimentHeartbeatTimer: ReturnType<typeof setInterval> | undefined;
+let roomExperimentExitSent = false;
 
 const allPosts = $derived.by(() => {
 	if (extraPosts.length === 0) return data.posts;
@@ -56,6 +59,64 @@ const displayedPosts = $derived(
 );
 
 let fetchingLive = false;
+
+function getRoomExperimentClientVisitKey(sessionId: string) {
+	const storageKey = `room-experiment-visit:${sessionId}`;
+	const existingKey = sessionStorage.getItem(storageKey);
+	if (existingKey) return existingKey;
+	const generatedKey = crypto.randomUUID();
+	sessionStorage.setItem(storageKey, generatedKey);
+	return generatedKey;
+}
+
+async function startRoomExperimentTracking() {
+	const sessionId = data.roomExperiment?.sessionId;
+	if (!data.user || !data.roomExperiment?.enabled || !sessionId) return;
+	try {
+		const res = await fetch("/api/room-experiment-visits", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({
+				session_id: sessionId,
+				client_visit_key: getRoomExperimentClientVisitKey(sessionId),
+			}),
+		});
+		if (res.status === 204 || !res.ok) return;
+		const body = (await res.json()) as {
+			visit_id?: string;
+			heartbeat_interval_ms?: number;
+		};
+		if (!body.visit_id) return;
+		roomExperimentVisitId = body.visit_id;
+		roomExperimentExitSent = false;
+		const intervalMs = body.heartbeat_interval_ms ?? 30_000;
+		roomExperimentHeartbeatTimer = setInterval(() => void sendRoomExperimentHeartbeat(), intervalMs);
+	} catch {
+		// Tracking is best-effort and must not affect room viewing.
+	}
+}
+
+async function sendRoomExperimentHeartbeat() {
+	if (!roomExperimentVisitId || roomExperimentExitSent) return;
+	try {
+		await fetch(`/api/room-experiment-visits/${roomExperimentVisitId}/heartbeat`, { method: "POST" });
+	} catch {
+		// Best-effort.
+	}
+}
+
+function sendRoomExperimentExit() {
+	if (!roomExperimentVisitId || roomExperimentExitSent) return;
+	roomExperimentExitSent = true;
+	if (roomExperimentHeartbeatTimer) {
+		clearInterval(roomExperimentHeartbeatTimer);
+		roomExperimentHeartbeatTimer = undefined;
+	}
+	const url = `/api/room-experiment-visits/${roomExperimentVisitId}/exit`;
+	if (typeof navigator === "undefined") return;
+	if (navigator.sendBeacon?.(url)) return;
+	void fetch(url, { method: "POST", keepalive: true }).catch(() => undefined);
+}
 
 /** 最後に受信した投稿以降の差分を取得して extraPosts に追加する */
 async function fetchNewPosts() {
@@ -98,12 +159,19 @@ onMount(() => {
 		void focusLatestPost();
 	}
 	window.addEventListener("scroll", handleWindowScroll, { passive: true });
+	window.addEventListener("pagehide", sendRoomExperimentExit);
+	void startRoomExperimentTracking();
 });
 
 onDestroy(() => {
 	clearInterval(intervalId);
 	if (programmaticScrollTimer) clearTimeout(programmaticScrollTimer);
-	if (typeof window !== "undefined") window.removeEventListener("scroll", handleWindowScroll);
+	if (roomExperimentHeartbeatTimer) clearInterval(roomExperimentHeartbeatTimer);
+	if (typeof window !== "undefined") {
+		window.removeEventListener("scroll", handleWindowScroll);
+		window.removeEventListener("pagehide", sendRoomExperimentExit);
+	}
+	sendRoomExperimentExit();
 });
 
 $effect(() => {

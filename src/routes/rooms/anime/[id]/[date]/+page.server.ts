@@ -13,6 +13,10 @@ import {
 	getBroadcastRoomPosts,
 	getBroadcastRoomSession,
 } from "$lib/server/queries";
+import {
+	createRoomExperimentServiceClient,
+	getActiveRoomExperimentRunForAnime as getActiveExperimentRun,
+} from "$lib/server/room-experiments";
 import type { Anime } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -68,10 +72,12 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 	if (!session) throw error(404, "放送ルームが見つかりません");
 
 	const hashtag = roomHashtag(anime);
-	const [posts, trending, animeTrending] = await Promise.all([
+	const roomExperimentSupabase = user ? createRoomExperimentServiceClient() : null;
+	const [posts, trending, animeTrending, roomExperimentRun] = await Promise.all([
 		getBroadcastRoomPosts(supabase, session.id, user?.id ?? null, { limit: 100, ascending: true }),
 		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
 		getAnimeRankingTrending(supabase, 5),
+		roomExperimentSupabase ? getActiveExperimentRun(roomExperimentSupabase, anime.id) : Promise.resolve(null),
 	]);
 
 	return {
@@ -91,6 +97,10 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 		trending: trending.data ?? [],
 		animeTrending,
 		user,
+		roomExperiment: {
+			enabled: Boolean(user && roomExperimentRun),
+			sessionId: roomExperimentRun ? session.id : undefined,
+		},
 	};
 };
 

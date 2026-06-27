@@ -60,6 +60,10 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 		trending: trending.data ?? [],
 		animeTrending,
 		user,
+		roomExperiment: {
+			enabled: false,
+			sessionId: undefined,
+		},
 	};
 };
 
