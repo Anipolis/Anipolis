@@ -107,6 +107,7 @@ let {
 	backdrop-filter: blur(18px);
 	box-shadow: 0 18px 48px rgba(0, 0, 0, 0.22);
 	overflow: hidden;
+	container-type: inline-size;
 }
 
 .exchange-result-grid {
@@ -117,17 +118,15 @@ let {
 }
 
 .exchange-result-grid--full {
-	grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+	grid-template-columns: var(--trade-card-width) var(--trade-center-width) var(--trade-card-width);
 	align-items: stretch;
-	gap: 16px;
-	container-type: inline-size;
+	justify-content: center;
+	gap: var(--trade-side-gap);
 	--trade-card-padding: 10px;
 	--trade-center-width: 46px;
 	--trade-side-gap: 16px;
-	--trade-cover-width: min(
-		200px,
-		calc(((100cqw - var(--trade-center-width) - (var(--trade-side-gap) * 2)) / 2) - (var(--trade-card-padding) * 2))
-	);
+	--trade-card-width: min(220px, calc((100cqw - var(--trade-center-width) - (var(--trade-side-gap) * 2)) / 2));
+	--trade-cover-width: calc(var(--trade-card-width) - (var(--trade-card-padding) * 2));
 	--trade-cover-center-y: calc(
 		var(--trade-card-padding) +
 		(0.74rem * 1.2) +
@@ -137,10 +136,19 @@ let {
 }
 
 .exchange-result-grid--timeline {
-	grid-template-columns: minmax(0, 1fr) 28px minmax(0, 1fr);
+	grid-template-columns: minmax(0, 1fr) var(--timeline-center-width) minmax(0, 1fr);
 	align-items: stretch;
-	gap: 8px;
-	width: min(100%, 330px);
+	gap: var(--timeline-gap);
+	width: min(
+		100%,
+		calc(
+			var(--timeline-card-max) +
+			var(--timeline-card-max) +
+			var(--timeline-center-width) +
+			var(--timeline-gap) +
+			var(--timeline-gap)
+		)
+	);
 	margin-inline: auto;
 }
 
@@ -185,6 +193,10 @@ let {
 	background: transparent;
 	box-shadow: none;
 	backdrop-filter: none;
+	container-type: inline-size;
+	--timeline-center-width: 28px;
+	--timeline-gap: 8px;
+	--timeline-card-max: min(126px, calc((100cqw - var(--timeline-center-width) - (var(--timeline-gap) * 2)) / 2));
 }
 
 .anime-exchange-result--unframed {
@@ -208,6 +220,10 @@ let {
 	animation: none;
 }
 
+.exchange-result-grid--timeline :global(.eac--poster-only) {
+	max-width: var(--timeline-card-max);
+}
+
 :global([data-theme="light"]) .anime-exchange-result {
 	border-color: rgba(124, 58, 237, 0.16);
 	background:
@@ -217,6 +233,12 @@ let {
 }
 
 :global([data-theme="light"]) .anime-exchange-result--unframed {
+	border-color: transparent;
+	background: transparent;
+	box-shadow: none;
+}
+
+:global([data-theme="light"]) .anime-exchange-result--timeline {
 	border-color: transparent;
 	background: transparent;
 	box-shadow: none;
@@ -239,9 +261,11 @@ let {
 }
 
 @media (max-width: 640px) {
+	.anime-exchange-result:not(.anime-exchange-result--timeline):not(.anime-exchange-result--unframed) {
+		padding: 12px;
+	}
+
 	.exchange-result-grid--full {
-		grid-template-columns: minmax(0, 1fr) 30px minmax(0, 1fr);
-		gap: 8px;
 		--trade-center-width: 30px;
 		--trade-side-gap: 8px;
 	}
@@ -267,9 +291,9 @@ let {
 	}
 
 	.exchange-result-grid--timeline {
-		grid-template-columns: minmax(0, 1fr) 24px minmax(0, 1fr);
-		gap: 6px;
-		width: min(100%, 290px);
+		--timeline-center-width: 24px;
+		--timeline-gap: 6px;
+		--timeline-card-max: min(104px, calc((100cqw - var(--timeline-center-width) - (var(--timeline-gap) * 2)) / 2));
 	}
 }
 </style>

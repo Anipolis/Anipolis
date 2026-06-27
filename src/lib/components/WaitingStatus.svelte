@@ -93,12 +93,10 @@ let {
 	overflow: hidden;
 	container-type: inline-size;
 	--trade-card-padding: 10px;
-	--trade-center-width: 86px;
+	--trade-center-width: 46px;
 	--trade-side-gap: 16px;
-	--trade-cover-width: min(
-		200px,
-		calc(((100cqw - var(--trade-center-width) - (var(--trade-side-gap) * 2)) / 2) - (var(--trade-card-padding) * 2))
-	);
+	--trade-card-width: min(220px, calc((100cqw - var(--trade-center-width) - (var(--trade-side-gap) * 2)) / 2));
+	--trade-cover-width: calc(var(--trade-card-width) - (var(--trade-card-padding) * 2));
 	--trade-cover-center-y: calc(
 		var(--trade-card-padding) +
 		(0.74rem * 1.2) +
@@ -109,9 +107,10 @@ let {
 
 .waiting-status-grid {
 	display: grid;
-	grid-template-columns: minmax(0, 1fr) 86px minmax(0, 1fr);
+	grid-template-columns: var(--trade-card-width) var(--trade-center-width) var(--trade-card-width);
 	align-items: stretch;
-	gap: 16px;
+	justify-content: center;
+	gap: var(--trade-side-gap);
 }
 
 .waiting-indicator {
@@ -199,11 +198,6 @@ let {
 		padding: 12px;
 		--trade-center-width: 30px;
 		--trade-side-gap: 8px;
-	}
-
-	.waiting-status-grid {
-		grid-template-columns: minmax(0, 1fr) 30px minmax(0, 1fr);
-		gap: 8px;
 	}
 
 	.waiting-indicator {
