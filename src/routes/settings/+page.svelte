@@ -36,34 +36,32 @@ const items = $derived.by((): Item[] => {
 		return list;
 	}
 	if (activeSection === "privacy") {
-		return [
+		const list: Item[] = [
 			{
 				label: "プライバシー",
-				description: "鍵アカウントを管理します",
+				description: "アカウントの公開設定を変更します",
 				href: "/settings/privacy",
 			},
 			{
-				label: "ミュートワード",
-				description: "非表示にするワードを管理します",
+				label: "ミュート設定",
+				description: "ワード・アニメのミュートをまとめて管理します",
 				href: "/settings/mutes",
 			},
-			{
-				label: "フォローリクエスト",
-				description: `${data.pendingFollowRequestCount}件の未対応申請を確認します`,
-				href: "/settings/follow-requests",
-			},
 		];
+		if (data.pendingFollowRequestCount > 0) {
+			list.push({
+				label: "フォローリクエスト",
+				description: `${data.pendingFollowRequestCount}件の未対応申請があります`,
+				href: "/settings/follow-requests",
+			});
+		}
+		return list;
 	}
 	return [
 		{
 			label: "通知",
 			description: "放送前通知のタイミングを設定します",
 			href: "/settings/rooms/notifications",
-		},
-		{
-			label: "ミュート",
-			description: "ルーム投稿のネタバレ防止ミュートを管理します",
-			href: "/settings/rooms/mutes",
 		},
 	];
 });
@@ -99,7 +97,6 @@ const activeLabel = $derived(sections.find((s) => s.id === activeSection)?.label
 				</nav>
 
 				<div class="settings-panel">
-					<h2 class="settings-panel-title">{activeLabel}</h2>
 					<nav class="settings-item-list" aria-label="{activeLabel}の設定メニュー">
 						{#each items as item (item.href)}
 							<a href={item.href} class="settings-item-link">
@@ -172,12 +169,6 @@ const activeLabel = $derived(sections.find((s) => s.id === activeSection)?.label
 
 .settings-panel {
 	padding: 28px 32px;
-}
-
-.settings-panel-title {
-	font-size: 1.05rem;
-	font-weight: 700;
-	margin: 0 0 8px;
 }
 
 .settings-item-list {

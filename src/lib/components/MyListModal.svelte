@@ -353,6 +353,10 @@ form {
 	border-color: #14b8a6;
 	box-shadow: 0 0 0 3px rgb(20 184 166 / 15%);
 }
+.stepper input:focus-visible {
+	outline: 2px solid #14b8a6;
+	outline-offset: 2px;
+}
 .episode-total {
 	color: var(--text-muted, #a1a1aa);
 	font-size: 0.82rem;
