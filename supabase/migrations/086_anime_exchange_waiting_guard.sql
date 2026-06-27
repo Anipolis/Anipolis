@@ -134,11 +134,13 @@ BEGIN
 
     DELETE FROM public.anime_exchange_entries
      WHERE user_id = current_user_id
-       AND status IN ('matched', 'cancelled')
+       AND status = 'cancelled'
+       AND received_entry_id IS NULL
        AND id NOT IN (
            SELECT id FROM public.anime_exchange_entries
             WHERE user_id = current_user_id
-              AND status IN ('matched', 'cancelled')
+              AND status = 'cancelled'
+              AND received_entry_id IS NULL
             ORDER BY created_at DESC
             LIMIT 5
        );

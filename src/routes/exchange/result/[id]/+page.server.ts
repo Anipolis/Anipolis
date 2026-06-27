@@ -1,4 +1,5 @@
 import { error } from "@sveltejs/kit";
+import { toValidExchangeSubjectiveTags } from "$lib/exchange-tags";
 import { getAnimeRankingTrending } from "$lib/server/queries";
 import type { AnimeExchangeShare } from "$lib/types";
 import type { PageServerLoad } from "./$types";
@@ -33,21 +34,13 @@ function toExchangeShare(value: unknown): AnimeExchangeShare | null {
 		received_anime: received,
 		offered_comment: typeof raw.offered_comment === "string" ? raw.offered_comment : null,
 		received_comment: typeof raw.received_comment === "string" ? raw.received_comment : null,
-		offered_subjective_tags: toStringArray(raw.offered_subjective_tags),
-		received_subjective_tags: toStringArray(raw.received_subjective_tags),
+		offered_subjective_tags: toValidExchangeSubjectiveTags(
+			Array.isArray(raw.offered_subjective_tags) ? raw.offered_subjective_tags : [],
+		),
+		received_subjective_tags: toValidExchangeSubjectiveTags(
+			Array.isArray(raw.received_subjective_tags) ? raw.received_subjective_tags : [],
+		),
 	};
-}
-
-function toStringArray(value: unknown) {
-	if (!Array.isArray(value)) return [];
-	const values: string[] = [];
-	for (const item of value) {
-		if (typeof item !== "string") continue;
-		const text = item.trim();
-		if (!text || values.includes(text)) continue;
-		values.push(text);
-	}
-	return values;
 }
 
 function toExchangeShareAnime(value: unknown): AnimeExchangeShare["offered_anime"] | null {

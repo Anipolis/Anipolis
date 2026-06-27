@@ -33,6 +33,7 @@ let selectedSubjectiveTags = $state<string[]>([]);
 let selectedAnime = $state<AnimeResult | null>(null);
 let animeSearching = $state(false);
 let searchDebounce = $state<ReturnType<typeof setTimeout> | null>(null);
+let searchController = $state<AbortController | null>(null);
 let exchangeSubmitting = $state(false);
 let exchangeFeedback = $state("");
 let exchangeError = $state("");
@@ -94,7 +95,19 @@ function showTransientActionFeedback(type: "exchange" | "cancel", message: strin
 	}, 4000);
 }
 
-onDestroy(clearFeedbackTimer);
+function clearAnimeSearch() {
+	if (searchDebounce) {
+		clearTimeout(searchDebounce);
+		searchDebounce = null;
+	}
+	searchController?.abort();
+	searchController = null;
+}
+
+onDestroy(() => {
+	clearFeedbackTimer();
+	clearAnimeSearch();
+});
 
 $effect(() => {
 	if (pendingMatchedExchange && data.latestMatchedExchange?.received_anime) {
@@ -121,25 +134,38 @@ function handleAnimeQueryInput() {
 	clearActionFeedback();
 	exchangeError = "";
 	exchangeTagMessage = "";
-	if (searchDebounce) clearTimeout(searchDebounce);
+	clearAnimeSearch();
 	const q = animeQuery.trim();
 	if (!q) {
+		animeSearching = false;
 		animeResults = [];
 		return;
 	}
 	searchDebounce = setTimeout(async () => {
+		const controller = new AbortController();
+		searchController = controller;
 		animeSearching = true;
 		try {
-			const res = await fetch(`/api/anime/search?q=${encodeURIComponent(q)}`);
-			animeResults = res.ok ? await res.json() : [];
-		} catch {
-			animeResults = [];
+			const res = await fetch(`/api/anime/search?q=${encodeURIComponent(q)}`, { signal: controller.signal });
+			const results = res.ok ? await res.json() : [];
+			if (searchController === controller && animeQuery.trim() === q) {
+				animeResults = results;
+			}
+		} catch (error) {
+			if (!(error instanceof DOMException && error.name === "AbortError") && searchController === controller) {
+				animeResults = [];
+			}
+		} finally {
+			if (searchController === controller) {
+				animeSearching = false;
+				searchController = null;
+			}
 		}
-		animeSearching = false;
 	}, 250);
 }
 
 function selectAnime(anime: AnimeResult) {
+	clearAnimeSearch();
 	selectedAnime = anime;
 	animeQuery = anime.title;
 	animeResults = [];
@@ -149,8 +175,10 @@ function selectAnime(anime: AnimeResult) {
 }
 
 function clearAnime() {
+	clearAnimeSearch();
 	selectedAnime = null;
 	animeQuery = "";
+	animeSearching = false;
 	animeResults = [];
 }
 
@@ -198,13 +226,16 @@ const handleExchangeSubmit: SubmitFunction = () => {
 			return;
 		}
 
-		const payload =
-			result.type === "success"
-				? (result.data as {
-						exchangeMatched?: boolean;
-						receivedAnime?: { id?: string; title?: string; cover_url?: string | null } | null;
-					})
-				: undefined;
+		if (result.type === "error") {
+			exchangeError = "トレードに失敗しました";
+			return;
+		}
+		if (result.type !== "success") return;
+
+		const payload = result.data as {
+			exchangeMatched?: boolean;
+			receivedAnime?: { id?: string; title?: string; cover_url?: string | null } | null;
+		};
 
 		if (payload?.exchangeMatched) {
 			pendingMatchedExchange = true;
@@ -239,6 +270,12 @@ const handleCancelExchangeSubmit: SubmitFunction = () => {
 		if (result.type === "failure") {
 			cancelError =
 				(result.data as { cancelMessage?: string })?.cancelMessage ?? "マッチングのキャンセルに失敗しました";
+			await update();
+			return;
+		}
+
+		if (result.type !== "success") {
+			cancelError = "マッチングのキャンセルに失敗しました";
 			await update();
 			return;
 		}

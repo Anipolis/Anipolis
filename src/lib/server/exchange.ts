@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { toExchangeSubjectiveTags } from "$lib/exchange-tags";
+import { toValidExchangeSubjectiveTags } from "$lib/exchange-tags";
 import type { Database } from "$lib/supabase/database.types";
 import type { UserAnimeEntry } from "$lib/types";
 
@@ -108,7 +108,7 @@ function toExchangeItem(raw: ExchangeRow): ExchangeItem | null {
 		created_at: String(raw.created_at),
 		matched_at: typeof raw.matched_at === "string" ? raw.matched_at : null,
 		comment: typeof raw.comment === "string" ? raw.comment : null,
-		subjective_tags: toExchangeSubjectiveTags(Array.isArray(raw.subjective_tags) ? raw.subjective_tags : []),
+		subjective_tags: toValidExchangeSubjectiveTags(Array.isArray(raw.subjective_tags) ? raw.subjective_tags : []),
 		received_entry_id: raw.received_entry_id ? String(raw.received_entry_id) : null,
 		offered_anime: offered,
 		received_anime: null,
@@ -194,7 +194,7 @@ export async function getExchangeEntries(
 			receivedEntryById.set(String(row.id), {
 				anime,
 				comment: typeof row.comment === "string" ? row.comment : null,
-				subjective_tags: toExchangeSubjectiveTags(
+				subjective_tags: toValidExchangeSubjectiveTags(
 					Array.isArray(row.subjective_tags) ? row.subjective_tags : [],
 				),
 			});

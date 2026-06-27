@@ -40,6 +40,10 @@ export function toExchangeSubjectiveTags(values: Iterable<unknown>) {
 	return tags;
 }
 
+export function toValidExchangeSubjectiveTags(values: Iterable<unknown>) {
+	return toExchangeSubjectiveTags(values).filter(isExchangeSubjectiveTag).slice(0, MAX_EXCHANGE_SUBJECTIVE_TAGS);
+}
+
 export function validateExchangeSubjectiveTags(tags: readonly string[]) {
 	return tags.length <= MAX_EXCHANGE_SUBJECTIVE_TAGS && tags.every(isExchangeSubjectiveTag);
 }
