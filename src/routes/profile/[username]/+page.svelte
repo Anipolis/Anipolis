@@ -716,7 +716,7 @@ const grouped = $derived(
 .report-modal-overlay {
 	position: fixed;
 	inset: 0;
-	z-index: 100;
+	z-index: 1000;
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -811,7 +811,7 @@ const grouped = $derived(
 .profile-edit-modal-overlay {
 	position: fixed;
 	inset: 0;
-	z-index: 100;
+	z-index: 1000;
 	display: flex;
 	align-items: center;
 	justify-content: center;
