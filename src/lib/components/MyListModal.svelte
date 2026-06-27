@@ -2,6 +2,7 @@
 import type { SubmitFunction } from "@sveltejs/kit";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
+import { trapFocus } from "$lib/actions/trapFocus";
 import type { AnimeStatus, UserAnimeEntry } from "$lib/types";
 
 type Props = {
@@ -111,6 +112,7 @@ $effect(() => {
 			aria-modal="true"
 			aria-labelledby="mylist-modal-title"
 			tabindex="-1"
+			use:trapFocus
 			onclick={(e) => e.stopPropagation()}
 		>
 			<header class="modal-header">
@@ -352,6 +354,10 @@ form {
 .stepper input:focus {
 	border-color: #14b8a6;
 	box-shadow: 0 0 0 3px rgb(20 184 166 / 15%);
+}
+.stepper input:focus-visible {
+	outline: 2px solid #14b8a6;
+	outline-offset: 2px;
 }
 .episode-total {
 	color: var(--text-muted, #a1a1aa);

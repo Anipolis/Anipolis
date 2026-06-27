@@ -341,41 +341,35 @@ function formatCompactDate(iso: string) {
 	</div>
 
 	<aside class="sidebar-column">
-		<div class="mb-4 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 shadow-sm">
+		<div class="room-summary-card mb-4 rounded-xl border p-4 shadow-sm">
 			<div class="flex items-start">
 				<a href="/anime/{data.anime.id}" class="shrink-0" aria-label="アニメ詳細を開く">
 					{#if data.anime.cover_url}
 						<img src={data.anime.cover_url} alt={data.anime.title} class="block w-16 rounded-lg shadow-md">
 					{:else}
-						<div class="h-20 w-16 rounded-lg border border-zinc-800 bg-zinc-800 shadow-md"></div>
+						<div class="room-summary-placeholder h-20 w-16 rounded-lg border shadow-md"></div>
 					{/if}
 				</a>
 				<div class="flex min-h-20 min-w-0 flex-1 flex-col justify-between pl-3">
 					<div class="min-w-0">
-						<h1 class="line-clamp-1 text-sm font-bold text-zinc-100">{data.room.title}</h1>
+						<h1 class="room-summary-title line-clamp-1 text-sm font-bold">{data.room.title}</h1>
 						<div class="mt-2 flex min-w-0 items-center gap-2">
 							{#if status === "ended"}
-								<span class="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-bold text-zinc-400">
-									終了
-								</span>
+								<span class="room-summary-status rounded px-1.5 py-0.5 text-[10px] font-bold"
+									>終了</span
+								>
 							{/if}
-							<time class="truncate text-xs text-zinc-400"
+							<time class="room-summary-secondary truncate text-xs"
 								>{formatCompactDate(data.room.scheduled_at)}</time
 							>
 						</div>
-						<div class="mt-1 truncate text-xs text-zinc-500">{broadcastMetaLine}</div>
+						<div class="room-summary-muted mt-1 truncate text-xs">{broadcastMetaLine}</div>
 					</div>
 					<div class="mt-2 flex items-center justify-between gap-2">
-						<a
-							href="/hashtag/{data.room.hashtag}"
-							class="truncate text-xs text-teal-400/80 hover:text-teal-300"
-						>
+						<a href="/hashtag/{data.room.hashtag}" class="room-summary-link truncate text-xs">
 							#{data.room.hashtag}
 						</a>
-						<a
-							href="/schedule"
-							class="shrink-0 text-xs text-zinc-400 transition-colors hover:text-teal-400"
-						>
+						<a href="/schedule" class="room-summary-back shrink-0 text-xs transition-colors">
 							← 週間スケジュールへ戻る
 						</a>
 					</div>
@@ -388,6 +382,43 @@ function formatCompactDate(iso: string) {
 </div>
 
 <style>
+.room-summary-card {
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
+}
+
+.room-summary-placeholder {
+	background: var(--color-surface-hover);
+	border-color: var(--color-border);
+}
+
+.room-summary-title {
+	color: var(--color-text);
+}
+
+.room-summary-status {
+	background: var(--color-surface-hover);
+	color: var(--color-text-secondary);
+}
+
+.room-summary-secondary {
+	color: var(--color-text-secondary);
+}
+
+.room-summary-muted,
+.room-summary-back {
+	color: var(--color-text-muted);
+}
+
+.room-summary-link {
+	color: var(--color-accent);
+}
+
+.room-summary-link:hover,
+.room-summary-back:hover {
+	color: var(--color-accent-hover);
+}
+
 .feed-column {
 	display: flex;
 	flex-direction: column;

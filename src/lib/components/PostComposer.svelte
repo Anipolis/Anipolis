@@ -3,6 +3,7 @@ import type { SubmitFunction } from "@sveltejs/kit";
 import { enhance } from "$app/forms";
 import { replaceState } from "$app/navigation";
 import { page } from "$app/state";
+import { trapFocus } from "$lib/actions/trapFocus";
 import type { AnimeExchangeShare } from "$lib/types";
 import { charCountClass } from "$lib/utils/format";
 import AnimeExchangeResult from "./AnimeExchangeResult.svelte";
@@ -569,6 +570,7 @@ const handleSubmit: SubmitFunction = () => {
 		aria-modal="true"
 		aria-label="アニメ検索"
 		tabindex="-1"
+		use:trapFocus
 	>
 		<div class="anime-search-modal">
 			<div class="anime-search-header">
@@ -629,6 +631,7 @@ const handleSubmit: SubmitFunction = () => {
 		aria-modal="true"
 		aria-label="ネタバレ作品を選択"
 		tabindex="-1"
+		use:trapFocus
 	>
 		<div class="anime-search-modal">
 			<div class="anime-search-header">

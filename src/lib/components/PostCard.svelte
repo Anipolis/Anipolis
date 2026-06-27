@@ -2,6 +2,7 @@
 import type { SubmitFunction } from "@sveltejs/kit";
 import { enhance } from "$app/forms";
 import { goto } from "$app/navigation";
+import { trapFocus } from "$lib/actions/trapFocus";
 import AnimeExchangeResult from "$lib/components/AnimeExchangeResult.svelte";
 import ReactionUsersPopover from "$lib/components/ReactionUsersPopover.svelte";
 import { buildAnimeRoomLabel, type Post, type ReactionType, type ReactionUser } from "$lib/types";
@@ -348,12 +349,11 @@ async function submitReport() {
 								role="presentation"
 								onclick={(e) => { e.stopPropagation(); showKebabMenu = false; }}
 							></div>
-							<div class="post-kebab-menu" role="menu">
+							<div class="post-kebab-menu">
 								{#if isOwn}
 									<button
 										type="button"
 										class="post-kebab-item post-kebab-item--danger"
-										role="menuitem"
 										onclick={(e) => { e.stopPropagation(); showKebabMenu = false; showDeleteModal = true; }}
 									>
 										<span class="i-lucide-trash-2" aria-hidden="true"></span>
@@ -363,7 +363,6 @@ async function submitReport() {
 									<button
 										type="button"
 										class="post-kebab-item"
-										role="menuitem"
 										onclick={(e) => { e.stopPropagation(); showKebabMenu = false; showReportModal = true; }}
 									>
 										<span class="i-lucide-flag" aria-hidden="true"></span>
@@ -551,6 +550,7 @@ async function submitReport() {
 					aria-modal="true"
 					aria-labelledby="quote-modal-title"
 					tabindex="-1"
+					use:trapFocus
 					onclick={(e) => e.stopPropagation()}
 					onkeydown={(e) => e.stopPropagation()}
 				>
@@ -612,6 +612,7 @@ async function submitReport() {
 					aria-modal="true"
 					aria-labelledby="exchange-result-modal-title"
 					tabindex="-1"
+					use:trapFocus
 					onclick={(e) => e.stopPropagation()}
 				>
 					<div class="exchange-result-modal-header">
@@ -649,6 +650,7 @@ async function submitReport() {
 				aria-modal="true"
 				aria-label="画像拡大表示"
 				tabindex="-1"
+				use:trapFocus
 			>
 				<button
 					type="button"
@@ -675,6 +677,7 @@ async function submitReport() {
 					aria-modal="true"
 					aria-labelledby="report-modal-title"
 					tabindex="-1"
+					use:trapFocus
 					onclick={(e) => e.stopPropagation()}
 				>
 					<div class="report-modal-header">
@@ -735,6 +738,7 @@ async function submitReport() {
 					aria-modal="true"
 					aria-labelledby="delete-modal-title"
 					tabindex="-1"
+					use:trapFocus
 					onclick={(e) => e.stopPropagation()}
 				>
 					<div class="delete-modal-header">
