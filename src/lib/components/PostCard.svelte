@@ -348,12 +348,11 @@ async function submitReport() {
 								role="presentation"
 								onclick={(e) => { e.stopPropagation(); showKebabMenu = false; }}
 							></div>
-							<div class="post-kebab-menu" role="menu">
+							<div class="post-kebab-menu">
 								{#if isOwn}
 									<button
 										type="button"
 										class="post-kebab-item post-kebab-item--danger"
-										role="menuitem"
 										onclick={(e) => { e.stopPropagation(); showKebabMenu = false; showDeleteModal = true; }}
 									>
 										<span class="i-lucide-trash-2" aria-hidden="true"></span>
@@ -363,7 +362,6 @@ async function submitReport() {
 									<button
 										type="button"
 										class="post-kebab-item"
-										role="menuitem"
 										onclick={(e) => { e.stopPropagation(); showKebabMenu = false; showReportModal = true; }}
 									>
 										<span class="i-lucide-flag" aria-hidden="true"></span>
