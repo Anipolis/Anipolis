@@ -529,6 +529,11 @@ textarea {
 	color: var(--color-text-muted);
 }
 
+.composer-textarea:focus-visible {
+	outline: 2px solid var(--color-accent);
+	outline-offset: 2px;
+}
+
 .composer-footer {
 	display: flex;
 	align-items: center;
@@ -1181,6 +1186,11 @@ textarea {
 	border-color: var(--color-accent);
 }
 
+.global-search-input:focus-visible {
+	outline: 2px solid var(--color-accent);
+	outline-offset: 2px;
+}
+
 .global-search-input::placeholder {
 	color: var(--color-text-muted);
 }
@@ -1651,6 +1661,11 @@ textarea {
 	border-color: var(--color-accent);
 }
 
+.field-input:not(.has-prefix):focus-visible {
+	outline: 2px solid var(--color-accent);
+	outline-offset: 2px;
+}
+
 .field-input::placeholder {
 	color: var(--color-text-muted);
 }
@@ -1712,6 +1727,11 @@ textarea {
 	border-color: var(--color-accent);
 }
 
+.field-input-prefix:has(.field-input:focus-visible) {
+	outline: 2px solid var(--color-accent);
+	outline-offset: 2px;
+}
+
 .field-input-prefix:has(.field-error) {
 	border-color: var(--color-danger);
 }
@@ -1756,6 +1776,11 @@ textarea {
 .field-textarea:focus {
 	outline: none;
 	border-color: var(--color-accent);
+}
+
+.field-textarea:focus-visible {
+	outline: 2px solid var(--color-accent);
+	outline-offset: 2px;
 }
 
 .field-textarea::placeholder {
@@ -2816,6 +2841,10 @@ textarea {
 .anime-search-input:focus {
 	border-color: var(--color-primary);
 }
+.anime-search-input:focus-visible {
+	outline: 2px solid var(--color-accent);
+	outline-offset: 2px;
+}
 .anime-search-results {
 	overflow-y: auto;
 	flex: 1;
@@ -3033,6 +3062,11 @@ form + .repost-menu-item {
 .quote-modal-textarea:focus {
 	outline: none;
 	border-color: var(--color-accent, #89b4fa);
+}
+
+.quote-modal-textarea:focus-visible {
+	outline: 2px solid var(--color-accent, #89b4fa);
+	outline-offset: 2px;
 }
 
 .quote-preview {

@@ -520,6 +520,12 @@ const handleExchangeSubmit: SubmitFunction = () => {
 	border-color: var(--color-accent);
 }
 
+.exchange-input:focus-visible,
+.exchange-comment-input:focus-visible {
+	outline: 2px solid var(--color-accent);
+	outline-offset: 2px;
+}
+
 .anime-results {
 	position: absolute;
 	z-index: 20;
