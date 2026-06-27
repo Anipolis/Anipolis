@@ -31,15 +31,19 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	const tab = url.searchParams.get("tab") === "following" && user ? "following" : "all";
 	const quoteAnimeId = url.searchParams.get("quote_anime");
 	const shareExchangeId = url.searchParams.get("share_exchange");
+	const beforeParam = url.searchParams.get("before") ?? undefined;
+	const before = beforeParam && /^\d{4}-\d{2}-\d{2}T/.test(beforeParam) ? beforeParam : undefined;
 	const followingProfiles = tab === "following" && user ? await getFollowingProfiles(supabase, user.id) : null;
 
 	const buildPostsQuery = (select: string) => {
-		return supabase
+		let q = supabase
 			.from("posts")
 			.select(select)
 			.is("parent_id", null)
 			.order("created_at", { ascending: false })
 			.limit(50);
+		if (before) q = q.lt("created_at", before);
+		return q;
 	};
 
 	const fetchPosts = async (): Promise<Post[]> => {
@@ -48,6 +52,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 				const result = await getTimelinePostsWithReposts(supabase, followingProfiles, user?.id ?? null, {
 					select,
 					limit: 50,
+					...(before ? { before } : {}),
 				});
 				if (!result.error) return result.posts;
 			}
@@ -147,6 +152,8 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		animeTrending,
 		profile,
 		tab,
+		before: before ?? null,
+		hasMore: posts.length >= 50,
 		initialAnime: quoteAnimeResult.data ? { ...quoteAnimeResult.data, id: String(quoteAnimeResult.data.id) } : null,
 		initialExchangeId: exchangeShare ? shareExchangeId : null,
 		initialExchangeShare: exchangeShare,

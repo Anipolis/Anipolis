@@ -43,7 +43,7 @@ The Supabase CLI is installed as a project dev dependency and configured by `sup
 ```bash
 pnpm exec supabase login
 pnpm exec supabase link --project-ref <project-ref>
-pnpm supabase:migrations
+pnpm supabase migrations list
 pnpm supabase:types
 ```
 

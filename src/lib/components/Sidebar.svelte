@@ -5,6 +5,7 @@ import { goto, invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
 import type { Database } from "$lib/supabase/database.types";
 import type { StoredAccount } from "$lib/types";
+import AnimeIcon from "./AnimeIcon.svelte";
 import UserAvatar from "./UserAvatar.svelte";
 
 type Profile = Database["public"]["Tables"]["profiles"]["Row"] | null;
@@ -202,7 +203,7 @@ function isActive(path: string): boolean {
 	<nav class="mobile-drawer-nav">
 		{#if session}
 			<a href="/anime" class="mobile-drawer-btn" class:active={isActive('/anime')} onclick={closeDrawer}>
-				<span class="anipolis-logo-icon size-20" aria-hidden="true"></span>
+				<AnimeIcon size={20} />
 				アニメ
 			</a>
 
@@ -509,7 +510,7 @@ function isActive(path: string): boolean {
 		{/if}
 
 		<a href="/anime" class="sidebar-btn" class:active={isActive('/anime')} aria-label="アニメ" title="アニメ">
-			<span class="anipolis-logo-icon size-22" aria-hidden="true"></span>
+			<AnimeIcon />
 			<span class="sidebar-btn-label">アニメ</span>
 		</a>
 
@@ -916,11 +917,6 @@ function isActive(path: string): boolean {
 	background: center / contain no-repeat var(--anipolis-logo-image);
 }
 
-.anipolis-logo-icon.size-20 {
-	width: 20px;
-	height: 20px;
-}
-
 .anipolis-logo-icon.size-22 {
 	width: 22px;
 	height: 22px;
@@ -1172,17 +1168,32 @@ function isActive(path: string): boolean {
 	width: 100%;
 	padding: 10px 16px;
 	font-size: 0.9rem;
-	color: var(--fg, #f1f5f9);
+	color: var(--color-text);
 	background: none;
 	border: none;
 	cursor: pointer;
 	text-decoration: none;
 	text-align: left;
 	transition: background 0.12s;
+	-webkit-tap-highlight-color: transparent;
 }
 
-.account-menu-item:hover {
-	background: var(--surface-hover, #263348);
+.account-menu-item:hover,
+.account-menu-item:focus {
+	background: var(--color-surface-hover);
+}
+
+.account-menu-item:active {
+	background: color-mix(in srgb, var(--color-accent) 14%, var(--color-surface));
+}
+
+.account-menu-item:focus {
+	outline: none;
+}
+
+.account-menu-item:focus-visible {
+	outline: 2px solid var(--color-accent);
+	outline-offset: -3px;
 }
 
 .account-menu-current {

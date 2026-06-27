@@ -39,7 +39,7 @@ export const load: PageServerLoad = async ({ url, locals: { safeGetSession } }) 
 	return {
 		mode,
 		next,
-		closedBeta: publicEnv["PUBLIC_CLOSED_BETA"] === "true",
+		closedBeta: isClosedBeta(),
 		error: url.searchParams.get("error"),
 	};
 };
