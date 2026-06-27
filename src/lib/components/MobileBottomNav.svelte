@@ -301,13 +301,6 @@ function isActive(path: string): boolean {
 	justify-content: center;
 }
 
-.anipolis-logo-icon {
-	display: block;
-	width: 22px;
-	height: 22px;
-	background: center / contain no-repeat var(--anipolis-logo-image);
-}
-
 @media (max-width: 960px) {
 	.mobile-bottom-nav {
 		display: flex;

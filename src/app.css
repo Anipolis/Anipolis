@@ -363,28 +363,8 @@ textarea {
 	font-weight: 700;
 }
 
-/* Active: solid/filled icons */
-[data-theme="light"] .sidebar-btn.active svg path,
-[data-theme="light"] .sidebar-btn.active svg polygon,
-[data-theme="light"] .sidebar-btn.active svg circle,
-[data-theme="light"] .sidebar-btn.active svg rect {
-	fill: currentColor;
-	stroke: none;
-}
-
-/* Home icon door: keep as white cutout */
-[data-theme="light"] .sidebar-btn.active svg polyline {
-	fill: none;
-	stroke: #fff;
-	stroke-width: 2;
-	stroke-linecap: round;
-	stroke-linejoin: round;
-}
-
-/* Exchange icon (open line paths only): keep stroke, make bolder */
-[data-theme="light"] .sidebar-btn.active svg.icon-lines path {
-	fill: none !important;
-	stroke: currentColor !important;
+/* Keep line icons legible while giving the active item more visual weight. */
+[data-theme="light"] .sidebar-btn.active svg {
 	stroke-width: 2.5;
 }
 

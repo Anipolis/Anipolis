@@ -5,6 +5,7 @@ import { goto, invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
 import type { Database } from "$lib/supabase/database.types";
 import type { StoredAccount } from "$lib/types";
+import AnimeIcon from "./AnimeIcon.svelte";
 import UserAvatar from "./UserAvatar.svelte";
 
 type Profile = Database["public"]["Tables"]["profiles"]["Row"] | null;
@@ -202,7 +203,7 @@ function isActive(path: string): boolean {
 	<nav class="mobile-drawer-nav">
 		{#if session}
 			<a href="/anime" class="mobile-drawer-btn" class:active={isActive('/anime')} onclick={closeDrawer}>
-				<span class="anipolis-logo-icon size-20" aria-hidden="true"></span>
+				<AnimeIcon size={20} />
 				アニメ
 			</a>
 
@@ -507,7 +508,7 @@ function isActive(path: string): boolean {
 		{/if}
 
 		<a href="/anime" class="sidebar-btn" class:active={isActive('/anime')} aria-label="アニメ" title="アニメ">
-			<span class="anipolis-logo-icon size-22" aria-hidden="true"></span>
+			<AnimeIcon />
 			<span class="sidebar-btn-label">アニメ</span>
 		</a>
 
@@ -912,11 +913,6 @@ function isActive(path: string): boolean {
 	display: block;
 	flex-shrink: 0;
 	background: center / contain no-repeat var(--anipolis-logo-image);
-}
-
-.anipolis-logo-icon.size-20 {
-	width: 20px;
-	height: 20px;
 }
 
 .anipolis-logo-icon.size-22 {
