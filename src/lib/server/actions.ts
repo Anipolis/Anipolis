@@ -1052,6 +1052,41 @@ export async function removeBroadcastRoomMute(supabase: SupabaseClient<Database>
 	return { roomMuteSuccess: true };
 }
 
+/** 文字列を正の整数に正規化する。整数でない・0以下・桁あふれは null を返す。 */
+export function parsePositiveInt(value: string | null): number | null {
+	if (value == null) return null;
+	const trimmed = value.trim();
+	if (!/^\d+$/.test(trimmed)) return null;
+	const n = Number(trimmed);
+	return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+
+/** settings/mutes のアニメミュート更新フォームを処理する（パース・検証・upsert を所有） */
+export async function updateAnimeMuteAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
+	const form = await request.formData();
+	const animeId = (form.get("anime_id") as string | null)?.trim() ?? "";
+	const muteType = form.get("mute_type") as string | null;
+	if (!animeId || (muteType !== "period" && muteType !== "always")) {
+		return fail(400, { message: "入力内容を確認してください" });
+	}
+	const periodDays =
+		muteType === "period" ? parsePositiveInt((form.get("period_days") as string | null) ?? "3") : null;
+	if (muteType === "period" && (periodDays == null || periodDays < 1 || periodDays > 7)) {
+		return fail(400, { message: "ミュート期間を選択してください（1〜7日）" });
+	}
+	const isRepeat = form.get("is_repeat") === "on";
+
+	return upsertAnimeMute(supabase, userId, animeId, muteType, periodDays, isRepeat, null);
+}
+
+/** settings/mutes のアニメミュート解除フォームを処理する（パース・検証・削除を所有） */
+export async function removeAnimeMuteAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
+	const form = await request.formData();
+	const animeId = (form.get("anime_id") as string | null)?.trim() ?? "";
+	if (!animeId) return fail(400, { message: "ミュート設定が見つかりません" });
+	return removeAnimeMute(supabase, userId, animeId);
+}
+
 export async function upsertAnimeMute(
 	supabase: SupabaseClient<Database>,
 	userId: string,

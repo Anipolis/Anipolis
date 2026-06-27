@@ -27,6 +27,11 @@ function closeModal() {
 	composeOpen.set(false);
 }
 
+function loadMoreHref(lastCreatedAt: string): string {
+	const base = data.tab === "following" ? "/?tab=following" : "/";
+	return `${base}&before=${encodeURIComponent(lastCreatedAt)}`.replace("/?&", "/?");
+}
+
 $effect(() => {
 	if ((data.initialAnime || data.initialExchangeShare) && data.profile) {
 		if (window.matchMedia("(max-width: 960px)").matches) {
@@ -196,6 +201,11 @@ $effect(() => {
 				<PostCardSkeleton />
 			{/each}
 		{:then posts}
+			{#if data.before}
+				<a href={data.tab === "following" ? "/?tab=following" : "/"} class="timeline-back-link"
+					>← 新しい投稿に戻る</a
+				>
+			{/if}
 			{#if posts.length === 0}
 				<div class="empty-state">
 					{#if data.tab === 'following'}
@@ -208,6 +218,12 @@ $effect(() => {
 				{#each posts as post (post.id)}
 					<PostCard {post} currentUserId={data.user?.id ?? null} />
 				{/each}
+				{#if data.hasMore}
+					{@const lastPost = posts[posts.length - 1]}
+					{#if lastPost}
+						<a href={loadMoreHref(lastPost.created_at)} class="load-more-btn"> さらに読み込む </a>
+					{/if}
+				{/if}
 			{/if}
 		{/await}
 	</main>
@@ -476,5 +492,33 @@ $effect(() => {
 		display: flex;
 		padding: 24px 16px;
 	}
+}
+
+.timeline-back-link {
+	display: block;
+	padding: 10px 16px;
+	text-align: center;
+	font-size: 0.88rem;
+	color: var(--color-accent);
+	text-decoration: none;
+	border-bottom: 1px solid var(--color-border);
+}
+.timeline-back-link:hover {
+	background: color-mix(in srgb, var(--color-accent) 6%, transparent);
+}
+
+.load-more-btn {
+	display: block;
+	padding: 14px 16px;
+	text-align: center;
+	font-size: 0.9rem;
+	font-weight: 500;
+	color: var(--color-accent);
+	text-decoration: none;
+	border-top: 1px solid var(--color-border);
+	transition: background 0.12s;
+}
+.load-more-btn:hover {
+	background: color-mix(in srgb, var(--color-accent) 6%, transparent);
 }
 </style>

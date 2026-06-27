@@ -1081,7 +1081,7 @@ export async function getTimelinePostsWithReposts(
 	supabase: SupabaseClient<Database>,
 	profiles: ProfileRepostContext[],
 	currentUserId: string | null,
-	options: { limit?: number; select?: string } = {},
+	options: { limit?: number; select?: string; before?: string } = {},
 ): Promise<TimelinePostsWithRepostsResult> {
 	if (profiles.length === 0) return { posts: [], error: null };
 
@@ -1093,10 +1093,18 @@ export async function getTimelinePostsWithReposts(
 	const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
 
 	const buildProfileFilter = <
-		T extends { eq: (column: string, value: string) => T; in: (column: string, values: string[]) => T },
+		T extends {
+			eq: (column: string, value: string) => T;
+			in: (column: string, values: string[]) => T;
+			lt: (column: string, value: string) => T;
+		},
 	>(
 		query: T,
-	) => (profileIds.length === 1 ? query.eq("user_id", firstProfileId) : query.in("user_id", profileIds));
+	) => {
+		let q = profileIds.length === 1 ? query.eq("user_id", firstProfileId) : query.in("user_id", profileIds);
+		if (options.before) q = q.lt("created_at", options.before);
+		return q;
+	};
 
 	const ownPostsQuery = buildProfileFilter(
 		supabase
@@ -2320,6 +2328,7 @@ export async function getBroadcastRoomMutes(
 		anime_id: number;
 		room_session_id: string;
 		session: { room_date: string } | { room_date: string }[];
+		anime: { title: string; cover_url: string | null } | null;
 		duration_days: number | null;
 		mute_until_event_end: boolean;
 		repeat_weekly: boolean;
@@ -2331,32 +2340,21 @@ export async function getBroadcastRoomMutes(
 	const { data } = await supabase
 		.from("broadcast_room_mutes")
 		.select(
-			"anime_id, room_session_id, session:broadcast_room_sessions!broadcast_room_mutes_room_session_id_fkey ( room_date ), duration_days, mute_until_event_end, repeat_weekly, muted_until, created_at, updated_at",
+			"anime_id, room_session_id, session:broadcast_room_sessions!broadcast_room_mutes_room_session_id_fkey ( room_date ), anime:anime!broadcast_room_mutes_anime_id_fkey ( title, cover_url ), duration_days, mute_until_event_end, repeat_weekly, muted_until, created_at, updated_at",
 		)
 		.eq("user_id", userId)
 		.order("muted_until", { ascending: false });
 	const rows = (data ?? []) as unknown as BroadcastRoomMuteRow[];
-	if (rows.length === 0) return [];
-
-	const { data: animes } = await supabase
-		.from("anime")
-		.select("id, title, cover_url")
-		.in(
-			"id",
-			rows.map((row) => row.anime_id),
-		);
-	const animeById = new Map((animes ?? []).map((anime) => [anime.id, anime]));
 
 	return rows.map((row) => {
-		const anime = animeById.get(row.anime_id);
 		const duration =
 			row.mute_until_event_end || row.duration_days == null
 				? "event_end"
 				: (Math.min(7, Math.max(1, row.duration_days)) as 1 | 2 | 3 | 4 | 5 | 6 | 7);
 		return {
 			anime_id: String(row.anime_id),
-			anime_title: anime?.title ?? "不明なアニメ",
-			anime_cover_url: anime?.cover_url ?? null,
+			anime_title: row.anime?.title ?? "不明なアニメ",
+			anime_cover_url: row.anime?.cover_url ?? null,
 			room_session_id: row.room_session_id,
 			room_date: (Array.isArray(row.session) ? row.session[0]?.room_date : row.session?.room_date) ?? "",
 			duration,
@@ -2388,17 +2386,20 @@ export async function getActiveAnimeMuteIds(
 	userId: string | null,
 ): Promise<Set<string>> {
 	if (!userId) return new Set();
+	type ActiveMuteRow = AnimeMuteRow & { anime: { id: number; broadcast_day: number | null } | null };
 	// biome-ignore lint/suspicious/noExplicitAny: anime_mutes not yet in auto-generated DB types
 	const { data } = await (supabase as any)
 		.from("anime_mutes")
-		.select("anime_id, mute_type, period_days, is_repeat, muted_until")
+		.select(
+			"anime_id, mute_type, period_days, is_repeat, muted_until, anime:anime!anime_mutes_anime_id_fkey ( id, broadcast_day )",
+		)
 		.eq("user_id", userId);
-	const rows = (data ?? []) as AnimeMuteRow[];
+	const rows = (data ?? []) as ActiveMuteRow[];
 	if (rows.length === 0) return new Set();
 
 	const now = Date.now();
 	const activeIds = new Set<string>();
-	const repeatRows: AnimeMuteRow[] = [];
+	const todayDay = new Date().getDay();
 
 	for (const row of rows) {
 		if (row.mute_type === "always") {
@@ -2408,29 +2409,10 @@ export async function getActiveAnimeMuteIds(
 				if (row.muted_until && new Date(row.muted_until).getTime() > now) {
 					activeIds.add(String(row.anime_id));
 				}
-			} else {
-				repeatRows.push(row);
+			} else if (row.period_days != null && row.anime?.broadcast_day != null) {
+				const daysSince = (todayDay - row.anime.broadcast_day + 7) % 7;
+				if (daysSince < row.period_days) activeIds.add(String(row.anime_id));
 			}
-		}
-	}
-
-	// For repeat period mutes, check if today falls within period window of last broadcast_day
-	if (repeatRows.length > 0) {
-		const { data: animes } = await supabase
-			.from("anime")
-			.select("id, broadcast_day")
-			.in(
-				"id",
-				repeatRows.map((r) => r.anime_id),
-			);
-		const animeMap = new Map((animes ?? []).map((a) => [a.id, a.broadcast_day]));
-		const todayDay = new Date().getDay();
-		for (const row of repeatRows) {
-			if (row.period_days == null) continue;
-			const broadcastDay = animeMap.get(row.anime_id);
-			if (broadcastDay == null) continue;
-			const daysSince = (todayDay - broadcastDay + 7) % 7;
-			if (daysSince < row.period_days) activeIds.add(String(row.anime_id));
 		}
 	}
 
@@ -2438,37 +2420,30 @@ export async function getActiveAnimeMuteIds(
 }
 
 export async function getAnimeMutes(supabase: SupabaseClient<Database>, userId: string): Promise<AnimeMute[]> {
+	type Row = AnimeMuteRow & {
+		id: string;
+		created_at: string;
+		anime: { title: string; cover_url: string | null } | null;
+	};
 	// biome-ignore lint/suspicious/noExplicitAny: anime_mutes not yet in auto-generated DB types
 	const { data } = await (supabase as any)
 		.from("anime_mutes")
-		.select("id, anime_id, mute_type, period_days, is_repeat, muted_until, created_at")
+		.select(
+			"id, anime_id, mute_type, period_days, is_repeat, muted_until, created_at, anime:anime!anime_mutes_anime_id_fkey ( title, cover_url )",
+		)
 		.eq("user_id", userId)
 		.order("created_at", { ascending: false });
-	type Row = AnimeMuteRow & { id: string; created_at: string };
 	const rows = ((data ?? []) as Row[]).filter((row) => isVisibleAnimeMute(row));
-	if (rows.length === 0) return [];
 
-	const { data: animes } = await supabase
-		.from("anime")
-		.select("id, title, cover_url")
-		.in(
-			"id",
-			rows.map((r) => r.anime_id),
-		);
-	const animeById = new Map((animes ?? []).map((a) => [a.id, a]));
-
-	return rows.map((row) => {
-		const anime = animeById.get(row.anime_id);
-		return {
-			id: row.id,
-			anime_id: String(row.anime_id),
-			anime_title: anime?.title ?? "不明なアニメ",
-			anime_cover_url: anime?.cover_url ?? null,
-			mute_type: row.mute_type as "period" | "always",
-			period_days: row.period_days,
-			is_repeat: row.is_repeat,
-			muted_until: row.muted_until,
-			created_at: row.created_at,
-		};
-	});
+	return rows.map((row) => ({
+		id: row.id,
+		anime_id: String(row.anime_id),
+		anime_title: row.anime?.title ?? "不明なアニメ",
+		anime_cover_url: row.anime?.cover_url ?? null,
+		mute_type: row.mute_type as "period" | "always",
+		period_days: row.period_days,
+		is_repeat: row.is_repeat,
+		muted_until: row.muted_until,
+		created_at: row.created_at,
+	}));
 }
