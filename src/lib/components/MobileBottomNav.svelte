@@ -1,5 +1,6 @@
 <script lang="ts">
 import type { Session } from "@supabase/supabase-js";
+import { onMount } from "svelte";
 import { page } from "$app/state";
 
 interface Props {
@@ -8,6 +9,17 @@ interface Props {
 }
 
 let { session, unreadNotificationCount = 0 }: Props = $props();
+let isMobileViewport = $state(false);
+
+onMount(() => {
+	const mediaQuery = window.matchMedia("(max-width: 960px)");
+	const updateViewport = () => {
+		isMobileViewport = mediaQuery.matches;
+	};
+	updateViewport();
+	mediaQuery.addEventListener("change", updateViewport);
+	return () => mediaQuery.removeEventListener("change", updateViewport);
+});
 
 function isActive(path: string): boolean {
 	if (path === "/") return page.url.pathname === "/";
@@ -15,7 +27,7 @@ function isActive(path: string): boolean {
 }
 </script>
 
-<nav class="mobile-bottom-nav" aria-label="モバイルナビゲーション">
+<nav class="mobile-bottom-nav" aria-label="モバイルナビゲーション" hidden={!isMobileViewport}>
 	{#if session}
 		<a href="/" class="mobile-tab" class:active={isActive('/')} aria-label="ホーム">
 			<svg
