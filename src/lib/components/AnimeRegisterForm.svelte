@@ -113,12 +113,12 @@ async function handleFileChange(e: Event) {
 	<h2 class="register-title">{isEditMode ? "作品情報を編集" : "アニメ登録"}</h2>
 
 	{#if form?.success}
-		<div class="form-success">
+		<div class="form-success" aria-live="polite">
 			{isEditMode ? "更新しました！" : "登録しました！"} <a href="/anime/{form.animeId}">詳細を見る →</a>
 		</div>
 	{/if}
 	{#if form?.message}
-		<div class="form-error">{form.message}</div>
+		<div class="form-error" role="alert">{form.message}</div>
 	{/if}
 
 	<form

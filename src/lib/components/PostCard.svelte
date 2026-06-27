@@ -582,7 +582,7 @@ async function submitReport() {
 							<p class="quote-preview-content">{post.content}</p>
 						</div>
 						{#if quoteError}
-							<p class="flash-error" style="margin-top:8px;">{quoteError}</p>
+							<p class="flash-error" role="alert" style="margin-top:8px;">{quoteError}</p>
 						{/if}
 					</div>
 					<div class="quote-modal-footer">
@@ -708,7 +708,7 @@ async function submitReport() {
 							<textarea rows="3" maxlength="500" bind:value={reportDetails}></textarea>
 						</label>
 						{#if reportMessage}
-							<p class="report-message">{reportMessage}</p>
+							<p class="report-message" role="status" aria-live="polite">{reportMessage}</p>
 						{/if}
 					</div>
 					<div class="report-modal-footer">

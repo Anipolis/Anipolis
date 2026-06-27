@@ -436,7 +436,7 @@ const handleSubmit: SubmitFunction = () => {
 			<input type="hidden" name="image_urls" value={JSON.stringify(imageUrls)}>
 
 			{#if errorMessage}
-				<p class="flash-error" style="margin-top:8px;">{errorMessage}</p>
+				<p class="flash-error" role="alert" style="margin-top:8px;">{errorMessage}</p>
 			{/if}
 
 			<div class="composer-footer">

@@ -160,16 +160,16 @@ const handleExchangeSubmit: SubmitFunction = () => {
 				{/if}
 
 				{#if form?.exchangeMessage || exchangeError}
-					<p class="form-error">{exchangeError || form?.exchangeMessage}</p>
+					<p class="form-error" role="alert">{exchangeError || form?.exchangeMessage}</p>
 				{/if}
 				{#if form?.exchangeSuccess || exchangeFeedback}
-					<p class="form-success">{exchangeFeedback || "交換を受け付けました"}</p>
+					<p class="form-success" aria-live="polite">{exchangeFeedback || "交換を受け付けました"}</p>
 				{/if}
 				{#if listError}
-					<p class="form-error">{listError}</p>
+					<p class="form-error" role="alert">{listError}</p>
 				{/if}
 				{#if listFeedback}
-					<p class="form-success">{listFeedback}</p>
+					<p class="form-success" aria-live="polite">{listFeedback}</p>
 				{/if}
 
 				{#if latestReceived}

@@ -751,7 +751,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 			</header>
 
 			{#if form && "message" in form}
-				<p class="form-error">{form.message}</p>
+				<p class="form-error" role="alert">{form.message}</p>
 			{/if}
 
 			<form method="POST" action="?/createEvent" use:enhance class="event-form">
