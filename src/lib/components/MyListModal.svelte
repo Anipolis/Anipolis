@@ -2,6 +2,7 @@
 import type { SubmitFunction } from "@sveltejs/kit";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
+import { trapFocus } from "$lib/actions/trapFocus";
 import type { AnimeStatus, UserAnimeEntry } from "$lib/types";
 
 type Props = {
@@ -111,6 +112,7 @@ $effect(() => {
 			aria-modal="true"
 			aria-labelledby="mylist-modal-title"
 			tabindex="-1"
+			use:trapFocus
 			onclick={(e) => e.stopPropagation()}
 		>
 			<header class="modal-header">
