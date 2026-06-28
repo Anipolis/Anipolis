@@ -55,6 +55,18 @@ function roomHashtag(anime: Anime) {
 	return officialHashtag ?? fallbackRoomHashtag(anime.title);
 }
 
+function stripTrailingRoomHashtag(content: string, hashtag: string) {
+	const tag = normalizeHashtag(hashtag);
+	if (!tag) return content.trim();
+	const trimmed = content.trim();
+	const normalized = trimmed.toLowerCase();
+	const suffix = `#${tag}`;
+	if (!normalized.endsWith(suffix)) return trimmed;
+	const before = trimmed.slice(0, trimmed.length - suffix.length);
+	if (before.length > 0 && !/\s$/.test(before)) return trimmed;
+	return before.trimEnd();
+}
+
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 	const anime = await getAnime(supabase, params.id, user?.id ?? null);
@@ -129,9 +141,10 @@ export const actions: Actions = {
 		}
 
 		const form = await request.formData();
-		const content = (form.get("content") as string | null)?.trim() ?? "";
-		if (!content) return fail(400, { message: "投稿内容を入力してください" });
+		const rawContent = (form.get("content") as string | null) ?? "";
 		const hashtag = roomHashtag(anime);
+		const content = stripTrailingRoomHashtag(rawContent, hashtag);
+		if (!content) return fail(400, { message: "投稿内容を入力してください" });
 
 		return insertPostWithHashtags(supabase, user.id, content, null, [], anime.id, null, null, session.id, null, [
 			hashtag,

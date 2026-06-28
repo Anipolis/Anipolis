@@ -37,16 +37,18 @@ function fallbackRoomTag(title: string) {
 	return title.replace(/\s+/g, "").replace(/[^\p{L}\p{N}_]/gu, "");
 }
 
-function getRoomTagCandidates(anime: Post["anime_quote"]) {
-	if (!anime?.room_href) return [];
+function getRoomTagCandidates(post: Post) {
+	const anime = post.anime_quote;
+	if (!post.broadcast_room_session_id || !anime?.room_href) return [];
 	return [
 		...(anime.official_hashtag ?? []).map(normalizeRoomTag),
 		normalizeRoomTag(fallbackRoomTag(anime.title)),
 	].filter((tag) => tag.length > 0);
 }
 
-function hideTrailingRoomTag(content: string, anime: Post["anime_quote"]) {
-	const roomTags = getRoomTagCandidates(anime);
+function hideTrailingRoomTag(post: Post) {
+	const content = post.content;
+	const roomTags = getRoomTagCandidates(post);
 	if (roomTags.length === 0) return content;
 	const trimmed = content.trimEnd();
 	const normalized = trimmed.toLowerCase();
@@ -60,7 +62,7 @@ function hideTrailingRoomTag(content: string, anime: Post["anime_quote"]) {
 	return content;
 }
 
-const displayContent = $derived(hideTrailingRoomTag(post.content, post.anime_quote));
+const displayContent = $derived(hideTrailingRoomTag(post));
 const parts = $derived(parseContentParts(displayContent));
 const relativeTime = $derived(formatRelativeTime(post.created_at));
 const broadcastRelativeTime = $derived(

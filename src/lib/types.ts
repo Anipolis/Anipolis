@@ -107,6 +107,7 @@ export interface Post {
 	reposted_by_me: boolean;
 	bookmarked_by_me: boolean;
 	anime_id: string | null;
+	broadcast_room_session_id: string | null;
 	anime_quote: AnimeQuote | null;
 	exchange_share: AnimeExchangeShare | null;
 	cw_anime_id: string | null;
@@ -380,6 +381,7 @@ export function toPost(
 		reposted_by_me: counts?.reposted_by_me ?? false,
 		bookmarked_by_me: counts?.bookmarked_by_me ?? false,
 		anime_id: raw.anime_id != null ? String(raw.anime_id) : null,
+		broadcast_room_session_id: raw.broadcast_room_session_id ?? null,
 		anime_quote: raw.anime
 			? {
 					id: String(raw.anime.id),
