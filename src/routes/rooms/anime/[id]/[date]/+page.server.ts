@@ -130,11 +130,12 @@ export const actions: Actions = {
 
 		const form = await request.formData();
 		const content = (form.get("content") as string | null)?.trim() ?? "";
+		if (!content) return fail(400, { message: "投稿内容を入力してください" });
 		const hashtag = roomHashtag(anime);
-		const hasTag = content.toLowerCase().includes(`#${hashtag.toLowerCase()}`);
-		const finalContent = hasTag ? content : `${content} #${hashtag}`;
 
-		return insertPostWithHashtags(supabase, user.id, finalContent, null, [], anime.id, null, null, session.id);
+		return insertPostWithHashtags(supabase, user.id, content, null, [], anime.id, null, null, session.id, null, [
+			hashtag,
+		]);
 	},
 
 	deletePost: async ({ request, locals: { supabase, safeGetSession } }) => {
