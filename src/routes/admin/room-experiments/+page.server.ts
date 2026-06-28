@@ -7,6 +7,13 @@ import {
 } from "$lib/server/room-experiments";
 import type { Actions, PageServerLoad } from "./$types";
 
+function getTextField(form: FormData, name: string): { ok: true; value: string } | { ok: false } {
+	const value = form.get(name);
+	if (value == null) return { ok: true, value: "" };
+	if (typeof value !== "string") return { ok: false };
+	return { ok: true, value: value.trim() };
+}
+
 export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 	if (!user) redirect(302, "/");
@@ -26,9 +33,15 @@ export const actions: Actions = {
 		if (!(await isAdminUser(supabase, user.id))) return fail(403, { message: "管理者権限が必要です" });
 
 		const form = await request.formData();
-		const animeId = (form.get("anime_id") as string | null)?.trim() ?? "";
-		const label = (form.get("label") as string | null)?.trim() || null;
-		const notes = (form.get("notes") as string | null)?.trim() || null;
+		const animeIdField = getTextField(form, "anime_id");
+		const labelField = getTextField(form, "label");
+		const notesField = getTextField(form, "notes");
+		if (!animeIdField.ok || !labelField.ok || !notesField.ok) {
+			return fail(400, { message: "フォーム値が不正です" });
+		}
+		const animeId = animeIdField.value;
+		const label = labelField.value || null;
+		const notes = notesField.value || null;
 		const result = await startRoomExperimentRun(supabase, user.id, { animeId, label, notes });
 		if (!result.ok) return fail(result.status, { message: result.message });
 		return { success: true, message: "検証runを開始しました" };
@@ -40,7 +53,9 @@ export const actions: Actions = {
 		if (!(await isAdminUser(supabase, user.id))) return fail(403, { message: "管理者権限が必要です" });
 
 		const form = await request.formData();
-		const runId = (form.get("run_id") as string | null)?.trim() ?? "";
+		const runIdField = getTextField(form, "run_id");
+		if (!runIdField.ok) return fail(400, { message: "フォーム値が不正です" });
+		const runId = runIdField.value;
 		if (!runId) return fail(400, { message: "run IDが不正です" });
 
 		const result = await stopRoomExperimentRun(supabase, user.id, runId);

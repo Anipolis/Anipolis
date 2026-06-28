@@ -99,7 +99,8 @@ BEGIN
 
     SELECT * INTO target_run
     FROM public.room_experiment_runs
-    WHERE id = NEW.run_id;
+    WHERE id = NEW.run_id
+    FOR UPDATE;
 
     IF NOT FOUND THEN
         RAISE EXCEPTION 'room experiment run does not exist'
@@ -187,9 +188,4 @@ CREATE POLICY "room_experiment_visits_insert_own"
     WITH CHECK (user_id = auth.uid());
 
 DROP POLICY IF EXISTS "room_experiment_visits_update_own" ON public.room_experiment_visits;
-CREATE POLICY "room_experiment_visits_update_own"
-    ON public.room_experiment_visits
-    FOR UPDATE
-    TO authenticated
-    USING (user_id = auth.uid())
-    WITH CHECK (user_id = auth.uid());
+-- Visit updates are performed only through trusted server-side API helpers.

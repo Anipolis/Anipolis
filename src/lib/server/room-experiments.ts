@@ -13,9 +13,6 @@ import {
 	ROOM_EXPERIMENT_STALE_AFTER_MS,
 } from "./room-experiment-metrics";
 
-// biome-ignore lint/suspicious/noExplicitAny: new room experiment tables may lag behind linked Supabase type generation
-type AnySupabase = SupabaseClient<any>;
-
 type RunRow = {
 	id: string;
 	anime_id: number;
@@ -87,10 +84,6 @@ type SessionInfo = {
 	scheduled_at: string;
 	posting_closes_at: string | null;
 };
-
-function asAny(supabase: SupabaseClient<Database>): AnySupabase {
-	return supabase as unknown as AnySupabase;
-}
 
 export function createRoomExperimentServiceClient(): SupabaseClient<Database> | null {
 	try {
@@ -176,7 +169,7 @@ export async function getActiveRoomExperimentRunForAnime(
 	supabase: SupabaseClient<Database>,
 	animeId: string | number,
 ): Promise<RoomExperimentRun | null> {
-	const { data, error } = await asAny(supabase)
+	const { data, error } = await supabase
 		.from("room_experiment_runs")
 		.select(
 			"id, anime_id, started_at, ended_at, label, notes, anime:anime!room_experiment_runs_anime_id_fkey ( title, cover_url )",
@@ -208,13 +201,13 @@ export async function searchRoomExperimentAnime(
 	if (!trimmed) return [];
 
 	const [{ data: animeRows }, { data: activeRuns }] = await Promise.all([
-		asAny(supabase)
+		supabase
 			.from("anime")
 			.select("id, title, cover_url, room_type")
 			.or(buildTitleSearchFilter(trimmed))
 			.order("title", { ascending: true })
 			.limit(10),
-		asAny(supabase).from("room_experiment_runs").select("id, anime_id").is("ended_at", null),
+		supabase.from("room_experiment_runs").select("id, anime_id").is("ended_at", null),
 	]);
 
 	const activeRunByAnime = new Map(
@@ -249,14 +242,12 @@ export async function startRoomExperimentRun(
 		return { ok: false, status: 400, message: "作品IDが不正です" };
 	}
 
-	const { error } = await asAny(supabase)
-		.from("room_experiment_runs")
-		.insert({
-			anime_id: Number(options.animeId),
-			created_by: adminId,
-			label: options.label || null,
-			notes: options.notes || null,
-		});
+	const { error } = await supabase.from("room_experiment_runs").insert({
+		anime_id: Number(options.animeId),
+		created_by: adminId,
+		label: options.label || null,
+		notes: options.notes || null,
+	});
 
 	if (!error) return { ok: true };
 	if (error.code === "23505") return { ok: false, status: 409, message: "この作品はすでに検証対象です" };
@@ -269,13 +260,29 @@ export async function stopRoomExperimentRun(
 	adminId: string,
 	runId: string,
 ): Promise<{ ok: true } | { ok: false; status: number; message: string }> {
-	const { error } = await asAny(supabase)
+	const { data: existingRun, error: lookupError } = await supabase
+		.from("room_experiment_runs")
+		.select("id, ended_at")
+		.eq("id", runId)
+		.maybeSingle();
+
+	if (lookupError) {
+		console.error("room experiment run stop lookup error:", lookupError);
+		return { ok: false, status: 500, message: "検証runの確認に失敗しました" };
+	}
+	if (!existingRun) return { ok: false, status: 404, message: "検証runが見つかりません" };
+	if (existingRun.ended_at) return { ok: false, status: 409, message: "この検証runはすでに停止されています" };
+
+	const { data, error } = await supabase
 		.from("room_experiment_runs")
 		.update({ ended_at: new Date().toISOString(), ended_by: adminId })
 		.eq("id", runId)
-		.is("ended_at", null);
+		.is("ended_at", null)
+		.select("id")
+		.maybeSingle();
 
-	if (!error) return { ok: true };
+	if (!error && data) return { ok: true };
+	if (!error && !data) return { ok: false, status: 409, message: "この検証runはすでに停止されています" };
 	console.error("room experiment run stop error:", error);
 	return { ok: false, status: 500, message: "検証runの停止に失敗しました" };
 }
@@ -295,14 +302,14 @@ export async function createRoomExperimentVisit(
 		return { error: true, status: 400, message: "client_visit_keyが不正です" };
 	}
 
-	const { data: session } = await asAny(supabase)
+	const { data: session } = await supabase
 		.from("broadcast_room_sessions")
 		.select("id, anime_id, room_kind")
 		.eq("id", sessionId)
 		.maybeSingle();
 	if (!session || session.room_kind !== "episode") return { tracked: false };
 
-	const { data: run } = await asAny(supabase)
+	const { data: run } = await supabase
 		.from("room_experiment_runs")
 		.select("id, anime_id")
 		.eq("anime_id", session.anime_id)
@@ -311,7 +318,7 @@ export async function createRoomExperimentVisit(
 	if (!run) return { tracked: false };
 
 	const now = new Date().toISOString();
-	const { data, error } = await asAny(supabase)
+	const { data, error } = await supabase
 		.from("room_experiment_visits")
 		.upsert(
 			{
@@ -346,19 +353,23 @@ export async function heartbeatRoomExperimentVisit(
 	supabase: SupabaseClient<Database>,
 	userId: string,
 	visitId: string,
-): Promise<void> {
-	const { data: visit } = await asAny(supabase)
+): Promise<{ ok: true } | { ok: false; status: number; message: string }> {
+	const { data: visit, error } = await supabase
 		.from("room_experiment_visits")
 		.select("id, heartbeat_count, run:room_experiment_runs!room_experiment_visits_run_id_fkey ( ended_at )")
 		.eq("id", visitId)
 		.eq("user_id", userId)
 		.maybeSingle();
-	if (!visit) return;
+	if (error) {
+		console.error("room experiment heartbeat lookup error:", { visitId, userId, error });
+		return { ok: false, status: 500, message: "heartbeatの更新に失敗しました" };
+	}
+	if (!visit) return { ok: true };
 
 	const run = firstMaybeArray(visit.run as { ended_at: string | null } | { ended_at: string | null }[] | null);
-	if (run?.ended_at) return;
+	if (run?.ended_at) return { ok: true };
 
-	await asAny(supabase)
+	const { error: updateError } = await supabase
 		.from("room_experiment_visits")
 		.update({
 			last_seen_at: new Date().toISOString(),
@@ -366,23 +377,32 @@ export async function heartbeatRoomExperimentVisit(
 		})
 		.eq("id", visitId)
 		.eq("user_id", userId);
+	if (updateError) {
+		console.error("room experiment heartbeat update error:", { visitId, userId, error: updateError });
+		return { ok: false, status: 500, message: "heartbeatの更新に失敗しました" };
+	}
+	return { ok: true };
 }
 
 export async function exitRoomExperimentVisit(
 	supabase: SupabaseClient<Database>,
 	userId: string,
 	visitId: string,
-): Promise<void> {
-	const { data: visit } = await asAny(supabase)
+): Promise<{ ok: true } | { ok: false; status: number; message: string }> {
+	const { data: visit, error } = await supabase
 		.from("room_experiment_visits")
 		.select("id, exited_at")
 		.eq("id", visitId)
 		.eq("user_id", userId)
 		.maybeSingle();
-	if (!visit) return;
+	if (error) {
+		console.error("room experiment exit lookup error:", { visitId, userId, error });
+		return { ok: false, status: 500, message: "exitの更新に失敗しました" };
+	}
+	if (!visit) return { ok: true };
 
 	const now = new Date().toISOString();
-	await asAny(supabase)
+	const { error: updateError } = await supabase
 		.from("room_experiment_visits")
 		.update({
 			last_seen_at: now,
@@ -390,6 +410,11 @@ export async function exitRoomExperimentVisit(
 		})
 		.eq("id", visitId)
 		.eq("user_id", userId);
+	if (updateError) {
+		console.error("room experiment exit update error:", { visitId, userId, error: updateError });
+		return { ok: false, status: 500, message: "exitの更新に失敗しました" };
+	}
+	return { ok: true };
 }
 
 export async function getRoomExperimentDashboardData(
@@ -398,7 +423,7 @@ export async function getRoomExperimentDashboardData(
 ): Promise<{ runs: RoomExperimentDashboardRun[]; searchResults: RoomExperimentAnimeSearchResult[] }> {
 	const [searchResults, { data: runRows }] = await Promise.all([
 		searchRoomExperimentAnime(supabase, searchQuery),
-		asAny(supabase)
+		supabase
 			.from("room_experiment_runs")
 			.select(
 				"id, anime_id, started_at, ended_at, label, notes, anime:anime!room_experiment_runs_anime_id_fkey ( title, cover_url )",
@@ -415,13 +440,13 @@ export async function getRoomExperimentDashboardData(
 	const earliestStartedAt = runs.map((run) => run.started_at).sort()[0];
 
 	const [{ data: visitRows }, { data: postRows }, { data: sessionRows }] = await Promise.all([
-		asAny(supabase)
+		supabase
 			.from("room_experiment_visits")
 			.select(
 				"id, run_id, anime_id, broadcast_room_session_id, user_id, entered_at, last_seen_at, exited_at, session:broadcast_room_sessions!room_experiment_visits_broadcast_room_session_id_fkey ( id, room_date, room_kind, room_key, scheduled_at, posting_closes_at )",
 			)
 			.in("run_id", runIds),
-		asAny(supabase)
+		supabase
 			.from("posts")
 			.select(
 				"id, user_id, broadcast_room_session_id, created_at, parent_id, hidden_by_admin, session:broadcast_room_sessions!posts_broadcast_room_session_id_fkey ( id, anime_id, room_date, room_kind, room_key, scheduled_at, posting_closes_at )",
@@ -429,7 +454,7 @@ export async function getRoomExperimentDashboardData(
 			.in("anime_id", animeIds)
 			.not("broadcast_room_session_id", "is", null)
 			.gte("created_at", earliestStartedAt),
-		asAny(supabase)
+		supabase
 			.from("broadcast_room_sessions")
 			.select("id, anime_id, room_date, room_kind, room_key, scheduled_at, posting_closes_at")
 			.in("anime_id", animeIds)

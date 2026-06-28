@@ -69,6 +69,12 @@ function getRoomExperimentClientVisitKey(sessionId: string) {
 	return generatedKey;
 }
 
+function clearRoomExperimentHeartbeatTimer() {
+	if (!roomExperimentHeartbeatTimer) return;
+	clearInterval(roomExperimentHeartbeatTimer);
+	roomExperimentHeartbeatTimer = undefined;
+}
+
 async function startRoomExperimentTracking() {
 	const sessionId = data.roomExperiment?.sessionId;
 	if (!data.user || !data.roomExperiment?.enabled || !sessionId) return;
@@ -90,6 +96,7 @@ async function startRoomExperimentTracking() {
 		roomExperimentVisitId = body.visit_id;
 		roomExperimentExitSent = false;
 		const intervalMs = body.heartbeat_interval_ms ?? 30_000;
+		clearRoomExperimentHeartbeatTimer();
 		roomExperimentHeartbeatTimer = setInterval(() => void sendRoomExperimentHeartbeat(), intervalMs);
 	} catch {
 		// Tracking is best-effort and must not affect room viewing.
@@ -108,14 +115,23 @@ async function sendRoomExperimentHeartbeat() {
 function sendRoomExperimentExit() {
 	if (!roomExperimentVisitId || roomExperimentExitSent) return;
 	roomExperimentExitSent = true;
-	if (roomExperimentHeartbeatTimer) {
-		clearInterval(roomExperimentHeartbeatTimer);
-		roomExperimentHeartbeatTimer = undefined;
-	}
+	clearRoomExperimentHeartbeatTimer();
 	const url = `/api/room-experiment-visits/${roomExperimentVisitId}/exit`;
 	if (typeof navigator === "undefined") return;
 	if (navigator.sendBeacon?.(url)) return;
 	void fetch(url, { method: "POST", keepalive: true }).catch(() => undefined);
+}
+
+function handleRoomExperimentPageHide(event: PageTransitionEvent) {
+	if (event.persisted) {
+		clearRoomExperimentHeartbeatTimer();
+		return;
+	}
+	sendRoomExperimentExit();
+}
+
+function handleRoomExperimentPageShow(event: PageTransitionEvent) {
+	if (event.persisted) void startRoomExperimentTracking();
 }
 
 /** 最後に受信した投稿以降の差分を取得して extraPosts に追加する */
@@ -159,17 +175,19 @@ onMount(() => {
 		void focusLatestPost();
 	}
 	window.addEventListener("scroll", handleWindowScroll, { passive: true });
-	window.addEventListener("pagehide", sendRoomExperimentExit);
+	window.addEventListener("pagehide", handleRoomExperimentPageHide);
+	window.addEventListener("pageshow", handleRoomExperimentPageShow);
 	void startRoomExperimentTracking();
 });
 
 onDestroy(() => {
 	clearInterval(intervalId);
 	if (programmaticScrollTimer) clearTimeout(programmaticScrollTimer);
-	if (roomExperimentHeartbeatTimer) clearInterval(roomExperimentHeartbeatTimer);
+	clearRoomExperimentHeartbeatTimer();
 	if (typeof window !== "undefined") {
 		window.removeEventListener("scroll", handleWindowScroll);
-		window.removeEventListener("pagehide", sendRoomExperimentExit);
+		window.removeEventListener("pagehide", handleRoomExperimentPageHide);
+		window.removeEventListener("pageshow", handleRoomExperimentPageShow);
 	}
 	sendRoomExperimentExit();
 });

@@ -16,6 +16,7 @@ export const POST: RequestHandler = async ({ params, locals: { safeGetSession } 
 	const supabase = createRoomExperimentServiceClient();
 	if (!supabase) return noContent();
 
-	await exitRoomExperimentVisit(supabase, user.id, params.id);
+	const result = await exitRoomExperimentVisit(supabase, user.id, params.id);
+	if (!result.ok) error(result.status, result.message);
 	return noContent();
 };
