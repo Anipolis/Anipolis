@@ -27,6 +27,7 @@ let showDeleteModal = $state(false);
 let showReportModal = $state(false);
 let deleteFormEl = $state<HTMLFormElement | null>(null);
 let deleting = $state(false);
+let deleteMessage = $state("");
 let reportReason = $state("spam");
 let reportDetails = $state("");
 let reportSubmitting = $state(false);
@@ -140,8 +141,17 @@ const handleRepost: SubmitFunction = () => {
 
 const handleDelete: SubmitFunction = () => {
 	deleting = true;
-	return async ({ update }) => {
+	deleteMessage = "";
+	return async ({ result, update }) => {
+		if (result.type === "failure" || result.type === "error") {
+			const data = result.type === "failure" ? (result.data as { message?: string } | undefined) : undefined;
+			deleteMessage = data?.message ?? "投稿の削除に失敗しました";
+			await update({ reset: false });
+			deleting = false;
+			return;
+		}
 		await update();
+		showDeleteModal = false;
 		deleting = false;
 	};
 };
@@ -400,6 +410,9 @@ async function submitReport(event: MouseEvent) {
 			>
 				<h2 id="live-delete-title">投稿を削除</h2>
 				<p>この投稿を削除します。この操作は取り消せません。</p>
+				{#if deleteMessage}
+					<p class="live-reply-status live-reply-error">{deleteMessage}</p>
+				{/if}
 				<div class="live-modal-actions">
 					<button type="button" class="btn btn-ghost" onclick={() => (showDeleteModal = false)}>
 						キャンセル
@@ -407,7 +420,8 @@ async function submitReport(event: MouseEvent) {
 					<button
 						type="button"
 						class="btn btn-danger"
-						onclick={(event) => { event.stopPropagation(); showDeleteModal = false; deleteFormEl?.requestSubmit(); }}
+						disabled={deleting}
+						onclick={(event) => { event.stopPropagation(); deleteFormEl?.requestSubmit(); }}
 					>
 						削除する
 					</button>

@@ -28,7 +28,9 @@ type ModerationProfile = {
 	moderation_until: string | null;
 };
 
-export function getAnimeExchangeErrorDetail(error: { details?: unknown }): keyof typeof animeExchangeErrorMessages | null {
+export function getAnimeExchangeErrorDetail(error: {
+	details?: unknown;
+}): keyof typeof animeExchangeErrorMessages | null {
 	return typeof error.details === "string" && error.details in animeExchangeErrorMessages
 		? (error.details as keyof typeof animeExchangeErrorMessages)
 		: null;
@@ -655,7 +657,7 @@ export async function upsertUserAnimeEntry(supabase: SupabaseClient<Database>, r
 	if (moderationFailure) return moderationFailure;
 
 	const form = await request.formData();
-	const animeId = (form.get("anime_id") as string | null)?.trim() ?? "";
+	const animeId = parsePositiveInt(form.get("anime_id") as string | null);
 	const status = (form.get("status") as string | null)?.trim() as AnimeStatus | null;
 	const scoreRaw = form.get("score") as string | null;
 	const progressRaw = form.get("progress") as string | null;
@@ -790,10 +792,10 @@ export async function exchangeAnimeAction(supabase: SupabaseClient<Database>, re
 	};
 }
 
-export async function cancelAnimeExchangeAction(supabase: SupabaseClient<Database>) {
+export async function cancelAnimeExchangeAction(supabase: SupabaseClient<Database>, userId: string) {
 	const { data, error } = await supabase.rpc("cancel_anime_exchange");
 	if (error) {
-		console.error("anime exchange cancel error:", error);
+		console.error("anime exchange cancel error:", { userId, error });
 		return fail(500, { cancelMessage: "マッチングのキャンセルに失敗しました" });
 	}
 
@@ -1016,6 +1018,12 @@ export async function completeProfileSetupAction(
 		.insert({ id: userId, username, display_name: displayName || null, avatar_url: avatarUrl });
 
 	if (error) {
+		console.error("onboarding profile insert error:", {
+			userId,
+			code: error.code,
+			message: error.message,
+			details: error.details,
+		});
 		if (uploadedAvatarPath) {
 			await supabase.storage.from("profile-avatars").remove([uploadedAvatarPath]);
 		}
@@ -1126,15 +1134,15 @@ export async function updateAnimeMuteAction(request: Request, supabase: Supabase
 	}
 	const isRepeat = form.get("is_repeat") === "on";
 
-	return upsertAnimeMute(supabase, userId, animeId, muteType, periodDays, isRepeat, null);
+	return upsertAnimeMute(supabase, userId, String(animeId), muteType, periodDays, isRepeat, null);
 }
 
 /** settings/mutes のアニメミュート解除フォームを処理する（パース・検証・削除を所有） */
 export async function removeAnimeMuteAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
 	const form = await request.formData();
-	const animeId = (form.get("anime_id") as string | null)?.trim() ?? "";
+	const animeId = parsePositiveInt(form.get("anime_id") as string | null);
 	if (!animeId) return fail(400, { message: "ミュート設定が見つかりません" });
-	return removeAnimeMute(supabase, userId, animeId);
+	return removeAnimeMute(supabase, userId, String(animeId));
 }
 
 export async function upsertAnimeMute(

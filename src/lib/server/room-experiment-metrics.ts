@@ -205,10 +205,12 @@ export function filterRoomExperimentPosts(
 		sessionId: string;
 		runStartedAt: string;
 		runEndedAt: string | null;
+		postingClosesAt?: string | null;
 	},
 ): ExperimentPostInput[] {
 	const runStartedMs = toMs(options.runStartedAt);
 	const runEndedMs = toMs(options.runEndedAt);
+	const postingClosesMs = toMs(options.postingClosesAt);
 	if (runStartedMs == null) return [];
 
 	return posts
@@ -219,6 +221,7 @@ export function filterRoomExperimentPosts(
 			const createdMs = toMs(post.created_at);
 			if (createdMs == null || createdMs < runStartedMs) return false;
 			if (runEndedMs != null && createdMs >= runEndedMs) return false;
+			if (postingClosesMs != null && createdMs >= postingClosesMs) return false;
 			return true;
 		})
 		.map((post) => ({ user_id: post.user_id, created_at: post.created_at }));

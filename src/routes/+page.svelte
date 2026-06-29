@@ -27,10 +27,10 @@ function closeModal() {
 	composeOpen.set(false);
 }
 
-function loadMoreHref(lastCreatedAt: string): string {
+function loadMoreHref(lastCreatedAt: string, lastPostId: string): string {
 	const base = data.tab === "following" ? "/?tab=following" : "/";
 	const separator = base.includes("?") ? "&" : "?";
-	return `${base}${separator}before=${encodeURIComponent(lastCreatedAt)}`;
+	return `${base}${separator}before=${encodeURIComponent(lastCreatedAt)}&before_id=${encodeURIComponent(lastPostId)}`;
 }
 
 $effect(() => {
@@ -222,7 +222,9 @@ $effect(() => {
 				{#if data.hasMore}
 					{@const lastPost = posts[posts.length - 1]}
 					{#if lastPost}
-						<a href={loadMoreHref(lastPost.created_at)} class="load-more-btn"> さらに読み込む </a>
+						<a href={loadMoreHref(lastPost.created_at, lastPost.id)} class="load-more-btn">
+							さらに読み込む
+						</a>
 					{/if}
 				{/if}
 			{/if}

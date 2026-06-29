@@ -98,6 +98,11 @@ function normalizeAverageScore(score: number | null | undefined, count: number |
 /** 投稿一覧系クエリで共通の SELECT 句 */
 const POST_LIST_SELECT = buildPostCardSelect();
 
+export type TimelineCursor = {
+	createdAt: string;
+	id: string;
+};
+
 /**
  * リクエストスコープのミュート設定キャッシュ。
  *
@@ -240,6 +245,31 @@ export async function enrichPostsWithCounts(
 		}
 		return post;
 	});
+}
+
+export async function getHomeTimelinePosts(
+	supabase: SupabaseClient<Database>,
+	userId: string | null,
+	options: { limit?: number; select?: string; cursor?: TimelineCursor } = {},
+): Promise<{ posts: Post[]; error: unknown | null }> {
+	const limit = options.limit ?? 50;
+	const select = options.select ?? POST_LIST_SELECT;
+	let query = supabase
+		.from("posts")
+		.select(select)
+		.is("parent_id", null)
+		.order("created_at", { ascending: false })
+		.order("id", { ascending: false })
+		.limit(limit);
+
+	if (options.cursor) {
+		const { createdAt, id } = options.cursor;
+		query = query.or(`created_at.lt.${createdAt},and(created_at.eq.${createdAt},id.lt.${id})`);
+	}
+
+	const { data, error } = await query;
+	if (error) return { posts: [], error };
+	return { posts: await enrichPostsWithCounts(supabase, (data ?? []) as unknown as RawPost[], userId), error: null };
 }
 
 export async function getMutedWords(supabase: SupabaseClient<Database>, userId: string | null): Promise<string[]> {
@@ -1121,7 +1151,7 @@ export async function getTimelinePostsWithReposts(
 	supabase: SupabaseClient<Database>,
 	profiles: ProfileRepostContext[],
 	currentUserId: string | null,
-	options: { limit?: number; select?: string; before?: string } = {},
+	options: { limit?: number; select?: string; before?: string; beforeId?: string } = {},
 ): Promise<TimelinePostsWithRepostsResult> {
 	if (profiles.length === 0) return { posts: [], error: null };
 
@@ -1137,12 +1167,20 @@ export async function getTimelinePostsWithReposts(
 			eq: (column: string, value: string) => T;
 			in: (column: string, values: string[]) => T;
 			lt: (column: string, value: string) => T;
+			or: (filters: string) => T;
 		},
 	>(
 		query: T,
+		cursorIdColumn: string,
 	) => {
 		let q = profileIds.length === 1 ? query.eq("user_id", firstProfileId) : query.in("user_id", profileIds);
-		if (options.before) q = q.lt("created_at", options.before);
+		if (options.before && options.beforeId) {
+			q = q.or(
+				`created_at.lt.${options.before},and(created_at.eq.${options.before},${cursorIdColumn}.lt.${options.beforeId})`,
+			);
+		} else if (options.before) {
+			q = q.lt("created_at", options.before);
+		}
 		return q;
 	};
 
@@ -1152,14 +1190,18 @@ export async function getTimelinePostsWithReposts(
 			.select(select)
 			.is("parent_id", null)
 			.order("created_at", { ascending: false })
+			.order("id", { ascending: false })
 			.limit(limit),
+		"id",
 	);
 	const repostRowsQuery = buildProfileFilter(
 		supabase
 			.from("reposts")
 			.select("post_id, user_id, created_at")
 			.order("created_at", { ascending: false })
+			.order("post_id", { ascending: false })
 			.limit(limit),
+		"post_id",
 	);
 
 	const [ownPostsResult, repostRowsResult] = await Promise.all([ownPostsQuery, repostRowsQuery]);

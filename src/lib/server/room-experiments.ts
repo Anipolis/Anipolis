@@ -200,7 +200,7 @@ export async function searchRoomExperimentAnime(
 	const trimmed = query.trim().replace(/[%,]/g, "");
 	if (!trimmed) return [];
 
-	const [{ data: animeRows }, { data: activeRuns }] = await Promise.all([
+	const [{ data: animeRows, error: animeError }, { data: activeRuns, error: activeRunsError }] = await Promise.all([
 		supabase
 			.from("anime")
 			.select("id, title, cover_url, room_type")
@@ -209,6 +209,10 @@ export async function searchRoomExperimentAnime(
 			.limit(10),
 		supabase.from("room_experiment_runs").select("id, anime_id").is("ended_at", null),
 	]);
+	if (animeError || activeRunsError) {
+		console.error("room experiment anime search query failed:", { animeError, activeRunsError });
+		throw new Error("room experiment anime search query failed");
+	}
 
 	const activeRunByAnime = new Map(
 		((activeRuns ?? []) as unknown as Array<{ id: string; anime_id: number }>).map((run) => [
@@ -429,7 +433,7 @@ export async function getRoomExperimentDashboardData(
 	supabase: SupabaseClient<Database>,
 	searchQuery: string,
 ): Promise<{ runs: RoomExperimentDashboardRun[]; searchResults: RoomExperimentAnimeSearchResult[] }> {
-	const [searchResults, { data: runRows }] = await Promise.all([
+	const [searchResults, { data: runRows, error: runsError }] = await Promise.all([
 		searchRoomExperimentAnime(supabase, searchQuery),
 		supabase
 			.from("room_experiment_runs")
@@ -439,6 +443,10 @@ export async function getRoomExperimentDashboardData(
 			.is("ended_at", null)
 			.order("started_at", { ascending: false }),
 	]);
+	if (runsError) {
+		console.error("room experiment runs query failed:", runsError);
+		throw new Error("room experiment runs query failed");
+	}
 
 	const runs = ((runRows ?? []) as unknown as RunRow[]) ?? [];
 	if (runs.length === 0) return { runs: [], searchResults };
@@ -447,7 +455,11 @@ export async function getRoomExperimentDashboardData(
 	const animeIds = [...new Set(runs.map((run) => run.anime_id))];
 	const earliestStartedAt = runs.map((run) => run.started_at).sort()[0];
 
-	const [{ data: visitRows }, { data: postRows }, { data: sessionRows }] = await Promise.all([
+	const [
+		{ data: visitRows, error: visitsError },
+		{ data: postRows, error: postsError },
+		{ data: sessionRows, error: sessionsError },
+	] = await Promise.all([
 		supabase
 			.from("room_experiment_visits")
 			.select(
@@ -468,6 +480,10 @@ export async function getRoomExperimentDashboardData(
 			.in("anime_id", animeIds)
 			.eq("room_kind", "episode"),
 	]);
+	if (visitsError || postsError || sessionsError) {
+		console.error("room experiment dashboard query failed:", { visitsError, postsError, sessionsError });
+		throw new Error("room experiment dashboard query failed");
+	}
 
 	const visits = ((visitRows ?? []) as unknown as VisitRow[]).filter((row) => {
 		const session = getSessionFromVisit(row);
@@ -523,6 +539,7 @@ export async function getRoomExperimentDashboardData(
 					sessionId: session.id,
 					runStartedAt: run.started_at,
 					runEndedAt: run.ended_at,
+					postingClosesAt: session.posting_closes_at,
 				}),
 			}));
 

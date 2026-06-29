@@ -35,6 +35,6 @@ export const actions: Actions = {
 	cancelExchange: async ({ locals: { supabase, safeGetSession } }) => {
 		const { user } = await safeGetSession();
 		if (!user) return fail(401, { cancelMessage: "ログインが必要です" });
-		return cancelAnimeExchangeAction(supabase);
+		return cancelAnimeExchangeAction(supabase, user.id);
 	},
 };

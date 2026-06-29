@@ -13,6 +13,7 @@ import {
 	getFollowRequestStatus,
 	getLikedPosts,
 	getProfileTimelinePosts,
+	getTrendingHashtags,
 	getUserAnimeList,
 } from "$lib/server/queries";
 import type { Actions, PageServerLoad } from "./$types";
@@ -56,7 +57,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 
 		getFollowCounts(supabase, profile.id),
 
-		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
+		getTrendingHashtags(supabase, 10),
 
 		getAnimeRankingTrending(supabase, 5),
 
@@ -80,7 +81,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 		followCounts,
 		isFollowing,
 		followRequestStatus,
-		trending: trendingResult.data ?? [],
+		trending: trendingResult,
 		animeTrending,
 		animeList,
 		user,

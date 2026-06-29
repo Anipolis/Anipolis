@@ -13,12 +13,10 @@ AS $$
 DECLARE
     base_username  text;
     final_username text;
-    is_google      boolean := false;
-    is_discord     boolean := false;
 BEGIN
-    is_google :=
-        new.raw_app_meta_data->>'provider' = 'google'
-        OR EXISTS (
+    -- Email/password only. Any non-email provider should wait for onboarding.
+    IF COALESCE(new.raw_app_meta_data->>'provider', 'email') <> 'email'
+       OR EXISTS (
             SELECT 1
             FROM jsonb_array_elements_text(
                 CASE
@@ -27,26 +25,8 @@ BEGIN
                     ELSE '[]'::jsonb
                 END
             ) AS provider
-            WHERE provider = 'google'
-        );
-
-    is_discord :=
-        new.raw_app_meta_data->>'provider' = 'discord'
-        OR EXISTS (
-            SELECT 1
-            FROM jsonb_array_elements_text(
-                CASE
-                    WHEN jsonb_typeof(new.raw_app_meta_data->'providers') = 'array'
-                    THEN new.raw_app_meta_data->'providers'
-                    ELSE '[]'::jsonb
-                END
-            ) AS provider
-            WHERE provider = 'discord'
-        );
-
-    -- OAuth profile fields can contain personally identifying values. Keep them out of
-    -- public.profiles until the user explicitly confirms onboarding.
-    IF is_google OR is_discord THEN
+            WHERE provider <> 'email'
+       ) THEN
         RETURN new;
     END IF;
 

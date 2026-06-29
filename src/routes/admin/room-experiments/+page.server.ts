@@ -14,6 +14,12 @@ function getTextField(form: FormData, name: string): { ok: true; value: string }
 	return { ok: true, value: value.trim() };
 }
 
+function parsePositiveInt(value: string): number | null {
+	if (!/^\d+$/.test(value)) return null;
+	const n = Number(value);
+	return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+
 export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 	if (!user) redirect(302, "/");
@@ -39,10 +45,11 @@ export const actions: Actions = {
 		if (!animeIdField.ok || !labelField.ok || !notesField.ok) {
 			return fail(400, { message: "フォーム値が不正です" });
 		}
-		const animeId = animeIdField.value;
+		const animeId = parsePositiveInt(animeIdField.value);
+		if (!animeId) return fail(400, { message: "anime_idが不正です" });
 		const label = labelField.value || null;
 		const notes = notesField.value || null;
-		const result = await startRoomExperimentRun(supabase, user.id, { animeId, label, notes });
+		const result = await startRoomExperimentRun(supabase, user.id, { animeId: String(animeId), label, notes });
 		if (!result.ok) return fail(result.status, { message: result.message });
 		return { success: true, message: "検証runを開始しました" };
 	},

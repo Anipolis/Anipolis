@@ -143,24 +143,22 @@ const activeTab = $derived.by((): "word" | "anime" => {
 				<h1 class="settings-title">ミュート設定</h1>
 			</div>
 
-			<div class="mute-tabs" role="tablist" aria-label="ミュート種別">
+			<nav class="mute-tabs" aria-label="ミュート種別">
 				<a
 					href={wordTabHref}
 					class="mute-tab"
 					class:active={activeTab === "word"}
-					role="tab"
-					aria-selected={activeTab === "word"}
+					aria-current={activeTab === "word" ? "page" : undefined}
 					>ワード</a
 				>
 				<a
 					href={animeTabHref}
 					class="mute-tab"
 					class:active={activeTab === "anime"}
-					role="tab"
-					aria-selected={activeTab === "anime"}
+					aria-current={activeTab === "anime" ? "page" : undefined}
 					>アニメ</a
 				>
-			</div>
+			</nav>
 
 			{#if activeTab === "word"}
 				{#if form && "message" in form && !("field" in form)}
@@ -335,7 +333,7 @@ const activeTab = $derived.by((): "word" | "anime" => {
 }
 .settings-section-desc,
 .mute-empty {
-	color: var(--text-muted, #94a3b8);
+	color: color-mix(in srgb, var(--color-text) 72%, transparent);
 	font-size: 0.82rem;
 	line-height: 1.6;
 	margin: 0 0 16px;
@@ -349,14 +347,14 @@ const activeTab = $derived.by((): "word" | "anime" => {
 	gap: 8px;
 }
 .mute-item {
-	border: 1px solid var(--border, #334155);
+	border: 1px solid var(--color-border);
 	border-radius: 10px;
-	background: var(--card-bg);
+	background: var(--color-surface);
 	overflow: hidden;
 }
 .mute-item--virtual {
-	border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
-	background: color-mix(in srgb, var(--accent) 4%, var(--card-bg));
+	border-color: color-mix(in srgb, var(--color-accent) 40%, var(--color-border));
+	background: color-mix(in srgb, var(--color-accent) 4%, var(--color-surface));
 }
 .mute-row {
 	display: flex;
@@ -375,7 +373,7 @@ const activeTab = $derived.by((): "word" | "anime" => {
 }
 .mute-cover--placeholder {
 	aspect-ratio: 9 / 13;
-	background: var(--border);
+	background: var(--color-border);
 }
 .mute-meta {
 	flex: 1;
@@ -387,17 +385,17 @@ const activeTab = $derived.by((): "word" | "anime" => {
 .mute-title {
 	font-size: 0.88rem;
 	font-weight: 600;
-	color: var(--text);
+	color: var(--color-text);
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 .mute-status {
 	font-size: 0.74rem;
-	color: var(--accent);
+	color: var(--color-accent);
 }
 .mute-status--none {
-	color: var(--text-muted);
+	color: color-mix(in srgb, var(--color-text) 72%, transparent);
 }
 .mute-item-actions {
 	display: flex;
@@ -406,7 +404,7 @@ const activeTab = $derived.by((): "word" | "anime" => {
 	flex-shrink: 0;
 }
 .mute-accordion-form {
-	border-top: 1px solid var(--border);
+	border-top: 1px solid var(--color-border);
 	padding: 14px;
 	display: flex;
 	flex-direction: column;
@@ -422,13 +420,13 @@ const activeTab = $derived.by((): "word" | "anime" => {
 	gap: 6px;
 	font-size: 0.82rem;
 	font-weight: 600;
-	color: var(--text);
+	color: var(--color-text);
 	cursor: pointer;
 }
 .mute-type-label input {
 	width: 15px;
 	height: 15px;
-	accent-color: var(--accent);
+	accent-color: var(--color-accent);
 }
 .mute-period-row {
 	display: flex;
@@ -438,7 +436,7 @@ const activeTab = $derived.by((): "word" | "anime" => {
 }
 .mute-period-label {
 	font-size: 0.78rem;
-	color: var(--text-muted);
+	color: color-mix(in srgb, var(--color-text) 72%, transparent);
 	white-space: nowrap;
 }
 .mute-select {
@@ -450,14 +448,14 @@ const activeTab = $derived.by((): "word" | "anime" => {
 	align-items: center;
 	gap: 5px;
 	font-size: 0.78rem;
-	color: var(--text-muted);
+	color: color-mix(in srgb, var(--color-text) 72%, transparent);
 	cursor: pointer;
 	white-space: nowrap;
 }
 .mute-repeat-check input {
 	width: 14px;
 	height: 14px;
-	accent-color: var(--accent);
+	accent-color: var(--color-accent);
 }
 .mute-accordion-actions {
 	display: flex;

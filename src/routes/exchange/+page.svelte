@@ -236,9 +236,10 @@ const handleExchangeSubmit: SubmitFunction = () => {
 			exchangeMatched?: boolean;
 			receivedAnime?: { id?: string; title?: string; cover_url?: string | null } | null;
 		};
+		const exchangeMatched = !!payload?.exchangeMatched;
 
 		if (payload?.exchangeMatched) {
-			pendingMatchedExchange = true;
+			void exchangeMatched;
 		} else {
 			showTransientActionFeedback("exchange", "おすすめを預かりました");
 		}
@@ -247,6 +248,7 @@ const handleExchangeSubmit: SubmitFunction = () => {
 		exchangeComment = "";
 		selectedSubjectiveTags = [];
 		await update();
+		if (exchangeMatched) pendingMatchedExchange = true;
 	};
 };
 

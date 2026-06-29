@@ -281,8 +281,11 @@ const grouped = $derived(
 							<form
 								method="POST"
 								action="?/follow"
-								use:enhance={() => {
-                            if (isProcessing) return;
+								use:enhance={({ cancel }) => {
+                            if (isProcessing) {
+                                cancel();
+                                return;
+                            }
                             isProcessing = true;
                             return async ({ result }) => {
                                 try {

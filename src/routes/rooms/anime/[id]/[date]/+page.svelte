@@ -37,6 +37,10 @@ let roomExperimentVisitId: string | null = null;
 let roomExperimentHeartbeatTimer: ReturnType<typeof setInterval> | undefined;
 let roomExperimentExitSent = false;
 
+function getRoomExperimentVisitStorageKey(sessionId: string) {
+	return `room-experiment-visit:${sessionId}`;
+}
+
 const allPosts = $derived.by(() => {
 	if (extraPosts.length === 0) return data.posts;
 	const seen = new Set(data.posts.map((p) => p.id));
@@ -56,7 +60,7 @@ const displayedPosts = $derived(
 let fetchingLive = false;
 
 function getRoomExperimentClientVisitKey(sessionId: string) {
-	const storageKey = `room-experiment-visit:${sessionId}`;
+	const storageKey = getRoomExperimentVisitStorageKey(sessionId);
 	const existingKey = sessionStorage.getItem(storageKey);
 	if (existingKey) return existingKey;
 	const generatedKey = crypto.randomUUID();
@@ -112,6 +116,8 @@ function sendRoomExperimentExit() {
 	roomExperimentExitSent = true;
 	clearRoomExperimentHeartbeatTimer();
 	const url = `/api/room-experiment-visits/${roomExperimentVisitId}/exit`;
+	const sessionId = data.roomExperiment?.sessionId;
+	if (sessionId) sessionStorage.removeItem(getRoomExperimentVisitStorageKey(sessionId));
 	if (typeof navigator === "undefined") return;
 	if (navigator.sendBeacon?.(url)) return;
 	void fetch(url, { method: "POST", keepalive: true }).catch(() => undefined);

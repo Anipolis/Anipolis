@@ -52,9 +52,9 @@ function formatDuration(seconds: number | null) {
 }
 
 const closeStopModalAfterSubmit: SubmitFunction = () => {
-	return async ({ update }) => {
+	return async ({ result, update }) => {
 		await update();
-		stopTarget = null;
+		if (result.type === "success") stopTarget = null;
 	};
 };
 </script>
@@ -79,7 +79,7 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 			<h2>作品検索</h2>
 		</div>
 		<form method="GET" class="search-form">
-			<input class="input" name="q" value={data.query} placeholder="作品名で検索">
+			<input class="input" name="q" value={data.query} aria-label="作品検索" placeholder="作品名で検索">
 			<button class="btn" type="submit">検索</button>
 		</form>
 

@@ -582,6 +582,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 													<button
 														type="button"
 														class="alert-menu-backdrop"
+														tabindex="-1"
 														aria-label="閉じる"
 														onclick={() => (openAlertMenu = null)}
 													></button>

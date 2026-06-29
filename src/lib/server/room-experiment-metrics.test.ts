@@ -311,8 +311,16 @@ describe("filterRoomExperimentPosts", () => {
 					parent_id: null,
 					hidden_by_admin: false,
 				},
+				{
+					id: "after-close",
+					user_id: "u6",
+					broadcast_room_session_id: "session-1",
+					created_at: roomClosesAt,
+					parent_id: null,
+					hidden_by_admin: false,
+				},
 			],
-			{ sessionId: "session-1", runStartedAt, runEndedAt },
+			{ sessionId: "session-1", runStartedAt, runEndedAt, postingClosesAt: roomClosesAt },
 		);
 
 		expect(posts).toEqual([{ user_id: "u1", created_at: "2026-06-27T10:05:00.000Z" }]);
