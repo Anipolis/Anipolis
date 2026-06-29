@@ -30,11 +30,7 @@ const closeMs = $derived(new Date(data.room.posting_closes_at).getTime());
 const openLeadMinutes = $derived(Math.round((scheduledMs - openMs) / (60 * 1000)));
 const roomHref = $derived(`/rooms/anime/${data.anime.id}/${data.room.date}`);
 const isGlobalLobby = $derived(data.room.kind === "global");
-const hashtagSuffix = $derived(` #${data.room.hashtag}`);
-const contentWithTag = $derived(
-	postContent.includes(`#${data.room.hashtag}`) ? postContent : postContent + hashtagSuffix,
-);
-const charCount = $derived(contentWithTag.length);
+const charCount = $derived(postContent.length);
 const overLimit = $derived(charCount > maxLen);
 // ライブ更新で受信した投稿（load 由来の data.posts とは別に保持し、ID でマージする）
 let extraPosts = $state<Post[]>([]);
@@ -335,7 +331,7 @@ function formatCompactDate(iso: string) {
 							bind:this={textareaEl}
 							class="composer-textarea"
 							name="content"
-							placeholder="#{data.room.hashtag} で実況しよう... (Shift+Enterで改行)"
+							placeholder="いまの感想を投稿... (Shift+Enterで改行)"
 							rows="3"
 							bind:value={postContent}
 							maxlength={maxLen}
@@ -359,7 +355,6 @@ function formatCompactDate(iso: string) {
 							</button>
 						</div>
 					</div>
-					<p class="composer-hint">投稿には <strong>#{data.room.hashtag}</strong> が自動で付きます。</p>
 				</form>
 			</div>
 		{:else if !data.user && status === "open"}
@@ -398,11 +393,7 @@ function formatCompactDate(iso: string) {
 		</div>
 
 		{#if allPosts.length === 0}
-			<div class="card anime-room-empty">
-				まだ実況投稿はありません。<br>
-				#{data.room.hashtag}
-				で最初の感想を残しましょう。
-			</div>
+			<div class="card anime-room-empty">まだ投稿はありません。最初の感想を残しましょう。</div>
 		{:else}
 			{#each displayedPosts as post (post.id)}
 				<div class="anime-room-post">
@@ -451,10 +442,7 @@ function formatCompactDate(iso: string) {
 						</div>
 						<div class="room-summary-muted mt-1 truncate text-xs">{broadcastMetaLine}</div>
 					</div>
-					<div class="mt-2 flex items-center justify-between gap-2">
-						<a href="/hashtag/{data.room.hashtag}" class="room-summary-link truncate text-xs">
-							#{data.room.hashtag}
-						</a>
+					<div class="mt-2 flex items-center justify-end gap-2">
 						<a href="/schedule" class="room-summary-back shrink-0 text-xs transition-colors">
 							← 週間スケジュールへ戻る
 						</a>
@@ -496,11 +484,6 @@ function formatCompactDate(iso: string) {
 	color: var(--color-text-muted);
 }
 
-.room-summary-link {
-	color: var(--color-accent);
-}
-
-.room-summary-link:hover,
 .room-summary-back:hover {
 	color: var(--color-accent-hover);
 }
