@@ -1,7 +1,7 @@
 <script lang="ts">
 import { onDestroy, onMount, tick } from "svelte";
 import { enhance } from "$app/forms";
-import PostCard from "$lib/components/PostCard.svelte";
+import LiveRoomPostCard from "$lib/components/LiveRoomPostCard.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import type { Post } from "$lib/types";
 import type { ActionData, PageData } from "./$types";
@@ -28,7 +28,6 @@ const scheduledMs = $derived(new Date(data.room.scheduled_at).getTime());
 const openMs = $derived(new Date(data.room.posting_opens_at).getTime());
 const closeMs = $derived(new Date(data.room.posting_closes_at).getTime());
 const openLeadMinutes = $derived(Math.round((scheduledMs - openMs) / (60 * 1000)));
-const roomHref = $derived(`/rooms/anime/${data.anime.id}/${data.room.date}`);
 const isGlobalLobby = $derived(data.room.kind === "global");
 const charCount = $derived(postContent.length);
 const overLimit = $derived(charCount > maxLen);
@@ -397,11 +396,9 @@ function formatCompactDate(iso: string) {
 		{:else}
 			{#each displayedPosts as post (post.id)}
 				<div class="anime-room-post">
-					<PostCard
+					<LiveRoomPostCard
 						{post}
 						currentUserId={data.user?.id ?? null}
-						insideRoom={true}
-						roomContext={{ href: roomHref, title: `${data.anime.title} の放送ルーム` }}
 						broadcastStartAt={data.room.scheduled_at}
 					/>
 				</div>

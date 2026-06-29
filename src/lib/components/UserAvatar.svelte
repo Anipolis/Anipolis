@@ -2,7 +2,7 @@
 interface Props {
 	src: string | null | undefined;
 	username: string;
-	size?: "sm" | "md" | "lg";
+	size?: "xs" | "sm" | "md" | "lg";
 }
 
 let { src, username, size = "md" }: Props = $props();
@@ -17,3 +17,11 @@ const initial = $derived(username ? (username[0] ?? "?").toUpperCase() : "?");
 		{initial}
 	{/if}
 </div>
+
+<style>
+.avatar-xs {
+	width: 20px;
+	height: 20px;
+	font-size: 10px;
+}
+</style>
