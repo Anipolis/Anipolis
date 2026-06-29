@@ -705,7 +705,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 														</div>
 														<div class="menu-settings-link">
 															<a
-																href="/settings/rooms/mutes?anime_id={anime.id}"
+																href="/settings/mutes?anime_id={anime.id}"
 																class="menu-settings-link-anchor"
 															>
 																<span
