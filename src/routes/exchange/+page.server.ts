@@ -4,17 +4,30 @@ import {
 	toExchangeSubjectiveTags,
 	validateExchangeSubjectiveTags,
 } from "$lib/exchange-tags";
-import { getExchangeEntries } from "$lib/server/exchange";
-import { getAnimeRankingTrending } from "$lib/server/queries";
+import { getAnimeExchangeEntries, getAnimeRankingTrending } from "$lib/server/queries";
 import type { Actions, PageServerLoad } from "./$types";
+
+const animeExchangeErrorMessages = {
+	ANIME_EXCHANGE_ANIME_NOT_FOUND: { status: 404, message: "アニメが見つかりません" },
+	ANIME_EXCHANGE_WAITING_EXISTS: {
+		status: 409,
+		message: "待機中のトレードがあります。マッチングをやめてからもう一度お試しください。",
+	},
+} as const;
+
+function getAnimeExchangeErrorDetail(error: { details?: unknown }): keyof typeof animeExchangeErrorMessages | null {
+	return typeof error.details === "string" && error.details in animeExchangeErrorMessages
+		? (error.details as keyof typeof animeExchangeErrorMessages)
+		: null;
+}
 
 export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 	if (!user) throw redirect(302, "/");
 
 	const [exchanges, waitingExchanges, trendingResult, animeTrending] = await Promise.all([
-		getExchangeEntries(supabase, user.id),
-		getExchangeEntries(supabase, user.id, 1, "waiting"),
+		getAnimeExchangeEntries(supabase, user.id),
+		getAnimeExchangeEntries(supabase, user.id, 1, "waiting"),
 		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
 		getAnimeRankingTrending(supabase, 5),
 	]);
@@ -59,13 +72,10 @@ export const actions: Actions = {
 			p_subjective_tags: subjectiveTags,
 		});
 		if (error) {
-			if (String(error.message).includes("anime not found")) {
-				return fail(404, { exchangeMessage: "アニメが見つかりません" });
-			}
-			if (String(error.message).includes("you already have a waiting exchange")) {
-				return fail(409, {
-					exchangeMessage: "待機中のトレードがあります。マッチングをやめてからもう一度お試しください。",
-				});
+			const exchangeErrorDetail = getAnimeExchangeErrorDetail(error);
+			if (exchangeErrorDetail) {
+				const mapped = animeExchangeErrorMessages[exchangeErrorDetail];
+				return fail(mapped.status, { exchangeMessage: mapped.message });
 			}
 			console.error("anime exchange error:", error);
 			return fail(500, { exchangeMessage: "トレードに失敗しました" });

@@ -278,12 +278,16 @@ export interface AnimeExchangeItem {
 		title: string;
 		title_en: string | null;
 		cover_url: string | null;
+		episode_count?: string | null;
+		user_entry?: UserAnimeEntry | null;
 	};
 	received_anime: {
 		id: string;
 		title: string;
 		title_en: string | null;
 		cover_url: string | null;
+		episode_count?: string | null;
+		user_entry?: UserAnimeEntry | null;
 	} | null;
 	received_comment: string | null;
 	received_subjective_tags: string[];

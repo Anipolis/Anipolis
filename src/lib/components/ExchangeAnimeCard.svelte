@@ -243,6 +243,13 @@ const posterOnly = $derived(variant === "poster-only");
 	transform: translateY(0);
 }
 
+@media (hover: none), (max-width: 640px) {
+	.eac--poster-only .eac-poster-title {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
 .eac-cover--mystery {
 	display: grid;
 	place-items: center;

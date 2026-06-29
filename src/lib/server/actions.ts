@@ -13,6 +13,13 @@ import { extractHashtags } from "$lib/utils/hashtag";
 
 const reportStatuses = new Set(["open", "reviewing", "resolved", "rejected"]);
 const moderationStatuses = new Set(["active", "restricted", "banned"]);
+const animeExchangeErrorMessages = {
+	ANIME_EXCHANGE_ANIME_NOT_FOUND: { status: 404, message: "アニメが見つかりません" },
+	ANIME_EXCHANGE_WAITING_EXISTS: {
+		status: 409,
+		message: "待機中のトレードがあります。マッチングをやめてからもう一度お試しください。",
+	},
+} as const;
 
 export type ModerationStatus = "active" | "restricted" | "banned";
 
@@ -20,6 +27,12 @@ type ModerationProfile = {
 	moderation_status: ModerationStatus;
 	moderation_until: string | null;
 };
+
+function getAnimeExchangeErrorDetail(error: { details?: unknown }): keyof typeof animeExchangeErrorMessages | null {
+	return typeof error.details === "string" && error.details in animeExchangeErrorMessages
+		? (error.details as keyof typeof animeExchangeErrorMessages)
+		: null;
+}
 
 export async function getCurrentModerationStatus(
 	supabase: SupabaseClient<Database>,
@@ -738,13 +751,10 @@ export async function exchangeAnimeAction(supabase: SupabaseClient<Database>, re
 	});
 
 	if (error) {
-		if (error.message.includes("anime not found")) {
-			return fail(404, { exchangeMessage: "アニメが見つかりません" });
-		}
-		if (error.message.includes("you already have a waiting exchange")) {
-			return fail(409, {
-				exchangeMessage: "待機中のトレードがあります。マッチングをやめてからもう一度お試しください。",
-			});
+		const exchangeErrorDetail = getAnimeExchangeErrorDetail(error);
+		if (exchangeErrorDetail) {
+			const mapped = animeExchangeErrorMessages[exchangeErrorDetail];
+			return fail(mapped.status, { exchangeMessage: mapped.message });
 		}
 		console.error("anime exchange error:", error);
 		return fail(500, { exchangeMessage: "トレードに失敗しました" });

@@ -236,6 +236,11 @@ function confirmRemove() {
 	outline: none;
 }
 
+.edit-select:focus-visible {
+	outline: 2px solid var(--accent, #6366f1);
+	outline-offset: 2px;
+}
+
 .score-select {
 	min-width: 70px;
 }

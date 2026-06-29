@@ -1893,27 +1893,10 @@ export async function getUsersWhoListedAnime(
 export async function getAnimeExchangeEntries(
 	supabase: SupabaseClient<Database>,
 	userId: string,
-	limit = 20,
+	limit: number | null = 20,
+	status?: AnimeExchangeItem["status"],
 ): Promise<AnimeExchangeItem[]> {
-	const { data, error } = await (
-		supabase as unknown as {
-			from: (table: "anime_exchange_entries") => {
-				select: (columns: string) => {
-					eq: (
-						column: "user_id",
-						value: string,
-					) => {
-						order: (
-							column: "created_at",
-							options: { ascending: boolean },
-						) => {
-							limit: (count: number) => Promise<{ data: unknown[] | null; error: unknown | null }>;
-						};
-					};
-				};
-			};
-		}
-	)
+	let query = supabase
 		.from("anime_exchange_entries")
 		.select(`
             id,
@@ -1927,12 +1910,16 @@ export async function getAnimeExchangeEntries(
                 id,
                 title,
                 title_en,
-                cover_url
+                cover_url,
+                episode_count
             )
         `)
-		.eq("user_id", userId)
-		.order("created_at", { ascending: false })
-		.limit(limit);
+		.eq("user_id", userId);
+
+	if (status) query = query.eq("status", status);
+
+	const orderedQuery = query.order("created_at", { ascending: false });
+	const { data, error } = await (limit == null ? orderedQuery : orderedQuery.limit(limit));
 
 	if (error || !data) return [];
 	const baseRows = data as Record<string, unknown>[];
@@ -1954,69 +1941,116 @@ export async function getAnimeExchangeEntries(
 				.filter((v): v is string => typeof v === "string" && v.length > 0),
 		),
 	];
-	if (receivedEntryIds.length === 0) return baseItems;
 
-	const { data: receivedRows, error: receivedError } = await supabase
-		.from("anime_exchange_entries")
-		.select(`
-			id,
-			comment,
-			subjective_tags,
-			anime:anime_exchange_entries_anime_id_fkey (
+	let entriesWithReceived = baseItems;
+	if (receivedEntryIds.length > 0) {
+		const { data: receivedRows, error: receivedError } = await supabase
+			.from("anime_exchange_entries")
+			.select(`
 				id,
-				title,
-				title_en,
-				cover_url
-			)
-		`)
-		.in("id", receivedEntryIds);
+				comment,
+				subjective_tags,
+				anime:anime_exchange_entries_anime_id_fkey (
+					id,
+					title,
+					title_en,
+					cover_url,
+					episode_count
+				)
+			`)
+			.in("id", receivedEntryIds);
 
-	if (receivedError || !receivedRows) return baseItems;
+		if (receivedError || !receivedRows) return baseItems;
 
-	const receivedEntryById = new Map<
-		string,
-		Pick<AnimeExchangeItem, "received_anime" | "received_comment" | "received_subjective_tags">
-	>();
-	for (const row of receivedRows as Record<string, unknown>[]) {
-		const animeValue = row["anime"];
-		const anime = Array.isArray(animeValue) ? animeValue[0] : animeValue;
-		if (!anime || typeof anime !== "object" || !row["id"]) continue;
-		const animeRecord = anime as Record<string, unknown>;
-		receivedEntryById.set(String(row["id"]), {
-			received_anime: {
-				id: String(animeRecord["id"]),
-				title: String(animeRecord["title"]),
-				title_en: typeof animeRecord["title_en"] === "string" ? animeRecord["title_en"] : null,
-				cover_url: typeof animeRecord["cover_url"] === "string" ? animeRecord["cover_url"] : null,
-			},
-			received_comment: typeof row["comment"] === "string" ? row["comment"] : null,
-			received_subjective_tags: toValidExchangeSubjectiveTags(
-				Array.isArray(row["subjective_tags"]) ? row["subjective_tags"] : [],
-			),
+		const receivedEntryById = new Map<
+			string,
+			Pick<AnimeExchangeItem, "received_anime" | "received_comment" | "received_subjective_tags">
+		>();
+		for (const row of receivedRows as Record<string, unknown>[]) {
+			const animeValue = row["anime"];
+			const anime = Array.isArray(animeValue) ? animeValue[0] : animeValue;
+			if (!anime || typeof anime !== "object" || !row["id"]) continue;
+			const animeRecord = anime as Record<string, unknown>;
+			receivedEntryById.set(String(row["id"]), {
+				received_anime: {
+					id: String(animeRecord["id"]),
+					title: String(animeRecord["title"]),
+					title_en: typeof animeRecord["title_en"] === "string" ? animeRecord["title_en"] : null,
+					cover_url: typeof animeRecord["cover_url"] === "string" ? animeRecord["cover_url"] : null,
+					episode_count:
+						typeof animeRecord["episode_count"] === "string" ||
+						typeof animeRecord["episode_count"] === "number"
+							? String(animeRecord["episode_count"])
+							: null,
+					user_entry: null,
+				},
+				received_comment: typeof row["comment"] === "string" ? row["comment"] : null,
+				received_subjective_tags: toValidExchangeSubjectiveTags(
+					Array.isArray(row["subjective_tags"]) ? row["subjective_tags"] : [],
+				),
+			});
+		}
+
+		entriesWithReceived = baseItems.map((item) => {
+			const receivedEntryId = receivedEntryIdByItemId.get(item.id);
+			const receivedAnime =
+				typeof receivedEntryId === "string" && receivedEntryId.length > 0
+					? (receivedEntryById.get(receivedEntryId)?.received_anime ?? null)
+					: null;
+			const receivedComment =
+				typeof receivedEntryId === "string" && receivedEntryId.length > 0
+					? (receivedEntryById.get(receivedEntryId)?.received_comment ?? null)
+					: null;
+			const receivedSubjectiveTags =
+				typeof receivedEntryId === "string" && receivedEntryId.length > 0
+					? (receivedEntryById.get(receivedEntryId)?.received_subjective_tags ?? [])
+					: [];
+			return {
+				...item,
+				received_anime: receivedAnime,
+				received_comment: receivedComment,
+				received_subjective_tags: receivedSubjectiveTags,
+			};
 		});
 	}
 
-	return baseItems.map((item) => {
-		const receivedEntryId = receivedEntryIdByItemId.get(item.id);
-		const receivedAnime =
-			typeof receivedEntryId === "string" && receivedEntryId.length > 0
-				? (receivedEntryById.get(receivedEntryId)?.received_anime ?? null)
-				: null;
-		const receivedComment =
-			typeof receivedEntryId === "string" && receivedEntryId.length > 0
-				? (receivedEntryById.get(receivedEntryId)?.received_comment ?? null)
-				: null;
-		const receivedSubjectiveTags =
-			typeof receivedEntryId === "string" && receivedEntryId.length > 0
-				? (receivedEntryById.get(receivedEntryId)?.received_subjective_tags ?? [])
-				: [];
-		return {
-			...item,
-			received_anime: receivedAnime,
-			received_comment: receivedComment,
-			received_subjective_tags: receivedSubjectiveTags,
-		};
-	});
+	const animeIds = [
+		...new Set(
+			entriesWithReceived
+				.flatMap((entry) => [entry.offered_anime.id, entry.received_anime?.id])
+				.filter((id): id is string => typeof id === "string" && id.length > 0),
+		),
+	];
+	if (animeIds.length === 0) return entriesWithReceived;
+
+	const { data: userAnimeRows, error: userAnimeError } = await supabase
+		.from("user_anime_list")
+		.select("anime_id, status, score, progress, updated_at")
+		.eq("user_id", userId)
+		.in("anime_id", animeIds.map(Number));
+
+	if (userAnimeError || !userAnimeRows) return entriesWithReceived;
+
+	const userEntryByAnimeId = new Map<string, UserAnimeEntry>();
+	for (const row of userAnimeRows) {
+		const entry = toAnimeExchangeUserEntry(row as Record<string, unknown>);
+		if (!entry) continue;
+		userEntryByAnimeId.set(String(row.anime_id), entry);
+	}
+
+	return entriesWithReceived.map((entry) => ({
+		...entry,
+		offered_anime: {
+			...entry.offered_anime,
+			user_entry: userEntryByAnimeId.get(entry.offered_anime.id) ?? null,
+		},
+		received_anime: entry.received_anime
+			? {
+					...entry.received_anime,
+					user_entry: userEntryByAnimeId.get(entry.received_anime.id) ?? null,
+				}
+			: null,
+	}));
 }
 
 // ── ヘルパー ──────────────────────────────────────────────────────
@@ -2170,10 +2204,35 @@ function toAnimeExchangeItem(raw: Record<string, unknown>): AnimeExchangeItem | 
 			title: String(offeredRecord["title"]),
 			title_en: typeof offeredRecord["title_en"] === "string" ? offeredRecord["title_en"] : null,
 			cover_url: typeof offeredRecord["cover_url"] === "string" ? offeredRecord["cover_url"] : null,
+			episode_count:
+				typeof offeredRecord["episode_count"] === "string" || typeof offeredRecord["episode_count"] === "number"
+					? String(offeredRecord["episode_count"])
+					: null,
+			user_entry: null,
 		},
 		received_anime: null,
 		received_comment: null,
 		received_subjective_tags: [],
+	};
+}
+
+function toAnimeExchangeUserEntry(raw: Record<string, unknown>): UserAnimeEntry | null {
+	const status = raw["status"];
+	if (
+		status !== "watching" &&
+		status !== "completed" &&
+		status !== "plan_to_watch" &&
+		status !== "dropped" &&
+		status !== "on_hold"
+	) {
+		return null;
+	}
+
+	return {
+		status,
+		score: typeof raw["score"] === "number" ? raw["score"] : null,
+		progress: typeof raw["progress"] === "number" ? raw["progress"] : 0,
+		updated_at: typeof raw["updated_at"] === "string" ? raw["updated_at"] : "",
 	};
 }
 

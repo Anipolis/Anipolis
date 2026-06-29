@@ -57,12 +57,20 @@ function addDays(date: Date, days: number): Date {
 	return next;
 }
 
+function getWeekCenterDate(): Date {
+	// Anchor the rolling 7-day window to the displayed week instead of the
+	// real-world today, so week navigation updates the dates. The center is the
+	// day in the displayed week that matches today's weekday (the default
+	// selected day), keeping the current week's dates identical to before.
+	const weekStart = new Date(`${data.weekStart}T00:00:00`);
+	return addDays(weekStart, getCurrentBroadcastDate().getDay());
+}
+
 function getDisplayDateForDay(dayIdx: number, fallbackDate: string): string {
 	const displayPos = getDisplayDayOrder().indexOf(dayIdx);
 	if (displayPos === -1) return fallbackDate;
 
-	const centerDate = getCurrentBroadcastDate();
-	return toDateInputValue(addDays(centerDate, displayPos - 3));
+	return toDateInputValue(addDays(getWeekCenterDate(), displayPos - 3));
 }
 
 function getDisplayDayItems() {
@@ -80,7 +88,6 @@ function getDisplayDayItems() {
 }
 
 let selectedDayIndex = $state(getDefaultDayIndex());
-let lastWeekStart = $state(untrack(() => data.weekStart));
 let dayTabBar = $state<HTMLElement | null>(null);
 
 $effect(() => {
@@ -108,12 +115,6 @@ $effect(() => {
 	subscribedIds = new Set<string>(data.subscriptions);
 	mutedAnimeIds = new Set<string>(data.mutedAnimeIds);
 	roomMuteSettings = data.roomMuteSettings;
-});
-
-$effect(() => {
-	if (data.weekStart === lastWeekStart) return;
-	lastWeekStart = data.weekStart;
-	selectedDayIndex = getDefaultDayIndex();
 });
 
 function formatDate(value: string) {
@@ -751,7 +752,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 			</header>
 
 			{#if form && "message" in form}
-				<p class="form-error">{form.message}</p>
+				<p class="form-error" role="alert">{form.message}</p>
 			{/if}
 
 			<form method="POST" action="?/createEvent" use:enhance class="event-form">
@@ -1191,6 +1192,14 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	flex-direction: column;
 	gap: 8px;
 }
+
+@media (min-width: 961px) {
+	.day-col:first-child .room-alert-menu {
+		left: 4px;
+		right: auto;
+	}
+}
+
 .notify-toggle {
 	width: 100%;
 	display: flex;

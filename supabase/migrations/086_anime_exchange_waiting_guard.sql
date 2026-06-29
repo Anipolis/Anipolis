@@ -77,7 +77,8 @@ BEGIN
          WHERE id = p_anime_id
            AND (NOT hidden_by_admin OR public.is_current_user_admin())
     ) THEN
-        RAISE EXCEPTION 'anime not found';
+        RAISE EXCEPTION 'anime exchange rejected'
+            USING DETAIL = 'ANIME_EXCHANGE_ANIME_NOT_FOUND';
     END IF;
 
     PERFORM pg_advisory_xact_lock(hashtext('public.anime_exchange_entries'));
@@ -88,7 +89,8 @@ BEGIN
          WHERE entry.user_id = current_user_id
            AND entry.status = 'waiting'
     ) THEN
-        RAISE EXCEPTION 'you already have a waiting exchange';
+        RAISE EXCEPTION 'anime exchange rejected'
+            USING DETAIL = 'ANIME_EXCHANGE_WAITING_EXISTS';
     END IF;
 
     SELECT *

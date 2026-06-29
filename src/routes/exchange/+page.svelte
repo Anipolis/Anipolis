@@ -310,16 +310,22 @@ const handleCancelExchangeSubmit: SubmitFunction = () => {
 				</div>
 
 				{#if exchangeError || (!enhancedActionHandled && form?.exchangeMessage)}
-					<p class="form-error">{exchangeError || form?.exchangeMessage}</p>
+					<p class="form-error" role="alert">{exchangeError || form?.exchangeMessage}</p>
 				{/if}
 				{#if exchangeFeedback || (!enhancedActionHandled && form?.exchangeSuccess)}
-					<p class="form-success">{exchangeFeedback || "おすすめを預かりました"}</p>
+					<p class="form-success" aria-live="polite">{exchangeFeedback || "おすすめを預かりました"}</p>
 				{/if}
 				{#if cancelError || (!enhancedActionHandled && form?.cancelMessage)}
-					<p class="form-error">{cancelError || form?.cancelMessage}</p>
+					<p class="form-error" role="alert">{cancelError || form?.cancelMessage}</p>
 				{/if}
 				{#if cancelFeedback || (!enhancedActionHandled && form?.cancelSuccess)}
-					<p class="form-success">{cancelFeedback || "マッチングをキャンセルしました"}</p>
+					<p class="form-success" aria-live="polite">{cancelFeedback || "マッチングをキャンセルしました"}</p>
+				{/if}
+				{#if data.waitingExchange}
+					<div class="waiting-strip">
+						<span class="waiting-dot"></span>
+						<span>「{data.waitingExchange.offered_anime.title}」は次の交換相手を待機中です</span>
+					</div>
 				{/if}
 
 				{#if tradeStatus === "IDLE"}
@@ -745,6 +751,12 @@ const handleCancelExchangeSubmit: SubmitFunction = () => {
 .exchange-comment-input:focus {
 	outline: none;
 	border-color: var(--color-accent);
+}
+
+.exchange-input:focus-visible,
+.exchange-comment-input:focus-visible {
+	outline: 2px solid var(--color-accent);
+	outline-offset: 2px;
 }
 
 .anime-results {
