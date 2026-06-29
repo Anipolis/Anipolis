@@ -81,6 +81,10 @@ type UserAnimeListWithProfileRow = {
 	profiles: { username: string; display_name: string | null; avatar_url: string | null; list_is_public: boolean };
 };
 
+export async function getProfileById(supabase: SupabaseClient<Database>, userId: string) {
+	return supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+}
+
 function normalizeScore(score: number | null | undefined): number | null {
 	if (score == null || !Number.isFinite(score) || score <= 0) return null;
 	return score;

@@ -302,19 +302,27 @@ export async function createRoomExperimentVisit(
 		return { error: true, status: 400, message: "client_visit_keyが不正です" };
 	}
 
-	const { data: session } = await supabase
+	const { data: session, error: sessionError } = await supabase
 		.from("broadcast_room_sessions")
 		.select("id, anime_id, room_kind")
 		.eq("id", sessionId)
 		.maybeSingle();
+	if (sessionError) {
+		console.error("room experiment session lookup error:", sessionError);
+		return { error: true, status: 500, message: "放送ルームの取得に失敗しました" };
+	}
 	if (!session || session.room_kind !== "episode") return { tracked: false };
 
-	const { data: run } = await supabase
+	const { data: run, error: runError } = await supabase
 		.from("room_experiment_runs")
 		.select("id, anime_id")
 		.eq("anime_id", session.anime_id)
 		.is("ended_at", null)
 		.maybeSingle();
+	if (runError) {
+		console.error("room experiment active run lookup error:", runError);
+		return { error: true, status: 500, message: "検証runの取得に失敗しました" };
+	}
 	if (!run) return { tracked: false };
 
 	const now = new Date().toISOString();

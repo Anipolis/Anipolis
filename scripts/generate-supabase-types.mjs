@@ -8,6 +8,7 @@ const executable = windows ? (process.env.ComSpec ?? "cmd.exe") : "pnpm";
 const arguments_ = windows ? ["/d", "/s", "/c", `pnpm ${cliArguments.join(" ")}`] : cliArguments;
 const result = spawnSync(executable, arguments_, {
 	encoding: "utf8",
+	maxBuffer: 16 * 1024 * 1024,
 	stdio: ["inherit", "pipe", "inherit"],
 });
 

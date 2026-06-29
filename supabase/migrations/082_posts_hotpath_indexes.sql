@@ -17,18 +17,19 @@
 
 -- プロフィール投稿 / フォロー中タイムライン:
 --   eq(user_id) AND parent_id IS NULL ORDER BY created_at DESC LIMIT 50
-CREATE INDEX IF NOT EXISTS posts_user_created_idx
-    ON public.posts (user_id, created_at DESC);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS posts_user_created_idx
+    ON public.posts (user_id, created_at DESC)
+    WHERE parent_id IS NULL;
 
 -- ホーム（all）タイムライン:
 --   parent_id IS NULL ORDER BY created_at DESC LIMIT 50
 -- トップレベル投稿のみを対象にした部分インデックス。
-CREATE INDEX IF NOT EXISTS posts_toplevel_created_idx
+CREATE INDEX CONCURRENTLY IF NOT EXISTS posts_toplevel_created_idx
     ON public.posts (created_at DESC)
     WHERE parent_id IS NULL;
 
 -- 放送ルームのタイムライン:
 --   eq(broadcast_room_session_id) ORDER BY created_at DESC LIMIT 100
-CREATE INDEX IF NOT EXISTS posts_room_created_idx
+CREATE INDEX CONCURRENTLY IF NOT EXISTS posts_room_created_idx
     ON public.posts (broadcast_room_session_id, created_at DESC)
     WHERE broadcast_room_session_id IS NOT NULL;

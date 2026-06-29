@@ -8,14 +8,23 @@ const FOCUSABLE = [
 ].join(", ");
 
 function getFocusable(node: HTMLElement): HTMLElement[] {
-	return Array.from(node.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => !el.closest("[inert]"));
+	return Array.from(node.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+		(el) => !el.closest("[inert],[hidden]") && el.getClientRects().length > 0,
+	);
 }
 
 export function trapFocus(node: HTMLElement) {
 	const previouslyFocused = document.activeElement as HTMLElement | null;
 
-	const firstFocusable = getFocusable(node)[0] ?? node;
-	firstFocusable.focus();
+	const previousTabIndex = node.getAttribute("tabindex");
+	const firstFocusable = getFocusable(node)[0];
+
+	if (firstFocusable) {
+		firstFocusable.focus();
+	} else {
+		if (previousTabIndex === null) node.setAttribute("tabindex", "-1");
+		node.focus();
+	}
 
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.key !== "Tab") return;
@@ -41,6 +50,9 @@ export function trapFocus(node: HTMLElement) {
 	return {
 		destroy() {
 			node.removeEventListener("keydown", handleKeydown);
+			if (previousTabIndex === null && node.getAttribute("tabindex") === "-1") {
+				node.removeAttribute("tabindex");
+			}
 			previouslyFocused?.focus();
 		},
 	};

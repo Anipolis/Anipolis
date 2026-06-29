@@ -29,7 +29,8 @@ function closeModal() {
 
 function loadMoreHref(lastCreatedAt: string): string {
 	const base = data.tab === "following" ? "/?tab=following" : "/";
-	return `${base}&before=${encodeURIComponent(lastCreatedAt)}`.replace("/?&", "/?");
+	const separator = base.includes("?") ? "&" : "?";
+	return `${base}${separator}before=${encodeURIComponent(lastCreatedAt)}`;
 }
 
 $effect(() => {

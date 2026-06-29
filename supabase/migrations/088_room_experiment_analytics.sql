@@ -97,10 +97,16 @@ BEGIN
         END IF;
     END IF;
 
-    SELECT * INTO target_run
-    FROM public.room_experiment_runs
-    WHERE id = NEW.run_id
-    FOR UPDATE;
+    IF TG_OP = 'INSERT' THEN
+        SELECT * INTO target_run
+        FROM public.room_experiment_runs
+        WHERE id = NEW.run_id
+        FOR UPDATE;
+    ELSE
+        SELECT * INTO target_run
+        FROM public.room_experiment_runs
+        WHERE id = NEW.run_id;
+    END IF;
 
     IF NOT FOUND THEN
         RAISE EXCEPTION 'room experiment run does not exist'

@@ -28,7 +28,7 @@ type ModerationProfile = {
 	moderation_until: string | null;
 };
 
-function getAnimeExchangeErrorDetail(error: { details?: unknown }): keyof typeof animeExchangeErrorMessages | null {
+export function getAnimeExchangeErrorDetail(error: { details?: unknown }): keyof typeof animeExchangeErrorMessages | null {
 	return typeof error.details === "string" && error.details in animeExchangeErrorMessages
 		? (error.details as keyof typeof animeExchangeErrorMessages)
 		: null;

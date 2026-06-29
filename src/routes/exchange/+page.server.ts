@@ -50,9 +50,10 @@ export const actions: Actions = {
 
 		const form = await request.formData();
 		const animeId = (form.get("anime_id") as string | null)?.trim() ?? "";
+		const animeIdNumber = Number(animeId);
 		const comment = ((form.get("comment") as string | null)?.trim() ?? "") || null;
 		const subjectiveTags = toExchangeSubjectiveTags(form.getAll("subjective_tags"));
-		if (!animeId || Number.isNaN(Number(animeId))) {
+		if (!/^\d+$/.test(animeId) || !Number.isSafeInteger(animeIdNumber) || animeIdNumber <= 0) {
 			return fail(400, { exchangeMessage: "アニメを選択してください" });
 		}
 
@@ -67,7 +68,7 @@ export const actions: Actions = {
 		}
 
 		const { data, error } = await supabase.rpc("create_anime_exchange", {
-			p_anime_id: Number(animeId),
+			p_anime_id: animeIdNumber,
 			p_comment: comment,
 			p_subjective_tags: subjectiveTags,
 		});

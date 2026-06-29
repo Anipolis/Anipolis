@@ -6,6 +6,7 @@ import type { Database } from "$lib/supabase/database.types";
 import type { RawPost } from "$lib/types";
 
 const POSTS_SELECT = buildPostCardSelect();
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function parseLimit(value: string | null, fallback: number, max: number) {
 	if (value == null || value.trim() === "") return fallback;
@@ -20,6 +21,7 @@ function toSelectedReplyPost(row: unknown): RawPost {
 
 export const GET: RequestHandler = async ({ params, url, locals: { supabase, safeGetSession } }) => {
 	if (!params.id) return json({ message: "投稿が見つかりません" }, { status: 404 });
+	if (!UUID_PATTERN.test(params.id)) return json({ message: "投稿が見つかりません" }, { status: 404 });
 
 	const mode = url.searchParams.get("mode") === "all" ? "all" : "recent";
 	const limit = parseLimit(url.searchParams.get("limit"), mode === "all" ? 100 : 3, 100);

@@ -1,6 +1,7 @@
 <script lang="ts">
 import type { SubmitFunction } from "@sveltejs/kit";
 import { enhance } from "$app/forms";
+import { trapFocus } from "$lib/actions/trapFocus";
 import type { Post } from "$lib/types";
 import { formatBroadcastRelativeTime, formatRelativeTime } from "$lib/utils/format";
 import { parseContentParts } from "$lib/utils/hashtag";
@@ -56,12 +57,6 @@ const remainingReplyCount = $derived(Math.max(post.reply_count - replies.length,
 
 function stop(event: Event) {
 	event.stopPropagation();
-}
-
-function handleRowKeydown(event: KeyboardEvent) {
-	if (event.key !== "Enter" && event.key !== " ") return;
-	event.preventDefault();
-	void toggleExpanded();
 }
 
 async function toggleExpanded() {
@@ -196,14 +191,7 @@ async function submitReport(event: MouseEvent) {
 		</form>
 	{/if}
 
-	<div
-		class="live-post-row"
-		role="button"
-		tabindex="0"
-		aria-expanded={expanded}
-		onclick={() => void toggleExpanded()}
-		onkeydown={handleRowKeydown}
-	>
+	<div class="live-post-row">
 		<a href="/profile/{post.username}" class="live-avatar" aria-label={displayName} onclick={stop}>
 			<UserAvatar src={post.avatar_url} username={post.username} size="xs" />
 		</a>
@@ -230,31 +218,43 @@ async function submitReport(event: MouseEvent) {
 				<span class="live-time-abs">({absoluteTimeStr})</span>
 			{/if}
 		</span>
-		{#if expanded}
-			<button
-				type="button"
-				class="live-collapse"
-				aria-label="閉じる"
-				onclick={(event) => { event.stopPropagation(); void toggleExpanded(); }}
-			>
-				▲
-			</button>
-		{:else}
-			<form method="POST" action="?/like" use:enhance={handleLike} class="live-like-form">
-				<input type="hidden" name="post_id" value={post.id}>
+		<div class="live-row-actions">
+			{#if expanded}
 				<button
-					type="submit"
-					class="live-like"
-					class:active={likedByMe}
-					disabled={!isLoggedIn}
-					aria-label={likedByMe ? 'いいねを取り消す' : 'いいね'}
-					onclick={stop}
+					type="button"
+					class="live-collapse"
+					aria-expanded={expanded}
+					aria-label="閉じる"
+					onclick={(event) => { event.stopPropagation(); void toggleExpanded(); }}
 				>
-					<span class="i-lucide-heart" aria-hidden="true"></span>
-					<span>{likeCount}</span>
+					▲
 				</button>
-			</form>
-		{/if}
+			{:else}
+				<form method="POST" action="?/like" use:enhance={handleLike} class="live-like-form">
+					<input type="hidden" name="post_id" value={post.id}>
+					<button
+						type="submit"
+						class="live-like"
+						class:active={likedByMe}
+						disabled={!isLoggedIn}
+						aria-label={likedByMe ? 'いいねを取り消す' : 'いいね'}
+						onclick={stop}
+					>
+						<span class="i-lucide-heart" aria-hidden="true"></span>
+						<span>{likeCount}</span>
+					</button>
+				</form>
+				<button
+					type="button"
+					class="live-expand-toggle"
+					aria-expanded={expanded}
+					aria-label="詳細を開く"
+					onclick={(event) => { event.stopPropagation(); void toggleExpanded(); }}
+				>
+					▼
+				</button>
+			{/if}
+		</div>
 	</div>
 
 	{#if expanded}
@@ -382,7 +382,17 @@ async function submitReport(event: MouseEvent) {
 				if (event.target === event.currentTarget) showDeleteModal = false;
 			}}
 		>
-			<div class="live-modal" role="dialog" aria-modal="true" aria-labelledby="live-delete-title" tabindex="-1">
+			<div
+				class="live-modal"
+				use:trapFocus
+				role="dialog"
+				aria-modal="true"
+				aria-labelledby="live-delete-title"
+				tabindex="-1"
+				onkeydown={(event) => {
+					if (event.key === "Escape") showDeleteModal = false;
+				}}
+			>
 				<h2 id="live-delete-title">投稿を削除</h2>
 				<p>この投稿を削除します。この操作は取り消せません。</p>
 				<div class="live-modal-actions">
@@ -411,7 +421,17 @@ async function submitReport(event: MouseEvent) {
 				if (event.target === event.currentTarget) showReportModal = false;
 			}}
 		>
-			<div class="live-modal" role="dialog" aria-modal="true" aria-labelledby="live-report-title" tabindex="-1">
+			<div
+				class="live-modal"
+				use:trapFocus
+				role="dialog"
+				aria-modal="true"
+				aria-labelledby="live-report-title"
+				tabindex="-1"
+				onkeydown={(event) => {
+					if (event.key === "Escape") showReportModal = false;
+				}}
+			>
 				<h2 id="live-report-title">投稿を通報</h2>
 				<label>
 					<span>理由</span>
@@ -479,7 +499,6 @@ async function submitReport(event: MouseEvent) {
 	row-gap: 3px;
 	min-height: 52px;
 	padding: 6px var(--live-row-pad-x);
-	cursor: pointer;
 }
 
 .live-post-row:focus-visible {
@@ -584,15 +603,22 @@ async function submitReport(event: MouseEvent) {
 	font-size: 10px;
 }
 
-.live-like-form {
+.live-row-actions {
 	grid-area: action;
 	display: inline-flex;
 	align-self: center;
+	align-items: center;
 	justify-content: flex-end;
+	min-width: 52px;
+}
+
+.live-like-form {
+	display: inline-flex;
 }
 
 .live-like,
-.live-collapse {
+.live-collapse,
+.live-expand-toggle {
 	grid-area: action;
 	align-self: center;
 	display: inline-flex;
@@ -609,6 +635,15 @@ async function submitReport(event: MouseEvent) {
 	font-weight: 700;
 	line-height: 1;
 	cursor: pointer;
+}
+
+.live-row-actions .live-like {
+	width: 34px;
+}
+
+.live-expand-toggle {
+	width: 18px;
+	color: var(--color-text-secondary);
 }
 
 .live-like:hover,

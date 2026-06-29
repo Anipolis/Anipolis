@@ -28,12 +28,14 @@ let {
 }: Props = $props();
 </script>
 
-<div class="waiting-status" class:waiting-status--matched={mode === "matched"} aria-live="polite">
+<div class="waiting-status" class:waiting-status--matched={mode === "matched"}>
 	<div class="waiting-status-grid">
 		<ExchangeAnimeCard anime={offeredAnime} caption="あなたのおすすめ" {comment} {subjectiveTags} link={false} />
 
 		<div class="waiting-indicator">
-			<span class="waiting-indicator-text">{mode === "matched" ? "マッチング成立" : "マッチング中"}</span>
+			<span class="waiting-indicator-text" aria-live="polite" aria-atomic="true"
+				>{mode === "matched" ? "マッチング成立" : "マッチング中"}</span
+			>
 			{#if mode === "matched"}
 				<span class="waiting-match-icon" aria-hidden="true">→</span>
 			{:else}

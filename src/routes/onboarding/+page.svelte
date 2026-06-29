@@ -1,6 +1,6 @@
 <script lang="ts">
 import type { SubmitFunction } from "@sveltejs/kit";
-import { untrack } from "svelte";
+import { onDestroy, untrack } from "svelte";
 import { enhance } from "$app/forms";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
 import type { PageProps } from "./$types";
@@ -13,6 +13,7 @@ let submitting = $state(false);
 let avatarChoice = $state<"oauth" | "upload" | "none">(untrack(() => (data.avatarUrl ? "oauth" : "none")));
 let avatarPreviewUrl = $state<string | null>(null);
 let avatarMessage = $state("");
+let avatarFileInput = $state<HTMLInputElement | null>(null);
 
 const selectedAvatarUrl = $derived(
 	avatarChoice === "upload" ? avatarPreviewUrl : avatarChoice === "oauth" ? data.avatarUrl : null,
@@ -25,6 +26,14 @@ const onSubmit: SubmitFunction = () => {
 		await update({ reset: false });
 	};
 };
+
+function clearSelectedAvatarFile() {
+	if (avatarFileInput) avatarFileInput.value = "";
+	if (avatarPreviewUrl) {
+		URL.revokeObjectURL(avatarPreviewUrl);
+		avatarPreviewUrl = null;
+	}
+}
 
 function updateAvatarFile(event: Event) {
 	const input = event.currentTarget as HTMLInputElement;
@@ -49,20 +58,24 @@ function updateAvatarFile(event: Event) {
 }
 
 function useOAuthAvatar() {
+	clearSelectedAvatarFile();
 	avatarChoice = data.avatarUrl ? "oauth" : "none";
 	avatarMessage = "";
 }
 
 function clearAvatar() {
+	clearSelectedAvatarFile();
 	avatarChoice = "none";
 	avatarMessage = "";
 }
+
+onDestroy(clearSelectedAvatarFile);
 </script>
 
 <svelte:head><title>プロフィールの設定 - Anipolis</title></svelte:head>
 
 <div class="page-container" style="justify-content: center;">
-	<main style="flex: 0 1 560px; min-width: 0;">
+	<div style="flex: 0 1 560px; min-width: 0;">
 		<div class="settings-card">
 			<div class="settings-header-row">
 				<h1 class="settings-title">ようこそ！プロフィールを設定しましょう</h1>
@@ -93,6 +106,7 @@ function clearAvatar() {
 									name="avatar_file"
 									accept="image/jpeg,image/png,image/webp"
 									disabled={submitting}
+									bind:this={avatarFileInput}
 									onchange={updateAvatarFile}
 								>
 							</label>
@@ -174,7 +188,7 @@ function clearAvatar() {
 				</div>
 			</form>
 		</div>
-	</main>
+	</div>
 </div>
 
 <style>

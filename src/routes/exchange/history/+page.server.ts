@@ -9,5 +9,5 @@ export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession 
 	const exchanges = (await getAnimeExchangeEntries(supabase, user.id, null)).filter(
 		(exchange) => exchange.status !== "cancelled",
 	);
-	return { user, exchanges };
+	return { exchanges };
 };

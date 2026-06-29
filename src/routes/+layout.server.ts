@@ -1,9 +1,10 @@
 import type { ServerLoad } from "@sveltejs/kit";
-import { redirect } from "@sveltejs/kit";
+import { error, redirect } from "@sveltejs/kit";
 import { markAllNotificationsRead } from "$lib/server/actions";
 import { getExtraAccounts, setExtraAccounts } from "$lib/server/multi-account";
 import {
 	getPendingReportsCount,
+	getProfileById,
 	getUnreadBroadcastNotificationCount,
 	getUnreadNotificationCount,
 } from "$lib/server/queries";
@@ -19,9 +20,11 @@ function isOnboardingExempt(pathname: string): boolean {
 export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, cookies, url }) => {
 	const { session, user } = await safeGetSession();
 
-	const { data: profile } = user
-		? await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle()
-		: { data: null };
+	const { data: profile, error: profileError } = user ? await getProfileById(supabase, user.id) : { data: null, error: null };
+
+	if (profileError) {
+		error(500, "プロフィールの取得に失敗しました");
+	}
 
 	// プロフィールがまだない OAuth ユーザーは、公開プロフィールを作成する前に
 	// オンボーディングで名前とアイコンを確認してもらう。

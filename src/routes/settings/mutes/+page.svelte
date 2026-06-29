@@ -24,6 +24,15 @@ const muteSubmit: SubmitFunction = () => {
 };
 
 // アニメ tab
+const stagedAnimeId = $derived(data.stagedAnimeId ?? null);
+const wordTabHref = $derived(
+	stagedAnimeId ? `/settings/mutes?tab=word&anime_id=${encodeURIComponent(stagedAnimeId)}` : "/settings/mutes",
+);
+const animeTabHref = $derived(
+	stagedAnimeId
+		? `/settings/mutes?tab=anime&anime_id=${encodeURIComponent(stagedAnimeId)}`
+		: "/settings/mutes?tab=anime",
+);
 let editingAnimeId = $state<string | null>(untrack(() => data.stagedAnimeId ?? null));
 let pendingMuteType = $state<Record<string, "period" | "always">>({});
 
@@ -69,7 +78,13 @@ const removeSubmit: SubmitFunction = () => {
 	};
 };
 
-const activeTab = $derived((page.url.searchParams.get("tab") === "anime" ? "anime" : "word") as "word" | "anime");
+const activeTab = $derived.by((): "word" | "anime" => {
+	const tab = page.url.searchParams.get("tab");
+	if (tab === "anime") return "anime";
+	if (tab === "word") return "word";
+	if (stagedAnimeId) return "anime";
+	return "word";
+});
 </script>
 
 <svelte:head><title>ミュート設定 - Anipolis</title></svelte:head>
@@ -130,7 +145,7 @@ const activeTab = $derived((page.url.searchParams.get("tab") === "anime" ? "anim
 
 			<div class="mute-tabs" role="tablist" aria-label="ミュート種別">
 				<a
-					href="/settings/mutes"
+					href={wordTabHref}
 					class="mute-tab"
 					class:active={activeTab === "word"}
 					role="tab"
@@ -138,7 +153,7 @@ const activeTab = $derived((page.url.searchParams.get("tab") === "anime" ? "anim
 					>ワード</a
 				>
 				<a
-					href="/settings/mutes?tab=anime"
+					href={animeTabHref}
 					class="mute-tab"
 					class:active={activeTab === "anime"}
 					role="tab"

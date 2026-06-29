@@ -3,6 +3,7 @@ import type { SubmitFunction } from "@sveltejs/kit";
 import { onMount } from "svelte";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
+import { trapFocus } from "$lib/actions/trapFocus";
 import type { PageProps } from "./$types";
 
 let { data, form }: PageProps = $props();
@@ -230,7 +231,17 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 		role="presentation"
 		onclick={(event) => { if (event.target === event.currentTarget) stopTarget = null; }}
 	>
-		<div class="modal" role="dialog" aria-modal="true" aria-labelledby="stop-run-title">
+		<div
+			class="modal"
+			use:trapFocus
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="stop-run-title"
+			tabindex="-1"
+			onkeydown={(event) => {
+				if (event.key === "Escape") stopTarget = null;
+			}}
+		>
 			<h2 id="stop-run-title">検証runを停止</h2>
 			<p>「{stopTarget.title}」の検証runを停止します。以後、このrunには新規入室・投稿が集計されません。</p>
 			<div class="modal-actions">

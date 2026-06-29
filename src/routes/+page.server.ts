@@ -1,4 +1,4 @@
-﻿import { fail, redirect } from "@sveltejs/kit";
+﻿import { fail } from "@sveltejs/kit";
 import {
 	deletePostAction,
 	insertPostWithHashtags,
@@ -25,8 +25,6 @@ const POSTS_SELECT_BASE = buildPostCardSelect({ exchangeShare: false });
 export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession }, parent }) => {
 	// parent()を早めに発火（まだawaitしない）し、キャッシュ済みのsafeGetSessionでuserを並列取得
 	const [{ profile }, { user }] = await Promise.all([parent(), safeGetSession()]);
-
-	if (!user) redirect(303, `/auth?next=${encodeURIComponent("/")}`);
 
 	const tab = url.searchParams.get("tab") === "following" && user ? "following" : "all";
 	const quoteAnimeId = url.searchParams.get("quote_anime");

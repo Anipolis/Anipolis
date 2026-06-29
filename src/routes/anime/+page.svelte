@@ -440,16 +440,25 @@ function isAiringToday(anime: AnimeListItem): boolean {
 						<section class="filter-drawer-column">
 							<h2 class="filter-drawer-heading">放送年</h2>
 							<label class="sr-only" for="desktop-anime-year">放送年</label>
-							<input
-								id="desktop-anime-year"
-								type="number"
-								min="1900"
-								max="2100"
-								class="filter-input"
-								placeholder="例: 2025"
-								value={filterState.year}
-								oninput={(e) => updateFilterState({ year: e.currentTarget.value })}
-							>
+							<div class="filter-year-wrap">
+								<input
+									id="desktop-anime-year"
+									type="number"
+									min="1900"
+									max="2100"
+									class="filter-input"
+									placeholder="例: 2025"
+									value={filterState.year}
+									oninput={(e) => updateFilterState({ year: e.currentTarget.value })}
+								>
+								<button
+									type="button"
+									class="filter-year-today-btn"
+									onclick={() => updateFilterState({ year: String(new Date().getFullYear()) })}
+								>
+									今年
+								</button>
+							</div>
 						</section>
 
 						<section class="filter-drawer-column">
@@ -553,93 +562,6 @@ function isAiringToday(anime: AnimeListItem): boolean {
 				{/if}
 			</div>
 
-			<div class="filter-row filter-row--desktop">
-				<div class="filter-group">
-					<label for="filter-genre" class="filter-label">ジャンル</label>
-					<select id="filter-genre" name="genre" class="filter-select">
-						<option value="">すべて</option>
-						{#each GENRES as g}
-							<option value={g} selected={data.genre === g}>{g}</option>
-						{/each}
-					</select>
-				</div>
-				<div class="filter-group filter-group--year">
-					<label for="filter-broadcast-year" class="filter-label">放送年</label>
-					<div class="filter-year-wrap">
-						<input
-							id="filter-broadcast-year"
-							name="broadcastYear"
-							type="number"
-							min="1900"
-							max="2100"
-							class="filter-input"
-							placeholder="例: 2025"
-							value={data.broadcastYear ?? ''}
-						>
-						<button
-							type="button"
-							class="filter-year-today-btn"
-							onclick={(e) => {
-								const input = (e.currentTarget.closest('.filter-year-wrap') as HTMLElement)?.querySelector('input') as HTMLInputElement | null;
-								if (input) { input.value = String(new Date().getFullYear()); input.form?.requestSubmit(); }
-							}}
-						>
-							今年
-						</button>
-					</div>
-				</div>
-				<div class="filter-group">
-					<label for="filter-broadcast-season" class="filter-label">放送シーズン</label>
-					<select id="filter-broadcast-season" name="broadcastSeason" class="filter-select">
-						<option value="">すべて</option>
-						<option value="冬" selected={data.broadcastSeason === '冬'}>冬</option>
-						<option value="春" selected={data.broadcastSeason === '春'}>春</option>
-						<option value="夏" selected={data.broadcastSeason === '夏'}>夏</option>
-						<option value="秋" selected={data.broadcastSeason === '秋'}>秋</option>
-					</select>
-				</div>
-				<div class="filter-group">
-					<label for="filter-studio" class="filter-label">スタジオ</label>
-					<input
-						id="filter-studio"
-						name="studio"
-						type="text"
-						class="filter-input"
-						placeholder="スタジオ名"
-						value={data.studio ?? ''}
-					>
-				</div>
-				<div class="filter-group">
-					<label for="filter-producer" class="filter-label">制作</label>
-					<input
-						id="filter-producer"
-						name="producer"
-						type="text"
-						class="filter-input"
-						placeholder="制作会社名"
-						value={data.producer ?? ''}
-					>
-				</div>
-				<div class="filter-group">
-					<label for="filter-source" class="filter-label">原作</label>
-					<select id="filter-source" name="source" class="filter-select">
-						<option value="">すべて</option>
-						{#each SOURCE_OPTIONS as source}
-							<option value={source} selected={data.source === source}>{source}</option>
-						{/each}
-					</select>
-				</div>
-				{#if data.genre || data.broadcastYear || data.broadcastSeason || data.studio || data.producer || data.source}
-					<div class="filter-group filter-group--reset">
-						<a
-							href="/anime{data.tab && data.tab !== 'popular' ? `?tab=${data.tab}` : ''}"
-							class="filter-reset-btn"
-							title="フィルターをリセット"
-							>✕ リセット</a
-						>
-					</div>
-				{/if}
-			</div>
 		</form>
 
 		<nav class="tab-nav">
@@ -942,14 +864,25 @@ function isAiringToday(anime: AnimeListItem): boolean {
 
 					<section class="filter-sheet-section">
 						<h3 class="filter-sheet-section-label">放送年</h3>
-						<input
-							type="number"
-							min="1900"
-							max="2100"
-							class="filter-sheet-input"
-							placeholder="例: 2025"
-							bind:value={pendingYear}
-						>
+						<div class="filter-year-wrap">
+							<input
+								type="number"
+								min="1900"
+								max="2100"
+								class="filter-sheet-input"
+								placeholder="例: 2025"
+								bind:value={pendingYear}
+							>
+							<button
+								type="button"
+								class="filter-year-today-btn"
+								onclick={() => {
+									pendingYear = String(new Date().getFullYear());
+								}}
+							>
+								今年
+							</button>
+						</div>
 					</section>
 
 					<section class="filter-sheet-section">
@@ -1350,7 +1283,6 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	flex: 1;
 	min-width: 0;
 }
-
 .filter-select:focus-visible,
 .filter-input:focus-visible {
 	outline: 2px solid var(--color-accent);
@@ -1973,6 +1905,10 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	transition:
 		border-color 0.15s,
 		box-shadow 0.15s;
+}
+.filter-year-wrap .filter-sheet-input {
+	flex: 1;
+	min-width: 0;
 }
 .filter-sheet-input:focus {
 	border-color: var(--accent);

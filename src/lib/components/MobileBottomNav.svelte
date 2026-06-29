@@ -1,6 +1,7 @@
 <script lang="ts">
 import type { Session } from "@supabase/supabase-js";
 import { page } from "$app/state";
+import AnimeIcon from "./AnimeIcon.svelte";
 
 interface Props {
 	session: Session | null;
@@ -198,7 +199,7 @@ function isActive(path: string): boolean {
 			aria-label="アニメ"
 			aria-current={isActive('/anime') ? 'page' : undefined}
 		>
-			<span class="anipolis-logo-icon" aria-hidden="true"></span>
+			<AnimeIcon size={22} />
 			<span class="mobile-tab-label">アニメ</span>
 		</a>
 

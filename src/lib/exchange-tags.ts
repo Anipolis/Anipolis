@@ -21,15 +21,17 @@ export const EXCHANGE_SUBJECTIVE_TAG_OPTIONS = [
 	"懐かしい",
 ] as const;
 
+export type ExchangeSubjectiveTag = (typeof EXCHANGE_SUBJECTIVE_TAG_OPTIONS)[number];
+
 export const MAX_EXCHANGE_SUBJECTIVE_TAGS = 3;
 
-const EXCHANGE_SUBJECTIVE_TAG_SET = new Set<string>(EXCHANGE_SUBJECTIVE_TAG_OPTIONS);
+const EXCHANGE_SUBJECTIVE_TAG_SET = new Set<ExchangeSubjectiveTag>(EXCHANGE_SUBJECTIVE_TAG_OPTIONS);
 
-export function isExchangeSubjectiveTag(tag: string) {
-	return EXCHANGE_SUBJECTIVE_TAG_SET.has(tag);
+export function isExchangeSubjectiveTag(tag: string): tag is ExchangeSubjectiveTag {
+	return EXCHANGE_SUBJECTIVE_TAG_SET.has(tag as ExchangeSubjectiveTag);
 }
 
-export function toExchangeSubjectiveTags(values: Iterable<unknown>) {
+export function toExchangeSubjectiveTags(values: Iterable<unknown>): string[] {
 	const tags: string[] = [];
 	for (const value of values) {
 		if (typeof value !== "string") continue;
@@ -40,10 +42,10 @@ export function toExchangeSubjectiveTags(values: Iterable<unknown>) {
 	return tags;
 }
 
-export function toValidExchangeSubjectiveTags(values: Iterable<unknown>) {
+export function toValidExchangeSubjectiveTags(values: Iterable<unknown>): ExchangeSubjectiveTag[] {
 	return toExchangeSubjectiveTags(values).filter(isExchangeSubjectiveTag).slice(0, MAX_EXCHANGE_SUBJECTIVE_TAGS);
 }
 
-export function validateExchangeSubjectiveTags(tags: readonly string[]) {
+export function validateExchangeSubjectiveTags(tags: readonly string[]): tags is readonly ExchangeSubjectiveTag[] {
 	return tags.length <= MAX_EXCHANGE_SUBJECTIVE_TAGS && tags.every(isExchangeSubjectiveTag);
 }
