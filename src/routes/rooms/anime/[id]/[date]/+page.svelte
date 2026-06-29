@@ -326,6 +326,7 @@ function formatCompactDate(iso: string) {
 						insideRoom={true}
 						roomContext={{ href: roomHref, title: `${data.anime.title} の放送ルーム` }}
 						broadcastStartAt={data.room.scheduled_at}
+						roomPostMode="live"
 					/>
 				</div>
 			{/each}

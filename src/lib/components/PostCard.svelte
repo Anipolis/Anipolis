@@ -3,6 +3,7 @@ import type { SubmitFunction } from "@sveltejs/kit";
 import { enhance } from "$app/forms";
 import { goto } from "$app/navigation";
 import AnimeExchangeResult from "$lib/components/AnimeExchangeResult.svelte";
+import LiveRoomPostCard from "$lib/components/LiveRoomPostCard.svelte";
 import ReactionUsersPopover from "$lib/components/ReactionUsersPopover.svelte";
 import { buildAnimeRoomLabel, type Post, type ReactionType, type ReactionUser } from "$lib/types";
 import { formatBroadcastRelativeTime, formatRelativeTime } from "$lib/utils/format";
@@ -17,6 +18,7 @@ interface Props {
 	roomContext?: { href: string; title: string } | null;
 	insideRoom?: boolean;
 	broadcastStartAt?: string | null;
+	roomPostMode?: "live" | null;
 }
 
 let {
@@ -26,6 +28,7 @@ let {
 	roomContext = null,
 	insideRoom = false,
 	broadcastStartAt = null,
+	roomPostMode = null,
 }: Props = $props();
 
 const parts = $derived(parseContentParts(post.content));
@@ -258,6 +261,9 @@ async function submitReport() {
 
 <svelte:window onkeydown={handleLightboxKeydown} />
 
+{#if roomPostMode === "live"}
+	<LiveRoomPostCard {post} {currentUserId} {broadcastStartAt} />
+{:else}
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <article
@@ -751,7 +757,7 @@ async function submitReport() {
 						stroke-linejoin="round"
 						aria-hidden="true"
 					>
-						<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+						<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
 					</svg>
 					{#if post.reply_count > 0}
 						<span>{post.reply_count}</span>
@@ -952,6 +958,7 @@ async function submitReport() {
 		</div>
 	</div>
 </article>
+{/if}
 
 <style>
 .post-card--with-room {
