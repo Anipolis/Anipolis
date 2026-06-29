@@ -32,4 +32,5 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS posts_toplevel_created_idx
 --   eq(broadcast_room_session_id) ORDER BY created_at DESC LIMIT 100
 CREATE INDEX CONCURRENTLY IF NOT EXISTS posts_room_created_idx
     ON public.posts (broadcast_room_session_id, created_at DESC)
-    WHERE broadcast_room_session_id IS NOT NULL;
+    WHERE broadcast_room_session_id IS NOT NULL
+      AND parent_id IS NULL;

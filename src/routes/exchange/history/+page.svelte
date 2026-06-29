@@ -88,7 +88,7 @@ let { data }: PageProps = $props();
 
 .history-item {
 	display: grid;
-	grid-template-columns: minmax(0, 1fr) 24px minmax(0, 1fr);
+	grid-template-columns: 1fr;
 	gap: 12px;
 	align-items: start;
 	padding: 12px;
@@ -140,18 +140,20 @@ let { data }: PageProps = $props();
 .history-arrow {
 	align-self: center;
 	color: var(--color-text-muted);
-	text-align: center;
+	text-align: left;
+	transform: rotate(90deg);
+	width: 24px;
 }
 
-@media (max-width: 640px) {
+@media (min-width: 641px) {
 	.history-item {
-		grid-template-columns: 1fr;
+		grid-template-columns: minmax(0, 1fr) 24px minmax(0, 1fr);
 	}
 
 	.history-arrow {
-		text-align: left;
-		transform: rotate(90deg);
-		width: 24px;
+		text-align: center;
+		transform: none;
+		width: auto;
 	}
 }
 </style>

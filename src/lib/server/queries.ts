@@ -252,6 +252,23 @@ export async function getMutedWords(supabase: SupabaseClient<Database>, userId: 
 	return (data ?? []).map((row) => normalizeMutedWord(row.word)).filter((word) => word.length > 0);
 }
 
+export async function getMutedWordRows(supabase: SupabaseClient<Database>, userId: string) {
+	const { data } = await supabase
+		.from("muted_words")
+		.select("id, word, created_at")
+		.eq("user_id", userId)
+		.order("created_at", { ascending: false });
+	return data ?? [];
+}
+
+export async function getProfileIdByUsername(
+	supabase: SupabaseClient<Database>,
+	username: string,
+): Promise<string | null> {
+	const { data } = await supabase.from("profiles").select("id").eq("username", username).maybeSingle();
+	return data?.id ?? null;
+}
+
 export async function getActiveBroadcastRoomMuteAnimeIds(
 	supabase: SupabaseClient<Database>,
 	userId: string | null,
@@ -559,6 +576,24 @@ export async function getBroadcastRoomPosts(
 	return enrichPostsWithCounts(supabase, (orderedPosts ?? []) as unknown as RawPost[], userId, {
 		includeMutedRoomPosts: true,
 	});
+}
+
+export async function getPostReplies(
+	supabase: SupabaseClient<Database>,
+	parentId: string,
+	options: { mode: "recent" | "all"; limit: number },
+): Promise<RawPost[]> {
+	let query = supabase.from("posts").select(POST_LIST_SELECT).eq("parent_id", parentId);
+	if (options.mode === "recent") {
+		query = query.order("created_at", { ascending: false }).limit(options.limit);
+	} else {
+		query = query.order("created_at", { ascending: true }).limit(options.limit);
+	}
+
+	const { data, error } = await query;
+	if (error) throw error;
+	const rows = (data ?? []) as unknown as RawPost[];
+	return options.mode === "recent" ? [...rows].reverse() : rows;
 }
 
 // ── ヘルパー ──────────────────────────────────────────────────────
@@ -1794,6 +1829,15 @@ export async function getAnimeRankingTrending(supabase: SupabaseClient<Database>
 	return animes.map((a) => ({ ...a, recent_count: countMap.get(a.id) ?? 0 }));
 }
 
+export async function getTrendingHashtags(supabase: SupabaseClient<Database>, limit = 10) {
+	const { data, error } = await supabase.rpc("get_trending_hashtags", { limit_count: limit });
+	if (error) {
+		console.error("trending hashtags query failed:", error);
+		return [];
+	}
+	return data ?? [];
+}
+
 /**
  * 高評価ランキング（平均スコア順）
  */
@@ -2547,4 +2591,10 @@ export async function getAnimeMutes(supabase: SupabaseClient<Database>, userId: 
 		muted_until: row.muted_until,
 		created_at: row.created_at,
 	}));
+}
+
+export async function getAnimeMuteCandidate(supabase: SupabaseClient<Database>, animeId: number) {
+	const { data } = await supabase.from("anime").select("id, title, cover_url").eq("id", animeId).maybeSingle();
+	if (!data) return null;
+	return { id: String(data.id), title: data.title, cover_url: data.cover_url ?? null };
 }

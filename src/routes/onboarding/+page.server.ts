@@ -1,5 +1,6 @@
 import { fail, redirect } from "@sveltejs/kit";
 import { completeProfileSetupAction } from "$lib/server/actions";
+import { getProfileIdByUsername } from "$lib/server/queries";
 import type { Actions, PageServerLoad } from "./$types";
 
 const USERNAME_PATTERN = /^[a-zA-Z0-9_]{3,20}$/;
@@ -40,13 +41,9 @@ async function getOnboardingDefaults(
 	const usernameCandidate = getUsernameCandidate(metadata.rawUsername);
 	if (!usernameCandidate) return { username: "", displayName: metadata.displayName, avatarUrl: metadata.avatarUrl };
 
-	const { data: existing } = await supabase
-		.from("profiles")
-		.select("id")
-		.eq("username", usernameCandidate)
-		.maybeSingle();
+	const existingProfileId = await getProfileIdByUsername(supabase, usernameCandidate);
 	return {
-		username: existing ? "" : usernameCandidate,
+		username: existingProfileId ? "" : usernameCandidate,
 		displayName: metadata.displayName,
 		avatarUrl: metadata.avatarUrl,
 	};

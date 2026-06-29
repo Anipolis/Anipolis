@@ -43,12 +43,14 @@ function updateAvatarFile(event: Event) {
 	avatarMessage = "";
 	if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
 		avatarMessage = "JPEG、PNG、WebP形式の画像を選択してください。";
-		input.value = "";
+		clearSelectedAvatarFile();
+		avatarChoice = data.avatarUrl ? "oauth" : "none";
 		return;
 	}
 	if (file.size > 2 * 1024 * 1024) {
 		avatarMessage = "画像は2MB以内にしてください。";
-		input.value = "";
+		clearSelectedAvatarFile();
+		avatarChoice = data.avatarUrl ? "oauth" : "none";
 		return;
 	}
 

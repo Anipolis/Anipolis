@@ -731,10 +731,11 @@ export async function exchangeAnimeAction(supabase: SupabaseClient<Database>, re
 
 	const form = await request.formData();
 	const animeId = (form.get("anime_id") as string | null)?.trim() ?? "";
+	const animeIdNumber = Number(animeId);
 	const comment = ((form.get("comment") as string | null)?.trim() ?? "") || null;
 	const subjectiveTags = toExchangeSubjectiveTags(form.getAll("subjective_tags"));
 
-	if (!animeId || Number.isNaN(Number(animeId))) {
+	if (!/^\d+$/.test(animeId) || !Number.isSafeInteger(animeIdNumber) || animeIdNumber <= 0) {
 		return fail(400, { exchangeMessage: "アニメを選択してください" });
 	}
 
@@ -749,7 +750,7 @@ export async function exchangeAnimeAction(supabase: SupabaseClient<Database>, re
 	}
 
 	const { data, error } = await supabase.rpc("create_anime_exchange", {
-		p_anime_id: Number(animeId),
+		p_anime_id: animeIdNumber,
 		p_comment: comment,
 		p_subjective_tags: subjectiveTags,
 	});
@@ -787,6 +788,21 @@ export async function exchangeAnimeAction(supabase: SupabaseClient<Database>, re
 		exchangeMatched: result?.received_anime_id != null,
 		receivedAnime,
 	};
+}
+
+export async function cancelAnimeExchangeAction(supabase: SupabaseClient<Database>) {
+	const { data, error } = await supabase.rpc("cancel_anime_exchange");
+	if (error) {
+		console.error("anime exchange cancel error:", error);
+		return fail(500, { cancelMessage: "マッチングのキャンセルに失敗しました" });
+	}
+
+	const result = data?.[0] ?? null;
+	if (!result?.cancelled) {
+		return fail(409, { cancelMessage: "待機中のトレードが見つかりません" });
+	}
+
+	return { cancelSuccess: true };
 }
 
 export async function toggleBroadcastSubscription(

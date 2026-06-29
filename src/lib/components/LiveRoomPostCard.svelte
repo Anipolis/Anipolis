@@ -237,6 +237,7 @@ async function submitReport(event: MouseEvent) {
 						class="live-like"
 						class:active={likedByMe}
 						disabled={!isLoggedIn}
+						aria-pressed={likedByMe}
 						aria-label={likedByMe ? 'いいねを取り消す' : 'いいね'}
 						onclick={stop}
 					>
@@ -273,7 +274,8 @@ async function submitReport(event: MouseEvent) {
 						class="live-action"
 						class:active={repostedByMe}
 						disabled={!isLoggedIn}
-						aria-label="リポスト"
+						aria-pressed={repostedByMe}
+						aria-label={repostedByMe ? "リポストを取り消す" : "リポスト"}
 					>
 						<span class="i-lucide-repeat-2" aria-hidden="true"></span>
 						{#if repostCount > 0}
@@ -288,7 +290,8 @@ async function submitReport(event: MouseEvent) {
 						class="live-action live-action-like"
 						class:active={likedByMe}
 						disabled={!isLoggedIn}
-						aria-label="いいね"
+						aria-pressed={likedByMe}
+						aria-label={likedByMe ? "いいねを取り消す" : "いいね"}
 					>
 						<span class="i-lucide-heart" aria-hidden="true"></span>
 						{#if likeCount > 0}
@@ -303,7 +306,8 @@ async function submitReport(event: MouseEvent) {
 						class="live-action"
 						class:active={bookmarkedByMe}
 						disabled={!isLoggedIn}
-						aria-label="ブックマーク"
+						aria-pressed={bookmarkedByMe}
+						aria-label={bookmarkedByMe ? "ブックマークを解除" : "ブックマーク"}
 					>
 						<span class="i-lucide-bookmark" aria-hidden="true"></span>
 					</button>
@@ -315,6 +319,7 @@ async function submitReport(event: MouseEvent) {
 							class="live-action"
 							aria-label="メニュー"
 							aria-haspopup="true"
+							aria-expanded={showKebabMenu}
 							onclick={(event) => { event.stopPropagation(); showKebabMenu = !showKebabMenu; }}
 						>
 							<span class="i-lucide-ellipsis-vertical" aria-hidden="true"></span>
