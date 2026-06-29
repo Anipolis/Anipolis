@@ -94,6 +94,52 @@ function normalizeAverageScore(score: number | null | undefined, count: number |
 const POST_LIST_SELECT = buildPostCardSelect();
 
 /**
+ * リクエストスコープのミュート設定キャッシュ。
+ *
+ * supabase クライアントは `hooks.server.ts` でリクエストごとに新規生成されるため、
+ * クライアントオブジェクトをキーにすることで「同一リクエスト内でのみ」設定を共有できる。
+ * WeakMap なのでクライアントが GC されればエントリも自動的に解放される。
+ *
+ * ユーザーのミュート設定はリクエスト内で不変なのに、`enrichPostsWithCounts` が
+ * 複数回呼ばれるルート（プロフィール: posts / imagePosts / likes で最大3回）では
+ * 毎回 muted_words / anime_mutes を取得し直していた。これをメモ化して 1 回にまとめる。
+ */
+const muteSettingsCache = new WeakMap<
+	object,
+	Map<string, { mutedWords?: Promise<string[]>; animeMuteIds?: Promise<Set<string>> }>
+>();
+
+function getMuteCacheEntry(supabase: SupabaseClient<Database>, userId: string) {
+	let byUser = muteSettingsCache.get(supabase);
+	if (!byUser) {
+		byUser = new Map();
+		muteSettingsCache.set(supabase, byUser);
+	}
+	let entry = byUser.get(userId);
+	if (!entry) {
+		entry = {};
+		byUser.set(userId, entry);
+	}
+	return entry;
+}
+
+/** リクエストスコープでメモ化された getMutedWords */
+function getMutedWordsCached(supabase: SupabaseClient<Database>, userId: string | null): Promise<string[]> {
+	if (!userId) return getMutedWords(supabase, userId);
+	const entry = getMuteCacheEntry(supabase, userId);
+	if (!entry.mutedWords) entry.mutedWords = getMutedWords(supabase, userId);
+	return entry.mutedWords;
+}
+
+/** リクエストスコープでメモ化された getActiveAnimeMuteIds */
+function getActiveAnimeMuteIdsCached(supabase: SupabaseClient<Database>, userId: string | null): Promise<Set<string>> {
+	if (!userId) return getActiveAnimeMuteIds(supabase, userId);
+	const entry = getMuteCacheEntry(supabase, userId);
+	if (!entry.animeMuteIds) entry.animeMuteIds = getActiveAnimeMuteIds(supabase, userId);
+	return entry.animeMuteIds;
+}
+
+/**
  * rawPost 配列に like_count / repost_count / reply_count / liked_by_me / reposted_by_me を付加して
  * Post[] に変換する共通ヘルパー。
  * 全ルートサーバー（タイムライン・プロフィール・ハッシュタグ・検索・詳細）で使い回す。
@@ -106,10 +152,10 @@ export async function enrichPostsWithCounts(
 ): Promise<Post[]> {
 	if (rawPosts.length === 0) return [];
 
-	const mutedWordsPromise = getMutedWords(supabase, userId);
+	const mutedWordsPromise = getMutedWordsCached(supabase, userId);
 	const mutedRoomAnimeIdsPromise = options.includeMutedRoomPosts
 		? Promise.resolve(new Set<string>())
-		: getActiveAnimeMuteIds(supabase, userId);
+		: getActiveAnimeMuteIdsCached(supabase, userId);
 
 	type QuotedPostRow = {
 		id: string;
@@ -1017,6 +1063,159 @@ export async function getBookmarkedPosts(supabase: SupabaseClient<Database>, use
 		(a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0),
 	);
 	return enrichPostsWithCounts(supabase, sorted, userId);
+}
+
+type ProfileRepostContext = {
+	id: string;
+	username: string;
+	display_name: string | null;
+	avatar_url: string | null;
+};
+
+type TimelinePostsWithRepostsResult = {
+	posts: Post[];
+	error: unknown | null;
+};
+
+export async function getTimelinePostsWithReposts(
+	supabase: SupabaseClient<Database>,
+	profiles: ProfileRepostContext[],
+	currentUserId: string | null,
+	options: { limit?: number; select?: string; before?: string } = {},
+): Promise<TimelinePostsWithRepostsResult> {
+	if (profiles.length === 0) return { posts: [], error: null };
+
+	const limit = options.limit ?? 50;
+	const select = options.select ?? POST_LIST_SELECT;
+	const profileIds = profiles.map((profile) => profile.id);
+	const firstProfileId = profileIds[0];
+	if (!firstProfileId) return { posts: [], error: null };
+	const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
+
+	const buildProfileFilter = <
+		T extends {
+			eq: (column: string, value: string) => T;
+			in: (column: string, values: string[]) => T;
+			lt: (column: string, value: string) => T;
+		},
+	>(
+		query: T,
+	) => {
+		let q = profileIds.length === 1 ? query.eq("user_id", firstProfileId) : query.in("user_id", profileIds);
+		if (options.before) q = q.lt("created_at", options.before);
+		return q;
+	};
+
+	const ownPostsQuery = buildProfileFilter(
+		supabase
+			.from("posts")
+			.select(select)
+			.is("parent_id", null)
+			.order("created_at", { ascending: false })
+			.limit(limit),
+	);
+	const repostRowsQuery = buildProfileFilter(
+		supabase
+			.from("reposts")
+			.select("post_id, user_id, created_at")
+			.order("created_at", { ascending: false })
+			.limit(limit),
+	);
+
+	const [ownPostsResult, repostRowsResult] = await Promise.all([ownPostsQuery, repostRowsQuery]);
+
+	if (ownPostsResult.error) {
+		return { posts: [], error: ownPostsResult.error };
+	}
+	if (repostRowsResult.error) {
+		return { posts: [], error: repostRowsResult.error };
+	}
+
+	const ownPosts = (ownPostsResult.data ?? []) as unknown as RawPost[];
+	const ownPostIds = new Set(ownPosts.map((post) => post.id));
+	const repostRows = repostRowsResult.data ?? [];
+	const repostPostIds = [
+		...new Set(
+			repostRows.filter((row) => profiles.length > 1 || !ownPostIds.has(row.post_id)).map((row) => row.post_id),
+		),
+	];
+
+	const repostedPostsResult =
+		repostPostIds.length > 0
+			? await supabase.from("posts").select(select).in("id", repostPostIds)
+			: { data: [] as unknown[], error: null };
+
+	if (repostedPostsResult.error) {
+		return { posts: [], error: repostedPostsResult.error };
+	}
+
+	const repostedPostById = new Map(
+		((repostedPostsResult.data ?? []) as unknown as RawPost[]).map((post) => [post.id, post]),
+	);
+
+	const timelineItems = [
+		...ownPosts.map((post) => ({
+			kind: "post" as const,
+			sortAt: post.created_at,
+			post,
+		})),
+		...repostRows
+			.map((row) => {
+				const post = repostedPostById.get(row.post_id);
+				const repostProfile = profileById.get(row.user_id);
+				if (!post || !repostProfile) return null;
+				return {
+					kind: "repost" as const,
+					sortAt: row.created_at,
+					post,
+					repostedAt: row.created_at,
+					profile: repostProfile,
+				};
+			})
+			.filter(
+				(
+					item,
+				): item is {
+					kind: "repost";
+					sortAt: string;
+					post: RawPost;
+					repostedAt: string;
+					profile: ProfileRepostContext;
+				} => item !== null,
+			),
+	]
+		.sort((a, b) => new Date(b.sortAt).getTime() - new Date(a.sortAt).getTime())
+		.filter((item, index, items) => items.findIndex((candidate) => candidate.post.id === item.post.id) === index)
+		.slice(0, limit);
+
+	const rawTimelinePosts = timelineItems.map((item) => ({
+		...item.post,
+		repost_context:
+			item.kind === "repost"
+				? {
+						user_id: item.profile.id,
+						username: item.profile.username,
+						display_name: item.profile.display_name,
+						avatar_url: item.profile.avatar_url,
+						created_at: item.repostedAt,
+					}
+				: null,
+	}));
+
+	return { posts: await enrichPostsWithCounts(supabase, rawTimelinePosts, currentUserId), error: null };
+}
+
+export async function getProfileTimelinePosts(
+	supabase: SupabaseClient<Database>,
+	profile: ProfileRepostContext,
+	currentUserId: string | null,
+	limit = 50,
+): Promise<Post[]> {
+	const result = await getTimelinePostsWithReposts(supabase, [profile], currentUserId, { limit });
+	if (result.error) {
+		console.error("[profile] timeline posts query failed:", result.error);
+	}
+	return result.posts;
 }
 
 export async function getLikedPosts(
@@ -2129,6 +2328,7 @@ export async function getBroadcastRoomMutes(
 		anime_id: number;
 		room_session_id: string;
 		session: { room_date: string } | { room_date: string }[];
+		anime: { title: string; cover_url: string | null } | null;
 		duration_days: number | null;
 		mute_until_event_end: boolean;
 		repeat_weekly: boolean;
@@ -2140,32 +2340,21 @@ export async function getBroadcastRoomMutes(
 	const { data } = await supabase
 		.from("broadcast_room_mutes")
 		.select(
-			"anime_id, room_session_id, session:broadcast_room_sessions!broadcast_room_mutes_room_session_id_fkey ( room_date ), duration_days, mute_until_event_end, repeat_weekly, muted_until, created_at, updated_at",
+			"anime_id, room_session_id, session:broadcast_room_sessions!broadcast_room_mutes_room_session_id_fkey ( room_date ), anime:anime!broadcast_room_mutes_anime_id_fkey ( title, cover_url ), duration_days, mute_until_event_end, repeat_weekly, muted_until, created_at, updated_at",
 		)
 		.eq("user_id", userId)
 		.order("muted_until", { ascending: false });
 	const rows = (data ?? []) as unknown as BroadcastRoomMuteRow[];
-	if (rows.length === 0) return [];
-
-	const { data: animes } = await supabase
-		.from("anime")
-		.select("id, title, cover_url")
-		.in(
-			"id",
-			rows.map((row) => row.anime_id),
-		);
-	const animeById = new Map((animes ?? []).map((anime) => [anime.id, anime]));
 
 	return rows.map((row) => {
-		const anime = animeById.get(row.anime_id);
 		const duration =
 			row.mute_until_event_end || row.duration_days == null
 				? "event_end"
 				: (Math.min(7, Math.max(1, row.duration_days)) as 1 | 2 | 3 | 4 | 5 | 6 | 7);
 		return {
 			anime_id: String(row.anime_id),
-			anime_title: anime?.title ?? "不明なアニメ",
-			anime_cover_url: anime?.cover_url ?? null,
+			anime_title: row.anime?.title ?? "不明なアニメ",
+			anime_cover_url: row.anime?.cover_url ?? null,
 			room_session_id: row.room_session_id,
 			room_date: (Array.isArray(row.session) ? row.session[0]?.room_date : row.session?.room_date) ?? "",
 			duration,
@@ -2197,17 +2386,20 @@ export async function getActiveAnimeMuteIds(
 	userId: string | null,
 ): Promise<Set<string>> {
 	if (!userId) return new Set();
+	type ActiveMuteRow = AnimeMuteRow & { anime: { id: number; broadcast_day: number | null } | null };
 	// biome-ignore lint/suspicious/noExplicitAny: anime_mutes not yet in auto-generated DB types
 	const { data } = await (supabase as any)
 		.from("anime_mutes")
-		.select("anime_id, mute_type, period_days, is_repeat, muted_until")
+		.select(
+			"anime_id, mute_type, period_days, is_repeat, muted_until, anime:anime!anime_mutes_anime_id_fkey ( id, broadcast_day )",
+		)
 		.eq("user_id", userId);
-	const rows = (data ?? []) as AnimeMuteRow[];
+	const rows = (data ?? []) as ActiveMuteRow[];
 	if (rows.length === 0) return new Set();
 
 	const now = Date.now();
 	const activeIds = new Set<string>();
-	const repeatRows: AnimeMuteRow[] = [];
+	const todayDay = new Date().getDay();
 
 	for (const row of rows) {
 		if (row.mute_type === "always") {
@@ -2217,29 +2409,10 @@ export async function getActiveAnimeMuteIds(
 				if (row.muted_until && new Date(row.muted_until).getTime() > now) {
 					activeIds.add(String(row.anime_id));
 				}
-			} else {
-				repeatRows.push(row);
+			} else if (row.period_days != null && row.anime?.broadcast_day != null) {
+				const daysSince = (todayDay - row.anime.broadcast_day + 7) % 7;
+				if (daysSince < row.period_days) activeIds.add(String(row.anime_id));
 			}
-		}
-	}
-
-	// For repeat period mutes, check if today falls within period window of last broadcast_day
-	if (repeatRows.length > 0) {
-		const { data: animes } = await supabase
-			.from("anime")
-			.select("id, broadcast_day")
-			.in(
-				"id",
-				repeatRows.map((r) => r.anime_id),
-			);
-		const animeMap = new Map((animes ?? []).map((a) => [a.id, a.broadcast_day]));
-		const todayDay = new Date().getDay();
-		for (const row of repeatRows) {
-			if (row.period_days == null) continue;
-			const broadcastDay = animeMap.get(row.anime_id);
-			if (broadcastDay == null) continue;
-			const daysSince = (todayDay - broadcastDay + 7) % 7;
-			if (daysSince < row.period_days) activeIds.add(String(row.anime_id));
 		}
 	}
 
@@ -2247,37 +2420,30 @@ export async function getActiveAnimeMuteIds(
 }
 
 export async function getAnimeMutes(supabase: SupabaseClient<Database>, userId: string): Promise<AnimeMute[]> {
+	type Row = AnimeMuteRow & {
+		id: string;
+		created_at: string;
+		anime: { title: string; cover_url: string | null } | null;
+	};
 	// biome-ignore lint/suspicious/noExplicitAny: anime_mutes not yet in auto-generated DB types
 	const { data } = await (supabase as any)
 		.from("anime_mutes")
-		.select("id, anime_id, mute_type, period_days, is_repeat, muted_until, created_at")
+		.select(
+			"id, anime_id, mute_type, period_days, is_repeat, muted_until, created_at, anime:anime!anime_mutes_anime_id_fkey ( title, cover_url )",
+		)
 		.eq("user_id", userId)
 		.order("created_at", { ascending: false });
-	type Row = AnimeMuteRow & { id: string; created_at: string };
 	const rows = ((data ?? []) as Row[]).filter((row) => isVisibleAnimeMute(row));
-	if (rows.length === 0) return [];
 
-	const { data: animes } = await supabase
-		.from("anime")
-		.select("id, title, cover_url")
-		.in(
-			"id",
-			rows.map((r) => r.anime_id),
-		);
-	const animeById = new Map((animes ?? []).map((a) => [a.id, a]));
-
-	return rows.map((row) => {
-		const anime = animeById.get(row.anime_id);
-		return {
-			id: row.id,
-			anime_id: String(row.anime_id),
-			anime_title: anime?.title ?? "不明なアニメ",
-			anime_cover_url: anime?.cover_url ?? null,
-			mute_type: row.mute_type as "period" | "always",
-			period_days: row.period_days,
-			is_repeat: row.is_repeat,
-			muted_until: row.muted_until,
-			created_at: row.created_at,
-		};
-	});
+	return rows.map((row) => ({
+		id: row.id,
+		anime_id: String(row.anime_id),
+		anime_title: row.anime?.title ?? "不明なアニメ",
+		anime_cover_url: row.anime?.cover_url ?? null,
+		mute_type: row.mute_type as "period" | "always",
+		period_days: row.period_days,
+		is_repeat: row.is_repeat,
+		muted_until: row.muted_until,
+		created_at: row.created_at,
+	}));
 }

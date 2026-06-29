@@ -1,17 +1,34 @@
 import { fail, redirect } from "@sveltejs/kit";
+import { parsePositiveInt, removeAnimeMuteAction, updateAnimeMuteAction } from "$lib/server/actions";
+import { getAnimeMutes } from "$lib/server/queries";
 import type { Actions, PageServerLoad } from "./$types";
 
-export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession } }) => {
+export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 	if (!user) redirect(303, "/");
 
-	const { data: mutedWords } = await supabase
-		.from("muted_words")
-		.select("id, word, created_at")
-		.eq("user_id", user.id)
-		.order("created_at", { ascending: false });
+	const [{ data: mutedWords }, mutes] = await Promise.all([
+		supabase
+			.from("muted_words")
+			.select("id, word, created_at")
+			.eq("user_id", user.id)
+			.order("created_at", { ascending: false }),
+		getAnimeMutes(supabase, user.id),
+	]);
 
-	return { mutedWords: mutedWords ?? [] };
+	const parsedAnimeId = parsePositiveInt(url.searchParams.get("anime_id"));
+	const stagedAnimeId = parsedAnimeId !== null ? String(parsedAnimeId) : null;
+	let virtualAnime: { id: string; title: string; cover_url: string | null } | null = null;
+	if (stagedAnimeId && !mutes.find((m) => m.anime_id === stagedAnimeId)) {
+		const { data } = await supabase
+			.from("anime")
+			.select("id, title, cover_url")
+			.eq("id", Number(stagedAnimeId))
+			.maybeSingle();
+		if (data) virtualAnime = { id: String(data.id), title: data.title, cover_url: data.cover_url ?? null };
+	}
+
+	return { mutedWords: mutedWords ?? [], mutes, virtualAnime, stagedAnimeId };
 };
 
 export const actions: Actions = {
@@ -51,5 +68,17 @@ export const actions: Actions = {
 		if (error) return fail(500, { message: "ミュートワードの削除に失敗しました" });
 
 		return { muteSuccess: true };
+	},
+
+	updateAnimeMute: async ({ request, locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { message: "ログインが必要です" });
+		return updateAnimeMuteAction(request, supabase, user.id);
+	},
+
+	removeAnimeMute: async ({ request, locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { message: "ログインが必要です" });
+		return removeAnimeMuteAction(request, supabase, user.id);
 	},
 };

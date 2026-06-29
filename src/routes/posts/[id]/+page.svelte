@@ -105,7 +105,7 @@ $effect(() => {
 						<div class="reply-hint">@{enriched.post?.username} に返信</div>
 
 						{#if form && 'message' in form}
-							<p class="flash-error" style="margin-bottom: 8px;">{form.message}</p>
+							<p class="flash-error" role="alert" style="margin-bottom: 8px;">{form.message}</p>
 						{/if}
 
 						<textarea

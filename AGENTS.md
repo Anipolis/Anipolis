@@ -57,7 +57,7 @@ Detected from the repository:
 
 Important assumptions:
 
-- The app connects to remote Supabase (`supabase.co`). There is no Supabase CLI `config.toml` in the repo, so migrations are presumed to be applied manually through the Supabase Dashboard SQL editor or an explicit one-off script.
+- The app connects to remote Supabase (`supabase.co`). The Supabase CLI is installed locally and configured by `supabase/config.toml`; each developer must authenticate and link their checkout to the intended project.
 - Database row-level security is part of the security model. Do not treat client-side checks as sufficient.
 - `src/lib/supabase/database.types.ts` is generated and should not be hand-edited.
 
@@ -97,7 +97,7 @@ High-level layout:
 |       |-- search/              # Search
 |       `-- settings/            # Profile/settings flows
 |-- supabase/
-|   |-- migrations/              # SQL migrations, manually applied unless tooling changes
+|   |-- migrations/              # SQL migrations managed through the Supabase CLI
 |   `-- seeds/                   # Demo seed data
 |-- package.json
 |-- biome.jsonc
@@ -285,6 +285,9 @@ pnpm install         # Install dependencies
 pnpm dev             # Start the SvelteKit dev server
 pnpm build           # Production build
 pnpm preview         # Preview the production build
+pnpm supabase:version # Show the installed Supabase CLI version
+pnpm supabase:migrations # Compare local and remote migration history
+pnpm supabase:types  # Regenerate src/lib/supabase/database.types.ts from the linked project
 pnpm check:biome     # Biome check with --write
 pnpm check:svelte    # svelte-kit sync + svelte-check
 pnpm check:types     # tsc --noEmit
@@ -298,6 +301,8 @@ Notes:
 - `pnpm check` runs `biome check --write`, then `svelte-check`, then `tsc --noEmit`.
 - Because Biome writes fixes, expect formatting changes if files violate formatter rules.
 - There is no separate format script in `package.json`; formatting is currently folded into `check:biome`.
+- First-time setup requires `pnpm exec supabase login` and `pnpm exec supabase link --project-ref <project-ref>`.
+- Migration application during remote push and local DB reset is intentionally disabled in `supabase/config.toml`, and destructive commands are not exposed as package scripts yet. Inspect `pnpm supabase:migrations` and baseline the historical manually applied migrations first. Do not enable migrations, run `db push` or `db reset`, repair history, or rename applied migrations without confirming the remote state.
 
 ## Safety Rules
 

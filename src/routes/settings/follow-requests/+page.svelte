@@ -22,7 +22,7 @@ let { data, form }: PageProps = $props();
 			</div>
 
 			{#if form && "message" in form}
-				<div class="flash-error">{form.message}</div>
+				<div class="flash-error" role="alert">{form.message}</div>
 			{/if}
 
 			{#if data.requests.length === 0}

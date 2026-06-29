@@ -52,6 +52,20 @@ export const API_RATE_RULES: RateRule[] = [
 	{ name: "search", pattern: /^\/api\/(anime|users)\/search/, limit: 30, windowMs: 10_000 },
 	{ name: "anime-count", pattern: /^\/api\/anime\/count$/, limit: 30, windowMs: 10_000 },
 	{ name: "room-posts", pattern: /^\/api\/rooms\/posts$/, limit: 60, windowMs: 60_000 },
+	{
+		name: "room-experiment-visit",
+		pattern: /^\/api\/room-experiment-visits$/,
+		methods: ["POST"],
+		limit: 60,
+		windowMs: 60_000,
+	},
+	{
+		name: "room-experiment-visit-update",
+		pattern: /^\/api\/room-experiment-visits\/[^/]+\/(heartbeat|exit)$/,
+		methods: ["POST"],
+		limit: 180,
+		windowMs: 60_000,
+	},
 	{ name: "account-switch", pattern: /^\/api\/account-switch$/, methods: ["POST"], limit: 10, windowMs: 60_000 },
 ];
 
