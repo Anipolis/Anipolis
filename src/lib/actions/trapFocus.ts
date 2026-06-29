@@ -33,6 +33,9 @@ export function trapFocus(node: HTMLElement) {
 		const last = focusable[focusable.length - 1];
 		if (!first || !last) {
 			e.preventDefault();
+			if (previousTabIndex === null && node.getAttribute("tabindex") === null) {
+				node.setAttribute("tabindex", "-1");
+			}
 			node.focus();
 			return;
 		}
