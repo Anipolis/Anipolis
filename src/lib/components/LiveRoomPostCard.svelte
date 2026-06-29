@@ -72,20 +72,22 @@ async function toggleExpanded() {
 
 async function loadRecentReplies() {
 	if (repliesLoaded || post.reply_count <= 0 || repliesLoading) return;
-	await fetchReplies("recent", 3);
-	repliesLoaded = true;
-	allRepliesLoaded = post.reply_count <= replies.length;
+	if (await fetchReplies("recent", 3)) {
+		repliesLoaded = true;
+		allRepliesLoaded = post.reply_count <= replies.length;
+	}
 }
 
 async function loadAllReplies(event: MouseEvent) {
 	event.preventDefault();
 	event.stopPropagation();
-	await fetchReplies("all", 100);
-	repliesLoaded = true;
-	allRepliesLoaded = true;
+	if (await fetchReplies("all", 100)) {
+		repliesLoaded = true;
+		allRepliesLoaded = true;
+	}
 }
 
-async function fetchReplies(mode: "recent" | "all", limit: number) {
+async function fetchReplies(mode: "recent" | "all", limit: number): Promise<boolean> {
 	repliesLoading = true;
 	repliesError = "";
 	try {
@@ -94,11 +96,13 @@ async function fetchReplies(mode: "recent" | "all", limit: number) {
 		const body = (await response.json().catch(() => ({}))) as { replies?: Post[]; message?: string };
 		if (!response.ok) {
 			repliesError = body.message ?? "返信を読み込めませんでした";
-			return;
+			return false;
 		}
 		replies = body.replies ?? [];
+		return true;
 	} catch {
 		repliesError = "返信を読み込めませんでした";
+		return false;
 	} finally {
 		repliesLoading = false;
 	}
@@ -109,7 +113,7 @@ const handleLike: SubmitFunction = () => {
 	likedByMeLocal = !wasLiked;
 	likeCountLocal = wasLiked ? likeCount - 1 : likeCount + 1;
 	return async ({ result, update }) => {
-		if (result.type === "failure") {
+		if (result.type === "failure" || result.type === "error") {
 			likedByMeLocal = null;
 			likeCountLocal = null;
 		}
@@ -121,7 +125,7 @@ const handleBookmark: SubmitFunction = () => {
 	const wasBookmarked = bookmarkedByMe;
 	bookmarkedByMeLocal = !wasBookmarked;
 	return async ({ result, update }) => {
-		if (result.type === "failure") bookmarkedByMeLocal = null;
+		if (result.type === "failure" || result.type === "error") bookmarkedByMeLocal = null;
 		await update({ reset: false });
 	};
 };
@@ -131,7 +135,7 @@ const handleRepost: SubmitFunction = () => {
 	repostedByMeLocal = !wasReposted;
 	repostCountLocal = wasReposted ? repostCount - 1 : repostCount + 1;
 	return async ({ result, update }) => {
-		if (result.type === "failure") {
+		if (result.type === "failure" || result.type === "error") {
 			repostedByMeLocal = null;
 			repostCountLocal = null;
 		}
@@ -246,21 +250,7 @@ async function submitReport(event: MouseEvent) {
 					aria-label={likedByMe ? 'いいねを取り消す' : 'いいね'}
 					onclick={stop}
 				>
-					<svg
-						width="15"
-						height="15"
-						viewBox="0 0 24 24"
-						fill={likedByMe ? 'currentColor' : 'none'}
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						aria-hidden="true"
-					>
-						<path
-							d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
-						/>
-					</svg>
+					<span class="i-lucide-heart" aria-hidden="true"></span>
 					<span>{likeCount}</span>
 				</button>
 			</form>
@@ -271,19 +261,7 @@ async function submitReport(event: MouseEvent) {
 		<div class="live-detail">
 			<div class="live-actions" aria-label="投稿アクション">
 				<a href="/posts/{post.id}" class="live-action" aria-label="返信">
-					<svg
-						width="15"
-						height="15"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						aria-hidden="true"
-					>
-						<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
-					</svg>
+					<span class="i-lucide-message-circle" aria-hidden="true"></span>
 					{#if post.reply_count > 0}
 						<span>{post.reply_count}</span>
 					{/if}
@@ -297,22 +275,7 @@ async function submitReport(event: MouseEvent) {
 						disabled={!isLoggedIn}
 						aria-label="リポスト"
 					>
-						<svg
-							width="15"
-							height="15"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							aria-hidden="true"
-						>
-							<path d="M17 1l4 4-4 4" />
-							<path d="M3 11V9a4 4 0 0 1 4-4h14" />
-							<path d="M7 23l-4-4 4-4" />
-							<path d="M21 13v2a4 4 0 0 1-4 4H3" />
-						</svg>
+						<span class="i-lucide-repeat-2" aria-hidden="true"></span>
 						{#if repostCount > 0}
 							<span>{repostCount}</span>
 						{/if}
@@ -327,21 +290,7 @@ async function submitReport(event: MouseEvent) {
 						disabled={!isLoggedIn}
 						aria-label="いいね"
 					>
-						<svg
-							width="15"
-							height="15"
-							viewBox="0 0 24 24"
-							fill={likedByMe ? 'currentColor' : 'none'}
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							aria-hidden="true"
-						>
-							<path
-								d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
-							/>
-						</svg>
+						<span class="i-lucide-heart" aria-hidden="true"></span>
 						{#if likeCount > 0}
 							<span>{likeCount}</span>
 						{/if}
@@ -356,19 +305,7 @@ async function submitReport(event: MouseEvent) {
 						disabled={!isLoggedIn}
 						aria-label="ブックマーク"
 					>
-						<svg
-							width="15"
-							height="15"
-							viewBox="0 0 24 24"
-							fill={bookmarkedByMe ? 'currentColor' : 'none'}
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							aria-hidden="true"
-						>
-							<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-						</svg>
+						<span class="i-lucide-bookmark" aria-hidden="true"></span>
 					</button>
 				</form>
 				{#if isLoggedIn}
@@ -681,7 +618,7 @@ async function submitReport(event: MouseEvent) {
 	color: #f43f5e;
 }
 
-.live-like svg {
+.live-like [class^="i-lucide"] {
 	flex-shrink: 0;
 }
 
@@ -740,7 +677,6 @@ async function submitReport(event: MouseEvent) {
 	opacity: 0.5;
 }
 
-.live-action svg,
 .live-action [class^="i-lucide"] {
 	width: 15px;
 	height: 15px;
@@ -958,6 +894,5 @@ async function submitReport(event: MouseEvent) {
 		width: 48px;
 		font-size: 11px;
 	}
-
 }
 </style>

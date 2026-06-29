@@ -4,7 +4,6 @@ import { enhance } from "$app/forms";
 import { goto } from "$app/navigation";
 import { trapFocus } from "$lib/actions/trapFocus";
 import AnimeExchangeResult from "$lib/components/AnimeExchangeResult.svelte";
-import LiveRoomPostCard from "$lib/components/LiveRoomPostCard.svelte";
 import ReactionUsersPopover from "$lib/components/ReactionUsersPopover.svelte";
 import { buildAnimeRoomLabel, type Post, type ReactionType, type ReactionUser } from "$lib/types";
 import { formatBroadcastRelativeTime, formatRelativeTime } from "$lib/utils/format";
@@ -19,7 +18,6 @@ interface Props {
 	roomContext?: { href: string; title: string } | null;
 	insideRoom?: boolean;
 	broadcastStartAt?: string | null;
-	roomPostMode?: "live" | null;
 }
 
 let {
@@ -29,7 +27,6 @@ let {
 	roomContext = null,
 	insideRoom = false,
 	broadcastStartAt = null,
-	roomPostMode = null,
 }: Props = $props();
 
 function normalizeRoomTag(value: string) {
@@ -298,9 +295,6 @@ async function submitReport() {
 
 <svelte:window onkeydown={handleLightboxKeydown} />
 
-{#if roomPostMode === "live"}
-	<LiveRoomPostCard {post} {currentUserId} {broadcastStartAt} />
-{:else}
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <article
@@ -1018,7 +1012,6 @@ async function submitReport() {
 		</div>
 	</div>
 </article>
-{/if}
 
 <style>
 .post-card--with-room,

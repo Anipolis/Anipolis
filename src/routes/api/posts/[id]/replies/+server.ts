@@ -8,9 +8,14 @@ import type { RawPost } from "$lib/types";
 const POSTS_SELECT = buildPostCardSelect();
 
 function parseLimit(value: string | null, fallback: number, max: number) {
+	if (value == null || value.trim() === "") return fallback;
 	const parsed = Number(value);
 	if (!Number.isFinite(parsed)) return fallback;
 	return Math.min(max, Math.max(1, Math.floor(parsed)));
+}
+
+function toSelectedReplyPost(row: unknown): RawPost {
+	return row as RawPost;
 }
 
 export const GET: RequestHandler = async ({ params, url, locals: { supabase, safeGetSession } }) => {
@@ -31,8 +36,9 @@ export const GET: RequestHandler = async ({ params, url, locals: { supabase, saf
 	const { data, error } = await query;
 	if (error) return json({ message: "返信の取得に失敗しました" }, { status: 500 });
 
-	const ordered = mode === "recent" ? [...(data ?? [])].reverse() : (data ?? []);
-	const replies = await enrichPostsWithCounts(supabase, ordered as unknown as RawPost[], user?.id ?? null, {
+	const rows = (data ?? []).map(toSelectedReplyPost);
+	const ordered = mode === "recent" ? [...rows].reverse() : rows;
+	const replies = await enrichPostsWithCounts(supabase, ordered, user?.id ?? null, {
 		includeMutedRoomPosts: true,
 	});
 
