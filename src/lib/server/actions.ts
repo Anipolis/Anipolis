@@ -67,6 +67,7 @@ export async function insertPostWithHashtags(
 	exchangeShare: AnimeExchangeShare | null = null,
 	broadcastRoomSessionId: string | null = null,
 	cwAnimeId: string | null = null,
+	additionalHashtags: string[] = [],
 ) {
 	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
 	if (moderationFailure) return moderationFailure;
@@ -109,7 +110,10 @@ export async function insertPostWithHashtags(
 	// ハッシュタグを一括登録（既存タグは ON CONFLICT DO NOTHING）。
 	// タグごとの insert+select ループは実況時の余分な往復になるため一括化している。
 	// メンション通知は DB トリガー notify_on_mention（migration 026）が生成する。
-	const tags = extractHashtags(postContent);
+	const additionalTags = additionalHashtags
+		.map((tag) => tag.trim().replace(/^#+/, "").toLowerCase())
+		.filter((tag) => tag.length > 0);
+	const tags = [...new Set([...extractHashtags(postContent), ...additionalTags])];
 	if (tags.length > 0) {
 		await supabase.from("hashtags").upsert(
 			tags.map((name) => ({ name })),

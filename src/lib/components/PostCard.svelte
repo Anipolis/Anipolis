@@ -29,7 +29,41 @@ let {
 	broadcastStartAt = null,
 }: Props = $props();
 
-const parts = $derived(parseContentParts(post.content));
+function normalizeRoomTag(value: string) {
+	return value.trim().replace(/^#+/, "").toLowerCase();
+}
+
+function fallbackRoomTag(title: string) {
+	return title.replace(/\s+/g, "").replace(/[^\p{L}\p{N}_]/gu, "");
+}
+
+function getRoomTagCandidates(post: Post) {
+	const anime = post.anime_quote;
+	if (!post.broadcast_room_session_id || !anime?.room_href) return [];
+	return [
+		...(anime.official_hashtag ?? []).map(normalizeRoomTag),
+		normalizeRoomTag(fallbackRoomTag(anime.title)),
+	].filter((tag) => tag.length > 0);
+}
+
+function hideTrailingRoomTag(post: Post) {
+	const content = post.content;
+	const roomTags = getRoomTagCandidates(post);
+	if (roomTags.length === 0) return content;
+	const trimmed = content.trimEnd();
+	const normalized = trimmed.toLowerCase();
+	for (const tag of roomTags) {
+		const suffix = `#${tag}`;
+		if (!normalized.endsWith(suffix)) continue;
+		const before = trimmed.slice(0, trimmed.length - suffix.length);
+		if (before.length > 0 && !/\s$/.test(before)) continue;
+		return before.trimEnd();
+	}
+	return content;
+}
+
+const displayContent = $derived(hideTrailingRoomTag(post));
+const parts = $derived(parseContentParts(displayContent));
 const relativeTime = $derived(formatRelativeTime(post.created_at));
 const broadcastRelativeTime = $derived(
 	broadcastStartAt ? formatBroadcastRelativeTime(post.created_at, broadcastStartAt) : null,
@@ -50,7 +84,7 @@ const effectiveRoomContext = $derived(
 const showsContextStack = $derived(!isDetailView && (!!post.repost_context || (!!effectiveRoomContext && !insideRoom)));
 const cwContentId = $derived(`post-cw-content-${post.id}`);
 
-const isLong = $derived(post.content.length > 300 || (post.content.match(/\n/g)?.length ?? 0) >= 5);
+const isLong = $derived(displayContent.length > 300 || (displayContent.match(/\n/g)?.length ?? 0) >= 5);
 let collapsed = $state(true);
 let cwRevealed = $state(false);
 
@@ -579,7 +613,7 @@ async function submitReport() {
 								<span class="quote-preview-name">{post.display_name || post.username}</span>
 								<span class="quote-preview-at">@{post.username}</span>
 							</div>
-							<p class="quote-preview-content">{post.content}</p>
+							<p class="quote-preview-content">{displayContent}</p>
 						</div>
 						{#if quoteError}
 							<p class="flash-error" role="alert" style="margin-top:8px;">{quoteError}</p>

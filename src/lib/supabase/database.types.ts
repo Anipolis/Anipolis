@@ -870,6 +870,133 @@ export type Database = {
 					},
 				];
 			};
+			room_experiment_runs: {
+				Row: {
+					id: string;
+					anime_id: number;
+					started_at: string;
+					ended_at: string | null;
+					created_by: string;
+					ended_by: string | null;
+					label: string | null;
+					notes: string | null;
+					created_at: string;
+					updated_at: string;
+				};
+				Insert: {
+					id?: string;
+					anime_id: number;
+					started_at?: string;
+					ended_at?: string | null;
+					created_by: string;
+					ended_by?: string | null;
+					label?: string | null;
+					notes?: string | null;
+					created_at?: string;
+					updated_at?: string;
+				};
+				Update: {
+					anime_id?: number;
+					started_at?: string;
+					ended_at?: string | null;
+					ended_by?: string | null;
+					label?: string | null;
+					notes?: string | null;
+					updated_at?: string;
+				};
+				Relationships: [
+					{
+						foreignKeyName: "room_experiment_runs_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "room_experiment_runs_created_by_fkey";
+						columns: ["created_by"];
+						isOneToOne: false;
+						referencedRelation: "profiles";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "room_experiment_runs_ended_by_fkey";
+						columns: ["ended_by"];
+						isOneToOne: false;
+						referencedRelation: "profiles";
+						referencedColumns: ["id"];
+					},
+				];
+			};
+			room_experiment_visits: {
+				Row: {
+					id: string;
+					run_id: string;
+					anime_id: number;
+					broadcast_room_session_id: string;
+					user_id: string;
+					client_visit_key: string;
+					entered_at: string;
+					last_seen_at: string;
+					exited_at: string | null;
+					heartbeat_count: number;
+					user_agent: string | null;
+					created_at: string;
+					updated_at: string;
+				};
+				Insert: {
+					id?: string;
+					run_id: string;
+					anime_id: number;
+					broadcast_room_session_id: string;
+					user_id: string;
+					client_visit_key: string;
+					entered_at?: string;
+					last_seen_at?: string;
+					exited_at?: string | null;
+					heartbeat_count?: number;
+					user_agent?: string | null;
+					created_at?: string;
+					updated_at?: string;
+				};
+				Update: {
+					last_seen_at?: string;
+					exited_at?: string | null;
+					heartbeat_count?: number;
+					user_agent?: string | null;
+					updated_at?: string;
+				};
+				Relationships: [
+					{
+						foreignKeyName: "room_experiment_visits_run_id_fkey";
+						columns: ["run_id"];
+						isOneToOne: false;
+						referencedRelation: "room_experiment_runs";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "room_experiment_visits_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "room_experiment_visits_broadcast_room_session_id_fkey";
+						columns: ["broadcast_room_session_id"];
+						isOneToOne: false;
+						referencedRelation: "broadcast_room_sessions";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "room_experiment_visits_user_id_fkey";
+						columns: ["user_id"];
+						isOneToOne: false;
+						referencedRelation: "profiles";
+						referencedColumns: ["id"];
+					},
+				];
+			};
 			broadcast_notification_subscriptions: {
 				Row: {
 					user_id: string;
