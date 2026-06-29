@@ -13,6 +13,10 @@ import {
 	getBroadcastRoomPosts,
 	getBroadcastRoomSession,
 } from "$lib/server/queries";
+import {
+	createRoomExperimentServiceClient,
+	getActiveRoomExperimentRunForAnime as getActiveExperimentRun,
+} from "$lib/server/room-experiments";
 import type { Anime } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -51,6 +55,18 @@ function roomHashtag(anime: Anime) {
 	return officialHashtag ?? fallbackRoomHashtag(anime.title);
 }
 
+function stripTrailingRoomHashtag(content: string, hashtag: string) {
+	const tag = normalizeHashtag(hashtag);
+	if (!tag) return content.trim();
+	const trimmed = content.trim();
+	const normalized = trimmed.toLowerCase();
+	const suffix = `#${tag}`;
+	if (!normalized.endsWith(suffix)) return trimmed;
+	const before = trimmed.slice(0, trimmed.length - suffix.length);
+	if (before.length > 0 && !/\s$/.test(before)) return trimmed;
+	return before.trimEnd();
+}
+
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 	const anime = await getAnime(supabase, params.id, user?.id ?? null);
@@ -68,10 +84,12 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 	if (!session) throw error(404, "放送ルームが見つかりません");
 
 	const hashtag = roomHashtag(anime);
-	const [posts, trending, animeTrending] = await Promise.all([
+	const roomExperimentSupabase = user ? createRoomExperimentServiceClient() : null;
+	const [posts, trending, animeTrending, roomExperimentRun] = await Promise.all([
 		getBroadcastRoomPosts(supabase, session.id, user?.id ?? null, { limit: 100, ascending: true }),
 		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
 		getAnimeRankingTrending(supabase, 5),
+		roomExperimentSupabase ? getActiveExperimentRun(roomExperimentSupabase, anime.id) : Promise.resolve(null),
 	]);
 
 	return {
@@ -91,6 +109,10 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 		trending: trending.data ?? [],
 		animeTrending,
 		user,
+		roomExperiment: {
+			enabled: Boolean(user && roomExperimentRun),
+			sessionId: roomExperimentRun ? session.id : undefined,
+		},
 	};
 };
 
@@ -119,12 +141,14 @@ export const actions: Actions = {
 		}
 
 		const form = await request.formData();
-		const content = (form.get("content") as string | null)?.trim() ?? "";
+		const rawContent = (form.get("content") as string | null) ?? "";
 		const hashtag = roomHashtag(anime);
-		const hasTag = content.toLowerCase().includes(`#${hashtag.toLowerCase()}`);
-		const finalContent = hasTag ? content : `${content} #${hashtag}`;
+		const content = stripTrailingRoomHashtag(rawContent, hashtag);
+		if (!content) return fail(400, { message: "投稿内容を入力してください" });
 
-		return insertPostWithHashtags(supabase, user.id, finalContent, null, [], anime.id, null, null, session.id);
+		return insertPostWithHashtags(supabase, user.id, content, null, [], anime.id, null, null, session.id, null, [
+			hashtag,
+		]);
 	},
 
 	deletePost: async ({ request, locals: { supabase, safeGetSession } }) => {

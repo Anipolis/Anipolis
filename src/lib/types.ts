@@ -113,6 +113,7 @@ export interface Post {
 	reposted_by_me: boolean;
 	bookmarked_by_me: boolean;
 	anime_id: string | null;
+	broadcast_room_session_id: string | null;
 	anime_quote: AnimeQuote | null;
 	exchange_share: AnimeExchangeShare | null;
 	cw_anime_id: string | null;
@@ -392,6 +393,7 @@ export function toPost(
 		reposted_by_me: counts?.reposted_by_me ?? false,
 		bookmarked_by_me: counts?.bookmarked_by_me ?? false,
 		anime_id: raw.anime_id != null ? String(raw.anime_id) : null,
+		broadcast_room_session_id: raw.broadcast_room_session_id ?? null,
 		anime_quote: raw.anime
 			? {
 					id: String(raw.anime.id),
@@ -548,6 +550,54 @@ export interface BroadcastRoomOverride {
 	announcement_label: string | null;
 	note: string | null;
 	created_at: string;
+}
+
+export interface RoomExperimentRun {
+	id: string;
+	anime_id: string;
+	anime_title: string;
+	anime_cover_url: string | null;
+	started_at: string;
+	ended_at: string | null;
+	label: string | null;
+	notes: string | null;
+}
+
+export interface RoomExperimentRoomMetric {
+	broadcast_room_session_id: string;
+	room_title: string | null;
+	episode_number: number | null;
+	scheduled_at: string | null;
+	posting_closes_at: string | null;
+	visit_count: number;
+	unique_visitor_count: number;
+	active_visit_count: number;
+	post_count: number;
+	poster_count: number;
+	posting_rate: number;
+	posts_per_poster: number;
+	posts_per_unique_visitor: number;
+	average_stay_seconds: number | null;
+	bounce_rate_under_60s: number | null;
+	early_exit_rate: number | null;
+}
+
+export type RoomExperimentSummaryMetric = Omit<
+	RoomExperimentRoomMetric,
+	"broadcast_room_session_id" | "room_title" | "episode_number" | "scheduled_at" | "posting_closes_at"
+>;
+
+export interface RoomExperimentDashboardRun extends RoomExperimentRun {
+	summary: RoomExperimentSummaryMetric;
+	rooms: RoomExperimentRoomMetric[];
+}
+
+export interface RoomExperimentAnimeSearchResult {
+	id: string;
+	title: string;
+	cover_url: string | null;
+	room_type: string;
+	active_run_id: string | null;
 }
 
 export interface StoredAccount {
