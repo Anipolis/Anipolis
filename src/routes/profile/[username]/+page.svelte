@@ -409,7 +409,12 @@ const grouped = $derived(
 						</button>
 					</div>
 
-					<form method="POST" action="?/updateProfile" use:enhance={handleProfileSubmit}>
+					<form
+						class="profile-edit-modal-form"
+						method="POST"
+						action="?/updateProfile"
+						use:enhance={handleProfileSubmit}
+					>
 						<div class="profile-edit-modal-body">
 							{#if form?.success}
 								<div class="flash-success">プロフィールを更新しました。</div>
@@ -711,7 +716,7 @@ const grouped = $derived(
 .report-modal-overlay {
 	position: fixed;
 	inset: 0;
-	z-index: 100;
+	z-index: 1000;
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -806,7 +811,7 @@ const grouped = $derived(
 .profile-edit-modal-overlay {
 	position: fixed;
 	inset: 0;
-	z-index: 100;
+	z-index: 1000;
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -815,9 +820,11 @@ const grouped = $derived(
 }
 
 .profile-edit-modal-card {
+	display: flex;
+	flex-direction: column;
 	width: min(100%, 520px);
-	max-height: calc(100vh - 32px);
-	overflow: auto;
+	max-height: calc(100dvh - 32px);
+	overflow: hidden;
 	border: 1px solid var(--color-border, var(--border, #334155));
 	border-radius: 8px;
 	background: var(--color-surface, var(--surface, #1e293b));
@@ -827,6 +834,7 @@ const grouped = $derived(
 .profile-edit-modal-header,
 .profile-edit-modal-footer {
 	display: flex;
+	flex-shrink: 0;
 	align-items: center;
 	justify-content: space-between;
 	gap: 12px;
@@ -867,11 +875,22 @@ const grouped = $derived(
 	opacity: 0.55;
 }
 
+.profile-edit-modal-form {
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	min-height: 0;
+	overflow: hidden;
+}
+
 .profile-edit-modal-body {
 	display: flex;
+	flex: 1 1 auto;
 	flex-direction: column;
 	gap: 16px;
+	min-height: 0;
 	padding: 14px;
+	overflow-y: auto;
 }
 
 .profile-header-editor {
