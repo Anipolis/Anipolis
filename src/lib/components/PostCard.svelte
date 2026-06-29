@@ -519,7 +519,7 @@ async function submitReport() {
 				class="exchange-share-inline"
 				role="button"
 				tabindex="0"
-				aria-label="交換結果を見る"
+				aria-label={`トレード結果を見る: ${post.exchange_share.offered_anime.title} から ${post.exchange_share.received_anime.title}`}
 				onclick={openExchangeModal}
 				onkeydown={handleExchangePreviewKeydown}
 			>
@@ -528,6 +528,8 @@ async function submitReport() {
 					receivedAnime={post.exchange_share.received_anime}
 					offeredComment={post.exchange_share.offered_comment}
 					receivedComment={post.exchange_share.received_comment}
+					offeredSubjectiveTags={post.exchange_share.offered_subjective_tags}
+					receivedSubjectiveTags={post.exchange_share.received_subjective_tags}
 					mode="timeline"
 					linkCards={false}
 				/>
@@ -650,7 +652,7 @@ async function submitReport() {
 					onclick={(e) => e.stopPropagation()}
 				>
 					<div class="exchange-result-modal-header">
-						<span id="exchange-result-modal-title" class="exchange-result-modal-title">交換結果</span>
+						<span id="exchange-result-modal-title" class="exchange-result-modal-title">トレード結果</span>
 						<button
 							type="button"
 							class="exchange-result-modal-close"
@@ -666,10 +668,13 @@ async function submitReport() {
 							receivedAnime={post.exchange_share.received_anime}
 							offeredComment={post.exchange_share.offered_comment}
 							receivedComment={post.exchange_share.received_comment}
+							offeredSubjectiveTags={post.exchange_share.offered_subjective_tags}
+							receivedSubjectiveTags={post.exchange_share.received_subjective_tags}
+							framed={false}
 						/>
 					</div>
 					<div class="exchange-result-modal-footer">
-						<a href="/exchange" class="exchange-result-modal-link">交流タブへ</a>
+						<a href="/exchange" class="exchange-result-modal-link">トレードタブへ</a>
 					</div>
 				</div>
 			</div>

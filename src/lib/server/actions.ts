@@ -1,5 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fail } from "@sveltejs/kit";
+import {
+	MAX_EXCHANGE_SUBJECTIVE_TAGS,
+	toExchangeSubjectiveTags,
+	validateExchangeSubjectiveTags,
+} from "$lib/exchange-tags";
 import { createServiceRoleClient } from "$lib/server/supabase-admin";
 import { publicUrlToStoragePath, validateImageBuffer } from "$lib/server/upload";
 import type { Database, Json } from "$lib/supabase/database.types";
@@ -8,6 +13,13 @@ import { extractHashtags } from "$lib/utils/hashtag";
 
 const reportStatuses = new Set(["open", "reviewing", "resolved", "rejected"]);
 const moderationStatuses = new Set(["active", "restricted", "banned"]);
+const animeExchangeErrorMessages = {
+	ANIME_EXCHANGE_ANIME_NOT_FOUND: { status: 404, message: "アニメが見つかりません" },
+	ANIME_EXCHANGE_WAITING_EXISTS: {
+		status: 409,
+		message: "待機中のトレードがあります。マッチングをやめてからもう一度お試しください。",
+	},
+} as const;
 
 export type ModerationStatus = "active" | "restricted" | "banned";
 
@@ -15,6 +27,12 @@ type ModerationProfile = {
 	moderation_status: ModerationStatus;
 	moderation_until: string | null;
 };
+
+function getAnimeExchangeErrorDetail(error: { details?: unknown }): keyof typeof animeExchangeErrorMessages | null {
+	return typeof error.details === "string" && error.details in animeExchangeErrorMessages
+		? (error.details as keyof typeof animeExchangeErrorMessages)
+		: null;
+}
 
 export async function getCurrentModerationStatus(
 	supabase: SupabaseClient<Database>,
@@ -73,7 +91,7 @@ export async function insertPostWithHashtags(
 	if (moderationFailure) return moderationFailure;
 
 	if (!content && imageUrls.length === 0 && !animeId && !exchangeShare) {
-		return fail(400, { message: "本文、画像、アニメ引用、または交換結果を追加してください" });
+		return fail(400, { message: "本文、画像、アニメ引用、またはトレード結果を追加してください" });
 	}
 	if (content.length > 280) return fail(400, { message: "280文字以内で入力してください" });
 
@@ -104,7 +122,9 @@ export async function insertPostWithHashtags(
 
 	if (postError || !post) {
 		console.error("post insert error:", postError);
-		return fail(500, { message: exchangeShare ? "交換結果つき投稿の保存に失敗しました" : "投稿に失敗しました" });
+		return fail(500, {
+			message: exchangeShare ? "トレード結果つき投稿の保存に失敗しました" : "投稿に失敗しました",
+		});
 	}
 
 	// ハッシュタグを一括登録（既存タグは ON CONFLICT DO NOTHING）。
@@ -712,6 +732,7 @@ export async function exchangeAnimeAction(supabase: SupabaseClient<Database>, re
 	const form = await request.formData();
 	const animeId = (form.get("anime_id") as string | null)?.trim() ?? "";
 	const comment = ((form.get("comment") as string | null)?.trim() ?? "") || null;
+	const subjectiveTags = toExchangeSubjectiveTags(form.getAll("subjective_tags"));
 
 	if (!animeId || Number.isNaN(Number(animeId))) {
 		return fail(400, { exchangeMessage: "アニメを選択してください" });
@@ -720,18 +741,27 @@ export async function exchangeAnimeAction(supabase: SupabaseClient<Database>, re
 	if (comment && comment.length > 120) {
 		return fail(400, { exchangeMessage: "コメントは120文字以内で入力してください" });
 	}
+	if (subjectiveTags.length > MAX_EXCHANGE_SUBJECTIVE_TAGS) {
+		return fail(400, { exchangeMessage: "タグは3個まで選択できます" });
+	}
+	if (!validateExchangeSubjectiveTags(subjectiveTags)) {
+		return fail(400, { exchangeMessage: "タグの指定が不正です" });
+	}
 
 	const { data, error } = await supabase.rpc("create_anime_exchange", {
 		p_anime_id: Number(animeId),
 		p_comment: comment,
+		p_subjective_tags: subjectiveTags,
 	});
 
 	if (error) {
-		if (error.message.includes("anime not found")) {
-			return fail(404, { exchangeMessage: "アニメが見つかりません" });
+		const exchangeErrorDetail = getAnimeExchangeErrorDetail(error);
+		if (exchangeErrorDetail) {
+			const mapped = animeExchangeErrorMessages[exchangeErrorDetail];
+			return fail(mapped.status, { exchangeMessage: mapped.message });
 		}
 		console.error("anime exchange error:", error);
-		return fail(500, { exchangeMessage: "交換に失敗しました" });
+		return fail(500, { exchangeMessage: "トレードに失敗しました" });
 	}
 
 	const result = data?.[0] ?? null;

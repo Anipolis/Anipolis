@@ -2,6 +2,8 @@
 // アプリ共通型定義
 // ================================================================
 
+import { toValidExchangeSubjectiveTags } from "$lib/exchange-tags";
+
 export interface Profile {
 	id: string;
 	username: string;
@@ -52,6 +54,8 @@ export interface AnimeExchangeShare {
 	received_anime: AnimeExchangeShareAnime;
 	offered_comment: string | null;
 	received_comment: string | null;
+	offered_subjective_tags: string[];
+	received_subjective_tags: string[];
 }
 
 type AnimeExchangeShareRaw = {
@@ -60,6 +64,8 @@ type AnimeExchangeShareRaw = {
 	received_anime?: unknown;
 	offered_comment?: unknown;
 	received_comment?: unknown;
+	offered_subjective_tags?: unknown;
+	received_subjective_tags?: unknown;
 };
 
 type AnimeExchangeShareAnimeRaw = {
@@ -267,19 +273,25 @@ export interface AnimeExchangeItem {
 	created_at: string;
 	matched_at: string | null;
 	comment: string | null;
+	subjective_tags: string[];
 	offered_anime: {
 		id: string;
 		title: string;
 		title_en: string | null;
 		cover_url: string | null;
+		episode_count?: string | null;
+		user_entry?: UserAnimeEntry | null;
 	};
 	received_anime: {
 		id: string;
 		title: string;
 		title_en: string | null;
 		cover_url: string | null;
+		episode_count?: string | null;
+		user_entry?: UserAnimeEntry | null;
 	} | null;
 	received_comment: string | null;
+	received_subjective_tags: string[];
 }
 
 // ----------------------------------------------------------------
@@ -454,6 +466,12 @@ function toAnimeExchangeShare(value: unknown): AnimeExchangeShare | null {
 		received_anime: received,
 		offered_comment: typeof raw.offered_comment === "string" ? raw.offered_comment : null,
 		received_comment: typeof raw.received_comment === "string" ? raw.received_comment : null,
+		offered_subjective_tags: toValidExchangeSubjectiveTags(
+			Array.isArray(raw.offered_subjective_tags) ? raw.offered_subjective_tags : [],
+		),
+		received_subjective_tags: toValidExchangeSubjectiveTags(
+			Array.isArray(raw.received_subjective_tags) ? raw.received_subjective_tags : [],
+		),
 	};
 }
 

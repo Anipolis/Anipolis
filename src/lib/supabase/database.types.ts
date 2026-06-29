@@ -480,6 +480,7 @@ export type Database = {
 					user_id: string;
 					anime_id: number;
 					comment: string | null;
+					subjective_tags: string[];
 					status: "waiting" | "matched" | "cancelled";
 					received_entry_id: string | null;
 					created_at: string;
@@ -490,6 +491,7 @@ export type Database = {
 					user_id: string;
 					anime_id: number;
 					comment?: string | null;
+					subjective_tags?: string[];
 					status?: "waiting" | "matched" | "cancelled";
 					received_entry_id?: string | null;
 					created_at?: string;
@@ -497,6 +499,7 @@ export type Database = {
 				};
 				Update: {
 					comment?: string | null;
+					subjective_tags?: string[];
 					status?: "waiting" | "matched" | "cancelled";
 					received_entry_id?: string | null;
 					matched_at?: string | null;
@@ -1159,8 +1162,15 @@ export type Database = {
 					bookmarked_by_me: boolean;
 				}[];
 			};
+			cancel_anime_exchange: {
+				Args: Record<PropertyKey, never>;
+				Returns: {
+					cancelled: boolean;
+					cancelled_count: number;
+				}[];
+			};
 			create_anime_exchange: {
-				Args: { p_anime_id: number; p_comment?: string | null };
+				Args: { p_anime_id: number; p_comment?: string | null; p_subjective_tags?: string[] | null };
 				Returns: {
 					exchange_id: string;
 					received_entry_id: string | null;

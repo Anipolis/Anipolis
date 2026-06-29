@@ -12,6 +12,7 @@ type Props = {
 	episodeCount?: string | null;
 	entry?: UserAnimeEntry | null | undefined;
 	action?: string;
+	variant?: "full" | "status-only";
 	onclose: () => void;
 };
 
@@ -22,6 +23,7 @@ let {
 	episodeCount = null,
 	entry = null,
 	action = "?/upsertWatchlist",
+	variant = "full",
 	onclose,
 }: Props = $props();
 
@@ -40,6 +42,7 @@ let submitting = $state(false);
 let errorMessage = $state("");
 let initializedFor = $state<string | null>(null);
 let totalEpisodes = $derived(parseEpisodeCount(episodeCount));
+let statusOnly = $derived(variant === "status-only");
 
 function parseEpisodeCount(value: string | null): number | null {
 	if (!value) return null;
@@ -108,6 +111,7 @@ $effect(() => {
 	<div class="modal-backdrop" role="presentation" onclick={() => !submitting && onclose()}>
 		<div
 			class="modal-card"
+			class:modal-card--compact={statusOnly}
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="mylist-modal-title"
@@ -116,7 +120,7 @@ $effect(() => {
 			onclick={(e) => e.stopPropagation()}
 		>
 			<header class="modal-header">
-				<h2 id="mylist-modal-title">マイリスト登録・編集</h2>
+				<h2 id="mylist-modal-title">{statusOnly ? "マイリストに追加" : "マイリスト登録・編集"}</h2>
 				<p>{animeTitle}</p>
 			</header>
 
@@ -126,59 +130,61 @@ $effect(() => {
 				<input type="hidden" name="score" value={score ?? ""}>
 				<input type="hidden" name="progress" value={progress}>
 
-				<section class="field-section" aria-labelledby="score-label">
-					<div class="section-heading">
-						<h3 id="score-label">スコア</h3>
-						<span>{score ?? "未評価"}</span>
-					</div>
-					<div class="score-grid">
-						{#each Array.from({ length: 10 }, (_, i) => i + 1) as value}
+				{#if !statusOnly}
+					<section class="field-section" aria-labelledby="score-label">
+						<div class="section-heading">
+							<h3 id="score-label">スコア</h3>
+							<span>{score ?? "未評価"}</span>
+						</div>
+						<div class="score-grid">
+							{#each Array.from({ length: 10 }, (_, i) => i + 1) as value}
+								<button
+									type="button"
+									class:active={score === value}
+									aria-pressed={score === value}
+									onclick={() => (score = score === value ? null : value)}
+								>
+									{value}
+								</button>
+							{/each}
+						</div>
+					</section>
+
+					<section class="field-section" aria-labelledby="progress-label">
+						<div class="section-heading"><h3 id="progress-label">視聴進捗</h3></div>
+						<div class="stepper">
 							<button
 								type="button"
-								class:active={score === value}
-								aria-pressed={score === value}
-								onclick={() => (score = score === value ? null : value)}
+								aria-label="進捗を1話戻す"
+								disabled={progress <= 0}
+								onclick={() => setProgress(progress - 1)}
 							>
-								{value}
+								−
 							</button>
-						{/each}
-					</div>
-				</section>
-
-				<section class="field-section" aria-labelledby="progress-label">
-					<div class="section-heading"><h3 id="progress-label">視聴進捗</h3></div>
-					<div class="stepper">
-						<button
-							type="button"
-							aria-label="進捗を1話戻す"
-							disabled={progress <= 0}
-							onclick={() => setProgress(progress - 1)}
-						>
-							−
-						</button>
-						<label>
-							<span class="sr-only">現在の話数</span>
-							<input
-								type="number"
-								min="0"
-								max={totalEpisodes ?? undefined}
-								value={progress}
-								oninput={handleProgressInput}
+							<label>
+								<span class="sr-only">現在の話数</span>
+								<input
+									type="number"
+									min="0"
+									max={totalEpisodes ?? undefined}
+									value={progress}
+									oninput={handleProgressInput}
+								>
+							</label>
+							<button
+								type="button"
+								aria-label="進捗を1話進める"
+								disabled={totalEpisodes != null && progress >= totalEpisodes}
+								onclick={() => setProgress(progress + 1)}
 							>
-						</label>
-						<button
-							type="button"
-							aria-label="進捗を1話進める"
-							disabled={totalEpisodes != null && progress >= totalEpisodes}
-							onclick={() => setProgress(progress + 1)}
-						>
-							＋
-						</button>
-						<span class="episode-total"
-							>/ {totalEpisodes != null ? `${totalEpisodes}話` : "全話数未定"}</span
-						>
-					</div>
-				</section>
+								＋
+							</button>
+							<span class="episode-total"
+								>/ {totalEpisodes != null ? `${totalEpisodes}話` : "全話数未定"}</span
+							>
+						</div>
+					</section>
+				{/if}
 
 				<section class="field-section" aria-labelledby="status-label">
 					<div class="section-heading"><h3 id="status-label">視聴ステータス</h3></div>
@@ -234,6 +240,9 @@ $effect(() => {
 	color: var(--text, #f4f4f5);
 	box-shadow: 0 24px 80px rgb(0 0 0 / 48%);
 }
+.modal-card--compact {
+	width: min(100%, 420px);
+}
 .modal-header {
 	padding: 22px 24px 18px;
 	border-bottom: 1px solid var(--border, #27272a);
@@ -254,9 +263,16 @@ $effect(() => {
 form {
 	padding: 4px 24px 22px;
 }
+.modal-card--compact form {
+	padding-top: 2px;
+}
 .field-section {
 	padding: 18px 0;
 	border-bottom: 1px solid color-mix(in srgb, var(--border, #27272a) 78%, transparent);
+}
+.modal-card--compact .field-section {
+	padding-bottom: 8px;
+	border-bottom: 0;
 }
 .section-heading {
 	display: flex;
