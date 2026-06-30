@@ -1115,7 +1115,6 @@ $effect(() => {
 						<span class="i-lucide-messages-square" aria-hidden="true"></span>
 						<span>
 							<strong>この作品の総合実況・雑談ロビーへ入る</strong>
-							<small>話数別ではなく、作品全体の常設ルームです</small>
 						</span>
 					</a>
 				</section>
@@ -1995,18 +1994,11 @@ $effect(() => {
 	font-size: 1.35rem;
 	color: #0f766e;
 }
-.global-lobby-link strong,
-.global-lobby-link small {
+.global-lobby-link strong {
 	display: block;
 }
 .global-lobby-link strong {
 	font-size: 0.95rem;
-	line-height: 1.35;
-}
-.global-lobby-link small {
-	margin-top: 2px;
-	color: var(--text-muted);
-	font-size: 0.78rem;
 	line-height: 1.35;
 }
 

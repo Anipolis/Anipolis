@@ -804,24 +804,30 @@ async function submitReport() {
 
 		<div class="post-footer">
 			<div class="post-footer-item">
-				<a href="/posts/{post.id}" class="post-action-btn post-reply-btn" aria-label="返信">
-					<svg
-						width="15"
-						height="15"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						aria-hidden="true"
+				<div class="reaction-action-group">
+					<a
+						href="/posts/{post.id}"
+						class="post-action-btn post-reply-btn reaction-icon-hitbox"
+						aria-label="返信"
 					>
-						<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
-					</svg>
-					{#if post.reply_count > 0}
-						<span>{post.reply_count}</span>
-					{/if}
-				</a>
+						<svg
+							width="15"
+							height="15"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+						>
+							<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
+						</svg>
+					</a>
+					<span class="reaction-count-static" class:has-count={isDetailView && post.reply_count > 0}
+						>{post.reply_count > 0 ? post.reply_count : ''}</span
+					>
+				</div>
 			</div>
 
 			<div class="post-footer-item">
@@ -865,7 +871,9 @@ async function submitReport() {
 							</button>
 						{/if}
 					{:else}
-						<span class="reaction-count-static">{repostCount > 0 ? repostCount : ''}</span>
+						<span class="reaction-count-static" class:has-count={isDetailView && repostCount > 0}
+							>{repostCount > 0 ? repostCount : ''}</span
+						>
 					{/if}
 
 					{#if showRepostMenu}
@@ -973,7 +981,9 @@ async function submitReport() {
 							{likeCount}
 						</button>
 					{:else}
-						<span class="reaction-count-static">{likeCount > 0 ? likeCount : ''}</span>
+						<span class="reaction-count-static" class:has-count={isDetailView && likeCount > 0}
+							>{likeCount > 0 ? likeCount : ''}</span
+						>
 					{/if}
 					{#if openReactionType === 'like'}
 						<ReactionUsersPopover
@@ -992,7 +1002,7 @@ async function submitReport() {
 					<input type="hidden" name="post_id" value={post.id}>
 					<button
 						type="submit"
-						class="post-action-btn post-bookmark-btn"
+						class="post-action-btn post-bookmark-btn reaction-icon-hitbox"
 						class:active={bookmarkedByMe}
 						disabled={!isLoggedIn}
 						aria-label={bookmarkedByMe ? 'ブックマーク解除' : 'ブックマーク'}

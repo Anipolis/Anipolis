@@ -1,4 +1,5 @@
 <script lang="ts">
+import type { SubmitFunction } from "@sveltejs/kit";
 import { onDestroy, onMount, tick } from "svelte";
 import { enhance } from "$app/forms";
 import LiveRoomPostCard from "$lib/components/LiveRoomPostCard.svelte";
@@ -15,6 +16,8 @@ let now = $state(Date.now());
 let intervalId: ReturnType<typeof setInterval>;
 let postContent = $state("");
 let textareaEl: HTMLTextAreaElement | null = $state(null);
+let composerEl: HTMLDivElement | null = $state(null);
+let keepComposerFocused = $state(true);
 let mounted = $state(false);
 let postOrder = $state<PostOrder>("oldest");
 let lastPostCount = $state(0);
@@ -135,6 +138,39 @@ function handleRoomExperimentPageShow(event: PageTransitionEvent) {
 	if (event.persisted) void startRoomExperimentTracking();
 }
 
+function shouldAutoFocusComposer() {
+	return !("ontouchstart" in window) && navigator.maxTouchPoints === 0;
+}
+
+async function focusComposerTextarea(options: FocusOptions = {}) {
+	if (!shouldAutoFocusComposer() || !keepComposerFocused) return;
+	await tick();
+	await new Promise<void>((resolve) => {
+		requestAnimationFrame(() => resolve());
+	});
+	textareaEl?.focus(options);
+}
+
+function handleWindowPointerDown(event: PointerEvent) {
+	const target = event.target;
+	if (!(target instanceof Node)) return;
+	if (target === textareaEl) {
+		keepComposerFocused = true;
+		return;
+	}
+	const targetElement = target instanceof Element ? target : target.parentElement;
+	if (composerEl?.contains(target) && targetElement?.closest('button[type="submit"]')) return;
+	keepComposerFocused = false;
+}
+
+const handleCreatePost: SubmitFunction = () => {
+	keepComposerFocused = true;
+	return async ({ update }) => {
+		await update({ reset: false });
+		await focusComposerTextarea({ preventScroll: true });
+	};
+};
+
 /** 最後に受信した投稿以降の差分を取得して extraPosts に追加する */
 async function fetchNewPosts() {
 	if (fetchingLive) return;
@@ -169,13 +205,12 @@ onMount(() => {
 	intervalId = setInterval(() => {
 		now = Date.now();
 	}, 1000);
-	if (!("ontouchstart" in window) && textareaEl) {
-		textareaEl.focus();
-	}
 	if (status === "open" && data.posts.length > 0) {
 		void focusLatestPost();
 	}
+	void focusComposerTextarea();
 	window.addEventListener("scroll", handleWindowScroll, { passive: true });
+	window.addEventListener("pointerdown", handleWindowPointerDown, true);
 	window.addEventListener("pagehide", handleRoomExperimentPageHide);
 	window.addEventListener("pageshow", handleRoomExperimentPageShow);
 	void startRoomExperimentTracking();
@@ -187,6 +222,7 @@ onDestroy(() => {
 	clearRoomExperimentHeartbeatTimer();
 	if (typeof window !== "undefined") {
 		window.removeEventListener("scroll", handleWindowScroll);
+		window.removeEventListener("pointerdown", handleWindowPointerDown, true);
 		window.removeEventListener("pagehide", handleRoomExperimentPageHide);
 		window.removeEventListener("pageshow", handleRoomExperimentPageShow);
 	}
@@ -194,7 +230,10 @@ onDestroy(() => {
 });
 
 $effect(() => {
-	if (form && "success" in form && form.success) postContent = "";
+	if (form && "success" in form && form.success) {
+		postContent = "";
+		void focusComposerTextarea();
+	}
 });
 
 $effect(() => {
@@ -207,9 +246,10 @@ $effect(() => {
 	if (shouldFollow) {
 		isFollowingLatest = true;
 		unreadNewPostCount = 0;
-		void focusLatestPost(postOrder, "smooth");
+		void focusLatestPost(postOrder, "smooth").then(() => focusComposerTextarea({ preventScroll: true }));
 	} else {
 		unreadNewPostCount += Math.max(1, newPostCount);
+		void focusComposerTextarea({ preventScroll: true });
 	}
 });
 
@@ -296,7 +336,7 @@ const timerLabel = $derived.by(() => {
 });
 
 const broadcastMetaLine = $derived.by(() => {
-	if (isGlobalLobby) return "総合実況・雑談ロビー";
+	if (isGlobalLobby) return "";
 	const station = data.anime.broadcast_station?.filter(Boolean).join(" / ");
 	const frame = `${data.room.duration_minutes}分枠`;
 	return station ? `${station} · ${frame}` : frame;
@@ -326,20 +366,23 @@ function formatCompactDate(iso: string) {
 		</div>
 
 		{#if data.user && status === "open"}
-			<div class="card composer">
+			<div class="card composer" bind:this={composerEl}>
 				{#if form && "message" in form}
 					<p class="form-error">{form.message}</p>
 				{/if}
-				<form method="POST" action="?/createPost" use:enhance>
+				<form method="POST" action="?/createPost" use:enhance={handleCreatePost}>
 					<div class="composer-body">
 						<textarea
 							bind:this={textareaEl}
-							class="composer-textarea"
+							class="composer-textarea room-composer-textarea"
 							name="content"
 							placeholder="いまの感想を投稿... (Shift+Enterで改行)"
 							rows="3"
 							bind:value={postContent}
 							maxlength={maxLen}
+							onfocus={() => {
+								keepComposerFocused = true;
+							}}
 							onkeydown={(e) => {
 								if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
 									e.preventDefault();
@@ -406,6 +449,7 @@ function formatCompactDate(iso: string) {
 						{post}
 						currentUserId={data.user?.id ?? null}
 						broadcastStartAt={data.room.scheduled_at}
+						timelineTimeMode={isGlobalLobby}
 					/>
 				</div>
 			{/each}
@@ -433,17 +477,21 @@ function formatCompactDate(iso: string) {
 				<div class="flex min-h-20 min-w-0 flex-1 flex-col justify-between pl-3">
 					<div class="min-w-0">
 						<h1 class="room-summary-title line-clamp-1 text-sm font-bold">{data.room.title}</h1>
-						<div class="mt-2 flex min-w-0 items-center gap-2">
-							{#if status === "ended"}
-								<span class="room-summary-status rounded px-1.5 py-0.5 text-[10px] font-bold"
-									>終了</span
+						{#if !isGlobalLobby}
+							<div class="mt-2 flex min-w-0 items-center gap-2">
+								{#if status === "ended"}
+									<span class="room-summary-status rounded px-1.5 py-0.5 text-[10px] font-bold"
+										>終了</span
+									>
+								{/if}
+								<time class="room-summary-secondary truncate text-xs"
+									>{formatCompactDate(data.room.scheduled_at)}</time
 								>
-							{/if}
-							<time class="room-summary-secondary truncate text-xs"
-								>{formatCompactDate(data.room.scheduled_at)}</time
-							>
-						</div>
-						<div class="room-summary-muted mt-1 truncate text-xs">{broadcastMetaLine}</div>
+							</div>
+						{/if}
+						{#if broadcastMetaLine}
+							<div class="room-summary-muted mt-1 truncate text-xs">{broadcastMetaLine}</div>
+						{/if}
 					</div>
 					<div class="mt-2 flex items-center justify-end gap-2">
 						<a href="/schedule" class="room-summary-back shrink-0 text-xs transition-colors">
@@ -584,6 +632,11 @@ function formatCompactDate(iso: string) {
 .room-order-toggle button.active {
 	background: var(--color-accent);
 	color: white;
+}
+
+:global(.room-composer-textarea:focus-visible) {
+	outline: none;
+	outline-offset: 0;
 }
 
 /* ── モバイル用コンパクトバー (サイドバー非表示時のみ表示) ── */

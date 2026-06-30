@@ -1884,6 +1884,11 @@ textarea {
 	padding-right: 0;
 }
 
+.post-bookmark-btn:not(:disabled):hover {
+	color: var(--color-text);
+	background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+
 /* --- Post action buttons (reply / repost / like) --- */
 
 .post-action-btn {
@@ -1972,11 +1977,17 @@ textarea {
 .reaction-count-button {
 	cursor: pointer;
 	border-radius: var(--radius-sm);
+	margin-left: 0;
 }
 
 .reaction-count-static {
 	height: 28px;
 	margin-left: 2px;
+}
+
+.reaction-count-static.has-count {
+	margin-left: 0;
+	min-width: 28px;
 }
 
 .reaction-icon-hitbox {
@@ -2013,9 +2024,15 @@ textarea {
 	left: 0;
 }
 
+.post-reply-btn.reaction-icon-hitbox:hover,
 .post-repost-btn.reaction-icon-hitbox:not(:disabled):hover,
-.post-like-btn.reaction-icon-hitbox:not(:disabled):hover {
+.post-like-btn.reaction-icon-hitbox:not(:disabled):hover,
+.post-bookmark-btn.reaction-icon-hitbox:not(:disabled):hover {
 	background: none;
+}
+
+.post-reply-btn.reaction-icon-hitbox:hover::before {
+	background: color-mix(in srgb, var(--color-accent) 10%, transparent);
 }
 
 .post-repost-count.reaction-count-hitbox:hover {
@@ -2034,6 +2051,10 @@ textarea {
 
 .post-like-btn.reaction-icon-hitbox:not(:disabled):hover::before {
 	background: rgba(244, 63, 94, 0.1);
+}
+
+.post-bookmark-btn.reaction-icon-hitbox:not(:disabled):hover::before {
+	background: color-mix(in srgb, var(--color-accent) 10%, transparent);
 }
 
 .reaction-popover-backdrop {
