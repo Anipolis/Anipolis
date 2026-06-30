@@ -270,8 +270,8 @@ export async function addBroadcastOverrideAction(
 	if (overrideKind === "cancelled") {
 		announcementLabel ??= "今週は放送休止";
 	}
-	if (overrideKind === "marathon" && (episodeStart == null || episodeEnd == null)) {
-		return fail(400, { message: "一挙放送では対象話数の開始と終了を入力してください" });
+	if (overrideKind === "marathon" && (episodeStart == null || episodeEnd == null || episodeEnd <= episodeStart)) {
+		return fail(400, { message: "一挙放送では対象話数の開始より大きい終了話数を入力してください" });
 	}
 
 	// biome-ignore lint/suspicious/noExplicitAny: broadcast_room_overrides not yet in generated types

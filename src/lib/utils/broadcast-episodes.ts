@@ -83,7 +83,21 @@ export function formatBroadcastOverrideKindLabel(override: BroadcastRoomOverride
 }
 
 export function formatBroadcastOverrideAnnouncement(override: BroadcastRoomOverride): string {
-	return override.announcement_label?.trim() || "今週は放送休止";
+	const customLabel = override.announcement_label?.trim();
+	if (customLabel) return customLabel;
+
+	switch (inferBroadcastOverrideKind(override)) {
+		case "cancelled":
+			return "今週は放送休止";
+		case "recap":
+			return normalizedBroadcastEpisodeLabel(override) ?? "総集編/特別編";
+		case "time_change":
+			return override.broadcast_time ? `放送時間変更：${override.broadcast_time}〜` : "放送時間変更";
+		case "marathon":
+			return formatBroadcastOverrideEpisodeSummary(override) ?? "一挙放送";
+		default:
+			return override.note?.trim() || "イレギュラー放送";
+	}
 }
 
 export function normalizedBroadcastEpisodeLabel(override: BroadcastRoomOverride | undefined): string | null {

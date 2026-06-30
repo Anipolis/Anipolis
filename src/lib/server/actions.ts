@@ -486,7 +486,9 @@ export async function createEventAction(request: Request, supabase: SupabaseClie
 	const rawHashtag = (form.get("hashtag") as string | null)?.trim() ?? "";
 	const scheduledAtRaw = (form.get("scheduled_at") as string | null)?.trim() ?? "";
 	const durationRaw = (form.get("duration_minutes") as string | null)?.trim() ?? "";
-	const animeId = parsePositiveInt(form.get("anime_id") as string | null);
+	const animeIdRaw = (form.get("anime_id") as string | null)?.trim() ?? "";
+	const animeId = animeIdRaw ? parsePositiveInt(animeIdRaw) : null;
+	if (animeIdRaw && animeId === null) return fail(400, { message: "アニメIDの形式が正しくありません" });
 
 	if (!title) return fail(400, { message: "タイトルを入力してください" });
 	if (title.length > 100) return fail(400, { message: "タイトルは100文字以内で入力してください" });

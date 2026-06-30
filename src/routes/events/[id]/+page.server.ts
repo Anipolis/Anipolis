@@ -8,6 +8,7 @@ import {
 } from "$lib/server/actions";
 import { getAnimeRankingTrending, getEvent, getEventPosts } from "$lib/server/queries";
 import type { Post } from "$lib/types";
+import { extractHashtags } from "$lib/utils/hashtag";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
@@ -43,10 +44,12 @@ export const actions: Actions = {
 		const animeId = event.anime_id;
 
 		// ハッシュタグが含まれていなければ自動付与
-		const hasTag = content.toLowerCase().includes(`#${hashtag.toLowerCase()}`);
+		const hasTag = extractHashtags(content).includes(hashtag.toLowerCase());
 		const finalContent = hasTag ? content : `${content} #${hashtag}`;
 
-		return insertPostWithHashtags(supabase, user.id, finalContent, null, [], animeId);
+		return insertPostWithHashtags(supabase, user.id, finalContent, null, [], animeId, null, null, null, null, [
+			hashtag,
+		]);
 	},
 
 	deletePost: async ({ request, locals: { supabase, safeGetSession } }) => {

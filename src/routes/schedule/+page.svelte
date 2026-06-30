@@ -145,14 +145,16 @@ function handleEventAnimeQueryInput() {
 		return;
 	}
 	eventAnimeSearchDebounce = setTimeout(async () => {
+		const query = eventAnimeQuery.trim();
 		eventAnimeSearching = true;
 		try {
-			const res = await fetch(`/api/anime/search?q=${encodeURIComponent(eventAnimeQuery.trim())}`);
-			eventAnimeResults = res.ok ? await res.json() : [];
+			const res = await fetch(`/api/anime/search?q=${encodeURIComponent(query)}`);
+			const results = res.ok ? await res.json() : [];
+			if (eventAnimeQuery.trim() === query) eventAnimeResults = results;
 		} catch {
-			eventAnimeResults = [];
+			if (eventAnimeQuery.trim() === query) eventAnimeResults = [];
 		}
-		eventAnimeSearching = false;
+		if (eventAnimeQuery.trim() === query) eventAnimeSearching = false;
 	}, 300);
 }
 

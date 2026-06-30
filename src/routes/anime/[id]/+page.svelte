@@ -993,7 +993,6 @@ $effect(() => {
 											}}
 											class="broadcast-override-form"
 										>
-											<input type="hidden" name="override_kind" value={selectedOverrideKind}>
 											<div class="broadcast-override-field">
 												<label for="override-room-date">日付</label>
 												<input id="override-room-date" type="date" name="room_date" required>
@@ -1004,16 +1003,20 @@ $effect(() => {
 												aria-label="シチュエーション"
 											>
 												{#each overrideKindOptions as option}
-													<button
-														type="button"
+													<label
 														class="broadcast-override-kind-option"
 														class:broadcast-override-kind-option--active={selectedOverrideKind === option.kind}
-														aria-pressed={selectedOverrideKind === option.kind}
-														onclick={() => selectOverrideKind(option.kind)}
 													>
+														<input
+															type="radio"
+															name="override_kind"
+															value={option.kind}
+															checked={selectedOverrideKind === option.kind}
+															onchange={() => selectOverrideKind(option.kind)}
+														>
 														<span>{option.label}</span>
 														<small>{option.description}</small>
-													</button>
+													</label>
 												{/each}
 											</div>
 
@@ -1976,16 +1979,16 @@ $effect(() => {
 .broadcast-override-table th,
 .broadcast-override-table td {
 	padding: 10px 12px;
-	border-bottom: 1px solid #27272a;
+	border-bottom: 1px solid var(--border);
 	text-align: left;
 	vertical-align: middle;
 }
 .broadcast-override-table th {
-	color: #a1a1aa;
+	color: var(--text-muted);
 	font-size: 0.72rem;
 	font-weight: 700;
 	letter-spacing: 0.04em;
-	background: #18181b;
+	background: var(--hover-bg);
 }
 .broadcast-override-table tr:last-child td {
 	border-bottom: 0;
@@ -1998,31 +2001,31 @@ $effect(() => {
 }
 .broadcast-override-date {
 	font-weight: 600;
-	color: #f4f4f5;
+	color: var(--text);
 }
 .broadcast-override-tag {
 	display: inline-flex;
 	align-items: center;
 	min-height: 22px;
 	padding: 2px 8px;
-	border: 1px solid #3f3f46;
+	border: 1px solid var(--border);
 	border-radius: 999px;
-	background: #18181b;
-	color: #d4d4d8;
+	background: var(--card-bg);
+	color: var(--text-muted);
 	font-size: 0.76rem;
 }
 .broadcast-override-tag--kind {
-	border-color: color-mix(in srgb, var(--accent) 55%, #3f3f46);
+	border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
 	color: var(--accent);
 }
 .broadcast-override-note {
-	color: #a1a1aa;
+	color: var(--text-muted);
 	font-size: 0.8rem;
 	font-style: italic;
 }
 .broadcast-override-empty,
 .broadcast-override-empty-row {
-	color: #71717a;
+	color: var(--text-muted);
 }
 .broadcast-override-empty-row {
 	padding: 18px 12px;
@@ -2033,9 +2036,9 @@ $effect(() => {
 	white-space: nowrap;
 }
 .broadcast-override-delete {
-	border: 1px solid #3f3f46;
-	background: #18181b;
-	color: #f4f4f5;
+	border: 1px solid var(--border);
+	background: var(--card-bg);
+	color: var(--text);
 	border-radius: 6px;
 	padding: 4px 10px;
 	font-size: 0.78rem;
@@ -2049,10 +2052,10 @@ $effect(() => {
 	align-self: flex-start;
 	min-height: 40px;
 	padding: 0 16px;
-	border: 1px solid #3f3f46;
+	border: 1px solid var(--border);
 	border-radius: 9px;
-	background: #18181b;
-	color: #f4f4f5;
+	background: var(--card-bg);
+	color: var(--text);
 	font-size: 0.86rem;
 	font-weight: 700;
 	cursor: pointer;
@@ -2064,14 +2067,14 @@ $effect(() => {
 .broadcast-override-add-toggle:hover {
 	border-color: var(--accent);
 	color: var(--accent);
-	background: #27272a;
+	background: var(--hover-bg);
 }
 .broadcast-override-accordion {
 	animation: override-form-enter 0.18s ease-out;
 	padding: 14px;
-	border: 1px solid #27272a;
+	border: 1px solid var(--border);
 	border-radius: 12px;
-	background: #111113;
+	background: var(--card-bg);
 }
 .broadcast-override-form {
 	display: grid;
@@ -2089,18 +2092,29 @@ $effect(() => {
 	gap: 8px;
 }
 .broadcast-override-kind-option {
+	position: relative;
 	display: flex;
 	flex-direction: column;
 	align-items: flex-start;
 	gap: 2px;
 	min-height: 56px;
 	padding: 9px 11px;
-	border: 1px solid #3f3f46;
+	border: 1px solid var(--border);
 	border-radius: 8px;
-	background: #18181b;
-	color: #f4f4f5;
+	background: var(--card-bg);
+	color: var(--text);
 	text-align: left;
 	cursor: pointer;
+}
+.broadcast-override-kind-option input {
+	position: absolute;
+	inset: 0;
+	opacity: 0;
+	cursor: pointer;
+}
+.broadcast-override-kind-option:focus-within {
+	outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+	outline-offset: 2px;
 }
 .broadcast-override-kind-option span {
 	font-size: 0.86rem;
@@ -2108,14 +2122,14 @@ $effect(() => {
 }
 .broadcast-override-kind-option small {
 	font-size: 0.72rem;
-	color: #a1a1aa;
+	color: var(--text-muted);
 }
 .broadcast-override-kind-option--active {
 	border-color: var(--accent);
-	background: color-mix(in srgb, var(--accent) 14%, #18181b);
+	background: color-mix(in srgb, var(--accent) 14%, var(--card-bg));
 }
 .broadcast-override-kind-option--active small {
-	color: #d4d4d8;
+	color: var(--text);
 }
 .broadcast-override-field {
 	display: flex;
@@ -2124,15 +2138,15 @@ $effect(() => {
 }
 .broadcast-override-field label {
 	font-size: 0.75rem;
-	color: #a1a1aa;
+	color: var(--text-muted);
 }
 .broadcast-override-field input {
 	height: 36px;
 	padding: 0 10px;
 	border-radius: 6px;
-	border: 1px solid #3f3f46;
-	background: #09090b;
-	color: #f4f4f5;
+	border: 1px solid var(--border);
+	background: var(--card-bg);
+	color: var(--text);
 	font-size: 0.85rem;
 }
 .broadcast-override-checkbox {
@@ -2141,7 +2155,7 @@ $effect(() => {
 	gap: 8px;
 	min-height: 36px;
 	font-size: 0.82rem;
-	color: #f4f4f5;
+	color: var(--text);
 }
 .broadcast-override-checkbox input {
 	width: 16px;
@@ -2155,26 +2169,26 @@ $effect(() => {
 .broadcast-override-secondary {
 	min-height: 34px;
 	padding: 0 12px;
-	border: 1px solid #3f3f46;
+	border: 1px solid var(--border);
 	border-radius: 7px;
 	background: transparent;
-	color: #d4d4d8;
+	color: var(--text-muted);
 	font-size: 0.8rem;
 	font-weight: 700;
 	cursor: pointer;
 }
 .broadcast-override-secondary:hover {
-	background: #27272a;
-	color: #f4f4f5;
+	background: var(--hover-bg);
+	color: var(--text);
 }
 .broadcast-override-advanced-fields {
 	display: grid;
 	grid-template-columns: repeat(1, minmax(0, 1fr));
 	gap: 12px;
 	padding: 12px;
-	border: 1px dashed #3f3f46;
+	border: 1px dashed var(--border);
 	border-radius: 9px;
-	background: #0c0c0e;
+	background: var(--hover-bg);
 }
 .broadcast-override-form-actions {
 	grid-column: 1 / -1;
@@ -2201,13 +2215,13 @@ $effect(() => {
 	opacity: 0.9;
 }
 .broadcast-override-cancel {
-	border: 1px solid #3f3f46;
+	border: 1px solid var(--border);
 	background: transparent;
-	color: #d4d4d8;
+	color: var(--text-muted);
 }
 .broadcast-override-cancel:hover {
-	background: #27272a;
-	color: #f4f4f5;
+	background: var(--hover-bg);
+	color: var(--text);
 }
 
 @keyframes override-form-enter {
