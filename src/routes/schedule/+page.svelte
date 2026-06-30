@@ -3,7 +3,12 @@ import type { SubmitFunction } from "@sveltejs/kit";
 import { untrack } from "svelte";
 import { enhance } from "$app/forms";
 import type { Anime, BroadcastRoomOverride } from "$lib/types";
-import { type BroadcastEpisodeSlot, resolveBroadcastEpisodeSlot } from "$lib/utils/broadcast-episodes";
+import {
+	type BroadcastEpisodeSlot,
+	formatMarathonBadge,
+	isMarathonEpisodeSlot,
+	resolveBroadcastEpisodeSlot,
+} from "$lib/utils/broadcast-episodes";
 import {
 	broadcastTimeMinutes,
 	effectiveBroadcastTime as resolveEffectiveBroadcastTime,
@@ -15,8 +20,20 @@ import type { ActionData, PageProps } from "./$types";
 
 let { data, form }: PageProps & { form: ActionData } = $props();
 
+interface AnimeSearchResult {
+	id: string;
+	title: string;
+	title_en: string | null;
+	cover_url: string | null;
+}
+
 let showEventDialog = $state(false);
 let openAlertMenu = $state<string | null>(null);
+let eventAnimeQuery = $state("");
+let eventAnimeResults = $state<AnimeSearchResult[]>([]);
+let eventAnimeSearching = $state(false);
+let selectedEventAnime = $state<AnimeSearchResult | null>(null);
+let eventAnimeSearchDebounce: ReturnType<typeof setTimeout> | null = null;
 
 // Notification subscription state — optimistic, keyed by anime.id
 let subscribedIds = $state(new Set<string>(untrack(() => data.subscriptions)));
@@ -33,8 +50,7 @@ function getDefaultDayIndex(): number {
 	return getCurrentBroadcastDate().getDay();
 }
 function getDisplayDayOrder(): number[] {
-	const today = getCurrentBroadcastDate().getDay();
-	return Array.from({ length: 7 }, (_, i) => (today - 3 + i + 7) % 7);
+	return data.days.map((_, index) => index);
 }
 
 function getCurrentBroadcastDate(now = new Date()): Date {
@@ -42,35 +58,6 @@ function getCurrentBroadcastDate(now = new Date()): Date {
 	// Late-night broadcasts through 28:00 (04:00 next day) belong to the previous broadcast date.
 	if (date.getHours() < 4) date.setDate(date.getDate() - 1);
 	return date;
-}
-
-function toDateInputValue(date: Date): string {
-	const y = date.getFullYear();
-	const m = String(date.getMonth() + 1).padStart(2, "0");
-	const d = String(date.getDate()).padStart(2, "0");
-	return `${y}-${m}-${d}`;
-}
-
-function addDays(date: Date, days: number): Date {
-	const next = new Date(date);
-	next.setDate(next.getDate() + days);
-	return next;
-}
-
-function getWeekCenterDate(): Date {
-	// Anchor the rolling 7-day window to the displayed week instead of the
-	// real-world today, so week navigation updates the dates. The center is the
-	// day in the displayed week that matches today's weekday (the default
-	// selected day), keeping the current week's dates identical to before.
-	const weekStart = new Date(`${data.weekStart}T00:00:00`);
-	return addDays(weekStart, getCurrentBroadcastDate().getDay());
-}
-
-function getDisplayDateForDay(dayIdx: number, fallbackDate: string): string {
-	const displayPos = getDisplayDayOrder().indexOf(dayIdx);
-	if (displayPos === -1) return fallbackDate;
-
-	return toDateInputValue(addDays(getWeekCenterDate(), displayPos - 3));
 }
 
 function getDisplayDayItems() {
@@ -81,7 +68,7 @@ function getDisplayDayItems() {
 			return {
 				dayIdx,
 				day,
-				date: getDisplayDateForDay(dayIdx, day.date),
+				date: day.date,
 			};
 		})
 		.filter((item): item is NonNullable<typeof item> => item !== null);
@@ -128,6 +115,45 @@ function formatShortDate(value: string): string {
 
 function formatTime(iso: string) {
 	return new Date(iso).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
+}
+
+function openEventDialog() {
+	showEventDialog = true;
+	eventAnimeQuery = "";
+	eventAnimeResults = [];
+	eventAnimeSearching = false;
+	selectedEventAnime = null;
+}
+
+function selectEventAnime(anime: AnimeSearchResult) {
+	selectedEventAnime = anime;
+	eventAnimeQuery = "";
+	eventAnimeResults = [];
+}
+
+function clearEventAnime() {
+	selectedEventAnime = null;
+	eventAnimeQuery = "";
+	eventAnimeResults = [];
+}
+
+function handleEventAnimeQueryInput() {
+	if (eventAnimeSearchDebounce) clearTimeout(eventAnimeSearchDebounce);
+	if (eventAnimeQuery.trim().length === 0) {
+		eventAnimeResults = [];
+		eventAnimeSearching = false;
+		return;
+	}
+	eventAnimeSearchDebounce = setTimeout(async () => {
+		eventAnimeSearching = true;
+		try {
+			const res = await fetch(`/api/anime/search?q=${encodeURIComponent(eventAnimeQuery.trim())}`);
+			eventAnimeResults = res.ok ? await res.json() : [];
+		} catch {
+			eventAnimeResults = [];
+		}
+		eventAnimeSearching = false;
+	}, 300);
 }
 
 function effectiveBroadcastTime(anime: Anime, dateStr: string): string | null {
@@ -386,7 +412,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 				<button
 					type="button"
 					class="btn btn-primary create-event-btn"
-					onclick={() => (showEventDialog = true)}
+					onclick={openEventDialog}
 					aria-label="イベント作成"
 				>
 					<span class="i-lucide-calendar-plus" aria-hidden="true"></span>
@@ -417,7 +443,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 
 	<div class="schedule-grid">
 		{#each data.days as day, d}
-			{@const displayDate = d === selectedDayIndex ? getDisplayDateForDay(d, day.date) : day.date}
+			{@const displayDate = day.date}
 			<div class="day-col" class:day-col--selected={d === selectedDayIndex}>
 				<div class="day-heading" style="color: {DAY_COLOR[d]}; background: {DAY_BG[d]}">
 					<span>{day.label}曜日</span>
@@ -433,10 +459,25 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 								class="event-slot"
 								class:event-slot--cancelled={event.is_cancelled}
 							>
-								<span class="slot-kind">EVENT</span>
-								<span class="slot-time">{formatTime(event.scheduled_at)}</span>
-								<span class="slot-title">{event.title}</span>
-								<span class="slot-station">#{event.hashtag}</span>
+								<div class="slot-cover-wrap">
+									{#if event.anime?.cover_url}
+										<img src={event.anime.cover_url} alt={event.anime.title} class="slot-cover">
+									{:else}
+										<div class="slot-cover slot-cover--event-placeholder">
+											<span class="i-lucide-calendar-days" aria-hidden="true"></span>
+										</div>
+									{/if}
+								</div>
+								<div class="slot-info">
+									<div class="slot-meta-row">
+										<span class="slot-time slot-time--event">{formatTime(event.scheduled_at)}</span>
+										<span class="slot-kind slot-kind--event">EVENT</span>
+									</div>
+									<span class="slot-title">{event.title}</span>
+									<span class="slot-bottom"
+										>{[event.anime?.title, `#${event.hashtag}`].filter(Boolean).join(" ・ ")}</span
+									>
+								</div>
 							</a>
 						{/each}
 
@@ -476,9 +517,11 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 										{@const roomMute = roomMuteSettings[anime.id]}
 										{@const subscribable = canSubscribe(anime)}
 										{@const ep = currentEpisodeForSlot(anime, displayDate, data.broadcastOverrides[anime.id])}
-										{@const isMarathon = ep !== null && ep.start != null && ep.end != null && ep.end !== ep.start}
+										{@const isMarathon = ep !== null && isMarathonEpisodeSlot(ep)}
 										{@const epBadge = ep !== null ? formatEpisodeBadge(ep, anime.episode_count) : null}
-										{@const episodeLabel = epBadge !== null ? (anime.episode_count ? epBadge : `#${epBadge}`) : null}
+										{@const specialEpisodeLabel = ep !== null && ep.start == null && ep.end == null ? ep.label : null}
+										{@const episodeLabel =
+											epBadge !== null && specialEpisodeLabel === null ? (anime.episode_count ? epBadge : `#${epBadge}`) : null}
 										{@const stationLabel = anime.broadcast_station?.length ? anime.broadcast_station.join(" / ") : null}
 										<div
 											class="anime-slot-wrap"
@@ -503,9 +546,14 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 														{/if}
 													</div>
 													<span class="slot-title">{anime.title}</span>
-													{#if isMarathon}
+													{#if isMarathon && ep}
 														<span class="slot-marathon-badge"
-															>第{ep?.start}話〜第{ep?.end}話 一挙放送</span
+															>{formatMarathonBadge(ep)}</span
+														>
+													{/if}
+													{#if specialEpisodeLabel}
+														<span class="slot-special-label-badge"
+															>{specialEpisodeLabel}</span
 														>
 													{/if}
 													{#if episodeLabel || stationLabel}
@@ -775,6 +823,68 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 					<span>ハッシュタグ</span>
 					<input class="input" type="text" name="hashtag" required maxlength="50" placeholder="Anipolis視聴">
 				</label>
+				<div class="event-anime-field">
+					<span class="event-form-label">対象アニメ</span>
+					{#if selectedEventAnime}
+						<input type="hidden" name="anime_id" value={selectedEventAnime.id}>
+						<div class="event-anime-selected">
+							{#if selectedEventAnime.cover_url}
+								<img src={selectedEventAnime.cover_url} alt={selectedEventAnime.title}>
+							{:else}
+								<div class="event-anime-thumb-empty"></div>
+							{/if}
+							<div>
+								<strong>{selectedEventAnime.title}</strong>
+								{#if selectedEventAnime.title_en}
+									<span>{selectedEventAnime.title_en}</span>
+								{/if}
+							</div>
+							<button
+								type="button"
+								class="event-anime-clear"
+								onclick={clearEventAnime}
+								aria-label="対象アニメを解除"
+							>
+								<span class="i-lucide-x" aria-hidden="true"></span>
+							</button>
+						</div>
+					{:else}
+						<input
+							class="input"
+							type="search"
+							placeholder="アニメタイトルで検索"
+							bind:value={eventAnimeQuery}
+							oninput={handleEventAnimeQueryInput}
+						>
+						{#if eventAnimeSearching || eventAnimeResults.length > 0}
+							<div class="event-anime-results" aria-live="polite" aria-busy={eventAnimeSearching}>
+								{#if eventAnimeSearching}
+									<p>検索中...</p>
+								{:else}
+									{#each eventAnimeResults as anime}
+										<button
+											type="button"
+											class="event-anime-result"
+											onclick={() => selectEventAnime(anime)}
+										>
+											{#if anime.cover_url}
+												<img src={anime.cover_url} alt={anime.title}>
+											{:else}
+												<div class="event-anime-thumb-empty"></div>
+											{/if}
+											<span>
+												<strong>{anime.title}</strong>
+												{#if anime.title_en}
+													<small>{anime.title_en}</small>
+												{/if}
+											</span>
+										</button>
+									{/each}
+								{/if}
+							</div>
+						{/if}
+					{/if}
+				</div>
 				<label>
 					<span>説明</span>
 					<textarea class="input" name="description" rows="3" placeholder="放映時間や対象話数など"></textarea>
@@ -941,8 +1051,10 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	align-items: stretch;
 }
 .event-slot {
-	gap: 7px;
-	height: 76px;
+	height: 86px;
+	padding: 4px 4px 4px 0;
+	gap: 0;
+	align-items: stretch;
 }
 .anime-slot-wrap .anime-slot {
 	border: none;
@@ -952,8 +1064,6 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	background: var(--color-surface-hover);
 }
 .event-slot {
-	flex-direction: column;
-	gap: 2px;
 	border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-border));
 }
 
@@ -976,6 +1086,15 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 }
 .slot-cover--placeholder {
 	background: var(--color-border);
+}
+.slot-cover--event-placeholder {
+	height: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: color-mix(in srgb, #f97316 16%, var(--color-surface));
+	color: #f97316;
+	font-size: 1rem;
 }
 .anime-slot-wrap--suspension {
 	opacity: 0.5;
@@ -1076,6 +1195,9 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	color: var(--color-text-muted);
 	letter-spacing: 0;
 }
+.slot-kind--event {
+	color: #f97316;
+}
 @keyframes live-pulse {
 	0%,
 	100% {
@@ -1089,6 +1211,9 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	font-size: 0.72rem;
 	font-weight: 700;
 	color: var(--color-accent);
+}
+.slot-time--event {
+	color: #f97316;
 }
 .slot-title {
 	font-size: 0.73rem;
@@ -1104,25 +1229,17 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	text-overflow: ellipsis;
 	word-break: break-word;
 }
-.slot-station {
-	font-size: 0.7rem;
-	color: var(--color-text-muted);
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	max-width: 100%;
-}
-.slot-marathon-badge {
+.slot-marathon-badge,
+.slot-special-label-badge {
 	display: inline-block;
 	font-size: 0.62rem;
 	font-weight: 700;
 	color: var(--accent);
-	background: color-mix(in srgb, var(--accent) 14%, transparent);
-	border-radius: 3px;
-	padding: 1px 4px;
+	line-height: 1.15;
+	margin-top: 3px;
+	padding: 0;
 	width: fit-content;
 }
-
 /* Notification and spoiler mute menu */
 .room-alert-control {
 	position: absolute;
@@ -1383,6 +1500,96 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	font-weight: 700;
 	color: var(--color-text-muted);
 }
+.event-anime-field {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+.event-form-label {
+	font-size: 0.75rem;
+	font-weight: 700;
+	color: var(--color-text-muted);
+}
+.event-anime-selected,
+.event-anime-result {
+	display: grid;
+	grid-template-columns: 40px minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	border: 1px solid var(--color-border);
+	border-radius: 6px;
+	background: var(--color-surface);
+	color: var(--color-text);
+}
+.event-anime-selected {
+	padding: 6px;
+}
+.event-anime-selected img,
+.event-anime-result img,
+.event-anime-thumb-empty {
+	width: 40px;
+	height: 54px;
+	border-radius: 4px;
+	object-fit: cover;
+	background: var(--color-border);
+}
+.event-anime-selected div,
+.event-anime-result span {
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.event-anime-selected strong,
+.event-anime-result strong {
+	font-size: 0.78rem;
+	line-height: 1.3;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.event-anime-selected span,
+.event-anime-result small {
+	font-size: 0.68rem;
+	font-weight: 500;
+	color: var(--color-text-muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.event-anime-clear {
+	width: 28px;
+	height: 28px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 5px;
+	color: var(--color-text-muted);
+}
+.event-anime-clear:hover,
+.event-anime-result:hover {
+	background: var(--color-surface-hover);
+	color: var(--color-text);
+}
+.event-anime-results {
+	max-height: 220px;
+	overflow: auto;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+.event-anime-results p {
+	margin: 0;
+	font-size: 0.75rem;
+	color: var(--color-text-muted);
+}
+.event-anime-result {
+	grid-template-columns: 40px minmax(0, 1fr);
+	padding: 6px;
+	text-align: left;
+	cursor: pointer;
+}
 .event-form textarea {
 	resize: vertical;
 }
@@ -1504,6 +1711,9 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	.anime-slot {
 		height: 98px;
 		padding: 4px 4px 4px 0;
+	}
+	.event-slot {
+		height: 98px;
 	}
 	.slot-cover-wrap {
 		width: 68px;

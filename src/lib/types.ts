@@ -160,6 +160,7 @@ export interface Notification {
 export interface Event {
 	id: string;
 	creator_id: string;
+	anime_id: string | null;
 	title: string;
 	description: string | null;
 	hashtag: string; // # なし (例: "AnimeOP2026")
@@ -169,6 +170,12 @@ export interface Event {
 	created_at: string;
 	// JOIN で付加されるフィールド（任意）
 	creator_username?: string;
+	anime?: {
+		id: string;
+		title: string;
+		title_en: string | null;
+		cover_url: string | null;
+	} | null;
 	creator_display_name?: string | null;
 	creator_avatar_url?: string | null;
 }
@@ -538,6 +545,7 @@ export interface BroadcastRoomOverride {
 	id: string;
 	anime_id: number;
 	room_date: string;
+	override_kind: "cancelled" | "recap" | "time_change" | "marathon" | "custom";
 	broadcast_time: string | null;
 	duration_minutes: number | null;
 	pre_open_minutes: number | null;

@@ -11,6 +11,7 @@ import {
 	isAdminUser,
 } from "$lib/server/queries";
 import type { Anime, BroadcastNotificationSettings, BroadcastRoomOverride, Event } from "$lib/types";
+import { formatBroadcastOverrideAnnouncement } from "$lib/utils/broadcast-episodes";
 import {
 	broadcastTimeSortValue,
 	effectiveBroadcastTime,
@@ -72,7 +73,7 @@ function isAnimeOnAirDate(anime: Anime, date: string) {
 }
 
 function announcementMessage(override: BroadcastRoomOverride): string {
-	return override.announcement_label?.trim() || "今週は放送休止";
+	return formatBroadcastOverrideAnnouncement(override);
 }
 
 function pushAnnouncement(
