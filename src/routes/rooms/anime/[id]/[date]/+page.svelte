@@ -206,9 +206,10 @@ onMount(() => {
 		now = Date.now();
 	}, 1000);
 	if (status === "open" && data.posts.length > 0) {
-		void focusLatestPost();
+		void focusLatestPost().then(() => focusComposerTextarea({ preventScroll: true }));
+	} else {
+		void focusComposerTextarea();
 	}
-	void focusComposerTextarea();
 	window.addEventListener("scroll", handleWindowScroll, { passive: true });
 	window.addEventListener("pointerdown", handleWindowPointerDown, true);
 	window.addEventListener("pagehide", handleRoomExperimentPageHide);
@@ -232,7 +233,6 @@ onDestroy(() => {
 $effect(() => {
 	if (form && "success" in form && form.success) {
 		postContent = "";
-		void focusComposerTextarea();
 	}
 });
 

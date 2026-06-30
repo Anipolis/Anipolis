@@ -61,14 +61,25 @@ function stop(event: Event) {
 	event.stopPropagation();
 }
 
+function isInteractiveEventTarget(event: Event) {
+	const target = event.target;
+	return target instanceof Element && !!target.closest("a, button, input, textarea, select, label, form");
+}
+
 async function toggleExpanded() {
 	expanded = !expanded;
 	showKebabMenu = false;
 	if (expanded) await loadRecentReplies();
 }
 
+function handleRowClick(event: MouseEvent) {
+	if (isInteractiveEventTarget(event)) return;
+	void toggleExpanded();
+}
+
 function handleRowKeydown(event: KeyboardEvent) {
 	if (event.key !== "Enter" && event.key !== " ") return;
+	if (isInteractiveEventTarget(event)) return;
 	event.preventDefault();
 	void toggleExpanded();
 }
@@ -213,7 +224,7 @@ async function submitReport(event: MouseEvent) {
 		role="button"
 		tabindex="0"
 		aria-expanded={expanded}
-		onclick={() => void toggleExpanded()}
+		onclick={handleRowClick}
 		onkeydown={handleRowKeydown}
 	>
 		<a href="/profile/{post.username}" class="live-avatar" aria-label={displayName} onclick={stop}>
@@ -236,7 +247,7 @@ async function submitReport(event: MouseEvent) {
 		</p>
 		<span class="live-time">
 			{#if timelineTimeMode}
-				<time datetime={post.created_at} title={post.created_at}>{relativeTime}</time>
+				<time datetime={post.created_at} title={absoluteTimeStr}>{relativeTime}</time>
 			{:else if broadcastRelativeTime}
 				<BroadcastTimestamp relativeTime={broadcastRelativeTime} absoluteTime={absoluteTimeStr} />
 			{:else}
