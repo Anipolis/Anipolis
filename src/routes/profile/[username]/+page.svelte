@@ -64,6 +64,13 @@ const editableHeaderUrl = $derived(headerPreviewUrl ?? (headerPendingDelete ? nu
 const handleProfileSubmit: SubmitFunction = () => {
 	profileSubmitting = true;
 	return async ({ result, update }) => {
+		// プロフィールテキストの保存が失敗した場合は画像処理をスキップ
+		if (result.type !== "success") {
+			profileSubmitting = false;
+			await update({ reset: false });
+			return;
+		}
+
 		if (headerPendingFile) {
 			headerUploading = true;
 			headerMessage = "";
@@ -82,6 +89,7 @@ const handleProfileSubmit: SubmitFunction = () => {
 				headerMessage = uploadError instanceof Error ? uploadError.message : "ヘッダー画像の更新に失敗しました";
 				headerUploading = false;
 				profileSubmitting = false;
+				await update({ reset: false });
 				return;
 			}
 			headerUploading = false;
@@ -97,6 +105,7 @@ const handleProfileSubmit: SubmitFunction = () => {
 				headerMessage = deleteError instanceof Error ? deleteError.message : "ヘッダー画像の削除に失敗しました";
 				headerUploading = false;
 				profileSubmitting = false;
+				await update({ reset: false });
 				return;
 			}
 			headerUploading = false;
@@ -120,6 +129,7 @@ const handleProfileSubmit: SubmitFunction = () => {
 				avatarMessage = uploadError instanceof Error ? uploadError.message : "アイコン画像の更新に失敗しました";
 				avatarUploading = false;
 				profileSubmitting = false;
+				await update({ reset: false });
 				return;
 			}
 			avatarUploading = false;
@@ -127,11 +137,9 @@ const handleProfileSubmit: SubmitFunction = () => {
 
 		profileSubmitting = false;
 		await update({ reset: false });
-		if (result.type === "success") {
-			editDisplayName = data.profile.display_name ?? "";
-			editBio = data.profile.bio ?? "";
-			showProfileEditModal = false;
-		}
+		editDisplayName = data.profile.display_name ?? "";
+		editBio = data.profile.bio ?? "";
+		showProfileEditModal = false;
 	};
 };
 
