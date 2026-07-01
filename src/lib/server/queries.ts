@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { toValidExchangeSubjectiveTags } from "$lib/exchange-tags";
 import { buildPostCardSelect } from "$lib/server/post-selects";
 import type { Database } from "$lib/supabase/database.types";
 import type {
@@ -80,6 +81,10 @@ type UserAnimeListWithProfileRow = {
 	profiles: { username: string; display_name: string | null; avatar_url: string | null; list_is_public: boolean };
 };
 
+export async function getProfileById(supabase: SupabaseClient<Database>, userId: string) {
+	return supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+}
+
 function normalizeScore(score: number | null | undefined): number | null {
 	if (score == null || !Number.isFinite(score) || score <= 0) return null;
 	return score;
@@ -92,6 +97,57 @@ function normalizeAverageScore(score: number | null | undefined, count: number |
 
 /** 投稿一覧系クエリで共通の SELECT 句 */
 const POST_LIST_SELECT = buildPostCardSelect();
+
+export type TimelineCursor = {
+	createdAt: string;
+	id: string;
+};
+
+/**
+ * リクエストスコープのミュート設定キャッシュ。
+ *
+ * supabase クライアントは `hooks.server.ts` でリクエストごとに新規生成されるため、
+ * クライアントオブジェクトをキーにすることで「同一リクエスト内でのみ」設定を共有できる。
+ * WeakMap なのでクライアントが GC されればエントリも自動的に解放される。
+ *
+ * ユーザーのミュート設定はリクエスト内で不変なのに、`enrichPostsWithCounts` が
+ * 複数回呼ばれるルート（プロフィール: posts / imagePosts / likes で最大3回）では
+ * 毎回 muted_words / anime_mutes を取得し直していた。これをメモ化して 1 回にまとめる。
+ */
+const muteSettingsCache = new WeakMap<
+	object,
+	Map<string, { mutedWords?: Promise<string[]>; animeMuteIds?: Promise<Set<string>> }>
+>();
+
+function getMuteCacheEntry(supabase: SupabaseClient<Database>, userId: string) {
+	let byUser = muteSettingsCache.get(supabase);
+	if (!byUser) {
+		byUser = new Map();
+		muteSettingsCache.set(supabase, byUser);
+	}
+	let entry = byUser.get(userId);
+	if (!entry) {
+		entry = {};
+		byUser.set(userId, entry);
+	}
+	return entry;
+}
+
+/** リクエストスコープでメモ化された getMutedWords */
+function getMutedWordsCached(supabase: SupabaseClient<Database>, userId: string | null): Promise<string[]> {
+	if (!userId) return getMutedWords(supabase, userId);
+	const entry = getMuteCacheEntry(supabase, userId);
+	if (!entry.mutedWords) entry.mutedWords = getMutedWords(supabase, userId);
+	return entry.mutedWords;
+}
+
+/** リクエストスコープでメモ化された getActiveAnimeMuteIds */
+function getActiveAnimeMuteIdsCached(supabase: SupabaseClient<Database>, userId: string | null): Promise<Set<string>> {
+	if (!userId) return getActiveAnimeMuteIds(supabase, userId);
+	const entry = getMuteCacheEntry(supabase, userId);
+	if (!entry.animeMuteIds) entry.animeMuteIds = getActiveAnimeMuteIds(supabase, userId);
+	return entry.animeMuteIds;
+}
 
 /**
  * rawPost 配列に like_count / repost_count / reply_count / liked_by_me / reposted_by_me を付加して
@@ -106,10 +162,10 @@ export async function enrichPostsWithCounts(
 ): Promise<Post[]> {
 	if (rawPosts.length === 0) return [];
 
-	const mutedWordsPromise = getMutedWords(supabase, userId);
+	const mutedWordsPromise = getMutedWordsCached(supabase, userId);
 	const mutedRoomAnimeIdsPromise = options.includeMutedRoomPosts
 		? Promise.resolve(new Set<string>())
-		: getActiveAnimeMuteIds(supabase, userId);
+		: getActiveAnimeMuteIdsCached(supabase, userId);
 
 	type QuotedPostRow = {
 		id: string;
@@ -191,6 +247,31 @@ export async function enrichPostsWithCounts(
 	});
 }
 
+export async function getHomeTimelinePosts(
+	supabase: SupabaseClient<Database>,
+	userId: string | null,
+	options: { limit?: number; select?: string; cursor?: TimelineCursor } = {},
+): Promise<{ posts: Post[]; error: unknown | null }> {
+	const limit = options.limit ?? 50;
+	const select = options.select ?? POST_LIST_SELECT;
+	let query = supabase
+		.from("posts")
+		.select(select)
+		.is("parent_id", null)
+		.order("created_at", { ascending: false })
+		.order("id", { ascending: false })
+		.limit(limit);
+
+	if (options.cursor) {
+		const { createdAt, id } = options.cursor;
+		query = query.or(`created_at.lt.${createdAt},and(created_at.eq.${createdAt},id.lt.${id})`);
+	}
+
+	const { data, error } = await query;
+	if (error) return { posts: [], error };
+	return { posts: await enrichPostsWithCounts(supabase, (data ?? []) as unknown as RawPost[], userId), error: null };
+}
+
 export async function getMutedWords(supabase: SupabaseClient<Database>, userId: string | null): Promise<string[]> {
 	if (!userId) return [];
 	const { data } = await supabase
@@ -199,6 +280,23 @@ export async function getMutedWords(supabase: SupabaseClient<Database>, userId: 
 		.eq("user_id", userId)
 		.order("created_at", { ascending: false });
 	return (data ?? []).map((row) => normalizeMutedWord(row.word)).filter((word) => word.length > 0);
+}
+
+export async function getMutedWordRows(supabase: SupabaseClient<Database>, userId: string) {
+	const { data } = await supabase
+		.from("muted_words")
+		.select("id, word, created_at")
+		.eq("user_id", userId)
+		.order("created_at", { ascending: false });
+	return data ?? [];
+}
+
+export async function getProfileIdByUsername(
+	supabase: SupabaseClient<Database>,
+	username: string,
+): Promise<string | null> {
+	const { data } = await supabase.from("profiles").select("id").eq("username", username).maybeSingle();
+	return data?.id ?? null;
 }
 
 export async function getActiveBroadcastRoomMuteAnimeIds(
@@ -508,6 +606,24 @@ export async function getBroadcastRoomPosts(
 	return enrichPostsWithCounts(supabase, (orderedPosts ?? []) as unknown as RawPost[], userId, {
 		includeMutedRoomPosts: true,
 	});
+}
+
+export async function getPostReplies(
+	supabase: SupabaseClient<Database>,
+	parentId: string,
+	options: { mode: "recent" | "all"; limit: number },
+): Promise<RawPost[]> {
+	let query = supabase.from("posts").select(POST_LIST_SELECT).eq("parent_id", parentId);
+	if (options.mode === "recent") {
+		query = query.order("created_at", { ascending: false }).limit(options.limit);
+	} else {
+		query = query.order("created_at", { ascending: true }).limit(options.limit);
+	}
+
+	const { data, error } = await query;
+	if (error) throw error;
+	const rows = (data ?? []) as unknown as RawPost[];
+	return options.mode === "recent" ? [...rows].reverse() : rows;
 }
 
 // ── ヘルパー ──────────────────────────────────────────────────────
@@ -1017,6 +1133,171 @@ export async function getBookmarkedPosts(supabase: SupabaseClient<Database>, use
 		(a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0),
 	);
 	return enrichPostsWithCounts(supabase, sorted, userId);
+}
+
+type ProfileRepostContext = {
+	id: string;
+	username: string;
+	display_name: string | null;
+	avatar_url: string | null;
+};
+
+type TimelinePostsWithRepostsResult = {
+	posts: Post[];
+	error: unknown | null;
+};
+
+export async function getTimelinePostsWithReposts(
+	supabase: SupabaseClient<Database>,
+	profiles: ProfileRepostContext[],
+	currentUserId: string | null,
+	options: { limit?: number; select?: string; before?: string; beforeId?: string } = {},
+): Promise<TimelinePostsWithRepostsResult> {
+	if (profiles.length === 0) return { posts: [], error: null };
+
+	const limit = options.limit ?? 50;
+	const select = options.select ?? POST_LIST_SELECT;
+	const profileIds = profiles.map((profile) => profile.id);
+	const firstProfileId = profileIds[0];
+	if (!firstProfileId) return { posts: [], error: null };
+	const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
+
+	const buildProfileFilter = <
+		T extends {
+			eq: (column: string, value: string) => T;
+			in: (column: string, values: string[]) => T;
+			lt: (column: string, value: string) => T;
+			or: (filters: string) => T;
+		},
+	>(
+		query: T,
+		cursorIdColumn: string,
+	) => {
+		let q = profileIds.length === 1 ? query.eq("user_id", firstProfileId) : query.in("user_id", profileIds);
+		if (options.before && options.beforeId) {
+			q = q.or(
+				`created_at.lt.${options.before},and(created_at.eq.${options.before},${cursorIdColumn}.lt.${options.beforeId})`,
+			);
+		} else if (options.before) {
+			q = q.lt("created_at", options.before);
+		}
+		return q;
+	};
+
+	const ownPostsQuery = buildProfileFilter(
+		supabase
+			.from("posts")
+			.select(select)
+			.is("parent_id", null)
+			.order("created_at", { ascending: false })
+			.order("id", { ascending: false })
+			.limit(limit),
+		"id",
+	);
+	const repostRowsQuery = buildProfileFilter(
+		supabase
+			.from("reposts")
+			.select("post_id, user_id, created_at")
+			.order("created_at", { ascending: false })
+			.order("post_id", { ascending: false })
+			.limit(limit),
+		"post_id",
+	);
+
+	const [ownPostsResult, repostRowsResult] = await Promise.all([ownPostsQuery, repostRowsQuery]);
+
+	if (ownPostsResult.error) {
+		return { posts: [], error: ownPostsResult.error };
+	}
+	if (repostRowsResult.error) {
+		return { posts: [], error: repostRowsResult.error };
+	}
+
+	const ownPosts = (ownPostsResult.data ?? []) as unknown as RawPost[];
+	const ownPostIds = new Set(ownPosts.map((post) => post.id));
+	const repostRows = repostRowsResult.data ?? [];
+	const repostPostIds = [
+		...new Set(
+			repostRows.filter((row) => profiles.length > 1 || !ownPostIds.has(row.post_id)).map((row) => row.post_id),
+		),
+	];
+
+	const repostedPostsResult =
+		repostPostIds.length > 0
+			? await supabase.from("posts").select(select).in("id", repostPostIds)
+			: { data: [] as unknown[], error: null };
+
+	if (repostedPostsResult.error) {
+		return { posts: [], error: repostedPostsResult.error };
+	}
+
+	const repostedPostById = new Map(
+		((repostedPostsResult.data ?? []) as unknown as RawPost[]).map((post) => [post.id, post]),
+	);
+
+	const timelineItems = [
+		...ownPosts.map((post) => ({
+			kind: "post" as const,
+			sortAt: post.created_at,
+			post,
+		})),
+		...repostRows
+			.map((row) => {
+				const post = repostedPostById.get(row.post_id);
+				const repostProfile = profileById.get(row.user_id);
+				if (!post || !repostProfile) return null;
+				return {
+					kind: "repost" as const,
+					sortAt: row.created_at,
+					post,
+					repostedAt: row.created_at,
+					profile: repostProfile,
+				};
+			})
+			.filter(
+				(
+					item,
+				): item is {
+					kind: "repost";
+					sortAt: string;
+					post: RawPost;
+					repostedAt: string;
+					profile: ProfileRepostContext;
+				} => item !== null,
+			),
+	]
+		.sort((a, b) => new Date(b.sortAt).getTime() - new Date(a.sortAt).getTime())
+		.filter((item, index, items) => items.findIndex((candidate) => candidate.post.id === item.post.id) === index)
+		.slice(0, limit);
+
+	const rawTimelinePosts = timelineItems.map((item) => ({
+		...item.post,
+		repost_context:
+			item.kind === "repost"
+				? {
+						user_id: item.profile.id,
+						username: item.profile.username,
+						display_name: item.profile.display_name,
+						avatar_url: item.profile.avatar_url,
+						created_at: item.repostedAt,
+					}
+				: null,
+	}));
+
+	return { posts: await enrichPostsWithCounts(supabase, rawTimelinePosts, currentUserId), error: null };
+}
+
+export async function getProfileTimelinePosts(
+	supabase: SupabaseClient<Database>,
+	profile: ProfileRepostContext,
+	currentUserId: string | null,
+	limit = 50,
+): Promise<Post[]> {
+	const result = await getTimelinePostsWithReposts(supabase, [profile], currentUserId, { limit });
+	if (result.error) {
+		console.error("[profile] timeline posts query failed:", result.error);
+	}
+	return result.posts;
 }
 
 export async function getLikedPosts(
@@ -1590,6 +1871,15 @@ export async function getAnimeRankingTrending(supabase: SupabaseClient<Database>
 	return animes.map((a) => ({ ...a, recent_count: countMap.get(a.id) ?? 0 }));
 }
 
+export async function getTrendingHashtags(supabase: SupabaseClient<Database>, limit = 10) {
+	const { data, error } = await supabase.rpc("get_trending_hashtags", { limit_count: limit });
+	if (error) {
+		console.error("trending hashtags query failed:", error);
+		return [];
+	}
+	return data ?? [];
+}
+
 /**
  * 高評価ランキング（平均スコア順）
  */
@@ -1693,27 +1983,10 @@ export async function getUsersWhoListedAnime(
 export async function getAnimeExchangeEntries(
 	supabase: SupabaseClient<Database>,
 	userId: string,
-	limit = 20,
+	limit: number | null = 20,
+	status?: AnimeExchangeItem["status"],
 ): Promise<AnimeExchangeItem[]> {
-	const { data, error } = await (
-		supabase as unknown as {
-			from: (table: "anime_exchange_entries") => {
-				select: (columns: string) => {
-					eq: (
-						column: "user_id",
-						value: string,
-					) => {
-						order: (
-							column: "created_at",
-							options: { ascending: boolean },
-						) => {
-							limit: (count: number) => Promise<{ data: unknown[] | null; error: unknown | null }>;
-						};
-					};
-				};
-			};
-		}
-	)
+	let query = supabase
 		.from("anime_exchange_entries")
 		.select(`
             id,
@@ -1721,23 +1994,36 @@ export async function getAnimeExchangeEntries(
             created_at,
             matched_at,
             comment,
+            subjective_tags,
             received_entry_id,
             anime:anime_exchange_entries_anime_id_fkey (
                 id,
                 title,
                 title_en,
-                cover_url
+                cover_url,
+                episode_count
             )
         `)
-		.eq("user_id", userId)
-		.order("created_at", { ascending: false })
-		.limit(limit);
+		.eq("user_id", userId);
+
+	if (status) query = query.eq("status", status);
+
+	const orderedQuery = query.order("created_at", { ascending: false });
+	const { data, error } = await (limit == null ? orderedQuery : orderedQuery.limit(limit));
 
 	if (error || !data) return [];
 	const baseRows = data as Record<string, unknown>[];
 	const baseItems = baseRows
 		.map((row) => toAnimeExchangeItem(row))
 		.filter((item): item is AnimeExchangeItem => item !== null);
+	const receivedEntryIdByItemId = new Map<string, string>();
+	for (const row of baseRows) {
+		const id = row["id"];
+		const receivedEntryId = row["received_entry_id"];
+		if (id !== undefined && typeof receivedEntryId === "string" && receivedEntryId.length > 0) {
+			receivedEntryIdByItemId.set(String(id), receivedEntryId);
+		}
+	}
 	const receivedEntryIds = [
 		...new Set(
 			baseRows
@@ -1745,53 +2031,116 @@ export async function getAnimeExchangeEntries(
 				.filter((v): v is string => typeof v === "string" && v.length > 0),
 		),
 	];
-	if (receivedEntryIds.length === 0) return baseItems;
 
-	const { data: receivedRows, error: receivedError } = await supabase
-		.from("anime_exchange_entries")
-		.select(`
-			id,
-			comment,
-			anime:anime_exchange_entries_anime_id_fkey (
+	let entriesWithReceived = baseItems;
+	if (receivedEntryIds.length > 0) {
+		const { data: receivedRows, error: receivedError } = await supabase
+			.from("anime_exchange_entries")
+			.select(`
 				id,
-				title,
-				title_en,
-				cover_url
-			)
-		`)
-		.in("id", receivedEntryIds);
+				comment,
+				subjective_tags,
+				anime:anime_exchange_entries_anime_id_fkey (
+					id,
+					title,
+					title_en,
+					cover_url,
+					episode_count
+				)
+			`)
+			.in("id", receivedEntryIds);
 
-	if (receivedError || !receivedRows) return baseItems;
+		if (receivedError || !receivedRows) return baseItems;
 
-	const receivedEntryById = new Map<string, Pick<AnimeExchangeItem, "received_anime" | "received_comment">>();
-	for (const row of receivedRows as Record<string, unknown>[]) {
-		const animeValue = row["anime"];
-		const anime = Array.isArray(animeValue) ? animeValue[0] : animeValue;
-		if (!anime || typeof anime !== "object" || !row["id"]) continue;
-		const animeRecord = anime as Record<string, unknown>;
-		receivedEntryById.set(String(row["id"]), {
-			received_anime: {
-				id: String(animeRecord["id"]),
-				title: String(animeRecord["title"]),
-				title_en: typeof animeRecord["title_en"] === "string" ? animeRecord["title_en"] : null,
-				cover_url: typeof animeRecord["cover_url"] === "string" ? animeRecord["cover_url"] : null,
-			},
-			received_comment: typeof row["comment"] === "string" ? row["comment"] : null,
+		const receivedEntryById = new Map<
+			string,
+			Pick<AnimeExchangeItem, "received_anime" | "received_comment" | "received_subjective_tags">
+		>();
+		for (const row of receivedRows as Record<string, unknown>[]) {
+			const animeValue = row["anime"];
+			const anime = Array.isArray(animeValue) ? animeValue[0] : animeValue;
+			if (!anime || typeof anime !== "object" || !row["id"]) continue;
+			const animeRecord = anime as Record<string, unknown>;
+			receivedEntryById.set(String(row["id"]), {
+				received_anime: {
+					id: String(animeRecord["id"]),
+					title: String(animeRecord["title"]),
+					title_en: typeof animeRecord["title_en"] === "string" ? animeRecord["title_en"] : null,
+					cover_url: typeof animeRecord["cover_url"] === "string" ? animeRecord["cover_url"] : null,
+					episode_count:
+						typeof animeRecord["episode_count"] === "string" ||
+						typeof animeRecord["episode_count"] === "number"
+							? String(animeRecord["episode_count"])
+							: null,
+					user_entry: null,
+				},
+				received_comment: typeof row["comment"] === "string" ? row["comment"] : null,
+				received_subjective_tags: toValidExchangeSubjectiveTags(
+					Array.isArray(row["subjective_tags"]) ? row["subjective_tags"] : [],
+				),
+			});
+		}
+
+		entriesWithReceived = baseItems.map((item) => {
+			const receivedEntryId = receivedEntryIdByItemId.get(item.id);
+			const receivedAnime =
+				typeof receivedEntryId === "string" && receivedEntryId.length > 0
+					? (receivedEntryById.get(receivedEntryId)?.received_anime ?? null)
+					: null;
+			const receivedComment =
+				typeof receivedEntryId === "string" && receivedEntryId.length > 0
+					? (receivedEntryById.get(receivedEntryId)?.received_comment ?? null)
+					: null;
+			const receivedSubjectiveTags =
+				typeof receivedEntryId === "string" && receivedEntryId.length > 0
+					? (receivedEntryById.get(receivedEntryId)?.received_subjective_tags ?? [])
+					: [];
+			return {
+				...item,
+				received_anime: receivedAnime,
+				received_comment: receivedComment,
+				received_subjective_tags: receivedSubjectiveTags,
+			};
 		});
 	}
 
-	return baseItems.map((item, index) => {
-		const receivedEntryId = baseRows[index]?.["received_entry_id"];
-		const receivedAnime =
-			typeof receivedEntryId === "string" && receivedEntryId.length > 0
-				? (receivedEntryById.get(receivedEntryId)?.received_anime ?? null)
-				: null;
-		const receivedComment =
-			typeof receivedEntryId === "string" && receivedEntryId.length > 0
-				? (receivedEntryById.get(receivedEntryId)?.received_comment ?? null)
-				: null;
-		return { ...item, received_anime: receivedAnime, received_comment: receivedComment };
-	});
+	const animeIds = [
+		...new Set(
+			entriesWithReceived
+				.flatMap((entry) => [entry.offered_anime.id, entry.received_anime?.id])
+				.filter((id): id is string => typeof id === "string" && id.length > 0),
+		),
+	];
+	if (animeIds.length === 0) return entriesWithReceived;
+
+	const { data: userAnimeRows, error: userAnimeError } = await supabase
+		.from("user_anime_list")
+		.select("anime_id, status, score, progress, updated_at")
+		.eq("user_id", userId)
+		.in("anime_id", animeIds.map(Number));
+
+	if (userAnimeError || !userAnimeRows) return entriesWithReceived;
+
+	const userEntryByAnimeId = new Map<string, UserAnimeEntry>();
+	for (const row of userAnimeRows) {
+		const entry = toAnimeExchangeUserEntry(row as Record<string, unknown>);
+		if (!entry) continue;
+		userEntryByAnimeId.set(String(row.anime_id), entry);
+	}
+
+	return entriesWithReceived.map((entry) => ({
+		...entry,
+		offered_anime: {
+			...entry.offered_anime,
+			user_entry: userEntryByAnimeId.get(entry.offered_anime.id) ?? null,
+		},
+		received_anime: entry.received_anime
+			? {
+					...entry.received_anime,
+					user_entry: userEntryByAnimeId.get(entry.received_anime.id) ?? null,
+				}
+			: null,
+	}));
 }
 
 // ── ヘルパー ──────────────────────────────────────────────────────
@@ -1809,7 +2158,7 @@ function toExchangeShareAnime(value: unknown): AnimeExchangeShare["offered_anime
 	};
 }
 
-const EXCHANGE_SHARE_SELECT = `comment, received_entry_id,
+const EXCHANGE_SHARE_SELECT = `comment, subjective_tags, received_entry_id,
             anime:anime_exchange_entries_anime_id_fkey ( id, title, title_en, cover_url )`;
 
 export async function getAnimeExchangeShareForUser(
@@ -1839,8 +2188,10 @@ export async function getAnimeExchangeShareForUser(
 		.maybeSingle();
 
 	const receivedRecord = received as Record<string, unknown> | null;
-	const receivedAnime = receivedRecord ? toExchangeShareAnime(receivedRecord["anime"]) : null;
+	if (!receivedRecord) return null;
+	const receivedAnime = toExchangeShareAnime(receivedRecord["anime"]);
 	if (!receivedAnime) return null;
+	const receivedSubjectiveTagsRaw = receivedRecord["subjective_tags"];
 
 	return {
 		type: "anime_exchange",
@@ -1849,6 +2200,12 @@ export async function getAnimeExchangeShareForUser(
 		offered_comment: typeof entryRecord["comment"] === "string" ? entryRecord["comment"] : null,
 		received_comment:
 			typeof receivedRecord?.["comment"] === "string" ? (receivedRecord["comment"] as string) : null,
+		offered_subjective_tags: toValidExchangeSubjectiveTags(
+			Array.isArray(entryRecord["subjective_tags"]) ? entryRecord["subjective_tags"] : [],
+		),
+		received_subjective_tags: toValidExchangeSubjectiveTags(
+			Array.isArray(receivedSubjectiveTagsRaw) ? receivedSubjectiveTagsRaw : [],
+		),
 	};
 }
 
@@ -1929,14 +2286,43 @@ function toAnimeExchangeItem(raw: Record<string, unknown>): AnimeExchangeItem | 
 		created_at: String(raw["created_at"]),
 		matched_at: (raw["matched_at"] as string | null) ?? null,
 		comment: typeof raw["comment"] === "string" ? raw["comment"] : null,
+		subjective_tags: toValidExchangeSubjectiveTags(
+			Array.isArray(raw["subjective_tags"]) ? raw["subjective_tags"] : [],
+		),
 		offered_anime: {
 			id: String(offeredRecord["id"]),
 			title: String(offeredRecord["title"]),
 			title_en: typeof offeredRecord["title_en"] === "string" ? offeredRecord["title_en"] : null,
 			cover_url: typeof offeredRecord["cover_url"] === "string" ? offeredRecord["cover_url"] : null,
+			episode_count:
+				typeof offeredRecord["episode_count"] === "string" || typeof offeredRecord["episode_count"] === "number"
+					? String(offeredRecord["episode_count"])
+					: null,
+			user_entry: null,
 		},
 		received_anime: null,
 		received_comment: null,
+		received_subjective_tags: [],
+	};
+}
+
+function toAnimeExchangeUserEntry(raw: Record<string, unknown>): UserAnimeEntry | null {
+	const status = raw["status"];
+	if (
+		status !== "watching" &&
+		status !== "completed" &&
+		status !== "plan_to_watch" &&
+		status !== "dropped" &&
+		status !== "on_hold"
+	) {
+		return null;
+	}
+
+	return {
+		status,
+		score: typeof raw["score"] === "number" ? raw["score"] : null,
+		progress: typeof raw["progress"] === "number" ? raw["progress"] : 0,
+		updated_at: typeof raw["updated_at"] === "string" ? raw["updated_at"] : "",
 	};
 }
 
@@ -2129,6 +2515,7 @@ export async function getBroadcastRoomMutes(
 		anime_id: number;
 		room_session_id: string;
 		session: { room_date: string } | { room_date: string }[];
+		anime: { title: string; cover_url: string | null } | null;
 		duration_days: number | null;
 		mute_until_event_end: boolean;
 		repeat_weekly: boolean;
@@ -2140,32 +2527,21 @@ export async function getBroadcastRoomMutes(
 	const { data } = await supabase
 		.from("broadcast_room_mutes")
 		.select(
-			"anime_id, room_session_id, session:broadcast_room_sessions!broadcast_room_mutes_room_session_id_fkey ( room_date ), duration_days, mute_until_event_end, repeat_weekly, muted_until, created_at, updated_at",
+			"anime_id, room_session_id, session:broadcast_room_sessions!broadcast_room_mutes_room_session_id_fkey ( room_date ), anime:anime!broadcast_room_mutes_anime_id_fkey ( title, cover_url ), duration_days, mute_until_event_end, repeat_weekly, muted_until, created_at, updated_at",
 		)
 		.eq("user_id", userId)
 		.order("muted_until", { ascending: false });
 	const rows = (data ?? []) as unknown as BroadcastRoomMuteRow[];
-	if (rows.length === 0) return [];
-
-	const { data: animes } = await supabase
-		.from("anime")
-		.select("id, title, cover_url")
-		.in(
-			"id",
-			rows.map((row) => row.anime_id),
-		);
-	const animeById = new Map((animes ?? []).map((anime) => [anime.id, anime]));
 
 	return rows.map((row) => {
-		const anime = animeById.get(row.anime_id);
 		const duration =
 			row.mute_until_event_end || row.duration_days == null
 				? "event_end"
 				: (Math.min(7, Math.max(1, row.duration_days)) as 1 | 2 | 3 | 4 | 5 | 6 | 7);
 		return {
 			anime_id: String(row.anime_id),
-			anime_title: anime?.title ?? "不明なアニメ",
-			anime_cover_url: anime?.cover_url ?? null,
+			anime_title: row.anime?.title ?? "不明なアニメ",
+			anime_cover_url: row.anime?.cover_url ?? null,
 			room_session_id: row.room_session_id,
 			room_date: (Array.isArray(row.session) ? row.session[0]?.room_date : row.session?.room_date) ?? "",
 			duration,
@@ -2197,17 +2573,20 @@ export async function getActiveAnimeMuteIds(
 	userId: string | null,
 ): Promise<Set<string>> {
 	if (!userId) return new Set();
+	type ActiveMuteRow = AnimeMuteRow & { anime: { id: number; broadcast_day: number | null } | null };
 	// biome-ignore lint/suspicious/noExplicitAny: anime_mutes not yet in auto-generated DB types
 	const { data } = await (supabase as any)
 		.from("anime_mutes")
-		.select("anime_id, mute_type, period_days, is_repeat, muted_until")
+		.select(
+			"anime_id, mute_type, period_days, is_repeat, muted_until, anime:anime!anime_mutes_anime_id_fkey ( id, broadcast_day )",
+		)
 		.eq("user_id", userId);
-	const rows = (data ?? []) as AnimeMuteRow[];
+	const rows = (data ?? []) as ActiveMuteRow[];
 	if (rows.length === 0) return new Set();
 
 	const now = Date.now();
 	const activeIds = new Set<string>();
-	const repeatRows: AnimeMuteRow[] = [];
+	const todayDay = new Date().getDay();
 
 	for (const row of rows) {
 		if (row.mute_type === "always") {
@@ -2217,29 +2596,10 @@ export async function getActiveAnimeMuteIds(
 				if (row.muted_until && new Date(row.muted_until).getTime() > now) {
 					activeIds.add(String(row.anime_id));
 				}
-			} else {
-				repeatRows.push(row);
+			} else if (row.period_days != null && row.anime?.broadcast_day != null) {
+				const daysSince = (todayDay - row.anime.broadcast_day + 7) % 7;
+				if (daysSince < row.period_days) activeIds.add(String(row.anime_id));
 			}
-		}
-	}
-
-	// For repeat period mutes, check if today falls within period window of last broadcast_day
-	if (repeatRows.length > 0) {
-		const { data: animes } = await supabase
-			.from("anime")
-			.select("id, broadcast_day")
-			.in(
-				"id",
-				repeatRows.map((r) => r.anime_id),
-			);
-		const animeMap = new Map((animes ?? []).map((a) => [a.id, a.broadcast_day]));
-		const todayDay = new Date().getDay();
-		for (const row of repeatRows) {
-			if (row.period_days == null) continue;
-			const broadcastDay = animeMap.get(row.anime_id);
-			if (broadcastDay == null) continue;
-			const daysSince = (todayDay - broadcastDay + 7) % 7;
-			if (daysSince < row.period_days) activeIds.add(String(row.anime_id));
 		}
 	}
 
@@ -2247,37 +2607,36 @@ export async function getActiveAnimeMuteIds(
 }
 
 export async function getAnimeMutes(supabase: SupabaseClient<Database>, userId: string): Promise<AnimeMute[]> {
+	type Row = AnimeMuteRow & {
+		id: string;
+		created_at: string;
+		anime: { title: string; cover_url: string | null } | null;
+	};
 	// biome-ignore lint/suspicious/noExplicitAny: anime_mutes not yet in auto-generated DB types
 	const { data } = await (supabase as any)
 		.from("anime_mutes")
-		.select("id, anime_id, mute_type, period_days, is_repeat, muted_until, created_at")
+		.select(
+			"id, anime_id, mute_type, period_days, is_repeat, muted_until, created_at, anime:anime!anime_mutes_anime_id_fkey ( title, cover_url )",
+		)
 		.eq("user_id", userId)
 		.order("created_at", { ascending: false });
-	type Row = AnimeMuteRow & { id: string; created_at: string };
 	const rows = ((data ?? []) as Row[]).filter((row) => isVisibleAnimeMute(row));
-	if (rows.length === 0) return [];
 
-	const { data: animes } = await supabase
-		.from("anime")
-		.select("id, title, cover_url")
-		.in(
-			"id",
-			rows.map((r) => r.anime_id),
-		);
-	const animeById = new Map((animes ?? []).map((a) => [a.id, a]));
+	return rows.map((row) => ({
+		id: row.id,
+		anime_id: String(row.anime_id),
+		anime_title: row.anime?.title ?? "不明なアニメ",
+		anime_cover_url: row.anime?.cover_url ?? null,
+		mute_type: row.mute_type as "period" | "always",
+		period_days: row.period_days,
+		is_repeat: row.is_repeat,
+		muted_until: row.muted_until,
+		created_at: row.created_at,
+	}));
+}
 
-	return rows.map((row) => {
-		const anime = animeById.get(row.anime_id);
-		return {
-			id: row.id,
-			anime_id: String(row.anime_id),
-			anime_title: anime?.title ?? "不明なアニメ",
-			anime_cover_url: anime?.cover_url ?? null,
-			mute_type: row.mute_type as "period" | "always",
-			period_days: row.period_days,
-			is_repeat: row.is_repeat,
-			muted_until: row.muted_until,
-			created_at: row.created_at,
-		};
-	});
+export async function getAnimeMuteCandidate(supabase: SupabaseClient<Database>, animeId: number) {
+	const { data } = await supabase.from("anime").select("id, title, cover_url").eq("id", animeId).maybeSingle();
+	if (!data) return null;
+	return { id: String(data.id), title: data.title, cover_url: data.cover_url ?? null };
 }

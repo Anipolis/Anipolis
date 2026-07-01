@@ -1,4 +1,5 @@
 import { error } from "@sveltejs/kit";
+import { toValidExchangeSubjectiveTags } from "$lib/exchange-tags";
 import { getAnimeRankingTrending } from "$lib/server/queries";
 import type { AnimeExchangeShare } from "$lib/types";
 import type { PageServerLoad } from "./$types";
@@ -9,6 +10,8 @@ type ExchangeShareRaw = {
 	received_anime?: unknown;
 	offered_comment?: unknown;
 	received_comment?: unknown;
+	offered_subjective_tags?: unknown;
+	received_subjective_tags?: unknown;
 };
 
 type ExchangeShareAnimeRaw = {
@@ -31,6 +34,12 @@ function toExchangeShare(value: unknown): AnimeExchangeShare | null {
 		received_anime: received,
 		offered_comment: typeof raw.offered_comment === "string" ? raw.offered_comment : null,
 		received_comment: typeof raw.received_comment === "string" ? raw.received_comment : null,
+		offered_subjective_tags: toValidExchangeSubjectiveTags(
+			Array.isArray(raw.offered_subjective_tags) ? raw.offered_subjective_tags : [],
+		),
+		received_subjective_tags: toValidExchangeSubjectiveTags(
+			Array.isArray(raw.received_subjective_tags) ? raw.received_subjective_tags : [],
+		),
 	};
 }
 
@@ -68,7 +77,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 	const post = postResult.data;
 
 	const exchangeShare = toExchangeShare(post?.exchange_share);
-	if (!post || !exchangeShare) error(404, "交換結果が見つかりません");
+	if (!post || !exchangeShare) error(404, "トレード結果が見つかりません");
 
 	const profile = Array.isArray(post.profiles) ? post.profiles[0] : post.profiles;
 

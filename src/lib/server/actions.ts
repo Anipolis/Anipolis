@@ -1,13 +1,25 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fail } from "@sveltejs/kit";
+import {
+	MAX_EXCHANGE_SUBJECTIVE_TAGS,
+	toExchangeSubjectiveTags,
+	validateExchangeSubjectiveTags,
+} from "$lib/exchange-tags";
 import { createServiceRoleClient } from "$lib/server/supabase-admin";
-import { publicUrlToStoragePath } from "$lib/server/upload";
+import { publicUrlToStoragePath, validateImageBuffer } from "$lib/server/upload";
 import type { Database, Json } from "$lib/supabase/database.types";
 import type { AnimeExchangeShare, AnimeStatus, BroadcastRoomMuteDuration } from "$lib/types";
 import { extractHashtags } from "$lib/utils/hashtag";
 
 const reportStatuses = new Set(["open", "reviewing", "resolved", "rejected"]);
 const moderationStatuses = new Set(["active", "restricted", "banned"]);
+const animeExchangeErrorMessages = {
+	ANIME_EXCHANGE_ANIME_NOT_FOUND: { status: 404, message: "アニメが見つかりません" },
+	ANIME_EXCHANGE_WAITING_EXISTS: {
+		status: 409,
+		message: "待機中のトレードがあります。マッチングをやめてからもう一度お試しください。",
+	},
+} as const;
 
 export type ModerationStatus = "active" | "restricted" | "banned";
 
@@ -15,6 +27,14 @@ type ModerationProfile = {
 	moderation_status: ModerationStatus;
 	moderation_until: string | null;
 };
+
+export function getAnimeExchangeErrorDetail(error: {
+	details?: unknown;
+}): keyof typeof animeExchangeErrorMessages | null {
+	return typeof error.details === "string" && error.details in animeExchangeErrorMessages
+		? (error.details as keyof typeof animeExchangeErrorMessages)
+		: null;
+}
 
 export async function getCurrentModerationStatus(
 	supabase: SupabaseClient<Database>,
@@ -67,12 +87,13 @@ export async function insertPostWithHashtags(
 	exchangeShare: AnimeExchangeShare | null = null,
 	broadcastRoomSessionId: string | null = null,
 	cwAnimeId: string | null = null,
+	additionalHashtags: string[] = [],
 ) {
 	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
 	if (moderationFailure) return moderationFailure;
 
 	if (!content && imageUrls.length === 0 && !animeId && !exchangeShare) {
-		return fail(400, { message: "本文、画像、アニメ引用、または交換結果を追加してください" });
+		return fail(400, { message: "本文、画像、アニメ引用、またはトレード結果を追加してください" });
 	}
 	if (content.length > 280) return fail(400, { message: "280文字以内で入力してください" });
 
@@ -103,13 +124,18 @@ export async function insertPostWithHashtags(
 
 	if (postError || !post) {
 		console.error("post insert error:", postError);
-		return fail(500, { message: exchangeShare ? "交換結果つき投稿の保存に失敗しました" : "投稿に失敗しました" });
+		return fail(500, {
+			message: exchangeShare ? "トレード結果つき投稿の保存に失敗しました" : "投稿に失敗しました",
+		});
 	}
 
 	// ハッシュタグを一括登録（既存タグは ON CONFLICT DO NOTHING）。
 	// タグごとの insert+select ループは実況時の余分な往復になるため一括化している。
 	// メンション通知は DB トリガー notify_on_mention（migration 026）が生成する。
-	const tags = extractHashtags(postContent);
+	const additionalTags = additionalHashtags
+		.map((tag) => tag.trim().replace(/^#+/, "").toLowerCase())
+		.filter((tag) => tag.length > 0);
+	const tags = [...new Set([...extractHashtags(postContent), ...additionalTags])];
 	if (tags.length > 0) {
 		await supabase.from("hashtags").upsert(
 			tags.map((name) => ({ name })),
@@ -631,7 +657,7 @@ export async function upsertUserAnimeEntry(supabase: SupabaseClient<Database>, r
 	if (moderationFailure) return moderationFailure;
 
 	const form = await request.formData();
-	const animeId = (form.get("anime_id") as string | null)?.trim() ?? "";
+	const animeId = parsePositiveInt(form.get("anime_id") as string | null);
 	const status = (form.get("status") as string | null)?.trim() as AnimeStatus | null;
 	const scoreRaw = form.get("score") as string | null;
 	const progressRaw = form.get("progress") as string | null;
@@ -707,27 +733,38 @@ export async function exchangeAnimeAction(supabase: SupabaseClient<Database>, re
 
 	const form = await request.formData();
 	const animeId = (form.get("anime_id") as string | null)?.trim() ?? "";
+	const animeIdNumber = Number(animeId);
 	const comment = ((form.get("comment") as string | null)?.trim() ?? "") || null;
+	const subjectiveTags = toExchangeSubjectiveTags(form.getAll("subjective_tags"));
 
-	if (!animeId || Number.isNaN(Number(animeId))) {
+	if (!/^\d+$/.test(animeId) || !Number.isSafeInteger(animeIdNumber) || animeIdNumber <= 0) {
 		return fail(400, { exchangeMessage: "アニメを選択してください" });
 	}
 
 	if (comment && comment.length > 120) {
 		return fail(400, { exchangeMessage: "コメントは120文字以内で入力してください" });
 	}
+	if (subjectiveTags.length > MAX_EXCHANGE_SUBJECTIVE_TAGS) {
+		return fail(400, { exchangeMessage: "タグは3個まで選択できます" });
+	}
+	if (!validateExchangeSubjectiveTags(subjectiveTags)) {
+		return fail(400, { exchangeMessage: "タグの指定が不正です" });
+	}
 
 	const { data, error } = await supabase.rpc("create_anime_exchange", {
-		p_anime_id: Number(animeId),
+		p_anime_id: animeIdNumber,
 		p_comment: comment,
+		p_subjective_tags: subjectiveTags,
 	});
 
 	if (error) {
-		if (error.message.includes("anime not found")) {
-			return fail(404, { exchangeMessage: "アニメが見つかりません" });
+		const exchangeErrorDetail = getAnimeExchangeErrorDetail(error);
+		if (exchangeErrorDetail) {
+			const mapped = animeExchangeErrorMessages[exchangeErrorDetail];
+			return fail(mapped.status, { exchangeMessage: mapped.message });
 		}
 		console.error("anime exchange error:", error);
-		return fail(500, { exchangeMessage: "交換に失敗しました" });
+		return fail(500, { exchangeMessage: "トレードに失敗しました" });
 	}
 
 	const result = data?.[0] ?? null;
@@ -753,6 +790,21 @@ export async function exchangeAnimeAction(supabase: SupabaseClient<Database>, re
 		exchangeMatched: result?.received_anime_id != null,
 		receivedAnime,
 	};
+}
+
+export async function cancelAnimeExchangeAction(supabase: SupabaseClient<Database>, userId: string) {
+	const { data, error } = await supabase.rpc("cancel_anime_exchange");
+	if (error) {
+		console.error("anime exchange cancel error:", { userId, error });
+		return fail(500, { cancelMessage: "マッチングのキャンセルに失敗しました" });
+	}
+
+	const result = data?.[0] ?? null;
+	if (!result?.cancelled) {
+		return fail(409, { cancelMessage: "待機中のトレードが見つかりません" });
+	}
+
+	return { cancelSuccess: true };
 }
 
 export async function toggleBroadcastSubscription(
@@ -853,6 +905,145 @@ export async function updateNotificationSettingsAction(
 	await updateBroadcastNotificationSettings(supabase, userId, settings);
 }
 
+const ONBOARDING_USERNAME_PATTERN = /^[a-zA-Z0-9_]{3,20}$/;
+const ONBOARDING_MAX_DISPLAY_NAME_LENGTH = 50;
+const ONBOARDING_ALLOWED_AVATAR_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+const ONBOARDING_MAX_AVATAR_SIZE = 2 * 1024 * 1024;
+
+type ProfileSetupResult =
+	| { success: true }
+	| {
+			error: string;
+			status: number;
+			field?: "username" | "display_name" | "avatar";
+			values: { username: string; display_name: string };
+	  };
+
+type ProfileSetupOptions = {
+	oauthAvatarUrl?: string | null;
+};
+
+async function uploadOnboardingAvatar(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+	file: File,
+): Promise<{ url: string; path: string; stalePaths: string[] } | { error: string }> {
+	if (!ONBOARDING_ALLOWED_AVATAR_TYPES.includes(file.type as (typeof ONBOARDING_ALLOWED_AVATAR_TYPES)[number])) {
+		return { error: "対応していないファイル形式です（JPEG/PNG/WebP）" };
+	}
+	if (file.size > ONBOARDING_MAX_AVATAR_SIZE) {
+		return { error: "画像は2MB以内にしてください" };
+	}
+
+	const arrayBuffer = await file.arrayBuffer();
+	const validated = validateImageBuffer(arrayBuffer, ONBOARDING_ALLOWED_AVATAR_TYPES);
+	if (!validated) {
+		return { error: "対応していないファイル形式です（JPEG/PNG/WebP）" };
+	}
+
+	const { data: existingFiles } = await supabase.storage.from("profile-avatars").list(userId);
+	const path = `${userId}/avatar_${Date.now()}.${validated.ext}`;
+	const { error } = await supabase.storage
+		.from("profile-avatars")
+		.upload(path, arrayBuffer, { contentType: validated.mime, upsert: true });
+	if (error) {
+		console.error("onboarding avatar upload error:", error);
+		return { error: "画像のアップロードに失敗しました" };
+	}
+
+	const {
+		data: { publicUrl },
+	} = supabase.storage.from("profile-avatars").getPublicUrl(path);
+	const stalePaths = (existingFiles ?? [])
+		.map((file) => `${userId}/${file.name}`)
+		.filter((existingPath) => existingPath !== path);
+	return { url: publicUrl, path, stalePaths };
+}
+
+/** 初回オンボーディング：ユーザーが確認した公開プロフィールを初めて作成する */
+export async function completeProfileSetupAction(
+	requestOrForm: Request | FormData,
+	supabase: SupabaseClient<Database>,
+	userId: string,
+	options: ProfileSetupOptions = {},
+): Promise<ProfileSetupResult> {
+	const form = requestOrForm instanceof FormData ? requestOrForm : await requestOrForm.formData();
+	const usernameEntry = form.get("username");
+	const displayNameEntry = form.get("display_name");
+	const avatarChoiceEntry = form.get("avatar_choice");
+	const avatarFileEntry = form.get("avatar_file");
+	const username = typeof usernameEntry === "string" ? usernameEntry.trim().toLowerCase() : "";
+	const displayName = typeof displayNameEntry === "string" ? displayNameEntry.trim() : "";
+	const avatarChoice = typeof avatarChoiceEntry === "string" ? avatarChoiceEntry : "none";
+	const values = { username, display_name: displayName };
+
+	if (!ONBOARDING_USERNAME_PATTERN.test(username)) {
+		return {
+			error: "ユーザー名は3〜20文字の半角英数字・アンダースコアのみ使用できます",
+			status: 400,
+			field: "username",
+			values,
+		};
+	}
+
+	if (displayName.length > ONBOARDING_MAX_DISPLAY_NAME_LENGTH) {
+		return {
+			error: "表示名は50文字以内で入力してください",
+			status: 400,
+			field: "display_name",
+			values,
+		};
+	}
+
+	let avatarUrl: string | null = null;
+	let uploadedAvatarPath: string | null = null;
+	let staleAvatarPaths: string[] = [];
+	if (avatarChoice === "oauth") {
+		avatarUrl = options.oauthAvatarUrl ?? null;
+	} else if (avatarChoice === "upload") {
+		if (!(avatarFileEntry instanceof File) || avatarFileEntry.size === 0) {
+			return { error: "プロフィール画像を選択してください", status: 400, field: "avatar", values };
+		}
+		const uploaded = await uploadOnboardingAvatar(supabase, userId, avatarFileEntry);
+		if ("error" in uploaded) {
+			return { error: uploaded.error, status: 400, field: "avatar", values };
+		}
+		avatarUrl = uploaded.url;
+		uploadedAvatarPath = uploaded.path;
+		staleAvatarPaths = uploaded.stalePaths;
+	}
+
+	const { error } = await supabase
+		.from("profiles")
+		.insert({ id: userId, username, display_name: displayName || null, avatar_url: avatarUrl });
+
+	if (error) {
+		console.error("onboarding profile insert error:", {
+			userId,
+			code: error.code,
+			message: error.message,
+			details: error.details,
+		});
+		if (uploadedAvatarPath) {
+			await supabase.storage.from("profile-avatars").remove([uploadedAvatarPath]);
+		}
+		if (error.code === "23505") {
+			if (error.message.includes("username")) {
+				return { error: "このユーザー名はすでに使用されています", status: 400, field: "username", values };
+			}
+			return { error: "オンボーディングはすでに完了しています", status: 409, values };
+		}
+		return { error: "保存に失敗しました。しばらく経ってから再試行してください", status: 500, values };
+	}
+
+	if (staleAvatarPaths.length > 0) {
+		const { error: cleanupError } = await supabase.storage.from("profile-avatars").remove(staleAvatarPaths);
+		if (cleanupError) console.error("onboarding stale avatar cleanup error:", cleanupError);
+	}
+
+	return { success: true };
+}
+
 export async function upsertBroadcastRoomMute(
 	supabase: SupabaseClient<Database>,
 	userId: string,
@@ -917,6 +1108,41 @@ export async function removeBroadcastRoomMute(supabase: SupabaseClient<Database>
 		.eq("anime_id", Number(animeId));
 	if (error) return fail(500, { message: "ルームのミュート解除に失敗しました" });
 	return { roomMuteSuccess: true };
+}
+
+/** 文字列を正の整数に正規化する。整数でない・0以下・桁あふれは null を返す。 */
+export function parsePositiveInt(value: string | null): number | null {
+	if (value == null) return null;
+	const trimmed = value.trim();
+	if (!/^\d+$/.test(trimmed)) return null;
+	const n = Number(trimmed);
+	return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+
+/** settings/mutes のアニメミュート更新フォームを処理する（パース・検証・upsert を所有） */
+export async function updateAnimeMuteAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
+	const form = await request.formData();
+	const animeId = (form.get("anime_id") as string | null)?.trim() ?? "";
+	const muteType = form.get("mute_type") as string | null;
+	if (!animeId || (muteType !== "period" && muteType !== "always")) {
+		return fail(400, { message: "入力内容を確認してください" });
+	}
+	const periodDays =
+		muteType === "period" ? parsePositiveInt((form.get("period_days") as string | null) ?? "3") : null;
+	if (muteType === "period" && (periodDays == null || periodDays < 1 || periodDays > 7)) {
+		return fail(400, { message: "ミュート期間を選択してください（1〜7日）" });
+	}
+	const isRepeat = form.get("is_repeat") === "on";
+
+	return upsertAnimeMute(supabase, userId, String(animeId), muteType, periodDays, isRepeat, null);
+}
+
+/** settings/mutes のアニメミュート解除フォームを処理する（パース・検証・削除を所有） */
+export async function removeAnimeMuteAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
+	const form = await request.formData();
+	const animeId = parsePositiveInt(form.get("anime_id") as string | null);
+	if (!animeId) return fail(400, { message: "ミュート設定が見つかりません" });
+	return removeAnimeMute(supabase, userId, String(animeId));
 }
 
 export async function upsertAnimeMute(

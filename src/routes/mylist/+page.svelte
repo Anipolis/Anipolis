@@ -579,8 +579,8 @@ $effect(() => {
 }
 
 .status-tab.active {
-	background: color-mix(in srgb, var(--accent, #6366f1) 20%, transparent);
-	color: var(--accent, #6366f1);
+	background: color-mix(in srgb, var(--color-accent) 20%, transparent);
+	color: var(--color-accent);
 }
 
 .status-tab--watching.active {
@@ -668,8 +668,8 @@ $effect(() => {
 	}
 
 	.mobile-visibility-btn.active {
-		background: color-mix(in srgb, var(--accent, #6366f1) 16%, transparent);
-		color: var(--accent, #6366f1);
+		background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+		color: var(--color-accent);
 		cursor: default;
 		opacity: 1;
 	}
@@ -692,8 +692,8 @@ $effect(() => {
 	}
 
 	.mobile-view-btn.active {
-		background: color-mix(in srgb, var(--accent, #6366f1) 16%, transparent);
-		color: var(--accent, #6366f1);
+		background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+		color: var(--color-accent);
 	}
 
 	.status-tab-bar {

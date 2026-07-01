@@ -2,6 +2,7 @@
 import type { SubmitFunction } from "@sveltejs/kit";
 import { enhance } from "$app/forms";
 import { goto } from "$app/navigation";
+import { trapFocus } from "$lib/actions/trapFocus";
 import AnimeExchangeResult from "$lib/components/AnimeExchangeResult.svelte";
 import ReactionUsersPopover from "$lib/components/ReactionUsersPopover.svelte";
 import { buildAnimeRoomLabel, type Post, type ReactionType, type ReactionUser } from "$lib/types";
@@ -28,7 +29,41 @@ let {
 	broadcastStartAt = null,
 }: Props = $props();
 
-const parts = $derived(parseContentParts(post.content));
+function normalizeRoomTag(value: string) {
+	return value.trim().replace(/^#+/, "").toLowerCase();
+}
+
+function fallbackRoomTag(title: string) {
+	return title.replace(/\s+/g, "").replace(/[^\p{L}\p{N}_]/gu, "");
+}
+
+function getRoomTagCandidates(post: Post) {
+	const anime = post.anime_quote;
+	if (!post.broadcast_room_session_id || !anime?.room_href) return [];
+	return [
+		...(anime.official_hashtag ?? []).map(normalizeRoomTag),
+		normalizeRoomTag(fallbackRoomTag(anime.title)),
+	].filter((tag) => tag.length > 0);
+}
+
+function hideTrailingRoomTag(post: Post) {
+	const content = post.content;
+	const roomTags = getRoomTagCandidates(post);
+	if (roomTags.length === 0) return content;
+	const trimmed = content.trimEnd();
+	const normalized = trimmed.toLowerCase();
+	for (const tag of roomTags) {
+		const suffix = `#${tag}`;
+		if (!normalized.endsWith(suffix)) continue;
+		const before = trimmed.slice(0, trimmed.length - suffix.length);
+		if (before.length > 0 && !/\s$/.test(before)) continue;
+		return before.trimEnd();
+	}
+	return content;
+}
+
+const displayContent = $derived(hideTrailingRoomTag(post));
+const parts = $derived(parseContentParts(displayContent));
 const relativeTime = $derived(formatRelativeTime(post.created_at));
 const broadcastRelativeTime = $derived(
 	broadcastStartAt ? formatBroadcastRelativeTime(post.created_at, broadcastStartAt) : null,
@@ -37,6 +72,7 @@ const absoluteTimeStr = $derived(
 	new Date(post.created_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
 );
 const displayName = $derived(post.display_name || post.username);
+const repostContextDisplayName = $derived(post.repost_context?.display_name || post.repost_context?.username);
 const isOwn = $derived(!!currentUserId && currentUserId === post.user_id);
 const isLoggedIn = $derived(!!currentUserId);
 const effectiveRoomContext = $derived(
@@ -45,9 +81,10 @@ const effectiveRoomContext = $derived(
 			? { href: post.anime_quote.room_href, title: buildAnimeRoomLabel(post.anime_quote) }
 			: null),
 );
+const showsContextStack = $derived(!isDetailView && (!!post.repost_context || (!!effectiveRoomContext && !insideRoom)));
 const cwContentId = $derived(`post-cw-content-${post.id}`);
 
-const isLong = $derived(post.content.length > 300 || (post.content.match(/\n/g)?.length ?? 0) >= 5);
+const isLong = $derived(displayContent.length > 300 || (displayContent.match(/\n/g)?.length ?? 0) >= 5);
 let collapsed = $state(true);
 let cwRevealed = $state(false);
 
@@ -267,13 +304,33 @@ async function submitReport() {
 	class:post-card-clickable={!isDetailView}
 	class:post-card-modal-open={showDeleteModal || showExchangeModal || showQuoteModal || showReportModal || !!lightboxUrl}
 	class:post-card--with-room={!!effectiveRoomContext && !insideRoom}
+	class:post-card--with-context={showsContextStack}
 	onclick={handleCardClick}
 >
 	{#if !isDetailView}
 		<a href="/posts/{post.id}" class="post-card-hitarea" aria-label="投稿詳細を開く"></a>
 	{/if}
 
-	{#if effectiveRoomContext && !insideRoom}
+	{#if showsContextStack}
+		<div class="post-context-stack">
+			{#if post.repost_context}
+				<a
+					href="/profile/{post.repost_context.username}"
+					class="post-repost-context"
+					onclick={(e) => e.stopPropagation()}
+				>
+					<span class="i-lucide-repeat-2" aria-hidden="true"></span>
+					<span>{repostContextDisplayName}さんがリポスト</span>
+				</a>
+			{/if}
+			{#if effectiveRoomContext && !insideRoom}
+				<a href={effectiveRoomContext.href} class="post-room-link" onclick={(e) => e.stopPropagation()}>
+					<span class="i-lucide-door-open" aria-hidden="true"></span>
+					<span>{effectiveRoomContext.title}</span>
+				</a>
+			{/if}
+		</div>
+	{:else if effectiveRoomContext && !insideRoom}
 		<a href={effectiveRoomContext.href} class="post-room-link" onclick={(e) => e.stopPropagation()}>
 			<span class="i-lucide-door-open" aria-hidden="true"></span>
 			<span>{effectiveRoomContext.title}</span>
@@ -326,12 +383,11 @@ async function submitReport() {
 								role="presentation"
 								onclick={(e) => { e.stopPropagation(); showKebabMenu = false; }}
 							></div>
-							<div class="post-kebab-menu" role="menu">
+							<div class="post-kebab-menu">
 								{#if isOwn}
 									<button
 										type="button"
 										class="post-kebab-item post-kebab-item--danger"
-										role="menuitem"
 										onclick={(e) => { e.stopPropagation(); showKebabMenu = false; showDeleteModal = true; }}
 									>
 										<span class="i-lucide-trash-2" aria-hidden="true"></span>
@@ -341,7 +397,6 @@ async function submitReport() {
 									<button
 										type="button"
 										class="post-kebab-item"
-										role="menuitem"
 										onclick={(e) => { e.stopPropagation(); showKebabMenu = false; showReportModal = true; }}
 									>
 										<span class="i-lucide-flag" aria-hidden="true"></span>
@@ -464,7 +519,7 @@ async function submitReport() {
 				class="exchange-share-inline"
 				role="button"
 				tabindex="0"
-				aria-label="交換結果を見る"
+				aria-label={`トレード結果を見る: ${post.exchange_share.offered_anime.title} から ${post.exchange_share.received_anime.title}`}
 				onclick={openExchangeModal}
 				onkeydown={handleExchangePreviewKeydown}
 			>
@@ -473,6 +528,8 @@ async function submitReport() {
 					receivedAnime={post.exchange_share.received_anime}
 					offeredComment={post.exchange_share.offered_comment}
 					receivedComment={post.exchange_share.received_comment}
+					offeredSubjectiveTags={post.exchange_share.offered_subjective_tags}
+					receivedSubjectiveTags={post.exchange_share.received_subjective_tags}
 					mode="timeline"
 					linkCards={false}
 				/>
@@ -529,6 +586,7 @@ async function submitReport() {
 					aria-modal="true"
 					aria-labelledby="quote-modal-title"
 					tabindex="-1"
+					use:trapFocus
 					onclick={(e) => e.stopPropagation()}
 					onkeydown={(e) => e.stopPropagation()}
 				>
@@ -557,10 +615,10 @@ async function submitReport() {
 								<span class="quote-preview-name">{post.display_name || post.username}</span>
 								<span class="quote-preview-at">@{post.username}</span>
 							</div>
-							<p class="quote-preview-content">{post.content}</p>
+							<p class="quote-preview-content">{displayContent}</p>
 						</div>
 						{#if quoteError}
-							<p class="flash-error" style="margin-top:8px;">{quoteError}</p>
+							<p class="flash-error" role="alert" style="margin-top:8px;">{quoteError}</p>
 						{/if}
 					</div>
 					<div class="quote-modal-footer">
@@ -590,10 +648,11 @@ async function submitReport() {
 					aria-modal="true"
 					aria-labelledby="exchange-result-modal-title"
 					tabindex="-1"
+					use:trapFocus
 					onclick={(e) => e.stopPropagation()}
 				>
 					<div class="exchange-result-modal-header">
-						<span id="exchange-result-modal-title" class="exchange-result-modal-title">交換結果</span>
+						<span id="exchange-result-modal-title" class="exchange-result-modal-title">トレード結果</span>
 						<button
 							type="button"
 							class="exchange-result-modal-close"
@@ -609,10 +668,13 @@ async function submitReport() {
 							receivedAnime={post.exchange_share.received_anime}
 							offeredComment={post.exchange_share.offered_comment}
 							receivedComment={post.exchange_share.received_comment}
+							offeredSubjectiveTags={post.exchange_share.offered_subjective_tags}
+							receivedSubjectiveTags={post.exchange_share.received_subjective_tags}
+							framed={false}
 						/>
 					</div>
 					<div class="exchange-result-modal-footer">
-						<a href="/exchange" class="exchange-result-modal-link">交流タブへ</a>
+						<a href="/exchange" class="exchange-result-modal-link">トレードタブへ</a>
 					</div>
 				</div>
 			</div>
@@ -627,6 +689,7 @@ async function submitReport() {
 				aria-modal="true"
 				aria-label="画像拡大表示"
 				tabindex="-1"
+				use:trapFocus
 			>
 				<button
 					type="button"
@@ -653,6 +716,7 @@ async function submitReport() {
 					aria-modal="true"
 					aria-labelledby="report-modal-title"
 					tabindex="-1"
+					use:trapFocus
 					onclick={(e) => e.stopPropagation()}
 				>
 					<div class="report-modal-header">
@@ -683,7 +747,7 @@ async function submitReport() {
 							<textarea rows="3" maxlength="500" bind:value={reportDetails}></textarea>
 						</label>
 						{#if reportMessage}
-							<p class="report-message">{reportMessage}</p>
+							<p class="report-message" role="status" aria-live="polite">{reportMessage}</p>
 						{/if}
 					</div>
 					<div class="report-modal-footer">
@@ -713,6 +777,7 @@ async function submitReport() {
 					aria-modal="true"
 					aria-labelledby="delete-modal-title"
 					tabindex="-1"
+					use:trapFocus
 					onclick={(e) => e.stopPropagation()}
 				>
 					<div class="delete-modal-header">
@@ -751,7 +816,7 @@ async function submitReport() {
 						stroke-linejoin="round"
 						aria-hidden="true"
 					>
-						<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+						<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
 					</svg>
 					{#if post.reply_count > 0}
 						<span>{post.reply_count}</span>
@@ -954,14 +1019,26 @@ async function submitReport() {
 </article>
 
 <style>
-.post-card--with-room {
+.post-card--with-room,
+.post-card--with-context {
 	--post-content-offset: 50px;
 	flex-wrap: wrap;
 	column-gap: 10px;
 	row-gap: 2px;
 }
 
-.post-room-link {
+.post-context-stack {
+	flex: 0 0 calc(100% - var(--post-content-offset));
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+	width: fit-content;
+	max-width: calc(100% - var(--post-content-offset));
+	margin: -4px 0 2px var(--post-content-offset);
+}
+
+.post-room-link,
+.post-repost-context {
 	flex: 0 0 calc(100% - var(--post-content-offset));
 	display: inline-flex;
 	align-items: center;
@@ -976,18 +1053,28 @@ async function submitReport() {
 	text-decoration: none;
 }
 
-.post-room-link:hover {
+.post-context-stack .post-room-link,
+.post-context-stack .post-repost-context {
+	flex: 0 1 auto;
+	max-width: 100%;
+	margin: 0;
+}
+
+.post-room-link:hover,
+.post-repost-context:hover {
 	color: var(--color-text-secondary);
 	text-decoration: underline;
 }
 
-.post-room-link span:last-child {
+.post-room-link span:last-child,
+.post-repost-context span:last-child {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 
-.post-room-link [class^="i-lucide"] {
+.post-room-link [class^="i-lucide"],
+.post-repost-context [class^="i-lucide"] {
 	flex-shrink: 0;
 	width: 13px;
 	height: 13px;

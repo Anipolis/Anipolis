@@ -73,6 +73,8 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		animes = await getAnimeList(supabase, { broadcastStatus: "airing", limit: 1000, userId: user?.id ?? null });
 	} else if (tab === "upcoming") {
 		animes = await getAnimeList(supabase, { broadcastStatus: "upcoming", limit: 1000, userId: user?.id ?? null });
+	} else if (tab === "all") {
+		animes = await getAnimeList(supabase, { limit: 1000, userId: user?.id ?? null });
 	} else if (tab === "register") {
 		animes = [];
 	} else {

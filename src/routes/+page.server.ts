@@ -8,13 +8,14 @@ import {
 } from "$lib/server/actions";
 import { buildPostCardSelect } from "$lib/server/post-selects";
 import {
-	enrichPostsWithCounts,
 	getAnimeExchangeShareForUser,
 	getAnimeRankingTrending,
-	getFollowingIds,
+	getFollowingProfiles,
+	getHomeTimelinePosts,
+	getTimelinePostsWithReposts,
 	getUserAnimeList,
 } from "$lib/server/queries";
-import type { AnimeExchangeShare, RawPost } from "$lib/types";
+import type { AnimeExchangeShare, Post } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
 const POSTS_SELECT_WITH_EXCHANGE_AND_CW = buildPostCardSelect({ exchangeShare: true, cwAnime: true });
@@ -28,41 +29,59 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	const tab = url.searchParams.get("tab") === "following" && user ? "following" : "all";
 	const quoteAnimeId = url.searchParams.get("quote_anime");
 	const shareExchangeId = url.searchParams.get("share_exchange");
-	const followingIds = tab === "following" && user ? await getFollowingIds(supabase, user.id) : null;
+	const beforeParam = url.searchParams.get("before") ?? undefined;
+	const beforeIdParam = url.searchParams.get("before_id") ?? undefined;
+	const before =
+		beforeParam && beforeIdParam && /^\d{4}-\d{2}-\d{2}T/.test(beforeParam)
+			? { createdAt: beforeParam, id: beforeIdParam }
+			: undefined;
+	const followingProfiles = tab === "following" && user ? await getFollowingProfiles(supabase, user.id) : null;
 
-	const buildPostsQuery = (select: string) => {
-		let query = supabase
-			.from("posts")
-			.select(select)
-			.is("parent_id", null)
-			.order("created_at", { ascending: false })
-			.limit(50);
-
-		if (tab === "following" && followingIds !== null) {
-			query = query.in("user_id", followingIds);
+	const fetchPosts = async (): Promise<Post[]> => {
+		if (tab === "following" && followingProfiles !== null) {
+			for (const select of [POSTS_SELECT_WITH_EXCHANGE_AND_CW, POSTS_SELECT_WITH_EXCHANGE, POSTS_SELECT_BASE]) {
+				const result = await getTimelinePostsWithReposts(supabase, followingProfiles, user?.id ?? null, {
+					select,
+					limit: 50,
+					...(before ? { before: before.createdAt, beforeId: before.id } : {}),
+				});
+				if (!result.error) return result.posts;
+			}
+			console.error("following timeline posts query failed for all select fallbacks");
+			return [];
 		}
 
-		return query;
-	};
+		const result = await getHomeTimelinePosts(supabase, user?.id ?? null, {
+			select: POSTS_SELECT_WITH_EXCHANGE_AND_CW,
+			limit: 50,
+			...(before ? { cursor: before } : {}),
+		});
+		if (!result.error) {
+			return result.posts;
+		}
 
-	const fetchPosts = async () => {
-		const result = await buildPostsQuery(POSTS_SELECT_WITH_EXCHANGE_AND_CW);
-		if (!result.error) return result;
+		const exchangeFallback = await getHomeTimelinePosts(supabase, user?.id ?? null, {
+			select: POSTS_SELECT_WITH_EXCHANGE,
+			limit: 50,
+			...(before ? { cursor: before } : {}),
+		});
+		if (!exchangeFallback.error) {
+			return exchangeFallback.posts;
+		}
 
-		const exchangeFallback = await buildPostsQuery(POSTS_SELECT_WITH_EXCHANGE);
-		if (!exchangeFallback.error) return exchangeFallback;
-
-		const baseFallback = await buildPostsQuery(POSTS_SELECT_BASE);
+		const baseFallback = await getHomeTimelinePosts(supabase, user?.id ?? null, {
+			select: POSTS_SELECT_BASE,
+			limit: 50,
+			...(before ? { cursor: before } : {}),
+		});
 		if (baseFallback.error) console.error("home posts query failed:", baseFallback.error);
-		return baseFallback;
+		return baseFallback.posts;
 	};
 
-	const buildExchangeInitialContent = (exchangeShare: AnimeExchangeShare | null) =>
-		exchangeShare?.received_anime.title
-			? `アニメトレードで「${exchangeShare.received_anime.title}」がおすすめとして届きました！ #アニメトレード`
-			: "アニメトレードでおすすめが届きました！ #アニメトレード";
+	const buildExchangeInitialContent = (_exchangeShare: AnimeExchangeShare | null) =>
+		"#アニメトレード でおすすめが届きました！";
 
-	if (tab === "following" && followingIds !== null && followingIds.length === 0) {
+	if (tab === "following" && followingProfiles !== null && followingProfiles.length === 0) {
 		const [trendingResult, animeTrending, quoteAnimeResult, exchangeShare, watchingAnime] = await Promise.all([
 			supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
 			getAnimeRankingTrending(supabase, 5),
@@ -99,28 +118,22 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		};
 	}
 
-	const [postsResult, trendingResult, animeTrending, quoteAnimeResult, exchangeShare, watchingAnime] =
-		await Promise.all([
-			fetchPosts(),
-			supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
-			getAnimeRankingTrending(supabase, 5),
-			quoteAnimeId
-				? supabase
-						.from("anime")
-						.select("id, title, title_en, cover_url, official_hashtag")
-						.eq("id", Number(quoteAnimeId))
-						.single()
-				: Promise.resolve({ data: null }),
-			user && shareExchangeId
-				? getAnimeExchangeShareForUser(supabase, user.id, shareExchangeId)
-				: Promise.resolve(null),
-			user ? getUserAnimeList(supabase, user.id, "watching") : Promise.resolve([]),
-		]);
-
-	// Cast to RawPost[] - postsResult.data is expected to be an array of raw post objects
-	// with nested joins from Supabase (posts + profiles + anime + quoted_post via enrichPostsWithCounts)
-	const rawPosts = Array.isArray(postsResult.data) ? (postsResult.data as unknown as RawPost[]) : [];
-	const posts = await enrichPostsWithCounts(supabase, rawPosts, user?.id ?? null);
+	const [posts, trendingResult, animeTrending, quoteAnimeResult, exchangeShare, watchingAnime] = await Promise.all([
+		fetchPosts(),
+		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
+		getAnimeRankingTrending(supabase, 5),
+		quoteAnimeId
+			? supabase
+					.from("anime")
+					.select("id, title, title_en, cover_url, official_hashtag")
+					.eq("id", Number(quoteAnimeId))
+					.single()
+			: Promise.resolve({ data: null }),
+		user && shareExchangeId
+			? getAnimeExchangeShareForUser(supabase, user.id, shareExchangeId)
+			: Promise.resolve(null),
+		user ? getUserAnimeList(supabase, user.id, "watching") : Promise.resolve([]),
+	]);
 
 	return {
 		posts,
@@ -128,6 +141,8 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		animeTrending,
 		profile,
 		tab,
+		before: before?.createdAt ?? null,
+		hasMore: posts.length >= 50,
 		initialAnime: quoteAnimeResult.data ? { ...quoteAnimeResult.data, id: String(quoteAnimeResult.data.id) } : null,
 		initialExchangeId: exchangeShare ? shareExchangeId : null,
 		initialExchangeShare: exchangeShare,
@@ -156,7 +171,7 @@ export const actions: Actions = {
 			imageUrls = [];
 		}
 		const exchangeShare = exchangeId ? await getAnimeExchangeShareForUser(supabase, user.id, exchangeId) : null;
-		if (exchangeId && !exchangeShare) return fail(404, { message: "共有する交換結果が見つかりません" });
+		if (exchangeId && !exchangeShare) return fail(404, { message: "共有するトレード結果が見つかりません" });
 
 		return insertPostWithHashtags(
 			supabase,

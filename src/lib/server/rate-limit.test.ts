@@ -9,20 +9,20 @@ describe("isRateLimited", () => {
 		vi.useRealTimers();
 	});
 
-	it("制限内のリクエストは許可される", () => {
+	it("allows requests within the limit", () => {
 		const key = `test-${Math.random()}`;
 		expect(isRateLimited(key, 3, 1000)).toBe(false);
 		expect(isRateLimited(key, 3, 1000)).toBe(false);
 		expect(isRateLimited(key, 3, 1000)).toBe(false);
 	});
 
-	it("制限を超えたリクエストは拒否される", () => {
+	it("blocks requests over the limit", () => {
 		const key = `test-${Math.random()}`;
 		for (let i = 0; i < 3; i += 1) isRateLimited(key, 3, 1000);
 		expect(isRateLimited(key, 3, 1000)).toBe(true);
 	});
 
-	it("ウィンドウが過ぎるとカウントがリセットされる", () => {
+	it("resets counts after the window", () => {
 		const key = `test-${Math.random()}`;
 		for (let i = 0; i < 4; i += 1) isRateLimited(key, 3, 1000);
 		expect(isRateLimited(key, 3, 1000)).toBe(true);
@@ -30,7 +30,7 @@ describe("isRateLimited", () => {
 		expect(isRateLimited(key, 3, 1000)).toBe(false);
 	});
 
-	it("キーごとに独立してカウントされる", () => {
+	it("counts each key independently", () => {
 		const keyA = `test-a-${Math.random()}`;
 		const keyB = `test-b-${Math.random()}`;
 		for (let i = 0; i < 4; i += 1) isRateLimited(keyA, 3, 1000);
@@ -39,19 +39,19 @@ describe("isRateLimited", () => {
 });
 
 describe("isApiRateLimited", () => {
-	it("ルールにマッチしないパスは制限されない", () => {
+	it("does not limit unmatched paths", () => {
 		for (let i = 0; i < 100; i += 1) {
 			expect(isApiRateLimited("/api/unknown", "GET", "ip-x")).toBe(false);
 		}
 	});
 
-	it("メソッド指定のあるルールは他メソッドに適用されない", () => {
+	it("does not apply method-specific rules to other methods", () => {
 		for (let i = 0; i < 100; i += 1) {
 			expect(isApiRateLimited("/api/posts", "GET", "ip-method-test")).toBe(false);
 		}
 	});
 
-	it("アップロードは10回/分を超えると429相当になる", () => {
+	it("limits uploads over 10 requests per minute", () => {
 		const ip = `ip-${Math.random()}`;
 		for (let i = 0; i < 10; i += 1) {
 			expect(isApiRateLimited("/api/upload", "POST", ip)).toBe(false);
@@ -59,11 +59,30 @@ describe("isApiRateLimited", () => {
 		expect(isApiRateLimited("/api/upload", "POST", ip)).toBe(true);
 	});
 
-	it("検索はIPごとに独立して制限される", () => {
+	it("keeps search limits isolated by IP", () => {
 		const ipA = `ip-a-${Math.random()}`;
 		const ipB = `ip-b-${Math.random()}`;
 		for (let i = 0; i < 31; i += 1) isApiRateLimited("/api/anime/search", "GET", ipA);
 		expect(isApiRateLimited("/api/anime/search", "GET", ipA)).toBe(true);
 		expect(isApiRateLimited("/api/anime/search", "GET", ipB)).toBe(false);
+	});
+
+	it("limits room experiment visit creation by POST", () => {
+		const ip = `ip-room-experiment-create-${Math.random()}`;
+		for (let i = 0; i < 60; i += 1) {
+			expect(isApiRateLimited("/api/room-experiment-visits", "POST", ip)).toBe(false);
+		}
+		expect(isApiRateLimited("/api/room-experiment-visits", "POST", ip)).toBe(true);
+		expect(isApiRateLimited("/api/room-experiment-visits", "GET", ip)).toBe(false);
+	});
+
+	it("shares a bucket for room experiment heartbeat and exit", () => {
+		const ip = `ip-room-experiment-update-${Math.random()}`;
+		const visitId = "00000000-0000-4000-8000-000000000001";
+		for (let i = 0; i < 180; i += 1) {
+			expect(isApiRateLimited(`/api/room-experiment-visits/${visitId}/heartbeat`, "POST", ip)).toBe(false);
+		}
+		expect(isApiRateLimited(`/api/room-experiment-visits/${visitId}/exit`, "POST", ip)).toBe(true);
+		expect(isApiRateLimited(`/api/room-experiment-visits/${visitId}/heartbeat`, "GET", ip)).toBe(false);
 	});
 });

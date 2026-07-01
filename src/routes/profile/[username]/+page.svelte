@@ -20,6 +20,7 @@ const profileSocialImage = $derived(profile.header_url ?? profile.avatar_url);
 let isFollowing = $state(false);
 let followRequestStatus = $state<"none" | "pending">("none");
 let followerCount = $state(0);
+let isProcessing = $state(false);
 let editDisplayName = $state(untrack(() => data.profile.display_name ?? ""));
 let editBio = $state(untrack(() => data.profile.bio ?? ""));
 let editProfileId = $state(untrack(() => data.profile.id));
@@ -280,17 +281,26 @@ const grouped = $derived(
 							<form
 								method="POST"
 								action="?/follow"
-								use:enhance={() => {
+								use:enhance={({ cancel }) => {
+                            if (isProcessing) {
+                                cancel();
+                                return;
+                            }
+                            isProcessing = true;
                             return async ({ result }) => {
-                                if (result.type === 'success' && result.data) {
-                                    const payload = result.data as { followed: boolean; requestStatus?: "none" | "pending" };
-                                    const followed = payload.followed;
-                                    isFollowing = followed;
-                                    followRequestStatus = payload.requestStatus ?? "none";
-                                    if (followed !== data.isFollowing) {
-                                        followerCount += followed ? 1 : -1;
+                                try {
+                                    if (result.type === 'success' && result.data) {
+                                        const payload = result.data as { followed: boolean; requestStatus?: "none" | "pending" };
+                                        const followed = payload.followed;
+                                        isFollowing = followed;
+                                        followRequestStatus = payload.requestStatus ?? "none";
+                                        if (followed !== data.isFollowing) {
+                                            followerCount += followed ? 1 : -1;
+                                        }
+                                        await invalidateAll();
                                     }
-                                    await invalidateAll();
+                                } finally {
+                                    isProcessing = false;
                                 }
                             };
                         }}
@@ -299,7 +309,7 @@ const grouped = $derived(
 								<button
 									type="submit"
 									class="btn {isFollowing || followRequestStatus === 'pending' ? 'btn-outline' : 'btn-primary'}"
-									disabled={followRequestStatus === 'pending'}
+									disabled={isProcessing || followRequestStatus === 'pending'}
 									style="font-size: 13px;"
 								>
 									{isFollowing ? 'フォロー中' : followRequestStatus === 'pending' ? '申請中' : profile.is_private ? 'フォロー申請' : 'フォローする'}
@@ -402,7 +412,12 @@ const grouped = $derived(
 						</button>
 					</div>
 
-					<form method="POST" action="?/updateProfile" use:enhance={handleProfileSubmit}>
+					<form
+						class="profile-edit-modal-form"
+						method="POST"
+						action="?/updateProfile"
+						use:enhance={handleProfileSubmit}
+					>
 						<div class="profile-edit-modal-body">
 							{#if form?.success}
 								<div class="flash-success">プロフィールを更新しました。</div>
@@ -650,6 +665,12 @@ const grouped = $derived(
 	margin-top: 12px;
 }
 
+.profile-actions .btn[disabled] {
+	pointer-events: none;
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
 .profile-lock-badge {
 	display: inline-flex;
 	align-items: center;
@@ -698,7 +719,7 @@ const grouped = $derived(
 .report-modal-overlay {
 	position: fixed;
 	inset: 0;
-	z-index: 100;
+	z-index: 1000;
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -793,7 +814,7 @@ const grouped = $derived(
 .profile-edit-modal-overlay {
 	position: fixed;
 	inset: 0;
-	z-index: 100;
+	z-index: 1000;
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -802,9 +823,11 @@ const grouped = $derived(
 }
 
 .profile-edit-modal-card {
+	display: flex;
+	flex-direction: column;
 	width: min(100%, 520px);
-	max-height: calc(100vh - 32px);
-	overflow: auto;
+	max-height: calc(100dvh - 32px);
+	overflow: hidden;
 	border: 1px solid var(--color-border, var(--border, #334155));
 	border-radius: 8px;
 	background: var(--color-surface, var(--surface, #1e293b));
@@ -814,6 +837,7 @@ const grouped = $derived(
 .profile-edit-modal-header,
 .profile-edit-modal-footer {
 	display: flex;
+	flex-shrink: 0;
 	align-items: center;
 	justify-content: space-between;
 	gap: 12px;
@@ -854,11 +878,22 @@ const grouped = $derived(
 	opacity: 0.55;
 }
 
+.profile-edit-modal-form {
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	min-height: 0;
+	overflow: hidden;
+}
+
 .profile-edit-modal-body {
 	display: flex;
+	flex: 1 1 auto;
 	flex-direction: column;
 	gap: 16px;
+	min-height: 0;
 	padding: 14px;
+	overflow-y: auto;
 }
 
 .profile-header-editor {

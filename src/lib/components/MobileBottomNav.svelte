@@ -1,6 +1,7 @@
 <script lang="ts">
 import type { Session } from "@supabase/supabase-js";
 import { page } from "$app/state";
+import AnimeIcon from "./AnimeIcon.svelte";
 
 interface Props {
 	session: Session | null;
@@ -17,7 +18,13 @@ function isActive(path: string): boolean {
 
 <nav class="mobile-bottom-nav" aria-label="モバイルナビゲーション">
 	{#if session}
-		<a href="/" class="mobile-tab" class:active={isActive('/')} aria-label="ホーム">
+		<a
+			href="/"
+			class="mobile-tab"
+			class:active={isActive('/')}
+			aria-label="ホーム"
+			aria-current={isActive('/') ? 'page' : undefined}
+		>
 			<svg
 				width="22"
 				height="22"
@@ -35,7 +42,13 @@ function isActive(path: string): boolean {
 			<span class="mobile-tab-label">ホーム</span>
 		</a>
 
-		<a href="/search" class="mobile-tab" class:active={isActive('/search')} aria-label="検索">
+		<a
+			href="/search"
+			class="mobile-tab"
+			class:active={isActive('/search')}
+			aria-label="検索"
+			aria-current={isActive('/search') ? 'page' : undefined}
+		>
 			<svg
 				width="22"
 				height="22"
@@ -58,6 +71,7 @@ function isActive(path: string): boolean {
 			class="mobile-tab"
 			class:active={isActive('/schedule') || isActive('/events')}
 			aria-label="カレンダー"
+			aria-current={isActive('/schedule') || isActive('/events') ? 'page' : undefined}
 		>
 			<svg
 				width="22"
@@ -76,7 +90,13 @@ function isActive(path: string): boolean {
 			<span class="mobile-tab-label">カレンダー</span>
 		</a>
 
-		<a href="/notifications" class="mobile-tab" class:active={isActive('/notifications')} aria-label="通知">
+		<a
+			href="/notifications"
+			class="mobile-tab"
+			class:active={isActive('/notifications')}
+			aria-label="通知"
+			aria-current={isActive('/notifications') ? 'page' : undefined}
+		>
 			<span class="mobile-tab-icon-wrap">
 				<svg
 					width="22"
@@ -101,7 +121,13 @@ function isActive(path: string): boolean {
 			<span class="mobile-tab-label">通知</span>
 		</a>
 
-		<a href="/mylist" class="mobile-tab" class:active={isActive('/mylist')} aria-label="マイリスト">
+		<a
+			href="/mylist"
+			class="mobile-tab"
+			class:active={isActive('/mylist')}
+			aria-label="マイリスト"
+			aria-current={isActive('/mylist') ? 'page' : undefined}
+		>
 			<svg
 				width="22"
 				height="22"
@@ -118,7 +144,13 @@ function isActive(path: string): boolean {
 			<span class="mobile-tab-label">マイリスト</span>
 		</a>
 	{:else}
-		<a href="/" class="mobile-tab" class:active={isActive('/')} aria-label="ホーム">
+		<a
+			href="/"
+			class="mobile-tab"
+			class:active={isActive('/')}
+			aria-label="ホーム"
+			aria-current={isActive('/') ? 'page' : undefined}
+		>
 			<svg
 				width="22"
 				height="22"
@@ -136,29 +168,12 @@ function isActive(path: string): boolean {
 			<span class="mobile-tab-label">ホーム</span>
 		</a>
 
-		<a href="/search" class="mobile-tab" class:active={isActive('/search')} aria-label="検索">
-			<svg
-				width="22"
-				height="22"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-				aria-hidden="true"
-			>
-				<circle cx="11" cy="11" r="8" />
-				<path d="m21 21-4.35-4.35" />
-			</svg>
-			<span class="mobile-tab-label">検索</span>
-		</a>
-
 		<a
 			href="/schedule"
 			class="mobile-tab"
 			class:active={isActive('/schedule') || isActive('/events')}
 			aria-label="カレンダー"
+			aria-current={isActive('/schedule') || isActive('/events') ? 'page' : undefined}
 		>
 			<svg
 				width="22"
@@ -177,12 +192,24 @@ function isActive(path: string): boolean {
 			<span class="mobile-tab-label">カレンダー</span>
 		</a>
 
-		<a href="/anime" class="mobile-tab" class:active={isActive('/anime')} aria-label="アニメ">
-			<span class="anipolis-logo-icon" aria-hidden="true"></span>
+		<a
+			href="/anime"
+			class="mobile-tab"
+			class:active={isActive('/anime')}
+			aria-label="アニメ"
+			aria-current={isActive('/anime') ? 'page' : undefined}
+		>
+			<AnimeIcon size={22} />
 			<span class="mobile-tab-label">アニメ</span>
 		</a>
 
-		<a href="/auth" class="mobile-tab" class:active={isActive('/auth')} aria-label="ログイン">
+		<a
+			href="/auth"
+			class="mobile-tab"
+			class:active={isActive('/auth')}
+			aria-label="ログイン"
+			aria-current={isActive('/auth') ? 'page' : undefined}
+		>
 			<svg
 				width="22"
 				height="22"
@@ -240,18 +267,15 @@ function isActive(path: string): boolean {
 	line-height: 1;
 }
 
+.mobile-tab.active .mobile-tab-label {
+	font-weight: 700;
+}
+
 .mobile-tab-icon-wrap {
 	position: relative;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-}
-
-.anipolis-logo-icon {
-	display: block;
-	width: 22px;
-	height: 22px;
-	background: center / contain no-repeat var(--anipolis-logo-image);
 }
 
 @media (max-width: 960px) {

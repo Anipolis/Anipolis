@@ -1,7 +1,7 @@
 <script lang="ts">
 import { onDestroy, onMount, tick } from "svelte";
 import { enhance } from "$app/forms";
-import PostCard from "$lib/components/PostCard.svelte";
+import LiveRoomPostCard from "$lib/components/LiveRoomPostCard.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import type { Post } from "$lib/types";
 import type { ActionData, PageData } from "./$types";
@@ -28,16 +28,18 @@ const scheduledMs = $derived(new Date(data.room.scheduled_at).getTime());
 const openMs = $derived(new Date(data.room.posting_opens_at).getTime());
 const closeMs = $derived(new Date(data.room.posting_closes_at).getTime());
 const openLeadMinutes = $derived(Math.round((scheduledMs - openMs) / (60 * 1000)));
-const roomHref = $derived(`/rooms/anime/${data.anime.id}/${data.room.date}`);
 const isGlobalLobby = $derived(data.room.kind === "global");
-const hashtagSuffix = $derived(` #${data.room.hashtag}`);
-const contentWithTag = $derived(
-	postContent.includes(`#${data.room.hashtag}`) ? postContent : postContent + hashtagSuffix,
-);
-const charCount = $derived(contentWithTag.length);
+const charCount = $derived(postContent.length);
 const overLimit = $derived(charCount > maxLen);
 // ライブ更新で受信した投稿（load 由来の data.posts とは別に保持し、ID でマージする）
 let extraPosts = $state<Post[]>([]);
+let roomExperimentVisitId: string | null = null;
+let roomExperimentHeartbeatTimer: ReturnType<typeof setInterval> | undefined;
+let roomExperimentExitSent = false;
+
+function getRoomExperimentVisitStorageKey(sessionId: string) {
+	return `room-experiment-visit:${sessionId}`;
+}
 
 const allPosts = $derived.by(() => {
 	if (extraPosts.length === 0) return data.posts;
@@ -56,6 +58,82 @@ const displayedPosts = $derived(
 );
 
 let fetchingLive = false;
+
+function getRoomExperimentClientVisitKey(sessionId: string) {
+	const storageKey = getRoomExperimentVisitStorageKey(sessionId);
+	const existingKey = sessionStorage.getItem(storageKey);
+	if (existingKey) return existingKey;
+	const generatedKey = crypto.randomUUID();
+	sessionStorage.setItem(storageKey, generatedKey);
+	return generatedKey;
+}
+
+function clearRoomExperimentHeartbeatTimer() {
+	if (!roomExperimentHeartbeatTimer) return;
+	clearInterval(roomExperimentHeartbeatTimer);
+	roomExperimentHeartbeatTimer = undefined;
+}
+
+async function startRoomExperimentTracking() {
+	const sessionId = data.roomExperiment?.sessionId;
+	if (!data.user || !data.roomExperiment?.enabled || !sessionId) return;
+	try {
+		const res = await fetch("/api/room-experiment-visits", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({
+				session_id: sessionId,
+				client_visit_key: getRoomExperimentClientVisitKey(sessionId),
+			}),
+		});
+		if (res.status === 204 || !res.ok) return;
+		const body = (await res.json()) as {
+			visit_id?: string;
+			heartbeat_interval_ms?: number;
+		};
+		if (!body.visit_id) return;
+		roomExperimentVisitId = body.visit_id;
+		roomExperimentExitSent = false;
+		const intervalMs = body.heartbeat_interval_ms ?? 30_000;
+		clearRoomExperimentHeartbeatTimer();
+		roomExperimentHeartbeatTimer = setInterval(() => void sendRoomExperimentHeartbeat(), intervalMs);
+	} catch {
+		// Tracking is best-effort and must not affect room viewing.
+	}
+}
+
+async function sendRoomExperimentHeartbeat() {
+	if (!roomExperimentVisitId || roomExperimentExitSent) return;
+	try {
+		await fetch(`/api/room-experiment-visits/${roomExperimentVisitId}/heartbeat`, { method: "POST" });
+	} catch {
+		// Best-effort.
+	}
+}
+
+function sendRoomExperimentExit() {
+	if (!roomExperimentVisitId || roomExperimentExitSent) return;
+	roomExperimentExitSent = true;
+	clearRoomExperimentHeartbeatTimer();
+	const url = `/api/room-experiment-visits/${roomExperimentVisitId}/exit`;
+	const sessionId = data.roomExperiment?.sessionId;
+	if (sessionId) sessionStorage.removeItem(getRoomExperimentVisitStorageKey(sessionId));
+	if (typeof navigator === "undefined") return;
+	if (navigator.sendBeacon?.(url)) return;
+	void fetch(url, { method: "POST", keepalive: true }).catch(() => undefined);
+}
+
+function handleRoomExperimentPageHide(event: PageTransitionEvent) {
+	if (event.persisted) {
+		clearRoomExperimentHeartbeatTimer();
+		return;
+	}
+	sendRoomExperimentExit();
+}
+
+function handleRoomExperimentPageShow(event: PageTransitionEvent) {
+	if (event.persisted) void startRoomExperimentTracking();
+}
 
 /** 最後に受信した投稿以降の差分を取得して extraPosts に追加する */
 async function fetchNewPosts() {
@@ -98,12 +176,21 @@ onMount(() => {
 		void focusLatestPost();
 	}
 	window.addEventListener("scroll", handleWindowScroll, { passive: true });
+	window.addEventListener("pagehide", handleRoomExperimentPageHide);
+	window.addEventListener("pageshow", handleRoomExperimentPageShow);
+	void startRoomExperimentTracking();
 });
 
 onDestroy(() => {
 	clearInterval(intervalId);
 	if (programmaticScrollTimer) clearTimeout(programmaticScrollTimer);
-	if (typeof window !== "undefined") window.removeEventListener("scroll", handleWindowScroll);
+	clearRoomExperimentHeartbeatTimer();
+	if (typeof window !== "undefined") {
+		window.removeEventListener("scroll", handleWindowScroll);
+		window.removeEventListener("pagehide", handleRoomExperimentPageHide);
+		window.removeEventListener("pageshow", handleRoomExperimentPageShow);
+	}
+	sendRoomExperimentExit();
 });
 
 $effect(() => {
@@ -249,7 +336,7 @@ function formatCompactDate(iso: string) {
 							bind:this={textareaEl}
 							class="composer-textarea"
 							name="content"
-							placeholder="#{data.room.hashtag} で実況しよう... (Shift+Enterで改行)"
+							placeholder="いまの感想を投稿... (Shift+Enterで改行)"
 							rows="3"
 							bind:value={postContent}
 							maxlength={maxLen}
@@ -273,7 +360,6 @@ function formatCompactDate(iso: string) {
 							</button>
 						</div>
 					</div>
-					<p class="composer-hint">投稿には <strong>#{data.room.hashtag}</strong> が自動で付きます。</p>
 				</form>
 			</div>
 		{:else if !data.user && status === "open"}
@@ -312,19 +398,13 @@ function formatCompactDate(iso: string) {
 		</div>
 
 		{#if allPosts.length === 0}
-			<div class="card anime-room-empty">
-				まだ実況投稿はありません。<br>
-				#{data.room.hashtag}
-				で最初の感想を残しましょう。
-			</div>
+			<div class="card anime-room-empty">まだ投稿はありません。最初の感想を残しましょう。</div>
 		{:else}
 			{#each displayedPosts as post (post.id)}
 				<div class="anime-room-post">
-					<PostCard
+					<LiveRoomPostCard
 						{post}
 						currentUserId={data.user?.id ?? null}
-						insideRoom={true}
-						roomContext={{ href: roomHref, title: `${data.anime.title} の放送ルーム` }}
 						broadcastStartAt={data.room.scheduled_at}
 					/>
 				</div>
@@ -341,41 +421,32 @@ function formatCompactDate(iso: string) {
 	</div>
 
 	<aside class="sidebar-column">
-		<div class="mb-4 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 shadow-sm">
+		<div class="room-summary-card mb-4 rounded-xl border p-4 shadow-sm">
 			<div class="flex items-start">
 				<a href="/anime/{data.anime.id}" class="shrink-0" aria-label="アニメ詳細を開く">
 					{#if data.anime.cover_url}
 						<img src={data.anime.cover_url} alt={data.anime.title} class="block w-16 rounded-lg shadow-md">
 					{:else}
-						<div class="h-20 w-16 rounded-lg border border-zinc-800 bg-zinc-800 shadow-md"></div>
+						<div class="room-summary-placeholder h-20 w-16 rounded-lg border shadow-md"></div>
 					{/if}
 				</a>
 				<div class="flex min-h-20 min-w-0 flex-1 flex-col justify-between pl-3">
 					<div class="min-w-0">
-						<h1 class="line-clamp-1 text-sm font-bold text-zinc-100">{data.room.title}</h1>
+						<h1 class="room-summary-title line-clamp-1 text-sm font-bold">{data.room.title}</h1>
 						<div class="mt-2 flex min-w-0 items-center gap-2">
 							{#if status === "ended"}
-								<span class="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-bold text-zinc-400">
-									終了
-								</span>
+								<span class="room-summary-status rounded px-1.5 py-0.5 text-[10px] font-bold"
+									>終了</span
+								>
 							{/if}
-							<time class="truncate text-xs text-zinc-400"
+							<time class="room-summary-secondary truncate text-xs"
 								>{formatCompactDate(data.room.scheduled_at)}</time
 							>
 						</div>
-						<div class="mt-1 truncate text-xs text-zinc-500">{broadcastMetaLine}</div>
+						<div class="room-summary-muted mt-1 truncate text-xs">{broadcastMetaLine}</div>
 					</div>
-					<div class="mt-2 flex items-center justify-between gap-2">
-						<a
-							href="/hashtag/{data.room.hashtag}"
-							class="truncate text-xs text-teal-400/80 hover:text-teal-300"
-						>
-							#{data.room.hashtag}
-						</a>
-						<a
-							href="/schedule"
-							class="shrink-0 text-xs text-zinc-400 transition-colors hover:text-teal-400"
-						>
+					<div class="mt-2 flex items-center justify-end gap-2">
+						<a href="/schedule" class="room-summary-back shrink-0 text-xs transition-colors">
 							← 週間スケジュールへ戻る
 						</a>
 					</div>
@@ -388,6 +459,38 @@ function formatCompactDate(iso: string) {
 </div>
 
 <style>
+.room-summary-card {
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
+}
+
+.room-summary-placeholder {
+	background: var(--color-surface-hover);
+	border-color: var(--color-border);
+}
+
+.room-summary-title {
+	color: var(--color-text);
+}
+
+.room-summary-status {
+	background: var(--color-surface-hover);
+	color: var(--color-text-secondary);
+}
+
+.room-summary-secondary {
+	color: var(--color-text-secondary);
+}
+
+.room-summary-muted,
+.room-summary-back {
+	color: var(--color-text-muted);
+}
+
+.room-summary-back:hover {
+	color: var(--color-accent-hover);
+}
+
 .feed-column {
 	display: flex;
 	flex-direction: column;

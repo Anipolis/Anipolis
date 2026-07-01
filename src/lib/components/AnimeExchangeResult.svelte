@@ -1,14 +1,20 @@
 <script lang="ts">
 import type { Snippet } from "svelte";
 import type { AnimeExchangeShareAnime } from "$lib/types";
+import ExchangeAnimeCard from "./ExchangeAnimeCard.svelte";
 
 interface Props {
 	offeredAnime: AnimeExchangeShareAnime;
 	receivedAnime: AnimeExchangeShareAnime;
 	offeredComment?: string | null;
 	receivedComment?: string | null;
+	offeredSubjectiveTags?: readonly string[] | null;
+	receivedSubjectiveTags?: readonly string[] | null;
 	mode?: "full" | "timeline";
 	linkCards?: boolean;
+	framed?: boolean;
+	offeredCardActions?: Snippet;
+	receivedCardActions?: Snippet;
 	actions?: Snippet;
 }
 
@@ -17,138 +23,73 @@ let {
 	receivedAnime,
 	offeredComment = null,
 	receivedComment = null,
+	offeredSubjectiveTags = [],
+	receivedSubjectiveTags = [],
 	mode = "full",
 	linkCards = true,
+	framed = true,
+	offeredCardActions,
+	receivedCardActions,
 	actions,
 }: Props = $props();
-
-function animeHref(animeId: string) {
-	return `/anime/${animeId}`;
-}
 </script>
 
-<div class="anime-exchange-result" class:anime-exchange-result--timeline={mode === "timeline"}>
-	<div class="exchange-result-grid">
-		{#if linkCards}
-			<a href={animeHref(offeredAnime.id)} class="exchange-result-card exchange-result-card--offered">
-				<div class="exchange-result-cover-wrap">
-					{#if offeredAnime.cover_url}
-						<img
-							src={offeredAnime.cover_url}
-							alt={offeredAnime.title}
-							class="exchange-result-cover"
-							width="74"
-							height="111"
-							loading="lazy"
-							decoding="async"
-						>
-					{:else}
-						<div class="exchange-result-cover exchange-result-cover--empty"></div>
-					{/if}
-				</div>
-				<div class="exchange-result-copy">
-					<span>自分が贈ったアニメ</span>
-					<strong>{offeredAnime.title}</strong>
-					{#if offeredAnime.title_en}
-						<small>{offeredAnime.title_en}</small>
-					{/if}
-					{#if offeredComment}
-						<p class="exchange-result-comment">{offeredComment}</p>
-					{/if}
-				</div>
-			</a>
-		{:else}
-			<div class="exchange-result-card exchange-result-card--offered">
-				<div class="exchange-result-cover-wrap">
-					{#if offeredAnime.cover_url}
-						<img
-							src={offeredAnime.cover_url}
-							alt={offeredAnime.title}
-							class="exchange-result-cover"
-							width="74"
-							height="111"
-							loading="lazy"
-							decoding="async"
-						>
-					{:else}
-						<div class="exchange-result-cover exchange-result-cover--empty"></div>
-					{/if}
-				</div>
-				<div class="exchange-result-copy">
-					<span>自分が贈ったアニメ</span>
-					<strong>{offeredAnime.title}</strong>
-					{#if offeredAnime.title_en}
-						<small>{offeredAnime.title_en}</small>
-					{/if}
-					{#if offeredComment}
-						<p class="exchange-result-comment">{offeredComment}</p>
-					{/if}
-				</div>
-			</div>
-		{/if}
-
-		<div class="exchange-swap-icon" aria-hidden="true"><span>→</span></div>
-
-		{#if linkCards}
-			<a href={animeHref(receivedAnime.id)} class="exchange-result-card exchange-result-card--received">
-				<span class="exchange-new-badge">New!</span>
-				<div class="exchange-result-cover-wrap">
-					{#if receivedAnime.cover_url}
-						<img
-							src={receivedAnime.cover_url}
-							alt={receivedAnime.title}
-							class="exchange-result-cover"
-							width="74"
-							height="111"
-							loading="lazy"
-							decoding="async"
-						>
-					{:else}
-						<div class="exchange-result-cover exchange-result-cover--empty"></div>
-					{/if}
-				</div>
-				<div class="exchange-result-copy">
-					<span>受け取ったアニメ</span>
-					<strong>{receivedAnime.title}</strong>
-					{#if receivedAnime.title_en}
-						<small>{receivedAnime.title_en}</small>
-					{/if}
-					{#if receivedComment}
-						<p class="exchange-result-comment">{receivedComment}</p>
-					{/if}
-				</div>
-			</a>
-		{:else}
-			<div class="exchange-result-card exchange-result-card--received">
-				<span class="exchange-new-badge">New!</span>
-				<div class="exchange-result-cover-wrap">
-					{#if receivedAnime.cover_url}
-						<img
-							src={receivedAnime.cover_url}
-							alt={receivedAnime.title}
-							class="exchange-result-cover"
-							width="74"
-							height="111"
-							loading="lazy"
-							decoding="async"
-						>
-					{:else}
-						<div class="exchange-result-cover exchange-result-cover--empty"></div>
-					{/if}
-				</div>
-				<div class="exchange-result-copy">
-					<span>受け取ったアニメ</span>
-					<strong>{receivedAnime.title}</strong>
-					{#if receivedAnime.title_en}
-						<small>{receivedAnime.title_en}</small>
-					{/if}
-					{#if receivedComment}
-						<p class="exchange-result-comment">{receivedComment}</p>
-					{/if}
-				</div>
-			</div>
-		{/if}
-	</div>
+<div
+	class="anime-exchange-result"
+	class:anime-exchange-result--timeline={mode === "timeline"}
+	class:anime-exchange-result--unframed={!framed}
+>
+	{#if mode === "timeline"}
+		<div class="exchange-result-grid exchange-result-grid--timeline">
+			<ExchangeAnimeCard anime={offeredAnime} link={linkCards} variant="poster-only" />
+			<div class="exchange-swap-icon exchange-swap-icon--timeline" aria-hidden="true"><span>→</span></div>
+			<ExchangeAnimeCard anime={receivedAnime} link={linkCards} variant="poster-only" highlight />
+		</div>
+	{:else}
+		<div class="exchange-result-grid exchange-result-grid--full">
+			{#if offeredCardActions}
+				<ExchangeAnimeCard
+					anime={offeredAnime}
+					caption="渡したアニメ"
+					comment={offeredComment}
+					subjectiveTags={offeredSubjectiveTags}
+					link={linkCards}
+				>
+					{@render offeredCardActions()}
+				</ExchangeAnimeCard>
+			{:else}
+				<ExchangeAnimeCard
+					anime={offeredAnime}
+					caption="渡したアニメ"
+					comment={offeredComment}
+					subjectiveTags={offeredSubjectiveTags}
+					link={linkCards}
+				/>
+			{/if}
+			<div class="exchange-swap-icon" aria-hidden="true"><span>→</span></div>
+			{#if receivedCardActions}
+				<ExchangeAnimeCard
+					anime={receivedAnime}
+					caption="受け取ったアニメ"
+					comment={receivedComment}
+					subjectiveTags={receivedSubjectiveTags}
+					link={linkCards}
+					highlight
+				>
+					{@render receivedCardActions()}
+				</ExchangeAnimeCard>
+			{:else}
+				<ExchangeAnimeCard
+					anime={receivedAnime}
+					caption="受け取ったアニメ"
+					comment={receivedComment}
+					subjectiveTags={receivedSubjectiveTags}
+					link={linkCards}
+					highlight
+				/>
+			{/if}
+		</div>
+	{/if}
 	{#if actions}
 		<div class="exchange-result-actions">{@render actions()}</div>
 	{/if}
@@ -166,6 +107,7 @@ function animeHref(animeId: string) {
 	backdrop-filter: blur(18px);
 	box-shadow: 0 18px 48px rgba(0, 0, 0, 0.22);
 	overflow: hidden;
+	container-type: inline-size;
 }
 
 .exchange-result-grid {
@@ -175,107 +117,50 @@ function animeHref(animeId: string) {
 	gap: 12px;
 }
 
-.exchange-result-card {
-	position: relative;
-	display: grid;
-	grid-template-columns: 74px minmax(0, 1fr);
-	gap: 12px;
-	min-width: 0;
-	padding: 12px;
-	border: 1px solid rgba(255, 255, 255, 0.16);
-	border-radius: 8px;
-	background: rgba(18, 24, 38, 0.54);
-	color: var(--color-text);
-	text-decoration: none;
-	backdrop-filter: blur(14px);
-	transition:
-		transform 0.18s ease,
-		border-color 0.18s ease,
-		background 0.18s ease;
-}
-
-a.exchange-result-card:hover {
-	transform: translateY(-2px);
-	border-color: rgba(52, 211, 153, 0.55);
-	background: rgba(24, 32, 50, 0.68);
-	text-decoration: none;
-}
-
-.exchange-result-card--received {
-	border-color: rgba(52, 211, 153, 0.42);
-}
-
-.exchange-result-cover-wrap {
-	width: 74px;
-	aspect-ratio: 2 / 3;
-	overflow: hidden;
-}
-
-.exchange-result-cover {
-	width: 100%;
-	display: block;
-	image-rendering: auto;
-	-webkit-backface-visibility: hidden;
-	backface-visibility: hidden;
-	border-radius: 6px;
-	background: var(--color-border);
-	box-shadow: 0 10px 26px rgba(0, 0, 0, 0.26);
-}
-
-.exchange-result-cover--empty {
-	background: linear-gradient(135deg, rgba(255, 255, 255, 0.16), transparent), var(--color-border);
-}
-
-.exchange-result-copy {
-	display: flex;
-	flex-direction: column;
+.exchange-result-grid--full {
+	grid-template-columns: var(--trade-card-width) var(--trade-center-width) var(--trade-card-width);
+	align-items: stretch;
 	justify-content: center;
-	gap: 5px;
-	min-width: 0;
+	gap: var(--trade-side-gap);
+	--trade-card-padding: 10px;
+	--trade-center-width: 46px;
+	--trade-side-gap: 16px;
+	--trade-card-width: min(220px, calc((100cqw - var(--trade-center-width) - (var(--trade-side-gap) * 2)) / 2));
+	--trade-cover-width: calc(var(--trade-card-width) - (var(--trade-card-padding) * 2));
+	--trade-cover-center-y: calc(
+		var(--trade-card-padding) +
+		(0.74rem * 1.2) +
+		6px +
+		(var(--trade-cover-width) * 1.414 / 2)
+	);
 }
 
-.exchange-result-copy span {
-	color: var(--color-text-muted);
-	font-size: 0.74rem;
-	font-weight: 800;
-}
-
-.exchange-result-copy strong,
-.exchange-result-copy small {
-	overflow: hidden;
-	text-overflow: ellipsis;
-	display: -webkit-box;
-	-webkit-box-orient: vertical;
-}
-
-.exchange-result-copy strong {
-	color: var(--color-text);
-	font-size: 1rem;
-	line-height: 1.35;
-	line-clamp: 2;
-	-webkit-line-clamp: 2;
-}
-
-.exchange-result-copy small {
-	color: var(--color-text-muted);
-	font-size: 0.78rem;
-	line-height: 1.35;
-	line-clamp: 1;
-	-webkit-line-clamp: 1;
-}
-
-.exchange-result-comment {
-	margin: 3px 0 0;
-	color: var(--color-text);
-	font-size: 0.78rem;
-	line-height: 1.45;
-	overflow-wrap: anywhere;
+.exchange-result-grid--timeline {
+	grid-template-columns: minmax(0, 1fr) var(--timeline-center-width) minmax(0, 1fr);
+	align-items: stretch;
+	gap: var(--timeline-gap);
+	width: min(
+		100%,
+		calc(
+			var(--timeline-card-max) +
+			var(--timeline-card-max) +
+			var(--timeline-center-width) +
+			var(--timeline-gap) +
+			var(--timeline-gap)
+		)
+	);
+	margin-inline: auto;
 }
 
 .exchange-swap-icon {
 	display: flex;
 	align-items: center;
 	justify-content: center;
+}
+
+.exchange-result-grid--full .exchange-swap-icon {
+	align-self: start;
+	margin-top: calc(var(--trade-cover-center-y) - 23px);
 }
 
 .exchange-swap-icon span {
@@ -297,61 +182,46 @@ a.exchange-result-card:hover {
 	flex-wrap: wrap;
 	gap: 8px;
 	align-items: center;
+	justify-content: center;
 	margin-top: 14px;
-}
-
-.exchange-new-badge {
-	position: absolute;
-	top: 8px;
-	right: 8px;
-	z-index: 2;
-	padding: 4px 8px;
-	border-radius: 999px;
-	background: linear-gradient(135deg, #fef08a, #34d399 65%, #60a5fa);
-	color: #08111f;
-	font-size: 0.72rem;
-	font-weight: 900;
-	box-shadow: 0 0 18px rgba(52, 211, 153, 0.65);
-	animation: exchange-badge-glow 1.7s ease-in-out infinite alternate;
 }
 
 .anime-exchange-result--timeline {
 	margin: 10px 0 6px;
-	padding: 12px;
+	padding: 0;
+	border: 0;
+	background: transparent;
 	box-shadow: none;
+	backdrop-filter: none;
+	container-type: inline-size;
+	--timeline-center-width: 28px;
+	--timeline-gap: 8px;
+	--timeline-card-max: min(126px, calc((100cqw - var(--timeline-center-width) - (var(--timeline-gap) * 2)) / 2));
 }
 
-.anime-exchange-result--timeline .exchange-result-grid {
-	grid-template-columns: minmax(0, 1fr) 38px minmax(0, 1fr);
-	gap: 8px;
+.anime-exchange-result--unframed {
+	padding: 0;
+	border: 0;
+	background: transparent;
+	box-shadow: none;
+	backdrop-filter: none;
+	overflow: visible;
 }
 
-.anime-exchange-result--timeline .exchange-result-card {
-	grid-template-columns: 48px minmax(0, 1fr);
-	padding: 9px;
-	gap: 8px;
-}
-
-.anime-exchange-result--timeline .exchange-result-cover-wrap {
-	width: 48px;
-}
-
-.anime-exchange-result--timeline .exchange-result-copy strong {
-	font-size: 0.85rem;
-	line-clamp: 2;
-	-webkit-line-clamp: 2;
-}
-
-.anime-exchange-result--timeline .exchange-result-copy span,
-.anime-exchange-result--timeline .exchange-result-copy small,
-.anime-exchange-result--timeline .exchange-result-comment {
-	font-size: 0.68rem;
+.anime-exchange-result--timeline .exchange-swap-icon {
+	align-self: center;
+	min-height: 28px;
 }
 
 .anime-exchange-result--timeline .exchange-swap-icon span {
-	width: 34px;
-	height: 34px;
-	font-size: 1rem;
+	width: 28px;
+	height: 28px;
+	font-size: 0.9rem;
+	animation: none;
+}
+
+.exchange-result-grid--timeline :global(.eac--poster-only) {
+	max-width: var(--timeline-card-max);
 }
 
 :global([data-theme="light"]) .anime-exchange-result {
@@ -362,20 +232,16 @@ a.exchange-result-card:hover {
 	box-shadow: 0 14px 34px rgba(124, 58, 237, 0.1);
 }
 
-:global([data-theme="light"]) .exchange-result-card {
-	border-color: rgba(124, 58, 237, 0.14);
-	background: rgba(255, 255, 255, 0.78);
-	box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
+:global([data-theme="light"]) .anime-exchange-result--unframed {
+	border-color: transparent;
+	background: transparent;
+	box-shadow: none;
 }
 
-:global([data-theme="light"]) a.exchange-result-card:hover {
-	border-color: rgba(52, 211, 153, 0.48);
-	background: rgba(240, 253, 250, 0.92);
-}
-
-:global([data-theme="light"]) .exchange-result-card--received {
-	border-color: rgba(52, 211, 153, 0.36);
-	background: rgba(236, 253, 245, 0.82);
+:global([data-theme="light"]) .anime-exchange-result--timeline {
+	border-color: transparent;
+	background: transparent;
+	box-shadow: none;
 }
 
 :global([data-theme="light"]) .exchange-swap-icon span {
@@ -394,39 +260,40 @@ a.exchange-result-card:hover {
 	}
 }
 
-@keyframes exchange-badge-glow {
-	from {
-		filter: brightness(1);
-		box-shadow: 0 0 12px rgba(52, 211, 153, 0.5);
-	}
-	to {
-		filter: brightness(1.18);
-		box-shadow: 0 0 24px rgba(250, 204, 21, 0.72);
-	}
-}
-
 @media (max-width: 640px) {
-	.exchange-result-grid,
-	.anime-exchange-result--timeline .exchange-result-grid {
-		grid-template-columns: 1fr;
+	.anime-exchange-result:not(.anime-exchange-result--timeline):not(.anime-exchange-result--unframed) {
+		padding: 12px;
 	}
 
-	.exchange-swap-icon {
-		min-height: 38px;
+	.exchange-result-grid--full {
+		--trade-center-width: 30px;
+		--trade-side-gap: 8px;
 	}
 
 	.exchange-swap-icon span {
 		transform: rotate(90deg);
 	}
 
-	.exchange-result-card,
-	.anime-exchange-result--timeline .exchange-result-card {
-		grid-template-columns: 62px minmax(0, 1fr);
+	.anime-exchange-result--timeline .exchange-swap-icon span {
+		transform: none;
 	}
 
-	.exchange-result-cover-wrap,
-	.anime-exchange-result--timeline .exchange-result-cover-wrap {
-		width: 62px;
+	.exchange-result-grid--full .exchange-swap-icon {
+		min-height: 0;
+		margin-top: calc(var(--trade-cover-center-y) - 15px);
+	}
+
+	.exchange-result-grid--full .exchange-swap-icon span {
+		width: 30px;
+		height: 30px;
+		font-size: 0.9rem;
+		transform: none;
+	}
+
+	.exchange-result-grid--timeline {
+		--timeline-center-width: 24px;
+		--timeline-gap: 6px;
+		--timeline-card-max: min(104px, calc((100cqw - var(--timeline-center-width) - (var(--timeline-gap) * 2)) / 2));
 	}
 }
 </style>

@@ -36,7 +36,7 @@ const submitPassword: SubmitFunction = () => {
 			{/if}
 
 			{#if form && "message" in form && !form.success && !("field" in form)}
-				<div class="flash-error">{form.message}</div>
+				<div class="flash-error" role="alert">{form.message}</div>
 			{/if}
 
 			{#if !data.hasEmailProvider}

@@ -1,6 +1,6 @@
 import type { AnimeListOptions } from "$lib/server/queries";
 
-export type AnimeListTab = "popular" | "trending" | "top_rated" | "mylist" | "airing" | "upcoming" | "register";
+export type AnimeListTab = "popular" | "trending" | "top_rated" | "mylist" | "airing" | "upcoming" | "register" | "all";
 export type AnimeSeasonChip = "" | "冬" | "春" | "夏" | "秋";
 
 export interface AnimeListFilters {
@@ -45,7 +45,8 @@ function normalizeTab(value: string | null): AnimeListTab {
 		value === "mylist" ||
 		value === "airing" ||
 		value === "upcoming" ||
-		value === "register"
+		value === "register" ||
+		value === "all"
 	) {
 		return value;
 	}

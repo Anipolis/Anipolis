@@ -42,12 +42,12 @@ const next = $derived(data.next ?? "/");
 			{/if}
 
 			{#if form && 'message' in form && !form.success}
-				<div class="flash-error">{form.message}</div>
+				<div class="flash-error" role="alert">{form.message}</div>
 			{/if}
 
 			{#if data.error === 'not_member'}
-				<div class="flash-error">
-					このDiscordサーバーのメンバーのみ参加できます。サーバーに参加してから、もう一度お試しください。
+				<div class="flash-error" role="alert">
+					このサービスは現在、クローズドβテスト中です。テストに参加しているメンバーのみ利用できます。
 				</div>
 			{/if}
 
