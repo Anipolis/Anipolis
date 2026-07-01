@@ -18,7 +18,9 @@ let postContent = $state("");
 let textareaEl: HTMLTextAreaElement | null = $state(null);
 let composerEl: HTMLDivElement | null = $state(null);
 let keepComposerFocused = $state(true);
+let postListEl: HTMLDivElement | null = $state(null);
 let mounted = $state(false);
+let isMobileViewport = $state(false);
 let postOrder = $state<PostOrder>("oldest");
 let lastPostCount = $state(0);
 let isFollowingLatest = $state(true);
@@ -39,6 +41,7 @@ let extraPosts = $state<Post[]>([]);
 let roomExperimentVisitId: string | null = null;
 let roomExperimentHeartbeatTimer: ReturnType<typeof setInterval> | undefined;
 let roomExperimentExitSent = false;
+let mobileViewportQuery: MediaQueryList | null = null;
 
 function getRoomExperimentVisitStorageKey(sessionId: string) {
 	return `room-experiment-visit:${sessionId}`;
@@ -198,8 +201,12 @@ const status = $derived.by<RoomStatus>(() => {
 	if (now >= closeMs) return "ended";
 	return "open";
 });
+const showLatestJumpButton = $derived(status === "open" && (!isFollowingLatest || unreadNewPostCount > 0));
 
 onMount(() => {
+	mobileViewportQuery = window.matchMedia("(max-width: 960px)");
+	isMobileViewport = mobileViewportQuery.matches;
+	mobileViewportQuery.addEventListener("change", handleMobileViewportChange);
 	mounted = true;
 	lastPostCount = data.posts.length;
 	intervalId = setInterval(() => {
@@ -210,7 +217,6 @@ onMount(() => {
 	} else {
 		void focusComposerTextarea();
 	}
-	window.addEventListener("scroll", handleWindowScroll, { passive: true });
 	window.addEventListener("pointerdown", handleWindowPointerDown, true);
 	window.addEventListener("pagehide", handleRoomExperimentPageHide);
 	window.addEventListener("pageshow", handleRoomExperimentPageShow);
@@ -218,17 +224,21 @@ onMount(() => {
 });
 
 onDestroy(() => {
+	mobileViewportQuery?.removeEventListener("change", handleMobileViewportChange);
 	clearInterval(intervalId);
 	if (programmaticScrollTimer) clearTimeout(programmaticScrollTimer);
 	clearRoomExperimentHeartbeatTimer();
 	if (typeof window !== "undefined") {
-		window.removeEventListener("scroll", handleWindowScroll);
 		window.removeEventListener("pointerdown", handleWindowPointerDown, true);
 		window.removeEventListener("pagehide", handleRoomExperimentPageHide);
 		window.removeEventListener("pageshow", handleRoomExperimentPageShow);
 	}
 	sendRoomExperimentExit();
 });
+
+function handleMobileViewportChange(event: MediaQueryListEvent) {
+	isMobileViewport = event.matches;
+}
 
 $effect(() => {
 	if (form && "success" in form && form.success) {
@@ -280,13 +290,13 @@ $effect(() => {
 });
 
 function isNearLatestEdge(order: PostOrder = postOrder) {
-	const root = document.documentElement;
-	if (order === "newest") return window.scrollY <= latestEdgeThreshold;
-	const distanceToBottom = root.scrollHeight - (window.scrollY + window.innerHeight);
+	if (!postListEl) return true;
+	if (order === "newest") return postListEl.scrollTop <= latestEdgeThreshold;
+	const distanceToBottom = postListEl.scrollHeight - (postListEl.scrollTop + postListEl.clientHeight);
 	return distanceToBottom <= latestEdgeThreshold;
 }
 
-function handleWindowScroll() {
+function handlePostListScroll() {
 	if (!mounted || status !== "open") return;
 	if (programmaticScrollTimer) return;
 	const nearLatest = isNearLatestEdge();
@@ -297,12 +307,16 @@ function handleWindowScroll() {
 async function focusLatestPost(order: PostOrder = postOrder, behavior: ScrollBehavior = "auto") {
 	await tick();
 	requestAnimationFrame(() => {
-		const selector = order === "oldest" ? ".anime-room-post:last-of-type" : ".anime-room-post:first-of-type";
+		if (!postListEl) return;
+		if (programmaticScrollTimer) clearTimeout(programmaticScrollTimer);
 		programmaticScrollTimer = setTimeout(() => {
 			programmaticScrollTimer = undefined;
 			isFollowingLatest = true;
 		}, 450);
-		document.querySelector<HTMLElement>(selector)?.scrollIntoView({ block: "center", behavior });
+		postListEl.scrollTo({
+			top: order === "oldest" ? postListEl.scrollHeight : 0,
+			behavior,
+		});
 	});
 }
 
@@ -355,13 +369,15 @@ function formatCompactDate(iso: string) {
 
 <svelte:head> <title>{data.room.title} - Anipolis</title> </svelte:head>
 
-<div class="page-container">
+<div class="page-container room-page-container">
 	<div class="feed-column">
 		<div class="room-mobile-bar">
 			<span class="room-mobile-title">{data.room.title}</span>
-			<span class="room-mobile-timer event-timer--{status}">{timerLabel}</span>
-			{#if status === "open"}
-				<span class="event-timer-badge">受付中</span>
+			{#if !isGlobalLobby}
+				<span class="room-mobile-timer event-timer--{status}">{timerLabel}</span>
+				{#if status === "open"}
+					<span class="event-timer-badge">受付中</span>
+				{/if}
 			{/if}
 		</div>
 
@@ -376,8 +392,9 @@ function formatCompactDate(iso: string) {
 							bind:this={textareaEl}
 							class="composer-textarea room-composer-textarea"
 							name="content"
-							placeholder="いまの感想を投稿... (Shift+Enterで改行)"
-							rows="3"
+							placeholder={isMobileViewport ? "いまの感想を投稿..." : "いまの感想を投稿... (Shift+Enterで改行)"}
+							rows={isMobileViewport ? 1 : 3}
+							enterkeyhint="send"
 							bind:value={postContent}
 							maxlength={maxLen}
 							onfocus={() => {
@@ -440,31 +457,45 @@ function formatCompactDate(iso: string) {
 			</button>
 		</div>
 
-		{#if allPosts.length === 0}
-			<div class="card anime-room-empty">まだ投稿はありません。最初の感想を残しましょう。</div>
-		{:else}
-			{#each displayedPosts as post (post.id)}
-				<div class="anime-room-post">
-					<LiveRoomPostCard
-						{post}
-						currentUserId={data.user?.id ?? null}
-						broadcastStartAt={data.room.scheduled_at}
-						timelineTimeMode={isGlobalLobby}
-					/>
-				</div>
-			{/each}
-		{/if}
+		<div class="room-post-list-shell">
+			<div class="room-post-list scrollbar-thin-muted" bind:this={postListEl} onscroll={handlePostListScroll}>
+				{#if allPosts.length === 0}
+					<div class="card anime-room-empty">まだ投稿はありません。最初の感想を残しましょう。</div>
+				{:else}
+					{#each displayedPosts as post (post.id)}
+						<div class="anime-room-post">
+							<LiveRoomPostCard
+								{post}
+								currentUserId={data.user?.id ?? null}
+								broadcastStartAt={data.room.scheduled_at}
+								timelineTimeMode={isGlobalLobby}
+							/>
+						</div>
+					{/each}
+				{/if}
+			</div>
 
-		{#if status === "open" && unreadNewPostCount > 0}
-			<button type="button" class="new-posts-badge" onclick={resumeLatestFollow}>
-				<span aria-hidden="true">↓</span>
-				<span>新着の投稿があります</span>
-				<span class="new-posts-count">{unreadNewPostCount}</span>
-			</button>
-		{/if}
+			{#if showLatestJumpButton}
+				<button
+					type="button"
+					class="new-posts-badge"
+					onclick={resumeLatestFollow}
+					aria-label="最新の投稿へ移動"
+				>
+					{#if postOrder === "oldest"}
+						<span class="i-lucide-arrow-down latest-jump-icon" aria-hidden="true"></span>
+					{:else}
+						<span class="i-lucide-arrow-up latest-jump-icon" aria-hidden="true"></span>
+					{/if}
+					{#if unreadNewPostCount > 0}
+						<span class="new-posts-count">{unreadNewPostCount}</span>
+					{/if}
+				</button>
+			{/if}
+		</div>
 	</div>
 
-	<aside class="sidebar-column">
+	<aside class="sidebar-column scrollbar-thin-muted">
 		<div class="room-summary-card mb-4 rounded-xl border p-4 shadow-sm">
 			<div class="flex items-start">
 				<a href="/anime/{data.anime.id}" class="shrink-0" aria-label="アニメ詳細を開く">
@@ -539,9 +570,32 @@ function formatCompactDate(iso: string) {
 	color: var(--color-accent-hover);
 }
 
-.feed-column {
+.room-page-container {
+	max-width: none;
+	height: 100dvh;
+	margin: 0;
+	align-items: stretch;
+	overflow: hidden;
+	padding-right: max(24px, env(safe-area-inset-right));
+	padding-bottom: 24px;
+	padding-left: max(16px, calc((100% - (var(--content-max) + 48px)) / 2 + 16px));
+}
+
+.room-page-container > .feed-column {
 	display: flex;
+	flex: 0 0 var(--feed-width);
+	height: 100%;
+	min-height: 0;
+	overflow: hidden;
 	flex-direction: column;
+}
+
+.room-page-container > .sidebar-column {
+	flex: 1 1 var(--sidebar-width);
+	max-height: 100%;
+	overflow-x: hidden;
+	overflow-y: auto;
+	padding-bottom: 24px;
 }
 
 .room-mobile-bar {
@@ -551,23 +605,37 @@ function formatCompactDate(iso: string) {
 .event-posts-header,
 .room-order-toggle {
 	order: 1;
+	flex: 0 0 auto;
 }
 
-.anime-room-empty,
-.anime-room-post {
+.room-post-list-shell {
+	position: relative;
 	order: 2;
+	flex: 1 1 auto;
+	min-height: 0;
+}
+
+.room-post-list {
+	height: 100%;
+	min-height: 0;
+	overflow-x: hidden;
+	overflow-y: auto;
+	overscroll-behavior: contain;
 }
 
 .new-posts-badge {
-	position: fixed;
+	position: absolute;
 	left: 50%;
-	bottom: 24px;
-	z-index: 145;
+	bottom: 12px;
+	z-index: 4;
 	display: inline-flex;
 	align-items: center;
+	justify-content: center;
 	gap: 8px;
-	max-width: calc(100vw - 32px);
-	padding: 9px 14px;
+	min-width: 40px;
+	min-height: 40px;
+	max-width: calc(100% - 32px);
+	padding: 8px 12px;
 	border: 1px solid color-mix(in srgb, var(--color-primary) 28%, transparent);
 	border-radius: 999px;
 	background: color-mix(in srgb, var(--color-surface) 92%, var(--color-primary));
@@ -597,6 +665,12 @@ function formatCompactDate(iso: string) {
 	font-variant-numeric: tabular-nums;
 }
 
+.latest-jump-icon {
+	width: 16px;
+	height: 16px;
+	flex-shrink: 0;
+}
+
 @keyframes new-posts-pop {
 	from {
 		opacity: 0;
@@ -613,7 +687,7 @@ function formatCompactDate(iso: string) {
 	align-self: flex-start;
 	gap: 2px;
 	padding: 3px;
-	margin: -4px 0 12px;
+	margin: -4px 0 10px;
 	background: var(--color-surface);
 	border: 1px solid var(--color-border);
 	border-radius: var(--radius-sm);
@@ -672,15 +746,6 @@ function formatCompactDate(iso: string) {
 	color: var(--color-primary);
 	font-weight: 600;
 }
-@media (max-width: 960px) {
-	.room-mobile-bar {
-		display: flex;
-	}
-
-	.new-posts-badge {
-		bottom: calc(76px + env(safe-area-inset-bottom));
-	}
-}
 
 /* ── ログイン/空状態 ── */
 .anime-room-login,
@@ -694,10 +759,98 @@ function formatCompactDate(iso: string) {
 .feed-column > .composer,
 .feed-column > .anime-room-login {
 	order: 3;
-	margin-top: 16px;
+	position: relative;
+	z-index: 2;
+	flex: 0 0 auto;
+	margin-top: 12px;
 }
 
 .feed-column > .composer {
-	margin-bottom: 0;
+	margin-bottom: 24px;
+}
+
+@media (max-width: 960px) {
+	.room-page-container {
+		height: calc(100dvh - 52px);
+		padding-right: 12px;
+		padding-bottom: calc(80px + env(safe-area-inset-bottom));
+		padding-left: 12px;
+	}
+
+	.room-page-container > .feed-column {
+		flex: 1 1 auto;
+	}
+
+	.room-mobile-bar {
+		display: flex;
+	}
+
+	.room-page-container .room-post-list {
+		padding-bottom: 14px;
+	}
+
+	.room-page-container .new-posts-badge {
+		bottom: 8px;
+	}
+
+	.room-page-container .feed-column > .composer {
+		margin-top: 8px;
+		margin-bottom: 0;
+		padding: 8px 10px;
+		border-radius: 14px;
+	}
+
+	.room-page-container .composer form,
+	.room-page-container .composer-body {
+		min-width: 0;
+		width: 100%;
+	}
+
+	.room-page-container .composer-body {
+		align-items: center;
+		gap: 8px;
+	}
+
+	.room-page-container .composer-textarea {
+		min-height: 24px;
+		max-height: 80px;
+		height: 24px;
+		line-height: 1.5;
+		font-size: 15px;
+		overflow-y: auto;
+	}
+
+	.room-page-container .composer-footer {
+		flex: 0 0 auto;
+		gap: 8px;
+		margin-top: 0;
+		padding-top: 0;
+		border-top: 0;
+	}
+
+	.room-page-container .composer-footer .char-count {
+		font-size: 12px;
+		line-height: 1;
+	}
+
+	.room-page-container .composer-footer .btn {
+		min-height: 32px;
+		padding: 6px 12px;
+		white-space: nowrap;
+	}
+}
+
+@media (max-width: 480px) {
+	.room-page-container {
+		padding-right: 8px;
+		padding-left: 8px;
+	}
+}
+
+@media (max-width: 375px) {
+	.room-page-container {
+		padding-right: 6px;
+		padding-left: 6px;
+	}
 }
 </style>
