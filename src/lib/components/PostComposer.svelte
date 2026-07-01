@@ -78,12 +78,12 @@ let cwInputEl = $state<HTMLInputElement | null>(null);
 // 実況ルームリンク
 type OpenRoom = {
 	id: string;
-	anime_id: number;
+	anime_id: string;
 	room_date: string;
 	room_kind: "episode" | "global";
 	room_key: string;
 	scheduled_at: string;
-	anime: { id: number; title: string; cover_url: string | null } | null;
+	anime: { id: string; title: string; cover_url: string | null } | null;
 };
 let selectedRoom = $state<OpenRoom | null>(null);
 let roomModalOpen = $state(false);
@@ -218,11 +218,13 @@ function clearCwAnime() {
 
 async function openRoomSearch() {
 	roomModalOpen = true;
-	if (openRooms !== null) return;
 	roomsLoading = true;
 	try {
 		const res = await fetch("/api/rooms/open");
+		if (!res.ok) throw new Error(`HTTP ${res.status}`);
 		openRooms = await res.json();
+	} catch {
+		openRooms = [];
 	} finally {
 		roomsLoading = false;
 	}
@@ -773,7 +775,7 @@ const handleSubmit: SubmitFunction = () => {
 				{:else if openRooms !== null && openRooms.length === 0}
 					<p class="anime-search-empty">現在開放中のルームはありません</p>
 				{:else if openRooms}
-					{#each openRooms as room}
+					{#each openRooms as room (room.id)}
 						<button type="button" class="anime-search-item" onclick={() => selectRoom(room)}>
 							{#if room.anime?.cover_url}
 								<img src={room.anime.cover_url} alt={room.anime.title} class="anime-search-thumb">
