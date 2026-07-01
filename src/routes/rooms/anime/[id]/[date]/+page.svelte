@@ -33,7 +33,6 @@ const openLeadMinutes = $derived(Math.round((scheduledMs - openMs) / (60 * 1000)
 const isGlobalLobby = $derived(data.room.kind === "global");
 const charCount = $derived(postContent.length);
 const overLimit = $derived(charCount > maxLen);
-const latestJumpArrow = $derived(postOrder === "oldest" ? "↓" : "↑");
 // ライブ更新で受信した投稿（load 由来の data.posts とは別に保持し、ID でマージする）
 let extraPosts = $state<Post[]>([]);
 let roomExperimentVisitId: string | null = null;
@@ -269,6 +268,7 @@ async function focusLatestPost(order: PostOrder = postOrder, behavior: ScrollBeh
 	await tick();
 	requestAnimationFrame(() => {
 		if (!postListEl) return;
+		if (programmaticScrollTimer) clearTimeout(programmaticScrollTimer);
 		programmaticScrollTimer = setTimeout(() => {
 			programmaticScrollTimer = undefined;
 			isFollowingLatest = true;
@@ -436,9 +436,13 @@ function formatCompactDate(iso: string) {
 					type="button"
 					class="new-posts-badge"
 					onclick={resumeLatestFollow}
-					aria-label="Jump to latest post"
+					aria-label="最新の投稿へ移動"
 				>
-					<span aria-hidden="true">{latestJumpArrow}</span>
+					{#if postOrder === "oldest"}
+						<span class="i-lucide-arrow-down latest-jump-icon" aria-hidden="true"></span>
+					{:else}
+						<span class="i-lucide-arrow-up latest-jump-icon" aria-hidden="true"></span>
+					{/if}
 					{#if unreadNewPostCount > 0}
 						<span class="new-posts-count">{unreadNewPostCount}</span>
 					{/if}
@@ -611,6 +615,12 @@ function formatCompactDate(iso: string) {
 	color: white;
 	font-size: 12px;
 	font-variant-numeric: tabular-nums;
+}
+
+.latest-jump-icon {
+	width: 16px;
+	height: 16px;
+	flex-shrink: 0;
 }
 
 @keyframes new-posts-pop {

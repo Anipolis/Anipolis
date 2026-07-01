@@ -95,7 +95,6 @@ html {
 html.room-scroll-lock {
 	height: 100%;
 	overflow: hidden;
-	scrollbar-gutter: stable;
 }
 
 body {
@@ -247,11 +246,9 @@ textarea {
 	width: 100%;
 	max-width: calc(var(--content-max) + 48px);
 	margin: 0 auto;
-	padding: 0 32px 0 16px;
+	padding: calc(var(--nav-height) + 24px) 32px 48px 16px;
 	display: flex;
 	gap: 20px;
-	padding-top: calc(var(--nav-height) + 24px);
-	padding-bottom: 48px;
 	align-items: flex-start;
 }
 

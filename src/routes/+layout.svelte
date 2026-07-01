@@ -50,7 +50,6 @@ $effect(() => {
 });
 
 $effect.pre(() => {
-	if (typeof document === "undefined") return;
 	const root = document.documentElement;
 	root.classList.toggle("room-scroll-lock", roomScrollLocked);
 	return () => {
