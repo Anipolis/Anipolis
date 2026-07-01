@@ -561,7 +561,6 @@ function isAiringToday(anime: AnimeListItem): boolean {
 					<a href="/anime" class="search-clear" title="フィルターをすべてクリア">✕</a>
 				{/if}
 			</div>
-
 		</form>
 
 		<nav class="tab-nav">
