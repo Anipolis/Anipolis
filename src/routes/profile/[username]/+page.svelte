@@ -34,6 +34,7 @@ let reportReason = $state("harassment");
 let reportDetails = $state("");
 let reportSubmitting = $state(false);
 let reportMessage = $state("");
+let showKebabMenu = $state(false);
 
 $effect(() => {
 	isFollowing = data.isFollowing;
@@ -176,6 +177,10 @@ async function submitUserReport() {
 }
 
 function handleReportModalKeydown(event: KeyboardEvent) {
+	if (showKebabMenu && event.key === "Escape") {
+		showKebabMenu = false;
+		return;
+	}
 	if (showUserReportModal && event.key === "Escape") {
 		showUserReportModal = false;
 	}
@@ -223,7 +228,7 @@ const grouped = $derived(
 	{/if}
 </svelte:head>
 
-<svelte:window onkeydown={handleReportModalKeydown} />
+<svelte:window onkeydown={handleReportModalKeydown} onclick={() => { if (showKebabMenu) showKebabMenu = false; }} />
 
 <div class="page-container">
 	<main class="feed-column">
@@ -234,50 +239,19 @@ const grouped = $derived(
 				<div class="profile-header-image profile-header-image--empty" aria-hidden="true"></div>
 			{/if}
 			<div class="profile-header-content">
-				<UserAvatar src={profile.avatar_url} username={profile.username} size="lg" />
-				<div class="profile-info">
-					<div class="profile-display-name">{displayName}</div>
-					<div class="profile-username">
-						@{profile.username}
-						{#if profile.is_private}
-							<span class="profile-lock-badge" title="鍵アカウント">鍵</span>
-						{/if}
-					</div>
-					{#if profile.bio}
-						<p class="profile-bio">{profile.bio}</p>
-					{/if}
-					<div class="profile-stats">
-						<span class="profile-stat">
-							<strong>{posts.length}</strong>
-							<span>投稿</span>
-						</span>
-						<a href="/profile/{profile.username}/followers" class="profile-stat profile-stat--link">
-							<strong>{followerCount}</strong>
-							<span>フォロワー</span>
-						</a>
-						<a href="/profile/{profile.username}/following" class="profile-stat profile-stat--link">
-							<strong>{data.followCounts.following}</strong>
-							<span>フォロー中</span>
-						</a>
-						{#if canViewContent && (profile.list_is_public || isOwn)}
-							<span class="profile-stat">
-								<strong>{animeList.length}</strong>
-								<span>アニメ</span>
-							</span>
-						{/if}
-					</div>
-
-					{#if isOwn}
-						<button
-							type="button"
-							class="btn btn-outline"
-							style="margin-top: 12px; font-size: 13px;"
-							onclick={openProfileEditModal}
-						>
-							プロフィールを編集
-						</button>
-					{:else if data.user}
-						<div class="profile-actions">
+				<div class="profile-header-top">
+					<UserAvatar src={profile.avatar_url} username={profile.username} size="lg" />
+					<div class="profile-header-actions">
+						{#if isOwn}
+							<button
+								type="button"
+								class="btn btn-outline"
+								style="font-size: 13px;"
+								onclick={openProfileEditModal}
+							>
+								プロフィールを編集
+							</button>
+						{:else if data.user}
 							<form
 								method="POST"
 								action="?/follow"
@@ -315,16 +289,68 @@ const grouped = $derived(
 									{isFollowing ? 'フォロー中' : followRequestStatus === 'pending' ? '申請中' : profile.is_private ? 'フォロー申請' : 'フォローする'}
 								</button>
 							</form>
-							<button
-								type="button"
-								class="btn btn-outline"
-								style="font-size: 13px;"
-								onclick={() => (showUserReportModal = true)}
-							>
-								通報
-							</button>
-						</div>
+							<div class="profile-kebab-menu">
+								<button
+									type="button"
+									class="profile-kebab-btn"
+									aria-label="その他のオプション"
+									aria-expanded={showKebabMenu}
+									onclick={(e) => { e.stopPropagation(); showKebabMenu = !showKebabMenu; }}
+								>
+									⋮
+								</button>
+								{#if showKebabMenu}
+									<div
+										class="profile-kebab-dropdown"
+										role="menu"
+										tabindex="-1"
+										onclick={(e) => e.stopPropagation()}
+										onkeydown={(e) => e.stopPropagation()}
+									>
+										<button
+											type="button"
+											role="menuitem"
+											onclick={() => { showKebabMenu = false; showUserReportModal = true; }}
+										>
+											通報
+										</button>
+									</div>
+								{/if}
+							</div>
+						{/if}
+					</div>
+				</div>
+				<div class="profile-info">
+					<div class="profile-display-name">{displayName}</div>
+					<div class="profile-username">
+						@{profile.username}
+						{#if profile.is_private}
+							<span class="profile-lock-badge" title="鍵アカウント">鍵</span>
+						{/if}
+					</div>
+					{#if profile.bio}
+						<p class="profile-bio">{profile.bio}</p>
 					{/if}
+					<div class="profile-stats">
+						<span class="profile-stat">
+							<strong>{posts.length}</strong>
+							<span>投稿</span>
+						</span>
+						<a href="/profile/{profile.username}/followers" class="profile-stat profile-stat--link">
+							<strong>{followerCount}</strong>
+							<span>フォロワー</span>
+						</a>
+						<a href="/profile/{profile.username}/following" class="profile-stat profile-stat--link">
+							<strong>{data.followCounts.following}</strong>
+							<span>フォロー中</span>
+						</a>
+						{#if canViewContent && (profile.list_is_public || isOwn)}
+							<span class="profile-stat">
+								<strong>{animeList.length}</strong>
+								<span>アニメ</span>
+							</span>
+						{/if}
+					</div>
 				</div>
 			</div>
 		</div>
@@ -658,17 +684,57 @@ const grouped = $derived(
 	cursor: pointer;
 }
 
-.profile-actions {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	margin-top: 12px;
+.profile-kebab-menu {
+	position: relative;
 }
 
-.profile-actions .btn[disabled] {
-	pointer-events: none;
-	opacity: 0.6;
-	cursor: not-allowed;
+.profile-kebab-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 34px;
+	height: 34px;
+	border: 1px solid var(--color-border);
+	border-radius: 999px;
+	background: transparent;
+	color: var(--color-text-muted);
+	cursor: pointer;
+	font-size: 20px;
+	line-height: 1;
+}
+
+.profile-kebab-btn:hover {
+	background: var(--color-surface-hover);
+	color: var(--color-text);
+}
+
+.profile-kebab-dropdown {
+	position: absolute;
+	right: 0;
+	top: calc(100% + 6px);
+	z-index: 100;
+	min-width: 140px;
+	border: 1px solid var(--color-border);
+	border-radius: 8px;
+	background: var(--color-surface);
+	box-shadow: 0 8px 24px rgb(0 0 0 / 0.24);
+	overflow: hidden;
+}
+
+.profile-kebab-dropdown button {
+	display: block;
+	width: 100%;
+	padding: 10px 14px;
+	border: 0;
+	background: transparent;
+	color: var(--color-text);
+	font-size: 14px;
+	text-align: left;
+	cursor: pointer;
+}
+
+.profile-kebab-dropdown button:hover {
+	background: var(--color-surface-hover);
 }
 
 .profile-lock-badge {
