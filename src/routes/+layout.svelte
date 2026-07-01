@@ -14,6 +14,7 @@ let { data, children }: LayoutProps = $props();
 let unreadNotificationCount = $state(0);
 let unreadBroadcastNotificationCount = $state(0);
 let pendingReportsCount = $state(0);
+const roomScrollLocked = $derived(page.url.pathname.startsWith("/rooms/anime/"));
 
 async function refreshNotificationCounts() {
 	if (!data.session) {
@@ -45,6 +46,15 @@ $effect(() => {
 	});
 	return () => {
 		active = false;
+	};
+});
+
+$effect.pre(() => {
+	if (typeof document === "undefined") return;
+	const root = document.documentElement;
+	root.classList.toggle("room-scroll-lock", roomScrollLocked);
+	return () => {
+		root.classList.remove("room-scroll-lock");
 	};
 });
 
