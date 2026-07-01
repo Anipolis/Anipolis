@@ -7,7 +7,10 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	const { user } = await safeGetSession();
 	if (!user) redirect(303, "/");
 
-	const [mutedWords, mutes] = await Promise.all([getMutedWordRows(supabase, user.id), getAnimeMutes(supabase, user.id)]);
+	const [mutedWords, mutes] = await Promise.all([
+		getMutedWordRows(supabase, user.id),
+		getAnimeMutes(supabase, user.id),
+	]);
 
 	const parsedAnimeId = parsePositiveInt(url.searchParams.get("anime_id"));
 	const stagedAnimeId = parsedAnimeId !== null ? String(parsedAnimeId) : null;
