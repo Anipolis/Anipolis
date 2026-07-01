@@ -1351,6 +1351,7 @@ export interface AnimeListOptions {
 	season?: string;
 	broadcastYear?: string;
 	broadcastSeason?: string;
+	broadcastSeasons?: string[];
 	scheduleRange?: { start: string; end: string };
 	genre?: string;
 	genres?: string[];
@@ -1413,6 +1414,7 @@ export async function getAnimeList(
 		season,
 		broadcastYear,
 		broadcastSeason,
+		broadcastSeasons,
 		scheduleRange,
 		genre,
 		genres,
@@ -1438,7 +1440,7 @@ export async function getAnimeList(
 
 	if (listedAnimeIds) query = query.in("id", listedAnimeIds);
 	if (season) query = query.eq("season", season);
-	const seasonFilter = buildSeasonFilter(undefined, broadcastSeason);
+	const seasonFilter = buildSeasonFilter(undefined, broadcastSeasons?.length ? broadcastSeasons : broadcastSeason);
 	if (seasonFilter) query = query.or(seasonFilter);
 	if (broadcastYear) query = applyAiredYearFilter(query, broadcastYear);
 	if (scheduleRange) {
@@ -1472,15 +1474,33 @@ export async function getAnimeCount(
 	supabase: SupabaseClient<Database>,
 	options: Pick<
 		AnimeListOptions,
-		"genre" | "genres" | "broadcastYear" | "broadcastSeason" | "studio" | "producer" | "source" | "query"
+		| "genre"
+		| "genres"
+		| "broadcastYear"
+		| "broadcastSeason"
+		| "broadcastSeasons"
+		| "studio"
+		| "producer"
+		| "source"
+		| "query"
 	>,
 ): Promise<number> {
-	const { genre, genres, broadcastYear, broadcastSeason, studio, producer, source, query: searchQuery } = options;
+	const {
+		genre,
+		genres,
+		broadcastYear,
+		broadcastSeason,
+		broadcastSeasons,
+		studio,
+		producer,
+		source,
+		query: searchQuery,
+	} = options;
 	const selectedGenres = normalizeGenreFilters(genres ?? genre);
 
 	let q = supabase.from("anime_with_computed_broadcast_status").select("id", { count: "exact", head: true });
 
-	const seasonFilter = buildSeasonFilter(undefined, broadcastSeason);
+	const seasonFilter = buildSeasonFilter(undefined, broadcastSeasons?.length ? broadcastSeasons : broadcastSeason);
 	if (seasonFilter) q = q.or(seasonFilter);
 	if (broadcastYear) q = applyAiredYearFilter(q, broadcastYear);
 	if (selectedGenres.length) q = q.or(buildGenreFilter(selectedGenres));
@@ -1553,22 +1573,26 @@ async function getAnimeListRowsFromBaseTable(
 	return (data ?? []) as unknown as Record<string, unknown>[];
 }
 
-function buildSeasonFilter(year: string | undefined, season: string | undefined): string | null {
+function buildSeasonFilter(year: string | undefined, seasons: string | string[] | undefined): string | null {
 	// 年は4桁数字のみ受け付ける（.or() 文字列への注入を防ぐ）
 	const trimmedYear = year?.trim();
 	const normalizedYear = trimmedYear && /^\d{4}$/.test(trimmedYear) ? trimmedYear : undefined;
-	const normalizedSeason = season?.trim();
-	if (!normalizedYear && !normalizedSeason) return null;
+	const normalizedSeasons = [
+		...new Set((Array.isArray(seasons) ? seasons : [seasons]).map((season) => season?.trim()).filter(Boolean)),
+	] as string[];
+	if (!normalizedYear && normalizedSeasons.length === 0) return null;
 
-	if (normalizedYear && normalizedSeason) {
-		return seasonSearchTerms(normalizedSeason)
+	if (normalizedYear && normalizedSeasons.length) {
+		return normalizedSeasons
+			.flatMap((season) => seasonSearchTerms(season))
 			.map((term) => `season.ilike.${quoteOrFilterValue(`${normalizedYear}%${term}`)}`)
 			.join(",");
 	}
 
 	if (normalizedYear) return `season.ilike.${quoteOrFilterValue(`${normalizedYear}%`)}`;
 
-	return seasonSearchTerms(normalizedSeason ?? "")
+	return normalizedSeasons
+		.flatMap((season) => seasonSearchTerms(season))
 		.flatMap((term) => [
 			`season.ilike.${quoteOrFilterValue(`%${term}`)}`,
 			`season.ilike.${quoteOrFilterValue(`%-${term}`)}`,
