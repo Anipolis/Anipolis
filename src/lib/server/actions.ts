@@ -486,6 +486,9 @@ export async function createEventAction(request: Request, supabase: SupabaseClie
 	const rawHashtag = (form.get("hashtag") as string | null)?.trim() ?? "";
 	const scheduledAtRaw = (form.get("scheduled_at") as string | null)?.trim() ?? "";
 	const durationRaw = (form.get("duration_minutes") as string | null)?.trim() ?? "";
+	const animeIdRaw = (form.get("anime_id") as string | null)?.trim() ?? "";
+	const animeId = animeIdRaw ? parsePositiveInt(animeIdRaw) : null;
+	if (animeIdRaw && animeId === null) return fail(400, { message: "アニメIDの形式が正しくありません" });
 
 	if (!title) return fail(400, { message: "タイトルを入力してください" });
 	if (title.length > 100) return fail(400, { message: "タイトルは100文字以内で入力してください" });
@@ -506,6 +509,11 @@ export async function createEventAction(request: Request, supabase: SupabaseClie
 		return fail(400, { message: "配信時間は正の整数で入力してください" });
 	}
 
+	if (animeId !== null) {
+		const { data: anime } = await supabase.from("anime").select("id").eq("id", animeId).maybeSingle();
+		if (!anime) return fail(400, { message: "アニメが見つかりません" });
+	}
+
 	const { data: event, error } = await supabase
 		.from("events")
 		.insert({
@@ -513,6 +521,7 @@ export async function createEventAction(request: Request, supabase: SupabaseClie
 			title,
 			description,
 			hashtag,
+			anime_id: animeId,
 			scheduled_at: scheduledAt.toISOString(),
 			duration_minutes: durationMinutes,
 		})

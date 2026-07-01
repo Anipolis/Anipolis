@@ -64,6 +64,7 @@ type NotificationRow = {
 type EventRow = Omit<Database["public"]["Tables"]["events"]["Row"], "anime_id"> & {
 	anime_id?: number | null;
 	profiles: { username: string; display_name: string | null; avatar_url: string | null } | null;
+	anime?: { id: number; title: string; title_en: string | null; cover_url: string | null } | null;
 };
 
 type UserAnimeListWithAnimeRow = {
@@ -473,7 +474,8 @@ export async function getEventsByMonth(
 		.select(`
             id, creator_id, title, description, hashtag, anime_id,
             scheduled_at, duration_minutes, is_cancelled, created_at,
-            profiles!events_creator_id_fkey ( username, display_name, avatar_url )
+            profiles!events_creator_id_fkey ( username, display_name, avatar_url ),
+            anime:anime!events_anime_id_fkey ( id, title, title_en, cover_url )
         `)
 		.gte("scheduled_at", startOfMonth)
 		.lte("scheduled_at", endOfMonth)
@@ -493,7 +495,8 @@ export async function getEventsByRange(
 		.select(`
             id, creator_id, title, description, hashtag, anime_id,
             scheduled_at, duration_minutes, is_cancelled, created_at,
-            profiles!events_creator_id_fkey ( username, display_name, avatar_url )
+            profiles!events_creator_id_fkey ( username, display_name, avatar_url ),
+            anime:anime!events_anime_id_fkey ( id, title, title_en, cover_url )
         `)
 		.gte("scheduled_at", startIso)
 		.lte("scheduled_at", endIso)
@@ -514,7 +517,8 @@ export async function getUpcomingEvents(supabase: SupabaseClient<Database>, limi
 		.select(`
             id, creator_id, title, description, hashtag, anime_id,
             scheduled_at, duration_minutes, is_cancelled, created_at,
-            profiles!events_creator_id_fkey ( username, display_name, avatar_url )
+            profiles!events_creator_id_fkey ( username, display_name, avatar_url ),
+            anime:anime!events_anime_id_fkey ( id, title, title_en, cover_url )
         `)
 		.gte("scheduled_at", now)
 		.eq("is_cancelled", false)
@@ -534,7 +538,8 @@ export async function getEvent(supabase: SupabaseClient<Database>, eventId: stri
 		.select(`
             id, creator_id, title, description, hashtag, anime_id,
             scheduled_at, duration_minutes, is_cancelled, created_at,
-            profiles!events_creator_id_fkey ( username, display_name, avatar_url )
+            profiles!events_creator_id_fkey ( username, display_name, avatar_url ),
+            anime:anime!events_anime_id_fkey ( id, title, title_en, cover_url )
         `)
 		.eq("id", eventId)
 		.maybeSingle();
@@ -630,9 +635,11 @@ export async function getPostReplies(
 
 function toEvent(raw: EventRow): Event {
 	const profiles = raw.profiles;
+	const anime = raw.anime;
 	return {
 		id: raw.id,
 		creator_id: raw.creator_id,
+		anime_id: raw.anime_id != null ? String(raw.anime_id) : null,
 		title: raw.title,
 		description: raw.description ?? null,
 		hashtag: raw.hashtag,
@@ -640,6 +647,14 @@ function toEvent(raw: EventRow): Event {
 		duration_minutes: raw.duration_minutes ?? null,
 		is_cancelled: raw.is_cancelled,
 		created_at: raw["created_at"],
+		anime: anime
+			? {
+					id: String(anime.id),
+					title: anime.title,
+					title_en: anime.title_en ?? null,
+					cover_url: anime.cover_url ?? null,
+				}
+			: null,
 		creator_username: profiles?.username ?? "unknown",
 		creator_display_name: profiles?.display_name ?? null,
 		creator_avatar_url: profiles?.avatar_url ?? null,

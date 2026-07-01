@@ -104,7 +104,6 @@ function formatDate(iso: string): string {
 						{#if data.event.duration_minutes}
 							<span>・{data.event.duration_minutes}分</span>
 						{/if}
-						<span>・主催: @{data.event.creator_username}</span>
 					</div>
 				</div>
 			</div>

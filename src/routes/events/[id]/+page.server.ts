@@ -8,6 +8,7 @@ import {
 } from "$lib/server/actions";
 import { getAnimeRankingTrending, getEvent, getEventPosts } from "$lib/server/queries";
 import type { Post } from "$lib/types";
+import { extractHashtags } from "$lib/utils/hashtag";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
@@ -31,19 +32,24 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 
 export const actions: Actions = {
 	// イベントルームへの投稿（ハッシュタグを自動付与）
-	createPost: async ({ request, locals: { supabase, safeGetSession } }) => {
+	createPost: async ({ request, params, locals: { supabase, safeGetSession } }) => {
 		const { user } = await safeGetSession();
 		if (!user) return fail(401, { message: "ログインが必要です" });
 
 		const form = await request.formData();
 		const content = (form.get("content") as string | null)?.trim() ?? "";
-		const hashtag = (form.get("hashtag") as string | null)?.trim() ?? "";
+		const event = await getEvent(supabase, params.id);
+		if (!event) return fail(404, { message: "イベントが見つかりません" });
+		const hashtag = event.hashtag;
+		const animeId = event.anime_id;
 
 		// ハッシュタグが含まれていなければ自動付与
-		const hasTag = content.toLowerCase().includes(`#${hashtag.toLowerCase()}`);
+		const hasTag = extractHashtags(content).includes(hashtag.toLowerCase());
 		const finalContent = hasTag ? content : `${content} #${hashtag}`;
 
-		return insertPostWithHashtags(supabase, user.id, finalContent);
+		return insertPostWithHashtags(supabase, user.id, finalContent, null, [], animeId, null, null, null, null, [
+			hashtag,
+		]);
 	},
 
 	deletePost: async ({ request, locals: { supabase, safeGetSession } }) => {
