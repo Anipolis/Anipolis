@@ -1081,10 +1081,11 @@ function isAiringToday(anime: AnimeListItem): boolean {
 		margin-top 0.3s ease;
 }
 .filter-drawer-panel--open {
-	max-height: 460px;
+	max-height: min(70dvh, 640px);
 	opacity: 1;
 	transform: translateY(0);
 	margin-top: 10px;
+	overflow-y: auto;
 }
 .filter-drawer-inner {
 	--filter-drawer-control-height: 46px;
