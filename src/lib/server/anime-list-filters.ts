@@ -2,6 +2,7 @@ import type { AnimeListOptions } from "$lib/server/queries";
 
 export type AnimeListTab = "popular" | "trending" | "top_rated" | "mylist" | "airing" | "upcoming" | "register" | "all";
 export type AnimeSeasonChip = "" | "冬" | "春" | "夏" | "秋";
+export type ActiveAnimeSeasonChip = Exclude<AnimeSeasonChip, "">;
 
 export interface AnimeListFilters {
 	tab: AnimeListTab;
@@ -11,6 +12,7 @@ export interface AnimeListFilters {
 	season: string;
 	broadcastYear: string;
 	broadcastSeason: AnimeSeasonChip;
+	broadcastSeasons: ActiveAnimeSeasonChip[];
 	studio: string;
 	producer: string;
 	source: string;
@@ -19,7 +21,15 @@ export interface AnimeListFilters {
 
 type AnimeCountOptions = Pick<
 	AnimeListOptions,
-	"genre" | "genres" | "broadcastYear" | "broadcastSeason" | "studio" | "producer" | "source" | "query"
+	| "genre"
+	| "genres"
+	| "broadcastYear"
+	| "broadcastSeason"
+	| "broadcastSeasons"
+	| "studio"
+	| "producer"
+	| "source"
+	| "query"
 >;
 
 function parseGenres(value: string | null): string[] {
@@ -36,6 +46,17 @@ function parseGenres(value: string | null): string[] {
 function normalizeSeasonChip(value: string | null): AnimeSeasonChip {
 	const season = value?.trim();
 	return season === "冬" || season === "春" || season === "夏" || season === "秋" ? season : "";
+}
+
+function parseSeasonChips(...values: (string | null)[]): ActiveAnimeSeasonChip[] {
+	return [
+		...new Set(
+			values
+				.flatMap((value) => (value ?? "").split(","))
+				.map((value) => normalizeSeasonChip(value))
+				.filter((value): value is ActiveAnimeSeasonChip => Boolean(value)),
+		),
+	];
 }
 
 function normalizeTab(value: string | null): AnimeListTab {
@@ -67,7 +88,13 @@ export function parseAnimeListFilters(searchParams: URLSearchParams): AnimeListF
 	const seasonParam = searchParams.get("season")?.trim() ?? "";
 	const broadcastYearParam = (searchParams.get("year") ?? searchParams.get("broadcastYear"))?.trim() ?? "";
 	const broadcastYear = /^\d{4}$/.test(broadcastYearParam) ? broadcastYearParam : "";
-	const broadcastSeason = normalizeSeasonChip(searchParams.get("season") ?? searchParams.get("broadcastSeason"));
+	const broadcastSeasons = parseSeasonChips(
+		searchParams.get("seasons"),
+		searchParams.get("broadcastSeasons"),
+		searchParams.get("season"),
+		searchParams.get("broadcastSeason"),
+	);
+	const broadcastSeason = broadcastSeasons[0] ?? "";
 	const season = broadcastSeason ? "" : seasonParam;
 	const studio = searchParams.get("studio")?.trim() ?? "";
 	const producer = searchParams.get("producer")?.trim() ?? "";
@@ -84,6 +111,7 @@ export function parseAnimeListFilters(searchParams: URLSearchParams): AnimeListF
 		season,
 		broadcastYear,
 		broadcastSeason,
+		broadcastSeasons,
 		studio,
 		producer,
 		source,
@@ -109,7 +137,8 @@ export function buildAnimeListOptions(
 	if (filters.genres.length) options.genres = filters.genres;
 	if (filters.season) options.season = filters.season;
 	if (filters.broadcastYear) options.broadcastYear = filters.broadcastYear;
-	if (filters.broadcastSeason) options.broadcastSeason = filters.broadcastSeason;
+	if (filters.broadcastSeasons.length) options.broadcastSeasons = filters.broadcastSeasons;
+	else if (filters.broadcastSeason) options.broadcastSeason = filters.broadcastSeason;
 	if (filters.studio) options.studio = filters.studio;
 	if (filters.producer) options.producer = filters.producer;
 	if (filters.source) options.source = filters.source;
@@ -120,7 +149,8 @@ export function buildAnimeCountOptions(filters: AnimeListFilters): AnimeCountOpt
 	const options: AnimeCountOptions = {};
 	if (filters.genres.length) options.genres = filters.genres;
 	if (filters.broadcastYear) options.broadcastYear = filters.broadcastYear;
-	if (filters.broadcastSeason) options.broadcastSeason = filters.broadcastSeason;
+	if (filters.broadcastSeasons.length) options.broadcastSeasons = filters.broadcastSeasons;
+	else if (filters.broadcastSeason) options.broadcastSeason = filters.broadcastSeason;
 	if (filters.studio) options.studio = filters.studio;
 	if (filters.producer) options.producer = filters.producer;
 	if (filters.source) options.source = filters.source;
