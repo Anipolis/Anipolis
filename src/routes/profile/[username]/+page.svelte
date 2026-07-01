@@ -294,10 +294,11 @@ const grouped = $derived(
 									type="button"
 									class="profile-kebab-btn"
 									aria-label="その他のオプション"
+									aria-haspopup="true"
 									aria-expanded={showKebabMenu}
 									onclick={(e) => { e.stopPropagation(); showKebabMenu = !showKebabMenu; }}
 								>
-									⋮
+									<span class="i-lucide-ellipsis-vertical" aria-hidden="true"></span>
 								</button>
 								{#if showKebabMenu}
 									<div
@@ -305,7 +306,13 @@ const grouped = $derived(
 										role="menu"
 										tabindex="-1"
 										onclick={(e) => e.stopPropagation()}
-										onkeydown={(e) => e.stopPropagation()}
+										onkeydown={(e) => {
+											if (e.key === "Escape") {
+												showKebabMenu = false;
+												return;
+											}
+											e.stopPropagation();
+										}}
 									>
 										<button
 											type="button"
