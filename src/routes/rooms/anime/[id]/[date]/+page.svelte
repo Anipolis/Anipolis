@@ -477,6 +477,10 @@ function formatCompactDate(iso: string) {
 					<span class="event-timer-badge">受付中</span>
 				{/if}
 			{/if}
+			<button type="button" class="room-mobile-exit" onclick={handleExitRoom} aria-label="騾蜃ｺ縺吶ｋ">
+				<span class="i-lucide-log-out" aria-hidden="true"></span>
+				<span>騾蜃ｺ</span>
+			</button>
 		</div>
 
 		{#if data.user && status === "open"}
@@ -863,6 +867,22 @@ function formatCompactDate(iso: string) {
 	color: var(--color-text-muted);
 	white-space: nowrap;
 	flex-shrink: 0;
+}
+.room-mobile-exit {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	flex-shrink: 0;
+	border: 0;
+	background: transparent;
+	color: var(--color-text-muted);
+	font: inherit;
+	font-size: 12px;
+	font-weight: 700;
+	cursor: pointer;
+}
+.room-mobile-exit:hover {
+	color: var(--color-accent-hover);
 }
 .room-mobile-timer.event-timer--open {
 	color: var(--color-primary);

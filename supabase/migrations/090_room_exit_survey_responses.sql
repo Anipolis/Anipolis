@@ -201,7 +201,7 @@ DROP POLICY IF EXISTS "room_experiment_visits_update_own" ON public.room_experim
 CREATE TABLE IF NOT EXISTS public.room_exit_survey_responses (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-    anime_id integer NOT NULL REFERENCES public.anime(id) ON DELETE CASCADE,
+    anime_id bigint NOT NULL REFERENCES public.anime(id) ON DELETE CASCADE,
     broadcast_room_session_id uuid NOT NULL REFERENCES public.broadcast_room_sessions(id) ON DELETE CASCADE,
     experiment_run_id uuid NOT NULL REFERENCES public.room_experiment_runs(id) ON DELETE CASCADE,
     survey_version text NOT NULL DEFAULT 'room_exit_v1'
@@ -317,7 +317,16 @@ CREATE POLICY "room_exit_survey_responses_insert_own"
     ON public.room_exit_survey_responses
     FOR INSERT
     TO authenticated
-    WITH CHECK (user_id = auth.uid());
+    WITH CHECK (
+        user_id = auth.uid()
+        AND EXISTS (
+            SELECT 1
+            FROM public.room_experiment_visits visit
+            WHERE visit.run_id = room_exit_survey_responses.experiment_run_id
+              AND visit.broadcast_room_session_id = room_exit_survey_responses.broadcast_room_session_id
+              AND visit.user_id = auth.uid()
+        )
+    );
 
 DROP POLICY IF EXISTS "room_exit_survey_responses_select_own_or_admin" ON public.room_exit_survey_responses;
 CREATE POLICY "room_exit_survey_responses_select_own_or_admin"

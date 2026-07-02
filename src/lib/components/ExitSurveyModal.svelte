@@ -80,6 +80,30 @@ function setRating(field: RatingField, value: number) {
 	else readabilityRating = value;
 }
 
+function moveRating(field: RatingField, direction: -1 | 1) {
+	const current = ratingValue(field) ?? 3;
+	setRating(field, Math.min(5, Math.max(1, current + direction)));
+}
+
+function handleRatingKeydown(event: KeyboardEvent, field: RatingField, value: number) {
+	if (event.key === "ArrowLeft" || event.key === "ArrowDown") {
+		event.preventDefault();
+		moveRating(field, -1);
+	} else if (event.key === "ArrowRight" || event.key === "ArrowUp") {
+		event.preventDefault();
+		moveRating(field, 1);
+	} else if (event.key === "Home") {
+		event.preventDefault();
+		setRating(field, 1);
+	} else if (event.key === "End") {
+		event.preventDefault();
+		setRating(field, 5);
+	} else if (event.key === " " || event.key === "Enter") {
+		event.preventDefault();
+		setRating(field, value);
+	}
+}
+
 function trimOptionalText(value: string) {
 	const trimmed = value.trim();
 	return trimmed ? trimmed.slice(0, 1000) : null;
@@ -123,12 +147,16 @@ function submit() {
 					<h3>{ratingLabels[ratingField]}</h3>
 					<div class="rating-row" role="radiogroup" aria-label={ratingLabels[ratingField]}>
 						{#each [1, 2, 3, 4, 5] as value}
+							{@const selected = ratingValue(ratingField) === value}
 							<button
 								type="button"
-								class:active={ratingValue(ratingField) === value}
-								aria-pressed={ratingValue(ratingField) === value}
+								role="radio"
+								class:active={selected}
+								aria-checked={selected}
+								tabindex={selected || (ratingValue(ratingField) == null && value === 1) ? 0 : -1}
 								disabled={submitting}
 								onclick={() => setRating(ratingField, value)}
+								onkeydown={(event) => handleRatingKeydown(event, ratingField, value)}
 							>
 								{value}
 							</button>

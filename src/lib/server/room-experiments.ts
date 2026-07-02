@@ -593,7 +593,7 @@ export async function getRoomExperimentDashboardData(
 			)
 			.in("experiment_run_id", runIds),
 	]);
-	const surveysUnavailable = surveysError && isSchemaUnavailableError(surveysError);
+	const surveysUnavailable = Boolean(surveysError && isSchemaUnavailableError(surveysError));
 	if (surveysUnavailable) {
 		console.warn("room exit survey dashboard data unavailable:", surveysError);
 	}
@@ -616,7 +616,10 @@ export async function getRoomExperimentDashboardData(
 		return session?.room_kind === "episode";
 	});
 	const sessions = ((sessionRows ?? []) as unknown as SessionInfo[]).filter((row) => row.room_kind === "episode");
-	const surveys = ((surveysUnavailable ? [] : (surveyRows ?? [])) as unknown as SurveyRow[]) ?? [];
+	const surveys = ((surveysUnavailable ? [] : (surveyRows ?? [])) as unknown as SurveyRow[]).filter((row) => {
+		const session = getSessionFromSurvey(row);
+		return session?.room_kind === "episode";
+	});
 
 	return {
 		searchResults,

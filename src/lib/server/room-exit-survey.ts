@@ -76,6 +76,11 @@ type SaveResult =
 	| { ok: true; duplicate: true }
 	| { ok: false; status: number; message: string };
 
+export type RoomExitSurveyLoadState = {
+	alreadyAnswered: boolean;
+	postCount: number;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -265,23 +270,80 @@ export function toRoomExitSurveyInsert(
 	};
 }
 
+function isSessionInRunWindow(session: { posting_closes_at: string | null }, run: { started_at: string }): boolean {
+	if (!session.posting_closes_at) return true;
+	const roomClosesMs = new Date(session.posting_closes_at).getTime();
+	const runStartsMs = new Date(run.started_at).getTime();
+	if (!Number.isFinite(roomClosesMs) || !Number.isFinite(runStartsMs)) return true;
+	return roomClosesMs >= runStartsMs;
+}
+
+export async function getRoomExitSurveyLoadState(
+	supabase: SupabaseClient<Database>,
+	userId: string | null | undefined,
+	sessionId: string,
+): Promise<RoomExitSurveyLoadState> {
+	if (!userId) return { alreadyAnswered: false, postCount: 0 };
+
+	const [surveyResponse, surveyPostCount] = await Promise.all([
+		supabase
+			.from("room_exit_survey_responses")
+			.select("id")
+			.eq("user_id", userId)
+			.eq("broadcast_room_session_id", sessionId)
+			.eq("survey_version", ROOM_EXIT_SURVEY_VERSION)
+			.maybeSingle(),
+		supabase
+			.from("posts")
+			.select("id", { count: "exact", head: true })
+			.eq("user_id", userId)
+			.eq("broadcast_room_session_id", sessionId)
+			.is("parent_id", null)
+			.eq("hidden_by_admin", false),
+	]);
+
+	if (surveyResponse.error) {
+		console.error("room exit survey lookup failed:", surveyResponse.error);
+	}
+	if (surveyPostCount.error) {
+		console.error("room exit survey post count lookup failed:", surveyPostCount.error);
+	}
+
+	return {
+		alreadyAnswered: Boolean(surveyResponse.data),
+		postCount: surveyPostCount.count ?? 0,
+	};
+}
+
 export async function saveRoomExitSurveyResponse(
 	writer: SupabaseClient<Database>,
 	validator: SupabaseClient<Database>,
 	userId: string,
 	request: ParsedRoomExitSurveyRequest,
 ): Promise<SaveResult> {
-	const [{ data: session, error: sessionError }, { data: run, error: runError }] = await Promise.all([
-		validator
-			.from("broadcast_room_sessions")
-			.select("id, anime_id, room_kind")
-			.eq("id", request.broadcastRoomSessionId)
-			.maybeSingle(),
-		validator.from("room_experiment_runs").select("id, anime_id").eq("id", request.experimentRunId).maybeSingle(),
-	]);
+	const [{ data: session, error: sessionError }, { data: run, error: runError }, { data: visit, error: visitError }] =
+		await Promise.all([
+			validator
+				.from("broadcast_room_sessions")
+				.select("id, anime_id, room_kind, posting_closes_at")
+				.eq("id", request.broadcastRoomSessionId)
+				.maybeSingle(),
+			validator
+				.from("room_experiment_runs")
+				.select("id, anime_id, started_at, ended_at")
+				.eq("id", request.experimentRunId)
+				.maybeSingle(),
+			validator
+				.from("room_experiment_visits")
+				.select("id")
+				.eq("run_id", request.experimentRunId)
+				.eq("broadcast_room_session_id", request.broadcastRoomSessionId)
+				.eq("user_id", userId)
+				.maybeSingle(),
+		]);
 
-	if (sessionError || runError) {
-		console.error("room exit survey validation query failed:", { sessionError, runError });
+	if (sessionError || runError || visitError) {
+		console.error("room exit survey validation query failed:", { sessionError, runError, visitError });
 		return { ok: false, status: 500, message: "Survey validation failed" };
 	}
 	if (!session || !run || session.room_kind !== "episode") {
@@ -289,6 +351,15 @@ export async function saveRoomExitSurveyResponse(
 	}
 	if (session.anime_id !== request.animeId || run.anime_id !== request.animeId) {
 		return { ok: false, status: 400, message: "Survey target anime mismatch" };
+	}
+	if (run.ended_at) {
+		return { ok: false, status: 400, message: "Survey target experiment has ended" };
+	}
+	if (!isSessionInRunWindow(session, run)) {
+		return { ok: false, status: 400, message: "Survey target room is outside the experiment window" };
+	}
+	if (!visit) {
+		return { ok: false, status: 403, message: "Survey target visit was not found" };
 	}
 
 	const { error } = await writer.from("room_exit_survey_responses").insert(toRoomExitSurveyInsert(userId, request));

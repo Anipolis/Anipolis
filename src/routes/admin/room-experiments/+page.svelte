@@ -4,6 +4,7 @@ import { onMount } from "svelte";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
 import { trapFocus } from "$lib/actions/trapFocus";
+import type { RoomExitSurveyComparisonWithX, RoomExitSurveyNextParticipation } from "$lib/types";
 import type { PageProps } from "./$types";
 
 let { data, form }: PageProps = $props();
@@ -55,7 +56,7 @@ function formatAverage(value: number | null) {
 	return value == null ? "-" : value.toFixed(1);
 }
 
-const nextParticipationLabels: Record<string, string> = {
+const nextParticipationLabels: Record<RoomExitSurveyNextParticipation, string> = {
 	must_join: "必ず参加したい",
 	want_join: "できれば参加したい",
 	not_sure: "わからない",
@@ -63,7 +64,7 @@ const nextParticipationLabels: Record<string, string> = {
 	not_join: "参加したくない",
 };
 
-const comparisonWithXLabels: Record<string, string> = {
+const comparisonWithXLabels: Record<RoomExitSurveyComparisonWithX, string> = {
 	anipolis_better: "Anipolisの方がよい",
 	anipolis_slightly_better: "どちらかといえばAnipolis",
 	same: "どちらともいえない",
@@ -72,8 +73,12 @@ const comparisonWithXLabels: Record<string, string> = {
 	cannot_compare: "比較できない",
 };
 
-function optionCounts(counts: Record<string, number>, labels: Record<string, string>) {
-	return Object.entries(labels).map(([value, label]) => ({ value, label, count: counts[value] ?? 0 }));
+function optionCounts<T extends string>(counts: Record<T, number>, labels: Record<T, string>) {
+	return (Object.entries(labels) as Array<[T, string]>).map(([value, label]) => ({
+		value,
+		label,
+		count: counts[value] ?? 0,
+	}));
 }
 
 const closeStopModalAfterSubmit: SubmitFunction = () => {
