@@ -163,6 +163,7 @@ export const actions: Actions = {
 		const imageUrlsRaw = (form.get("image_urls") as string | null) ?? "[]";
 		const animeId = (form.get("anime_id") as string | null)?.trim() || null;
 		const cwAnimeId = (form.get("cw_anime_id") as string | null)?.trim() || null;
+		const broadcastRoomSessionId = (form.get("broadcast_room_session_id") as string | null)?.trim() || null;
 		const exchangeId = (form.get("exchange_id") as string | null)?.trim() || null;
 		let imageUrls: string[] = [];
 		try {
@@ -182,7 +183,7 @@ export const actions: Actions = {
 			exchangeShare?.received_anime.id ?? animeId,
 			null,
 			exchangeShare,
-			null,
+			broadcastRoomSessionId,
 			cwAnimeId,
 		);
 	},

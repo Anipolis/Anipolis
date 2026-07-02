@@ -2679,3 +2679,32 @@ export async function getAnimeMuteCandidate(supabase: SupabaseClient<Database>, 
 	if (!data) return null;
 	return { id: String(data.id), title: data.title, cover_url: data.cover_url ?? null };
 }
+
+export async function getOpenBroadcastRoomSessions(supabase: SupabaseClient<Database>) {
+	const now = new Date().toISOString();
+	const { data, error } = await supabase
+		.from("broadcast_room_sessions")
+		.select(
+			"id, anime_id, room_date, room_kind, room_key, scheduled_at, anime:anime!broadcast_room_sessions_anime_id_fkey ( id, title, cover_url )",
+		)
+		.lte("posting_opens_at", now)
+		.gte("posting_closes_at", now)
+		.order("scheduled_at");
+	if (error) {
+		console.error("getOpenBroadcastRoomSessions failed:", error);
+		return [];
+	}
+	type RawAnime = { id: number; title: string; cover_url: string | null };
+	return (data ?? []).map((row) => {
+		const anime = row.anime as unknown as RawAnime | null;
+		return {
+			id: row.id,
+			anime_id: String(row.anime_id),
+			room_date: row.room_date,
+			room_kind: row.room_kind as "episode" | "global",
+			room_key: row.room_key,
+			scheduled_at: row.scheduled_at,
+			anime: anime ? { id: String(anime.id), title: anime.title, cover_url: anime.cover_url ?? null } : null,
+		};
+	});
+}

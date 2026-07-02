@@ -75,6 +75,21 @@ let selectedCwAnime = $state<AnimeResult | null>(null);
 let cwSearchDebounce: ReturnType<typeof setTimeout> | null = null;
 let cwInputEl = $state<HTMLInputElement | null>(null);
 
+// 実況ルームリンク
+type OpenRoom = {
+	id: string;
+	anime_id: string;
+	room_date: string;
+	room_kind: "episode" | "global";
+	room_key: string;
+	scheduled_at: string;
+	anime: { id: string; title: string; cover_url: string | null } | null;
+};
+let selectedRoom = $state<OpenRoom | null>(null);
+let roomModalOpen = $state(false);
+let openRooms = $state<OpenRoom[] | null>(null);
+let roomsLoading = $state(false);
+
 // @メンション
 let textareaEl = $state<HTMLTextAreaElement | null>(null);
 let mentionResults = $state<UserResult[]>([]);
@@ -199,6 +214,30 @@ function selectCwAnime(anime: AnimeResult) {
 }
 function clearCwAnime() {
 	selectedCwAnime = null;
+}
+
+async function openRoomSearch() {
+	roomModalOpen = true;
+	roomsLoading = true;
+	try {
+		const res = await fetch("/api/rooms/open");
+		if (!res.ok) throw new Error(`HTTP ${res.status}`);
+		openRooms = await res.json();
+	} catch {
+		openRooms = [];
+	} finally {
+		roomsLoading = false;
+	}
+}
+function closeRoomModal() {
+	roomModalOpen = false;
+}
+function selectRoom(room: OpenRoom) {
+	selectedRoom = room;
+	roomModalOpen = false;
+}
+function clearRoom() {
+	selectedRoom = null;
 }
 function handleCwQueryInput() {
 	if (cwSearchDebounce) clearTimeout(cwSearchDebounce);
@@ -344,7 +383,7 @@ const handleSubmit: SubmitFunction = () => {
 				{/if}
 			</div>
 
-			{#if selectedAnime || selectedCwAnime}
+			{#if selectedAnime || selectedCwAnime || selectedRoom}
 				<div class="flex flex-wrap gap-2 mt-2 mb-0.5">
 					{#if selectedAnime}
 						<span
@@ -379,15 +418,40 @@ const handleSubmit: SubmitFunction = () => {
 							</button>
 						</span>
 					{/if}
+
+					{#if selectedRoom}
+						<span
+							class="inline-flex items-center gap-1.5 max-w-full rounded-full border border-green-500/50 bg-green-950/40 px-3 py-1 text-sm font-semibold leading-tight text-green-300"
+						>
+							<span class="i-lucide-door-open shrink-0" aria-hidden="true"></span>
+							<span class="min-w-0 max-w-[24ch] truncate"
+								>{selectedRoom.anime?.title ?? "実況ルーム"}</span
+							>
+							<button
+								type="button"
+								class="-mr-1 inline-flex h-5 w-5 items-center justify-center rounded-full border-0 bg-transparent p-0 text-current opacity-70 hover:bg-white/15 hover:opacity-100"
+								onclick={clearRoom}
+								aria-label="ルームリンクを削除"
+							>
+								✕
+							</button>
+						</span>
+					{/if}
 				</div>
 			{/if}
 
 			{#if selectedAnime}
 				<input type="hidden" name="anime_id" value={selectedAnime.id}>
+			{:else if selectedRoom}
+				<input type="hidden" name="anime_id" value={selectedRoom.anime_id}>
 			{/if}
 
 			{#if selectedCwAnime}
 				<input type="hidden" name="cw_anime_id" value={selectedCwAnime.id}>
+			{/if}
+
+			{#if selectedRoom}
+				<input type="hidden" name="broadcast_room_session_id" value={selectedRoom.id}>
 			{/if}
 
 			{#if selectedExchangeShare}
@@ -552,6 +616,18 @@ const handleSubmit: SubmitFunction = () => {
 					</svg>
 				</button>
 
+				<!-- 実況ルームリンクボタン -->
+				<button
+					type="button"
+					class="composer-image-btn"
+					class:active={selectedRoom !== null}
+					onclick={openRoomSearch}
+					aria-label="実況ルームにリンク"
+					title="実況ルームにリンク"
+				>
+					<span class="i-lucide-door-open" style="width:18px;height:18px;" aria-hidden="true"></span>
+				</button>
+
 				<span class="char-count {countClass}">{remaining}</span>
 				<button type="submit" class="btn btn-primary" disabled={!canSubmit}>
 					{submitting ? '投稿中…' : '投稿'}
@@ -665,6 +741,53 @@ const handleSubmit: SubmitFunction = () => {
 								<span class="anime-search-item-title">{anime.title}</span>
 								{#if anime.title_en}
 									<span class="anime-search-item-sub">{anime.title_en}</span>
+								{/if}
+							</div>
+						</button>
+					{/each}
+				{/if}
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- 実況ルーム選択モーダル -->
+{#if roomModalOpen}
+	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<div
+		class="anime-search-overlay"
+		onclick={(e) => { if (e.target === e.currentTarget) closeRoomModal(); }}
+		role="dialog"
+		aria-modal="true"
+		aria-label="実況ルームを選択"
+		tabindex="-1"
+		use:trapFocus
+	>
+		<div class="anime-search-modal">
+			<div class="anime-search-header">
+				<span class="anime-search-title">実況ルームを選択</span>
+				<button type="button" class="anime-search-close" onclick={closeRoomModal} aria-label="閉じる">✕</button>
+			</div>
+			<div class="anime-search-results">
+				{#if roomsLoading}
+					<p class="anime-search-empty">読み込み中…</p>
+				{:else if openRooms !== null && openRooms.length === 0}
+					<p class="anime-search-empty">現在開放中のルームはありません</p>
+				{:else if openRooms}
+					{#each openRooms as room (room.id)}
+						<button type="button" class="anime-search-item" onclick={() => selectRoom(room)}>
+							{#if room.anime?.cover_url}
+								<img src={room.anime.cover_url} alt={room.anime.title} class="anime-search-thumb">
+							{:else}
+								<div class="anime-search-thumb anime-search-thumb-empty"></div>
+							{/if}
+							<div class="anime-search-item-info">
+								<span class="anime-search-item-title">{room.anime?.title ?? "不明"}</span>
+								{#if room.room_kind === "episode"}
+									<span class="anime-search-item-sub">{room.room_date}</span>
+								{:else}
+									<span class="anime-search-item-sub">総合ロビー</span>
 								{/if}
 							</div>
 						</button>
