@@ -55,6 +55,11 @@ const items = $derived.by((): Item[] => {
 				href: "/settings/follow-requests",
 			});
 		}
+		list.push({
+			label: "プライバシーポリシー",
+			description: "個人情報の取扱いについて確認できます",
+			href: "/privacy-policy",
+		});
 		return list;
 	}
 	return [
