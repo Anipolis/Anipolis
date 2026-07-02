@@ -97,24 +97,7 @@ type SurveyRow = RoomExitSurveyAggregateRow & {
 	experiment_run_id: string;
 	next_participation: RoomExitSurveyNextParticipation | null;
 	comparison_with_x: RoomExitSurveyComparisonWithX | null;
-	session:
-		| {
-				id: string;
-				room_date: string;
-				room_kind: string;
-				room_key: string;
-				scheduled_at: string;
-				posting_closes_at: string | null;
-		  }
-		| {
-				id: string;
-				room_date: string;
-				room_kind: string;
-				room_key: string;
-				scheduled_at: string;
-				posting_closes_at: string | null;
-		  }[]
-		| null;
+	session: SessionInfo | SessionInfo[] | null;
 };
 
 export function createRoomExperimentServiceClient(): SupabaseClient<Database> | null {

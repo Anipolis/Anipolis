@@ -270,6 +270,15 @@ export async function addBroadcastOverrideAction(
 	if (overrideKind === "cancelled") {
 		announcementLabel ??= "今週は放送休止";
 	}
+	if (
+		overrideKind === "time_change" &&
+		broadcastTime == null &&
+		durationMinutes == null &&
+		preOpenMinutes == null &&
+		postCloseMinutes == null
+	) {
+		return fail(400, { message: "放送時間変更では変更後の時刻・放送時間・投稿時間のいずれかを入力してください" });
+	}
 	if (overrideKind === "marathon" && (episodeStart == null || episodeEnd == null || episodeEnd <= episodeStart)) {
 		return fail(400, { message: "一挙放送では対象話数の開始より大きい終了話数を入力してください" });
 	}

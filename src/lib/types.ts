@@ -4,6 +4,9 @@
 
 import { toValidExchangeSubjectiveTags } from "$lib/exchange-tags";
 
+export type AnimeSeasonChip = "" | "冬" | "春" | "夏" | "秋";
+export type ActiveAnimeSeasonChip = Exclude<AnimeSeasonChip, "">;
+
 export interface Profile {
 	id: string;
 	username: string;

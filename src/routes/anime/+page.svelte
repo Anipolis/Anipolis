@@ -3,7 +3,7 @@ import { goto } from "$app/navigation";
 import { ANIME_GENRES, ANIME_SOURCE_OPTIONS } from "$lib/anime-vocabulary";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
-import type { AnimeListItem, AnimeStatus } from "$lib/types";
+import type { ActiveAnimeSeasonChip, AnimeListItem, AnimeStatus } from "$lib/types";
 import type { PageProps } from "./$types";
 
 let { data, form }: PageProps = $props();
@@ -22,8 +22,7 @@ const tabs = [
 ] as const;
 
 const ANIME_SECTION_SIZE = 50;
-type SeasonChip = "" | "冬" | "春" | "夏" | "秋";
-type ActiveSeasonChip = Exclude<SeasonChip, "">;
+type ActiveSeasonChip = ActiveAnimeSeasonChip;
 type AnimeFilterState = {
 	search: string;
 	genres: string[];
@@ -181,6 +180,13 @@ function updateFilterState(patch: Partial<AnimeFilterState>) {
 	const next = { ...filterState, ...patch };
 	filterState = next;
 	syncFiltersToUrl(next);
+}
+
+let filterDebounceTimer: ReturnType<typeof setTimeout> | undefined;
+function updateFilterStateDebounced(patch: Partial<AnimeFilterState>) {
+	filterState = { ...filterState, ...patch };
+	clearTimeout(filterDebounceTimer);
+	filterDebounceTimer = setTimeout(() => syncFiltersToUrl(filterState), 400);
 }
 
 function toggleSidebarGenre(genre: string) {
@@ -520,7 +526,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 								class="filter-input"
 								placeholder="スタジオ名"
 								value={filterState.studio}
-								oninput={(e) => updateFilterState({ studio: e.currentTarget.value })}
+								oninput={(e) => updateFilterStateDebounced({ studio: e.currentTarget.value })}
 							>
 						</section>
 
@@ -533,7 +539,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 								class="filter-input"
 								placeholder="制作会社名"
 								value={filterState.producer}
-								oninput={(e) => updateFilterState({ producer: e.currentTarget.value })}
+								oninput={(e) => updateFilterStateDebounced({ producer: e.currentTarget.value })}
 							>
 						</section>
 
@@ -654,7 +660,9 @@ function isAiringToday(anime: AnimeListItem): boolean {
 			</p>
 		{:else if data.broadcastYear || data.broadcastSeason || data.broadcastSeasons?.length}
 			<p class="search-label">
-				放送時期：<strong>{[data.broadcastYear, ...(data.broadcastSeasons?.length ? data.broadcastSeasons : [data.broadcastSeason])].filter(Boolean).join(' ')}</strong>
+				放送時期：<strong
+					>{[data.broadcastYear, ...(data.broadcastSeasons?.length ? data.broadcastSeasons : [data.broadcastSeason])].filter(Boolean).join(' ')}</strong
+				>
 				／ {data.animes.length}件 <a href="/anime" class="filter-clear">✕</a>
 			</p>
 		{:else if data.studio}

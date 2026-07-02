@@ -38,6 +38,7 @@ export const actions: Actions = {
 
 		const form = await request.formData();
 		const content = (form.get("content") as string | null)?.trim() ?? "";
+		if (!content) return fail(400, { message: "投稿内容を入力してください" });
 		const event = await getEvent(supabase, params.id);
 		if (!event) return fail(404, { message: "イベントが見つかりません" });
 		const hashtag = event.hashtag;

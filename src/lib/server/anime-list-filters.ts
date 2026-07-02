@@ -1,8 +1,9 @@
 import type { AnimeListOptions } from "$lib/server/queries";
+import type { ActiveAnimeSeasonChip, AnimeSeasonChip } from "$lib/types";
+
+export type { ActiveAnimeSeasonChip, AnimeSeasonChip } from "$lib/types";
 
 export type AnimeListTab = "popular" | "trending" | "top_rated" | "mylist" | "airing" | "upcoming" | "register" | "all";
-export type AnimeSeasonChip = "" | "冬" | "春" | "夏" | "秋";
-export type ActiveAnimeSeasonChip = Exclude<AnimeSeasonChip, "">;
 
 export interface AnimeListFilters {
 	tab: AnimeListTab;

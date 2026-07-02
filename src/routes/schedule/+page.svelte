@@ -857,6 +857,9 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 							placeholder="アニメタイトルで検索"
 							bind:value={eventAnimeQuery}
 							oninput={handleEventAnimeQueryInput}
+							onkeydown={(event) => {
+								if (event.key === "Enter") event.preventDefault();
+							}}
 						>
 						{#if eventAnimeSearching || eventAnimeResults.length > 0}
 							<div class="event-anime-results" aria-live="polite" aria-busy={eventAnimeSearching}>
@@ -903,9 +906,13 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 
 <style>
 .schedule-page {
+	--schedule-event-accent: #f97316;
 	max-width: 1480px;
 	margin: 0 auto;
 	padding: 0 1rem 2rem;
+}
+:global([data-theme="light"]) .schedule-page {
+	--schedule-event-accent: #c2410c;
 }
 .schedule-header {
 	display: flex;
@@ -1094,8 +1101,8 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	background: color-mix(in srgb, #f97316 16%, var(--color-surface));
-	color: #f97316;
+	background: color-mix(in srgb, var(--schedule-event-accent) 16%, var(--color-surface));
+	color: var(--schedule-event-accent);
 	font-size: 1rem;
 }
 .anime-slot-wrap--suspension {
@@ -1198,7 +1205,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	letter-spacing: 0;
 }
 .slot-kind--event {
-	color: #f97316;
+	color: var(--schedule-event-accent);
 }
 @keyframes live-pulse {
 	0%,
@@ -1215,7 +1222,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	color: var(--color-accent);
 }
 .slot-time--event {
-	color: #f97316;
+	color: var(--schedule-event-accent);
 }
 .slot-title {
 	font-size: 0.73rem;

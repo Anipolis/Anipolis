@@ -510,7 +510,15 @@ export async function createEventAction(request: Request, supabase: SupabaseClie
 	}
 
 	if (animeId !== null) {
-		const { data: anime } = await supabase.from("anime").select("id").eq("id", animeId).maybeSingle();
+		const { data: anime, error: animeError } = await supabase
+			.from("anime")
+			.select("id")
+			.eq("id", animeId)
+			.maybeSingle();
+		if (animeError) {
+			console.error("anime lookup error:", animeError);
+			return fail(500, { message: "アニメの確認に失敗しました" });
+		}
 		if (!anime) return fail(400, { message: "アニメが見つかりません" });
 	}
 

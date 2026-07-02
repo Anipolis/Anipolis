@@ -94,8 +94,12 @@ function parsePositiveInteger(value: unknown): number | null {
 	return value;
 }
 
+const POSTGRES_INT4_MAX = 2_147_483_647;
+
 function parseNonNegativeInteger(value: unknown): number | null {
-	if (typeof value !== "number" || !Number.isInteger(value) || value < 0) return null;
+	if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > POSTGRES_INT4_MAX) {
+		return null;
+	}
 	return value;
 }
 
@@ -167,10 +171,11 @@ export function parseRoomExitSurveyRequest(body: unknown): ParseResult {
 	const experimentRunId = parseUuid(body["experiment_run_id"]);
 	const stayedSeconds = parseNonNegativeInteger(body["stayed_seconds"]);
 	const postCount = parseNonNegativeInteger(body["post_count"]);
-	const surveyVersion =
-		typeof body["survey_version"] === "string" && body["survey_version"].trim()
-			? body["survey_version"].trim().slice(0, 40)
-			: ROOM_EXIT_SURVEY_VERSION;
+	const rawSurveyVersion = typeof body["survey_version"] === "string" ? body["survey_version"].trim() : "";
+	if (rawSurveyVersion && rawSurveyVersion !== ROOM_EXIT_SURVEY_VERSION) {
+		return { ok: false, status: 400, message: "Unsupported survey version" };
+	}
+	const surveyVersion = ROOM_EXIT_SURVEY_VERSION;
 
 	if (
 		!action ||

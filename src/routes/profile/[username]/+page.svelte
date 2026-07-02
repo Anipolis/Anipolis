@@ -63,6 +63,10 @@ const bioRemaining = $derived(160 - editBio.length);
 const editableHeaderUrl = $derived(headerPreviewUrl ?? (headerPendingDelete ? null : profile.header_url));
 
 const handleProfileSubmit: SubmitFunction = () => {
+	// 保存中に選択が変わっても送信開始時点の画像状態を使う
+	const pendingHeaderFile = headerPendingFile;
+	const shouldDeleteHeader = headerPendingDelete;
+	const pendingAvatarFile = avatarPendingFile;
 	profileSubmitting = true;
 	return async ({ result, update }) => {
 		// プロフィールテキストの保存が失敗した場合は画像処理をスキップ
@@ -72,12 +76,12 @@ const handleProfileSubmit: SubmitFunction = () => {
 			return;
 		}
 
-		if (headerPendingFile) {
+		if (pendingHeaderFile) {
 			headerUploading = true;
 			headerMessage = "";
 			try {
 				const body = new FormData();
-				body.append("file", headerPendingFile);
+				body.append("file", pendingHeaderFile);
 				const response = await fetch("/api/upload/profile-header", { method: "POST", body });
 				const res = (await response.json().catch(() => ({}))) as { message?: string };
 				if (!response.ok) throw new Error(res.message ?? "ヘッダー画像の更新に失敗しました");
@@ -94,7 +98,7 @@ const handleProfileSubmit: SubmitFunction = () => {
 				return;
 			}
 			headerUploading = false;
-		} else if (headerPendingDelete) {
+		} else if (shouldDeleteHeader) {
 			headerUploading = true;
 			headerMessage = "";
 			try {
@@ -112,12 +116,12 @@ const handleProfileSubmit: SubmitFunction = () => {
 			headerUploading = false;
 		}
 
-		if (avatarPendingFile) {
+		if (pendingAvatarFile) {
 			avatarUploading = true;
 			avatarMessage = "";
 			try {
 				const body = new FormData();
-				body.append("file", avatarPendingFile);
+				body.append("file", pendingAvatarFile);
 				const response = await fetch("/api/upload/avatar", { method: "POST", body });
 				const res = (await response.json().catch(() => ({}))) as { message?: string };
 				if (!response.ok) throw new Error(res.message ?? "アイコン画像の更新に失敗しました");
@@ -562,7 +566,7 @@ const grouped = $derived(
 										<input
 											type="file"
 											accept="image/jpeg,image/png,image/webp"
-											disabled={avatarUploading}
+											disabled={profileSubmitting || avatarUploading}
 											onchange={updateAvatarImage}
 										>
 									</label>
@@ -588,7 +592,7 @@ const grouped = $derived(
 										<input
 											type="file"
 											accept="image/jpeg,image/png,image/webp"
-											disabled={headerUploading}
+											disabled={profileSubmitting || headerUploading}
 											onchange={updateHeaderImage}
 										>
 									</label>
@@ -596,7 +600,7 @@ const grouped = $derived(
 										<button
 											type="button"
 											class="btn btn-ghost"
-											disabled={headerUploading}
+											disabled={profileSubmitting || headerUploading}
 											onclick={removeHeaderImage}
 										>
 											削除

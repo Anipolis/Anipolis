@@ -242,8 +242,19 @@ function shouldAutoFocusComposer() {
 	return !("ontouchstart" in window) && navigator.maxTouchPoints === 0;
 }
 
+function canAutoRefocusComposer() {
+	if (!shouldAutoFocusComposer() || !keepComposerFocused) return false;
+	const activeElement = document.activeElement;
+	return (
+		!activeElement ||
+		activeElement === document.body ||
+		activeElement === textareaEl ||
+		(composerEl?.contains(activeElement) ?? false)
+	);
+}
+
 async function focusComposerTextarea(options: FocusOptions = {}) {
-	if (!shouldAutoFocusComposer() || !keepComposerFocused) return;
+	if (!canAutoRefocusComposer()) return;
 	await tick();
 	await new Promise<void>((resolve) => {
 		requestAnimationFrame(() => resolve());
@@ -627,7 +638,11 @@ function formatCompactDate(iso: string) {
 						{/if}
 					</div>
 					<div class="mt-2 flex items-center justify-end gap-2">
-						<button type="button" class="room-summary-exit shrink-0 text-xs transition-colors" onclick={handleExitRoom}>
+						<button
+							type="button"
+							class="room-summary-exit shrink-0 text-xs transition-colors"
+							onclick={handleExitRoom}
+						>
 							退出する
 						</button>
 						<a href="/schedule" class="room-summary-back shrink-0 text-xs transition-colors">
@@ -835,8 +850,8 @@ function formatCompactDate(iso: string) {
 }
 
 :global(.room-composer-textarea:focus-visible) {
-	outline: none;
-	outline-offset: 0;
+	outline: 2px solid var(--color-accent);
+	outline-offset: 2px;
 }
 
 /* ── モバイル用コンパクトバー (サイドバー非表示時のみ表示) ── */

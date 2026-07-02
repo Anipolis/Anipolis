@@ -898,9 +898,6 @@ $effect(() => {
 																	class="broadcast-override-tag broadcast-override-tag--kind"
 																	>{formatBroadcastOverrideKindLabel(override)}</span
 																>
-																{#if override.is_cancelled}
-																	<span class="broadcast-override-tag">放送休止</span>
-																{/if}
 																{#if override.announcement_label}
 																	<span class="broadcast-override-tag"
 																		>{override.announcement_label}</span
