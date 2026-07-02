@@ -477,9 +477,9 @@ function formatCompactDate(iso: string) {
 					<span class="event-timer-badge">受付中</span>
 				{/if}
 			{/if}
-			<button type="button" class="room-mobile-exit" onclick={handleExitRoom} aria-label="騾蜃ｺ縺吶ｋ">
+			<button type="button" class="room-mobile-exit" onclick={handleExitRoom} aria-label="退出する">
 				<span class="i-lucide-log-out" aria-hidden="true"></span>
-				<span>騾蜃ｺ</span>
+				<span>退出</span>
 			</button>
 		</div>
 

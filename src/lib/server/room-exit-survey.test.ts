@@ -141,6 +141,71 @@ describe("isDuplicateRoomExitSurveyError", () => {
 });
 
 describe("saveRoomExitSurveyResponse", () => {
+	it("rejects surveys for ended experiment runs", async () => {
+		const writer = createWriterClient();
+		const result = await saveRoomExitSurveyResponse(
+			writer.client as never,
+			createValidatorClient({
+				broadcast_room_sessions: {
+					data: {
+						id: sessionId,
+						anime_id: 123,
+						room_kind: "episode",
+						posting_closes_at: "2026-07-02T10:30:00Z",
+					},
+					error: null,
+				},
+				room_experiment_runs: {
+					data: {
+						id: runId,
+						anime_id: 123,
+						started_at: "2026-07-02T10:00:00Z",
+						ended_at: "2026-07-02T11:00:00Z",
+					},
+					error: null,
+				},
+				room_experiment_visits: { data: { id: "visit-1" }, error: null },
+			}) as never,
+			userId,
+			skipRequest(),
+		);
+
+		expect(result).toEqual({ ok: false, status: 400, message: "Survey target experiment has ended" });
+		expect(writer.insert).not.toHaveBeenCalled();
+	});
+
+	it("rejects sessions outside the experiment window", async () => {
+		const writer = createWriterClient();
+		const result = await saveRoomExitSurveyResponse(
+			writer.client as never,
+			createValidatorClient({
+				broadcast_room_sessions: {
+					data: {
+						id: sessionId,
+						anime_id: 123,
+						room_kind: "episode",
+						posting_closes_at: "2026-07-02T09:30:00Z",
+					},
+					error: null,
+				},
+				room_experiment_runs: {
+					data: { id: runId, anime_id: 123, started_at: "2026-07-02T10:00:00Z", ended_at: null },
+					error: null,
+				},
+				room_experiment_visits: { data: { id: "visit-1" }, error: null },
+			}) as never,
+			userId,
+			skipRequest(),
+		);
+
+		expect(result).toEqual({
+			ok: false,
+			status: 400,
+			message: "Survey target room is outside the experiment window",
+		});
+		expect(writer.insert).not.toHaveBeenCalled();
+	});
+
 	it("requires a matching experiment visit before inserting", async () => {
 		const writer = createWriterClient();
 		const result = await saveRoomExitSurveyResponse(

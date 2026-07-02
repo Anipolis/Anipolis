@@ -1,4 +1,5 @@
 <script lang="ts">
+import { tick } from "svelte";
 import { trapFocus } from "$lib/actions/trapFocus";
 import type { RoomExitSurveyComparisonWithX, RoomExitSurveyNextParticipation } from "$lib/types";
 
@@ -80,24 +81,30 @@ function setRating(field: RatingField, value: number) {
 	else readabilityRating = value;
 }
 
-function moveRating(field: RatingField, direction: -1 | 1) {
+function nextRatingValue(field: RatingField, direction: -1 | 1) {
 	const current = ratingValue(field) ?? 3;
-	setRating(field, Math.min(5, Math.max(1, current + direction)));
+	return Math.min(5, Math.max(1, current + direction));
+}
+
+async function setRatingAndFocus(field: RatingField, value: number) {
+	setRating(field, value);
+	await tick();
+	document.querySelector<HTMLButtonElement>(`[data-rating-field="${field}"][data-rating-value="${value}"]`)?.focus();
 }
 
 function handleRatingKeydown(event: KeyboardEvent, field: RatingField, value: number) {
 	if (event.key === "ArrowLeft" || event.key === "ArrowDown") {
 		event.preventDefault();
-		moveRating(field, -1);
+		void setRatingAndFocus(field, nextRatingValue(field, -1));
 	} else if (event.key === "ArrowRight" || event.key === "ArrowUp") {
 		event.preventDefault();
-		moveRating(field, 1);
+		void setRatingAndFocus(field, nextRatingValue(field, 1));
 	} else if (event.key === "Home") {
 		event.preventDefault();
-		setRating(field, 1);
+		void setRatingAndFocus(field, 1);
 	} else if (event.key === "End") {
 		event.preventDefault();
-		setRating(field, 5);
+		void setRatingAndFocus(field, 5);
 	} else if (event.key === " " || event.key === "Enter") {
 		event.preventDefault();
 		setRating(field, value);
@@ -153,6 +160,8 @@ function submit() {
 								role="radio"
 								class:active={selected}
 								aria-checked={selected}
+								data-rating-field={ratingField}
+								data-rating-value={value}
 								tabindex={selected || (ratingValue(ratingField) == null && value === 1) ? 0 : -1}
 								disabled={submitting}
 								onclick={() => setRating(ratingField, value)}
