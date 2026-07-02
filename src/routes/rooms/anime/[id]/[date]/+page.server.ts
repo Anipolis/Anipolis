@@ -13,6 +13,7 @@ import {
 	getBroadcastRoomPosts,
 	getBroadcastRoomSession,
 } from "$lib/server/queries";
+import { ROOM_EXIT_SURVEY_VERSION } from "$lib/server/room-exit-survey";
 import {
 	createRoomExperimentServiceClient,
 	getActiveRoomExperimentRunForAnime as getActiveExperimentRun,
@@ -85,12 +86,36 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 
 	const hashtag = roomHashtag(anime);
 	const roomExperimentSupabase = user ? createRoomExperimentServiceClient() : null;
-	const [posts, trending, animeTrending, roomExperimentRun] = await Promise.all([
+	const [posts, trending, animeTrending, roomExperimentRun, surveyResponse, surveyPostCount] = await Promise.all([
 		getBroadcastRoomPosts(supabase, session.id, user?.id ?? null, { limit: 100, ascending: true }),
 		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
 		getAnimeRankingTrending(supabase, 5),
 		roomExperimentSupabase ? getActiveExperimentRun(roomExperimentSupabase, anime.id) : Promise.resolve(null),
+		user
+			? supabase
+					.from("room_exit_survey_responses")
+					.select("id")
+					.eq("user_id", user.id)
+					.eq("broadcast_room_session_id", session.id)
+					.eq("survey_version", ROOM_EXIT_SURVEY_VERSION)
+					.maybeSingle()
+			: Promise.resolve({ data: null, error: null }),
+		user
+			? supabase
+					.from("posts")
+					.select("id", { count: "exact", head: true })
+					.eq("user_id", user.id)
+					.eq("broadcast_room_session_id", session.id)
+					.is("parent_id", null)
+					.eq("hidden_by_admin", false)
+			: Promise.resolve({ count: 0, error: null }),
 	]);
+	if (surveyResponse.error) {
+		console.error("room exit survey lookup failed:", surveyResponse.error);
+	}
+	if (surveyPostCount.error) {
+		console.error("room exit survey post count lookup failed:", surveyPostCount.error);
+	}
 
 	return {
 		anime,
@@ -112,6 +137,12 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 		roomExperiment: {
 			enabled: Boolean(user && roomExperimentRun),
 			sessionId: roomExperimentRun ? session.id : undefined,
+		},
+		roomExitSurvey: {
+			experimentRunId: roomExperimentRun?.id ?? null,
+			alreadyAnswered: Boolean(surveyResponse.data),
+			postCount: surveyPostCount.count ?? 0,
+			surveyVersion: ROOM_EXIT_SURVEY_VERSION,
 		},
 	};
 };

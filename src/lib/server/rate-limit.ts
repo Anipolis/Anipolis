@@ -66,6 +66,7 @@ export const API_RATE_RULES: RateRule[] = [
 		limit: 180,
 		windowMs: 60_000,
 	},
+	{ name: "room-exit-survey", pattern: /^\/api\/room-exit-surveys$/, methods: ["POST"], limit: 20, windowMs: 60_000 },
 	{ name: "account-switch", pattern: /^\/api\/account-switch$/, methods: ["POST"], limit: 10, windowMs: 60_000 },
 ];
 

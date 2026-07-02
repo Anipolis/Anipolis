@@ -85,4 +85,13 @@ describe("isApiRateLimited", () => {
 		expect(isApiRateLimited(`/api/room-experiment-visits/${visitId}/exit`, "POST", ip)).toBe(true);
 		expect(isApiRateLimited(`/api/room-experiment-visits/${visitId}/heartbeat`, "GET", ip)).toBe(false);
 	});
+
+	it("limits room exit survey submissions by POST", () => {
+		const ip = `ip-room-exit-survey-${Math.random()}`;
+		for (let i = 0; i < 20; i += 1) {
+			expect(isApiRateLimited("/api/room-exit-surveys", "POST", ip)).toBe(false);
+		}
+		expect(isApiRateLimited("/api/room-exit-surveys", "POST", ip)).toBe(true);
+		expect(isApiRateLimited("/api/room-exit-surveys", "GET", ip)).toBe(false);
+	});
 });

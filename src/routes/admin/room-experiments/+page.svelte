@@ -51,6 +51,31 @@ function formatDuration(seconds: number | null) {
 	return rest ? `${minutes}分${rest}秒` : `${minutes}分`;
 }
 
+function formatAverage(value: number | null) {
+	return value == null ? "-" : value.toFixed(1);
+}
+
+const nextParticipationLabels: Record<string, string> = {
+	must_join: "必ず参加したい",
+	want_join: "できれば参加したい",
+	not_sure: "わからない",
+	not_really: "あまり参加したくない",
+	not_join: "参加したくない",
+};
+
+const comparisonWithXLabels: Record<string, string> = {
+	anipolis_better: "Anipolisの方がよい",
+	anipolis_slightly_better: "どちらかといえばAnipolis",
+	same: "どちらともいえない",
+	x_slightly_better: "どちらかといえばX / Twitter",
+	x_better: "X / Twitterの方がよい",
+	cannot_compare: "比較できない",
+};
+
+function optionCounts(counts: Record<string, number>, labels: Record<string, string>) {
+	return Object.entries(labels).map(([value, label]) => ({ value, label, count: counts[value] ?? 0 }));
+}
+
 const closeStopModalAfterSubmit: SubmitFunction = () => {
 	return async ({ result, update }) => {
 		await update();
@@ -166,6 +191,71 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 							</div>
 						</div>
 
+						<div class="survey-panel">
+							<div class="survey-panel-header">
+								<h3>退出時アンケート</h3>
+								<span>{run.survey.response_count}件 / スキップ {run.survey.skipped_count}件</span>
+							</div>
+							{#if run.survey.response_count === 0}
+								<p class="survey-empty">まだアンケート回答はありません。</p>
+							{:else}
+								<div class="survey-metrics">
+									<div>
+										<span>楽しさ</span
+										><strong>{formatAverage(run.survey.average_overall_rating)}</strong>
+									</div>
+									<div>
+										<span>一緒に見ている感</span
+										><strong>{formatAverage(run.survey.average_shared_experience_rating)}</strong>
+									</div>
+									<div>
+										<span>見やすさ</span
+										><strong>{formatAverage(run.survey.average_readability_rating)}</strong>
+									</div>
+									<div><span>回答</span><strong>{run.survey.submitted_count}</strong></div>
+								</div>
+								<div class="survey-distributions">
+									<div>
+										<h4>次回参加</h4>
+										{#each optionCounts(run.survey.next_participation_counts, nextParticipationLabels) as option}
+											<div class="survey-option-row">
+												<span>{option.label}</span>
+												<strong>{option.count}</strong>
+											</div>
+										{/each}
+									</div>
+									<div>
+										<h4>X / Twitter比較</h4>
+										{#each optionCounts(run.survey.comparison_with_x_counts, comparisonWithXLabels) as option}
+											<div class="survey-option-row">
+												<span>{option.label}</span>
+												<strong>{option.count}</strong>
+											</div>
+										{/each}
+									</div>
+								</div>
+								{#if run.survey.comments.length > 0}
+									<div class="survey-comments">
+										<h4>自由記述</h4>
+										{#each run.survey.comments as comment}
+											<article class="survey-comment">
+												<div>
+													<span>{comment.room_title ?? "-"}</span>
+													<time>{formatDate(comment.submitted_at)}</time>
+												</div>
+												{#if comment.good_points}
+													<p><strong>よかった点</strong>{comment.good_points}</p>
+												{/if}
+												{#if comment.improvement_points}
+													<p><strong>改善点</strong>{comment.improvement_points}</p>
+												{/if}
+											</article>
+										{/each}
+									</div>
+								{/if}
+							{/if}
+						</div>
+
 						<div class="room-table-wrap">
 							<table>
 								<thead>
@@ -182,12 +272,15 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 										<th>平均滞在</th>
 										<th>即離脱</th>
 										<th>終了前離脱</th>
+										<th>アンケート</th>
+										<th>平均</th>
+										<th>スキップ</th>
 									</tr>
 								</thead>
 								<tbody>
 									{#if run.rooms.length === 0}
 										<tr>
-											<td colspan="12" class="empty-cell">
+											<td colspan="15" class="empty-cell">
 												まだ放送回ルーム内の計測データはありません。
 											</td>
 										</tr>
@@ -206,6 +299,9 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 												<td>{formatDuration(room.average_stay_seconds)}</td>
 												<td>{formatPercent(room.bounce_rate_under_60s)}</td>
 												<td>{formatPercent(room.early_exit_rate)}</td>
+												<td>{room.survey.response_count}</td>
+												<td>{formatAverage(room.survey.average_overall_rating)}</td>
+												<td>{room.survey.skipped_count}</td>
 											</tr>
 										{/each}
 									{/if}
@@ -462,6 +558,127 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 	line-height: 1;
 }
 
+.survey-panel {
+	border-top: 1px solid var(--color-border);
+	padding: 14px 16px 16px;
+}
+
+.survey-panel-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 12px;
+}
+
+.survey-panel-header h3,
+.survey-distributions h4,
+.survey-comments h4 {
+	margin: 0;
+	font-size: 14px;
+}
+
+.survey-panel-header span,
+.survey-empty {
+	color: var(--color-text-muted);
+	font-size: 13px;
+}
+
+.survey-empty {
+	margin: 0;
+}
+
+.survey-metrics {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 1px;
+	margin-bottom: 12px;
+	background: var(--color-border);
+	border: 1px solid var(--color-border);
+	border-radius: 8px;
+	overflow: hidden;
+}
+
+.survey-metrics div {
+	min-width: 0;
+	background: var(--color-surface);
+	padding: 10px 12px;
+}
+
+.survey-metrics span {
+	display: block;
+	color: var(--color-text-muted);
+	font-size: 12px;
+	font-weight: 700;
+}
+
+.survey-metrics strong {
+	display: block;
+	margin-top: 4px;
+	font-size: 20px;
+	line-height: 1;
+}
+
+.survey-distributions {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 12px;
+}
+
+.survey-distributions > div,
+.survey-comments {
+	border: 1px solid var(--color-border);
+	border-radius: 8px;
+	padding: 12px;
+}
+
+.survey-option-row {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+	margin-top: 8px;
+	color: var(--color-text-muted);
+	font-size: 13px;
+}
+
+.survey-option-row strong {
+	color: var(--color-text);
+}
+
+.survey-comments {
+	margin-top: 12px;
+}
+
+.survey-comment {
+	margin-top: 10px;
+	border-top: 1px solid var(--color-border);
+	padding-top: 10px;
+}
+
+.survey-comment:first-of-type {
+	border-top: 0;
+	padding-top: 0;
+}
+
+.survey-comment div {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+	color: var(--color-text-muted);
+	font-size: 12px;
+}
+
+.survey-comment p {
+	margin: 8px 0 0;
+	white-space: pre-wrap;
+	line-height: 1.6;
+}
+
+.survey-comment p strong {
+	margin-right: 8px;
+	color: var(--color-text-muted);
+}
+
 .room-table-wrap {
 	overflow-x: auto;
 	border-top: 1px solid var(--color-border);
@@ -470,7 +687,7 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 table {
 	width: 100%;
 	border-collapse: collapse;
-	min-width: 980px;
+	min-width: 1120px;
 }
 
 th,
@@ -559,7 +776,9 @@ th {
 	}
 
 	.search-form,
-	.metric-strip {
+	.metric-strip,
+	.survey-metrics,
+	.survey-distributions {
 		grid-template-columns: 1fr;
 	}
 

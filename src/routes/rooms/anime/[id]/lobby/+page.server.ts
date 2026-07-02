@@ -76,6 +76,12 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 			enabled: false,
 			sessionId: undefined,
 		},
+		roomExitSurvey: {
+			experimentRunId: null,
+			alreadyAnswered: false,
+			postCount: 0,
+			surveyVersion: "room_exit_v1",
+		},
 	};
 };
 
