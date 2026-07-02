@@ -20,7 +20,9 @@ function isOnboardingExempt(pathname: string): boolean {
 export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, cookies, url }) => {
 	const { session, user } = await safeGetSession();
 
-	const { data: profile, error: profileError } = user ? await getProfileById(supabase, user.id) : { data: null, error: null };
+	const { data: profile, error: profileError } = user
+		? await getProfileById(supabase, user.id)
+		: { data: null, error: null };
 
 	if (profileError) {
 		error(500, "プロフィールの取得に失敗しました");

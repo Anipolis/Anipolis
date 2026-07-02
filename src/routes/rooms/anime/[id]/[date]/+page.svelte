@@ -1,9 +1,12 @@
 <script lang="ts">
+import type { SubmitFunction } from "@sveltejs/kit";
 import { onDestroy, onMount, tick } from "svelte";
 import { enhance } from "$app/forms";
+import { goto } from "$app/navigation";
+import ExitSurveyModal from "$lib/components/ExitSurveyModal.svelte";
 import LiveRoomPostCard from "$lib/components/LiveRoomPostCard.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
-import type { Post } from "$lib/types";
+import type { Post, RoomExitSurveyComparisonWithX, RoomExitSurveyNextParticipation } from "$lib/types";
 import type { ActionData, PageData } from "./$types";
 
 let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -15,11 +18,21 @@ let now = $state(Date.now());
 let intervalId: ReturnType<typeof setInterval>;
 let postContent = $state("");
 let textareaEl: HTMLTextAreaElement | null = $state(null);
+let composerEl: HTMLDivElement | null = $state(null);
+let keepComposerFocused = $state(true);
+let postListEl: HTMLDivElement | null = $state(null);
 let mounted = $state(false);
+let isMobileViewport = $state(false);
 let postOrder = $state<PostOrder>("oldest");
 let lastPostCount = $state(0);
 let isFollowingLatest = $state(true);
 let unreadNewPostCount = $state(0);
+let enteredAt = Date.now();
+let localSurveyPostCount = $state(0);
+let surveyOpen = $state(false);
+let surveyHandled = $state(false);
+let surveySubmitting = $state(false);
+let surveyErrorMessage: string | null = $state(null);
 let programmaticScrollTimer: ReturnType<typeof setTimeout> | undefined;
 
 const maxLen = 280;
@@ -31,11 +44,13 @@ const openLeadMinutes = $derived(Math.round((scheduledMs - openMs) / (60 * 1000)
 const isGlobalLobby = $derived(data.room.kind === "global");
 const charCount = $derived(postContent.length);
 const overLimit = $derived(charCount > maxLen);
+const surveyPostCount = $derived(data.roomExitSurvey.postCount + localSurveyPostCount);
 // ライブ更新で受信した投稿（load 由来の data.posts とは別に保持し、ID でマージする）
 let extraPosts = $state<Post[]>([]);
 let roomExperimentVisitId: string | null = null;
 let roomExperimentHeartbeatTimer: ReturnType<typeof setInterval> | undefined;
 let roomExperimentExitSent = false;
+let mobileViewportQuery: MediaQueryList | null = null;
 
 function getRoomExperimentVisitStorageKey(sessionId: string) {
 	return `room-experiment-visit:${sessionId}`;
@@ -123,6 +138,94 @@ function sendRoomExperimentExit() {
 	void fetch(url, { method: "POST", keepalive: true }).catch(() => undefined);
 }
 
+function getStayedSeconds() {
+	return Math.max(0, Math.floor((Date.now() - enteredAt) / 1000));
+}
+
+function shouldShowExitSurvey() {
+	if (surveyHandled) return false;
+	if (!data.user) return false;
+	if (!data.roomExitSurvey.experimentRunId) return false;
+	if (data.roomExitSurvey.alreadyAnswered) return false;
+	return getStayedSeconds() >= 180 || surveyPostCount >= 1;
+}
+
+async function leaveRoom() {
+	sendRoomExperimentExit();
+	await goto("/");
+}
+
+async function handleExitRoom() {
+	if (shouldShowExitSurvey()) {
+		surveyErrorMessage = null;
+		surveyOpen = true;
+		return;
+	}
+	surveyHandled = true;
+	await leaveRoom();
+}
+
+type RoomExitSurveySubmitAnswers = {
+	overallRating: number;
+	sharedExperienceRating: number;
+	readabilityRating: number;
+	nextParticipation: RoomExitSurveyNextParticipation;
+	comparisonWithX: RoomExitSurveyComparisonWithX;
+	goodPoints: string | null;
+	improvementPoints: string | null;
+};
+
+async function postRoomExitSurvey(action: "submit" | "skip", answers?: RoomExitSurveySubmitAnswers) {
+	const res = await fetch("/api/room-exit-surveys", {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({
+			action,
+			anime_id: data.anime.id,
+			broadcast_room_session_id: data.room.session_id,
+			experiment_run_id: data.roomExitSurvey.experimentRunId,
+			survey_version: data.roomExitSurvey.surveyVersion,
+			stayed_seconds: getStayedSeconds(),
+			post_count: surveyPostCount,
+			...(answers ? { answers } : {}),
+		}),
+	});
+	if (!res.ok) throw new Error(`room exit survey failed: ${res.status}`);
+}
+
+async function handleSurveySubmit(answers: RoomExitSurveySubmitAnswers) {
+	if (surveySubmitting) return;
+	surveySubmitting = true;
+	surveyErrorMessage = null;
+	try {
+		await postRoomExitSurvey("submit", answers);
+		surveyHandled = true;
+		surveyOpen = false;
+		await leaveRoom();
+	} catch (error) {
+		console.error("room exit survey submit failed:", error);
+		surveyErrorMessage = "送信に失敗しました。通信状況を確認してもう一度お試しください。";
+	} finally {
+		surveySubmitting = false;
+	}
+}
+
+async function handleSurveySkip() {
+	if (surveySubmitting) return;
+	surveySubmitting = true;
+	surveyErrorMessage = null;
+	try {
+		await postRoomExitSurvey("skip");
+	} catch (error) {
+		console.error("room exit survey skip failed:", error);
+	} finally {
+		surveyHandled = true;
+		surveySubmitting = false;
+		surveyOpen = false;
+		await leaveRoom();
+	}
+}
+
 function handleRoomExperimentPageHide(event: PageTransitionEvent) {
 	if (event.persisted) {
 		clearRoomExperimentHeartbeatTimer();
@@ -134,6 +237,51 @@ function handleRoomExperimentPageHide(event: PageTransitionEvent) {
 function handleRoomExperimentPageShow(event: PageTransitionEvent) {
 	if (event.persisted) void startRoomExperimentTracking();
 }
+
+function shouldAutoFocusComposer() {
+	return !("ontouchstart" in window) && navigator.maxTouchPoints === 0;
+}
+
+function canAutoRefocusComposer() {
+	if (!shouldAutoFocusComposer() || !keepComposerFocused) return false;
+	const activeElement = document.activeElement;
+	return (
+		!activeElement ||
+		activeElement === document.body ||
+		activeElement === textareaEl ||
+		(composerEl?.contains(activeElement) ?? false)
+	);
+}
+
+async function focusComposerTextarea(options: FocusOptions = {}) {
+	if (!canAutoRefocusComposer()) return;
+	await tick();
+	await new Promise<void>((resolve) => {
+		requestAnimationFrame(() => resolve());
+	});
+	textareaEl?.focus(options);
+}
+
+function handleWindowPointerDown(event: PointerEvent) {
+	const target = event.target;
+	if (!(target instanceof Node)) return;
+	if (target === textareaEl) {
+		keepComposerFocused = true;
+		return;
+	}
+	const targetElement = target instanceof Element ? target : target.parentElement;
+	if (composerEl?.contains(target) && targetElement?.closest('button[type="submit"]')) return;
+	keepComposerFocused = false;
+}
+
+const handleCreatePost: SubmitFunction = () => {
+	keepComposerFocused = true;
+	return async ({ result, update }) => {
+		await update({ reset: false });
+		if (result.type === "success") localSurveyPostCount += 1;
+		await focusComposerTextarea({ preventScroll: true });
+	};
+};
 
 /** 最後に受信した投稿以降の差分を取得して extraPosts に追加する */
 async function fetchNewPosts() {
@@ -162,39 +310,49 @@ const status = $derived.by<RoomStatus>(() => {
 	if (now >= closeMs) return "ended";
 	return "open";
 });
+const showLatestJumpButton = $derived(status === "open" && (!isFollowingLatest || unreadNewPostCount > 0));
 
 onMount(() => {
+	mobileViewportQuery = window.matchMedia("(max-width: 960px)");
+	isMobileViewport = mobileViewportQuery.matches;
+	mobileViewportQuery.addEventListener("change", handleMobileViewportChange);
 	mounted = true;
 	lastPostCount = data.posts.length;
 	intervalId = setInterval(() => {
 		now = Date.now();
 	}, 1000);
-	if (!("ontouchstart" in window) && textareaEl) {
-		textareaEl.focus();
-	}
 	if (status === "open" && data.posts.length > 0) {
-		void focusLatestPost();
+		void focusLatestPost().then(() => focusComposerTextarea({ preventScroll: true }));
+	} else {
+		void focusComposerTextarea();
 	}
-	window.addEventListener("scroll", handleWindowScroll, { passive: true });
+	window.addEventListener("pointerdown", handleWindowPointerDown, true);
 	window.addEventListener("pagehide", handleRoomExperimentPageHide);
 	window.addEventListener("pageshow", handleRoomExperimentPageShow);
 	void startRoomExperimentTracking();
 });
 
 onDestroy(() => {
+	mobileViewportQuery?.removeEventListener("change", handleMobileViewportChange);
 	clearInterval(intervalId);
 	if (programmaticScrollTimer) clearTimeout(programmaticScrollTimer);
 	clearRoomExperimentHeartbeatTimer();
 	if (typeof window !== "undefined") {
-		window.removeEventListener("scroll", handleWindowScroll);
+		window.removeEventListener("pointerdown", handleWindowPointerDown, true);
 		window.removeEventListener("pagehide", handleRoomExperimentPageHide);
 		window.removeEventListener("pageshow", handleRoomExperimentPageShow);
 	}
 	sendRoomExperimentExit();
 });
 
+function handleMobileViewportChange(event: MediaQueryListEvent) {
+	isMobileViewport = event.matches;
+}
+
 $effect(() => {
-	if (form && "success" in form && form.success) postContent = "";
+	if (form && "success" in form && form.success) {
+		postContent = "";
+	}
 });
 
 $effect(() => {
@@ -207,9 +365,10 @@ $effect(() => {
 	if (shouldFollow) {
 		isFollowingLatest = true;
 		unreadNewPostCount = 0;
-		void focusLatestPost(postOrder, "smooth");
+		void focusLatestPost(postOrder, "smooth").then(() => focusComposerTextarea({ preventScroll: true }));
 	} else {
 		unreadNewPostCount += Math.max(1, newPostCount);
+		void focusComposerTextarea({ preventScroll: true });
 	}
 });
 
@@ -240,13 +399,13 @@ $effect(() => {
 });
 
 function isNearLatestEdge(order: PostOrder = postOrder) {
-	const root = document.documentElement;
-	if (order === "newest") return window.scrollY <= latestEdgeThreshold;
-	const distanceToBottom = root.scrollHeight - (window.scrollY + window.innerHeight);
+	if (!postListEl) return true;
+	if (order === "newest") return postListEl.scrollTop <= latestEdgeThreshold;
+	const distanceToBottom = postListEl.scrollHeight - (postListEl.scrollTop + postListEl.clientHeight);
 	return distanceToBottom <= latestEdgeThreshold;
 }
 
-function handleWindowScroll() {
+function handlePostListScroll() {
 	if (!mounted || status !== "open") return;
 	if (programmaticScrollTimer) return;
 	const nearLatest = isNearLatestEdge();
@@ -257,12 +416,16 @@ function handleWindowScroll() {
 async function focusLatestPost(order: PostOrder = postOrder, behavior: ScrollBehavior = "auto") {
 	await tick();
 	requestAnimationFrame(() => {
-		const selector = order === "oldest" ? ".anime-room-post:last-of-type" : ".anime-room-post:first-of-type";
+		if (!postListEl) return;
+		if (programmaticScrollTimer) clearTimeout(programmaticScrollTimer);
 		programmaticScrollTimer = setTimeout(() => {
 			programmaticScrollTimer = undefined;
 			isFollowingLatest = true;
 		}, 450);
-		document.querySelector<HTMLElement>(selector)?.scrollIntoView({ block: "center", behavior });
+		postListEl.scrollTo({
+			top: order === "oldest" ? postListEl.scrollHeight : 0,
+			behavior,
+		});
 	});
 }
 
@@ -296,7 +459,7 @@ const timerLabel = $derived.by(() => {
 });
 
 const broadcastMetaLine = $derived.by(() => {
-	if (isGlobalLobby) return "総合実況・雑談ロビー";
+	if (isGlobalLobby) return "";
 	const station = data.anime.broadcast_station?.filter(Boolean).join(" / ");
 	const frame = `${data.room.duration_minutes}分枠`;
 	return station ? `${station} · ${frame}` : frame;
@@ -315,31 +478,41 @@ function formatCompactDate(iso: string) {
 
 <svelte:head> <title>{data.room.title} - Anipolis</title> </svelte:head>
 
-<div class="page-container">
+<div class="page-container room-page-container">
 	<div class="feed-column">
 		<div class="room-mobile-bar">
 			<span class="room-mobile-title">{data.room.title}</span>
-			<span class="room-mobile-timer event-timer--{status}">{timerLabel}</span>
-			{#if status === "open"}
-				<span class="event-timer-badge">受付中</span>
+			{#if !isGlobalLobby}
+				<span class="room-mobile-timer event-timer--{status}">{timerLabel}</span>
+				{#if status === "open"}
+					<span class="event-timer-badge">受付中</span>
+				{/if}
 			{/if}
+			<button type="button" class="room-mobile-exit" onclick={handleExitRoom} aria-label="退出する">
+				<span class="i-lucide-log-out" aria-hidden="true"></span>
+				<span>退出</span>
+			</button>
 		</div>
 
 		{#if data.user && status === "open"}
-			<div class="card composer">
+			<div class="card composer" bind:this={composerEl}>
 				{#if form && "message" in form}
 					<p class="form-error">{form.message}</p>
 				{/if}
-				<form method="POST" action="?/createPost" use:enhance>
+				<form method="POST" action="?/createPost" use:enhance={handleCreatePost}>
 					<div class="composer-body">
 						<textarea
 							bind:this={textareaEl}
-							class="composer-textarea"
+							class="composer-textarea room-composer-textarea"
 							name="content"
-							placeholder="いまの感想を投稿... (Shift+Enterで改行)"
-							rows="3"
+							placeholder={isMobileViewport ? "いまの感想を投稿..." : "いまの感想を投稿... (Shift+Enterで改行)"}
+							rows={isMobileViewport ? 1 : 3}
+							enterkeyhint="send"
 							bind:value={postContent}
 							maxlength={maxLen}
+							onfocus={() => {
+								keepComposerFocused = true;
+							}}
 							onkeydown={(e) => {
 								if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
 									e.preventDefault();
@@ -397,30 +570,45 @@ function formatCompactDate(iso: string) {
 			</button>
 		</div>
 
-		{#if allPosts.length === 0}
-			<div class="card anime-room-empty">まだ投稿はありません。最初の感想を残しましょう。</div>
-		{:else}
-			{#each displayedPosts as post (post.id)}
-				<div class="anime-room-post">
-					<LiveRoomPostCard
-						{post}
-						currentUserId={data.user?.id ?? null}
-						broadcastStartAt={data.room.scheduled_at}
-					/>
-				</div>
-			{/each}
-		{/if}
+		<div class="room-post-list-shell">
+			<div class="room-post-list scrollbar-thin-muted" bind:this={postListEl} onscroll={handlePostListScroll}>
+				{#if allPosts.length === 0}
+					<div class="card anime-room-empty">まだ投稿はありません。最初の感想を残しましょう。</div>
+				{:else}
+					{#each displayedPosts as post (post.id)}
+						<div class="anime-room-post">
+							<LiveRoomPostCard
+								{post}
+								currentUserId={data.user?.id ?? null}
+								broadcastStartAt={data.room.scheduled_at}
+								timelineTimeMode={isGlobalLobby}
+							/>
+						</div>
+					{/each}
+				{/if}
+			</div>
 
-		{#if status === "open" && unreadNewPostCount > 0}
-			<button type="button" class="new-posts-badge" onclick={resumeLatestFollow}>
-				<span aria-hidden="true">↓</span>
-				<span>新着の投稿があります</span>
-				<span class="new-posts-count">{unreadNewPostCount}</span>
-			</button>
-		{/if}
+			{#if showLatestJumpButton}
+				<button
+					type="button"
+					class="new-posts-badge"
+					onclick={resumeLatestFollow}
+					aria-label="最新の投稿へ移動"
+				>
+					{#if postOrder === "oldest"}
+						<span class="i-lucide-arrow-down latest-jump-icon" aria-hidden="true"></span>
+					{:else}
+						<span class="i-lucide-arrow-up latest-jump-icon" aria-hidden="true"></span>
+					{/if}
+					{#if unreadNewPostCount > 0}
+						<span class="new-posts-count">{unreadNewPostCount}</span>
+					{/if}
+				</button>
+			{/if}
+		</div>
 	</div>
 
-	<aside class="sidebar-column">
+	<aside class="sidebar-column scrollbar-thin-muted">
 		<div class="room-summary-card mb-4 rounded-xl border p-4 shadow-sm">
 			<div class="flex items-start">
 				<a href="/anime/{data.anime.id}" class="shrink-0" aria-label="アニメ詳細を開く">
@@ -433,19 +621,30 @@ function formatCompactDate(iso: string) {
 				<div class="flex min-h-20 min-w-0 flex-1 flex-col justify-between pl-3">
 					<div class="min-w-0">
 						<h1 class="room-summary-title line-clamp-1 text-sm font-bold">{data.room.title}</h1>
-						<div class="mt-2 flex min-w-0 items-center gap-2">
-							{#if status === "ended"}
-								<span class="room-summary-status rounded px-1.5 py-0.5 text-[10px] font-bold"
-									>終了</span
+						{#if !isGlobalLobby}
+							<div class="mt-2 flex min-w-0 items-center gap-2">
+								{#if status === "ended"}
+									<span class="room-summary-status rounded px-1.5 py-0.5 text-[10px] font-bold"
+										>終了</span
+									>
+								{/if}
+								<time class="room-summary-secondary truncate text-xs"
+									>{formatCompactDate(data.room.scheduled_at)}</time
 								>
-							{/if}
-							<time class="room-summary-secondary truncate text-xs"
-								>{formatCompactDate(data.room.scheduled_at)}</time
-							>
-						</div>
-						<div class="room-summary-muted mt-1 truncate text-xs">{broadcastMetaLine}</div>
+							</div>
+						{/if}
+						{#if broadcastMetaLine}
+							<div class="room-summary-muted mt-1 truncate text-xs">{broadcastMetaLine}</div>
+						{/if}
 					</div>
 					<div class="mt-2 flex items-center justify-end gap-2">
+						<button
+							type="button"
+							class="room-summary-exit shrink-0 text-xs transition-colors"
+							onclick={handleExitRoom}
+						>
+							退出する
+						</button>
 						<a href="/schedule" class="room-summary-back shrink-0 text-xs transition-colors">
 							← 週間スケジュールへ戻る
 						</a>
@@ -457,6 +656,15 @@ function formatCompactDate(iso: string) {
 		<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
 	</aside>
 </div>
+
+{#if surveyOpen}
+	<ExitSurveyModal
+		submitting={surveySubmitting}
+		errorMessage={surveyErrorMessage}
+		onSubmit={handleSurveySubmit}
+		onSkip={handleSurveySkip}
+	/>
+{/if}
 
 <style>
 .room-summary-card {
@@ -483,17 +691,52 @@ function formatCompactDate(iso: string) {
 }
 
 .room-summary-muted,
-.room-summary-back {
+.room-summary-exit {
 	color: var(--color-text-muted);
 }
 
-.room-summary-back:hover {
+.room-summary-exit {
+	border: 0;
+	background: transparent;
+	padding: 0;
+	font: inherit;
+	cursor: pointer;
+}
+
+.room-summary-back {
+	display: none;
+}
+
+.room-summary-exit:hover {
 	color: var(--color-accent-hover);
 }
 
-.feed-column {
+.room-page-container {
+	max-width: none;
+	height: 100dvh;
+	margin: 0;
+	align-items: stretch;
+	overflow: hidden;
+	padding-right: max(24px, env(safe-area-inset-right));
+	padding-bottom: 24px;
+	padding-left: max(16px, calc((100% - (var(--content-max) + 48px)) / 2 + 16px));
+}
+
+.room-page-container > .feed-column {
 	display: flex;
+	flex: 0 0 var(--feed-width);
+	height: 100%;
+	min-height: 0;
+	overflow: hidden;
 	flex-direction: column;
+}
+
+.room-page-container > .sidebar-column {
+	flex: 1 1 var(--sidebar-width);
+	max-height: 100%;
+	overflow-x: hidden;
+	overflow-y: auto;
+	padding-bottom: 24px;
 }
 
 .room-mobile-bar {
@@ -503,23 +746,37 @@ function formatCompactDate(iso: string) {
 .event-posts-header,
 .room-order-toggle {
 	order: 1;
+	flex: 0 0 auto;
 }
 
-.anime-room-empty,
-.anime-room-post {
+.room-post-list-shell {
+	position: relative;
 	order: 2;
+	flex: 1 1 auto;
+	min-height: 0;
+}
+
+.room-post-list {
+	height: 100%;
+	min-height: 0;
+	overflow-x: hidden;
+	overflow-y: auto;
+	overscroll-behavior: contain;
 }
 
 .new-posts-badge {
-	position: fixed;
+	position: absolute;
 	left: 50%;
-	bottom: 24px;
-	z-index: 145;
+	bottom: 12px;
+	z-index: 4;
 	display: inline-flex;
 	align-items: center;
+	justify-content: center;
 	gap: 8px;
-	max-width: calc(100vw - 32px);
-	padding: 9px 14px;
+	min-width: 40px;
+	min-height: 40px;
+	max-width: calc(100% - 32px);
+	padding: 8px 12px;
 	border: 1px solid color-mix(in srgb, var(--color-primary) 28%, transparent);
 	border-radius: 999px;
 	background: color-mix(in srgb, var(--color-surface) 92%, var(--color-primary));
@@ -549,6 +806,12 @@ function formatCompactDate(iso: string) {
 	font-variant-numeric: tabular-nums;
 }
 
+.latest-jump-icon {
+	width: 16px;
+	height: 16px;
+	flex-shrink: 0;
+}
+
 @keyframes new-posts-pop {
 	from {
 		opacity: 0;
@@ -565,7 +828,7 @@ function formatCompactDate(iso: string) {
 	align-self: flex-start;
 	gap: 2px;
 	padding: 3px;
-	margin: -4px 0 12px;
+	margin: -4px 0 10px;
 	background: var(--color-surface);
 	border: 1px solid var(--color-border);
 	border-radius: var(--radius-sm);
@@ -584,6 +847,11 @@ function formatCompactDate(iso: string) {
 .room-order-toggle button.active {
 	background: var(--color-accent);
 	color: white;
+}
+
+:global(.room-composer-textarea:focus-visible) {
+	outline: 2px solid var(--color-accent);
+	outline-offset: 2px;
 }
 
 /* ── モバイル用コンパクトバー (サイドバー非表示時のみ表示) ── */
@@ -615,18 +883,25 @@ function formatCompactDate(iso: string) {
 	white-space: nowrap;
 	flex-shrink: 0;
 }
+.room-mobile-exit {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	flex-shrink: 0;
+	border: 0;
+	background: transparent;
+	color: var(--color-text-muted);
+	font: inherit;
+	font-size: 12px;
+	font-weight: 700;
+	cursor: pointer;
+}
+.room-mobile-exit:hover {
+	color: var(--color-accent-hover);
+}
 .room-mobile-timer.event-timer--open {
 	color: var(--color-primary);
 	font-weight: 600;
-}
-@media (max-width: 960px) {
-	.room-mobile-bar {
-		display: flex;
-	}
-
-	.new-posts-badge {
-		bottom: calc(76px + env(safe-area-inset-bottom));
-	}
 }
 
 /* ── ログイン/空状態 ── */
@@ -641,10 +916,98 @@ function formatCompactDate(iso: string) {
 .feed-column > .composer,
 .feed-column > .anime-room-login {
 	order: 3;
-	margin-top: 16px;
+	position: relative;
+	z-index: 2;
+	flex: 0 0 auto;
+	margin-top: 12px;
 }
 
 .feed-column > .composer {
-	margin-bottom: 0;
+	margin-bottom: 24px;
+}
+
+@media (max-width: 960px) {
+	.room-page-container {
+		height: calc(100dvh - 52px);
+		padding-right: 12px;
+		padding-bottom: calc(80px + env(safe-area-inset-bottom));
+		padding-left: 12px;
+	}
+
+	.room-page-container > .feed-column {
+		flex: 1 1 auto;
+	}
+
+	.room-mobile-bar {
+		display: flex;
+	}
+
+	.room-page-container .room-post-list {
+		padding-bottom: 14px;
+	}
+
+	.room-page-container .new-posts-badge {
+		bottom: 8px;
+	}
+
+	.room-page-container .feed-column > .composer {
+		margin-top: 8px;
+		margin-bottom: 0;
+		padding: 8px 10px;
+		border-radius: 14px;
+	}
+
+	.room-page-container .composer form,
+	.room-page-container .composer-body {
+		min-width: 0;
+		width: 100%;
+	}
+
+	.room-page-container .composer-body {
+		align-items: center;
+		gap: 8px;
+	}
+
+	.room-page-container .composer-textarea {
+		min-height: 24px;
+		max-height: 80px;
+		height: 24px;
+		line-height: 1.5;
+		font-size: 15px;
+		overflow-y: auto;
+	}
+
+	.room-page-container .composer-footer {
+		flex: 0 0 auto;
+		gap: 8px;
+		margin-top: 0;
+		padding-top: 0;
+		border-top: 0;
+	}
+
+	.room-page-container .composer-footer .char-count {
+		font-size: 12px;
+		line-height: 1;
+	}
+
+	.room-page-container .composer-footer .btn {
+		min-height: 32px;
+		padding: 6px 12px;
+		white-space: nowrap;
+	}
+}
+
+@media (max-width: 480px) {
+	.room-page-container {
+		padding-right: 8px;
+		padding-left: 8px;
+	}
+}
+
+@media (max-width: 375px) {
+	.room-page-container {
+		padding-right: 6px;
+		padding-left: 6px;
+	}
 }
 </style>

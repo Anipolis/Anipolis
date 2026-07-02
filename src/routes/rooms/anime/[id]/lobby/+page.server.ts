@@ -76,6 +76,12 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 			enabled: false,
 			sessionId: undefined,
 		},
+		roomExitSurvey: {
+			experimentRunId: null,
+			alreadyAnswered: false,
+			postCount: 0,
+			surveyVersion: "room_exit_v1",
+		},
 	};
 };
 
@@ -96,9 +102,7 @@ export const actions: Actions = {
 		const content = stripTrailingRoomHashtag(rawContent, hashtag);
 		if (!content) return fail(400, { message: "投稿内容を入力してください" });
 
-		return insertPostWithHashtags(supabase, user.id, content, null, [], anime.id, null, null, session.id, null, [
-			hashtag,
-		]);
+		return insertPostWithHashtags(supabase, user.id, content, null, [], anime.id, null, null, session.id, null, []);
 	},
 
 	deletePost: async ({ request, locals: { supabase, safeGetSession } }) => {

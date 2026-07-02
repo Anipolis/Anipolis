@@ -1,5 +1,7 @@
 import type { BroadcastRoomOverride } from "$lib/types";
 
+export type BroadcastOverrideKind = BroadcastRoomOverride["override_kind"];
+
 export interface BroadcastEpisodeSlot {
 	date: string;
 	start: number | null;
@@ -43,15 +45,94 @@ function actualBroadcastDate(roomDate: Date, broadcastTime: string | null): Date
 	return actual;
 }
 
-function normalizedLabel(override: BroadcastRoomOverride | undefined): string | null {
+export function inferBroadcastOverrideKind(override: BroadcastRoomOverride): BroadcastOverrideKind {
+	if (override.override_kind) return override.override_kind;
+	if (override.is_cancelled) return "cancelled";
+	if (
+		override.episode_start != null &&
+		override.episode_end != null &&
+		override.episode_end > override.episode_start
+	) {
+		return "marathon";
+	}
+	if (override.episode_label || override.episode_count_increment === 0) return "recap";
+	if (
+		override.broadcast_time ||
+		override.duration_minutes != null ||
+		override.pre_open_minutes != null ||
+		override.post_close_minutes != null
+	) {
+		return "time_change";
+	}
+	return "custom";
+}
+
+export function formatBroadcastOverrideKindLabel(override: BroadcastRoomOverride): string {
+	switch (inferBroadcastOverrideKind(override)) {
+		case "cancelled":
+			return "放送休止";
+		case "recap":
+			return "総集編/特別編";
+		case "time_change":
+			return "放送時間変更";
+		case "marathon":
+			return "一挙放送";
+		default:
+			return "詳細設定";
+	}
+}
+
+export function formatBroadcastOverrideAnnouncement(override: BroadcastRoomOverride): string {
+	const customLabel = override.announcement_label?.trim();
+	if (customLabel) return customLabel;
+
+	switch (inferBroadcastOverrideKind(override)) {
+		case "cancelled":
+			return "今週は放送休止";
+		case "recap":
+			return normalizedBroadcastEpisodeLabel(override) ?? "総集編/特別編";
+		case "time_change":
+			return override.broadcast_time ? `放送時間変更：${override.broadcast_time}〜` : "放送時間変更";
+		case "marathon":
+			return formatBroadcastOverrideEpisodeSummary(override) ?? "一挙放送";
+		default:
+			return override.note?.trim() || "イレギュラー放送";
+	}
+}
+
+export function normalizedBroadcastEpisodeLabel(override: BroadcastRoomOverride | undefined): string | null {
 	const label = override?.episode_label?.trim();
-	return label || null;
+	if (label) return label;
+	if (!override) return null;
+	if (inferBroadcastOverrideKind(override) === "recap" || override.episode_count_increment === 0) return "総集編";
+	return null;
 }
 
 function episodeIncrement(override: BroadcastRoomOverride | undefined): number {
 	if (!override) return 1;
 	if (override.episode_count_increment != null) return override.episode_count_increment;
-	return normalizedLabel(override) ? 0 : 1;
+	return normalizedBroadcastEpisodeLabel(override) ? 0 : 1;
+}
+
+export function formatBroadcastOverrideEpisodeSummary(override: BroadcastRoomOverride): string | null {
+	const label = normalizedBroadcastEpisodeLabel(override);
+	if (override.episode_start != null && override.episode_end != null) {
+		const episode =
+			override.episode_start === override.episode_end
+				? `第${override.episode_start}話`
+				: `第${override.episode_start}話〜第${override.episode_end}話`;
+		const suffix = inferBroadcastOverrideKind(override) === "marathon" ? " 一挙放送" : "";
+		return label ? `${episode}${suffix} ${label}` : `${episode}${suffix}`;
+	}
+	return label;
+}
+
+export function isMarathonEpisodeSlot(slot: BroadcastEpisodeSlot): boolean {
+	return slot.start != null && slot.end != null && slot.end !== slot.start;
+}
+
+export function formatMarathonBadge(_slot: BroadcastEpisodeSlot): string {
+	return "一挙放送";
 }
 
 export function generateBroadcastEpisodeSlots({
@@ -103,7 +184,7 @@ export function generateBroadcastEpisodeSlots({
 		.map((date): BroadcastEpisodeSlot | null => {
 			const override = overrideByDate.get(date);
 			if (override?.is_cancelled) return null;
-			const label = normalizedLabel(override);
+			const label = normalizedBroadcastEpisodeLabel(override);
 
 			if (override?.episode_start != null && override.episode_end != null) {
 				episodeCounter = override.episode_end + 1;

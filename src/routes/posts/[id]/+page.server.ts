@@ -78,13 +78,24 @@ export const actions: Actions = {
 		const content = (form.get("content") as string | null)?.trim() ?? "";
 		const imageUrlsRaw = (form.get("image_urls") as string | null) ?? "[]";
 		const animeId = (form.get("anime_id") as string | null)?.trim() || null;
+		const broadcastRoomSessionId = (form.get("broadcast_room_session_id") as string | null)?.trim() || null;
 		let imageUrls: string[] = [];
 		try {
 			imageUrls = JSON.parse(imageUrlsRaw);
 		} catch {
 			imageUrls = [];
 		}
-		return insertPostWithHashtags(supabase, user.id, content, params.id, imageUrls, animeId);
+		return insertPostWithHashtags(
+			supabase,
+			user.id,
+			content,
+			params.id,
+			imageUrls,
+			animeId,
+			null,
+			null,
+			broadcastRoomSessionId,
+		);
 	},
 
 	deletePost: async ({ request, locals: { supabase, safeGetSession } }) => {

@@ -28,12 +28,19 @@ let profileSubmitting = $state(false);
 let headerUploading = $state(false);
 let headerMessage = $state("");
 let headerPreviewUrl = $state<string | null>(null);
+let headerPendingFile = $state<File | null>(null);
+let headerPendingDelete = $state(false);
+let avatarUploading = $state(false);
+let avatarMessage = $state("");
+let avatarPreviewUrl = $state<string | null>(null);
+let avatarPendingFile = $state<File | null>(null);
 let showProfileEditModal = $state(false);
 let showUserReportModal = $state(false);
 let reportReason = $state("harassment");
 let reportDetails = $state("");
 let reportSubmitting = $state(false);
 let reportMessage = $state("");
+let showKebabMenu = $state(false);
 
 $effect(() => {
 	isFollowing = data.isFollowing;
@@ -53,18 +60,91 @@ const activeTab = $derived(
 	requestedTab === "images" || requestedTab === "list" || requestedTab === "likes" ? requestedTab : "posts",
 );
 const bioRemaining = $derived(160 - editBio.length);
-const editableHeaderUrl = $derived(headerPreviewUrl ?? profile.header_url);
+const editableHeaderUrl = $derived(headerPreviewUrl ?? (headerPendingDelete ? null : profile.header_url));
 
 const handleProfileSubmit: SubmitFunction = () => {
+	// 保存中に選択が変わっても送信開始時点の画像状態を使う
+	const pendingHeaderFile = headerPendingFile;
+	const shouldDeleteHeader = headerPendingDelete;
+	const pendingAvatarFile = avatarPendingFile;
 	profileSubmitting = true;
 	return async ({ result, update }) => {
+		// プロフィールテキストの保存が失敗した場合は画像処理をスキップ
+		if (result.type !== "success") {
+			profileSubmitting = false;
+			await update({ reset: false });
+			return;
+		}
+
+		if (pendingHeaderFile) {
+			headerUploading = true;
+			headerMessage = "";
+			try {
+				const body = new FormData();
+				body.append("file", pendingHeaderFile);
+				const response = await fetch("/api/upload/profile-header", { method: "POST", body });
+				const res = (await response.json().catch(() => ({}))) as { message?: string };
+				if (!response.ok) throw new Error(res.message ?? "ヘッダー画像の更新に失敗しました");
+				if (headerPreviewUrl) {
+					URL.revokeObjectURL(headerPreviewUrl);
+					headerPreviewUrl = null;
+				}
+				headerPendingFile = null;
+			} catch (uploadError) {
+				headerMessage = uploadError instanceof Error ? uploadError.message : "ヘッダー画像の更新に失敗しました";
+				headerUploading = false;
+				profileSubmitting = false;
+				await update({ reset: false });
+				return;
+			}
+			headerUploading = false;
+		} else if (shouldDeleteHeader) {
+			headerUploading = true;
+			headerMessage = "";
+			try {
+				const response = await fetch("/api/upload/profile-header", { method: "DELETE" });
+				const res = (await response.json().catch(() => ({}))) as { message?: string };
+				if (!response.ok) throw new Error(res.message ?? "ヘッダー画像の削除に失敗しました");
+				headerPendingDelete = false;
+			} catch (deleteError) {
+				headerMessage = deleteError instanceof Error ? deleteError.message : "ヘッダー画像の削除に失敗しました";
+				headerUploading = false;
+				profileSubmitting = false;
+				await update({ reset: false });
+				return;
+			}
+			headerUploading = false;
+		}
+
+		if (pendingAvatarFile) {
+			avatarUploading = true;
+			avatarMessage = "";
+			try {
+				const body = new FormData();
+				body.append("file", pendingAvatarFile);
+				const response = await fetch("/api/upload/avatar", { method: "POST", body });
+				const res = (await response.json().catch(() => ({}))) as { message?: string };
+				if (!response.ok) throw new Error(res.message ?? "アイコン画像の更新に失敗しました");
+				if (avatarPreviewUrl) {
+					URL.revokeObjectURL(avatarPreviewUrl);
+					avatarPreviewUrl = null;
+				}
+				avatarPendingFile = null;
+			} catch (uploadError) {
+				avatarMessage = uploadError instanceof Error ? uploadError.message : "アイコン画像の更新に失敗しました";
+				avatarUploading = false;
+				profileSubmitting = false;
+				await update({ reset: false });
+				return;
+			}
+			avatarUploading = false;
+		}
+
 		profileSubmitting = false;
 		await update({ reset: false });
-		if (result.type === "success") {
-			editDisplayName = data.profile.display_name ?? "";
-			editBio = data.profile.bio ?? "";
-			showProfileEditModal = false;
-		}
+		editDisplayName = data.profile.display_name ?? "";
+		editBio = data.profile.bio ?? "";
+		showProfileEditModal = false;
 	};
 };
 
@@ -81,14 +161,26 @@ function openProfileEditModal() {
 }
 
 function closeProfileEditModal() {
-	if (profileSubmitting || headerUploading) return;
+	if (profileSubmitting || headerUploading || avatarUploading) return;
 	showProfileEditModal = false;
 	headerMessage = "";
+	avatarMessage = "";
+	if (headerPreviewUrl) {
+		URL.revokeObjectURL(headerPreviewUrl);
+		headerPreviewUrl = null;
+	}
+	headerPendingFile = null;
+	headerPendingDelete = false;
+	if (avatarPreviewUrl) {
+		URL.revokeObjectURL(avatarPreviewUrl);
+		avatarPreviewUrl = null;
+	}
+	avatarPendingFile = null;
 	editDisplayName = data.profile.display_name ?? "";
 	editBio = data.profile.bio ?? "";
 }
 
-async function updateHeaderImage(event: Event) {
+function updateHeaderImage(event: Event) {
 	const input = event.currentTarget as HTMLInputElement;
 	const file = input.files?.[0];
 	if (!file) return;
@@ -105,42 +197,42 @@ async function updateHeaderImage(event: Event) {
 		return;
 	}
 
-	const previewUrl = URL.createObjectURL(file);
-	headerPreviewUrl = previewUrl;
-	headerUploading = true;
-	try {
-		const body = new FormData();
-		body.append("file", file);
-		const response = await fetch("/api/upload/profile-header", { method: "POST", body });
-		const result = (await response.json().catch(() => ({}))) as { message?: string };
-		if (!response.ok) throw new Error(result.message ?? "ヘッダー画像の更新に失敗しました");
-		await invalidateAll();
-		headerMessage = "ヘッダー画像を更新しました。";
-	} catch (uploadError) {
-		headerMessage = uploadError instanceof Error ? uploadError.message : "ヘッダー画像の更新に失敗しました";
-	} finally {
-		headerUploading = false;
-		headerPreviewUrl = null;
-		URL.revokeObjectURL(previewUrl);
-		input.value = "";
-	}
+	if (headerPreviewUrl) URL.revokeObjectURL(headerPreviewUrl);
+	headerPreviewUrl = URL.createObjectURL(file);
+	headerPendingFile = file;
+	headerPendingDelete = false;
 }
 
-async function removeHeaderImage() {
-	if (headerUploading || !profile.header_url) return;
-	headerUploading = true;
-	headerMessage = "";
-	try {
-		const response = await fetch("/api/upload/profile-header", { method: "DELETE" });
-		const result = (await response.json().catch(() => ({}))) as { message?: string };
-		if (!response.ok) throw new Error(result.message ?? "ヘッダー画像の削除に失敗しました");
-		await invalidateAll();
-		headerMessage = "ヘッダー画像を削除しました。";
-	} catch (removeError) {
-		headerMessage = removeError instanceof Error ? removeError.message : "ヘッダー画像の削除に失敗しました";
-	} finally {
-		headerUploading = false;
+function updateAvatarImage(event: Event) {
+	const input = event.currentTarget as HTMLInputElement;
+	const file = input.files?.[0];
+	if (!file) return;
+
+	avatarMessage = "";
+	if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+		avatarMessage = "JPEG、PNG、WebP形式の画像を選択してください。";
+		input.value = "";
+		return;
 	}
+	if (file.size > 2 * 1024 * 1024) {
+		avatarMessage = "画像は2MB以内にしてください。";
+		input.value = "";
+		return;
+	}
+
+	if (avatarPreviewUrl) URL.revokeObjectURL(avatarPreviewUrl);
+	avatarPreviewUrl = URL.createObjectURL(file);
+	avatarPendingFile = file;
+}
+
+function removeHeaderImage() {
+	if (headerPreviewUrl) {
+		URL.revokeObjectURL(headerPreviewUrl);
+		headerPreviewUrl = null;
+	}
+	headerPendingFile = null;
+	headerPendingDelete = true;
+	headerMessage = "";
 }
 
 async function submitUserReport() {
@@ -176,6 +268,10 @@ async function submitUserReport() {
 }
 
 function handleReportModalKeydown(event: KeyboardEvent) {
+	if (showKebabMenu && event.key === "Escape") {
+		showKebabMenu = false;
+		return;
+	}
 	if (showUserReportModal && event.key === "Escape") {
 		showUserReportModal = false;
 	}
@@ -223,7 +319,7 @@ const grouped = $derived(
 	{/if}
 </svelte:head>
 
-<svelte:window onkeydown={handleReportModalKeydown} />
+<svelte:window onkeydown={handleReportModalKeydown} onclick={() => { if (showKebabMenu) showKebabMenu = false; }} />
 
 <div class="page-container">
 	<main class="feed-column">
@@ -234,50 +330,19 @@ const grouped = $derived(
 				<div class="profile-header-image profile-header-image--empty" aria-hidden="true"></div>
 			{/if}
 			<div class="profile-header-content">
-				<UserAvatar src={profile.avatar_url} username={profile.username} size="lg" />
-				<div class="profile-info">
-					<div class="profile-display-name">{displayName}</div>
-					<div class="profile-username">
-						@{profile.username}
-						{#if profile.is_private}
-							<span class="profile-lock-badge" title="鍵アカウント">鍵</span>
-						{/if}
-					</div>
-					{#if profile.bio}
-						<p class="profile-bio">{profile.bio}</p>
-					{/if}
-					<div class="profile-stats">
-						<span class="profile-stat">
-							<strong>{posts.length}</strong>
-							<span>投稿</span>
-						</span>
-						<a href="/profile/{profile.username}/followers" class="profile-stat profile-stat--link">
-							<strong>{followerCount}</strong>
-							<span>フォロワー</span>
-						</a>
-						<a href="/profile/{profile.username}/following" class="profile-stat profile-stat--link">
-							<strong>{data.followCounts.following}</strong>
-							<span>フォロー中</span>
-						</a>
-						{#if canViewContent && (profile.list_is_public || isOwn)}
-							<span class="profile-stat">
-								<strong>{animeList.length}</strong>
-								<span>アニメ</span>
-							</span>
-						{/if}
-					</div>
-
-					{#if isOwn}
-						<button
-							type="button"
-							class="btn btn-outline"
-							style="margin-top: 12px; font-size: 13px;"
-							onclick={openProfileEditModal}
-						>
-							プロフィールを編集
-						</button>
-					{:else if data.user}
-						<div class="profile-actions">
+				<div class="profile-header-top">
+					<UserAvatar src={profile.avatar_url} username={profile.username} size="lg" />
+					<div class="profile-header-actions">
+						{#if isOwn}
+							<button
+								type="button"
+								class="btn btn-outline"
+								style="font-size: 13px;"
+								onclick={openProfileEditModal}
+							>
+								プロフィールを編集
+							</button>
+						{:else if data.user}
 							<form
 								method="POST"
 								action="?/follow"
@@ -315,16 +380,75 @@ const grouped = $derived(
 									{isFollowing ? 'フォロー中' : followRequestStatus === 'pending' ? '申請中' : profile.is_private ? 'フォロー申請' : 'フォローする'}
 								</button>
 							</form>
-							<button
-								type="button"
-								class="btn btn-outline"
-								style="font-size: 13px;"
-								onclick={() => (showUserReportModal = true)}
-							>
-								通報
-							</button>
-						</div>
+							<div class="profile-kebab-menu">
+								<button
+									type="button"
+									class="profile-kebab-btn"
+									aria-label="その他のオプション"
+									aria-haspopup="true"
+									aria-expanded={showKebabMenu}
+									onclick={(e) => { e.stopPropagation(); showKebabMenu = !showKebabMenu; }}
+								>
+									<span class="i-lucide-ellipsis-vertical" aria-hidden="true"></span>
+								</button>
+								{#if showKebabMenu}
+									<div
+										class="profile-kebab-dropdown"
+										role="menu"
+										tabindex="-1"
+										onclick={(e) => e.stopPropagation()}
+										onkeydown={(e) => {
+											if (e.key === "Escape") {
+												showKebabMenu = false;
+												return;
+											}
+											e.stopPropagation();
+										}}
+									>
+										<button
+											type="button"
+											role="menuitem"
+											onclick={() => { showKebabMenu = false; showUserReportModal = true; }}
+										>
+											通報
+										</button>
+									</div>
+								{/if}
+							</div>
+						{/if}
+					</div>
+				</div>
+				<div class="profile-info">
+					<div class="profile-display-name">{displayName}</div>
+					<div class="profile-username">
+						@{profile.username}
+						{#if profile.is_private}
+							<span class="profile-lock-badge" title="鍵アカウント">鍵</span>
+						{/if}
+					</div>
+					{#if profile.bio}
+						<p class="profile-bio">{profile.bio}</p>
 					{/if}
+					<div class="profile-stats">
+						<span class="profile-stat">
+							<strong>{posts.length}</strong>
+							<span>投稿</span>
+						</span>
+						<a href="/profile/{profile.username}/followers" class="profile-stat profile-stat--link">
+							<strong>{followerCount}</strong>
+							<span>フォロワー</span>
+						</a>
+						<a href="/profile/{profile.username}/following" class="profile-stat profile-stat--link">
+							<strong>{data.followCounts.following}</strong>
+							<span>フォロー中</span>
+						</a>
+						{#if canViewContent && (profile.list_is_public || isOwn)}
+							<span class="profile-stat">
+								<strong>{animeList.length}</strong>
+								<span>アニメ</span>
+							</span>
+						{/if}
+					</div>
 				</div>
 			</div>
 		</div>
@@ -428,6 +552,32 @@ const grouped = $derived(
 							{/if}
 
 							<div class="field">
+								<span class="field-label">アイコン画像</span>
+								<div class="profile-avatar-editor">
+									<UserAvatar
+										src={avatarPreviewUrl ?? profile.avatar_url}
+										username={profile.username}
+										size="lg"
+									/>
+								</div>
+								<div class="profile-header-editor-actions">
+									<label class="btn btn-outline profile-header-file-button">
+										{avatarUploading ? '処理中...' : '画像を選択'}
+										<input
+											type="file"
+											accept="image/jpeg,image/png,image/webp"
+											disabled={profileSubmitting || avatarUploading}
+											onchange={updateAvatarImage}
+										>
+									</label>
+								</div>
+								<p class="field-hint">JPEG、PNG、WebP・最大2MB。</p>
+								{#if avatarMessage}
+									<p class="profile-header-editor-message" aria-live="polite">{avatarMessage}</p>
+								{/if}
+							</div>
+
+							<div class="field">
 								<span class="field-label">ヘッダー画像</span>
 								<div class="profile-header-editor">
 									{#if editableHeaderUrl}
@@ -442,15 +592,15 @@ const grouped = $derived(
 										<input
 											type="file"
 											accept="image/jpeg,image/png,image/webp"
-											disabled={headerUploading}
+											disabled={profileSubmitting || headerUploading}
 											onchange={updateHeaderImage}
 										>
 									</label>
-									{#if profile.header_url}
+									{#if editableHeaderUrl}
 										<button
 											type="button"
 											class="btn btn-ghost"
-											disabled={headerUploading}
+											disabled={profileSubmitting || headerUploading}
 											onclick={removeHeaderImage}
 										>
 											削除
@@ -658,17 +808,57 @@ const grouped = $derived(
 	cursor: pointer;
 }
 
-.profile-actions {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	margin-top: 12px;
+.profile-kebab-menu {
+	position: relative;
 }
 
-.profile-actions .btn[disabled] {
-	pointer-events: none;
-	opacity: 0.6;
-	cursor: not-allowed;
+.profile-kebab-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 34px;
+	height: 34px;
+	border: 1px solid var(--color-border);
+	border-radius: 999px;
+	background: transparent;
+	color: var(--color-text-muted);
+	cursor: pointer;
+	font-size: 20px;
+	line-height: 1;
+}
+
+.profile-kebab-btn:hover {
+	background: var(--color-surface-hover);
+	color: var(--color-text);
+}
+
+.profile-kebab-dropdown {
+	position: absolute;
+	right: 0;
+	top: calc(100% + 6px);
+	z-index: 100;
+	min-width: 140px;
+	border: 1px solid var(--color-border);
+	border-radius: 8px;
+	background: var(--color-surface);
+	box-shadow: 0 8px 24px rgb(0 0 0 / 0.24);
+	overflow: hidden;
+}
+
+.profile-kebab-dropdown button {
+	display: block;
+	width: 100%;
+	padding: 10px 14px;
+	border: 0;
+	background: transparent;
+	color: var(--color-text);
+	font-size: 14px;
+	text-align: left;
+	cursor: pointer;
+}
+
+.profile-kebab-dropdown button:hover {
+	background: var(--color-surface-hover);
 }
 
 .profile-lock-badge {
@@ -894,6 +1084,12 @@ const grouped = $derived(
 	min-height: 0;
 	padding: 14px;
 	overflow-y: auto;
+}
+
+.profile-avatar-editor {
+	display: flex;
+	align-items: center;
+	gap: 12px;
 }
 
 .profile-header-editor {

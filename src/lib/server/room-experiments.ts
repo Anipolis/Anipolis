@@ -1,8 +1,16 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildTitleSearchFilter } from "$lib/server/queries";
+import { type RoomExitSurveyAggregateRow, summarizeRoomExitSurveyRows } from "$lib/server/room-exit-survey";
 import { createServiceRoleClient } from "$lib/server/supabase-admin";
 import type { Database } from "$lib/supabase/database.types";
-import type { RoomExperimentAnimeSearchResult, RoomExperimentDashboardRun, RoomExperimentRun } from "$lib/types";
+import type {
+	RoomExitSurveyComparisonWithX,
+	RoomExitSurveyNextParticipation,
+	RoomExitSurveySummary,
+	RoomExperimentAnimeSearchResult,
+	RoomExperimentDashboardRun,
+	RoomExperimentRun,
+} from "$lib/types";
 import {
 	calculateRoomExperimentMetrics,
 	type ExperimentPostCandidate,
@@ -85,6 +93,13 @@ type SessionInfo = {
 	posting_closes_at: string | null;
 };
 
+type SurveyRow = RoomExitSurveyAggregateRow & {
+	experiment_run_id: string;
+	next_participation: RoomExitSurveyNextParticipation | null;
+	comparison_with_x: RoomExitSurveyComparisonWithX | null;
+	session: SessionInfo | SessionInfo[] | null;
+};
+
 export function createRoomExperimentServiceClient(): SupabaseClient<Database> | null {
 	try {
 		return createServiceRoleClient();
@@ -99,7 +114,35 @@ function firstMaybeArray<T>(value: T | T[] | null): T | null {
 	return value;
 }
 
-function toDashboardRun(row: RunRow, rooms: ExperimentRoomInput[]): RoomExperimentDashboardRun {
+export function isSchemaUnavailableError(error: unknown): boolean {
+	if (!error || typeof error !== "object") return false;
+	const record = error as Record<string, unknown>;
+	const code = typeof record["code"] === "string" ? record["code"] : "";
+	const message = typeof record["message"] === "string" ? record["message"].toLowerCase() : "";
+	const couldNotFindSchemaObject =
+		message.includes("could not find") &&
+		(message.includes("table") ||
+			message.includes("column") ||
+			message.includes("relationship") ||
+			message.includes("schema"));
+	return (
+		code === "42P01" ||
+		code === "42703" ||
+		code === "PGRST200" ||
+		code === "PGRST204" ||
+		code === "PGRST205" ||
+		message.includes("schema cache") ||
+		message.includes("does not exist") ||
+		couldNotFindSchemaObject
+	);
+}
+
+function toDashboardRun(
+	row: RunRow,
+	rooms: ExperimentRoomInput[],
+	surveyBySession: Map<string, RoomExitSurveySummary>,
+	survey: RoomExitSurveySummary,
+): RoomExperimentDashboardRun {
 	const anime = firstMaybeArray(row.anime);
 	const metrics = calculateRoomExperimentMetrics({
 		id: row.id,
@@ -117,7 +160,13 @@ function toDashboardRun(row: RunRow, rooms: ExperimentRoomInput[]): RoomExperime
 		label: row.label,
 		notes: row.notes,
 		summary: metrics.summary,
-		rooms: metrics.rooms.sort((a, b) => (a.scheduled_at ?? "").localeCompare(b.scheduled_at ?? "")),
+		survey,
+		rooms: metrics.rooms
+			.sort((a, b) => (a.scheduled_at ?? "").localeCompare(b.scheduled_at ?? ""))
+			.map((room) => ({
+				...room,
+				survey: surveyBySession.get(room.broadcast_room_session_id) ?? summarizeRoomExitSurveyRows([]),
+			})),
 	};
 }
 
@@ -165,6 +214,39 @@ function getSessionFromPost(row: PostRow): SessionInfo | null {
 		: null;
 }
 
+function getSessionFromSurvey(row: SurveyRow): SessionInfo | null {
+	const session = firstMaybeArray(row.session);
+	return session
+		? {
+				id: session.id,
+				room_date: session.room_date,
+				room_kind: session.room_kind,
+				room_key: session.room_key,
+				scheduled_at: session.scheduled_at,
+				posting_closes_at: session.posting_closes_at,
+			}
+		: null;
+}
+
+function toSurveyAggregateRow(row: SurveyRow): RoomExitSurveyAggregateRow {
+	const session = getSessionFromSurvey(row);
+	return {
+		broadcast_room_session_id: row.broadcast_room_session_id,
+		room_title: session ? roomTitle(session) : null,
+		submitted_at: row.submitted_at,
+		stayed_seconds: row.stayed_seconds,
+		post_count: row.post_count,
+		overall_rating: row.overall_rating,
+		shared_experience_rating: row.shared_experience_rating,
+		readability_rating: row.readability_rating,
+		next_participation: row.next_participation,
+		comparison_with_x: row.comparison_with_x,
+		good_points: row.good_points,
+		improvement_points: row.improvement_points,
+		skipped: row.skipped,
+	};
+}
+
 export async function getActiveRoomExperimentRunForAnime(
 	supabase: SupabaseClient<Database>,
 	animeId: string | number,
@@ -209,9 +291,12 @@ export async function searchRoomExperimentAnime(
 			.limit(10),
 		supabase.from("room_experiment_runs").select("id, anime_id").is("ended_at", null),
 	]);
-	if (animeError || activeRunsError) {
+	if (animeError || (activeRunsError && !isSchemaUnavailableError(activeRunsError))) {
 		console.error("room experiment anime search query failed:", { animeError, activeRunsError });
 		throw new Error("room experiment anime search query failed");
+	}
+	if (activeRunsError) {
+		console.warn("room experiment active run lookup unavailable:", activeRunsError);
 	}
 
 	const activeRunByAnime = new Map(
@@ -444,6 +529,10 @@ export async function getRoomExperimentDashboardData(
 			.order("started_at", { ascending: false }),
 	]);
 	if (runsError) {
+		if (isSchemaUnavailableError(runsError)) {
+			console.warn("room experiment dashboard unavailable:", runsError);
+			return { runs: [], searchResults };
+		}
 		console.error("room experiment runs query failed:", runsError);
 		throw new Error("room experiment runs query failed");
 	}
@@ -459,6 +548,7 @@ export async function getRoomExperimentDashboardData(
 		{ data: visitRows, error: visitsError },
 		{ data: postRows, error: postsError },
 		{ data: sessionRows, error: sessionsError },
+		{ data: surveyRows, error: surveysError },
 	] = await Promise.all([
 		supabase
 			.from("room_experiment_visits")
@@ -479,9 +569,24 @@ export async function getRoomExperimentDashboardData(
 			.select("id, anime_id, room_date, room_kind, room_key, scheduled_at, posting_closes_at")
 			.in("anime_id", animeIds)
 			.eq("room_kind", "episode"),
+		supabase
+			.from("room_exit_survey_responses")
+			.select(
+				"experiment_run_id, broadcast_room_session_id, submitted_at, stayed_seconds, post_count, overall_rating, shared_experience_rating, readability_rating, next_participation, comparison_with_x, good_points, improvement_points, skipped, session:broadcast_room_sessions!room_exit_survey_responses_broadcast_room_session_id_fkey ( id, room_date, room_kind, room_key, scheduled_at, posting_closes_at )",
+			)
+			.in("experiment_run_id", runIds),
 	]);
-	if (visitsError || postsError || sessionsError) {
-		console.error("room experiment dashboard query failed:", { visitsError, postsError, sessionsError });
+	const surveysUnavailable = Boolean(surveysError && isSchemaUnavailableError(surveysError));
+	if (surveysUnavailable) {
+		console.warn("room exit survey dashboard data unavailable:", surveysError);
+	}
+	if (visitsError || postsError || sessionsError || (surveysError && !surveysUnavailable)) {
+		console.error("room experiment dashboard query failed:", {
+			visitsError,
+			postsError,
+			sessionsError,
+			surveysError,
+		});
 		throw new Error("room experiment dashboard query failed");
 	}
 
@@ -494,6 +599,10 @@ export async function getRoomExperimentDashboardData(
 		return session?.room_kind === "episode";
 	});
 	const sessions = ((sessionRows ?? []) as unknown as SessionInfo[]).filter((row) => row.room_kind === "episode");
+	const surveys = ((surveysUnavailable ? [] : (surveyRows ?? [])) as unknown as SurveyRow[]).filter((row) => {
+		const session = getSessionFromSurvey(row);
+		return session?.room_kind === "episode";
+	});
 
 	return {
 		searchResults,
@@ -501,6 +610,8 @@ export async function getRoomExperimentDashboardData(
 			const sessionById = new Map<string, SessionInfo>();
 			const visitsBySession = new Map<string, ExperimentVisitInput[]>();
 			const postsBySession = new Map<string, ExperimentPostCandidate[]>();
+			const surveyRowsBySession = new Map<string, RoomExitSurveyAggregateRow[]>();
+			const runSurveyRows = surveys.filter((row) => row.experiment_run_id === run.id).map(toSurveyAggregateRow);
 
 			for (const session of sessions) {
 				if (shouldIncludeSessionForRun(session, run)) sessionById.set(session.id, session);
@@ -529,6 +640,19 @@ export async function getRoomExperimentDashboardData(
 				postsBySession.set(session.id, group);
 			}
 
+			for (const survey of runSurveyRows) {
+				const group = surveyRowsBySession.get(survey.broadcast_room_session_id) ?? [];
+				group.push(survey);
+				surveyRowsBySession.set(survey.broadcast_room_session_id, group);
+			}
+
+			const surveyBySession = new Map(
+				[...surveyRowsBySession.entries()].map(([sessionId, rows]) => [
+					sessionId,
+					summarizeRoomExitSurveyRows(rows),
+				]),
+			);
+
 			const rooms = [...sessionById.values()].map((session) => ({
 				broadcast_room_session_id: session.id,
 				room_title: roomTitle(session),
@@ -543,7 +667,7 @@ export async function getRoomExperimentDashboardData(
 				}),
 			}));
 
-			return toDashboardRun(run, rooms);
+			return toDashboardRun(run, rooms, surveyBySession, summarizeRoomExitSurveyRows(runSurveyRows));
 		}),
 	};
 }

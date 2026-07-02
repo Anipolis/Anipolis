@@ -31,7 +31,19 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	const { user } = await safeGetSession();
 	const isAdmin = user ? await isAdminUser(supabase, user.id) : false;
 	const filters = parseAnimeListFilters(url.searchParams);
-	const { tab, search, genre, genres, season, broadcastYear, broadcastSeason, studio, producer, source } = filters;
+	const {
+		tab,
+		search,
+		genre,
+		genres,
+		season,
+		broadcastYear,
+		broadcastSeason,
+		broadcastSeasons,
+		studio,
+		producer,
+		source,
+	} = filters;
 
 	let animes: Anime[];
 
@@ -48,6 +60,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 					season,
 					broadcastYear,
 					broadcastSeason,
+					broadcastSeasons,
 					studio,
 					producer,
 					source,
@@ -93,6 +106,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		season,
 		broadcastYear,
 		broadcastSeason,
+		broadcastSeasons,
 		studio,
 		producer,
 		source,

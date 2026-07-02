@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fail } from "@sveltejs/kit";
 import type { Database } from "$lib/supabase/database.types";
+import type { BroadcastOverrideKind } from "$lib/utils/broadcast-episodes";
 
 type AnimeWriteResult = { success: true; animeId: string } | ReturnType<typeof fail<{ message: string }>>;
 
@@ -61,6 +62,19 @@ function normalizeOptionalEpisodeIncrement(value: string | null | undefined) {
 	const increment = Number(raw);
 	if (!Number.isInteger(increment) || increment < 0 || increment > 99) return undefined;
 	return increment;
+}
+
+function normalizeOverrideKind(value: string | null | undefined): BroadcastOverrideKind {
+	switch (value) {
+		case "cancelled":
+		case "recap":
+		case "time_change":
+		case "marathon":
+		case "custom":
+			return value;
+		default:
+			return "custom";
+	}
 }
 
 function toArr(vals: FormDataEntryValue[]) {
@@ -221,7 +235,8 @@ export async function addBroadcastOverrideAction(
 		return fail(400, { message: "投稿終了の延長時間は0〜1440分の整数で入力してください" });
 	}
 
-	const isCancelled = fd.get("is_cancelled") === "on";
+	const overrideKind = normalizeOverrideKind(fd.get("override_kind") as string | null);
+	const isCancelled = overrideKind === "cancelled" || fd.get("is_cancelled") === "on";
 
 	const episodeStart = normalizeOptionalEpisode(fd.get("episode_start") as string | null);
 	if (episodeStart === undefined) {
@@ -233,7 +248,7 @@ export async function addBroadcastOverrideAction(
 		return fail(400, { message: "対象話数（終了）は1以上の整数で入力してください" });
 	}
 
-	const episodeCountIncrement = normalizeOptionalEpisodeIncrement(fd.get("episode_count_increment") as string | null);
+	let episodeCountIncrement = normalizeOptionalEpisodeIncrement(fd.get("episode_count_increment") as string | null);
 	if (episodeCountIncrement === undefined) {
 		return fail(400, { message: "話数カウントの進み方は0以上の整数で入力してください" });
 	}
@@ -246,22 +261,45 @@ export async function addBroadcastOverrideAction(
 		return fail(400, { message: "対象話数（終了）は開始以上の値を入力してください" });
 	}
 
+	let episodeLabel = nullableText(fd, "episode_label");
+	let announcementLabel = nullableText(fd, "announcement_label");
+	if (overrideKind === "recap") {
+		episodeLabel ??= "総集編";
+		episodeCountIncrement ??= 0;
+	}
+	if (overrideKind === "cancelled") {
+		announcementLabel ??= "今週は放送休止";
+	}
+	if (
+		overrideKind === "time_change" &&
+		broadcastTime == null &&
+		durationMinutes == null &&
+		preOpenMinutes == null &&
+		postCloseMinutes == null
+	) {
+		return fail(400, { message: "放送時間変更では変更後の時刻・放送時間・投稿時間のいずれかを入力してください" });
+	}
+	if (overrideKind === "marathon" && (episodeStart == null || episodeEnd == null || episodeEnd <= episodeStart)) {
+		return fail(400, { message: "一挙放送では対象話数の開始より大きい終了話数を入力してください" });
+	}
+
 	// biome-ignore lint/suspicious/noExplicitAny: broadcast_room_overrides not yet in generated types
 	const writer = supabase as SupabaseClient<any>;
 	const { error } = await writer.from("broadcast_room_overrides").upsert(
 		{
 			anime_id: Number(animeId),
 			room_date: roomDate,
+			override_kind: overrideKind,
 			broadcast_time: broadcastTime,
 			duration_minutes: durationMinutes,
 			pre_open_minutes: preOpenMinutes,
 			post_close_minutes: postCloseMinutes,
 			episode_start: episodeStart,
 			episode_end: episodeEnd,
-			episode_label: nullableText(fd, "episode_label"),
+			episode_label: episodeLabel,
 			episode_count_increment: episodeCountIncrement,
 			is_cancelled: isCancelled,
-			announcement_label: nullableText(fd, "announcement_label"),
+			announcement_label: announcementLabel,
 			note: nullableText(fd, "note"),
 		},
 		{ onConflict: "anime_id,room_date" },

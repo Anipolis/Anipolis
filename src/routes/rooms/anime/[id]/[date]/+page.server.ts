@@ -13,6 +13,7 @@ import {
 	getBroadcastRoomPosts,
 	getBroadcastRoomSession,
 } from "$lib/server/queries";
+import { getRoomExitSurveyLoadState, ROOM_EXIT_SURVEY_VERSION } from "$lib/server/room-exit-survey";
 import {
 	createRoomExperimentServiceClient,
 	getActiveRoomExperimentRunForAnime as getActiveExperimentRun,
@@ -85,11 +86,12 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 
 	const hashtag = roomHashtag(anime);
 	const roomExperimentSupabase = user ? createRoomExperimentServiceClient() : null;
-	const [posts, trending, animeTrending, roomExperimentRun] = await Promise.all([
+	const [posts, trending, animeTrending, roomExperimentRun, roomExitSurveyLoadState] = await Promise.all([
 		getBroadcastRoomPosts(supabase, session.id, user?.id ?? null, { limit: 100, ascending: true }),
 		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
 		getAnimeRankingTrending(supabase, 5),
 		roomExperimentSupabase ? getActiveExperimentRun(roomExperimentSupabase, anime.id) : Promise.resolve(null),
+		getRoomExitSurveyLoadState(supabase, user?.id, session.id),
 	]);
 
 	return {
@@ -112,6 +114,12 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 		roomExperiment: {
 			enabled: Boolean(user && roomExperimentRun),
 			sessionId: roomExperimentRun ? session.id : undefined,
+		},
+		roomExitSurvey: {
+			experimentRunId: roomExperimentRun?.id ?? null,
+			alreadyAnswered: roomExitSurveyLoadState.alreadyAnswered,
+			postCount: roomExitSurveyLoadState.postCount,
+			surveyVersion: ROOM_EXIT_SURVEY_VERSION,
 		},
 	};
 };
@@ -146,9 +154,7 @@ export const actions: Actions = {
 		const content = stripTrailingRoomHashtag(rawContent, hashtag);
 		if (!content) return fail(400, { message: "投稿内容を入力してください" });
 
-		return insertPostWithHashtags(supabase, user.id, content, null, [], anime.id, null, null, session.id, null, [
-			hashtag,
-		]);
+		return insertPostWithHashtags(supabase, user.id, content, null, [], anime.id, null, null, session.id, null, []);
 	},
 
 	deletePost: async ({ request, locals: { supabase, safeGetSession } }) => {

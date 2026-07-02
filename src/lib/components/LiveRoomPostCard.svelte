@@ -12,9 +12,10 @@ interface Props {
 	post: Post;
 	currentUserId?: string | null;
 	broadcastStartAt?: string | null;
+	timelineTimeMode?: boolean;
 }
 
-let { post, currentUserId = null, broadcastStartAt = null }: Props = $props();
+let { post, currentUserId = null, broadcastStartAt = null, timelineTimeMode = false }: Props = $props();
 
 let expanded = $state(false);
 let likeCountLocal = $state<number | null>(null);
@@ -60,10 +61,27 @@ function stop(event: Event) {
 	event.stopPropagation();
 }
 
+function isInteractiveEventTarget(event: Event) {
+	const target = event.target;
+	return target instanceof Element && !!target.closest("a, button, input, textarea, select, label, form");
+}
+
 async function toggleExpanded() {
 	expanded = !expanded;
 	showKebabMenu = false;
 	if (expanded) await loadRecentReplies();
+}
+
+function handleRowClick(event: MouseEvent) {
+	if (isInteractiveEventTarget(event)) return;
+	void toggleExpanded();
+}
+
+function handleRowKeydown(event: KeyboardEvent) {
+	if (event.key !== "Enter" && event.key !== " ") return;
+	if (isInteractiveEventTarget(event)) return;
+	event.preventDefault();
+	void toggleExpanded();
 }
 
 async function loadRecentReplies() {
@@ -201,7 +219,14 @@ async function submitReport(event: MouseEvent) {
 		</form>
 	{/if}
 
-	<div class="live-post-row">
+	<div
+		class="live-post-row"
+		role="button"
+		tabindex="0"
+		aria-expanded={expanded}
+		onclick={handleRowClick}
+		onkeydown={handleRowKeydown}
+	>
 		<a href="/profile/{post.username}" class="live-avatar" aria-label={displayName} onclick={stop}>
 			<UserAvatar src={post.avatar_url} username={post.username} size="xs" />
 		</a>
@@ -221,58 +246,86 @@ async function submitReport(event: MouseEvent) {
 			{/each}
 		</p>
 		<span class="live-time">
-			{#if broadcastRelativeTime}
+			{#if timelineTimeMode}
+				<time datetime={post.created_at} title={absoluteTimeStr}>{relativeTime}</time>
+			{:else if broadcastRelativeTime}
 				<BroadcastTimestamp relativeTime={broadcastRelativeTime} absoluteTime={absoluteTimeStr} />
 			{:else}
 				<time datetime={post.created_at} title={absoluteTimeStr}>{relativeTime}</time>
 				<span class="live-time-abs">({absoluteTimeStr})</span>
 			{/if}
 		</span>
-		<div class="live-row-actions">
-			{#if expanded}
-				<button
-					type="button"
-					class="live-collapse"
-					aria-expanded={expanded}
-					aria-label="閉じる"
-					onclick={(event) => { event.stopPropagation(); void toggleExpanded(); }}
+		{#if expanded}
+			<button
+				type="button"
+				class="live-collapse"
+				aria-label="閉じる"
+				onclick={(event) => { event.stopPropagation(); void toggleExpanded(); }}
+			>
+				<svg
+					width="15"
+					height="15"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
 				>
-					▲
-				</button>
-			{:else}
-				<form method="POST" action="?/like" use:enhance={handleLike} class="live-like-form">
-					<input type="hidden" name="post_id" value={post.id}>
-					<button
-						type="submit"
-						class="live-like"
-						class:active={likedByMe}
-						disabled={!isLoggedIn}
-						aria-pressed={likedByMe}
-						aria-label={likedByMe ? 'いいねを取り消す' : 'いいね'}
-						onclick={stop}
+					<path d="m18 15-6-6-6 6" />
+				</svg>
+			</button>
+		{:else}
+			<form method="POST" action="?/like" use:enhance={handleLike} class="live-like-form">
+				<input type="hidden" name="post_id" value={post.id}>
+				<button
+					type="submit"
+					class="live-like"
+					class:active={likedByMe}
+					disabled={!isLoggedIn}
+					aria-pressed={likedByMe}
+					aria-label={likedByMe ? 'いいねを取り消す' : 'いいね'}
+					onclick={stop}
+				>
+					<svg
+						width="15"
+						height="15"
+						viewBox="0 0 24 24"
+						fill={likedByMe ? 'currentColor' : 'none'}
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
 					>
-						<span class="i-lucide-heart" aria-hidden="true"></span>
-						<span>{likeCount}</span>
-					</button>
-				</form>
-				<button
-					type="button"
-					class="live-expand-toggle"
-					aria-expanded={expanded}
-					aria-label="詳細を開く"
-					onclick={(event) => { event.stopPropagation(); void toggleExpanded(); }}
-				>
-					▼
+						<path
+							d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
+						/>
+					</svg>
+					<span>{likeCount}</span>
 				</button>
-			{/if}
-		</div>
+			</form>
+		{/if}
 	</div>
 
 	{#if expanded}
 		<div class="live-detail">
 			<div class="live-actions" aria-label="投稿アクション">
-				<a href="/posts/{post.id}" class="live-action" aria-label="返信">
-					<span class="i-lucide-message-circle" aria-hidden="true"></span>
+				<a href="/posts/{post.id}" class="live-action live-action-reply" aria-label="返信">
+					<svg
+						width="15"
+						height="15"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
+					</svg>
 					{#if post.reply_count > 0}
 						<span>{post.reply_count}</span>
 					{/if}
@@ -281,13 +334,28 @@ async function submitReport(event: MouseEvent) {
 					<input type="hidden" name="post_id" value={post.id}>
 					<button
 						type="submit"
-						class="live-action"
+						class="live-action live-action-repost"
 						class:active={repostedByMe}
 						disabled={!isLoggedIn}
 						aria-pressed={repostedByMe}
 						aria-label={repostedByMe ? "リポストを取り消す" : "リポスト"}
 					>
-						<span class="i-lucide-repeat-2" aria-hidden="true"></span>
+						<svg
+							width="15"
+							height="15"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+						>
+							<path d="M17 1l4 4-4 4" />
+							<path d="M3 11V9a4 4 0 0 1 4-4h14" />
+							<path d="M7 23l-4-4 4-4" />
+							<path d="M21 13v2a4 4 0 0 1-4 4H3" />
+						</svg>
 						{#if repostCount > 0}
 							<span>{repostCount}</span>
 						{/if}
@@ -303,7 +371,21 @@ async function submitReport(event: MouseEvent) {
 						aria-pressed={likedByMe}
 						aria-label={likedByMe ? "いいねを取り消す" : "いいね"}
 					>
-						<span class="i-lucide-heart" aria-hidden="true"></span>
+						<svg
+							width="15"
+							height="15"
+							viewBox="0 0 24 24"
+							fill={likedByMe ? 'currentColor' : 'none'}
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+						>
+							<path
+								d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
+							/>
+						</svg>
 						{#if likeCount > 0}
 							<span>{likeCount}</span>
 						{/if}
@@ -313,13 +395,25 @@ async function submitReport(event: MouseEvent) {
 					<input type="hidden" name="post_id" value={post.id}>
 					<button
 						type="submit"
-						class="live-action"
+						class="live-action live-action-bookmark"
 						class:active={bookmarkedByMe}
 						disabled={!isLoggedIn}
 						aria-pressed={bookmarkedByMe}
 						aria-label={bookmarkedByMe ? "ブックマークを解除" : "ブックマーク"}
 					>
-						<span class="i-lucide-bookmark" aria-hidden="true"></span>
+						<svg
+							width="15"
+							height="15"
+							viewBox="0 0 24 24"
+							fill={bookmarkedByMe ? 'currentColor' : 'none'}
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+						>
+							<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+						</svg>
 					</button>
 				</form>
 				{#if isLoggedIn}
@@ -518,6 +612,7 @@ async function submitReport(event: MouseEvent) {
 	row-gap: 3px;
 	min-height: 52px;
 	padding: 6px var(--live-row-pad-x);
+	cursor: pointer;
 }
 
 .live-post-row:focus-visible {
@@ -622,22 +717,15 @@ async function submitReport(event: MouseEvent) {
 	font-size: 10px;
 }
 
-.live-row-actions {
+.live-like-form {
 	grid-area: action;
 	display: inline-flex;
 	align-self: center;
-	align-items: center;
 	justify-content: flex-end;
-	min-width: 52px;
-}
-
-.live-like-form {
-	display: inline-flex;
 }
 
 .live-like,
-.live-collapse,
-.live-expand-toggle {
+.live-collapse {
 	grid-area: action;
 	align-self: center;
 	display: inline-flex;
@@ -656,15 +744,6 @@ async function submitReport(event: MouseEvent) {
 	cursor: pointer;
 }
 
-.live-row-actions .live-like {
-	width: 34px;
-}
-
-.live-expand-toggle {
-	width: 18px;
-	color: var(--color-text-secondary);
-}
-
 .live-like:hover,
 .live-like.active,
 .live-action-like:hover,
@@ -672,12 +751,17 @@ async function submitReport(event: MouseEvent) {
 	color: #f43f5e;
 }
 
-.live-like [class^="i-lucide"] {
+.live-like svg,
+.live-collapse svg {
 	flex-shrink: 0;
 }
 
 .live-collapse {
 	color: var(--color-text-secondary);
+}
+
+.live-collapse svg {
+	transform: translateX(-5px);
 }
 
 .live-detail {
@@ -693,8 +777,7 @@ async function submitReport(event: MouseEvent) {
 }
 
 .live-actions > .live-action:first-child {
-	min-width: 23px;
-	padding-left: 0;
+	margin-left: -7px;
 }
 
 .live-actions form {
@@ -719,10 +802,42 @@ async function submitReport(event: MouseEvent) {
 	cursor: pointer;
 }
 
-.live-action:hover,
-.live-action.active {
+.live-action:hover {
 	background: color-mix(in srgb, var(--color-accent) 10%, transparent);
 	color: var(--color-text);
+}
+
+.live-action.active {
+	color: var(--color-text-muted);
+}
+
+.live-action-reply:hover {
+	background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+	color: var(--color-accent);
+	text-decoration: none;
+}
+
+.live-action-repost:not(:disabled):hover {
+	background: rgba(34, 197, 94, 0.1);
+	color: #22c55e;
+}
+
+.live-action-repost.active {
+	color: #22c55e;
+}
+
+.live-action-like:not(:disabled):hover {
+	background: rgba(244, 63, 94, 0.1);
+	color: #f43f5e;
+}
+
+.live-action-like:hover,
+.live-action-like.active {
+	color: #f43f5e;
+}
+
+.live-action-bookmark.active {
+	color: var(--color-text-muted);
 }
 
 .live-action:disabled,
@@ -731,6 +846,7 @@ async function submitReport(event: MouseEvent) {
 	opacity: 0.5;
 }
 
+.live-action svg,
 .live-action [class^="i-lucide"] {
 	width: 15px;
 	height: 15px;

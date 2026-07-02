@@ -183,7 +183,7 @@ const GENRE_JA_BY_EN: Record<string, string> = {
 	"Sci-Fi": "SF",
 	"Slice of Life": "日常",
 	Sports: "スポーツ",
-	Supernatural: "超自然",
+	Supernatural: "オカルト",
 	Suspense: "サスペンス",
 	"Adult Cast": "大人キャスト",
 	Anthropomorphic: "擬人化",

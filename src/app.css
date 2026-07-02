@@ -92,6 +92,11 @@ html {
 	scrollbar-gutter: stable;
 }
 
+html.room-scroll-lock {
+	height: 100%;
+	overflow: hidden;
+}
+
 body {
 	background: var(--color-bg);
 	color: var(--color-text);
@@ -103,6 +108,41 @@ body {
 	width: 100%;
 	overflow-x: clip;
 	overscroll-behavior-x: none;
+}
+
+:where(html.room-scroll-lock) body {
+	height: 100%;
+	overflow: hidden;
+}
+
+:where(html.room-scroll-lock) .app-layout,
+:where(html.room-scroll-lock) .app-main {
+	height: 100dvh;
+	min-height: 100dvh;
+	overflow: hidden;
+}
+
+.scrollbar-thin-muted {
+	scrollbar-width: thin;
+	scrollbar-color: color-mix(in srgb, var(--color-text-muted) 28%, transparent) transparent;
+}
+
+.scrollbar-thin-muted::-webkit-scrollbar {
+	width: 6px;
+	height: 6px;
+}
+
+.scrollbar-thin-muted::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+.scrollbar-thin-muted::-webkit-scrollbar-thumb {
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--color-text-muted) 24%, transparent);
+}
+
+.scrollbar-thin-muted::-webkit-scrollbar-thumb:hover {
+	background: color-mix(in srgb, var(--color-text-muted) 42%, transparent);
 }
 
 html[data-swipe-direction="next"]::view-transition-old(root) {
@@ -204,14 +244,19 @@ textarea {
 
 .page-container {
 	width: 100%;
-	max-width: var(--content-max);
+	max-width: calc(var(--content-max) + 48px);
 	margin: 0 auto;
-	padding: 0;
+	padding: calc(var(--nav-height) + 24px) 32px 48px 16px;
 	display: flex;
 	gap: 20px;
-	padding-top: calc(var(--nav-height) + 24px);
-	padding-bottom: 48px;
 	align-items: flex-start;
+}
+
+.page-container:not(.room-page-container):has(> .sidebar-column) {
+	max-width: none;
+	margin: 0;
+	padding-right: max(24px, env(safe-area-inset-right));
+	padding-left: max(16px, calc((100% - (var(--content-max) + 48px)) / 2 + 16px));
 }
 
 .feed-column {
@@ -221,8 +266,13 @@ textarea {
 
 .sidebar-column {
 	flex: 0 0 var(--sidebar-width);
+	min-width: 0;
 	position: sticky;
 	top: calc(var(--nav-height) + 24px);
+}
+
+.page-container:not(.room-page-container):has(> .sidebar-column) > .sidebar-column {
+	flex: 1 1 var(--sidebar-width);
 }
 
 @media (max-width: 960px) {
@@ -1015,6 +1065,7 @@ textarea {
 /* --- Trending Panel --- */
 
 .trending-panel {
+	min-width: 0;
 	background: var(--color-surface);
 	border: 1px solid var(--color-border);
 	border-radius: var(--radius);
@@ -1072,13 +1123,18 @@ textarea {
 
 .trending-name {
 	flex: 1;
+	min-width: 0;
 	font-weight: 600;
 	font-size: 14px;
 	color: var(--color-accent);
 	margin-left: 8px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .trending-count {
+	flex-shrink: 0;
 	font-size: 12px;
 	color: var(--color-text-muted);
 }
@@ -1105,6 +1161,19 @@ textarea {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+.trending-panel-footer-link {
+	display: block;
+	margin-top: 12px;
+	padding: 0 4px;
+	color: var(--color-text-muted);
+	font-size: 12px;
+	text-decoration: none;
+}
+
+.trending-panel-footer-link:hover {
+	text-decoration: underline;
 }
 
 /* --- Section title --- */
@@ -1297,10 +1366,22 @@ textarea {
 }
 
 .profile-header-content {
+	padding: 16px 24px 24px;
+}
+
+.profile-header-top {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	margin-bottom: 12px;
+}
+
+.profile-header-actions {
 	display: flex;
 	align-items: center;
-	gap: 16px;
-	padding: 24px;
+	gap: 8px;
+	padding-top: 4px;
+	flex-shrink: 0;
 }
 
 .profile-info {
@@ -1861,8 +1942,8 @@ textarea {
 	grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
 	align-items: center;
 	gap: 0;
-	margin-top: 10px;
-	padding-top: 8px;
+	margin-top: 2px;
+	padding-top: 0;
 }
 
 .post-footer-item {
@@ -1882,6 +1963,11 @@ textarea {
 
 .post-bookmark-btn {
 	padding-right: 0;
+}
+
+.post-bookmark-btn:not(:disabled):hover {
+	color: var(--color-text);
+	background: color-mix(in srgb, var(--color-accent) 10%, transparent);
 }
 
 /* --- Post action buttons (reply / repost / like) --- */
@@ -1972,11 +2058,17 @@ textarea {
 .reaction-count-button {
 	cursor: pointer;
 	border-radius: var(--radius-sm);
+	margin-left: 0;
 }
 
 .reaction-count-static {
 	height: 28px;
 	margin-left: 2px;
+}
+
+.reaction-count-static.has-count {
+	margin-left: 0;
+	min-width: 28px;
 }
 
 .reaction-icon-hitbox {
@@ -2013,9 +2105,15 @@ textarea {
 	left: 0;
 }
 
+.post-reply-btn.reaction-icon-hitbox:hover,
 .post-repost-btn.reaction-icon-hitbox:not(:disabled):hover,
-.post-like-btn.reaction-icon-hitbox:not(:disabled):hover {
+.post-like-btn.reaction-icon-hitbox:not(:disabled):hover,
+.post-bookmark-btn.reaction-icon-hitbox:not(:disabled):hover {
 	background: none;
+}
+
+.post-reply-btn.reaction-icon-hitbox:hover::before {
+	background: color-mix(in srgb, var(--color-accent) 10%, transparent);
 }
 
 .post-repost-count.reaction-count-hitbox:hover {
@@ -2034,6 +2132,10 @@ textarea {
 
 .post-like-btn.reaction-icon-hitbox:not(:disabled):hover::before {
 	background: rgba(244, 63, 94, 0.1);
+}
+
+.post-bookmark-btn.reaction-icon-hitbox:not(:disabled):hover::before {
+	background: color-mix(in srgb, var(--color-accent) 10%, transparent);
 }
 
 .reaction-popover-backdrop {
@@ -3196,13 +3298,13 @@ form + .repost-menu-item {
 		padding: 6.5px;
 	}
 
-	/* Profile header: stack on mobile */
+	/* Profile header: compact padding on mobile */
 	.profile-header-content {
-		flex-direction: column;
-		align-items: center;
-		text-align: center;
-		padding: 16px;
-		gap: 12px;
+		padding: 12px 16px 20px;
+	}
+
+	.profile-header-top {
+		margin-bottom: 10px;
 	}
 
 	.profile-header-image {
@@ -3210,7 +3312,6 @@ form + .repost-menu-item {
 	}
 
 	.profile-stats {
-		justify-content: center;
 		gap: 16px;
 	}
 
