@@ -152,7 +152,7 @@ function shouldShowExitSurvey() {
 
 async function leaveRoom() {
 	sendRoomExperimentExit();
-	await goto(`/anime/${data.anime.id}`);
+	await goto("/");
 }
 
 async function handleExitRoom() {
