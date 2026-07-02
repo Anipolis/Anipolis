@@ -826,7 +826,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 					<input class="input" type="text" name="hashtag" required maxlength="50" placeholder="Anipolis視聴">
 				</label>
 				<div class="event-anime-field">
-					<span class="event-form-label">対象アニメ</span>
+					<span id="event-anime-field-label" class="event-form-label">対象アニメ</span>
 					{#if selectedEventAnime}
 						<input type="hidden" name="anime_id" value={selectedEventAnime.id}>
 						<div class="event-anime-selected">
@@ -854,6 +854,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 						<input
 							class="input"
 							type="search"
+							aria-labelledby="event-anime-field-label"
 							placeholder="アニメタイトルで検索"
 							bind:value={eventAnimeQuery}
 							oninput={handleEventAnimeQueryInput}
