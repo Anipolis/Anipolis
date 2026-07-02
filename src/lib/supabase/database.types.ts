@@ -1000,6 +1000,92 @@ export type Database = {
 					},
 				];
 			};
+			room_exit_survey_responses: {
+				Row: {
+					id: string;
+					user_id: string;
+					anime_id: number;
+					broadcast_room_session_id: string;
+					experiment_run_id: string;
+					survey_version: string;
+					stayed_seconds: number;
+					post_count: number;
+					overall_rating: number | null;
+					shared_experience_rating: number | null;
+					readability_rating: number | null;
+					next_participation: string | null;
+					comparison_with_x: string | null;
+					good_points: string | null;
+					improvement_points: string | null;
+					answers: Json;
+					skipped: boolean;
+					submitted_at: string;
+				};
+				Insert: {
+					id?: string;
+					user_id: string;
+					anime_id: number;
+					broadcast_room_session_id: string;
+					experiment_run_id: string;
+					survey_version?: string;
+					stayed_seconds?: number;
+					post_count?: number;
+					overall_rating?: number | null;
+					shared_experience_rating?: number | null;
+					readability_rating?: number | null;
+					next_participation?: string | null;
+					comparison_with_x?: string | null;
+					good_points?: string | null;
+					improvement_points?: string | null;
+					answers?: Json;
+					skipped?: boolean;
+					submitted_at?: string;
+				};
+				Update: {
+					survey_version?: string;
+					stayed_seconds?: number;
+					post_count?: number;
+					overall_rating?: number | null;
+					shared_experience_rating?: number | null;
+					readability_rating?: number | null;
+					next_participation?: string | null;
+					comparison_with_x?: string | null;
+					good_points?: string | null;
+					improvement_points?: string | null;
+					answers?: Json;
+					skipped?: boolean;
+				};
+				Relationships: [
+					{
+						foreignKeyName: "room_exit_survey_responses_user_id_fkey";
+						columns: ["user_id"];
+						isOneToOne: false;
+						referencedRelation: "profiles";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "room_exit_survey_responses_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "room_exit_survey_responses_broadcast_room_session_id_fkey";
+						columns: ["broadcast_room_session_id"];
+						isOneToOne: false;
+						referencedRelation: "broadcast_room_sessions";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "room_exit_survey_responses_experiment_run_id_fkey";
+						columns: ["experiment_run_id"];
+						isOneToOne: false;
+						referencedRelation: "room_experiment_runs";
+						referencedColumns: ["id"];
+					},
+				];
+			};
 			broadcast_notification_subscriptions: {
 				Row: {
 					user_id: string;

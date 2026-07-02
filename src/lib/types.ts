@@ -588,16 +588,18 @@ export interface RoomExperimentRoomMetric {
 	average_stay_seconds: number | null;
 	bounce_rate_under_60s: number | null;
 	early_exit_rate: number | null;
+	survey: RoomExitSurveySummary;
 }
 
 export type RoomExperimentSummaryMetric = Omit<
 	RoomExperimentRoomMetric,
-	"broadcast_room_session_id" | "room_title" | "episode_number" | "scheduled_at" | "posting_closes_at"
+	"broadcast_room_session_id" | "room_title" | "episode_number" | "scheduled_at" | "posting_closes_at" | "survey"
 >;
 
 export interface RoomExperimentDashboardRun extends RoomExperimentRun {
 	summary: RoomExperimentSummaryMetric;
 	rooms: RoomExperimentRoomMetric[];
+	survey: RoomExitSurveySummary;
 }
 
 export interface RoomExperimentAnimeSearchResult {
@@ -606,6 +608,37 @@ export interface RoomExperimentAnimeSearchResult {
 	cover_url: string | null;
 	room_type: string;
 	active_run_id: string | null;
+}
+
+export type RoomExitSurveyNextParticipation = "must_join" | "want_join" | "not_sure" | "not_really" | "not_join";
+
+export type RoomExitSurveyComparisonWithX =
+	| "anipolis_better"
+	| "anipolis_slightly_better"
+	| "same"
+	| "x_slightly_better"
+	| "x_better"
+	| "cannot_compare";
+
+export interface RoomExitSurveyComment {
+	submitted_at: string;
+	room_title: string | null;
+	good_points: string | null;
+	improvement_points: string | null;
+	stayed_seconds: number;
+	post_count: number;
+}
+
+export interface RoomExitSurveySummary {
+	response_count: number;
+	submitted_count: number;
+	skipped_count: number;
+	average_overall_rating: number | null;
+	average_shared_experience_rating: number | null;
+	average_readability_rating: number | null;
+	next_participation_counts: Record<RoomExitSurveyNextParticipation, number>;
+	comparison_with_x_counts: Record<RoomExitSurveyComparisonWithX, number>;
+	comments: RoomExitSurveyComment[];
 }
 
 export interface StoredAccount {

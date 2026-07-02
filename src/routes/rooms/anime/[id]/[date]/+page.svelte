@@ -2,9 +2,11 @@
 import type { SubmitFunction } from "@sveltejs/kit";
 import { onDestroy, onMount, tick } from "svelte";
 import { enhance } from "$app/forms";
+import { goto } from "$app/navigation";
+import ExitSurveyModal from "$lib/components/ExitSurveyModal.svelte";
 import LiveRoomPostCard from "$lib/components/LiveRoomPostCard.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
-import type { Post } from "$lib/types";
+import type { Post, RoomExitSurveyComparisonWithX, RoomExitSurveyNextParticipation } from "$lib/types";
 import type { ActionData, PageData } from "./$types";
 
 let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -25,6 +27,12 @@ let postOrder = $state<PostOrder>("oldest");
 let lastPostCount = $state(0);
 let isFollowingLatest = $state(true);
 let unreadNewPostCount = $state(0);
+let enteredAt = Date.now();
+let localSurveyPostCount = $state(0);
+let surveyOpen = $state(false);
+let surveyHandled = $state(false);
+let surveySubmitting = $state(false);
+let surveyErrorMessage: string | null = $state(null);
 let programmaticScrollTimer: ReturnType<typeof setTimeout> | undefined;
 
 const maxLen = 280;
@@ -36,6 +44,7 @@ const openLeadMinutes = $derived(Math.round((scheduledMs - openMs) / (60 * 1000)
 const isGlobalLobby = $derived(data.room.kind === "global");
 const charCount = $derived(postContent.length);
 const overLimit = $derived(charCount > maxLen);
+const surveyPostCount = $derived(data.roomExitSurvey.postCount + localSurveyPostCount);
 // ライブ更新で受信した投稿（load 由来の data.posts とは別に保持し、ID でマージする）
 let extraPosts = $state<Post[]>([]);
 let roomExperimentVisitId: string | null = null;
@@ -129,6 +138,94 @@ function sendRoomExperimentExit() {
 	void fetch(url, { method: "POST", keepalive: true }).catch(() => undefined);
 }
 
+function getStayedSeconds() {
+	return Math.max(0, Math.floor((Date.now() - enteredAt) / 1000));
+}
+
+function shouldShowExitSurvey() {
+	if (surveyHandled) return false;
+	if (!data.user) return false;
+	if (!data.roomExitSurvey.experimentRunId) return false;
+	if (data.roomExitSurvey.alreadyAnswered) return false;
+	return getStayedSeconds() >= 180 || surveyPostCount >= 1;
+}
+
+async function leaveRoom() {
+	sendRoomExperimentExit();
+	await goto("/");
+}
+
+async function handleExitRoom() {
+	if (shouldShowExitSurvey()) {
+		surveyErrorMessage = null;
+		surveyOpen = true;
+		return;
+	}
+	surveyHandled = true;
+	await leaveRoom();
+}
+
+type RoomExitSurveySubmitAnswers = {
+	overallRating: number;
+	sharedExperienceRating: number;
+	readabilityRating: number;
+	nextParticipation: RoomExitSurveyNextParticipation;
+	comparisonWithX: RoomExitSurveyComparisonWithX;
+	goodPoints: string | null;
+	improvementPoints: string | null;
+};
+
+async function postRoomExitSurvey(action: "submit" | "skip", answers?: RoomExitSurveySubmitAnswers) {
+	const res = await fetch("/api/room-exit-surveys", {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({
+			action,
+			anime_id: data.anime.id,
+			broadcast_room_session_id: data.room.session_id,
+			experiment_run_id: data.roomExitSurvey.experimentRunId,
+			survey_version: data.roomExitSurvey.surveyVersion,
+			stayed_seconds: getStayedSeconds(),
+			post_count: surveyPostCount,
+			...(answers ? { answers } : {}),
+		}),
+	});
+	if (!res.ok) throw new Error(`room exit survey failed: ${res.status}`);
+}
+
+async function handleSurveySubmit(answers: RoomExitSurveySubmitAnswers) {
+	if (surveySubmitting) return;
+	surveySubmitting = true;
+	surveyErrorMessage = null;
+	try {
+		await postRoomExitSurvey("submit", answers);
+		surveyHandled = true;
+		surveyOpen = false;
+		await leaveRoom();
+	} catch (error) {
+		console.error("room exit survey submit failed:", error);
+		surveyErrorMessage = "送信に失敗しました。通信状況を確認してもう一度お試しください。";
+	} finally {
+		surveySubmitting = false;
+	}
+}
+
+async function handleSurveySkip() {
+	if (surveySubmitting) return;
+	surveySubmitting = true;
+	surveyErrorMessage = null;
+	try {
+		await postRoomExitSurvey("skip");
+	} catch (error) {
+		console.error("room exit survey skip failed:", error);
+	} finally {
+		surveyHandled = true;
+		surveySubmitting = false;
+		surveyOpen = false;
+		await leaveRoom();
+	}
+}
+
 function handleRoomExperimentPageHide(event: PageTransitionEvent) {
 	if (event.persisted) {
 		clearRoomExperimentHeartbeatTimer();
@@ -168,8 +265,9 @@ function handleWindowPointerDown(event: PointerEvent) {
 
 const handleCreatePost: SubmitFunction = () => {
 	keepComposerFocused = true;
-	return async ({ update }) => {
+	return async ({ result, update }) => {
 		await update({ reset: false });
+		if (result.type === "success") localSurveyPostCount += 1;
 		await focusComposerTextarea({ preventScroll: true });
 	};
 };
@@ -379,6 +477,10 @@ function formatCompactDate(iso: string) {
 					<span class="event-timer-badge">受付中</span>
 				{/if}
 			{/if}
+			<button type="button" class="room-mobile-exit" onclick={handleExitRoom} aria-label="退出する">
+				<span class="i-lucide-log-out" aria-hidden="true"></span>
+				<span>退出</span>
+			</button>
 		</div>
 
 		{#if data.user && status === "open"}
@@ -525,6 +627,9 @@ function formatCompactDate(iso: string) {
 						{/if}
 					</div>
 					<div class="mt-2 flex items-center justify-end gap-2">
+						<button type="button" class="room-summary-exit shrink-0 text-xs transition-colors" onclick={handleExitRoom}>
+							退出する
+						</button>
 						<a href="/schedule" class="room-summary-back shrink-0 text-xs transition-colors">
 							← 週間スケジュールへ戻る
 						</a>
@@ -536,6 +641,15 @@ function formatCompactDate(iso: string) {
 		<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
 	</aside>
 </div>
+
+{#if surveyOpen}
+	<ExitSurveyModal
+		submitting={surveySubmitting}
+		errorMessage={surveyErrorMessage}
+		onSubmit={handleSurveySubmit}
+		onSkip={handleSurveySkip}
+	/>
+{/if}
 
 <style>
 .room-summary-card {
@@ -562,11 +676,23 @@ function formatCompactDate(iso: string) {
 }
 
 .room-summary-muted,
-.room-summary-back {
+.room-summary-exit {
 	color: var(--color-text-muted);
 }
 
-.room-summary-back:hover {
+.room-summary-exit {
+	border: 0;
+	background: transparent;
+	padding: 0;
+	font: inherit;
+	cursor: pointer;
+}
+
+.room-summary-back {
+	display: none;
+}
+
+.room-summary-exit:hover {
 	color: var(--color-accent-hover);
 }
 
@@ -741,6 +867,22 @@ function formatCompactDate(iso: string) {
 	color: var(--color-text-muted);
 	white-space: nowrap;
 	flex-shrink: 0;
+}
+.room-mobile-exit {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	flex-shrink: 0;
+	border: 0;
+	background: transparent;
+	color: var(--color-text-muted);
+	font: inherit;
+	font-size: 12px;
+	font-weight: 700;
+	cursor: pointer;
+}
+.room-mobile-exit:hover {
+	color: var(--color-accent-hover);
 }
 .room-mobile-timer.event-timer--open {
 	color: var(--color-primary);
