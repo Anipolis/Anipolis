@@ -334,9 +334,9 @@ form {
 	font-weight: 800;
 }
 .status-grid button[data-status="plan_to_watch"].active {
-	border-color: var(--status-plan);
-	background: var(--status-plan);
-	box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-plan) 20%, transparent);
+	border-color: var(--watch-status-plan);
+	background: var(--watch-status-plan);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--watch-status-plan) 20%, transparent);
 }
 .status-grid button[data-status="watching"].active {
 	border-color: var(--status-watching);
@@ -344,9 +344,9 @@ form {
 	box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-watching) 20%, transparent);
 }
 .status-grid button[data-status="completed"].active {
-	border-color: var(--color-accent);
-	background: var(--color-accent);
-	box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 20%, transparent);
+	border-color: var(--status-completed);
+	background: var(--status-completed);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-completed) 20%, transparent);
 }
 .status-grid button[data-status="on_hold"].active {
 	border-color: var(--status-on-hold);
