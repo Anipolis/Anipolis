@@ -9,6 +9,15 @@ type Props = {
 };
 
 let { open, rooms, onclose }: Props = $props();
+
+$effect(() => {
+	if (!open) return;
+	const handleKeydown = (event: KeyboardEvent) => {
+		if (event.key === "Escape") onclose();
+	};
+	window.addEventListener("keydown", handleKeydown);
+	return () => window.removeEventListener("keydown", handleKeydown);
+});
 </script>
 
 {#if open}

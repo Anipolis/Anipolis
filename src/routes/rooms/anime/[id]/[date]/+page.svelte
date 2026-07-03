@@ -488,7 +488,7 @@ function formatCompactDate(iso: string) {
 		<div class="room-mobile-bar">
 			<span class="room-mobile-title"
 				><a href="/anime/{data.anime.id}" class="anime-title-link">{data.anime.title}</a
-				><span class="hierarchy-separator"> ❯ </span>{roomNameLabel}</span
+				><span class="hierarchy-separator"> ❯ </span><span class="room-name-label">{roomNameLabel}</span></span
 			>
 			{#if !isGlobalLobby && status !== "ended"}
 				<span class="room-mobile-timer event-timer--{status}">{timerLabel}</span>
@@ -628,9 +628,10 @@ function formatCompactDate(iso: string) {
 				</a>
 				<div class="flex min-h-20 min-w-0 flex-1 flex-col justify-between pl-3">
 					<div class="min-w-0">
-						<h1 class="room-summary-title line-clamp-1 text-sm font-bold">
+						<h1 class="room-summary-title text-sm font-bold">
 							<a href="/anime/{data.anime.id}" class="anime-title-link">{data.anime.title}</a
-							><span class="hierarchy-separator"> ❯ </span>{roomNameLabel}
+							><span class="hierarchy-separator"> ❯ </span
+							><span class="room-name-label">{roomNameLabel}</span>
 						</h1>
 						{#if !isGlobalLobby}
 							<div class="mt-2 flex min-w-0 items-center gap-2">
@@ -692,7 +693,15 @@ function formatCompactDate(iso: string) {
 	display: inline-flex;
 	align-items: center;
 	min-width: 0;
+	overflow: hidden;
 	color: var(--color-text);
+}
+
+.room-name-label {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	min-width: 0;
 }
 
 .anime-title-link {
