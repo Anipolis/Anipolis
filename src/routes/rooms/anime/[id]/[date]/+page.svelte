@@ -42,6 +42,11 @@ const openMs = $derived(new Date(data.room.posting_opens_at).getTime());
 const closeMs = $derived(new Date(data.room.posting_closes_at).getTime());
 const openLeadMinutes = $derived(Math.round((scheduledMs - openMs) / (60 * 1000)));
 const isGlobalLobby = $derived(data.room.kind === "global");
+const roomNameLabel = $derived(
+	data.room.title.startsWith(data.anime.title)
+		? data.room.title.slice(data.anime.title.length).trim()
+		: data.room.title,
+);
 const charCount = $derived(postContent.length);
 const overLimit = $derived(charCount > maxLen);
 const surveyPostCount = $derived(data.roomExitSurvey.postCount + localSurveyPostCount);
@@ -481,8 +486,11 @@ function formatCompactDate(iso: string) {
 <div class="page-container room-page-container">
 	<div class="feed-column">
 		<div class="room-mobile-bar">
-			<span class="room-mobile-title">{data.room.title}</span>
-			{#if !isGlobalLobby}
+			<span class="room-mobile-title"
+				><a href="/anime/{data.anime.id}" class="anime-title-link">{data.anime.title}</a
+				><span class="hierarchy-separator"> ❯ </span>{roomNameLabel}</span
+			>
+			{#if !isGlobalLobby && status !== "ended"}
 				<span class="room-mobile-timer event-timer--{status}">{timerLabel}</span>
 				{#if status === "open"}
 					<span class="event-timer-badge">受付中</span>
@@ -543,7 +551,7 @@ function formatCompactDate(iso: string) {
 			<div class="card anime-room-login">投稿受付は放送開始{openLeadMinutes}分前から始まります。</div>
 		{:else}
 			<div class="card anime-room-login">
-				このルームの投稿受付は終了しました。<a href="/?quote_anime={data.anime.id}">通常投稿で感想を残す</a>
+				このルームの投稿受付は終了しました。<a href="/?quote_anime={data.anime.id}">引用投稿で感想を残す</a>
 			</div>
 		{/if}
 
@@ -558,7 +566,7 @@ function formatCompactDate(iso: string) {
 				aria-pressed={postOrder === "oldest"}
 				onclick={() => setPostOrder("oldest")}
 			>
-				古い順
+				時系列順
 			</button>
 			<button
 				type="button"
@@ -620,7 +628,10 @@ function formatCompactDate(iso: string) {
 				</a>
 				<div class="flex min-h-20 min-w-0 flex-1 flex-col justify-between pl-3">
 					<div class="min-w-0">
-						<h1 class="room-summary-title line-clamp-1 text-sm font-bold">{data.room.title}</h1>
+						<h1 class="room-summary-title line-clamp-1 text-sm font-bold">
+							<a href="/anime/{data.anime.id}" class="anime-title-link">{data.anime.title}</a
+							><span class="hierarchy-separator"> ❯ </span>{roomNameLabel}
+						</h1>
 						{#if !isGlobalLobby}
 							<div class="mt-2 flex min-w-0 items-center gap-2">
 								{#if status === "ended"}
@@ -678,7 +689,34 @@ function formatCompactDate(iso: string) {
 }
 
 .room-summary-title {
+	display: inline-flex;
+	align-items: center;
+	min-width: 0;
 	color: var(--color-text);
+}
+
+.anime-title-link {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	min-width: 0;
+	text-decoration: none;
+	color: inherit;
+	padding: 4px 2px;
+	margin: -4px -2px;
+	transition: opacity 0.2s;
+}
+
+.anime-title-link:hover,
+.anime-title-link:active {
+	opacity: 0.7;
+}
+
+.hierarchy-separator {
+	flex-shrink: 0;
+	font-size: 0.85em;
+	color: var(--color-text-muted);
+	margin: 0 4px;
 }
 
 .room-summary-status {
@@ -849,11 +887,6 @@ function formatCompactDate(iso: string) {
 	color: white;
 }
 
-:global(.room-composer-textarea:focus-visible) {
-	outline: 2px solid var(--color-accent);
-	outline-offset: 2px;
-}
-
 /* ── モバイル用コンパクトバー (サイドバー非表示時のみ表示) ── */
 .room-mobile-bar {
 	display: none;
@@ -867,11 +900,12 @@ function formatCompactDate(iso: string) {
 	overflow: hidden;
 }
 .room-mobile-title {
+	display: inline-flex;
+	align-items: center;
 	font-size: 13px;
 	font-weight: 600;
 	color: var(--color-text);
 	overflow: hidden;
-	text-overflow: ellipsis;
 	white-space: nowrap;
 	flex: 1;
 	min-width: 0;
@@ -922,7 +956,8 @@ function formatCompactDate(iso: string) {
 	margin-top: 12px;
 }
 
-.feed-column > .composer {
+.feed-column > .composer,
+.feed-column > .anime-room-login {
 	margin-bottom: 24px;
 }
 

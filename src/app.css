@@ -579,11 +579,6 @@ textarea {
 	color: var(--color-text-muted);
 }
 
-.composer-textarea:focus-visible {
-	outline: 2px solid var(--color-accent);
-	outline-offset: 2px;
-}
-
 .composer-footer {
 	display: flex;
 	align-items: center;
