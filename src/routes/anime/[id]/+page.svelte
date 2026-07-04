@@ -4,6 +4,7 @@ import { tick } from "svelte";
 import { fade, scale } from "svelte/transition";
 import { enhance } from "$app/forms";
 import { page } from "$app/state";
+import { trapFocus } from "$lib/actions/trapFocus";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
 import type { BroadcastRoomOverride } from "$lib/types";
@@ -152,6 +153,10 @@ function dedupeLinks(links: { name: string; url: string }[]) {
 
 let myListModalOpen = $state(false);
 let showUserListModal = $state(false);
+let recommendModalOpen = $state(false);
+let hideRecommendFormResult = $state(false);
+const recommendFormMessage = $derived(hideRecommendFormResult ? "" : (form?.recommendMessage ?? ""));
+const recommendFormSuccess = $derived(!hideRecommendFormResult && Boolean(form?.recommendSuccess));
 // svelte-ignore state_referenced_locally
 let adminEditOpen = $state(Boolean(form?.success || form?.message));
 let activeAdminTab = $state<"basic" | "overrides">("basic");
@@ -160,6 +165,13 @@ let selectedOverrideKind = $state<BroadcastOverrideKind>("cancelled");
 let overrideAdvancedOpen = $state(false);
 $effect(() => {
 	if (form?.success || form?.message) adminEditOpen = true;
+});
+
+$effect(() => {
+	if (form?.recommendSuccess || form?.recommendMessage) {
+		hideRecommendFormResult = false;
+		recommendModalOpen = true;
+	}
 });
 
 const overrideKindOptions: { kind: BroadcastOverrideKind; label: string; description: string }[] = [
@@ -175,12 +187,25 @@ function selectOverrideKind(kind: BroadcastOverrideKind) {
 	overrideAdvancedOpen = kind === "custom";
 }
 
-function handleUserListKeydown(event: KeyboardEvent) {
-	if (event.key === "Escape" && showUserListModal) showUserListModal = false;
+function handleModalKeydown(event: KeyboardEvent) {
+	if (event.key !== "Escape") return;
+	if (showUserListModal) showUserListModal = false;
+	if (recommendModalOpen) recommendModalOpen = false;
 }
 
 function handleUserListBackdropClick(event: MouseEvent) {
 	if (event.target === event.currentTarget) showUserListModal = false;
+}
+
+function handleRecommendBackdropClick(event: MouseEvent) {
+	if (event.target === event.currentTarget) recommendModalOpen = false;
+}
+
+function openRecommendModal() {
+	recommendError = "";
+	recommendFeedback = "";
+	hideRecommendFormResult = true;
+	recommendModalOpen = true;
 }
 
 let coverUrl = $state("");
@@ -244,12 +269,7 @@ let recipientDebounce = $state<ReturnType<typeof setTimeout> | null>(null);
 let recommendSubmitting = $state(false);
 let recommendFeedback = $state("");
 let recommendError = $state("");
-let activeAction = $state<"watchlist" | "recommend" | null>(null);
 let liveRoomDates = $state(new Set<string>());
-
-function toggleAction(action: "watchlist" | "recommend") {
-	activeAction = activeAction === action ? null : action;
-}
 
 function handleRecipientInput() {
 	selectedRecipient = null;
@@ -292,6 +312,7 @@ const handleRecommendSubmit: SubmitFunction = () => {
 	recommendSubmitting = true;
 	recommendFeedback = "";
 	recommendError = "";
+	hideRecommendFormResult = true;
 	return async ({ result, update }) => {
 		recommendSubmitting = false;
 		if (result.type === "failure") {
@@ -381,6 +402,60 @@ $effect(() => {
 		<meta name="twitter:card" content="summary_large_image">
 	{/if}
 </svelte:head>
+
+{#snippet relationsSection()}
+	{#if data.relations.length > 0}
+		<section class="relations-section">
+			<h2>関連作品</h2>
+			{#each [
+				{ label: '前作', relations: prequelRelations },
+				{ label: '続編', relations: sequelRelations },
+				{ label: '関連作品', relations: otherRelations },
+			] as group (group.label)}
+				{#if group.relations.length > 0}
+					<div class="relation-group">
+						<h3>{group.label}</h3>
+						<div class="relation-list">
+							{#each group.relations as relation (`${relation.relation_type}-${relation.related_anime_mal_id}`)}
+								{#if relation.anime}
+									<a href="/anime/{relation.anime.id}" class="relation-card">
+										{#if relation.anime.cover_url}
+											<img class="relation-card-thumb" src={relation.anime.cover_url} alt="">
+										{:else}
+											<span
+												class="relation-card-thumb relation-card-thumb--placeholder"
+												aria-hidden="true"
+											></span>
+										{/if}
+										<span class="relation-card-body">
+											<strong>{relation.anime.title}</strong>
+											{#if group.label === '関連作品'}
+												<small>{relation.relation_type}</small>
+											{/if}
+										</span>
+									</a>
+								{:else}
+									<div class="relation-card relation-card--unavailable">
+										<span
+											class="relation-card-thumb relation-card-thumb--placeholder"
+											aria-hidden="true"
+										></span>
+										<span class="relation-card-body">
+											<strong>{relation.related_title}</strong>
+											<small>
+												{group.label === '関連作品' ? relation.relation_type : '未登録'}
+											</small>
+										</span>
+									</div>
+								{/if}
+							{/each}
+						</div>
+					</div>
+				{/if}
+			{/each}
+		</section>
+	{/if}
+{/snippet}
 
 <div class="detail-page">
 	<a href={animeListHref} class="back-link">← アニメ一覧</a>
@@ -677,9 +752,10 @@ $effect(() => {
 					<button
 						type="button"
 						class="action-bar-btn"
-						class:active={activeAction === 'recommend'}
-						onclick={() => toggleAction('recommend')}
-						aria-pressed={activeAction === 'recommend'}
+						class:active={recommendModalOpen}
+						onclick={openRecommendModal}
+						aria-haspopup="dialog"
+						aria-expanded={recommendModalOpen}
 					>
 						<svg
 							width="18"
@@ -717,98 +793,15 @@ $effect(() => {
 					{adminEditOpen ? "作品情報フォームを閉じる" : "作品情報を編集"}
 				</button>
 			{/if}
+			{#if data.relations.length > 0}
+				<div class="mobile-relations-slot">
+					{@render relationsSection()}
+				</div>
+			{/if}
 		</div>
 
 		<!-- Main: synopsis, panels, relations, room log -->
 		<div class="main-content">
-			{#if data.user}
-				{#if activeAction}
-					<div class="action-panel">
-						{#if activeAction === 'recommend'}
-							{#if form?.recommendMessage || recommendError}
-								<p class="form-error">{recommendError || form?.recommendMessage}</p>
-							{/if}
-							{#if form?.recommendSuccess || recommendFeedback}
-								<p class="form-success">{recommendFeedback || '推薦を送信しました'}</p>
-							{/if}
-
-							<form
-								method="POST"
-								action="?/recommendAnime"
-								use:enhance={handleRecommendSubmit}
-								class="recommend-form"
-							>
-								<input type="hidden" name="anime_id" value={data.anime.id}>
-								<input type="hidden" name="recipient_id" value={selectedRecipient?.id ?? ''}>
-
-								<div class="recommend-recipient-field">
-									<label class="form-label">
-										相手
-										<input
-											type="search"
-											class="form-input recommend-user-input"
-											placeholder="@username"
-											bind:value={recipientQuery}
-											oninput={handleRecipientInput}
-											autocomplete="off"
-										>
-									</label>
-
-									{#if selectedRecipient}
-										<div class="selected-recipient">
-											{#if selectedRecipient.avatar_url}
-												<img
-													src={selectedRecipient.avatar_url}
-													alt={selectedRecipient.username}
-												>
-											{/if}
-											<span>{selectedRecipient.display_name ?? selectedRecipient.username}</span>
-											<button type="button" onclick={clearRecipient} aria-label="相手をクリア">
-												×
-											</button>
-										</div>
-									{/if}
-
-									{#if recipientResults.length > 0}
-										<div class="recommend-user-results">
-											{#each recipientResults as user (user.id)}
-												<button
-													type="button"
-													class="recommend-user-result"
-													onclick={() => selectRecipient(user)}
-												>
-													{#if user.avatar_url}
-														<img src={user.avatar_url} alt={user.username}>
-													{:else}
-														<span class="recommend-user-avatar-fallback">
-															{(user.display_name ?? user.username).charAt(0).toUpperCase()}
-														</span>
-													{/if}
-													<span>
-														<strong>{user.display_name ?? user.username}</strong>
-														<small>@{user.username}</small>
-													</span>
-												</button>
-											{/each}
-										</div>
-									{:else if recipientSearching}
-										<p class="recommend-search-hint">検索中…</p>
-									{/if}
-								</div>
-
-								<button
-									type="submit"
-									class="btn-primary recommend-submit"
-									disabled={!selectedRecipient || recommendSubmitting}
-								>
-									{recommendSubmitting ? '送信中…' : '推薦する'}
-								</button>
-							</form>
-						{/if}
-					</div>
-				{/if}
-			{/if}
-
 			<!-- Synopsis -->
 			{#if data.anime.synopsis}
 				<section class="synopsis">
@@ -1319,46 +1312,9 @@ $effect(() => {
 			{/if}
 
 			{#if data.relations.length > 0}
-				<section class="relations-section">
-					<h2>関連作品</h2>
-					{#each [
-						{ label: '前作', relations: prequelRelations },
-						{ label: '続編', relations: sequelRelations },
-						{ label: '関連作品', relations: otherRelations },
-					] as group (group.label)}
-						{#if group.relations.length > 0}
-							<div class="relation-group">
-								<h3>{group.label}</h3>
-								<div class="relation-list">
-									{#each group.relations as relation (`${relation.relation_type}-${relation.related_anime_mal_id}`)}
-										{#if relation.anime}
-											<a href="/anime/{relation.anime.id}" class="relation-card">
-												{#if relation.anime.cover_url}
-													<img src={relation.anime.cover_url} alt="">
-												{/if}
-												<span>
-													<strong>{relation.anime.title}</strong>
-													{#if group.label === '関連作品'}
-														<small>{relation.relation_type}</small>
-													{/if}
-												</span>
-											</a>
-										{:else}
-											<div class="relation-card relation-card--unavailable">
-												<span>
-													<strong>{relation.related_title}</strong>
-													<small>
-														{group.label === '関連作品' ? relation.relation_type : '未登録'}
-													</small>
-												</span>
-											</div>
-										{/if}
-									{/each}
-								</div>
-							</div>
-						{/if}
-					{/each}
-				</section>
+				<div class="desktop-relations-slot">
+					{@render relationsSection()}
+				</div>
 			{/if}
 
 			{#if data.episodes.length > 0}
@@ -1405,7 +1361,7 @@ $effect(() => {
 	</div>
 </div>
 
-<svelte:window onkeydown={handleUserListKeydown} />
+<svelte:window onkeydown={handleModalKeydown} />
 
 {#if showUserListModal}
 	<div
@@ -1420,6 +1376,7 @@ $effect(() => {
 			aria-modal="true"
 			aria-labelledby="user-list-modal-title"
 			tabindex="-1"
+			use:trapFocus
 			in:scale={{ duration: 200, start: 0.95 }}
 		>
 			<header class="user-list-modal-header">
@@ -1430,9 +1387,7 @@ $effect(() => {
 					onclick={() => (showUserListModal = false)}
 					aria-label="閉じる"
 				>
-					<svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
-						<path d="M18 6 6 18M6 6l12 12" />
-					</svg>
+					<span class="i-lucide-x" aria-hidden="true"></span>
 				</button>
 			</header>
 
@@ -1463,6 +1418,107 @@ $effect(() => {
 					</a>
 				{/each}
 			</div>
+		</div>
+	</div>
+{/if}
+
+{#if recommendModalOpen}
+	<div
+		class="user-list-modal-backdrop"
+		role="presentation"
+		onclick={handleRecommendBackdropClick}
+		transition:fade={{ duration: 180 }}
+	>
+		<div
+			class="user-list-modal recommend-modal"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="recommend-modal-title"
+			tabindex="-1"
+			use:trapFocus
+			in:scale={{ duration: 200, start: 0.95 }}
+		>
+			<header class="user-list-modal-header">
+				<h2 id="recommend-modal-title">この作品を推薦する</h2>
+				<button
+					type="button"
+					class="user-list-modal-close"
+					onclick={() => (recommendModalOpen = false)}
+					aria-label="閉じる"
+				>
+					<span class="i-lucide-x" aria-hidden="true"></span>
+				</button>
+			</header>
+
+			{#if recommendFormMessage || recommendError}
+				<p class="form-error">{recommendError || recommendFormMessage}</p>
+			{/if}
+			{#if recommendFormSuccess || recommendFeedback}
+				<p class="form-success">{recommendFeedback || '推薦を送信しました'}</p>
+			{/if}
+
+			<form method="POST" action="?/recommendAnime" use:enhance={handleRecommendSubmit} class="recommend-form">
+				<input type="hidden" name="anime_id" value={data.anime.id}>
+				<input type="hidden" name="recipient_id" value={selectedRecipient?.id ?? ''}>
+
+				<div class="recommend-recipient-field">
+					<label class="form-label">
+						相手
+						<input
+							type="search"
+							class="form-input recommend-user-input"
+							placeholder="@username"
+							bind:value={recipientQuery}
+							oninput={handleRecipientInput}
+							autocomplete="off"
+						>
+					</label>
+
+					{#if selectedRecipient}
+						<div class="selected-recipient">
+							{#if selectedRecipient.avatar_url}
+								<img src={selectedRecipient.avatar_url} alt={selectedRecipient.username}>
+							{/if}
+							<span>{selectedRecipient.display_name ?? selectedRecipient.username}</span>
+							<button type="button" onclick={clearRecipient} aria-label="相手をクリア">×</button>
+						</div>
+					{/if}
+
+					{#if recipientResults.length > 0}
+						<div class="recommend-user-results">
+							{#each recipientResults as user (user.id)}
+								<button
+									type="button"
+									class="recommend-user-result"
+									onclick={() => selectRecipient(user)}
+								>
+									{#if user.avatar_url}
+										<img src={user.avatar_url} alt={user.username}>
+									{:else}
+										<span class="recommend-user-avatar-fallback">
+											{(user.display_name ?? user.username).charAt(0).toUpperCase()}
+										</span>
+									{/if}
+									<span>
+										<strong>{user.display_name ?? user.username}</strong>
+										<small>@{user.username}</small>
+									</span>
+								</button>
+							{/each}
+						</div>
+					{:else if recipientSearching}
+						<p class="recommend-search-hint">検索中…</p>
+					{/if}
+				</div>
+
+				<button
+					type="submit"
+					class="btn-primary recommend-submit"
+					disabled={!selectedRecipient || recommendSubmitting}
+				>
+					{recommendSubmitting ? '送信中…' : '推薦する'}
+				</button>
+			</form>
 		</div>
 	</div>
 {/if}
@@ -2290,11 +2346,12 @@ $effect(() => {
 
 /* Related anime */
 .relations-section {
-	display: flex;
-	flex-direction: column;
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
 	gap: 12px;
 }
 .relations-section h2 {
+	grid-column: 1 / -1;
 	font-size: 1rem;
 	font-weight: 600;
 	margin: 0;
@@ -2319,6 +2376,8 @@ $effect(() => {
 	display: flex;
 	gap: 9px;
 	align-items: center;
+	box-sizing: border-box;
+	height: 64px;
 	min-height: 52px;
 	max-width: 290px;
 	padding: 7px 10px 7px 7px;
@@ -2332,30 +2391,47 @@ a.relation-card:hover {
 	border-color: var(--accent);
 	background: var(--hover-bg);
 }
-.relation-card img {
+.relation-card-thumb {
 	width: 34px;
+	aspect-ratio: 1 / 1.414;
 	display: block;
 	image-rendering: auto;
 	border-radius: 4px;
 	flex-shrink: 0;
+	object-fit: cover;
 }
-.relation-card span {
+.relation-card-thumb--placeholder {
+	background: var(--hover-bg);
+	border: 1px solid var(--border);
+}
+.relation-card-body {
 	display: flex;
 	flex-direction: column;
 	gap: 2px;
 	min-width: 0;
 }
 .relation-card strong {
+	display: -webkit-box;
+	overflow: hidden;
 	font-size: 0.84rem;
 	line-height: 1.35;
 	font-weight: 600;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	line-clamp: 2;
 }
 .relation-card small {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 	font-size: 0.72rem;
 	color: var(--text-muted);
 }
 .relation-card--unavailable {
 	color: var(--text-muted);
+}
+.mobile-relations-slot {
+	display: none;
 }
 
 /* Action bar */
@@ -2397,16 +2473,6 @@ a.relation-card:hover {
 }
 .action-bar-btn--link {
 	border-style: dashed;
-}
-.action-panel {
-	width: 100%;
-	min-width: 0;
-	box-sizing: border-box;
-	border: 1px solid var(--border);
-	border-radius: 10px;
-	padding: 18px 16px;
-	background: var(--card-bg);
-	margin-bottom: 24px;
 }
 .form-row {
 	display: flex;
@@ -2648,6 +2714,16 @@ a.relation-card:hover {
 	background: #18181b;
 	box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.65);
 }
+.recommend-modal {
+	max-width: 460px;
+}
+.recommend-modal .recommend-form {
+	grid-template-columns: minmax(0, 1fr);
+	align-items: stretch;
+}
+.recommend-modal .recommend-submit {
+	width: 100%;
+}
 .user-list-modal-header {
 	display: flex;
 	align-items: center;
@@ -2685,11 +2761,9 @@ a.relation-card:hover {
 	outline: 2px solid var(--accent);
 	outline-offset: 2px;
 }
-.user-list-modal-close svg {
-	fill: none;
-	stroke: currentColor;
-	stroke-width: 2;
-	stroke-linecap: round;
+.user-list-modal-close :global(.i-lucide-x) {
+	width: 20px;
+	height: 20px;
 }
 .listed-users-list {
 	display: flex;
@@ -3004,6 +3078,44 @@ a.relation-card:hover {
 	.remote .action-bar-btn {
 		padding: 10px 4px;
 		font-size: 0.68rem;
+	}
+	.mobile-relations-slot {
+		display: block;
+		min-width: 0;
+	}
+	.desktop-relations-slot {
+		display: none;
+	}
+	.remote .relations-section {
+		gap: 10px;
+	}
+	.remote .relations-section h2 {
+		font-size: 0.9rem;
+	}
+	.remote .relation-group {
+		gap: 6px;
+	}
+	.remote .relation-list {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: 6px;
+	}
+	.remote .relation-card {
+		width: 100%;
+		height: 56px;
+		max-width: none;
+		min-width: 0;
+		min-height: 48px;
+		padding: 6px 8px 6px 6px;
+	}
+	.remote .relation-card-thumb {
+		width: 30px;
+	}
+	.remote .relation-card strong,
+	.remote .relation-card small {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 	.remote-admin-btn {
 		display: inline-block;
