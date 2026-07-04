@@ -1398,6 +1398,7 @@ $effect(() => {
 									<span class="event-log-title">{event.title}</span>
 									<span class="event-log-date">
 										{new Date(event.scheduled_at).toLocaleString("ja-JP", {
+											timeZone: "Asia/Tokyo",
 											year: "numeric",
 											month: "numeric",
 											day: "numeric",

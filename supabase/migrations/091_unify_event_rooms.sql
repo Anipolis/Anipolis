@@ -11,9 +11,8 @@
 ALTER TABLE public.posts
     ADD COLUMN IF NOT EXISTS event_id uuid REFERENCES public.events(id) ON DELETE SET NULL;
 
-CREATE INDEX IF NOT EXISTS posts_event_id_idx
-    ON public.posts (event_id, created_at DESC)
-    WHERE event_id IS NOT NULL;
+-- posts_event_id_idx は posts への書き込みをロックしないよう
+-- 092_posts_event_id_idx_concurrently.sql で CREATE INDEX CONCURRENTLY として作成する。
 
 -- ================================================================
 -- 2) events テーブル: updated_at + 作成者/管理者による更新

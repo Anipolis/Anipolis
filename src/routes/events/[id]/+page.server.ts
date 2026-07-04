@@ -71,6 +71,15 @@ export const actions: Actions = {
 		if (!content) return fail(400, { message: "投稿内容を入力してください" });
 		const event = await getEvent(supabase, params.id);
 		if (!event) return fail(404, { message: "イベントが見つかりません" });
+		if (event.is_cancelled) return fail(404, { message: "イベントが見つかりません" });
+
+		const scheduledMs = new Date(event.scheduled_at).getTime();
+		const durationMinutes = event.duration_minutes ?? DEFAULT_EVENT_DURATION_MINUTES;
+		const postingClosesAtMs = scheduledMs + durationMinutes * 60 * 1000;
+		const now = Date.now();
+		if (now < scheduledMs) return fail(403, { message: "このイベントはまだ投稿を受け付けていません" });
+		if (now > postingClosesAtMs) return fail(403, { message: "このイベントの投稿受付は終了しました" });
+
 		const hashtag = event.hashtag;
 		const animeId = event.anime_id;
 

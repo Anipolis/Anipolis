@@ -528,8 +528,9 @@ const timerLabel = $derived.by(() => {
 const broadcastMetaLine = $derived.by(() => {
 	if (isGlobalLobby) return "";
 	const station = data.anime?.broadcast_station?.filter(Boolean).join(" / ");
-	const frame = `${data.room.duration_minutes}分枠`;
-	return station ? `${station} · ${frame}` : frame;
+	const frame = data.room.duration_minutes != null ? `${data.room.duration_minutes}分枠` : "";
+	if (station && frame) return `${station} · ${frame}`;
+	return station || frame;
 });
 
 function formatCompactDate(iso: string) {
