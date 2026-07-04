@@ -12,6 +12,7 @@ import {
 	getAnimeRankingTrending,
 	getFollowingProfiles,
 	getHomeTimelinePosts,
+	getOpenBroadcastRoomSessions,
 	getTimelinePostsWithReposts,
 	getUserAnimeList,
 } from "$lib/server/queries";
@@ -81,8 +82,8 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	const buildExchangeInitialContent = (_exchangeShare: AnimeExchangeShare | null) =>
 		"#アニメトレード でおすすめが届きました！";
 
-	if (tab === "following" && followingProfiles !== null && followingProfiles.length === 0) {
-		const [trendingResult, animeTrending, quoteAnimeResult, exchangeShare, watchingAnime] = await Promise.all([
+	const fetchSidebarExtras = () =>
+		Promise.all([
 			supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
 			getAnimeRankingTrending(supabase, 5),
 			quoteAnimeId
@@ -96,11 +97,17 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 				? getAnimeExchangeShareForUser(supabase, user.id, shareExchangeId)
 				: Promise.resolve(null),
 			user ? getUserAnimeList(supabase, user.id, "watching") : Promise.resolve([]),
-		]);
+			user ? getOpenBroadcastRoomSessions(supabase, { kind: "episode" }) : Promise.resolve([]),
+		] as const);
+
+	if (tab === "following" && followingProfiles !== null && followingProfiles.length === 0) {
+		const [trendingResult, animeTrending, quoteAnimeResult, exchangeShare, watchingAnime, liveRooms] =
+			await fetchSidebarExtras();
 		return {
 			posts: [],
 			trending: trendingResult.data ?? [],
 			animeTrending,
+			liveRooms,
 			profile,
 			tab,
 			initialAnime: quoteAnimeResult.data
@@ -118,27 +125,14 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		};
 	}
 
-	const [posts, trendingResult, animeTrending, quoteAnimeResult, exchangeShare, watchingAnime] = await Promise.all([
-		fetchPosts(),
-		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
-		getAnimeRankingTrending(supabase, 5),
-		quoteAnimeId
-			? supabase
-					.from("anime")
-					.select("id, title, title_en, cover_url, official_hashtag")
-					.eq("id", Number(quoteAnimeId))
-					.single()
-			: Promise.resolve({ data: null }),
-		user && shareExchangeId
-			? getAnimeExchangeShareForUser(supabase, user.id, shareExchangeId)
-			: Promise.resolve(null),
-		user ? getUserAnimeList(supabase, user.id, "watching") : Promise.resolve([]),
-	]);
+	const [[trendingResult, animeTrending, quoteAnimeResult, exchangeShare, watchingAnime, liveRooms], posts] =
+		await Promise.all([fetchSidebarExtras(), fetchPosts()]);
 
 	return {
 		posts,
 		trending: trendingResult.data ?? [],
 		animeTrending,
+		liveRooms,
 		profile,
 		tab,
 		before: before?.createdAt ?? null,

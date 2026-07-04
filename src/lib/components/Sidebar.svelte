@@ -4,8 +4,9 @@ import { browser } from "$app/environment";
 import { goto, invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
 import type { Database } from "$lib/supabase/database.types";
-import type { StoredAccount } from "$lib/types";
+import type { OpenBroadcastRoomSummary, StoredAccount } from "$lib/types";
 import AnimeIcon from "./AnimeIcon.svelte";
+import LiveRoomPickerModal from "./LiveRoomPickerModal.svelte";
 import UserAvatar from "./UserAvatar.svelte";
 
 type Profile = Database["public"]["Tables"]["profiles"]["Row"] | null;
@@ -38,6 +39,43 @@ function toggleTheme() {
 	theme = theme === "dark" ? "light" : "dark";
 	document.documentElement.setAttribute("data-theme", theme);
 	localStorage.setItem("theme", theme);
+}
+
+let liveRoomModalOpen = $state(false);
+let liveRooms = $state<OpenBroadcastRoomSummary[] | null>(null);
+let liveRoomsError = $state(false);
+
+async function openLiveRoomPicker() {
+	liveRoomModalOpen = true;
+	liveRooms = null;
+	liveRoomsError = false;
+	const controller = new AbortController();
+	const timeout = setTimeout(() => controller.abort(), 8000);
+	try {
+		const res = await fetch("/api/rooms/open?kind=episode", { signal: controller.signal });
+		if (!res.ok) {
+			liveRoomsError = true;
+			liveRooms = [];
+			return;
+		}
+		const rooms: OpenBroadcastRoomSummary[] = await res.json();
+		const onlyRoom = rooms.length === 1 ? rooms[0] : undefined;
+		if (onlyRoom) {
+			liveRoomModalOpen = false;
+			await goto(`/rooms/anime/${onlyRoom.anime_id}/${onlyRoom.room_date}`);
+			return;
+		}
+		liveRooms = rooms;
+	} catch {
+		liveRoomsError = true;
+		liveRooms = [];
+	} finally {
+		clearTimeout(timeout);
+	}
+}
+
+function closeLiveRoomPicker() {
+	liveRoomModalOpen = false;
 }
 
 const displayName = $derived(profile?.display_name || profile?.username || session?.user?.email?.split("@")[0] || "");
@@ -121,51 +159,70 @@ function isActive(path: string): boolean {
 		<span class="anipolis-logo-icon size-22" aria-hidden="true"></span>
 		<span>Anipolis</span>
 	</a>
-	<button
-		type="button"
-		class="mobile-theme-btn"
-		onclick={toggleTheme}
-		aria-label={theme === 'dark' ? 'ライトモードに切替' : 'ダークモードに切替'}
-	>
-		{#if theme === 'dark'}
-			<svg
-				width="20"
-				height="20"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-				aria-hidden="true"
+	<div class="mobile-header-actions">
+		{#if session}
+			<button
+				type="button"
+				class="mobile-live-room-btn"
+				onclick={openLiveRoomPicker}
+				aria-label="ライブ実況ルーム"
 			>
-				<circle cx="12" cy="12" r="5" />
-				<line x1="12" y1="1" x2="12" y2="3" />
-				<line x1="12" y1="21" x2="12" y2="23" />
-				<line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-				<line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-				<line x1="1" y1="12" x2="3" y2="12" />
-				<line x1="21" y1="12" x2="23" y2="12" />
-				<line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-				<line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-			</svg>
-		{:else}
-			<svg
-				width="20"
-				height="20"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-				aria-hidden="true"
-			>
-				<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-			</svg>
+				<span class="i-lucide-radio" aria-hidden="true"></span>
+			</button>
 		{/if}
-	</button>
+		<button
+			type="button"
+			class="mobile-theme-btn"
+			onclick={toggleTheme}
+			aria-label={theme === 'dark' ? 'ライトモードに切替' : 'ダークモードに切替'}
+		>
+			{#if theme === 'dark'}
+				<svg
+					width="20"
+					height="20"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
+					<circle cx="12" cy="12" r="5" />
+					<line x1="12" y1="1" x2="12" y2="3" />
+					<line x1="12" y1="21" x2="12" y2="23" />
+					<line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+					<line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+					<line x1="1" y1="12" x2="3" y2="12" />
+					<line x1="21" y1="12" x2="23" y2="12" />
+					<line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+					<line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+				</svg>
+			{:else}
+				<svg
+					width="20"
+					height="20"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
+					<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+				</svg>
+			{/if}
+		</button>
+	</div>
 </header>
+
+<LiveRoomPickerModal
+	open={liveRoomModalOpen}
+	rooms={liveRooms}
+	loadError={liveRoomsError}
+	onclose={closeLiveRoomPicker}
+/>
 
 <!-- Mobile drawer backdrop -->
 {#if drawerOpen}
@@ -889,7 +946,8 @@ function isActive(path: string): boolean {
 }
 
 .mobile-hamburger,
-.mobile-theme-btn {
+.mobile-theme-btn,
+.mobile-live-room-btn {
 	background: none;
 	border: none;
 	cursor: pointer;
@@ -899,6 +957,12 @@ function isActive(path: string): boolean {
 	display: flex;
 	align-items: center;
 	justify-content: center;
+}
+
+.mobile-header-actions {
+	display: flex;
+	align-items: center;
+	gap: 4px;
 }
 
 .mobile-header-logo {

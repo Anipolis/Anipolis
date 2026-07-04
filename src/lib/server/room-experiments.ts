@@ -415,23 +415,41 @@ export async function createRoomExperimentVisit(
 	if (!run) return { tracked: false };
 
 	const now = new Date().toISOString();
-	const { data, error } = await supabase
+	const { data: inserted, error: insertError } = await supabase
 		.from("room_experiment_visits")
-		.upsert(
-			{
-				run_id: run.id,
-				anime_id: run.anime_id,
-				broadcast_room_session_id: session.id,
-				user_id: userId,
-				client_visit_key: clientVisitKey,
-				last_seen_at: now,
-				exited_at: null,
-				user_agent: options.userAgent?.slice(0, 500) ?? null,
-			},
-			{ onConflict: "run_id,user_id,broadcast_room_session_id,client_visit_key" },
-		)
+		.insert({
+			run_id: run.id,
+			anime_id: run.anime_id,
+			broadcast_room_session_id: session.id,
+			user_id: userId,
+			client_visit_key: clientVisitKey,
+			entered_at: now,
+			last_seen_at: now,
+			exited_at: null,
+			user_agent: options.userAgent?.slice(0, 500) ?? null,
+		})
 		.select("id")
 		.single();
+
+	// entered_at is set explicitly (matching last_seen_at) so the insert can never race against the
+	// DB's own now() and violate room_experiment_visits_seen_check (last_seen_at >= entered_at).
+	// On a repeat visit (same run/user/session/client_visit_key) this insert hits the unique index and
+	// falls through to an update, which must omit entered_at — the validate trigger rejects any change to it.
+	let data = inserted;
+	let error = insertError;
+	if (insertError?.code === "23505") {
+		const updated = await supabase
+			.from("room_experiment_visits")
+			.update({ last_seen_at: now, exited_at: null })
+			.eq("run_id", run.id)
+			.eq("user_id", userId)
+			.eq("broadcast_room_session_id", session.id)
+			.eq("client_visit_key", clientVisitKey)
+			.select("id")
+			.single();
+		data = updated.data;
+		error = updated.error;
+	}
 
 	if (error || !data) {
 		console.error("room experiment visit create error:", error);

@@ -192,6 +192,7 @@ $effect(() => {
 						{#each statusOptions as option}
 							<button
 								type="button"
+								data-status={option.value}
 								class:active={selectedStatus === option.value}
 								aria-pressed={selectedStatus === option.value}
 								onclick={() => (selectedStatus = option.value)}
@@ -234,10 +235,10 @@ $effect(() => {
 	width: min(100%, 520px);
 	max-height: min(760px, calc(100dvh - 32px));
 	overflow-y: auto;
-	border: 1px solid var(--border, #27272a);
+	border: 1px solid var(--color-border);
 	border-radius: 18px;
-	background: var(--surface, #111214);
-	color: var(--text, #f4f4f5);
+	background: var(--color-bg);
+	color: var(--color-text);
 	box-shadow: 0 24px 80px rgb(0 0 0 / 48%);
 }
 .modal-card--compact {
@@ -245,7 +246,7 @@ $effect(() => {
 }
 .modal-header {
 	padding: 22px 24px 18px;
-	border-bottom: 1px solid var(--border, #27272a);
+	border-bottom: 1px solid var(--color-border);
 }
 .modal-header h2 {
 	margin: 0;
@@ -255,7 +256,7 @@ $effect(() => {
 .modal-header p {
 	margin: 5px 0 0;
 	overflow: hidden;
-	color: var(--text-muted, #a1a1aa);
+	color: var(--color-text-muted);
 	font-size: 0.82rem;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -268,7 +269,7 @@ form {
 }
 .field-section {
 	padding: 18px 0;
-	border-bottom: 1px solid color-mix(in srgb, var(--border, #27272a) 78%, transparent);
+	border-bottom: 1px solid color-mix(in srgb, var(--color-border) 78%, transparent);
 }
 .modal-card--compact .field-section {
 	padding-bottom: 8px;
@@ -283,12 +284,12 @@ form {
 .section-heading h3 {
 	margin: 0;
 	font-size: 0.82rem;
-	color: var(--text-muted, #a1a1aa);
+	color: var(--color-text-muted);
 	font-weight: 650;
 	letter-spacing: 0.04em;
 }
 .section-heading span {
-	color: #2dd4bf;
+	color: var(--color-accent);
 	font-size: 0.76rem;
 	font-weight: 700;
 }
@@ -300,10 +301,10 @@ form {
 .score-grid button {
 	width: 38px;
 	height: 38px;
-	border: 1px solid #3f3f46;
+	border: 1px solid var(--color-border);
 	border-radius: 10px;
-	background: #18181b;
-	color: #a1a1aa;
+	background: var(--color-surface);
+	color: var(--color-text-muted);
 	cursor: pointer;
 	font-weight: 650;
 	transition:
@@ -313,21 +314,49 @@ form {
 }
 .score-grid button:hover,
 .status-grid button:hover {
-	border-color: #71717a;
-	color: #e4e4e7;
+	border-color: var(--color-border-hover);
+	color: var(--color-text);
 }
 .score-grid button:active,
 .status-grid button:active,
 .stepper button:active {
 	transform: scale(0.96);
 }
-.score-grid button.active,
-.status-grid button.active {
-	border-color: #14b8a6;
-	background: #14b8a6;
-	color: #18181b;
+.score-grid button.active {
+	border-color: var(--color-accent);
+	background: var(--color-accent);
+	color: var(--color-bg);
 	font-weight: 800;
-	box-shadow: 0 0 0 3px rgb(20 184 166 / 14%);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 20%, transparent);
+}
+.status-grid button.active {
+	color: var(--color-bg);
+	font-weight: 800;
+}
+.status-grid button[data-status="plan_to_watch"].active {
+	border-color: var(--watch-status-plan);
+	background: var(--watch-status-plan);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--watch-status-plan) 20%, transparent);
+}
+.status-grid button[data-status="watching"].active {
+	border-color: var(--status-watching);
+	background: var(--status-watching);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-watching) 20%, transparent);
+}
+.status-grid button[data-status="completed"].active {
+	border-color: var(--status-completed);
+	background: var(--status-completed);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-completed) 20%, transparent);
+}
+.status-grid button[data-status="on_hold"].active {
+	border-color: var(--status-on-hold);
+	background: var(--status-on-hold);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-on-hold) 20%, transparent);
+}
+.status-grid button[data-status="dropped"].active {
+	border-color: var(--status-dropped);
+	background: var(--status-dropped);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-dropped) 20%, transparent);
 }
 .stepper {
 	display: flex;
@@ -337,10 +366,10 @@ form {
 .stepper button {
 	width: 44px;
 	height: 44px;
-	border: 1px solid #3f3f46;
+	border: 1px solid var(--color-border);
 	border-radius: 12px;
-	background: #27272a;
-	color: #f4f4f5;
+	background: var(--color-surface);
+	color: var(--color-text);
 	cursor: pointer;
 	font-size: 1.25rem;
 	font-weight: 700;
@@ -349,7 +378,7 @@ form {
 		background 0.12s;
 }
 .stepper button:hover:not(:disabled) {
-	background: #3f3f46;
+	background: var(--color-surface-hover);
 }
 .stepper button:disabled {
 	cursor: not-allowed;
@@ -358,25 +387,25 @@ form {
 .stepper input {
 	width: 66px;
 	height: 44px;
-	border: 1px solid #3f3f46;
+	border: 1px solid var(--color-border);
 	border-radius: 12px;
 	outline: none;
-	background: #09090b;
-	color: #fafafa;
+	background: var(--color-bg);
+	color: var(--color-text);
 	font-size: 1rem;
 	font-weight: 750;
 	text-align: center;
 }
 .stepper input:focus {
-	border-color: #14b8a6;
-	box-shadow: 0 0 0 3px rgb(20 184 166 / 15%);
+	border-color: var(--color-accent);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 15%, transparent);
 }
 .stepper input:focus-visible {
-	outline: 2px solid #14b8a6;
+	outline: 2px solid var(--color-accent);
 	outline-offset: 2px;
 }
 .episode-total {
-	color: var(--text-muted, #a1a1aa);
+	color: var(--color-text-muted);
 	font-size: 0.82rem;
 	white-space: nowrap;
 }
@@ -388,10 +417,10 @@ form {
 .status-grid button {
 	grid-column: span 2;
 	min-height: 44px;
-	border: 1px solid #27272a;
+	border: 1px solid var(--color-border);
 	border-radius: 11px;
-	background: #18181b;
-	color: #a1a1aa;
+	background: var(--color-surface);
+	color: var(--color-text-muted);
 	cursor: pointer;
 	font-size: 0.84rem;
 	font-weight: 650;
@@ -408,7 +437,7 @@ form {
 }
 .form-error {
 	margin: 14px 0 0;
-	color: #f87171;
+	color: var(--color-error-text);
 	font-size: 0.82rem;
 }
 .modal-footer {
@@ -425,15 +454,23 @@ form {
 	font-weight: 750;
 }
 .cancel-button {
-	border: 1px solid #3f3f46;
+	border: 1px solid var(--color-border-hover);
 	background: transparent;
-	color: #a1a1aa;
+	color: var(--color-text-muted);
+}
+.cancel-button:hover:not(:disabled) {
+	background: var(--color-hover);
+	color: var(--color-text);
 }
 .save-button {
-	border: 1px solid #14b8a6;
-	background: #14b8a6;
-	color: #10201e;
-	box-shadow: 0 8px 24px rgb(20 184 166 / 18%);
+	border: 1px solid var(--color-accent);
+	background: var(--color-accent);
+	color: var(--color-bg);
+	box-shadow: 0 8px 24px color-mix(in srgb, var(--color-accent) 30%, transparent);
+}
+.save-button:hover:not(:disabled) {
+	border-color: var(--color-accent-hover);
+	background: var(--color-accent-hover);
 }
 .modal-footer button:disabled {
 	cursor: wait;
@@ -477,8 +514,8 @@ form {
 		bottom: -18px;
 		margin: 0 -18px -18px;
 		padding: 14px 18px calc(14px + env(safe-area-inset-bottom));
-		border-top: 1px solid var(--border, #27272a);
-		background: var(--surface, #111214);
+		border-top: 1px solid var(--color-border);
+		background: var(--color-bg);
 	}
 }
 </style>

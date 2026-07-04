@@ -1,5 +1,6 @@
 <script lang="ts">
 import { goto } from "$app/navigation";
+import LiveRoomsPanel from "$lib/components/LiveRoomsPanel.svelte";
 import PostCard from "$lib/components/PostCard.svelte";
 import PostCardSkeleton from "$lib/components/PostCardSkeleton.svelte";
 import PostComposer from "$lib/components/PostComposer.svelte";
@@ -232,6 +233,9 @@ $effect(() => {
 	</main>
 
 	<aside class="sidebar-column">
+		{#if data.user}
+			<LiveRoomsPanel rooms={data.liveRooms} />
+		{/if}
 		<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
 	</aside>
 </div>
@@ -271,6 +275,7 @@ $effect(() => {
 				initialExchangeShare={data.initialExchangeShare}
 				watchingAnime={data.watchingAnime}
 				onsubmitsuccess={closeModal}
+				focusOnMount
 			/>
 		</div>
 	</div>

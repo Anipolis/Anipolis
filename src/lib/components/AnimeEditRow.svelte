@@ -174,6 +174,7 @@ function confirmRemove() {
 	flex: 0 0 auto;
 	overflow: hidden;
 	border-radius: 6px;
+	background: var(--surface, #1e293b);
 	text-decoration: none;
 }
 
