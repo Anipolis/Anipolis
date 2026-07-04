@@ -47,4 +47,35 @@ describe("animeIsScheduledForRoomDate", () => {
 			),
 		).toBe(true);
 	});
+
+	it("keeps override dates bounded by the anime airing start", () => {
+		expect.assertions(1);
+
+		expect(
+			animeIsScheduledForRoomDate(
+				{
+					aired_from: "2026-07-12",
+					aired_to: null,
+					broadcast_day: 0,
+				},
+				"2026-07-05",
+				true,
+			),
+		).toBe(false);
+	});
+
+	it("rejects invalid calendar dates", () => {
+		expect.assertions(1);
+
+		expect(
+			animeIsScheduledForRoomDate(
+				{
+					aired_from: "2026-02-01",
+					aired_to: null,
+					broadcast_day: 2,
+				},
+				"2026-02-31",
+			),
+		).toBe(false);
+	});
 });

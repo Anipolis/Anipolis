@@ -14,9 +14,21 @@ export function roomDateKey(value: string): string {
 
 function dateKeyToDate(value: string) {
 	const dateKey = roomDateKey(value);
-	if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return null;
-	const date = new Date(`${dateKey}T00:00:00`);
-	return Number.isNaN(date.getTime()) ? null : date;
+	const match = dateKey.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+	if (!match) return null;
+	const year = Number(match[1]);
+	const month = Number(match[2]);
+	const day = Number(match[3]);
+	const date = new Date(year, month - 1, day);
+	if (
+		Number.isNaN(date.getTime()) ||
+		date.getFullYear() !== year ||
+		date.getMonth() !== month - 1 ||
+		date.getDate() !== day
+	) {
+		return null;
+	}
+	return date;
 }
 
 export function animeIsScheduledForRoomDate(

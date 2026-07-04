@@ -2704,6 +2704,7 @@ export async function getOpenBroadcastRoomSessions(
 	const rows = data ?? [];
 	const episodeRows = rows.filter((row) => row.room_kind === "episode");
 	const overrideBySessionKey = new Map<string, { is_cancelled: boolean | null }>();
+	let overrideLookupFailed = false;
 	if (episodeRows.length > 0) {
 		const animeIds = [...new Set(episodeRows.map((row) => row.anime_id))];
 		const roomDates = [...new Set(episodeRows.map((row) => row.room_date))];
@@ -2716,6 +2717,7 @@ export async function getOpenBroadcastRoomSessions(
 			.in("room_date", roomDates);
 		if (overrideError) {
 			console.error("getOpenBroadcastRoomSessions overrides failed:", overrideError);
+			overrideLookupFailed = true;
 		}
 		for (const override of (overrides as
 			| Pick<BroadcastRoomOverride, "anime_id" | "room_date" | "is_cancelled">[]
@@ -2740,6 +2742,7 @@ export async function getOpenBroadcastRoomSessions(
 	return rows
 		.filter((row) => {
 			if (row.room_kind !== "episode") return true;
+			if (overrideLookupFailed) return false;
 			const anime = rawAnimeForRow(row.anime);
 			if (!anime) return false;
 			const override = overrideBySessionKey.get(`${row.anime_id}:${row.room_date.slice(0, 10)}`);
