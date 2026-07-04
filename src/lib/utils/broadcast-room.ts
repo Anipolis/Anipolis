@@ -2,8 +2,40 @@ import type { Anime, BroadcastRoomOverride } from "$lib/types";
 
 export type BroadcastRoomOverridesByAnimeId = Record<string, BroadcastRoomOverride[]>;
 
+interface BroadcastScheduleBounds {
+	aired_from: string | null;
+	aired_to: string | null;
+	broadcast_day: number | null;
+}
+
 export function roomDateKey(value: string): string {
 	return value.slice(0, 10);
+}
+
+function dateKeyToDate(value: string) {
+	const dateKey = roomDateKey(value);
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return null;
+	const date = new Date(`${dateKey}T00:00:00`);
+	return Number.isNaN(date.getTime()) ? null : date;
+}
+
+export function animeIsScheduledForRoomDate(
+	anime: BroadcastScheduleBounds,
+	dateKey: string,
+	hasOverride = false,
+): boolean {
+	const roomDate = roomDateKey(dateKey);
+	const date = dateKeyToDate(roomDate);
+	if (!date) return false;
+	if (!hasOverride && (anime.broadcast_day == null || date.getDay() !== anime.broadcast_day)) return false;
+
+	const airedFrom = anime.aired_from?.slice(0, 10) ?? null;
+	if (airedFrom && roomDate < airedFrom) return false;
+
+	const airedTo = anime.aired_to?.slice(0, 10) ?? null;
+	if (airedTo && roomDate > airedTo) return false;
+
+	return true;
 }
 
 export function roomLiveKey(animeId: string, roomDate: string): string {
