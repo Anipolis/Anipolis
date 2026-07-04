@@ -1,0 +1,10 @@
+# デフォルトでテキストファイルはすべて Git 内部で LF として管理し、チェックアウト時も LF にする
+* text=auto eol=lf
+
+# 画像やバイナリファイルは改行コード変換の対象外にする
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary

@@ -85,11 +85,11 @@ let {
 }
 
 .status-section--completed .status-icon {
-	color: var(--accent, #6366f1);
+	color: var(--status-completed);
 }
 
 .status-section--plan_to_watch .status-icon {
-	color: var(--status-plan);
+	color: var(--watch-status-plan);
 }
 
 .status-section--on_hold .status-icon {

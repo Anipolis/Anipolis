@@ -74,6 +74,7 @@ type PostOrder = "oldest" | "newest";
 let now = $state(Date.now());
 let intervalId: ReturnType<typeof setInterval>;
 let postContent = $state("");
+let isPosting = $state(false);
 let textareaEl: HTMLTextAreaElement | null = $state(null);
 let composerEl: HTMLDivElement | null = $state(null);
 let keepComposerFocused = $state(true);
@@ -91,6 +92,8 @@ let surveyHandled = $state(false);
 let surveySubmitting = $state(false);
 let surveyErrorMessage: string | null = $state(null);
 let programmaticScrollTimer: ReturnType<typeof setTimeout> | undefined;
+let previousVirtualKeyboardOverlaysContent: boolean | undefined;
+let removeRoomKeyboardListeners: (() => void) | undefined;
 
 const maxLen = 280;
 const latestEdgeThreshold = 80;
@@ -99,6 +102,11 @@ const openMs = $derived(new Date(data.room.posting_opens_at).getTime());
 const closeMs = $derived(new Date(data.room.posting_closes_at).getTime());
 const openLeadMinutes = $derived(Math.round((scheduledMs - openMs) / (60 * 1000)));
 const isGlobalLobby = $derived(data.room.kind === "global");
+const roomNameLabel = $derived(
+	data.anime && data.room.title.startsWith(data.anime.title)
+		? data.room.title.slice(data.anime.title.length).trim()
+		: data.room.title,
+);
 const charCount = $derived(postContent.length);
 const overLimit = $derived(charCount > maxLen);
 const surveyPostCount = $derived(data.roomExitSurvey.postCount + localSurveyPostCount);
@@ -331,11 +339,24 @@ function handleWindowPointerDown(event: PointerEvent) {
 	keepComposerFocused = false;
 }
 
-const handleCreatePost: SubmitFunction = () => {
+const handleCreatePost: SubmitFunction = ({ cancel }) => {
+	if (isPosting) {
+		cancel();
+		return;
+	}
+	isPosting = true;
 	keepComposerFocused = true;
 	return async ({ result, update }) => {
-		await update({ reset: false });
-		if (result.type === "success") localSurveyPostCount += 1;
+		try {
+			// invalidateAll は load 全体の再実行で重いため、自分の投稿はライブ更新と同じ差分APIで反映する
+			await update({ reset: false, invalidateAll: false });
+			if (result.type === "success") {
+				localSurveyPostCount += 1;
+				await fetchNewPosts();
+			}
+		} finally {
+			isPosting = false;
+		}
 		await focusComposerTextarea({ preventScroll: true });
 	};
 };
@@ -378,6 +399,12 @@ onMount(() => {
 	mobileViewportQuery = window.matchMedia("(max-width: 960px)");
 	isMobileViewport = mobileViewportQuery.matches;
 	mobileViewportQuery.addEventListener("change", handleMobileViewportChange);
+	const virtualKeyboard = getVirtualKeyboard();
+	if (virtualKeyboard) {
+		previousVirtualKeyboardOverlaysContent = virtualKeyboard.overlaysContent;
+		virtualKeyboard.overlaysContent = true;
+	}
+	removeRoomKeyboardListeners = installRoomKeyboardOffsetTracking();
 	mounted = true;
 	lastPostCount = data.posts.length;
 	intervalId = setInterval(() => {
@@ -396,6 +423,11 @@ onMount(() => {
 
 onDestroy(() => {
 	mobileViewportQuery?.removeEventListener("change", handleMobileViewportChange);
+	removeRoomKeyboardListeners?.();
+	const virtualKeyboard = getVirtualKeyboard();
+	if (virtualKeyboard && previousVirtualKeyboardOverlaysContent !== undefined) {
+		virtualKeyboard.overlaysContent = previousVirtualKeyboardOverlaysContent;
+	}
 	clearInterval(intervalId);
 	if (programmaticScrollTimer) clearTimeout(programmaticScrollTimer);
 	clearRoomExperimentHeartbeatTimer();
@@ -409,6 +441,29 @@ onDestroy(() => {
 
 function handleMobileViewportChange(event: MediaQueryListEvent) {
 	isMobileViewport = event.matches;
+}
+
+function getVirtualKeyboard() {
+	return (navigator as Navigator & { virtualKeyboard?: { overlaysContent: boolean } }).virtualKeyboard;
+}
+
+function updateRoomKeyboardOffset() {
+	const viewport = window.visualViewport;
+	const offset = viewport ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop) : 0;
+	document.documentElement.style.setProperty("--room-keyboard-offset", `${Math.round(offset)}px`);
+}
+
+function installRoomKeyboardOffsetTracking() {
+	updateRoomKeyboardOffset();
+	window.addEventListener("resize", updateRoomKeyboardOffset);
+	window.visualViewport?.addEventListener("resize", updateRoomKeyboardOffset);
+	window.visualViewport?.addEventListener("scroll", updateRoomKeyboardOffset);
+	return () => {
+		window.removeEventListener("resize", updateRoomKeyboardOffset);
+		window.visualViewport?.removeEventListener("resize", updateRoomKeyboardOffset);
+		window.visualViewport?.removeEventListener("scroll", updateRoomKeyboardOffset);
+		document.documentElement.style.removeProperty("--room-keyboard-offset");
+	};
 }
 
 $effect(() => {
@@ -549,8 +604,16 @@ function formatCompactDate(iso: string) {
 <div class="page-container room-page-container">
 	<div class="feed-column">
 		<div class="room-mobile-bar">
-			<span class="room-mobile-title">{data.room.title}</span>
-			{#if !isGlobalLobby}
+			<span class="room-mobile-title">
+				{#if data.anime}
+					<a href="/anime/{data.anime.id}" class="anime-title-link">{data.anime.title}</a
+					><span class="hierarchy-separator" aria-hidden="true"> ❯ </span
+					><span class="room-name-label">{roomNameLabel}</span>
+				{:else}
+					{data.room.title}
+				{/if}
+			</span>
+			{#if !isGlobalLobby && status !== "ended"}
 				<span class="room-mobile-timer event-timer--{status}">{timerLabel}</span>
 				{#if status === "open"}
 					<span class="event-timer-badge">受付中</span>
@@ -584,7 +647,7 @@ function formatCompactDate(iso: string) {
 							onkeydown={(e) => {
 								if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
 									e.preventDefault();
-									if (!overLimit && postContent.trim()) {
+									if (!isPosting && !overLimit && postContent.trim()) {
 										e.currentTarget.closest('form')?.requestSubmit();
 									}
 								}
@@ -595,9 +658,9 @@ function formatCompactDate(iso: string) {
 							<button
 								type="submit"
 								class="btn btn-primary btn-sm"
-								disabled={overLimit || !postContent.trim()}
+								disabled={isPosting || overLimit || !postContent.trim()}
 							>
-								投稿
+								{isPosting ? "投稿中..." : "投稿"}
 							</button>
 						</div>
 					</div>
@@ -613,7 +676,7 @@ function formatCompactDate(iso: string) {
 			<div class="card anime-room-login">
 				このルームの投稿受付は終了しました。
 				{#if data.anime}
-					<a href="/?quote_anime={data.anime.id}">通常投稿で感想を残す</a>
+					<a href="/?quote_anime={data.anime.id}">引用投稿で感想を残す</a>
 				{/if}
 			</div>
 		{/if}
@@ -629,7 +692,7 @@ function formatCompactDate(iso: string) {
 				aria-pressed={postOrder === "oldest"}
 				onclick={() => setPostOrder("oldest")}
 			>
-				古い順
+				時系列順
 			</button>
 			<button
 				type="button"
@@ -699,7 +762,15 @@ function formatCompactDate(iso: string) {
 				{/if}
 				<div class="flex min-h-20 min-w-0 flex-1 flex-col justify-between pl-3">
 					<div class="min-w-0">
-						<h1 class="room-summary-title line-clamp-1 text-sm font-bold">{data.room.title}</h1>
+						<h1 class="room-summary-title text-sm font-bold">
+							{#if data.anime}
+								<a href="/anime/{data.anime.id}" class="anime-title-link">{data.anime.title}</a
+								><span class="hierarchy-separator" aria-hidden="true"> ❯ </span
+								><span class="room-name-label">{roomNameLabel}</span>
+							{:else}
+								{data.room.title}
+							{/if}
+						</h1>
 						{#if !isGlobalLobby}
 							<div class="mt-2 flex min-w-0 items-center gap-2">
 								{#if status === "ended"}
@@ -757,7 +828,42 @@ function formatCompactDate(iso: string) {
 }
 
 .room-summary-title {
+	display: inline-flex;
+	align-items: center;
+	min-width: 0;
+	overflow: hidden;
 	color: var(--color-text);
+}
+
+.room-name-label {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	min-width: 0;
+}
+
+.anime-title-link {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	min-width: 0;
+	text-decoration: none;
+	color: inherit;
+	padding: 4px 2px;
+	margin: -4px -2px;
+	transition: opacity 0.2s;
+}
+
+.anime-title-link:hover,
+.anime-title-link:active {
+	opacity: 0.7;
+}
+
+.hierarchy-separator {
+	flex-shrink: 0;
+	font-size: 0.85em;
+	color: var(--color-text-muted);
+	margin: 0 4px;
 }
 
 .room-summary-status {
@@ -792,7 +898,7 @@ function formatCompactDate(iso: string) {
 
 .room-page-container {
 	max-width: none;
-	height: 100dvh;
+	height: 100vh;
 	margin: 0;
 	align-items: stretch;
 	overflow: hidden;
@@ -928,11 +1034,6 @@ function formatCompactDate(iso: string) {
 	color: white;
 }
 
-:global(.room-composer-textarea:focus-visible) {
-	outline: 2px solid var(--color-accent);
-	outline-offset: 2px;
-}
-
 /* ── モバイル用コンパクトバー (サイドバー非表示時のみ表示) ── */
 .room-mobile-bar {
 	display: none;
@@ -946,11 +1047,12 @@ function formatCompactDate(iso: string) {
 	overflow: hidden;
 }
 .room-mobile-title {
+	display: inline-flex;
+	align-items: center;
 	font-size: 13px;
 	font-weight: 600;
 	color: var(--color-text);
 	overflow: hidden;
-	text-overflow: ellipsis;
 	white-space: nowrap;
 	flex: 1;
 	min-width: 0;
@@ -1001,13 +1103,14 @@ function formatCompactDate(iso: string) {
 	margin-top: 12px;
 }
 
-.feed-column > .composer {
+.feed-column > .composer,
+.feed-column > .anime-room-login {
 	margin-bottom: 24px;
 }
 
 @media (max-width: 960px) {
 	.room-page-container {
-		height: calc(100dvh - 52px);
+		height: calc(100vh - 52px);
 		padding-right: 12px;
 		padding-bottom: calc(80px + env(safe-area-inset-bottom));
 		padding-left: 12px;
@@ -1034,6 +1137,15 @@ function formatCompactDate(iso: string) {
 		margin-bottom: 0;
 		padding: 8px 10px;
 		border-radius: 14px;
+		transform: translateY(calc(0px - max(env(keyboard-inset-height, 0px), var(--room-keyboard-offset, 0px))));
+		transition: transform 160ms ease;
+		will-change: transform;
+	}
+
+	:global(html.room-scroll-lock .mobile-bottom-nav) {
+		transform: translateY(max(env(keyboard-inset-height, 0px), var(--room-keyboard-offset, 0px)));
+		transition: transform 160ms ease;
+		will-change: transform;
 	}
 
 	.room-page-container .composer form,
@@ -1073,6 +1185,18 @@ function formatCompactDate(iso: string) {
 		min-height: 32px;
 		padding: 6px 12px;
 		white-space: nowrap;
+	}
+}
+
+@supports (height: 100svh) {
+	.room-page-container {
+		height: 100svh;
+	}
+
+	@media (max-width: 960px) {
+		.room-page-container {
+			height: calc(100svh - 52px);
+		}
 	}
 }
 

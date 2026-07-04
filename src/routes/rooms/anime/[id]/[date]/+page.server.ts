@@ -19,6 +19,7 @@ import {
 	getActiveRoomExperimentRunForAnime as getActiveExperimentRun,
 } from "$lib/server/room-experiments";
 import type { Anime } from "$lib/types";
+import { calcEpisodeNumberFromDate } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
 function dateKeyToDate(value: string) {
@@ -85,6 +86,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 	if (!session) throw error(404, "放送ルームが見つかりません");
 
 	const hashtag = roomHashtag(anime);
+	const episodeNumber = calcEpisodeNumberFromDate(session.room_date, anime.aired_from, anime.broadcast_time);
 	const roomExperimentSupabase = user ? createRoomExperimentServiceClient() : null;
 	const [posts, trending, animeTrending, roomExperimentRun, roomExitSurveyLoadState] = await Promise.all([
 		getBroadcastRoomPosts(supabase, session.id, user?.id ?? null, { limit: 100, ascending: true }),
@@ -105,7 +107,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 			posting_opens_at: session.posting_opens_at,
 			posting_closes_at: session.posting_closes_at,
 			duration_minutes: session.duration_minutes,
-			title: `${anime.title} 放送ルーム`,
+			title: episodeNumber != null ? `${anime.title} ${episodeNumber}話` : `${anime.title} 放送ルーム`,
 		},
 		posts,
 		trending: trending.data ?? [],

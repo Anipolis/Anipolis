@@ -437,6 +437,21 @@ function buildAnimeRoomHref(
 	return session?.room_date ? `/rooms/anime/${String(anime.id)}/${session.room_date}` : null;
 }
 
+export function calcEpisodeNumberFromDate(
+	roomDate: string | null,
+	airedFrom: string | null,
+	broadcastTime: string | null,
+): number | null {
+	if (!roomDate || !airedFrom) return null;
+	const airedFromDate = new Date(`${airedFrom.slice(0, 10)}T00:00:00`);
+	const slotDate = new Date(`${roomDate}T00:00:00`);
+	const broadcastHour = broadcastTime ? Number(broadcastTime.split(":")[0]) : 0;
+	if (broadcastHour >= 24) slotDate.setDate(slotDate.getDate() + 1);
+	const msDiff = slotDate.getTime() - airedFromDate.getTime();
+	if (msDiff < 0) return null;
+	return Math.floor(Math.round(msDiff / 86_400_000) / 7) + 1;
+}
+
 function calcEpisodeNumber(
 	rawSession: RawPost["broadcast_room_session"],
 	airedFrom: string | null,
@@ -444,14 +459,7 @@ function calcEpisodeNumber(
 ): number | null {
 	const session = Array.isArray(rawSession) ? rawSession[0] : rawSession;
 	if (session?.room_kind === "global") return null;
-	if (!session?.room_date || !airedFrom) return null;
-	const airedFromDate = new Date(`${airedFrom.slice(0, 10)}T00:00:00`);
-	const slotDate = new Date(`${session.room_date}T00:00:00`);
-	const broadcastHour = broadcastTime ? Number(broadcastTime.split(":")[0]) : 0;
-	if (broadcastHour >= 24) slotDate.setDate(slotDate.getDate() + 1);
-	const msDiff = slotDate.getTime() - airedFromDate.getTime();
-	if (msDiff < 0) return null;
-	return Math.floor(Math.round(msDiff / 86_400_000) / 7) + 1;
+	return calcEpisodeNumberFromDate(session?.room_date ?? null, airedFrom, broadcastTime);
 }
 
 export function buildAnimeRoomLabel(anime: Pick<AnimeQuote, "title" | "official_hashtag" | "episode_number">): string {
@@ -542,6 +550,16 @@ export interface BroadcastRoomSession {
 	duration_minutes: number;
 	posting_opens_at: string;
 	posting_closes_at: string;
+}
+
+export interface OpenBroadcastRoomSummary {
+	id: string;
+	anime_id: string;
+	room_date: string;
+	room_kind: "episode" | "global";
+	room_key: string;
+	scheduled_at: string;
+	anime: { id: string; title: string; cover_url: string | null } | null;
 }
 
 export interface BroadcastRoomOverride {

@@ -45,6 +45,8 @@
 	--danger: var(--color-danger);
 	--status-watching: #34d399;
 	--status-plan: #60a5fa;
+	--status-completed: #6366f1;
+	--watch-status-plan: #94a3b8;
 	--status-on-hold: #fbbf24;
 	--status-dropped: #f87171;
 	--status-score: #f59e0b;
@@ -71,6 +73,8 @@
 	--anipolis-logo-image: url("/anipolis-logo.png");
 	--status-watching: #15803d;
 	--status-plan: #1d4ed8;
+	--status-completed: #4338ca;
+	--watch-status-plan: #64748b;
 	--status-on-hold: #a16207;
 	--status-dropped: #b91c1c;
 	--status-score: #a16207;
@@ -117,9 +121,17 @@ body {
 
 :where(html.room-scroll-lock) .app-layout,
 :where(html.room-scroll-lock) .app-main {
-	height: 100dvh;
-	min-height: 100dvh;
+	height: 100vh;
+	min-height: 100vh;
 	overflow: hidden;
+}
+
+@supports (height: 100svh) {
+	:where(html.room-scroll-lock) .app-layout,
+	:where(html.room-scroll-lock) .app-main {
+		height: 100svh;
+		min-height: 100svh;
+	}
 }
 
 .scrollbar-thin-muted {
@@ -580,8 +592,7 @@ textarea {
 }
 
 .composer-textarea:focus-visible {
-	outline: 2px solid var(--color-accent);
-	outline-offset: 2px;
+	outline: none;
 }
 
 .composer-footer {
