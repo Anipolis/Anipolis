@@ -17,6 +17,7 @@ type PostOrder = "oldest" | "newest";
 let now = $state(Date.now());
 let intervalId: ReturnType<typeof setInterval>;
 let postContent = $state("");
+let isPosting = $state(false);
 let textareaEl: HTMLTextAreaElement | null = $state(null);
 let composerEl: HTMLDivElement | null = $state(null);
 let keepComposerFocused = $state(true);
@@ -279,11 +280,24 @@ function handleWindowPointerDown(event: PointerEvent) {
 	keepComposerFocused = false;
 }
 
-const handleCreatePost: SubmitFunction = () => {
+const handleCreatePost: SubmitFunction = ({ cancel }) => {
+	if (isPosting) {
+		cancel();
+		return;
+	}
+	isPosting = true;
 	keepComposerFocused = true;
 	return async ({ result, update }) => {
-		await update({ reset: false });
-		if (result.type === "success") localSurveyPostCount += 1;
+		try {
+			// invalidateAll は load 全体の再実行で重いため、自分の投稿はライブ更新と同じ差分APIで反映する
+			await update({ reset: false, invalidateAll: false });
+			if (result.type === "success") {
+				localSurveyPostCount += 1;
+				await fetchNewPosts();
+			}
+		} finally {
+			isPosting = false;
+		}
 		await focusComposerTextarea({ preventScroll: true });
 	};
 };
@@ -525,7 +539,7 @@ function formatCompactDate(iso: string) {
 							onkeydown={(e) => {
 								if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
 									e.preventDefault();
-									if (!overLimit && postContent.trim()) {
+									if (!isPosting && !overLimit && postContent.trim()) {
 										e.currentTarget.closest('form')?.requestSubmit();
 									}
 								}
@@ -536,9 +550,9 @@ function formatCompactDate(iso: string) {
 							<button
 								type="submit"
 								class="btn btn-primary btn-sm"
-								disabled={overLimit || !postContent.trim()}
+								disabled={isPosting || overLimit || !postContent.trim()}
 							>
-								投稿
+								{isPosting ? "投稿中..." : "投稿"}
 							</button>
 						</div>
 					</div>
