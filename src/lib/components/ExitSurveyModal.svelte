@@ -243,7 +243,7 @@ function submit() {
 .survey-backdrop {
 	position: fixed;
 	inset: 0;
-	z-index: 100;
+	z-index: 1000;
 	display: grid;
 	place-items: center;
 	background: rgb(0 0 0 / 0.54);
@@ -264,6 +264,7 @@ function submit() {
 }
 
 .survey-header {
+	flex: none;
 	padding: 20px 22px 14px;
 	border-bottom: 1px solid var(--color-border);
 }
@@ -283,6 +284,8 @@ function submit() {
 
 .survey-body {
 	display: grid;
+	flex: 1 1 auto;
+	min-height: 0;
 	gap: 18px;
 	padding: 18px 22px;
 	overflow-y: auto;
@@ -386,6 +389,7 @@ function submit() {
 
 .survey-actions {
 	display: flex;
+	flex: none;
 	justify-content: flex-end;
 	gap: 10px;
 	padding: 14px 22px 20px;

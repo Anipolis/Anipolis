@@ -17,6 +17,7 @@ type PostOrder = "oldest" | "newest";
 let now = $state(Date.now());
 let intervalId: ReturnType<typeof setInterval>;
 let postContent = $state("");
+let isPosting = $state(false);
 let textareaEl: HTMLTextAreaElement | null = $state(null);
 let composerEl: HTMLDivElement | null = $state(null);
 let keepComposerFocused = $state(true);
@@ -34,6 +35,8 @@ let surveyHandled = $state(false);
 let surveySubmitting = $state(false);
 let surveyErrorMessage: string | null = $state(null);
 let programmaticScrollTimer: ReturnType<typeof setTimeout> | undefined;
+let previousVirtualKeyboardOverlaysContent: boolean | undefined;
+let removeRoomKeyboardListeners: (() => void) | undefined;
 
 const maxLen = 280;
 const latestEdgeThreshold = 80;
@@ -279,11 +282,24 @@ function handleWindowPointerDown(event: PointerEvent) {
 	keepComposerFocused = false;
 }
 
-const handleCreatePost: SubmitFunction = () => {
+const handleCreatePost: SubmitFunction = ({ cancel }) => {
+	if (isPosting) {
+		cancel();
+		return;
+	}
+	isPosting = true;
 	keepComposerFocused = true;
 	return async ({ result, update }) => {
-		await update({ reset: false });
-		if (result.type === "success") localSurveyPostCount += 1;
+		try {
+			// invalidateAll は load 全体の再実行で重いため、自分の投稿はライブ更新と同じ差分APIで反映する
+			await update({ reset: false, invalidateAll: false });
+			if (result.type === "success") {
+				localSurveyPostCount += 1;
+				await fetchNewPosts();
+			}
+		} finally {
+			isPosting = false;
+		}
 		await focusComposerTextarea({ preventScroll: true });
 	};
 };
@@ -321,6 +337,12 @@ onMount(() => {
 	mobileViewportQuery = window.matchMedia("(max-width: 960px)");
 	isMobileViewport = mobileViewportQuery.matches;
 	mobileViewportQuery.addEventListener("change", handleMobileViewportChange);
+	const virtualKeyboard = getVirtualKeyboard();
+	if (virtualKeyboard) {
+		previousVirtualKeyboardOverlaysContent = virtualKeyboard.overlaysContent;
+		virtualKeyboard.overlaysContent = true;
+	}
+	removeRoomKeyboardListeners = installRoomKeyboardOffsetTracking();
 	mounted = true;
 	lastPostCount = data.posts.length;
 	intervalId = setInterval(() => {
@@ -339,6 +361,11 @@ onMount(() => {
 
 onDestroy(() => {
 	mobileViewportQuery?.removeEventListener("change", handleMobileViewportChange);
+	removeRoomKeyboardListeners?.();
+	const virtualKeyboard = getVirtualKeyboard();
+	if (virtualKeyboard && previousVirtualKeyboardOverlaysContent !== undefined) {
+		virtualKeyboard.overlaysContent = previousVirtualKeyboardOverlaysContent;
+	}
 	clearInterval(intervalId);
 	if (programmaticScrollTimer) clearTimeout(programmaticScrollTimer);
 	clearRoomExperimentHeartbeatTimer();
@@ -352,6 +379,29 @@ onDestroy(() => {
 
 function handleMobileViewportChange(event: MediaQueryListEvent) {
 	isMobileViewport = event.matches;
+}
+
+function getVirtualKeyboard() {
+	return (navigator as Navigator & { virtualKeyboard?: { overlaysContent: boolean } }).virtualKeyboard;
+}
+
+function updateRoomKeyboardOffset() {
+	const viewport = window.visualViewport;
+	const offset = viewport ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop) : 0;
+	document.documentElement.style.setProperty("--room-keyboard-offset", `${Math.round(offset)}px`);
+}
+
+function installRoomKeyboardOffsetTracking() {
+	updateRoomKeyboardOffset();
+	window.addEventListener("resize", updateRoomKeyboardOffset);
+	window.visualViewport?.addEventListener("resize", updateRoomKeyboardOffset);
+	window.visualViewport?.addEventListener("scroll", updateRoomKeyboardOffset);
+	return () => {
+		window.removeEventListener("resize", updateRoomKeyboardOffset);
+		window.visualViewport?.removeEventListener("resize", updateRoomKeyboardOffset);
+		window.visualViewport?.removeEventListener("scroll", updateRoomKeyboardOffset);
+		document.documentElement.style.removeProperty("--room-keyboard-offset");
+	};
 }
 
 $effect(() => {
@@ -525,7 +575,7 @@ function formatCompactDate(iso: string) {
 							onkeydown={(e) => {
 								if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
 									e.preventDefault();
-									if (!overLimit && postContent.trim()) {
+									if (!isPosting && !overLimit && postContent.trim()) {
 										e.currentTarget.closest('form')?.requestSubmit();
 									}
 								}
@@ -536,9 +586,9 @@ function formatCompactDate(iso: string) {
 							<button
 								type="submit"
 								class="btn btn-primary btn-sm"
-								disabled={overLimit || !postContent.trim()}
+								disabled={isPosting || overLimit || !postContent.trim()}
 							>
-								投稿
+								{isPosting ? "投稿中..." : "投稿"}
 							</button>
 						</div>
 					</div>
@@ -761,7 +811,7 @@ function formatCompactDate(iso: string) {
 
 .room-page-container {
 	max-width: none;
-	height: 100dvh;
+	height: 100vh;
 	margin: 0;
 	align-items: stretch;
 	overflow: hidden;
@@ -973,7 +1023,7 @@ function formatCompactDate(iso: string) {
 
 @media (max-width: 960px) {
 	.room-page-container {
-		height: calc(100dvh - 52px);
+		height: calc(100vh - 52px);
 		padding-right: 12px;
 		padding-bottom: calc(80px + env(safe-area-inset-bottom));
 		padding-left: 12px;
@@ -1000,6 +1050,15 @@ function formatCompactDate(iso: string) {
 		margin-bottom: 0;
 		padding: 8px 10px;
 		border-radius: 14px;
+		transform: translateY(calc(0px - max(env(keyboard-inset-height, 0px), var(--room-keyboard-offset, 0px))));
+		transition: transform 160ms ease;
+		will-change: transform;
+	}
+
+	:global(html.room-scroll-lock .mobile-bottom-nav) {
+		transform: translateY(max(env(keyboard-inset-height, 0px), var(--room-keyboard-offset, 0px)));
+		transition: transform 160ms ease;
+		will-change: transform;
 	}
 
 	.room-page-container .composer form,
@@ -1039,6 +1098,18 @@ function formatCompactDate(iso: string) {
 		min-height: 32px;
 		padding: 6px 12px;
 		white-space: nowrap;
+	}
+}
+
+@supports (height: 100svh) {
+	.room-page-container {
+		height: 100svh;
+	}
+
+	@media (max-width: 960px) {
+		.room-page-container {
+			height: calc(100svh - 52px);
+		}
 	}
 }
 

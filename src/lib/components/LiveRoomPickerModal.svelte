@@ -24,7 +24,7 @@ $effect(() => {
 {#if open}
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<div
-		class="anime-search-overlay"
+		class="anime-search-overlay live-room-picker-overlay"
 		onclick={(e) => {
 			if (e.target === e.currentTarget) onclose();
 		}}
@@ -50,7 +50,11 @@ $effect(() => {
 					<p class="anime-search-empty">現在ライブ中の実況ルームはありません</p>
 				{:else}
 					{#each rooms as room (room.id)}
-						<a href="/rooms/anime/{room.anime_id}/{room.room_date}" class="anime-search-item">
+						<a
+							href="/rooms/anime/{room.anime_id}/{room.room_date}"
+							class="anime-search-item"
+							onclick={onclose}
+						>
 							{#if room.anime?.cover_url}
 								<img src={room.anime.cover_url} alt={room.anime.title} class="anime-search-thumb">
 							{:else}
@@ -67,3 +71,11 @@ $effect(() => {
 		</div>
 	</div>
 {/if}
+
+<style>
+.anime-search-overlay.live-room-picker-overlay {
+	z-index: 1200;
+	background: rgba(0, 0, 0, 0.72);
+	pointer-events: auto;
+}
+</style>
