@@ -59,12 +59,6 @@ async function openLiveRoomPicker() {
 			return;
 		}
 		const rooms: OpenBroadcastRoomSummary[] = await res.json();
-		const onlyRoom = rooms.length === 1 ? rooms[0] : undefined;
-		if (onlyRoom) {
-			liveRoomModalOpen = false;
-			await goto(`/rooms/anime/${onlyRoom.anime_id}/${onlyRoom.room_date}`);
-			return;
-		}
 		liveRooms = rooms;
 	} catch {
 		liveRoomsError = true;

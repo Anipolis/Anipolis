@@ -57,6 +57,7 @@ function closePicker() {
 
 .live-room-entry {
 	width: 100%;
+	gap: 12px;
 	border: none;
 	background: none;
 	cursor: pointer;
