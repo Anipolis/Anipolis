@@ -4,6 +4,7 @@ import { tick } from "svelte";
 import { fade, scale } from "svelte/transition";
 import { enhance } from "$app/forms";
 import { page } from "$app/state";
+import { trapFocus } from "$lib/actions/trapFocus";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
 import type { BroadcastRoomOverride } from "$lib/types";
@@ -153,6 +154,9 @@ function dedupeLinks(links: { name: string; url: string }[]) {
 let myListModalOpen = $state(false);
 let showUserListModal = $state(false);
 let recommendModalOpen = $state(false);
+let hideRecommendFormResult = $state(false);
+const recommendFormMessage = $derived(hideRecommendFormResult ? "" : (form?.recommendMessage ?? ""));
+const recommendFormSuccess = $derived(!hideRecommendFormResult && Boolean(form?.recommendSuccess));
 // svelte-ignore state_referenced_locally
 let adminEditOpen = $state(Boolean(form?.success || form?.message));
 let activeAdminTab = $state<"basic" | "overrides">("basic");
@@ -164,7 +168,10 @@ $effect(() => {
 });
 
 $effect(() => {
-	if (form?.recommendSuccess || form?.recommendMessage) recommendModalOpen = true;
+	if (form?.recommendSuccess || form?.recommendMessage) {
+		hideRecommendFormResult = false;
+		recommendModalOpen = true;
+	}
 });
 
 const overrideKindOptions: { kind: BroadcastOverrideKind; label: string; description: string }[] = [
@@ -192,6 +199,13 @@ function handleUserListBackdropClick(event: MouseEvent) {
 
 function handleRecommendBackdropClick(event: MouseEvent) {
 	if (event.target === event.currentTarget) recommendModalOpen = false;
+}
+
+function openRecommendModal() {
+	recommendError = "";
+	recommendFeedback = "";
+	hideRecommendFormResult = true;
+	recommendModalOpen = true;
 }
 
 let coverUrl = $state("");
@@ -298,6 +312,7 @@ const handleRecommendSubmit: SubmitFunction = () => {
 	recommendSubmitting = true;
 	recommendFeedback = "";
 	recommendError = "";
+	hideRecommendFormResult = true;
 	return async ({ result, update }) => {
 		recommendSubmitting = false;
 		if (result.type === "failure") {
@@ -738,7 +753,7 @@ $effect(() => {
 						type="button"
 						class="action-bar-btn"
 						class:active={recommendModalOpen}
-						onclick={() => (recommendModalOpen = true)}
+						onclick={openRecommendModal}
 						aria-haspopup="dialog"
 						aria-expanded={recommendModalOpen}
 					>
@@ -1361,6 +1376,7 @@ $effect(() => {
 			aria-modal="true"
 			aria-labelledby="user-list-modal-title"
 			tabindex="-1"
+			use:trapFocus
 			in:scale={{ duration: 200, start: 0.95 }}
 		>
 			<header class="user-list-modal-header">
@@ -1371,9 +1387,7 @@ $effect(() => {
 					onclick={() => (showUserListModal = false)}
 					aria-label="閉じる"
 				>
-					<svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
-						<path d="M18 6 6 18M6 6l12 12" />
-					</svg>
+					<span class="i-lucide-x" aria-hidden="true"></span>
 				</button>
 			</header>
 
@@ -1421,6 +1435,7 @@ $effect(() => {
 			aria-modal="true"
 			aria-labelledby="recommend-modal-title"
 			tabindex="-1"
+			use:trapFocus
 			in:scale={{ duration: 200, start: 0.95 }}
 		>
 			<header class="user-list-modal-header">
@@ -1431,16 +1446,14 @@ $effect(() => {
 					onclick={() => (recommendModalOpen = false)}
 					aria-label="閉じる"
 				>
-					<svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
-						<path d="M18 6 6 18M6 6l12 12" />
-					</svg>
+					<span class="i-lucide-x" aria-hidden="true"></span>
 				</button>
 			</header>
 
-			{#if form?.recommendMessage || recommendError}
-				<p class="form-error">{recommendError || form?.recommendMessage}</p>
+			{#if recommendFormMessage || recommendError}
+				<p class="form-error">{recommendError || recommendFormMessage}</p>
 			{/if}
-			{#if form?.recommendSuccess || recommendFeedback}
+			{#if recommendFormSuccess || recommendFeedback}
 				<p class="form-success">{recommendFeedback || '推薦を送信しました'}</p>
 			{/if}
 
@@ -2748,11 +2761,9 @@ a.relation-card:hover {
 	outline: 2px solid var(--accent);
 	outline-offset: 2px;
 }
-.user-list-modal-close svg {
-	fill: none;
-	stroke: currentColor;
-	stroke-width: 2;
-	stroke-linecap: round;
+.user-list-modal-close :global(.i-lucide-x) {
+	width: 20px;
+	height: 20px;
 }
 .listed-users-list {
 	display: flex;
