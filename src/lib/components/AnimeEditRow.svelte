@@ -170,6 +170,7 @@ function confirmRemove() {
 .edit-cover {
 	display: block;
 	width: 80px;
+	aspect-ratio: 2 / 3;
 	flex: 0 0 auto;
 	overflow: hidden;
 	border-radius: 6px;
@@ -180,13 +181,14 @@ function confirmRemove() {
 .edit-cover img {
 	display: block;
 	width: 100%;
-	height: auto;
+	height: 100%;
+	object-fit: cover;
 }
 
 .anime-cover-placeholder {
 	display: grid;
-	aspect-ratio: 2 / 3;
 	width: 100%;
+	height: 100%;
 	place-items: center;
 	background: var(--surface, #1e293b);
 	color: var(--fg-muted, #94a3b8);

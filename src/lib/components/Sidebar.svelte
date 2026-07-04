@@ -43,13 +43,22 @@ function toggleTheme() {
 
 let liveRoomModalOpen = $state(false);
 let liveRooms = $state<OpenBroadcastRoomSummary[] | null>(null);
+let liveRoomsError = $state(false);
 
 async function openLiveRoomPicker() {
 	liveRoomModalOpen = true;
 	liveRooms = null;
+	liveRoomsError = false;
+	const controller = new AbortController();
+	const timeout = setTimeout(() => controller.abort(), 8000);
 	try {
-		const res = await fetch("/api/rooms/open?kind=episode");
-		const rooms: OpenBroadcastRoomSummary[] = res.ok ? await res.json() : [];
+		const res = await fetch("/api/rooms/open?kind=episode", { signal: controller.signal });
+		if (!res.ok) {
+			liveRoomsError = true;
+			liveRooms = [];
+			return;
+		}
+		const rooms: OpenBroadcastRoomSummary[] = await res.json();
 		const onlyRoom = rooms.length === 1 ? rooms[0] : undefined;
 		if (onlyRoom) {
 			liveRoomModalOpen = false;
@@ -58,7 +67,10 @@ async function openLiveRoomPicker() {
 		}
 		liveRooms = rooms;
 	} catch {
+		liveRoomsError = true;
 		liveRooms = [];
+	} finally {
+		clearTimeout(timeout);
 	}
 }
 
@@ -205,7 +217,12 @@ function isActive(path: string): boolean {
 	</div>
 </header>
 
-<LiveRoomPickerModal open={liveRoomModalOpen} rooms={liveRooms} onclose={closeLiveRoomPicker} />
+<LiveRoomPickerModal
+	open={liveRoomModalOpen}
+	rooms={liveRooms}
+	loadError={liveRoomsError}
+	onclose={closeLiveRoomPicker}
+/>
 
 <!-- Mobile drawer backdrop -->
 {#if drawerOpen}

@@ -5,7 +5,7 @@ import { enhance } from "$app/forms";
 import { replaceState } from "$app/navigation";
 import { page } from "$app/state";
 import { trapFocus } from "$lib/actions/trapFocus";
-import type { AnimeExchangeShare } from "$lib/types";
+import type { AnimeExchangeShare, OpenBroadcastRoomSummary } from "$lib/types";
 import { charCountClass } from "$lib/utils/format";
 import AnimeExchangeResult from "./AnimeExchangeResult.svelte";
 import UserAvatar from "./UserAvatar.svelte";
@@ -79,26 +79,13 @@ let cwSearchDebounce: ReturnType<typeof setTimeout> | null = null;
 let cwInputEl = $state<HTMLInputElement | null>(null);
 
 // 実況ルームリンク
-type OpenRoom = {
-	id: string;
-	anime_id: string;
-	room_date: string;
-	room_kind: "episode" | "global";
-	room_key: string;
-	scheduled_at: string;
-	anime: { id: string; title: string; cover_url: string | null } | null;
-};
-let selectedRoom = $state<OpenRoom | null>(null);
+let selectedRoom = $state<OpenBroadcastRoomSummary | null>(null);
 let roomModalOpen = $state(false);
-let openRooms = $state<OpenRoom[] | null>(null);
+let openRooms = $state<OpenBroadcastRoomSummary[] | null>(null);
 let roomsLoading = $state(false);
 
 // @メンション
 let textareaEl = $state<HTMLTextAreaElement | null>(null);
-
-onMount(() => {
-	if (focusOnMount) textareaEl?.focus();
-});
 let mentionResults = $state<UserResult[]>([]);
 let mentionDropdownOpen = $state(false);
 let mentionDebounce = $state<ReturnType<typeof setTimeout> | null>(null);
@@ -212,6 +199,10 @@ function openCwSearch() {
 $effect(() => {
 	if (cwSearchOpen && cwInputEl) setTimeout(() => cwInputEl?.focus(), 50);
 });
+
+onMount(() => {
+	if (focusOnMount) textareaEl?.focus();
+});
 function closeCwSearch() {
 	cwSearchOpen = false;
 }
@@ -239,7 +230,7 @@ async function openRoomSearch() {
 function closeRoomModal() {
 	roomModalOpen = false;
 }
-function selectRoom(room: OpenRoom) {
+function selectRoom(room: OpenBroadcastRoomSummary) {
 	selectedRoom = room;
 	roomModalOpen = false;
 }

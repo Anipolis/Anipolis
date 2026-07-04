@@ -488,7 +488,8 @@ function formatCompactDate(iso: string) {
 		<div class="room-mobile-bar">
 			<span class="room-mobile-title"
 				><a href="/anime/{data.anime.id}" class="anime-title-link">{data.anime.title}</a
-				><span class="hierarchy-separator"> ❯ </span><span class="room-name-label">{roomNameLabel}</span></span
+				><span class="hierarchy-separator" aria-hidden="true"> ❯ </span
+				><span class="room-name-label">{roomNameLabel}</span></span
 			>
 			{#if !isGlobalLobby && status !== "ended"}
 				<span class="room-mobile-timer event-timer--{status}">{timerLabel}</span>
@@ -630,7 +631,7 @@ function formatCompactDate(iso: string) {
 					<div class="min-w-0">
 						<h1 class="room-summary-title text-sm font-bold">
 							<a href="/anime/{data.anime.id}" class="anime-title-link">{data.anime.title}</a
-							><span class="hierarchy-separator"> ❯ </span
+							><span class="hierarchy-separator" aria-hidden="true"> ❯ </span
 							><span class="room-name-label">{roomNameLabel}</span>
 						</h1>
 						{#if !isGlobalLobby}

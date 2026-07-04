@@ -5,10 +5,11 @@ import type { OpenBroadcastRoomSummary } from "$lib/types";
 type Props = {
 	open: boolean;
 	rooms: OpenBroadcastRoomSummary[] | null;
+	loadError?: boolean;
 	onclose: () => void;
 };
 
-let { open, rooms, onclose }: Props = $props();
+let { open, rooms, loadError = false, onclose }: Props = $props();
 
 $effect(() => {
 	if (!open) return;
@@ -36,11 +37,15 @@ $effect(() => {
 		<div class="anime-search-modal">
 			<div class="anime-search-header">
 				<span class="anime-search-title">ライブ実況ルームを選択</span>
-				<button type="button" class="anime-search-close" onclick={onclose} aria-label="閉じる">✕</button>
+				<button type="button" class="anime-search-close" onclick={onclose} aria-label="閉じる">
+					<span class="i-lucide-x" aria-hidden="true"></span>
+				</button>
 			</div>
 			<div class="anime-search-results">
 				{#if rooms === null}
 					<p class="anime-search-empty">読み込み中…</p>
+				{:else if loadError}
+					<p class="anime-search-empty">ライブ実況ルームを読み込めませんでした</p>
 				{:else if rooms.length === 0}
 					<p class="anime-search-empty">現在ライブ中の実況ルームはありません</p>
 				{:else}
