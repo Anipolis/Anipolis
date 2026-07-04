@@ -1,5 +1,6 @@
 ﻿<script lang="ts">
 import type { SubmitFunction } from "@sveltejs/kit";
+import { onMount } from "svelte";
 import { enhance } from "$app/forms";
 import { replaceState } from "$app/navigation";
 import { page } from "$app/state";
@@ -33,6 +34,7 @@ interface Props {
 	initialExchangeShare?: AnimeExchangeShare | null;
 	watchingAnime?: AnimeResult[];
 	onsubmitsuccess?: () => void;
+	focusOnMount?: boolean;
 }
 
 let {
@@ -44,6 +46,7 @@ let {
 	initialExchangeShare = null,
 	watchingAnime = [],
 	onsubmitsuccess,
+	focusOnMount = false,
 }: Props = $props();
 
 const MAX_LENGTH = 280;
@@ -92,6 +95,10 @@ let roomsLoading = $state(false);
 
 // @メンション
 let textareaEl = $state<HTMLTextAreaElement | null>(null);
+
+onMount(() => {
+	if (focusOnMount) textareaEl?.focus();
+});
 let mentionResults = $state<UserResult[]>([]);
 let mentionDropdownOpen = $state(false);
 let mentionDebounce = $state<ReturnType<typeof setTimeout> | null>(null);

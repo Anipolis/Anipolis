@@ -584,11 +584,11 @@ async function submitReport(event: MouseEvent) {
 	--live-grid-gap: 7px;
 	--live-detail-start: calc(var(--live-row-pad-x) + var(--live-avatar-size) + var(--live-grid-gap));
 	position: relative;
-	border-bottom: 1px solid var(--color-border);
-	border-left: 2px solid color-mix(in srgb, var(--color-border) 72%, transparent);
+	border-left: 2px solid color-mix(in srgb, var(--color-border) 90%, transparent);
 	background: transparent;
 	transition: background 120ms ease;
 	-webkit-tap-highlight-color: transparent;
+	overflow-anchor: none;
 }
 
 .live-post-card:hover,
@@ -671,7 +671,7 @@ async function submitReport(event: MouseEvent) {
 	margin: 0;
 	overflow: hidden;
 	color: var(--color-text);
-	font-size: 13px;
+	font-size: 15px;
 	font-weight: 500;
 	line-height: 1.35;
 	word-break: break-word;
@@ -1052,7 +1052,7 @@ async function submitReport(event: MouseEvent) {
 	}
 
 	.live-content {
-		font-size: 12px;
+		font-size: 14px;
 	}
 
 	.live-time {
