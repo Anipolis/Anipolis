@@ -69,11 +69,11 @@ const broadcastLabels: Record<string, string> = {
 	unknown: "未定",
 };
 const listedUserStatusColors: Record<string, string> = {
-	watching: "#34d399",
-	completed: "var(--color-accent)",
-	plan_to_watch: "#60a5fa",
-	on_hold: "#fbbf24",
-	dropped: "#f87171",
+	watching: "var(--status-watching)",
+	completed: "var(--status-completed)",
+	plan_to_watch: "var(--watch-status-plan)",
+	on_hold: "var(--status-on-hold)",
+	dropped: "var(--status-dropped)",
 };
 const listedUserStatusLabels: Record<string, string> = {
 	watching: "視聴中",

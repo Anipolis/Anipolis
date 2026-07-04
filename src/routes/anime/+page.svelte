@@ -1756,11 +1756,11 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	transform: scale(1.1);
 }
 .quick-add-btn.in-list {
-	background: rgba(124, 58, 237, 0.75);
-	border-color: rgba(124, 58, 237, 0.9);
+	background: color-mix(in srgb, var(--status-completed) 78%, transparent);
+	border-color: var(--status-completed);
 }
 .quick-add-btn.in-list:hover {
-	background: var(--color-accent);
+	background: var(--status-completed);
 }
 
 /* ─── クイック追加モーダル ─── */

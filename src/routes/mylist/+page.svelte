@@ -520,10 +520,10 @@ $effect(() => {
 	color: var(--status-watching);
 }
 .status-section--completed .status-icon {
-	color: var(--color-accent);
+	color: var(--status-completed);
 }
 .status-section--plan_to_watch .status-icon {
-	color: var(--status-plan);
+	color: var(--watch-status-plan);
 }
 .status-section--on_hold .status-icon {
 	color: var(--status-on-hold);
@@ -598,9 +598,14 @@ $effect(() => {
 	color: var(--status-dropped);
 }
 
+.status-tab--completed.active {
+	background: color-mix(in srgb, var(--status-completed) 20%, transparent);
+	color: var(--status-completed);
+}
+
 .status-tab--plan_to_watch.active {
-	background: color-mix(in srgb, var(--status-plan) 20%, transparent);
-	color: var(--status-plan);
+	background: color-mix(in srgb, var(--watch-status-plan) 20%, transparent);
+	color: var(--watch-status-plan);
 }
 
 .tab-icon {
@@ -723,6 +728,7 @@ $effect(() => {
 
 	.status-tab.active,
 	.status-tab--watching.active,
+	.status-tab--completed.active,
 	.status-tab--plan_to_watch.active,
 	.status-tab--on_hold.active,
 	.status-tab--dropped.active {
