@@ -91,7 +91,7 @@ function parseAction(value: unknown): RoomExitSurveyAction | null {
 
 function parsePositiveInteger(value: unknown): number | null {
 	const numeric = typeof value === "string" && /^\d+$/.test(value) ? Number(value) : value;
-	if (typeof numeric !== "number" || !Number.isInteger(numeric) || numeric <= 0) return null;
+	if (typeof numeric !== "number" || !Number.isSafeInteger(numeric) || numeric <= 0) return null;
 	return numeric;
 }
 
