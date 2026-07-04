@@ -1,4 +1,4 @@
-﻿import { error, fail } from "@sveltejs/kit";
+import { error, fail } from "@sveltejs/kit";
 import {
 	deletePostAction,
 	insertPostWithHashtags,
@@ -6,28 +6,58 @@ import {
 	toggleLikeAction,
 	toggleRepostAction,
 } from "$lib/server/actions";
-import { getAnimeRankingTrending, getEvent, getEventPosts } from "$lib/server/queries";
-import type { Post } from "$lib/types";
+import { getAnime, getAnimeRankingTrending, getEvent, getEventRoomPosts } from "$lib/server/queries";
 import { extractHashtags } from "$lib/utils/hashtag";
 import type { Actions, PageServerLoad } from "./$types";
 
+const DEFAULT_EVENT_DURATION_MINUTES = 6 * 60;
+
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
+	// イベントルームはリアルタイムルームの放送日ウィンドウ制限（animeIsScheduledForDate 相当）の対象外。
+	// アニメに紐づいていないイベントや、放送スケジュールと無関係な単発イベントも成立させるため意図的に外している。
 	const { user } = await safeGetSession();
 
-	const [event, trending, animeTrending] = await Promise.all([
-		getEvent(supabase, params.id),
+	const event = await getEvent(supabase, params.id);
+	if (!event) throw error(404, "イベントが見つかりません");
+
+	const [anime, posts, trending, animeTrending] = await Promise.all([
+		event.anime_id ? getAnime(supabase, event.anime_id, user?.id ?? null) : Promise.resolve(null),
+		getEventRoomPosts(supabase, event.id, user?.id ?? null, { limit: 100, ascending: true }),
 		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
 		getAnimeRankingTrending(supabase, 5),
 	]);
 
-	if (!event) throw error(404, "イベントが見つかりません");
+	const scheduledMs = new Date(event.scheduled_at).getTime();
+	const durationMinutes = event.duration_minutes ?? DEFAULT_EVENT_DURATION_MINUTES;
+	const postingClosesAt = new Date(scheduledMs + durationMinutes * 60 * 1000).toISOString();
 
-	const posts = getEventPosts(supabase, event.hashtag, user?.id ?? null).catch((err) => {
-		console.error("[events/[id]] posts fetch error:", err);
-		return [] as Post[];
-	});
-
-	return { event, posts, trending: trending.data ?? [], animeTrending, user };
+	return {
+		anime,
+		room: {
+			session_id: event.id,
+			date: event.scheduled_at.slice(0, 10),
+			kind: "event" as const,
+			hashtag: event.hashtag,
+			scheduled_at: event.scheduled_at,
+			posting_opens_at: event.scheduled_at,
+			posting_closes_at: postingClosesAt,
+			duration_minutes: event.duration_minutes,
+			title: event.title,
+		},
+		posts,
+		trending: trending.data ?? [],
+		animeTrending,
+		user,
+		roomExperiment: {
+			enabled: false,
+		},
+		roomExitSurvey: {
+			experimentRunId: null,
+			alreadyAnswered: true,
+			postCount: 0,
+			surveyVersion: "n/a",
+		},
+	};
 };
 
 export const actions: Actions = {
@@ -48,9 +78,20 @@ export const actions: Actions = {
 		const hasTag = extractHashtags(content).includes(hashtag.toLowerCase());
 		const finalContent = hasTag ? content : `${content} #${hashtag}`;
 
-		return insertPostWithHashtags(supabase, user.id, finalContent, null, [], animeId, null, null, null, null, [
-			hashtag,
-		]);
+		return insertPostWithHashtags(
+			supabase,
+			user.id,
+			finalContent,
+			null,
+			[],
+			animeId,
+			null,
+			null,
+			null,
+			null,
+			[hashtag],
+			event.id,
+		);
 	},
 
 	deletePost: async ({ request, locals: { supabase, safeGetSession } }) => {

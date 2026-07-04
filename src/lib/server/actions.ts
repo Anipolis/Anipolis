@@ -88,6 +88,7 @@ export async function insertPostWithHashtags(
 	broadcastRoomSessionId: string | null = null,
 	cwAnimeId: string | null = null,
 	additionalHashtags: string[] = [],
+	eventId: string | null = null,
 ) {
 	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
 	if (moderationFailure) return moderationFailure;
@@ -117,6 +118,7 @@ export async function insertPostWithHashtags(
 		cw_anime_id: cwAnimeId ? Number(cwAnimeId) : null,
 		quoted_post_id: quotedPostId || null,
 		broadcast_room_session_id: broadcastRoomSessionId,
+		event_id: eventId,
 	};
 	const postPayload = exchangeShare ? { ...basePost, exchange_share: exchangeShare as unknown as Json } : basePost;
 
@@ -770,7 +772,7 @@ export async function exchangeAnimeAction(supabase: SupabaseClient<Database>, re
 
 	const { data, error } = await supabase.rpc("create_anime_exchange", {
 		p_anime_id: animeIdNumber,
-		p_comment: comment,
+		...(comment ? { p_comment: comment } : {}),
 		p_subjective_tags: subjectiveTags,
 	});
 

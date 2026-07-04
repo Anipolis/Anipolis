@@ -5,6 +5,7 @@ import {
 	getAnime,
 	getAnimeRelations,
 	getBroadcastRoomOverridesForAnime,
+	getEventsForAnime,
 	getUsersWhoListedAnime,
 	isAdminUser,
 } from "$lib/server/queries";
@@ -31,9 +32,10 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 
 	if (!anime) throw error(404, "アニメが見つかりません");
 
-	const [relations, broadcastOverrides] = await Promise.all([
+	const [relations, broadcastOverrides, events] = await Promise.all([
 		getAnimeRelations(supabase, anime.mal_id),
 		getBroadcastRoomOverridesForAnime(supabase, params.id),
+		getEventsForAnime(supabase, Number(anime.id)),
 	]);
 
 	const episodes =
@@ -51,7 +53,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 				}).reverse()
 			: [];
 
-	return { anime, user, isAdmin, listedUsers, relations, episodes, broadcastOverrides };
+	return { anime, user, isAdmin, listedUsers, relations, episodes, broadcastOverrides, events };
 };
 
 export const actions: Actions = {

@@ -60,7 +60,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 		room: {
 			session_id: session.id,
 			date: "lobby",
-			kind: "global",
+			kind: "global" as const,
 			hashtag,
 			scheduled_at: session.scheduled_at,
 			posting_opens_at: session.posting_opens_at,

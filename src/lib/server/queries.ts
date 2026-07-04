@@ -61,7 +61,7 @@ type NotificationRow = {
 	broadcast_anime: NotificationBroadcastAnime | NotificationBroadcastAnime[] | null;
 };
 
-type EventRow = Omit<Database["public"]["Tables"]["events"]["Row"], "anime_id"> & {
+type EventRow = Omit<Database["public"]["Tables"]["events"]["Row"], "anime_id" | "updated_at"> & {
 	anime_id?: number | null;
 	profiles: { username: string; display_name: string | null; avatar_url: string | null } | null;
 	anime?: { id: number; title: string; title_en: string | null; cover_url: string | null } | null;
@@ -213,7 +213,7 @@ export async function enrichPostsWithCounts(
 	// p_user_id が NULL（未ログイン）の場合は各 *_by_me が全て false になる。
 	const { data: countsData } = await supabase.rpc("get_post_counts", {
 		p_post_ids: postIds,
-		p_user_id: userId,
+		...(userId ? { p_user_id: userId } : {}),
 	});
 
 	const countsByPostId = new Map((countsData ?? []).map((row) => [row.post_id, row]));
@@ -549,6 +549,26 @@ export async function getEvent(supabase: SupabaseClient<Database>, eventId: stri
 }
 
 /**
+ * 指定アニメに紐づくイベント一覧を取得する（アニメ詳細ページの「イベント」タブ用）。
+ * キャンセル済みも含めて全件返す（日付範囲・is_cancelled によるフィルタなし）。
+ */
+export async function getEventsForAnime(supabase: SupabaseClient<Database>, animeId: number): Promise<Event[]> {
+	const { data, error } = await supabase
+		.from("events")
+		.select(`
+            id, creator_id, title, description, hashtag, anime_id,
+            scheduled_at, duration_minutes, is_cancelled, created_at,
+            profiles!events_creator_id_fkey ( username, display_name, avatar_url ),
+            anime:anime!events_anime_id_fkey ( id, title, title_en, cover_url )
+        `)
+		.eq("anime_id", animeId)
+		.order("scheduled_at", { ascending: false });
+
+	if (error || !data) return [];
+	return data.map(toEvent);
+}
+
+/**
  * イベントのハッシュタグを持つ投稿を取得する（イベントルーム表示用）
  */
 export async function getEventPosts(
@@ -603,6 +623,28 @@ export async function getBroadcastRoomPosts(
 		.select(POST_LIST_SELECT)
 		.eq("broadcast_room_session_id", sessionId)
 		.is("parent_id", null);
+	if (sinceCreatedAt) query = query.gt("created_at", sinceCreatedAt);
+	const { data: rawPosts } = await query.order("created_at", { ascending: false }).limit(limit);
+	const orderedPosts = ascending ? [...(rawPosts ?? [])].reverse() : rawPosts;
+
+	// ルーム内ではそのルームのミュートを適用しない（明示的に入室しているため）
+	return enrichPostsWithCounts(supabase, (orderedPosts ?? []) as unknown as RawPost[], userId, {
+		includeMutedRoomPosts: true,
+	});
+}
+
+/**
+ * イベントルームの投稿を event_id で直接取得する（放送ルームの getBroadcastRoomPosts と同様）。
+ */
+export async function getEventRoomPosts(
+	supabase: SupabaseClient<Database>,
+	eventId: string,
+	userId: string | null,
+	options: { limit?: number; ascending?: boolean; sinceCreatedAt?: string } = {},
+): Promise<Post[]> {
+	const { limit = 100, ascending = false, sinceCreatedAt } = options;
+
+	let query = supabase.from("posts").select(POST_LIST_SELECT).eq("event_id", eventId).is("parent_id", null);
 	if (sinceCreatedAt) query = query.gt("created_at", sinceCreatedAt);
 	const { data: rawPosts } = await query.order("created_at", { ascending: false }).limit(limit);
 	const orderedPosts = ascending ? [...(rawPosts ?? [])].reverse() : rawPosts;
@@ -1086,7 +1128,7 @@ function toAdminReport(
 		reporter_id: row.reporter_id,
 		reporter_username: reporter?.username ?? "unknown",
 		reporter_display_name: reporter?.display_name ?? null,
-		target_type: row.target_type,
+		target_type: row.target_type as ReportTargetType,
 		target_id: row.target_id,
 		target_user_id: row.target_user_id,
 		target_username: targetUser?.username ?? null,
@@ -1096,9 +1138,9 @@ function toAdminReport(
 		target_moderation_reason: moderation?.reason ?? null,
 		post_content: postContent,
 		post_hidden_by_admin: postHiddenByAdmin,
-		reason: row.reason,
+		reason: row.reason as ReportReason,
 		details: row.details,
-		status: row.status,
+		status: row.status as ReportStatus,
 		created_at: row.created_at,
 		updated_at: row.updated_at,
 	};
