@@ -90,8 +90,9 @@ function parseAction(value: unknown): RoomExitSurveyAction | null {
 }
 
 function parsePositiveInteger(value: unknown): number | null {
-	if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) return null;
-	return value;
+	const numeric = typeof value === "string" && /^\d+$/.test(value) ? Number(value) : value;
+	if (typeof numeric !== "number" || !Number.isSafeInteger(numeric) || numeric <= 0) return null;
+	return numeric;
 }
 
 const POSTGRES_INT4_MAX = 2_147_483_647;
@@ -344,7 +345,7 @@ export async function saveRoomExitSurveyResponse(
 				.eq("run_id", request.experimentRunId)
 				.eq("broadcast_room_session_id", request.broadcastRoomSessionId)
 				.eq("user_id", userId)
-				.maybeSingle(),
+				.limit(1),
 		]);
 
 	if (sessionError || runError || visitError) {
@@ -363,7 +364,7 @@ export async function saveRoomExitSurveyResponse(
 	if (!isSessionInRunWindow(session, run)) {
 		return { ok: false, status: 400, message: "Survey target room is outside the experiment window" };
 	}
-	if (!visit) {
+	if (!visit || visit.length === 0) {
 		return { ok: false, status: 403, message: "Survey target visit was not found" };
 	}
 
