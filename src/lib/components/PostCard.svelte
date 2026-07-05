@@ -79,7 +79,8 @@ const effectiveRoomContext = $derived(
 	roomContext ??
 		(post.anime_quote?.room_href
 			? { href: post.anime_quote.room_href, title: buildAnimeRoomLabel(post.anime_quote) }
-			: null),
+			: null) ??
+		(post.event_room ? { href: `/events/${post.event_room.id}`, title: post.event_room.title } : null),
 );
 const showsContextStack = $derived(!isDetailView && (!!post.repost_context || (!!effectiveRoomContext && !insideRoom)));
 const cwContentId = $derived(`post-cw-content-${post.id}`);

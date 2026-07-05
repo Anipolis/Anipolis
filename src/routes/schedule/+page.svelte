@@ -822,8 +822,9 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 					>
 				</label>
 				<label>
-					<span>ハッシュタグ</span>
+					<span>ルームリンク</span>
 					<input class="input" type="text" name="hashtag" required maxlength="50" placeholder="Anipolis視聴">
+					<span class="event-field-hint">トレンド集計に使われるタグ名です</span>
 				</label>
 				<div class="event-anime-field">
 					<span id="event-anime-field-label" class="event-form-label">対象アニメ</span>
@@ -1519,6 +1520,12 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	font-size: 0.75rem;
 	font-weight: 700;
 	color: var(--color-text-muted);
+}
+.event-field-hint {
+	font-size: 0.72rem;
+	font-weight: 400;
+	color: var(--color-text-muted);
+	opacity: 0.8;
 }
 .event-anime-selected,
 .event-anime-result {

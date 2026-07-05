@@ -516,12 +516,12 @@ async function parseEventForm(
 	}
 
 	const hashtag = rawHashtag.replace(/^#/, "").toLowerCase();
-	if (!hashtag) return { ok: false, failure: fail(400, { message: "ハッシュタグを入力してください" }) };
+	if (!hashtag) return { ok: false, failure: fail(400, { message: "ルームリンクを入力してください" }) };
 	if (hashtag.length > 50) {
-		return { ok: false, failure: fail(400, { message: "ハッシュタグは50文字以内で入力してください" }) };
+		return { ok: false, failure: fail(400, { message: "ルームリンクは50文字以内で入力してください" }) };
 	}
 	if (!/^[a-z0-9_　-鿿＀-￯一-鿿]+$/u.test(hashtag)) {
-		return { ok: false, failure: fail(400, { message: "ハッシュタグに使用できない文字が含まれています" }) };
+		return { ok: false, failure: fail(400, { message: "ルームリンクに使用できない文字が含まれています" }) };
 	}
 
 	if (!scheduledAtRaw) return { ok: false, failure: fail(400, { message: "開始日時を入力してください" }) };

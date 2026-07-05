@@ -22,7 +22,6 @@ import {
 } from "$lib/server/queries";
 import { getRoomExitSurveyLoadState, ROOM_EXIT_SURVEY_VERSION } from "$lib/server/room-exit-survey";
 import { createRoomExperimentServiceClient, getActiveRoomExperimentRunForEvent } from "$lib/server/room-experiments";
-import { extractHashtags } from "$lib/utils/hashtag";
 import type { Actions, PageServerLoad } from "./$types";
 
 const DEFAULT_EVENT_DURATION_MINUTES = 6 * 60;
@@ -99,7 +98,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 };
 
 export const actions: Actions = {
-	// イベントルームへの投稿（ハッシュタグを自動付与）
+	// イベントルームへの投稿
 	createPost: async ({ request, params, locals: { supabase, safeGetSession } }) => {
 		const { user } = await safeGetSession();
 		if (!user) return fail(401, { message: "ログインが必要です" });
@@ -118,17 +117,12 @@ export const actions: Actions = {
 		if (now < scheduledMs) return fail(403, { message: "このイベントはまだ投稿を受け付けていません" });
 		if (now > postingClosesAtMs) return fail(403, { message: "このイベントの投稿受付は終了しました" });
 
-		const hashtag = event.hashtag;
 		const animeId = event.anime_id;
-
-		// ハッシュタグが含まれていなければ自動付与
-		const hasTag = extractHashtags(content).includes(hashtag.toLowerCase());
-		const finalContent = hasTag ? content : `${content} #${hashtag}`;
 
 		return insertPostWithHashtags(
 			supabase,
 			user.id,
-			finalContent,
+			content,
 			null,
 			[],
 			animeId,
@@ -136,7 +130,7 @@ export const actions: Actions = {
 			null,
 			null,
 			null,
-			[hashtag],
+			[],
 			event.id,
 		);
 	},

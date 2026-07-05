@@ -118,6 +118,7 @@ export interface Post {
 	anime_id: string | null;
 	broadcast_room_session_id: string | null;
 	anime_quote: AnimeQuote | null;
+	event_room: { id: string; title: string } | null;
 	exchange_share: AnimeExchangeShare | null;
 	cw_anime_id: string | null;
 	cw_anime: { id: string; title: string; cover_url: string | null } | null;
@@ -321,6 +322,7 @@ export interface RawPost {
 		| { room_date: string; room_kind?: "episode" | "global" | null; room_key?: string | null }
 		| { room_date: string; room_kind?: "episode" | "global" | null; room_key?: string | null }[]
 		| null;
+	event?: { id: string; title: string } | { id: string; title: string }[] | null;
 	exchange_share?: unknown;
 	anime?: {
 		id: string | number;
@@ -420,6 +422,10 @@ export function toPost(
 					user_score: null,
 				}
 			: null,
+		event_room: (() => {
+			const event = Array.isArray(raw.event) ? raw.event[0] : raw.event;
+			return event ? { id: event.id, title: event.title } : null;
+		})(),
 		exchange_share: toAnimeExchangeShare(raw.exchange_share),
 		cw_anime_id: raw.cw_anime_id != null ? String(raw.cw_anime_id) : null,
 		cw_anime: raw.cw_anime

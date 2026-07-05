@@ -249,7 +249,7 @@ const handleCancelSubmit: SubmitFunction = () => {
 								>
 							</label>
 							<label>
-								<span>ハッシュタグ</span>
+								<span>ルームリンク</span>
 								<input
 									class="input"
 									type="text"
@@ -258,6 +258,7 @@ const handleCancelSubmit: SubmitFunction = () => {
 									maxlength="50"
 									value={event.hashtag}
 								>
+								<span class="field-hint">トレンド集計に使われるタグ名です</span>
 							</label>
 							<label>
 								<span>説明</span>
@@ -472,6 +473,11 @@ const handleCancelSubmit: SubmitFunction = () => {
 .edit-form .input:focus {
 	outline: 2px solid var(--color-accent);
 	outline-offset: 1px;
+}
+.field-hint {
+	font-size: 0.76rem;
+	color: var(--color-text-muted);
+	opacity: 0.8;
 }
 .form-error {
 	margin: 10px 0 0;
