@@ -261,9 +261,13 @@ const handleCancelSubmit: SubmitFunction = () => {
 							</label>
 							<label>
 								<span>説明</span>
-								<textarea class="input" name="description" rows="3" maxlength="280">
-									{event.description ?? ""}
-								</textarea>
+								<textarea
+									class="input"
+									name="description"
+									rows="3"
+									maxlength="280"
+									value={event.description ?? ""}
+								></textarea>
 							</label>
 							<label>
 								<span>所要時間（分）</span>

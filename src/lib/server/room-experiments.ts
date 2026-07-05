@@ -923,7 +923,11 @@ async function getEventRoomExperimentDashboardRuns(
 					exited_at: visit.exited_at,
 				}));
 
-			const eventPosts = posts.filter((post) => post.event_id === event.id);
+			// filterRoomExperimentPosts はセッションID一致で絞り込むため、イベント投稿では
+			// broadcast_room_session_id（常にnull）の代わりに event_id をルーム識別子として詰め替える。
+			const eventPosts = posts
+				.filter((post) => post.event_id === event.id)
+				.map((post) => ({ ...post, broadcast_room_session_id: post.event_id }));
 			const runPosts = filterRoomExperimentPosts(eventPosts, {
 				sessionId: event.id,
 				runStartedAt: run.started_at,
