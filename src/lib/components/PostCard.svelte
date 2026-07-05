@@ -5,7 +5,7 @@ import { goto } from "$app/navigation";
 import { trapFocus } from "$lib/actions/trapFocus";
 import AnimeExchangeResult from "$lib/components/AnimeExchangeResult.svelte";
 import ReactionUsersPopover from "$lib/components/ReactionUsersPopover.svelte";
-import { buildAnimeRoomLabel, type Post, type ReactionType, type ReactionUser } from "$lib/types";
+import { buildAnimeRoomLabel, buildEventRoomLabel, type Post, type ReactionType, type ReactionUser } from "$lib/types";
 import { formatBroadcastRelativeTime, formatRelativeTime } from "$lib/utils/format";
 import { parseContentParts } from "$lib/utils/hashtag";
 import BroadcastTimestamp from "./BroadcastTimestamp.svelte";
@@ -38,6 +38,10 @@ function fallbackRoomTag(title: string) {
 }
 
 function getRoomTagCandidates(post: Post) {
+	// イベントルームリンク付き投稿: 旧仕様で自動付与されていた末尾タグを非表示にする
+	if (post.event_room) {
+		return [normalizeRoomTag(post.event_room.hashtag)].filter((tag) => tag.length > 0);
+	}
 	const anime = post.anime_quote;
 	if (!post.broadcast_room_session_id || !anime?.room_href) return [];
 	return [
@@ -80,7 +84,9 @@ const effectiveRoomContext = $derived(
 		(post.anime_quote?.room_href
 			? { href: post.anime_quote.room_href, title: buildAnimeRoomLabel(post.anime_quote) }
 			: null) ??
-		(post.event_room ? { href: `/events/${post.event_room.id}`, title: post.event_room.title } : null),
+		(post.event_room
+			? { href: `/events/${post.event_room.id}`, title: buildEventRoomLabel(post.event_room) }
+			: null),
 );
 const showsContextStack = $derived(!isDetailView && (!!post.repost_context || (!!effectiveRoomContext && !insideRoom)));
 const cwContentId = $derived(`post-cw-content-${post.id}`);

@@ -15,7 +15,7 @@ export const POST_AUTHOR_SELECT = "profiles!posts_user_id_fkey ( username, displ
 export const POST_HASHTAGS_SELECT = "post_hashtags ( hashtags ( name ) )";
 export const POST_ROOM_SESSION_SELECT =
 	"broadcast_room_session:broadcast_room_sessions!posts_broadcast_room_session_id_fkey ( room_date, room_kind, room_key )";
-export const POST_EVENT_SELECT = "event:events!posts_event_id_fkey ( id, title )";
+export const POST_EVENT_SELECT = "event:events!posts_event_id_fkey ( id, title, hashtag )";
 export const POST_CARD_ANIME_SELECT =
 	"anime:anime!posts_anime_id_fkey ( id, title, cover_url, official_hashtag, broadcast_day, broadcast_time, broadcast_duration_minutes, aired_from )";
 export const POST_CW_ANIME_SELECT = "cw_anime:anime!posts_cw_anime_id_fkey ( id, title, cover_url )";
