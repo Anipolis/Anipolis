@@ -564,13 +564,6 @@ export interface EventMute {
 	event_is_cancelled: boolean;
 }
 
-export interface EventNotificationSetting {
-	event_id: string;
-	notify_1min: boolean;
-	notify_5min: boolean;
-	notify_30min: boolean;
-}
-
 export interface BroadcastRoomSession {
 	id: string;
 	anime_id: number;

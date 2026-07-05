@@ -2,7 +2,7 @@
 import type { SubmitFunction } from "@sveltejs/kit";
 import { untrack } from "svelte";
 import { enhance } from "$app/forms";
-import type { Anime, BroadcastRoomOverride, EventNotificationSetting } from "$lib/types";
+import type { Anime, BroadcastRoomOverride } from "$lib/types";
 import {
 	type BroadcastEpisodeSlot,
 	formatMarathonBadge,
@@ -42,11 +42,7 @@ let roomMuteSettings = $state(untrack(() => data.roomMuteSettings));
 
 // Event mute / notification state — optimistic, keyed by event.id
 let mutedEventIds = $state(new Set<string>(untrack(() => data.mutedEventIds)));
-let eventNotificationSettings = $state(
-	new Map<string, EventNotificationSetting>(
-		untrack(() => data.eventNotificationSettings).map((setting) => [setting.event_id, setting]),
-	),
-);
+let eventSubscribedIds = $state(new Set<string>(untrack(() => data.eventNotificationSubscriptions)));
 
 // Which anime are currently in their notification window (client-side highlight)
 let notifyingIds = $state(new Set<string>());
@@ -111,9 +107,7 @@ $effect(() => {
 	mutedAnimeIds = new Set<string>(data.mutedAnimeIds);
 	roomMuteSettings = data.roomMuteSettings;
 	mutedEventIds = new Set<string>(data.mutedEventIds);
-	eventNotificationSettings = new Map<string, EventNotificationSetting>(
-		data.eventNotificationSettings.map((setting) => [setting.event_id, setting]),
-	);
+	eventSubscribedIds = new Set<string>(data.eventNotificationSubscriptions);
 });
 
 function formatDate(value: string) {
@@ -368,52 +362,48 @@ function eventAlertKey(eventId: string) {
 	return `event:${eventId}`;
 }
 
-// Optimistic toggle for event notification settings — event bell menu
+// Optimistic on/off toggle for event notifications — mirrors notifySubmit (anime bell menu)
 const eventNotifySubmit: SubmitFunction = ({ formData }) => {
-	openAlertMenu = null;
 	const eventId = formData.get("event_id") as string;
-	const previous = eventNotificationSettings;
-	const next: EventNotificationSetting = {
-		event_id: eventId,
-		notify_1min: formData.get("notify_1min") === "on",
-		notify_5min: formData.get("notify_5min") === "on",
-		notify_30min: formData.get("notify_30min") === "on",
-	};
-	eventNotificationSettings = new Map(eventNotificationSettings);
-	eventNotificationSettings.set(eventId, next);
+	const wasSubscribed = eventSubscribedIds.has(eventId);
+	if (wasSubscribed) {
+		eventSubscribedIds.delete(eventId);
+	} else {
+		eventSubscribedIds.add(eventId);
+	}
+	eventSubscribedIds = new Set(eventSubscribedIds);
 	return async ({ result, update }) => {
 		if (result.type === "failure") {
-			eventNotificationSettings = previous;
+			if (wasSubscribed) {
+				eventSubscribedIds.add(eventId);
+			} else {
+				eventSubscribedIds.delete(eventId);
+			}
+			eventSubscribedIds = new Set(eventSubscribedIds);
 		}
 		await update({ reset: false });
 	};
 };
 
-const eventMuteSubmit: SubmitFunction = ({ formData }) => {
-	openAlertMenu = null;
+// Optimistic on/off toggle for event mute — the form's action switches between
+// updateEventMute / removeEventMute based on current state
+const eventMuteToggleSubmit: SubmitFunction = ({ formData }) => {
 	const eventId = formData.get("event_id") as string;
-	const previousMutedEventIds = new Set(mutedEventIds);
-	mutedEventIds.add(eventId);
+	const wasMuted = mutedEventIds.has(eventId);
+	if (wasMuted) {
+		mutedEventIds.delete(eventId);
+	} else {
+		mutedEventIds.add(eventId);
+	}
 	mutedEventIds = new Set(mutedEventIds);
 	return async ({ result, update }) => {
 		if (result.type === "failure") {
-			mutedEventIds = previousMutedEventIds;
-			return;
-		}
-		await update({ reset: false });
-	};
-};
-
-const eventRemoveSubmit: SubmitFunction = ({ formData }) => {
-	openAlertMenu = null;
-	const eventId = formData.get("event_id") as string;
-	const previousMutedEventIds = new Set(mutedEventIds);
-	mutedEventIds.delete(eventId);
-	mutedEventIds = new Set(mutedEventIds);
-	return async ({ result, update }) => {
-		if (result.type === "failure") {
-			mutedEventIds = previousMutedEventIds;
-			return;
+			if (wasMuted) {
+				mutedEventIds.add(eventId);
+			} else {
+				mutedEventIds.delete(eventId);
+			}
+			mutedEventIds = new Set(mutedEventIds);
 		}
 		await update({ reset: false });
 	};
@@ -529,10 +519,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 					{:else}
 						{#snippet eventSlot(event: ScheduleDayEvent)}
 							{@const eventMuted = mutedEventIds.has(event.id)}
-							{@const eventNotifSetting = eventNotificationSettings.get(event.id)}
-							{@const eventSubscribed = Boolean(
-								eventNotifSetting?.notify_1min || eventNotifSetting?.notify_5min || eventNotifSetting?.notify_30min,
-							)}
+							{@const eventSubscribed = eventSubscribedIds.has(event.id)}
 							<div
 								class="event-slot-wrap"
 								class:event-slot-wrap--menu-open={openAlertMenu === eventAlertKey(event.id)}
@@ -637,74 +624,97 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 										></button>
 										<div class="room-alert-menu" aria-label="イベント設定">
 											{#if !event.is_cancelled}
-												<p class="menu-section-label">通知</p>
 												<form
 													method="POST"
-													action="?/updateEventNotification"
+													action="?/toggleEventNotification"
 													use:enhance={eventNotifySubmit}
 												>
 													<input type="hidden" name="event_id" value={event.id}>
-													<div class="event-notify-checkboxes">
-														<label>
-															<input
-																type="checkbox"
-																name="notify_1min"
-																checked={eventNotifSetting?.notify_1min ?? false}
+													<button
+														type="submit"
+														class="notify-toggle"
+														class:notify-toggle--on={eventSubscribed}
+													>
+														{#if eventSubscribed}
+															<svg
+																width="13"
+																height="13"
+																viewBox="0 0 24 24"
+																fill="currentColor"
+																stroke="currentColor"
+																stroke-width="1"
+																aria-hidden="true"
 															>
-															<span>1分前</span>
-														</label>
-														<label>
-															<input
-																type="checkbox"
-																name="notify_5min"
-																checked={eventNotifSetting?.notify_5min ?? false}
+																<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+																<path d="M13.73 21a2 2 0 0 1-3.46 0" />
+															</svg>
+														{:else}
+															<svg
+																width="13"
+																height="13"
+																viewBox="0 0 24 24"
+																fill="none"
+																stroke="currentColor"
+																stroke-width="2"
+																stroke-linecap="round"
+																stroke-linejoin="round"
+																aria-hidden="true"
 															>
-															<span>5分前</span>
-														</label>
-														<label>
-															<input
-																type="checkbox"
-																name="notify_30min"
-																checked={eventNotifSetting?.notify_30min ?? false}
-															>
-															<span>30分前</span>
-														</label>
-													</div>
-													<button type="submit" class="event-notify-save">保存</button>
+																<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+																<path d="M13.73 21a2 2 0 0 1-3.46 0" />
+															</svg>
+														{/if}
+														<span class="notify-toggle-label"
+															>{eventSubscribed ? "通知オン" : "通知オフ"}</span
+														>
+														<span class="notify-toggle-switch">
+															<span
+																class="notify-toggle-knob"
+																class:notify-toggle-knob--on={eventSubscribed}
+															></span>
+														</span>
+													</button>
 												</form>
 												<div class="menu-divider"></div>
 											{/if}
-											<p class="menu-section-label">ミュート設定</p>
-											<div class="mute-chips">
-												<form
-													method="POST"
-													action="?/removeEventMute"
-													use:enhance={eventRemoveSubmit}
+											<form
+												method="POST"
+												action={eventMuted ? "?/removeEventMute" : "?/updateEventMute"}
+												use:enhance={eventMuteToggleSubmit}
+											>
+												<input type="hidden" name="event_id" value={event.id}>
+												<button
+													type="submit"
+													class="notify-toggle"
+													class:notify-toggle--on={eventMuted}
 												>
-													<input type="hidden" name="event_id" value={event.id}>
-													<button
-														type="submit"
-														class="mute-chip"
-														class:mute-chip--active={!eventMuted}
+													<svg
+														width="13"
+														height="13"
+														viewBox="0 0 24 24"
+														fill="none"
+														stroke="currentColor"
+														stroke-width="2"
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														aria-hidden="true"
 													>
-														ミュートしない
-													</button>
-												</form>
-												<form
-													method="POST"
-													action="?/updateEventMute"
-													use:enhance={eventMuteSubmit}
-												>
-													<input type="hidden" name="event_id" value={event.id}>
-													<button
-														type="submit"
-														class="mute-chip"
-														class:mute-chip--active={eventMuted}
+														<path d="M10.268 21a2 2 0 0 0 3.464 0" />
+														<path d="M17 17H4s3-2 3-9a5 5 0 0 1 .6-2.4" />
+														<path d="M9.3 3.3A6 6 0 0 1 18 8c0 2.2.3 3.9.8 5.2" />
+														<path d="m2 2 20 20" />
+													</svg>
+													<span class="notify-toggle-label"
+														>{eventMuted ? "ミュート中" : "ミュートオフ"}</span
 													>
-														ミュートする
-													</button>
-												</form>
-											</div>
+													<span class="notify-toggle-switch">
+														<span
+															class="notify-toggle-knob"
+															class:notify-toggle-knob--on={eventMuted}
+														></span>
+													</span>
+												</button>
+											</form>
 											<div class="menu-settings-link">
 												<a href="/settings/mutes" class="menu-settings-link-anchor">
 													<span class="i-lucide-settings-2" aria-hidden="true"></span>
@@ -1638,35 +1648,6 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	font-weight: 600;
 	text-transform: uppercase;
 	letter-spacing: 0.05em;
-}
-.event-notify-checkboxes {
-	display: flex;
-	flex-direction: column;
-	gap: 4px;
-	margin-top: 4px;
-}
-.event-notify-checkboxes label {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	font-size: 0.78rem;
-	color: var(--text-muted);
-	cursor: pointer;
-}
-.event-notify-save {
-	align-self: flex-start;
-	margin-top: 6px;
-	padding: 4px 12px;
-	border: 1px solid var(--accent);
-	border-radius: 8px;
-	background: var(--accent);
-	color: #fff;
-	font-size: 0.75rem;
-	font-weight: 600;
-	cursor: pointer;
-}
-.event-notify-save:hover {
-	opacity: 0.9;
 }
 .mute-chips {
 	display: flex;

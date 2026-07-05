@@ -16,7 +16,6 @@ import type {
 	BroadcastStatus,
 	Event,
 	EventMute,
-	EventNotificationSetting,
 	Notification,
 	OpenBroadcastRoomSummary,
 	Post,
@@ -2807,43 +2806,19 @@ export async function isEventMuted(
 	return data !== null;
 }
 
-export async function getEventNotificationSetting(
+/**
+ * 通知オンにしているイベントID一覧を取得する（getBroadcastSubscriptions のイベント版）。
+ * 行の存在 = 通知オン。通知タイミングはリアタイルームと共通の broadcast_notification_settings で管理。
+ */
+export async function getEventNotificationSubscriptions(
 	supabase: SupabaseClient<Database>,
 	userId: string,
-	eventId: string,
-): Promise<EventNotificationSetting | null> {
-	const { data } = await supabase
-		.from("event_notification_settings")
-		.select("event_id, notify_1min, notify_5min, notify_30min")
-		.eq("user_id", userId)
-		.eq("event_id", eventId)
-		.maybeSingle();
-	if (!data) return null;
-	return {
-		event_id: data.event_id,
-		notify_1min: data.notify_1min,
-		notify_5min: data.notify_5min,
-		notify_30min: data.notify_30min,
-	};
+): Promise<string[]> {
+	const { data } = await supabase.from("event_notification_settings").select("event_id").eq("user_id", userId);
+	return (data ?? []).map((row) => row.event_id);
 }
 
 /** ユーザーの全イベント通知設定を取得する（/schedule でイベントごとのベルメニューに表示するため）。テーブルが小さいため一括取得する。 */
-export async function getEventNotificationSettings(
-	supabase: SupabaseClient<Database>,
-	userId: string,
-): Promise<EventNotificationSetting[]> {
-	const { data } = await supabase
-		.from("event_notification_settings")
-		.select("event_id, notify_1min, notify_5min, notify_30min")
-		.eq("user_id", userId);
-	return (data ?? []).map((row) => ({
-		event_id: row.event_id,
-		notify_1min: row.notify_1min,
-		notify_5min: row.notify_5min,
-		notify_30min: row.notify_30min,
-	}));
-}
-
 export async function getOpenBroadcastRoomSessions(
 	supabase: SupabaseClient<Database>,
 	options?: { kind?: "episode" | "global" },

@@ -1313,35 +1313,40 @@ export async function removeEventMuteAction(request: Request, supabase: Supabase
 }
 
 /** イベント開始前通知設定（1分前/5分前/30分前）の upsert を処理する */
-export async function updateEventNotificationAction(
-	request: Request,
+/**
+ * イベント通知のオン/オフをトグルする（toggleBroadcastSubscription のイベント版）。
+ * 行の存在 = 通知オン。通知タイミングはリアタイルームと共通の
+ * broadcast_notification_settings で管理する。
+ */
+export async function toggleEventNotificationSubscription(
 	supabase: SupabaseClient<Database>,
 	userId: string,
-) {
-	const form = await request.formData();
-	const eventId = (form.get("event_id") as string | null)?.trim() ?? "";
-	if (!eventId) return fail(400, { message: "イベントが見つかりません" });
+	eventId: string,
+): Promise<{ subscribed: boolean }> {
+	const { data: existing, error: selectError } = await supabase
+		.from("event_notification_settings")
+		.select("event_id")
+		.eq("user_id", userId)
+		.eq("event_id", eventId)
+		.maybeSingle();
 
-	const notify1min = form.get("notify_1min") === "on";
-	const notify5min = form.get("notify_5min") === "on";
-	const notify30min = form.get("notify_30min") === "on";
+	if (selectError) throw selectError;
 
-	const { error } = await supabase.from("event_notification_settings").upsert(
-		{
-			user_id: userId,
-			event_id: eventId,
-			notify_1min: notify1min,
-			notify_5min: notify5min,
-			notify_30min: notify30min,
-			updated_at: new Date().toISOString(),
-		},
-		{ onConflict: "user_id,event_id" },
-	);
-	if (error) {
-		console.error("event notification upsert error:", error);
-		return fail(500, { message: "通知設定に失敗しました" });
+	if (existing) {
+		const { error: deleteError } = await supabase
+			.from("event_notification_settings")
+			.delete()
+			.eq("user_id", userId)
+			.eq("event_id", eventId);
+		if (deleteError) throw deleteError;
+		return { subscribed: false };
 	}
-	return { eventNotificationSuccess: true };
+
+	const { error: insertError } = await supabase
+		.from("event_notification_settings")
+		.insert({ user_id: userId, event_id: eventId });
+	if (insertError) throw insertError;
+	return { subscribed: true };
 }
 
 // linked_accounts は自動生成型未収録のためテーブル名のみ型アサーション使用
