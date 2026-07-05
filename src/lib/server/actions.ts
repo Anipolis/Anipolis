@@ -530,8 +530,8 @@ async function parseEventForm(
 		return { ok: false, failure: fail(400, { message: "開始日時の形式が正しくありません" }) };
 	}
 
-	const durationMinutes = durationRaw ? parseInt(durationRaw, 10) : null;
-	if (durationMinutes !== null && (Number.isNaN(durationMinutes) || durationMinutes <= 0)) {
+	const durationMinutes = durationRaw ? parsePositiveInt(durationRaw) : null;
+	if (durationRaw && durationMinutes === null) {
 		return { ok: false, failure: fail(400, { message: "配信時間は正の整数で入力してください" }) };
 	}
 
