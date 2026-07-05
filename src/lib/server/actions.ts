@@ -9,7 +9,7 @@ import { getEvent, isAdminUser } from "$lib/server/queries";
 import { createServiceRoleClient } from "$lib/server/supabase-admin";
 import { publicUrlToStoragePath, validateImageBuffer } from "$lib/server/upload";
 import type { Database, Json } from "$lib/supabase/database.types";
-import type { AnimeExchangeShare, AnimeStatus, BroadcastRoomMuteDuration, Event } from "$lib/types";
+import type { AnimeExchangeShare, AnimeStatus, BroadcastRoomMuteDuration } from "$lib/types";
 import { extractHashtags } from "$lib/utils/hashtag";
 
 const reportStatuses = new Set(["open", "reviewing", "resolved", "rejected"]);
@@ -583,30 +583,16 @@ export async function createEventAction(request: Request, supabase: SupabaseClie
 }
 
 /**
- * イベントの編集・削除・キャンセル権限があるか判定する（作成者本人 または 管理者）
- */
-export async function canManageEvent(
-	supabase: SupabaseClient<Database>,
-	userId: string,
-	event: Pick<Event, "creator_id">,
-): Promise<boolean> {
-	if (event.creator_id === userId) return true;
-	return isAdminUser(supabase, userId);
-}
-
-/**
- * イベントを更新する（作成者 または 管理者のみ）
+ * イベントを更新する（管理者のみ — イベント作成自体が管理者限定のため権限も管理者に統一）
  */
 export async function updateEventAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
 	const form = await request.formData();
 	const eventId = (form.get("event_id") as string | null)?.trim() ?? "";
 	if (!eventId) return fail(400, { message: "イベントIDが不正です" });
+	if (!(await isAdminUser(supabase, userId))) return fail(403, { message: "管理者権限が必要です" });
 
 	const event = await getEvent(supabase, eventId);
 	if (!event) return fail(404, { message: "イベントが見つかりません" });
-	if (!(await canManageEvent(supabase, userId, event))) {
-		return fail(403, { message: "このイベントを編集する権限がありません" });
-	}
 
 	const parsed = await parseEventForm(form, supabase);
 	if (!parsed.ok) return parsed.failure;
@@ -633,18 +619,16 @@ export async function updateEventAction(request: Request, supabase: SupabaseClie
 }
 
 /**
- * イベントをキャンセルする（作成者 または 管理者のみ）
+ * イベントをキャンセルする（管理者のみ — イベント作成自体が管理者限定のため権限も管理者に統一）
  */
 export async function cancelEventAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
 	const form = await request.formData();
 	const eventId = (form.get("event_id") as string | null)?.trim() ?? "";
 	if (!eventId) return fail(400, { message: "イベントIDが不正です" });
+	if (!(await isAdminUser(supabase, userId))) return fail(403, { message: "管理者権限が必要です" });
 
 	const event = await getEvent(supabase, eventId);
 	if (!event) return fail(404, { message: "イベントが見つかりません" });
-	if (!(await canManageEvent(supabase, userId, event))) {
-		return fail(403, { message: "このイベントをキャンセルする権限がありません" });
-	}
 
 	const { error } = await supabase.from("events").update({ is_cancelled: true }).eq("id", eventId);
 

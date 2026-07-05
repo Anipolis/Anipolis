@@ -1,7 +1,6 @@
 import { error, fail } from "@sveltejs/kit";
 import {
 	cancelEventAction,
-	canManageEvent,
 	deletePostAction,
 	insertPostWithHashtags,
 	toggleBookmarkAction,
@@ -9,7 +8,7 @@ import {
 	toggleRepostAction,
 	updateEventAction,
 } from "$lib/server/actions";
-import { getAnime, getAnimeRankingTrending, getEvent, getEventRoomPosts } from "$lib/server/queries";
+import { getAnime, getAnimeRankingTrending, getEvent, getEventRoomPosts, isAdminUser } from "$lib/server/queries";
 import { getRoomExitSurveyLoadState, ROOM_EXIT_SURVEY_VERSION } from "$lib/server/room-exit-survey";
 import { createRoomExperimentServiceClient, getActiveRoomExperimentRunForEvent } from "$lib/server/room-experiments";
 import type { Actions, PageServerLoad } from "./$types";
@@ -35,7 +34,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 				? getActiveRoomExperimentRunForEvent(roomExperimentSupabase, event.id)
 				: Promise.resolve(null),
 			getRoomExitSurveyLoadState(supabase, user?.id, { eventId: event.id }),
-			user ? canManageEvent(supabase, user.id, event) : Promise.resolve(false),
+			user ? isAdminUser(supabase, user.id) : Promise.resolve(false),
 		]);
 
 	const scheduledMs = new Date(event.scheduled_at).getTime();
