@@ -4,22 +4,12 @@ import {
 	canManageEvent,
 	deletePostAction,
 	insertPostWithHashtags,
-	removeEventMuteAction,
 	toggleBookmarkAction,
 	toggleLikeAction,
 	toggleRepostAction,
 	updateEventAction,
-	updateEventMuteAction,
-	updateEventNotificationAction,
 } from "$lib/server/actions";
-import {
-	getAnime,
-	getAnimeRankingTrending,
-	getEvent,
-	getEventNotificationSetting,
-	getEventRoomPosts,
-	isEventMuted,
-} from "$lib/server/queries";
+import { getAnime, getAnimeRankingTrending, getEvent, getEventRoomPosts } from "$lib/server/queries";
 import { getRoomExitSurveyLoadState, ROOM_EXIT_SURVEY_VERSION } from "$lib/server/room-exit-survey";
 import { createRoomExperimentServiceClient, getActiveRoomExperimentRunForEvent } from "$lib/server/room-experiments";
 import type { Actions, PageServerLoad } from "./$types";
@@ -35,29 +25,18 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 	if (!event) throw error(404, "イベントが見つかりません");
 
 	const roomExperimentSupabase = user ? createRoomExperimentServiceClient() : null;
-	const [
-		anime,
-		posts,
-		trending,
-		animeTrending,
-		roomExperimentRun,
-		roomExitSurveyLoadState,
-		canManage,
-		isMuted,
-		notificationSetting,
-	] = await Promise.all([
-		event.anime_id ? getAnime(supabase, event.anime_id, user?.id ?? null) : Promise.resolve(null),
-		getEventRoomPosts(supabase, event.id, user?.id ?? null, { limit: 100, ascending: true }),
-		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
-		getAnimeRankingTrending(supabase, 5),
-		roomExperimentSupabase
-			? getActiveRoomExperimentRunForEvent(roomExperimentSupabase, event.id)
-			: Promise.resolve(null),
-		getRoomExitSurveyLoadState(supabase, user?.id, { eventId: event.id }),
-		user ? canManageEvent(supabase, user.id, event) : Promise.resolve(false),
-		user ? isEventMuted(supabase, user.id, event.id) : Promise.resolve(false),
-		user ? getEventNotificationSetting(supabase, user.id, event.id) : Promise.resolve(null),
-	]);
+	const [anime, posts, trending, animeTrending, roomExperimentRun, roomExitSurveyLoadState, canManage] =
+		await Promise.all([
+			event.anime_id ? getAnime(supabase, event.anime_id, user?.id ?? null) : Promise.resolve(null),
+			getEventRoomPosts(supabase, event.id, user?.id ?? null, { limit: 100, ascending: true }),
+			supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
+			getAnimeRankingTrending(supabase, 5),
+			roomExperimentSupabase
+				? getActiveRoomExperimentRunForEvent(roomExperimentSupabase, event.id)
+				: Promise.resolve(null),
+			getRoomExitSurveyLoadState(supabase, user?.id, { eventId: event.id }),
+			user ? canManageEvent(supabase, user.id, event) : Promise.resolve(false),
+		]);
 
 	const scheduledMs = new Date(event.scheduled_at).getTime();
 	const durationMinutes = event.duration_minutes ?? DEFAULT_EVENT_DURATION_MINUTES;
@@ -66,8 +45,6 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 	return {
 		event,
 		canManageEvent: canManage,
-		isMuted,
-		notificationSetting,
 		anime,
 		room: {
 			session_id: event.id,
@@ -168,23 +145,5 @@ export const actions: Actions = {
 		const { user } = await safeGetSession();
 		if (!user) return fail(401, { message: "ログインが必要です" });
 		return cancelEventAction(request, supabase, user.id);
-	},
-
-	updateEventMute: async ({ request, locals: { supabase, safeGetSession } }) => {
-		const { user } = await safeGetSession();
-		if (!user) return fail(401, { message: "ログインが必要です" });
-		return updateEventMuteAction(request, supabase, user.id);
-	},
-
-	removeEventMute: async ({ request, locals: { supabase, safeGetSession } }) => {
-		const { user } = await safeGetSession();
-		if (!user) return fail(401, { message: "ログインが必要です" });
-		return removeEventMuteAction(request, supabase, user.id);
-	},
-
-	updateEventNotification: async ({ request, locals: { supabase, safeGetSession } }) => {
-		const { user } = await safeGetSession();
-		if (!user) return fail(401, { message: "ログインが必要です" });
-		return updateEventNotificationAction(request, supabase, user.id);
 	},
 };

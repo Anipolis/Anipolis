@@ -2827,6 +2827,23 @@ export async function getEventNotificationSetting(
 	};
 }
 
+/** ユーザーの全イベント通知設定を取得する（/schedule でイベントごとのベルメニューに表示するため）。テーブルが小さいため一括取得する。 */
+export async function getEventNotificationSettings(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+): Promise<EventNotificationSetting[]> {
+	const { data } = await supabase
+		.from("event_notification_settings")
+		.select("event_id, notify_1min, notify_5min, notify_30min")
+		.eq("user_id", userId);
+	return (data ?? []).map((row) => ({
+		event_id: row.event_id,
+		notify_1min: row.notify_1min,
+		notify_5min: row.notify_5min,
+		notify_30min: row.notify_30min,
+	}));
+}
+
 export async function getOpenBroadcastRoomSessions(
 	supabase: SupabaseClient<Database>,
 	options?: { kind?: "episode" | "global" },

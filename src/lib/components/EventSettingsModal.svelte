@@ -2,7 +2,7 @@
 import type { SubmitFunction } from "@sveltejs/kit";
 import { enhance } from "$app/forms";
 import { trapFocus } from "$lib/actions/trapFocus";
-import type { Event, EventNotificationSetting } from "$lib/types";
+import type { Event } from "$lib/types";
 
 type EventSettingsEventData = Pick<
 	Event,
@@ -13,18 +13,11 @@ type Props = {
 	open: boolean;
 	event: EventSettingsEventData;
 	canManage: boolean;
-	isMuted: boolean;
-	notificationSetting: EventNotificationSetting | null;
-	loggedIn: boolean;
 	onclose: () => void;
 };
 
-let { open, event, canManage, isMuted, notificationSetting, loggedIn, onclose }: Props = $props();
+let { open, event, canManage, onclose }: Props = $props();
 
-let muteSubmitting = $state(false);
-let muteError = $state("");
-let notificationSubmitting = $state(false);
-let notificationError = $state("");
 let editSubmitting = $state(false);
 let editError = $state("");
 let confirmingCancel = $state(false);
@@ -44,8 +37,6 @@ function toDateTimeLocalValue(iso: string): string {
 $effect(() => {
 	if (open) return;
 	confirmingCancel = false;
-	muteError = "";
-	notificationError = "";
 	editError = "";
 	cancelError = "";
 });
@@ -58,40 +49,6 @@ $effect(() => {
 	window.addEventListener("keydown", handleKeydown);
 	return () => window.removeEventListener("keydown", handleKeydown);
 });
-
-const handleMuteSubmit: SubmitFunction = () => {
-	muteSubmitting = true;
-	muteError = "";
-	return async ({ result, update }) => {
-		muteSubmitting = false;
-		if (result.type === "failure") {
-			muteError = (result.data as { message?: string })?.message ?? "ミュート設定に失敗しました";
-			return;
-		}
-		if (result.type === "error") {
-			muteError = "ミュート設定に失敗しました";
-			return;
-		}
-		await update({ reset: false });
-	};
-};
-
-const handleNotificationSubmit: SubmitFunction = () => {
-	notificationSubmitting = true;
-	notificationError = "";
-	return async ({ result, update }) => {
-		notificationSubmitting = false;
-		if (result.type === "failure") {
-			notificationError = (result.data as { message?: string })?.message ?? "通知設定の保存に失敗しました";
-			return;
-		}
-		if (result.type === "error") {
-			notificationError = "通知設定の保存に失敗しました";
-			return;
-		}
-		await update({ reset: false });
-	};
-};
 
 const handleEditSubmit: SubmitFunction = () => {
 	editSubmitting = true;
@@ -151,76 +108,6 @@ const handleCancelSubmit: SubmitFunction = () => {
 			</header>
 
 			<div class="modal-body">
-				{#if loggedIn}
-					<section class="field-section" aria-labelledby="notify-section-label">
-						<div class="section-heading"><h3 id="notify-section-label">通知・ミュート</h3></div>
-
-						<form
-							method="POST"
-							action={isMuted ? "?/removeEventMute" : "?/updateEventMute"}
-							use:enhance={handleMuteSubmit}
-							class="mute-row-form"
-						>
-							<input type="hidden" name="event_id" value={event.id}>
-							<div class="mute-row">
-								<span>このイベントをミュート</span>
-								<button
-									type="submit"
-									class="toggle-button"
-									class:active={isMuted}
-									disabled={muteSubmitting}
-								>
-									{isMuted ? "ミュート中" : "ミュートする"}
-								</button>
-							</div>
-						</form>
-						{#if muteError}
-							<p class="form-error" role="alert">{muteError}</p>
-						{/if}
-
-						<form
-							method="POST"
-							action="?/updateEventNotification"
-							use:enhance={handleNotificationSubmit}
-							class="notify-form"
-						>
-							<input type="hidden" name="event_id" value={event.id}>
-							<div class="notify-checkboxes">
-								<label>
-									<input
-										type="checkbox"
-										name="notify_1min"
-										checked={notificationSetting?.notify_1min ?? false}
-									>
-									<span>1分前</span>
-								</label>
-								<label>
-									<input
-										type="checkbox"
-										name="notify_5min"
-										checked={notificationSetting?.notify_5min ?? false}
-									>
-									<span>5分前</span>
-								</label>
-								<label>
-									<input
-										type="checkbox"
-										name="notify_30min"
-										checked={notificationSetting?.notify_30min ?? false}
-									>
-									<span>30分前</span>
-								</label>
-							</div>
-							{#if notificationError}
-								<p class="form-error" role="alert">{notificationError}</p>
-							{/if}
-							<button type="submit" class="save-button save-button--sm" disabled={notificationSubmitting}>
-								{notificationSubmitting ? "保存中…" : "保存"}
-							</button>
-						</form>
-					</section>
-				{/if}
-
 				{#if canManage}
 					<section class="field-section" aria-labelledby="edit-section-label">
 						<div class="section-heading"><h3 id="edit-section-label">イベント編集</h3></div>
@@ -403,53 +290,6 @@ const handleCancelSubmit: SubmitFunction = () => {
 	font-weight: 650;
 	letter-spacing: 0.04em;
 }
-.mute-row-form {
-	margin-bottom: 10px;
-}
-.mute-row {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 10px;
-}
-.mute-row span {
-	color: var(--color-text);
-	font-size: 0.88rem;
-}
-.toggle-button {
-	min-height: 36px;
-	border: 1px solid var(--color-border-hover);
-	border-radius: 999px;
-	padding: 0 16px;
-	background: var(--color-surface);
-	color: var(--color-text-muted);
-	cursor: pointer;
-	font-size: 0.8rem;
-	font-weight: 650;
-}
-.toggle-button.active {
-	border-color: var(--color-accent);
-	background: var(--color-accent);
-	color: var(--color-bg);
-}
-.toggle-button:disabled {
-	cursor: wait;
-	opacity: 0.6;
-}
-.notify-checkboxes {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 14px;
-	margin-bottom: 12px;
-}
-.notify-checkboxes label {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	color: var(--color-text);
-	font-size: 0.85rem;
-	cursor: pointer;
-}
 .edit-form {
 	display: flex;
 	flex-direction: column;
@@ -498,11 +338,6 @@ const handleCancelSubmit: SubmitFunction = () => {
 .save-button:hover:not(:disabled) {
 	border-color: var(--color-accent-hover);
 	background: var(--color-accent-hover);
-}
-.save-button--sm {
-	min-height: 34px;
-	padding: 0 14px;
-	font-size: 0.82rem;
 }
 .save-button:disabled {
 	cursor: wait;

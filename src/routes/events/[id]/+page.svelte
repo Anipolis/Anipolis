@@ -10,7 +10,7 @@ let settingsOpen = $state(false);
 
 <LiveRoomView {data} {form}>
 	{#snippet headerActions()}
-		{#if data.user}
+		{#if data.canManageEvent}
 			<button
 				type="button"
 				class="event-settings-trigger"
@@ -23,14 +23,11 @@ let settingsOpen = $state(false);
 	{/snippet}
 </LiveRoomView>
 
-{#if data.user}
+{#if data.canManageEvent}
 	<EventSettingsModal
 		open={settingsOpen}
 		event={data.event}
 		canManage={data.canManageEvent}
-		isMuted={data.isMuted}
-		notificationSetting={data.notificationSetting}
-		loggedIn={Boolean(data.user)}
 		onclose={() => (settingsOpen = false)}
 	/>
 {/if}
