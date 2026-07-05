@@ -174,8 +174,11 @@ function effectiveBroadcastTime(anime: Anime, dateStr: string): string | null {
 	return resolveEffectiveBroadcastTime(anime, dateStr, data.broadcastOverrides[anime.id]);
 }
 
+type ScheduleDayEvent = (typeof data.days)[number]["events"][number];
+
 type ScheduleItem =
 	| { type: "anime"; anime: Anime }
+	| { type: "event"; event: ScheduleDayEvent }
 	| {
 			type: "suspension";
 			anime_id: string;
@@ -188,17 +191,19 @@ type ScheduleItem =
 function getScheduleItems(day: (typeof data.days)[number], dateStr: string): ScheduleItem[] {
 	return [
 		...day.anime.map((anime): ScheduleItem => ({ type: "anime", anime })),
+		...day.events.map((event): ScheduleItem => ({ type: "event", event })),
 		...day.announcements.map((announcement): ScheduleItem => ({ type: "suspension", ...announcement })),
-	].sort((a, b) => {
-		const aTime = a.type === "anime" ? effectiveBroadcastTime(a.anime, dateStr) : a.broadcast_time;
-		const bTime = b.type === "anime" ? effectiveBroadcastTime(b.anime, dateStr) : b.broadcast_time;
-		return (
-			(broadcastTimeMinutes(aTime) ?? Number.MAX_SAFE_INTEGER) -
-			(broadcastTimeMinutes(bTime) ?? Number.MAX_SAFE_INTEGER)
-		);
-	});
+	].sort(
+		(a, b) =>
+			(scheduleItemMinutes(a, dateStr) ?? Number.MAX_SAFE_INTEGER) -
+			(scheduleItemMinutes(b, dateStr) ?? Number.MAX_SAFE_INTEGER),
+	);
 }
 function scheduleItemMinutes(item: ScheduleItem, dateStr: string): number | null {
+	if (item.type === "event") {
+		const scheduled = new Date(item.event.scheduled_at);
+		return scheduled.getHours() * 60 + scheduled.getMinutes();
+	}
 	const time = item.type === "anime" ? effectiveBroadcastTime(item.anime, dateStr) : item.broadcast_time;
 	return broadcastTimeMinutes(time);
 }
@@ -522,7 +527,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 					{#if day.events.length === 0 && day.announcements.length === 0 && day.anime.length === 0}
 						<p class="empty-day">なし</p>
 					{:else}
-						{#each day.events as event (event.id)}
+						{#snippet eventSlot(event: ScheduleDayEvent)}
 							{@const eventMuted = mutedEventIds.has(event.id)}
 							{@const eventNotifSetting = eventNotificationSettings.get(event.id)}
 							{@const eventSubscribed = Boolean(
@@ -710,12 +715,14 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 									{/if}
 								{/if}
 							</div>
-						{/each}
+						{/snippet}
 
 						{#each groupScheduleItemsByTimeBand(day, displayDate) as itemGroup, groupIndex (groupIndex)}
 							<div class="anime-time-group">
-								{#each itemGroup as item (item.type === "anime" ? item.anime.id : `suspension-${item.anime_id}-${item.room_date}`)}
-									{#if item.type === "suspension"}
+								{#each itemGroup as item (item.type === "anime" ? item.anime.id : item.type === "event" ? item.event.id : `suspension-${item.anime_id}-${item.room_date}`)}
+									{#if item.type === "event"}
+										{@render eventSlot(item.event)}
+									{:else if item.type === "suspension"}
 										<div class="anime-slot-wrap anime-slot-wrap--suspension" role="note">
 											<div class="anime-slot anime-slot--suspension">
 												<div class="slot-cover-wrap">
@@ -1987,7 +1994,8 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 		width: 100%;
 		max-width: 388px;
 	}
-	.anime-time-group > .anime-slot-wrap:nth-child(odd) .room-alert-menu {
+	.anime-time-group > .anime-slot-wrap:nth-child(odd) .room-alert-menu,
+	.anime-time-group > .event-slot-wrap:nth-child(odd) .room-alert-menu {
 		left: 4px;
 		right: auto;
 		width: min(240px, calc(100vw - 32px));
