@@ -5,7 +5,7 @@ import { enhance } from "$app/forms";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
 import SettingsBackLink from "$lib/components/SettingsBackLink.svelte";
-import type { AnimeMute } from "$lib/types";
+import type { AnimeMute, EventMute } from "$lib/types";
 import type { PageProps } from "./$types";
 
 let { data, form }: PageProps = $props();
@@ -77,6 +77,21 @@ const removeSubmit: SubmitFunction = () => {
 		}
 	};
 };
+
+// イベントミュート tab
+const removeEventMuteSubmit: SubmitFunction = () => {
+	return async ({ result, update }) => {
+		await update({ reset: false });
+		if (result.type !== "failure") {
+			await goto("/settings/mutes?tab=anime", { invalidateAll: true, replaceState: true });
+		}
+	};
+};
+
+function eventMuteDateLabel(mute: EventMute): string {
+	if (!mute.event_scheduled_at) return "";
+	return new Date(mute.event_scheduled_at).toLocaleString("ja-JP", { dateStyle: "medium", timeStyle: "short" });
+}
 
 const activeTab = $derived.by((): "word" | "anime" => {
 	const tab = page.url.searchParams.get("tab");
@@ -291,6 +306,41 @@ const activeTab = $derived.by((): "word" | "anime" => {
 						</div>
 					{/if}
 				</section>
+
+				<section class="settings-section">
+					<h2 class="settings-section-title">イベントミュート</h2>
+					<p class="settings-section-desc">
+						ミュートしたイベントの投稿はタイムラインで恒久的に非表示になります。
+					</p>
+
+					{#if data.eventMutes.length === 0}
+						<p class="mute-empty">ミュート中のイベントはありません。</p>
+					{:else}
+						<div class="mute-items-list">
+							{#each data.eventMutes as eventMute (eventMute.id)}
+								<div class="mute-item">
+									<div class="mute-row">
+										<div class="mute-meta">
+											<span class="mute-title">{eventMute.event_title}</span>
+											<span class="mute-status">{eventMuteDateLabel(eventMute)}</span>
+										</div>
+										<div class="mute-item-actions">
+											<form
+												method="POST"
+												action="?/removeEventMute"
+												use:enhance={removeEventMuteSubmit}
+												style="display:contents"
+											>
+												<input type="hidden" name="event_id" value={eventMute.event_id}>
+												<button type="submit" class="btn btn-ghost danger btn-sm">解除</button>
+											</form>
+										</div>
+									</div>
+								</div>
+							{/each}
+						</div>
+					{/if}
+				</section>
 			{/if}
 		</div>
 	</main>
@@ -330,6 +380,15 @@ const activeTab = $derived.by((): "word" | "anime" => {
 .settings-section {
 	padding-top: 18px;
 	margin-top: 0;
+}
+.settings-section + .settings-section {
+	margin-top: 18px;
+	border-top: 1px solid var(--color-border);
+}
+.settings-section-title {
+	margin: 0 0 8px;
+	font-size: 1rem;
+	color: var(--color-text);
 }
 .settings-section-desc,
 .mute-empty {

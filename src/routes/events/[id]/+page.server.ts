@@ -1,12 +1,27 @@
 import { error, fail } from "@sveltejs/kit";
 import {
+	cancelEventAction,
+	canManageEvent,
 	deletePostAction,
 	insertPostWithHashtags,
+	removeEventMuteAction,
 	toggleBookmarkAction,
 	toggleLikeAction,
 	toggleRepostAction,
+	updateEventAction,
+	updateEventMuteAction,
+	updateEventNotificationAction,
 } from "$lib/server/actions";
-import { getAnime, getAnimeRankingTrending, getEvent, getEventRoomPosts } from "$lib/server/queries";
+import {
+	getAnime,
+	getAnimeRankingTrending,
+	getEvent,
+	getEventNotificationSetting,
+	getEventRoomPosts,
+	isEventMuted,
+} from "$lib/server/queries";
+import { getRoomExitSurveyLoadState, ROOM_EXIT_SURVEY_VERSION } from "$lib/server/room-exit-survey";
+import { createRoomExperimentServiceClient, getActiveRoomExperimentRunForEvent } from "$lib/server/room-experiments";
 import { extractHashtags } from "$lib/utils/hashtag";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -20,11 +35,29 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 	const event = await getEvent(supabase, params.id);
 	if (!event) throw error(404, "イベントが見つかりません");
 
-	const [anime, posts, trending, animeTrending] = await Promise.all([
+	const roomExperimentSupabase = user ? createRoomExperimentServiceClient() : null;
+	const [
+		anime,
+		posts,
+		trending,
+		animeTrending,
+		roomExperimentRun,
+		roomExitSurveyLoadState,
+		canManage,
+		isMuted,
+		notificationSetting,
+	] = await Promise.all([
 		event.anime_id ? getAnime(supabase, event.anime_id, user?.id ?? null) : Promise.resolve(null),
 		getEventRoomPosts(supabase, event.id, user?.id ?? null, { limit: 100, ascending: true }),
 		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
 		getAnimeRankingTrending(supabase, 5),
+		roomExperimentSupabase
+			? getActiveRoomExperimentRunForEvent(roomExperimentSupabase, event.id)
+			: Promise.resolve(null),
+		getRoomExitSurveyLoadState(supabase, user?.id, { eventId: event.id }),
+		user ? canManageEvent(supabase, user.id, event) : Promise.resolve(false),
+		user ? isEventMuted(supabase, user.id, event.id) : Promise.resolve(false),
+		user ? getEventNotificationSetting(supabase, user.id, event.id) : Promise.resolve(null),
 	]);
 
 	const scheduledMs = new Date(event.scheduled_at).getTime();
@@ -32,6 +65,10 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 	const postingClosesAt = new Date(scheduledMs + durationMinutes * 60 * 1000).toISOString();
 
 	return {
+		event,
+		canManageEvent: canManage,
+		isMuted,
+		notificationSetting,
 		anime,
 		room: {
 			session_id: event.id,
@@ -49,13 +86,14 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 		animeTrending,
 		user,
 		roomExperiment: {
-			enabled: false,
+			enabled: Boolean(user && roomExperimentRun),
+			sessionId: roomExperimentRun ? event.id : undefined,
 		},
 		roomExitSurvey: {
-			experimentRunId: null,
-			alreadyAnswered: true,
-			postCount: 0,
-			surveyVersion: "n/a",
+			experimentRunId: roomExperimentRun?.id ?? null,
+			alreadyAnswered: roomExitSurveyLoadState.alreadyAnswered,
+			postCount: roomExitSurveyLoadState.postCount,
+			surveyVersion: ROOM_EXIT_SURVEY_VERSION,
 		},
 	};
 };
@@ -124,5 +162,35 @@ export const actions: Actions = {
 		const { user } = await safeGetSession();
 		if (!user) return fail(401, { message: "ログインが必要です" });
 		return toggleBookmarkAction(request, supabase, user.id);
+	},
+
+	updateEvent: async ({ request, locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { message: "ログインが必要です" });
+		return updateEventAction(request, supabase, user.id);
+	},
+
+	cancelEvent: async ({ request, locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { message: "ログインが必要です" });
+		return cancelEventAction(request, supabase, user.id);
+	},
+
+	updateEventMute: async ({ request, locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { message: "ログインが必要です" });
+		return updateEventMuteAction(request, supabase, user.id);
+	},
+
+	removeEventMute: async ({ request, locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { message: "ログインが必要です" });
+		return removeEventMuteAction(request, supabase, user.id);
+	},
+
+	updateEventNotification: async ({ request, locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { message: "ログインが必要です" });
+		return updateEventNotificationAction(request, supabase, user.id);
 	},
 };

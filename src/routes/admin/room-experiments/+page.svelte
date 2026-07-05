@@ -106,14 +106,77 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 
 	<section class="admin-section">
 		<div class="admin-section-header">
-			<h2>作品検索</h2>
+			<h2>対象検索</h2>
+		</div>
+		<div class="target-toggle" role="group" aria-label="対象種別">
+			<a
+				class="btn-toggle"
+				class:btn-toggle--active={data.target !== "event"}
+				href={`?target=anime${data.query ? `&q=${encodeURIComponent(data.query)}` : ""}`}
+			>
+				アニメ
+			</a>
+			<a
+				class="btn-toggle"
+				class:btn-toggle--active={data.target === "event"}
+				href={`?target=event${data.query ? `&q=${encodeURIComponent(data.query)}` : ""}`}
+			>
+				イベント
+			</a>
 		</div>
 		<form method="GET" class="search-form">
-			<input class="input" name="q" value={data.query} aria-label="作品検索" placeholder="作品名で検索">
+			<input type="hidden" name="target" value={data.target}>
+			<input
+				class="input"
+				name="q"
+				value={data.query}
+				aria-label={data.target === "event" ? "イベント検索" : "作品検索"}
+				placeholder={data.target === "event" ? "イベント名で検索" : "作品名で検索"}
+			>
 			<button class="btn" type="submit">検索</button>
 		</form>
 
-		{#if data.dashboard.searchResults.length > 0}
+		{#if data.target === "event"}
+			{#if data.eventSearchResults.length > 0}
+				<div class="search-results">
+					{#each data.eventSearchResults as ev}
+						<div class="search-row">
+							<div class="anime-summary">
+								<div class="anime-cover anime-cover--empty"></div>
+								<div>
+									<strong>{ev.title}</strong>
+									<span>
+										{formatDate(ev.scheduled_at)}
+										{#if ev.anime_title}
+											· {ev.anime_title}
+										{/if}
+										{#if ev.is_cancelled}
+											· <span class="badge-cancelled">キャンセル済み</span>
+										{/if}
+									</span>
+								</div>
+							</div>
+							{#if ev.active_run_id}
+								<button
+									class="btn btn-danger"
+									type="button"
+									onclick={() => (stopTarget = { id: ev.active_run_id ?? "", title: ev.title })}
+								>
+									停止
+								</button>
+							{:else}
+								<form method="POST" action="?/startRun" use:enhance class="inline-form">
+									<input type="hidden" name="event_id" value={ev.id}>
+									<button class="btn" type="submit" disabled={ev.is_cancelled}>対象化</button>
+								</form>
+							{/if}
+						</div>
+					{/each}
+				</div>
+			{:else if data.query}
+				<p class="empty-state">該当するイベントがありません。</p>
+			{/if}
+		{:else if data.dashboard.searchResults.length > 0}
 			<div class="search-results">
 				{#each data.dashboard.searchResults as anime}
 					<div class="search-row">
@@ -165,20 +228,33 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 					<article class="run-panel">
 						<div class="run-panel-header">
 							<div class="anime-summary">
-								{#if run.anime_cover_url}
-									<img src={run.anime_cover_url} alt="" class="anime-cover">
-								{:else}
+								{#if run.room_kind === "event"}
 									<div class="anime-cover anime-cover--empty"></div>
+									<div>
+										<strong>{run.event_title}</strong>
+										<span class="kind-badge">イベント</span>
+										<span>{formatDate(run.started_at)}開始 · {formatElapsed(run.started_at)}</span>
+									</div>
+								{:else}
+									{#if run.anime_cover_url}
+										<img src={run.anime_cover_url} alt="" class="anime-cover">
+									{:else}
+										<div class="anime-cover anime-cover--empty"></div>
+									{/if}
+									<div>
+										<strong>{run.anime_title}</strong>
+										<span>{formatDate(run.started_at)}開始 · {formatElapsed(run.started_at)}</span>
+									</div>
 								{/if}
-								<div>
-									<strong>{run.anime_title}</strong>
-									<span>{formatDate(run.started_at)}開始 · {formatElapsed(run.started_at)}</span>
-								</div>
 							</div>
 							<button
 								class="btn btn-danger"
 								type="button"
-								onclick={() => (stopTarget = { id: run.id, title: run.anime_title })}
+								onclick={() =>
+									(stopTarget = {
+										id: run.id,
+										title: run.room_kind === "event" ? (run.event_title ?? "") : (run.anime_title ?? ""),
+									})}
 							>
 								停止
 							</button>
@@ -413,6 +489,49 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 .admin-section-header h2 {
 	margin: 0;
 	font-size: 16px;
+}
+
+.target-toggle {
+	display: flex;
+	gap: 8px;
+	padding: 16px 16px 0;
+}
+
+.btn-toggle {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 36px;
+	border: 1px solid var(--color-border);
+	border-radius: 8px;
+	background: var(--color-bg);
+	color: var(--color-text-muted);
+	padding: 0 14px;
+	font-weight: 700;
+	font-size: 13px;
+	text-decoration: none;
+}
+
+.btn-toggle--active {
+	border-color: var(--color-accent);
+	background: var(--color-accent);
+	color: white;
+}
+
+.anime-summary .kind-badge {
+	display: inline-block;
+	margin-left: 6px;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--color-accent) 18%, var(--color-surface));
+	color: var(--color-accent);
+	padding: 1px 8px;
+	font-size: 11px;
+	font-weight: 800;
+}
+
+.badge-cancelled {
+	color: var(--color-danger);
+	font-weight: 700;
 }
 
 .search-form {

@@ -1,6 +1,7 @@
 <script lang="ts">
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import type { SubmitFunction } from "@sveltejs/kit";
+import type { Snippet } from "svelte";
 import { onDestroy, onMount, tick } from "svelte";
 import { enhance } from "$app/forms";
 import { goto } from "$app/navigation";
@@ -66,7 +67,7 @@ export type LiveRoomActionData =
 	| null
 	| undefined;
 
-let { data, form }: { data: LiveRoomData; form: LiveRoomActionData } = $props();
+let { data, form, headerActions }: { data: LiveRoomData; form: LiveRoomActionData; headerActions?: Snippet } = $props();
 
 type RoomStatus = "not_open" | "open" | "ended";
 type PostOrder = "oldest" | "newest";
@@ -162,7 +163,7 @@ async function startRoomExperimentTracking() {
 			method: "POST",
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify({
-				session_id: sessionId,
+				...(data.room.kind === "event" ? { event_id: sessionId } : { session_id: sessionId }),
 				client_visit_key: getRoomExperimentClientVisitKey(sessionId),
 			}),
 		});
@@ -247,7 +248,9 @@ async function postRoomExitSurvey(action: "submit" | "skip", answers?: RoomExitS
 		body: JSON.stringify({
 			action,
 			anime_id: data.anime?.id ?? null,
-			broadcast_room_session_id: data.room.session_id,
+			...(data.room.kind === "event"
+				? { event_id: data.room.session_id }
+				: { broadcast_room_session_id: data.room.session_id }),
 			experiment_run_id: data.roomExitSurvey.experimentRunId,
 			survey_version: data.roomExitSurvey.surveyVersion,
 			stayed_seconds: getStayedSeconds(),
@@ -619,6 +622,7 @@ function formatCompactDate(iso: string) {
 					<span class="event-timer-badge">受付中</span>
 				{/if}
 			{/if}
+			{@render headerActions?.()}
 			<button type="button" class="room-mobile-exit" onclick={handleExitRoom} aria-label="退出する">
 				<span class="i-lucide-log-out" aria-hidden="true"></span>
 				<span>退出</span>
@@ -788,6 +792,7 @@ function formatCompactDate(iso: string) {
 						{/if}
 					</div>
 					<div class="mt-2 flex items-center justify-end gap-2">
+						{@render headerActions?.()}
 						<button
 							type="button"
 							class="room-summary-exit shrink-0 text-xs transition-colors"

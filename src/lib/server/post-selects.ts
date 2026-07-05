@@ -7,6 +7,7 @@ const POST_BASE_FIELDS = [
 	"quoted_post_id",
 	"image_urls",
 	"anime_id",
+	"event_id",
 	"broadcast_room_session_id",
 ];
 

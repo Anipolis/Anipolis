@@ -5,10 +5,11 @@ import {
 	toExchangeSubjectiveTags,
 	validateExchangeSubjectiveTags,
 } from "$lib/exchange-tags";
+import { getEvent, isAdminUser } from "$lib/server/queries";
 import { createServiceRoleClient } from "$lib/server/supabase-admin";
 import { publicUrlToStoragePath, validateImageBuffer } from "$lib/server/upload";
 import type { Database, Json } from "$lib/supabase/database.types";
-import type { AnimeExchangeShare, AnimeStatus, BroadcastRoomMuteDuration } from "$lib/types";
+import type { AnimeExchangeShare, AnimeStatus, BroadcastRoomMuteDuration, Event } from "$lib/types";
 import { extractHashtags } from "$lib/utils/hashtag";
 
 const reportStatuses = new Set(["open", "reviewing", "resolved", "rejected"]);
@@ -547,18 +548,107 @@ export async function createEventAction(request: Request, supabase: SupabaseClie
 }
 
 /**
- * イベントをキャンセルする（作成者のみ）
+ * イベントの編集・削除・キャンセル権限があるか判定する（作成者本人 または 管理者）
+ */
+export async function canManageEvent(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+	event: Pick<Event, "creator_id">,
+): Promise<boolean> {
+	if (event.creator_id === userId) return true;
+	return isAdminUser(supabase, userId);
+}
+
+/**
+ * イベントを更新する（作成者 または 管理者のみ）
+ */
+export async function updateEventAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
+	const form = await request.formData();
+	const eventId = (form.get("event_id") as string | null)?.trim() ?? "";
+	if (!eventId) return fail(400, { message: "イベントIDが不正です" });
+
+	const event = await getEvent(supabase, eventId);
+	if (!event) return fail(404, { message: "イベントが見つかりません" });
+	if (!(await canManageEvent(supabase, userId, event))) {
+		return fail(403, { message: "このイベントを編集する権限がありません" });
+	}
+
+	const title = (form.get("title") as string | null)?.trim() ?? "";
+	const description = (form.get("description") as string | null)?.trim() || null;
+	const rawHashtag = (form.get("hashtag") as string | null)?.trim() ?? "";
+	const scheduledAtRaw = (form.get("scheduled_at") as string | null)?.trim() ?? "";
+	const durationRaw = (form.get("duration_minutes") as string | null)?.trim() ?? "";
+	const animeIdRaw = (form.get("anime_id") as string | null)?.trim() ?? "";
+	const animeId = animeIdRaw ? parsePositiveInt(animeIdRaw) : null;
+	if (animeIdRaw && animeId === null) return fail(400, { message: "アニメIDの形式が正しくありません" });
+
+	if (!title) return fail(400, { message: "タイトルを入力してください" });
+	if (title.length > 100) return fail(400, { message: "タイトルは100文字以内で入力してください" });
+
+	const hashtag = rawHashtag.replace(/^#/, "").toLowerCase();
+	if (!hashtag) return fail(400, { message: "ハッシュタグを入力してください" });
+	if (hashtag.length > 50) return fail(400, { message: "ハッシュタグは50文字以内で入力してください" });
+	if (!/^[a-z0-9_\u3000-\u9fff\uff00-\uffef\u4e00-\u9fff]+$/u.test(hashtag)) {
+		return fail(400, { message: "ハッシュタグに使用できない文字が含まれています" });
+	}
+
+	if (!scheduledAtRaw) return fail(400, { message: "開始日時を入力してください" });
+	const scheduledAt = new Date(scheduledAtRaw);
+	if (Number.isNaN(scheduledAt.getTime())) return fail(400, { message: "開始日時の形式が正しくありません" });
+
+	const durationMinutes = durationRaw ? parseInt(durationRaw, 10) : null;
+	if (durationMinutes !== null && (Number.isNaN(durationMinutes) || durationMinutes <= 0)) {
+		return fail(400, { message: "配信時間は正の整数で入力してください" });
+	}
+
+	if (animeId !== null) {
+		const { data: anime, error: animeError } = await supabase
+			.from("anime")
+			.select("id")
+			.eq("id", animeId)
+			.maybeSingle();
+		if (animeError) {
+			console.error("anime lookup error:", animeError);
+			return fail(500, { message: "アニメの確認に失敗しました" });
+		}
+		if (!anime) return fail(400, { message: "アニメが見つかりません" });
+	}
+
+	const { error } = await supabase
+		.from("events")
+		.update({
+			title,
+			description,
+			hashtag,
+			anime_id: animeId,
+			scheduled_at: scheduledAt.toISOString(),
+			duration_minutes: durationMinutes,
+		})
+		.eq("id", eventId);
+
+	if (error) {
+		console.error("event update error:", error);
+		return fail(500, { message: "イベントの更新に失敗しました" });
+	}
+
+	return { success: true, eventId };
+}
+
+/**
+ * イベントをキャンセルする（作成者 または 管理者のみ）
  */
 export async function cancelEventAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
 	const form = await request.formData();
 	const eventId = (form.get("event_id") as string | null)?.trim() ?? "";
 	if (!eventId) return fail(400, { message: "イベントIDが不正です" });
 
-	const { error } = await supabase
-		.from("events")
-		.update({ is_cancelled: true })
-		.eq("id", eventId)
-		.eq("creator_id", userId);
+	const event = await getEvent(supabase, eventId);
+	if (!event) return fail(404, { message: "イベントが見つかりません" });
+	if (!(await canManageEvent(supabase, userId, event))) {
+		return fail(403, { message: "このイベントをキャンセルする権限がありません" });
+	}
+
+	const { error } = await supabase.from("events").update({ is_cancelled: true }).eq("id", eventId);
 
 	if (error) return fail(500, { message: "キャンセルに失敗しました" });
 	return { cancelled: true };
@@ -1208,6 +1298,68 @@ export async function removeAnimeMute(supabase: SupabaseClient<Database>, userId
 		.eq("anime_id", Number(animeId));
 	if (error) return fail(500, { message: "ミュート解除に失敗しました" });
 	return { roomMuteSuccess: true };
+}
+
+/**
+ * settings/mutes のイベントミュート追加フォームを処理する。
+ * イベントは再放送がないため one-shot（常にミュート＝そのイベントの投稿を恒久的に非表示）。
+ */
+export async function updateEventMuteAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
+	const form = await request.formData();
+	const eventId = (form.get("event_id") as string | null)?.trim() ?? "";
+	if (!eventId) return fail(400, { message: "イベントが見つかりません" });
+
+	const { error } = await supabase
+		.from("event_mutes")
+		.upsert({ user_id: userId, event_id: eventId }, { onConflict: "user_id,event_id" });
+	if (error) {
+		console.error("event mute upsert error:", error);
+		return fail(500, { message: "ミュート設定に失敗しました" });
+	}
+	return { eventMuteSuccess: true };
+}
+
+/** settings/mutes のイベントミュート解除フォームを処理する */
+export async function removeEventMuteAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
+	const form = await request.formData();
+	const eventId = (form.get("event_id") as string | null)?.trim() ?? "";
+	if (!eventId) return fail(400, { message: "ミュート設定が見つかりません" });
+
+	const { error } = await supabase.from("event_mutes").delete().eq("user_id", userId).eq("event_id", eventId);
+	if (error) return fail(500, { message: "ミュート解除に失敗しました" });
+	return { eventMuteSuccess: true };
+}
+
+/** イベント開始前通知設定（1分前/5分前/30分前）の upsert を処理する */
+export async function updateEventNotificationAction(
+	request: Request,
+	supabase: SupabaseClient<Database>,
+	userId: string,
+) {
+	const form = await request.formData();
+	const eventId = (form.get("event_id") as string | null)?.trim() ?? "";
+	if (!eventId) return fail(400, { message: "イベントが見つかりません" });
+
+	const notify1min = form.get("notify_1min") === "on";
+	const notify5min = form.get("notify_5min") === "on";
+	const notify30min = form.get("notify_30min") === "on";
+
+	const { error } = await supabase.from("event_notification_settings").upsert(
+		{
+			user_id: userId,
+			event_id: eventId,
+			notify_1min: notify1min,
+			notify_5min: notify5min,
+			notify_30min: notify30min,
+			updated_at: new Date().toISOString(),
+		},
+		{ onConflict: "user_id,event_id" },
+	);
+	if (error) {
+		console.error("event notification upsert error:", error);
+		return fail(500, { message: "通知設定に失敗しました" });
+	}
+	return { eventNotificationSuccess: true };
 }
 
 // linked_accounts は自動生成型未収録のためテーブル名のみ型アサーション使用

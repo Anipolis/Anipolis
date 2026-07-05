@@ -315,6 +315,7 @@ export interface RawPost {
 	created_at: string;
 	image_urls?: string[] | null;
 	anime_id?: string | number | null;
+	event_id?: string | null;
 	broadcast_room_session_id?: string | null;
 	broadcast_room_session?:
 		| { room_date: string; room_kind?: "episode" | "global" | null; room_key?: string | null }
@@ -540,6 +541,24 @@ export interface AnimeMute {
 	created_at: string;
 }
 
+// イベントは再放送がないため、ミュートは常に one-shot（そのイベントの投稿を恒久的に非表示にする）
+export interface EventMute {
+	id: string;
+	event_id: string;
+	created_at: string;
+	// JOIN で付加される表示用フィールド
+	event_title: string;
+	event_scheduled_at: string;
+	event_is_cancelled: boolean;
+}
+
+export interface EventNotificationSetting {
+	event_id: string;
+	notify_1min: boolean;
+	notify_5min: boolean;
+	notify_30min: boolean;
+}
+
 export interface BroadcastRoomSession {
 	id: string;
 	anime_id: number;
@@ -583,9 +602,12 @@ export interface BroadcastRoomOverride {
 
 export interface RoomExperimentRun {
 	id: string;
-	anime_id: string;
-	anime_title: string;
-	anime_cover_url: string | null;
+	room_kind: "episode" | "event";
+	anime_id?: string;
+	anime_title?: string;
+	anime_cover_url?: string | null;
+	event_id?: string;
+	event_title?: string;
 	started_at: string;
 	ended_at: string | null;
 	label: string | null;

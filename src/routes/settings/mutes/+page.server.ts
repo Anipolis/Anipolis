@@ -1,15 +1,21 @@
 import { fail, redirect } from "@sveltejs/kit";
-import { parsePositiveInt, removeAnimeMuteAction, updateAnimeMuteAction } from "$lib/server/actions";
-import { getAnimeMuteCandidate, getAnimeMutes, getMutedWordRows } from "$lib/server/queries";
+import {
+	parsePositiveInt,
+	removeAnimeMuteAction,
+	removeEventMuteAction,
+	updateAnimeMuteAction,
+} from "$lib/server/actions";
+import { getAnimeMuteCandidate, getAnimeMutes, getEventMutes, getMutedWordRows } from "$lib/server/queries";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 	if (!user) redirect(303, "/");
 
-	const [mutedWords, mutes] = await Promise.all([
+	const [mutedWords, mutes, eventMutes] = await Promise.all([
 		getMutedWordRows(supabase, user.id),
 		getAnimeMutes(supabase, user.id),
+		getEventMutes(supabase, user.id),
 	]);
 
 	const parsedAnimeId = parsePositiveInt(url.searchParams.get("anime_id"));
@@ -19,7 +25,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		virtualAnime = await getAnimeMuteCandidate(supabase, Number(stagedAnimeId));
 	}
 
-	return { mutedWords, mutes, virtualAnime, stagedAnimeId };
+	return { mutedWords, mutes, eventMutes, virtualAnime, stagedAnimeId };
 };
 
 export const actions: Actions = {
@@ -71,5 +77,11 @@ export const actions: Actions = {
 		const { user } = await safeGetSession();
 		if (!user) return fail(401, { message: "ログインが必要です" });
 		return removeAnimeMuteAction(request, supabase, user.id);
+	},
+
+	removeEventMute: async ({ request, locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { message: "ログインが必要です" });
+		return removeEventMuteAction(request, supabase, user.id);
 	},
 };
