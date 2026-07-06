@@ -569,12 +569,17 @@ async function parseEventForm(
 	if (hashtag.length > 50) {
 		return { ok: false, failure: fail(400, { message: "ルームリンクは50文字以内で入力してください" }) };
 	}
-	if (!/^[a-z0-9_　-鿿＀-￯一-鿿]+$/u.test(hashtag)) {
+	// 英数・アンダースコア・ひらがな・カタカナ(長音符含む)・漢字・全角英数・半角カナのみ許可。
+	// 全角スペースや全角記号(旧レンジ 　 / ＀-／ 等)はタグとして不正なため弾く。
+	if (!/^[a-z0-9_ぁ-ゖァ-ヺー一-鿿０-９Ａ-Ｚａ-ｚｦ-ﾟ]+$/u.test(hashtag)) {
 		return { ok: false, failure: fail(400, { message: "ルームリンクに使用できない文字が含まれています" }) };
 	}
 
 	if (!scheduledAtRaw) return { ok: false, failure: fail(400, { message: "開始日時を入力してください" }) };
-	const scheduledAt = new Date(scheduledAtRaw);
+	// datetime-local はタイムゾーンなしの文字列で届く。サーバーのTZ(本番はUTC)で解釈すると
+	// 9時間ずれるため、オフセットが付いていない場合は JST として明示的にパースする。
+	const hasOffset = /(?:Z|[+-]\d{2}:\d{2})$/.test(scheduledAtRaw);
+	const scheduledAt = new Date(hasOffset ? scheduledAtRaw : `${scheduledAtRaw}+09:00`);
 	if (Number.isNaN(scheduledAt.getTime())) {
 		return { ok: false, failure: fail(400, { message: "開始日時の形式が正しくありません" }) };
 	}

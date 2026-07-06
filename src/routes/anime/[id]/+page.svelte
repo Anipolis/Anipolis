@@ -1400,9 +1400,7 @@ $effect(() => {
 										})}
 									</span>
 									{#if event.is_cancelled}
-										<span class="room-log-live-badge event-log-cancelled-badge"
-											>キャンセル済み</span
-										>
+										<span class="event-log-cancelled-badge">キャンセル済み</span>
 									{/if}
 								</a>
 							</li>
@@ -2989,9 +2987,18 @@ a.relation-card:hover {
 	font-size: 0.75rem;
 }
 .event-log-cancelled-badge {
-	position: static;
+	display: inline-flex;
+	align-items: center;
 	align-self: flex-start;
+	height: 18px;
 	margin-top: 4px;
+	padding: 0 6px;
+	border-radius: 999px;
+	background: #ef4444;
+	color: #fff;
+	font-size: 0.66rem;
+	font-weight: 800;
+	line-height: 1;
 }
 
 /* Room log */

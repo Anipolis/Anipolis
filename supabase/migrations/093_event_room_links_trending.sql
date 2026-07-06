@@ -53,12 +53,13 @@ AS $$
 
         UNION
 
-        -- イベントルームのルームリンク: イベントに設定されたタグで集計
+        -- イベントルームのルームリンク: イベントに設定されたタグで集計(中止イベントは除外)
         SELECT lower(regexp_replace(btrim(e.hashtag), '^#+', '')) AS name, p.id AS post_id
         FROM   public.posts p
         JOIN   public.events e ON e.id = p.event_id
         WHERE  p.created_at > now() - interval '24 hours'
           AND  p.event_id IS NOT NULL
+          AND  NOT e.is_cancelled
           AND  length(regexp_replace(btrim(e.hashtag), '^#+', '')) > 0
     )
     SELECT tagged_posts.name, COUNT(DISTINCT tagged_posts.post_id) AS post_count

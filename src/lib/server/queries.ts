@@ -2892,9 +2892,13 @@ export async function getOpenBroadcastRoomSessions(
 	return rows
 		.filter((row) => {
 			if (row.room_kind !== "episode") return true;
-			if (overrideLookupFailed) return false;
 			const anime = rawAnimeForRow(row.anime);
 			if (!anime) return false;
+			if (overrideLookupFailed) {
+				// override取得の一時失敗でエピソードルームを全滅させない(fail-open)。
+				// 中止判定はできないため、通常スケジュール判定のみで表示する。
+				return animeIsScheduledForRoomDate(anime, row.room_date, false);
+			}
 			const override = overrideBySessionKey.get(`${row.anime_id}:${row.room_date.slice(0, 10)}`);
 			if (override?.is_cancelled) return false;
 			return animeIsScheduledForRoomDate(anime, row.room_date, override != null);

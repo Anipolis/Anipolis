@@ -5,4 +5,7 @@ import type { ActionData, PageData } from "./$types";
 let { data, form }: { data: PageData; form: ActionData } = $props();
 </script>
 
-<LiveRoomView {data} {form} />
+<!-- ルーム間遷移で extraPosts や検証計測などのローカル状態が持ち越されないよう、ルーム単位で再マウントする -->
+{#key data.room.session_id}
+	<LiveRoomView {data} {form} />
+{/key}

@@ -120,7 +120,20 @@ function formatShortDate(value: string): string {
 }
 
 function formatTime(iso: string) {
-	return new Date(iso).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
+	// 放送スケジュールはJST基準のため、閲覧ブラウザのTZに依存させない
+	return new Date(iso).toLocaleTimeString("ja-JP", {
+		timeZone: "Asia/Tokyo",
+		hour: "2-digit",
+		minute: "2-digit",
+	});
+}
+
+/** イベント開始時刻の JST での「0時からの経過分」。アニメの broadcast_time との時刻順ソートに使う */
+function eventMinutesInJst(iso: string): number {
+	const [hour, minute] = new Date(iso)
+		.toLocaleTimeString("ja-JP", { timeZone: "Asia/Tokyo", hour12: false, hour: "2-digit", minute: "2-digit" })
+		.split(":");
+	return Number(hour) * 60 + Number(minute);
 }
 
 function openEventDialog() {
@@ -195,8 +208,7 @@ function getScheduleItems(day: (typeof data.days)[number], dateStr: string): Sch
 }
 function scheduleItemMinutes(item: ScheduleItem, dateStr: string): number | null {
 	if (item.type === "event") {
-		const scheduled = new Date(item.event.scheduled_at);
-		return scheduled.getHours() * 60 + scheduled.getMinutes();
+		return eventMinutesInJst(item.event.scheduled_at);
 	}
 	const time = item.type === "anime" ? effectiveBroadcastTime(item.anime, dateStr) : item.broadcast_time;
 	return broadcastTimeMinutes(time);

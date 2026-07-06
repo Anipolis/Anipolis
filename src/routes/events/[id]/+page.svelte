@@ -8,20 +8,23 @@ let { data, form }: { data: PageData; form: ActionData } = $props();
 let settingsOpen = $state(false);
 </script>
 
-<LiveRoomView {data} {form}>
-	{#snippet headerActions()}
-		{#if data.canManageEvent}
-			<button
-				type="button"
-				class="event-settings-trigger"
-				aria-label="イベント設定"
-				onclick={() => (settingsOpen = true)}
-			>
-				<span class="i-lucide-settings" aria-hidden="true"></span>
-			</button>
-		{/if}
-	{/snippet}
-</LiveRoomView>
+<!-- ルーム間遷移でローカル状態が持ち越されないよう、ルーム単位で再マウントする -->
+{#key data.room.session_id}
+	<LiveRoomView {data} {form}>
+		{#snippet headerActions()}
+			{#if data.canManageEvent}
+				<button
+					type="button"
+					class="event-settings-trigger"
+					aria-label="イベント設定"
+					onclick={() => (settingsOpen = true)}
+				>
+					<span class="i-lucide-settings" aria-hidden="true"></span>
+				</button>
+			{/if}
+		{/snippet}
+	</LiveRoomView>
+{/key}
 
 {#if data.canManageEvent}
 	<EventSettingsModal

@@ -79,15 +79,6 @@ const removeSubmit: SubmitFunction = () => {
 };
 
 // イベントミュート tab
-const removeEventMuteSubmit: SubmitFunction = () => {
-	return async ({ result, update }) => {
-		await update({ reset: false });
-		if (result.type !== "failure") {
-			await goto("/settings/mutes?tab=anime", { invalidateAll: true, replaceState: true });
-		}
-	};
-};
-
 function eventMuteDateLabel(mute: EventMute): string {
 	if (!mute.event_scheduled_at) return "";
 	return new Date(mute.event_scheduled_at).toLocaleString("ja-JP", { dateStyle: "medium", timeStyle: "short" });
@@ -318,7 +309,7 @@ const activeTab = $derived.by((): "word" | "anime" => {
 											<form
 												method="POST"
 												action="?/removeEventMute"
-												use:enhance={removeEventMuteSubmit}
+												use:enhance={removeSubmit}
 												style="display:contents"
 											>
 												<input type="hidden" name="event_id" value={eventMute.event_id}>

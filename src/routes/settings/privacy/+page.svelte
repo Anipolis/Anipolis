@@ -24,19 +24,18 @@ const privacySubmit: SubmitFunction = () => {
 	return async ({ result, update }) => {
 		saving = false;
 		await update({ reset: false });
-		if (result.type === "success" && data.profile) {
-			isPrivate = data.profile.is_private ?? false;
-			justSaved = true;
-			if (savedTimer) clearTimeout(savedTimer);
-			savedTimer = setTimeout(() => {
-				justSaved = false;
-			}, 2000);
-			return;
-		}
 		if (result.type === "failure" || result.type === "error") {
 			// 保存に失敗したらサーバー状態へ巻き戻す
 			isPrivate = data.profile?.is_private ?? false;
+			return;
 		}
+		// 成功判定は result.type のみで行う(data.profile の再取得有無に依存させない)
+		if (data.profile) isPrivate = data.profile.is_private ?? false;
+		justSaved = true;
+		if (savedTimer) clearTimeout(savedTimer);
+		savedTimer = setTimeout(() => {
+			justSaved = false;
+		}, 2000);
 	};
 };
 </script>

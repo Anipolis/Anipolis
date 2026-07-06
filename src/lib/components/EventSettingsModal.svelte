@@ -25,13 +25,19 @@ let cancelSubmitting = $state(false);
 let cancelError = $state("");
 
 function toDateTimeLocalValue(iso: string): string {
-	const d = new Date(iso);
-	const y = d.getFullYear();
-	const m = String(d.getMonth() + 1).padStart(2, "0");
-	const day = String(d.getDate()).padStart(2, "0");
-	const h = String(d.getHours()).padStart(2, "0");
-	const min = String(d.getMinutes()).padStart(2, "0");
-	return `${y}-${m}-${day}T${h}:${min}`;
+	// サーバー側は datetime-local を JST として解釈するため、表示も Asia/Tokyo に固定する
+	// (ja-JP + hour12:false は "YYYY/MM/DD HH:mm" 形式を返す)
+	const formatted = new Date(iso).toLocaleString("ja-JP", {
+		timeZone: "Asia/Tokyo",
+		year: "numeric",
+		month: "2-digit",
+		day: "2-digit",
+		hour: "2-digit",
+		minute: "2-digit",
+		hour12: false,
+	});
+	const [datePart, timePart] = formatted.split(" ");
+	return `${datePart?.replaceAll("/", "-")}T${timePart}`;
 }
 
 $effect(() => {

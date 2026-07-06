@@ -19,9 +19,10 @@
 ALTER TABLE public.notifications
     ADD COLUMN IF NOT EXISTS event_id uuid REFERENCES public.events(id) ON DELETE CASCADE;
 
-CREATE UNIQUE INDEX IF NOT EXISTS notifications_event_slot_unique_idx
-    ON public.notifications (recipient_id, event_id)
-    WHERE type = 'broadcast' AND event_id IS NOT NULL;
+-- notifications_event_slot_unique_idx は書き込み頻度の高い notifications をロックしないよう
+-- 097_notifications_event_slot_idx_concurrently.sql で CREATE UNIQUE INDEX CONCURRENTLY として作成する。
+-- 注意: 下のイベント分岐の ON CONFLICT はこのインデックスに依存するため、
+-- 097 を適用してから cron が次に走るまでの間にイベント通知が必要なら 097 を先に適用すること。
 
 CREATE OR REPLACE FUNCTION public.enqueue_due_broadcast_notifications(target_user_id uuid DEFAULT NULL)
 RETURNS void
@@ -60,6 +61,8 @@ BEGIN
             subscription.user_id,
             anime.id AS anime_id,
             anime.broadcast_duration_minutes,
+            anime.aired_from,
+            anime.aired_to,
             COALESCE(settings.notify_1min, true) AS notify_1min,
             COALESCE(settings.notify_5min, true) AS notify_5min,
             COALESCE(settings.notify_30min, false) AS notify_30min,
@@ -82,7 +85,6 @@ BEGIN
           AND anime.broadcast_day IS NOT NULL
           AND anime.broadcast_time IS NOT NULL
     ) candidate
-    JOIN public.anime anime ON anime.id = candidate.anime_id
     CROSS JOIN LATERAL (
         -- 現時点で閾値を越えている選択済みタイミングのうち、最小のリード時間。
         -- LEAST は NULL を無視するため、どの閾値も越えていなければ NULL になる。
@@ -94,8 +96,8 @@ BEGIN
     ) due
     WHERE due.due_offset IS NOT NULL
       AND candidate.scheduled_jst + (candidate.broadcast_duration_minutes || ' minutes')::interval >= jst_now
-      AND (anime.aired_from IS NULL OR candidate.room_date >= anime.aired_from::date)
-      AND (anime.aired_to IS NULL OR candidate.room_date <= anime.aired_to::date)
+      AND (candidate.aired_from IS NULL OR candidate.room_date >= candidate.aired_from::date)
+      AND (candidate.aired_to IS NULL OR candidate.room_date <= candidate.aired_to::date)
     ON CONFLICT (recipient_id, broadcast_anime_id, broadcast_scheduled_at)
         WHERE type = 'broadcast'
         DO UPDATE SET
