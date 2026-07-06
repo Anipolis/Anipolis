@@ -26,12 +26,15 @@ function sign(payloadB64: string, secret: string): string {
 	return createHmac("sha256", secret).update(payloadB64).digest("base64url");
 }
 
-/** 署名を定数時間比較で検証する */
+/**
+ * 署名を定数時間で検証する。
+ * 入力長に依存する早期 return を避けるため、期待値・入力値をそれぞれ再度 HMAC で
+ * 固定長（32バイト）ダイジェスト化してから timingSafeEqual で比較する。
+ */
 function verify(payloadB64: string, signature: string, secret: string): boolean {
-	const expected = Buffer.from(sign(payloadB64, secret));
-	const actual = Buffer.from(signature);
-	if (expected.length !== actual.length) return false;
-	return timingSafeEqual(expected, actual);
+	const expectedDigest = createHmac("sha256", secret).update(sign(payloadB64, secret)).digest();
+	const actualDigest = createHmac("sha256", secret).update(signature).digest();
+	return timingSafeEqual(expectedDigest, actualDigest);
 }
 
 /**
@@ -80,7 +83,7 @@ export function setExtraAccounts(cookies: Cookies, accounts: StoredAccount[]): v
 	if (!secret) {
 		// 署名鍵が無い環境では未署名でトークンを保存しない（多重アカウントが永続化されないだけ）
 		console.error(
-			"MULTI_ACCOUNT_COOKIE_SECRET / SUPABASE_SECRET_KEY is not configured; skipping extra-account cookie",
+			"No signing secret configured (MULTI_ACCOUNT_COOKIE_SECRET / SUPABASE_SECRET_KEY / SUPABASE_SERVICE_ROLE_KEY); skipping extra-account cookie",
 		);
 		cookies.delete(COOKIE_NAME, { path: "/" });
 		return;
