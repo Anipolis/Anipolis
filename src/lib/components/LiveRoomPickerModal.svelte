@@ -34,7 +34,7 @@ $effect(() => {
 		tabindex="-1"
 		use:trapFocus
 	>
-		<div class="anime-search-modal">
+		<div class="anime-search-modal live-room-picker-modal">
 			<div class="anime-search-header">
 				<span class="anime-search-title">ライブ実況ルームを選択</span>
 				<button type="button" class="anime-search-close" onclick={onclose} aria-label="閉じる">
@@ -74,8 +74,47 @@ $effect(() => {
 
 <style>
 .anime-search-overlay.live-room-picker-overlay {
-	z-index: 1200;
-	background: rgba(0, 0, 0, 0.72);
+	position: fixed;
+	inset: 0;
+	z-index: 5000;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 24px;
+	background: rgba(0, 0, 0, 0.88);
 	pointer-events: auto;
+	isolation: isolate;
+}
+
+.live-room-picker-modal {
+	width: min(480px, calc(100vw - 32px));
+	max-height: min(76vh, 620px);
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
+	box-shadow: 0 24px 80px rgba(0, 0, 0, 0.56);
+}
+
+.live-room-picker-modal .anime-search-header,
+.live-room-picker-modal .anime-search-results {
+	background: var(--color-surface);
+}
+
+.live-room-picker-modal .anime-search-item {
+	background: var(--color-surface);
+}
+
+.live-room-picker-modal .anime-search-item:hover,
+.live-room-picker-modal .anime-search-item:focus-visible {
+	background: var(--color-surface-hover);
+}
+
+@media (max-width: 640px) {
+	.anime-search-overlay.live-room-picker-overlay {
+		padding: 16px;
+	}
+
+	.live-room-picker-modal {
+		max-height: min(82vh, 620px);
+	}
 }
 </style>

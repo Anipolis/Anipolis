@@ -959,6 +959,12 @@ function isActive(path: string): boolean {
 	gap: 4px;
 }
 
+.mobile-live-room-btn .i-lucide-radio {
+	width: 20px;
+	height: 20px;
+	font-size: 20px;
+}
+
 .mobile-header-logo {
 	display: flex;
 	align-items: center;

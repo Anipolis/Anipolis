@@ -20,29 +20,8 @@ import {
 } from "$lib/server/room-experiments";
 import type { Anime } from "$lib/types";
 import { calcEpisodeNumberFromDate } from "$lib/types";
+import { animeIsScheduledForRoomDate } from "$lib/utils/broadcast-room";
 import type { Actions, PageServerLoad } from "./$types";
-
-function dateKeyToDate(value: string) {
-	const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-	if (!match) return null;
-	const date = new Date(`${value}T00:00:00`);
-	if (Number.isNaN(date.getTime())) return null;
-	return date;
-}
-
-function animeIsScheduledForDate(anime: Anime, dateKey: string, hasOverride: boolean) {
-	const date = dateKeyToDate(dateKey);
-	if (!date) return false;
-	if (!hasOverride && (anime.broadcast_day == null || date.getDay() !== anime.broadcast_day)) return false;
-
-	const airedFrom = anime.aired_from?.slice(0, 10) ?? null;
-	if (airedFrom && dateKey < airedFrom) return false;
-
-	const airedTo = anime.aired_to?.slice(0, 10) ?? null;
-	if (airedTo && dateKey > airedTo) return false;
-
-	return true;
-}
 
 function fallbackRoomHashtag(title: string) {
 	return title.replace(/\s+/g, "").replace(/[^\p{L}\p{N}_]/gu, "");
@@ -78,7 +57,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 	if (override?.is_cancelled) {
 		throw error(404, "放送ルームが見つかりません");
 	}
-	if (!animeIsScheduledForDate(anime, params.date, override != null)) {
+	if (!animeIsScheduledForRoomDate(anime, params.date, override != null)) {
 		throw error(404, "放送ルームが見つかりません");
 	}
 
@@ -136,7 +115,7 @@ export const actions: Actions = {
 		if (override?.is_cancelled) {
 			return fail(404, { message: "放送ルームが見つかりません" });
 		}
-		if (!anime || !animeIsScheduledForDate(anime, params.date, override != null)) {
+		if (!anime || !animeIsScheduledForRoomDate(anime, params.date, override != null)) {
 			return fail(404, { message: "放送ルームが見つかりません" });
 		}
 
