@@ -607,26 +607,27 @@ function formatCompactDate(iso: string) {
 <div class="page-container room-page-container">
 	<div class="feed-column">
 		<div class="room-mobile-bar">
-			<span class="room-mobile-title">
-				{#if data.anime}
-					<a href="/anime/{data.anime.id}" class="anime-title-link">{data.anime.title}</a
-					><span class="hierarchy-separator" aria-hidden="true"> ❯ </span
-					><span class="room-name-label">{roomNameLabel}</span>
-				{:else}
-					{data.room.title}
-				{/if}
-			</span>
+			<div class="header-top-row">
+				<span class="room-mobile-title">
+					{#if data.anime}
+						<a href="/anime/{data.anime.id}" class="anime-title-link">{data.anime.title}</a
+						><span class="hierarchy-separator" aria-hidden="true"> ❯ </span
+						><span class="room-name-label">{roomNameLabel}</span>
+					{:else}
+						{data.room.title}
+					{/if}
+				</span>
+				{@render headerActions?.()}
+				<button type="button" class="room-mobile-exit" onclick={handleExitRoom} aria-label="退出する">
+					<span class="i-lucide-log-out" aria-hidden="true"></span>
+					<span>退出</span>
+				</button>
+			</div>
 			{#if !isGlobalLobby && status !== "ended"}
-				<span class="room-mobile-timer event-timer--{status}">{timerLabel}</span>
-				{#if status === "open"}
-					<span class="event-timer-badge">受付中</span>
-				{/if}
+				<div class="header-bottom-row">
+					<span class="room-mobile-timer event-timer--{status}">{timerLabel}</span>
+				</div>
 			{/if}
-			{@render headerActions?.()}
-			<button type="button" class="room-mobile-exit" onclick={handleExitRoom} aria-label="退出する">
-				<span class="i-lucide-log-out" aria-hidden="true"></span>
-				<span>退出</span>
-			</button>
 		</div>
 
 		{#if data.user && status === "open"}
@@ -1042,14 +1043,28 @@ function formatCompactDate(iso: string) {
 /* ── モバイル用コンパクトバー (サイドバー非表示時のみ表示) ── */
 .room-mobile-bar {
 	display: none;
-	align-items: center;
-	gap: 8px;
-	padding: 8px 12px;
+	flex-direction: column;
+	gap: 6px;
+	padding: 10px 12px;
 	margin-bottom: 12px;
 	background: var(--color-surface);
 	border: 1px solid var(--color-border);
 	border-radius: var(--radius);
 	overflow: hidden;
+}
+.header-top-row,
+.header-bottom-row {
+	display: flex;
+	width: 100%;
+	min-width: 0;
+}
+.header-top-row {
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+}
+.header-bottom-row {
+	align-items: center;
 }
 .room-mobile-title {
 	display: inline-flex;
@@ -1067,7 +1082,7 @@ function formatCompactDate(iso: string) {
 	font-variant-numeric: tabular-nums;
 	color: var(--color-text-muted);
 	white-space: nowrap;
-	flex-shrink: 0;
+	line-height: 1.2;
 }
 .room-mobile-exit {
 	display: inline-flex;
