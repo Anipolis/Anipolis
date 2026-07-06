@@ -76,7 +76,7 @@ $effect(() => {
 .anime-search-overlay.live-room-picker-overlay {
 	position: fixed;
 	inset: 0;
-	z-index: 5000;
+	z-index: 10000;
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -84,10 +84,6 @@ $effect(() => {
 	background: rgba(0, 0, 0, 0.58);
 	pointer-events: auto;
 	isolation: isolate;
-}
-
-:global(.sidebar-column:has(.live-room-picker-overlay)) {
-	z-index: 6000;
 }
 
 .live-room-picker-modal {

@@ -283,6 +283,10 @@ textarea {
 	top: calc(var(--nav-height) + 24px);
 }
 
+.sidebar-column:has(.live-room-picker-overlay) {
+	z-index: 10000;
+}
+
 .page-container:not(.room-page-container):has(> .sidebar-column) > .sidebar-column {
 	flex: 1 1 var(--sidebar-width);
 }
