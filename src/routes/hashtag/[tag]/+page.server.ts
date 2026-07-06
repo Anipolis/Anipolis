@@ -15,19 +15,51 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 
 	const [postsResult, trendingResult, animeTrending] = await Promise.all([
 		(async () => {
-			if (!hashtag) return { data: [] };
-
-			const { data: links } = await supabase.from("post_hashtags").select("post_id").eq("hashtag_id", hashtag.id);
+			const { data: links } = hashtag
+				? await supabase.from("post_hashtags").select("post_id").eq("hashtag_id", hashtag.id)
+				: { data: [] };
+			const { data: events } = await supabase
+				.from("events")
+				.select("id")
+				.eq("hashtag", tag)
+				.eq("is_cancelled", false);
 
 			const postIds = (links ?? []).map((l) => l.post_id);
-			if (postIds.length === 0) return { data: [] };
+			const eventIds = (events ?? []).map((event) => event.id);
+			if (postIds.length === 0 && eventIds.length === 0) return { data: [] };
 
-			return supabase
-				.from("posts")
-				.select(POSTS_SELECT)
-				.in("id", postIds)
-				.order("created_at", { ascending: false })
-				.limit(50);
+			const [taggedPosts, eventPosts] = await Promise.all([
+				postIds.length > 0
+					? supabase
+							.from("posts")
+							.select(POSTS_SELECT)
+							.in("id", postIds)
+							.order("created_at", { ascending: false })
+							.limit(50)
+					: Promise.resolve({ data: [] }),
+				eventIds.length > 0
+					? supabase
+							.from("posts")
+							.select(POSTS_SELECT)
+							.in("event_id", eventIds)
+							.order("created_at", { ascending: false })
+							.limit(50)
+					: Promise.resolve({ data: [] }),
+			]);
+
+			const postsById = new Map<string, RawPost>();
+			for (const post of [
+				...((taggedPosts.data ?? []) as unknown as RawPost[]),
+				...((eventPosts.data ?? []) as unknown as RawPost[]),
+			]) {
+				postsById.set(post.id, post);
+			}
+
+			return {
+				data: [...postsById.values()]
+					.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+					.slice(0, 50),
+			};
 		})(),
 
 		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),

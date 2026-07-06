@@ -106,7 +106,7 @@ export const actions: Actions = {
 			null,
 			null,
 			null,
-			[],
+			[event.hashtag],
 			event.id,
 		);
 	},
