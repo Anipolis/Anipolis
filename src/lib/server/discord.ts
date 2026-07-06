@@ -1,5 +1,15 @@
 import type { User } from "@supabase/supabase-js";
+import { env as publicEnv } from "$env/dynamic/public";
 import { DISCORD_BOT_TOKEN, DISCORD_GUILD_ID } from "$env/static/private";
+
+/**
+ * クローズドβのアクセスゲートが有効かどうか。
+ * hooks の全ルート遮断・/auth のログイン手段制限・/auth/callback のセッション破棄は
+ * すべてこの判定を共有する（フラグを消せば β ゲート全体が無効になる）。
+ */
+export function isBetaGateEnabled(): boolean {
+	return publicEnv["PUBLIC_CLOSED_BETA"] === "true";
+}
 
 /**
  * Discord Bot トークンを使って、指定 Guild にユーザーが在籍しているか照会する。

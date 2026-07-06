@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { type Handle, json, redirect } from "@sveltejs/kit";
 import { env as publicEnv } from "$env/dynamic/public";
-import { isBetaMember } from "$lib/server/discord";
+import { isBetaGateEnabled, isBetaMember } from "$lib/server/discord";
 import { isApiRateLimited } from "$lib/server/rate-limit";
 
 // クローズドβ：これらのプレフィックス配下は未資格ユーザーでもアクセス可
@@ -65,7 +65,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	// クローズドβ：所属検証済み（app_metadata.beta_member）でないログインユーザーを遮断する。
 	// 未ログインユーザーや公開パス（/auth 配下）は対象外。検証は /auth/callback で1度だけ行う。
-	if (event.route.id && !isPublicPath(event.url.pathname)) {
+	// PUBLIC_CLOSED_BETA を無効にするとこのゲートごと外れる（β終了時の締め出し防止）。
+	if (isBetaGateEnabled() && event.route.id && !isPublicPath(event.url.pathname)) {
 		const { user } = await event.locals.safeGetSession();
 		if (user && !isBetaMember(user)) {
 			redirect(303, "/auth?error=not_member");

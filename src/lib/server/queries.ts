@@ -1365,12 +1365,17 @@ export async function getTimelinePostsWithReposts(
 					profile: ProfileRepostContext;
 				} => item !== null,
 			),
-	]
-		.sort((a, b) => new Date(b.sortAt).getTime() - new Date(a.sortAt).getTime())
-		.filter((item, index, items) => items.findIndex((candidate) => candidate.post.id === item.post.id) === index)
-		.slice(0, limit);
+	].sort((a, b) => new Date(b.sortAt).getTime() - new Date(a.sortAt).getTime());
 
-	const rawTimelinePosts = timelineItems.map((item) => ({
+	// 同一投稿の重複（自分の投稿 + 他プロフィールによるリポスト等）は先勝ちで除外する
+	const seenPostIds = new Set<string>();
+	const dedupedItems = timelineItems.filter((item) => {
+		if (seenPostIds.has(item.post.id)) return false;
+		seenPostIds.add(item.post.id);
+		return true;
+	});
+
+	const rawTimelinePosts = dedupedItems.slice(0, limit).map((item) => ({
 		...item.post,
 		repost_context:
 			item.kind === "repost"

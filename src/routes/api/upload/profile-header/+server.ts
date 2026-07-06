@@ -1,5 +1,10 @@
 import { error, json } from "@sveltejs/kit";
-import { publicUrlToStoragePath, validateImageBuffer } from "$lib/server/upload";
+import {
+	MULTIPART_OVERHEAD_BYTES,
+	publicUrlToStoragePath,
+	readFormDataWithLimit,
+	validateImageBuffer,
+} from "$lib/server/upload";
 import type { RequestHandler } from "./$types";
 
 const BUCKET = "profile-headers";
@@ -10,7 +15,10 @@ export const POST: RequestHandler = async ({ request, locals: { supabase, safeGe
 	const { user } = await safeGetSession();
 	if (!user) error(401, "ログインが必要です");
 
-	const form = await request.formData();
+	const form = await readFormDataWithLimit(request, MAX_FILE_SIZE + MULTIPART_OVERHEAD_BYTES);
+	if (form === "too_large") error(413, "ファイルサイズが大きすぎます（最大5MB）");
+	if (form === "invalid") error(400, "ファイルが指定されていません");
+
 	const file = form.get("file") as File | null;
 	if (!file || file.size === 0) error(400, "ファイルが指定されていません");
 	if (!ALLOWED_TYPES.includes(file.type)) error(400, "対応していないファイル形式です（JPEG/PNG/WebP）");

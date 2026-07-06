@@ -1,5 +1,5 @@
 import { error, json } from "@sveltejs/kit";
-import { validateImageBuffer } from "$lib/server/upload";
+import { MULTIPART_OVERHEAD_BYTES, readFormDataWithLimit, validateImageBuffer } from "$lib/server/upload";
 import type { RequestHandler } from "./$types";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
@@ -9,37 +9,10 @@ export const POST: RequestHandler = async ({ request, locals: { supabase, safeGe
 	const { user } = await safeGetSession();
 	if (!user) error(401, "ログインが必要です");
 
-	// Fast rejection for clients that send Content-Length (they can lie, but worth the early check)
-	const contentLength = Number(request.headers.get("content-length") ?? 0);
-	if (contentLength > MAX_FILE_SIZE) error(413, "ファイルサイズが大きすぎます（最大5MB）");
+	const form = await readFormDataWithLimit(request, MAX_FILE_SIZE + MULTIPART_OVERHEAD_BYTES);
+	if (form === "too_large") error(413, "ファイルサイズが大きすぎます（最大5MB）");
+	if (form === "invalid") error(400, "ファイルが指定されていません");
 
-	// Stream body with a hard size cap before any parsing
-	const contentType = request.headers.get("content-type") ?? "";
-	if (!request.body) error(400, "ファイルが指定されていません");
-
-	const reader = request.body.getReader();
-	const chunks: Uint8Array[] = [];
-	let totalBytes = 0;
-	while (true) {
-		const { done, value } = await reader.read();
-		if (done) break;
-		totalBytes += value.byteLength;
-		if (totalBytes > MAX_FILE_SIZE) {
-			await reader.cancel();
-			error(413, "ファイルサイズが大きすぎます（最大5MB）");
-		}
-		chunks.push(value);
-	}
-
-	// Reassemble and delegate multipart parsing to the native API
-	const body = new Uint8Array(totalBytes);
-	let offset = 0;
-	for (const chunk of chunks) {
-		body.set(chunk, offset);
-		offset += chunk.byteLength;
-	}
-
-	const form = await new Response(body, { headers: { "content-type": contentType } }).formData();
 	const file = form.get("file") as File | null;
 
 	if (!file || file.size === 0) error(400, "ファイルが指定されていません");

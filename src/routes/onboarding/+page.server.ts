@@ -1,13 +1,13 @@
 import { fail, redirect } from "@sveltejs/kit";
 import { completeProfileSetupAction } from "$lib/server/actions";
 import { getProfileIdByUsername } from "$lib/server/queries";
+import { sanitizeInternalRedirect } from "$lib/utils/url";
 import type { Actions, PageServerLoad } from "./$types";
 
 const USERNAME_PATTERN = /^[a-zA-Z0-9_]{3,20}$/;
 
 function getSafeNext(raw: FormDataEntryValue | string | null): string {
-	const next = typeof raw === "string" ? raw : "/";
-	return next.startsWith("/") && !next.startsWith("//") && !next.includes(":/") ? next : "/";
+	return sanitizeInternalRedirect(typeof raw === "string" ? raw : "/");
 }
 
 function getMetadataString(metadata: Record<string, unknown>, key: string): string | null {
