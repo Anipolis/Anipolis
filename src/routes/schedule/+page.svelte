@@ -376,6 +376,7 @@ function eventAlertKey(eventId: string) {
 
 // Optimistic on/off toggle for event notifications — mirrors notifySubmit (anime bell menu)
 const eventNotifySubmit: SubmitFunction = ({ formData }) => {
+	openAlertMenu = null;
 	const eventId = formData.get("event_id") as string;
 	const wasSubscribed = eventSubscribedIds.has(eventId);
 	if (wasSubscribed) {
@@ -400,6 +401,7 @@ const eventNotifySubmit: SubmitFunction = ({ formData }) => {
 // Optimistic on/off toggle for event mute — the form's action switches between
 // updateEventMute / removeEventMute based on current state
 const eventMuteToggleSubmit: SubmitFunction = ({ formData }) => {
+	openAlertMenu = null;
 	const eventId = formData.get("event_id") as string;
 	const wasMuted = mutedEventIds.has(eventId);
 	if (wasMuted) {

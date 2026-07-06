@@ -81,7 +81,12 @@ const removeSubmit: SubmitFunction = () => {
 // イベントミュート tab
 function eventMuteDateLabel(mute: EventMute): string {
 	if (!mute.event_scheduled_at) return "";
-	return new Date(mute.event_scheduled_at).toLocaleString("ja-JP", { dateStyle: "medium", timeStyle: "short" });
+	// イベント日時はJST基準のため、閲覧ブラウザのTZに依存させない
+	return new Date(mute.event_scheduled_at).toLocaleString("ja-JP", {
+		timeZone: "Asia/Tokyo",
+		dateStyle: "medium",
+		timeStyle: "short",
+	});
 }
 
 const activeTab = $derived.by((): "word" | "anime" => {

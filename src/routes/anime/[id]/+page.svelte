@@ -1306,9 +1306,11 @@ $effect(() => {
 					<button
 						type="button"
 						role="tab"
+						id="room-tab-log"
 						class="room-tab"
 						class:room-tab--active={activeRoomTab === "log"}
 						aria-selected={activeRoomTab === "log"}
+						aria-controls="room-tabpanel"
 						onclick={() => (activeRoomTab = "log")}
 					>
 						ルームログ
@@ -1316,81 +1318,92 @@ $effect(() => {
 					<button
 						type="button"
 						role="tab"
+						id="room-tab-event"
 						class="room-tab"
 						class:room-tab--active={activeRoomTab === "event"}
 						aria-selected={activeRoomTab === "event"}
+						aria-controls="room-tabpanel"
 						onclick={() => (activeRoomTab = "event")}
 					>
 						イベント
 					</button>
 				</div>
 
-				{#if activeRoomTab === "log"}
-					{#if data.anime.room_type === "global"}
-						<section class="global-lobby-section">
-							<a href="/rooms/anime/{data.anime.id}/lobby" class="global-lobby-link">
-								<span class="i-lucide-messages-square" aria-hidden="true"></span>
-								<span>
-									<strong>この作品の総合実況・雑談ロビーへ入る</strong>
-								</span>
-							</a>
-						</section>
-					{:else if data.episodes.length > 0}
-						<section class="room-log-section">
-							<h2 class="room-log-heading">ルームログ</h2>
-							<ol class="room-log-list">
-								{#if isAnimeAiring && latestRoomLog}
-									<li class="room-log-latest-slot">
-										<a
-											href="/rooms/anime/{data.anime.id}/{latestRoomLog.date}"
-											class="room-log-item room-log-item--latest"
-										>
-											<span class="room-log-latest-label">
-												<span class="i-lucide-zap" aria-hidden="true"></span>
-												Latest
-											</span>
-											<span class="room-log-ep">{formatBroadcastEpisodeSlot(latestRoomLog)}</span>
-											<span class="room-log-ep-compact"
-												>{formatBroadcastEpisodeNumber(latestRoomLog)}</span
+				<div
+					id="room-tabpanel"
+					role="tabpanel"
+					aria-labelledby={activeRoomTab === "log" ? "room-tab-log" : "room-tab-event"}
+				>
+					{#if activeRoomTab === "log"}
+						{#if data.anime.room_type === "global"}
+							<section class="global-lobby-section">
+								<a href="/rooms/anime/{data.anime.id}/lobby" class="global-lobby-link">
+									<span class="i-lucide-messages-square" aria-hidden="true"></span>
+									<span>
+										<strong>この作品の総合実況・雑談ロビーへ入る</strong>
+									</span>
+								</a>
+							</section>
+						{:else if data.episodes.length > 0}
+							<section class="room-log-section">
+								<h2 class="room-log-heading">ルームログ</h2>
+								<ol class="room-log-list">
+									{#if isAnimeAiring && latestRoomLog}
+										<li class="room-log-latest-slot">
+											<a
+												href="/rooms/anime/{data.anime.id}/{latestRoomLog.date}"
+												class="room-log-item room-log-item--latest"
 											>
-											{#if liveRoomDates.has(latestRoomLog.date)}
-												<span class="room-log-live-badge">LIVE</span>
-											{/if}
-											<span class="room-log-date">{latestRoomLog.date}</span>
-										</a>
-									</li>
-								{/if}
-								{#each sortedRoomLogs as ep (ep.date)}
-									<li>
-										<a href="/rooms/anime/{data.anime.id}/{ep.date}" class="room-log-item">
-											<span class="room-log-ep">{formatBroadcastEpisodeSlot(ep)}</span>
-											<span class="room-log-ep-compact">{formatBroadcastEpisodeNumber(ep)}</span>
-											{#if liveRoomDates.has(ep.date)}
-												<span class="room-log-live-badge">LIVE</span>
-											{/if}
-											<span class="room-log-date">{ep.date}</span>
-										</a>
-									</li>
-								{/each}
-							</ol>
-						</section>
+												<span class="room-log-latest-label">
+													<span class="i-lucide-zap" aria-hidden="true"></span>
+													Latest
+												</span>
+												<span class="room-log-ep"
+													>{formatBroadcastEpisodeSlot(latestRoomLog)}</span
+												>
+												<span class="room-log-ep-compact"
+													>{formatBroadcastEpisodeNumber(latestRoomLog)}</span
+												>
+												{#if liveRoomDates.has(latestRoomLog.date)}
+													<span class="room-log-live-badge">LIVE</span>
+												{/if}
+												<span class="room-log-date">{latestRoomLog.date}</span>
+											</a>
+										</li>
+									{/if}
+									{#each sortedRoomLogs as ep (ep.date)}
+										<li>
+											<a href="/rooms/anime/{data.anime.id}/{ep.date}" class="room-log-item">
+												<span class="room-log-ep">{formatBroadcastEpisodeSlot(ep)}</span>
+												<span class="room-log-ep-compact"
+													>{formatBroadcastEpisodeNumber(ep)}</span
+												>
+												{#if liveRoomDates.has(ep.date)}
+													<span class="room-log-live-badge">LIVE</span>
+												{/if}
+												<span class="room-log-date">{ep.date}</span>
+											</a>
+										</li>
+									{/each}
+								</ol>
+							</section>
+						{:else}
+							<p class="room-tab-empty">このアニメにはルームがありません。</p>
+						{/if}
+					{:else if data.events.length === 0}
+						<p class="room-tab-empty">このアニメに紐づくイベントはまだありません。</p>
 					{:else}
-						<p class="room-tab-empty">このアニメにはルームがありません。</p>
-					{/if}
-				{:else if data.events.length === 0}
-					<p class="room-tab-empty">このアニメに紐づくイベントはまだありません。</p>
-				{:else}
-					<ol class="event-log-list">
-						{#each data.events as event (event.id)}
-							<li>
-								<a
-									href="/events/{event.id}"
-									class="event-log-item"
-									class:event-log-item--cancelled={event.is_cancelled}
-								>
-									<span class="event-log-title">{event.title}</span>
-									<span class="event-log-date">
-										{new Date(event.scheduled_at).toLocaleString("ja-JP", {
+						<ol class="event-log-list">
+							{#each data.events as event (event.id)}
+								<li>
+									<a
+										href="/events/{event.id}"
+										class="event-log-item"
+										class:event-log-item--cancelled={event.is_cancelled}
+									>
+										<span class="event-log-title">{event.title}</span>
+										<span class="event-log-date">
+											{new Date(event.scheduled_at).toLocaleString("ja-JP", {
 											timeZone: "Asia/Tokyo",
 											year: "numeric",
 											month: "numeric",
@@ -1398,15 +1411,16 @@ $effect(() => {
 											hour: "2-digit",
 											minute: "2-digit",
 										})}
-									</span>
-									{#if event.is_cancelled}
-										<span class="event-log-cancelled-badge">キャンセル済み</span>
-									{/if}
-								</a>
-							</li>
-						{/each}
-					</ol>
-				{/if}
+										</span>
+										{#if event.is_cancelled}
+											<span class="event-log-cancelled-badge">キャンセル済み</span>
+										{/if}
+									</a>
+								</li>
+							{/each}
+						</ol>
+					{/if}
+				</div>
 			</section>
 
 			{#if data.relations.length > 0}
