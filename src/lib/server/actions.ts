@@ -29,6 +29,54 @@ type ModerationProfile = {
 	moderation_until: string | null;
 };
 
+type RoomLinkTrendAnime = {
+	title: string | null;
+	official_hashtag: string[] | null;
+};
+
+type RoomLinkTrendSession = {
+	anime: RoomLinkTrendAnime | RoomLinkTrendAnime[] | null;
+};
+
+function fallbackRoomHashtag(title: string) {
+	return title.replace(/\s+/g, "").replace(/[^\p{L}\p{N}_]/gu, "");
+}
+
+function normalizeHashtagMetadata(value: string) {
+	return value.trim().replace(/^#+/, "").toLowerCase();
+}
+
+function firstRelatedRow<T>(value: T | T[] | null | undefined): T | null {
+	return Array.isArray(value) ? (value[0] ?? null) : (value ?? null);
+}
+
+async function getRoomLinkTrendHashtag(
+	supabase: SupabaseClient<Database>,
+	broadcastRoomSessionId: string | null,
+): Promise<string | null> {
+	if (!broadcastRoomSessionId) return null;
+
+	const { data, error } = await supabase
+		.from("broadcast_room_sessions")
+		.select("anime:anime!broadcast_room_sessions_anime_id_fkey ( title, official_hashtag )")
+		.eq("id", broadcastRoomSessionId)
+		.maybeSingle();
+
+	if (error || !data) {
+		if (error) console.error("room link trend hashtag lookup error:", error);
+		return null;
+	}
+
+	const anime = firstRelatedRow((data as unknown as RoomLinkTrendSession).anime);
+	if (!anime) return null;
+
+	const officialHashtag = anime.official_hashtag?.map(normalizeHashtagMetadata).find((tag) => tag.length > 0);
+	if (officialHashtag) return officialHashtag;
+
+	const fallback = fallbackRoomHashtag(anime.title ?? "");
+	return fallback ? normalizeHashtagMetadata(fallback) : null;
+}
+
 export function getAnimeExchangeErrorDetail(error: {
 	details?: unknown;
 }): keyof typeof animeExchangeErrorMessages | null {
@@ -135,10 +183,11 @@ export async function insertPostWithHashtags(
 	// ハッシュタグを一括登録（既存タグは ON CONFLICT DO NOTHING）。
 	// タグごとの insert+select ループは実況時の余分な往復になるため一括化している。
 	// メンション通知は DB トリガー notify_on_mention（migration 026）が生成する。
-	const additionalTags = additionalHashtags
-		.map((tag) => tag.trim().replace(/^#+/, "").toLowerCase())
-		.filter((tag) => tag.length > 0);
-	const tags = [...new Set([...extractHashtags(postContent), ...additionalTags])];
+	const additionalTags = additionalHashtags.map(normalizeHashtagMetadata).filter((tag) => tag.length > 0);
+	const roomLinkTrendHashtag =
+		additionalTags.length === 0 ? await getRoomLinkTrendHashtag(supabase, broadcastRoomSessionId) : null;
+	const roomLinkTags = roomLinkTrendHashtag ? [roomLinkTrendHashtag] : [];
+	const tags = [...new Set([...extractHashtags(postContent), ...additionalTags, ...roomLinkTags])];
 	if (tags.length > 0) {
 		await supabase.from("hashtags").upsert(
 			tags.map((name) => ({ name })),

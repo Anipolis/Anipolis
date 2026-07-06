@@ -1906,7 +1906,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	.create-event-btn {
 		position: fixed;
 		top: 6px;
-		right: 52px;
+		right: 92px;
 		z-index: 161;
 		width: 40px;
 		height: 40px;

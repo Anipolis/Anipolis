@@ -25,6 +25,7 @@ import type {
 	UserAnimeEntry,
 } from "$lib/types";
 import { toPost } from "$lib/types";
+import { animeIsScheduledForRoomDate } from "$lib/utils/broadcast-room";
 
 type NotificationActor = {
 	username: string;
@@ -2839,7 +2840,7 @@ export async function getOpenBroadcastRoomSessions(
 	let query = supabase
 		.from("broadcast_room_sessions")
 		.select(
-			"id, anime_id, room_date, room_kind, room_key, scheduled_at, anime:anime!broadcast_room_sessions_anime_id_fkey ( id, title, cover_url )",
+			"id, anime_id, room_date, room_kind, room_key, scheduled_at, anime:anime!broadcast_room_sessions_anime_id_fkey ( id, title, cover_url, aired_from, aired_to, broadcast_day )",
 		)
 		.lte("posting_opens_at", now)
 		.gte("posting_closes_at", now)
@@ -2850,17 +2851,64 @@ export async function getOpenBroadcastRoomSessions(
 		console.error("getOpenBroadcastRoomSessions failed:", error);
 		return [];
 	}
-	type RawAnime = { id: number; title: string; cover_url: string | null };
-	return (data ?? []).map((row) => {
-		const anime = row.anime as unknown as RawAnime | null;
-		return {
-			id: row.id,
-			anime_id: String(row.anime_id),
-			room_date: row.room_date,
-			room_kind: row.room_kind as "episode" | "global",
-			room_key: row.room_key,
-			scheduled_at: row.scheduled_at,
-			anime: anime ? { id: String(anime.id), title: anime.title, cover_url: anime.cover_url ?? null } : null,
-		};
-	});
+	const rows = data ?? [];
+	const episodeRows = rows.filter((row) => row.room_kind === "episode");
+	const overrideBySessionKey = new Map<string, { is_cancelled: boolean | null }>();
+	let overrideLookupFailed = false;
+	if (episodeRows.length > 0) {
+		const animeIds = [...new Set(episodeRows.map((row) => row.anime_id))];
+		const roomDates = [...new Set(episodeRows.map((row) => row.room_date))];
+		// biome-ignore lint/suspicious/noExplicitAny: broadcast_room_overrides not yet in generated types
+		const reader = supabase as SupabaseClient<any>;
+		const { data: overrides, error: overrideError } = await reader
+			.from("broadcast_room_overrides")
+			.select("anime_id, room_date, is_cancelled")
+			.in("anime_id", animeIds)
+			.in("room_date", roomDates);
+		if (overrideError) {
+			console.error("getOpenBroadcastRoomSessions overrides failed:", overrideError);
+			overrideLookupFailed = true;
+		}
+		for (const override of (overrides as
+			| Pick<BroadcastRoomOverride, "anime_id" | "room_date" | "is_cancelled">[]
+			| null) ?? []) {
+			overrideBySessionKey.set(`${override.anime_id}:${override.room_date.slice(0, 10)}`, {
+				is_cancelled: override.is_cancelled,
+			});
+		}
+	}
+	type RawAnime = {
+		id: number;
+		title: string;
+		cover_url: string | null;
+		aired_from: string | null;
+		aired_to: string | null;
+		broadcast_day: number | null;
+	};
+	const rawAnimeForRow = (anime: unknown): RawAnime | null => {
+		const raw = Array.isArray(anime) ? anime[0] : anime;
+		return raw ? (raw as RawAnime) : null;
+	};
+	return rows
+		.filter((row) => {
+			if (row.room_kind !== "episode") return true;
+			if (overrideLookupFailed) return false;
+			const anime = rawAnimeForRow(row.anime);
+			if (!anime) return false;
+			const override = overrideBySessionKey.get(`${row.anime_id}:${row.room_date.slice(0, 10)}`);
+			if (override?.is_cancelled) return false;
+			return animeIsScheduledForRoomDate(anime, row.room_date, override != null);
+		})
+		.map((row) => {
+			const anime = rawAnimeForRow(row.anime);
+			return {
+				id: row.id,
+				anime_id: String(row.anime_id),
+				room_date: row.room_date,
+				room_kind: row.room_kind as "episode" | "global",
+				room_key: row.room_key,
+				scheduled_at: row.scheduled_at,
+				anime: anime ? { id: String(anime.id), title: anime.title, cover_url: anime.cover_url ?? null } : null,
+			};
+		});
 }
