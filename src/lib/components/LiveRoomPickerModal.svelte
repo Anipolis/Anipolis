@@ -76,12 +76,12 @@ $effect(() => {
 .anime-search-overlay.live-room-picker-overlay {
 	position: fixed;
 	inset: 0;
-	z-index: 5000;
+	z-index: 10000;
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	padding: 24px;
-	background: rgba(0, 0, 0, 0.88);
+	background: rgba(0, 0, 0, 0.58);
 	pointer-events: auto;
 	isolation: isolate;
 }
