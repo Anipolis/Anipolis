@@ -1,8 +1,11 @@
 <script lang="ts">
-import RoomPage from "../[date]/+page.svelte";
+import LiveRoomView from "$lib/components/room/LiveRoomView.svelte";
 import type { ActionData, PageData } from "./$types";
 
 let { data, form }: { data: PageData; form: ActionData } = $props();
 </script>
 
-<RoomPage {data} {form} />
+<!-- ルーム間遷移でローカル状態が持ち越されないよう、ルーム単位で再マウントする -->
+{#key data.room.session_id}
+	<LiveRoomView {data} {form} />
+{/key}

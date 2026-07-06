@@ -160,6 +160,7 @@ const recommendFormSuccess = $derived(!hideRecommendFormResult && Boolean(form?.
 // svelte-ignore state_referenced_locally
 let adminEditOpen = $state(Boolean(form?.success || form?.message));
 let activeAdminTab = $state<"basic" | "overrides">("basic");
+let activeRoomTab = $state<"log" | "event">("log");
 let overrideFormOpen = $state(false);
 let selectedOverrideKind = $state<BroadcastOverrideKind>("cancelled");
 let overrideAdvancedOpen = $state(false);
@@ -1300,62 +1301,132 @@ $effect(() => {
 				</section>
 			{/if}
 
-			{#if data.anime.room_type === "global"}
-				<section class="global-lobby-section">
-					<a href="/rooms/anime/{data.anime.id}/lobby" class="global-lobby-link">
-						<span class="i-lucide-messages-square" aria-hidden="true"></span>
-						<span>
-							<strong>この作品の総合実況・雑談ロビーへ入る</strong>
-						</span>
-					</a>
-				</section>
-			{/if}
+			<section class="room-tabs-section">
+				<div class="room-tabs" role="tablist" aria-label="ルーム表示切り替え">
+					<button
+						type="button"
+						role="tab"
+						id="room-tab-log"
+						class="room-tab"
+						class:room-tab--active={activeRoomTab === "log"}
+						aria-selected={activeRoomTab === "log"}
+						aria-controls="room-tabpanel"
+						onclick={() => (activeRoomTab = "log")}
+					>
+						ルームログ
+					</button>
+					<button
+						type="button"
+						role="tab"
+						id="room-tab-event"
+						class="room-tab"
+						class:room-tab--active={activeRoomTab === "event"}
+						aria-selected={activeRoomTab === "event"}
+						aria-controls="room-tabpanel"
+						onclick={() => (activeRoomTab = "event")}
+					>
+						イベント
+					</button>
+				</div>
+
+				<div
+					id="room-tabpanel"
+					role="tabpanel"
+					aria-labelledby={activeRoomTab === "log" ? "room-tab-log" : "room-tab-event"}
+				>
+					{#if activeRoomTab === "log"}
+						{#if data.anime.room_type === "global"}
+							<section class="global-lobby-section">
+								<a href="/rooms/anime/{data.anime.id}/lobby" class="global-lobby-link">
+									<span class="i-lucide-messages-square" aria-hidden="true"></span>
+									<span>
+										<strong>この作品の総合実況・雑談ロビーへ入る</strong>
+									</span>
+								</a>
+							</section>
+						{:else if data.episodes.length > 0}
+							<section class="room-log-section">
+								<h2 class="room-log-heading">ルームログ</h2>
+								<ol class="room-log-list">
+									{#if isAnimeAiring && latestRoomLog}
+										<li class="room-log-latest-slot">
+											<a
+												href="/rooms/anime/{data.anime.id}/{latestRoomLog.date}"
+												class="room-log-item room-log-item--latest"
+											>
+												<span class="room-log-latest-label">
+													<span class="i-lucide-zap" aria-hidden="true"></span>
+													Latest
+												</span>
+												<span class="room-log-ep"
+													>{formatBroadcastEpisodeSlot(latestRoomLog)}</span
+												>
+												<span class="room-log-ep-compact"
+													>{formatBroadcastEpisodeNumber(latestRoomLog)}</span
+												>
+												{#if liveRoomDates.has(latestRoomLog.date)}
+													<span class="room-log-live-badge">LIVE</span>
+												{/if}
+												<span class="room-log-date">{latestRoomLog.date}</span>
+											</a>
+										</li>
+									{/if}
+									{#each sortedRoomLogs as ep (ep.date)}
+										<li>
+											<a href="/rooms/anime/{data.anime.id}/{ep.date}" class="room-log-item">
+												<span class="room-log-ep">{formatBroadcastEpisodeSlot(ep)}</span>
+												<span class="room-log-ep-compact"
+													>{formatBroadcastEpisodeNumber(ep)}</span
+												>
+												{#if liveRoomDates.has(ep.date)}
+													<span class="room-log-live-badge">LIVE</span>
+												{/if}
+												<span class="room-log-date">{ep.date}</span>
+											</a>
+										</li>
+									{/each}
+								</ol>
+							</section>
+						{:else}
+							<p class="room-tab-empty">このアニメにはルームがありません。</p>
+						{/if}
+					{:else if data.events.length === 0}
+						<p class="room-tab-empty">このアニメに紐づくイベントはまだありません。</p>
+					{:else}
+						<ol class="event-log-list">
+							{#each data.events as event (event.id)}
+								<li>
+									<a
+										href="/events/{event.id}"
+										class="event-log-item"
+										class:event-log-item--cancelled={event.is_cancelled}
+									>
+										<span class="event-log-title">{event.title}</span>
+										<span class="event-log-date">
+											{new Date(event.scheduled_at).toLocaleString("ja-JP", {
+											timeZone: "Asia/Tokyo",
+											year: "numeric",
+											month: "numeric",
+											day: "numeric",
+											hour: "2-digit",
+											minute: "2-digit",
+										})}
+										</span>
+										{#if event.is_cancelled}
+											<span class="event-log-cancelled-badge">キャンセル済み</span>
+										{/if}
+									</a>
+								</li>
+							{/each}
+						</ol>
+					{/if}
+				</div>
+			</section>
 
 			{#if data.relations.length > 0}
 				<div class="desktop-relations-slot">
 					{@render relationsSection()}
 				</div>
-			{/if}
-
-			{#if data.episodes.length > 0}
-				<section class="room-log-section">
-					<h2 class="room-log-heading">ルームログ</h2>
-					<ol class="room-log-list">
-						{#if isAnimeAiring && latestRoomLog}
-							<li class="room-log-latest-slot">
-								<a
-									href="/rooms/anime/{data.anime.id}/{latestRoomLog.date}"
-									class="room-log-item room-log-item--latest"
-								>
-									<span class="room-log-latest-label">
-										<span class="i-lucide-zap" aria-hidden="true"></span>
-										Latest
-									</span>
-									<span class="room-log-ep">{formatBroadcastEpisodeSlot(latestRoomLog)}</span>
-									<span class="room-log-ep-compact"
-										>{formatBroadcastEpisodeNumber(latestRoomLog)}</span
-									>
-									{#if liveRoomDates.has(latestRoomLog.date)}
-										<span class="room-log-live-badge">LIVE</span>
-									{/if}
-									<span class="room-log-date">{latestRoomLog.date}</span>
-								</a>
-							</li>
-						{/if}
-						{#each sortedRoomLogs as ep (ep.date)}
-							<li>
-								<a href="/rooms/anime/{data.anime.id}/{ep.date}" class="room-log-item">
-									<span class="room-log-ep">{formatBroadcastEpisodeSlot(ep)}</span>
-									<span class="room-log-ep-compact">{formatBroadcastEpisodeNumber(ep)}</span>
-									{#if liveRoomDates.has(ep.date)}
-										<span class="room-log-live-badge">LIVE</span>
-									{/if}
-									<span class="room-log-date">{ep.date}</span>
-								</a>
-							</li>
-						{/each}
-					</ol>
-				</section>
 			{/if}
 		</div>
 	</div>
@@ -2854,6 +2925,94 @@ a.relation-card:hover {
 	font-size: 0.68rem;
 	color: var(--status-score);
 	font-weight: 600;
+}
+
+/* Room tabs (ルームログ / イベント) */
+.room-tabs-section {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+.room-tabs {
+	display: flex;
+	gap: 6px;
+	border-bottom: 1px solid var(--border);
+}
+.room-tab {
+	appearance: none;
+	background: none;
+	border: none;
+	border-bottom: 2px solid transparent;
+	padding: 8px 4px;
+	font-size: 0.9rem;
+	font-weight: 600;
+	color: var(--text-muted);
+	cursor: pointer;
+}
+.room-tab:hover {
+	color: var(--text);
+}
+.room-tab--active {
+	color: var(--text);
+	border-bottom-color: var(--text);
+}
+.room-tab-empty {
+	color: var(--text-muted);
+	font-size: 0.85rem;
+	text-align: center;
+	padding: 24px 0;
+}
+.event-log-list {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+.event-log-item {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 10px 12px;
+	border-radius: 10px;
+	text-decoration: none;
+	color: var(--text);
+	border: 1px solid var(--border);
+	background: var(--card-bg);
+	transition:
+		background 0.12s,
+		border-color 0.12s;
+}
+.event-log-item:hover {
+	background: var(--hover-bg);
+	border-color: var(--text-muted);
+}
+.event-log-item--cancelled {
+	opacity: 0.6;
+}
+.event-log-title {
+	font-weight: 600;
+	font-size: 0.9rem;
+}
+.event-log-date {
+	color: var(--text-muted);
+	font-size: 0.75rem;
+}
+.event-log-cancelled-badge {
+	display: inline-flex;
+	align-items: center;
+	align-self: flex-start;
+	height: 18px;
+	margin-top: 4px;
+	padding: 0 6px;
+	border-radius: 999px;
+	background: #ef4444;
+	color: #fff;
+	font-size: 0.66rem;
+	font-weight: 800;
+	line-height: 1;
 }
 
 /* Room log */

@@ -15,6 +15,7 @@ import type {
 	BroadcastRoomSession,
 	BroadcastStatus,
 	Event,
+	EventMute,
 	Notification,
 	OpenBroadcastRoomSummary,
 	Post,
@@ -24,6 +25,7 @@ import type {
 	UserAnimeEntry,
 } from "$lib/types";
 import { toPost } from "$lib/types";
+import { animeIsScheduledForRoomDate } from "$lib/utils/broadcast-room";
 
 type NotificationActor = {
 	username: string;
@@ -46,6 +48,8 @@ type NotificationBroadcastAnime = {
 	cover_url: string | null;
 };
 
+type NotificationEvent = { id: string; title: string };
+
 type NotificationRow = {
 	id: string;
 	type: string;
@@ -54,15 +58,17 @@ type NotificationRow = {
 	broadcast_anime_id: number | null;
 	broadcast_scheduled_at: string | null;
 	broadcast_room_date: string | null;
+	event_id: string | null;
 	read: boolean;
 	created_at: string;
 	actor: NotificationActor | NotificationActor[] | null;
 	post: NotificationPost | NotificationPost[] | null;
 	recommendation: NotificationRecommendation | NotificationRecommendation[] | null;
 	broadcast_anime: NotificationBroadcastAnime | NotificationBroadcastAnime[] | null;
+	event: NotificationEvent | NotificationEvent[] | null;
 };
 
-type EventRow = Omit<Database["public"]["Tables"]["events"]["Row"], "anime_id"> & {
+type EventRow = Omit<Database["public"]["Tables"]["events"]["Row"], "anime_id" | "updated_at"> & {
 	anime_id?: number | null;
 	profiles: { username: string; display_name: string | null; avatar_url: string | null } | null;
 	anime?: { id: number; title: string; title_en: string | null; cover_url: string | null } | null;
@@ -118,7 +124,14 @@ export type TimelineCursor = {
  */
 const muteSettingsCache = new WeakMap<
 	object,
-	Map<string, { mutedWords?: Promise<string[]>; animeMuteIds?: Promise<Set<string>> }>
+	Map<
+		string,
+		{
+			mutedWords?: Promise<string[]>;
+			animeMuteIds?: Promise<Set<string>>;
+			mutedEventIds?: Promise<Set<string>>;
+		}
+	>
 >();
 
 function getMuteCacheEntry(supabase: SupabaseClient<Database>, userId: string) {
@@ -151,6 +164,14 @@ function getActiveAnimeMuteIdsCached(supabase: SupabaseClient<Database>, userId:
 	return entry.animeMuteIds;
 }
 
+/** リクエストスコープでメモ化された getMutedEventIds */
+function getMutedEventIdsCached(supabase: SupabaseClient<Database>, userId: string | null): Promise<Set<string>> {
+	if (!userId) return getMutedEventIds(supabase, userId);
+	const entry = getMuteCacheEntry(supabase, userId);
+	if (!entry.mutedEventIds) entry.mutedEventIds = getMutedEventIds(supabase, userId);
+	return entry.mutedEventIds;
+}
+
 /**
  * rawPost 配列に like_count / repost_count / reply_count / liked_by_me / reposted_by_me を付加して
  * Post[] に変換する共通ヘルパー。
@@ -168,6 +189,10 @@ export async function enrichPostsWithCounts(
 	const mutedRoomAnimeIdsPromise = options.includeMutedRoomPosts
 		? Promise.resolve(new Set<string>())
 		: getActiveAnimeMuteIdsCached(supabase, userId);
+	// イベントルーム内部（includeMutedRoomPosts）ではミュートを適用しない（明示的に入室しているため）
+	const mutedEventIdsPromise = options.includeMutedRoomPosts
+		? Promise.resolve(new Set<string>())
+		: getMutedEventIdsCached(supabase, userId);
 
 	type QuotedPostRow = {
 		id: string;
@@ -197,11 +222,20 @@ export async function enrichPostsWithCounts(
 		}
 	}
 
-	const [mutedWords, mutedRoomAnimeIds] = await Promise.all([mutedWordsPromise, mutedRoomAnimeIdsPromise]);
+	const [mutedWords, mutedRoomAnimeIds, mutedEventIds] = await Promise.all([
+		mutedWordsPromise,
+		mutedRoomAnimeIdsPromise,
+		mutedEventIdsPromise,
+	]);
 	const visibleRawPosts = rawPosts.filter(
 		(post) =>
 			!(mutedWords.length > 0 && containsMutedWord(post, mutedWords)) &&
-			!(post.broadcast_room_session_id && post.anime_id != null && mutedRoomAnimeIds.has(String(post.anime_id))),
+			!(
+				post.broadcast_room_session_id &&
+				post.anime_id != null &&
+				mutedRoomAnimeIds.has(String(post.anime_id))
+			) &&
+			!(post.event_id != null && mutedEventIds.has(String(post.event_id))),
 	);
 
 	if (visibleRawPosts.length === 0) return [];
@@ -214,7 +248,7 @@ export async function enrichPostsWithCounts(
 	// p_user_id が NULL（未ログイン）の場合は各 *_by_me が全て false になる。
 	const { data: countsData } = await supabase.rpc("get_post_counts", {
 		p_post_ids: postIds,
-		p_user_id: userId,
+		...(userId ? { p_user_id: userId } : {}),
 	});
 
 	const countsByPostId = new Map((countsData ?? []).map((row) => [row.post_id, row]));
@@ -371,6 +405,7 @@ export async function getNotifications(
             broadcast_anime_id,
             broadcast_scheduled_at,
             broadcast_room_date,
+            event_id,
             read,
             created_at,
             actor:profiles!notifications_actor_id_fkey (
@@ -392,6 +427,10 @@ export async function getNotifications(
                 id,
                 title,
                 cover_url
+            ),
+            event:events!notifications_event_id_fkey (
+                id,
+                title
             )
         `)
 		.eq("recipient_id", userId)
@@ -405,6 +444,7 @@ export async function getNotifications(
 		const post = Array.isArray(row.post) ? row.post[0] : row.post;
 		const recommendation = Array.isArray(row.recommendation) ? row.recommendation[0] : row.recommendation;
 		const broadcastAnime = Array.isArray(row.broadcast_anime) ? row.broadcast_anime[0] : row.broadcast_anime;
+		const event = Array.isArray(row.event) ? row.event[0] : row.event;
 		return {
 			id: row["id"],
 			type: row.type as Notification["type"],
@@ -424,6 +464,8 @@ export async function getNotifications(
 			recommendation_anime_cover_url: recommendation?.anime?.cover_url ?? null,
 			broadcast_anime_title: broadcastAnime?.title ?? null,
 			broadcast_anime_cover_url: broadcastAnime?.cover_url ?? null,
+			event_id: row.event_id,
+			event_title: event?.title ?? null,
 		};
 	});
 }
@@ -550,6 +592,26 @@ export async function getEvent(supabase: SupabaseClient<Database>, eventId: stri
 }
 
 /**
+ * 指定アニメに紐づくイベント一覧を取得する（アニメ詳細ページの「イベント」タブ用）。
+ * キャンセル済みも含めて全件返す（日付範囲・is_cancelled によるフィルタなし）。
+ */
+export async function getEventsForAnime(supabase: SupabaseClient<Database>, animeId: number): Promise<Event[]> {
+	const { data, error } = await supabase
+		.from("events")
+		.select(`
+            id, creator_id, title, description, hashtag, anime_id,
+            scheduled_at, duration_minutes, is_cancelled, created_at,
+            profiles!events_creator_id_fkey ( username, display_name, avatar_url ),
+            anime:anime!events_anime_id_fkey ( id, title, title_en, cover_url )
+        `)
+		.eq("anime_id", animeId)
+		.order("scheduled_at", { ascending: false });
+
+	if (error || !data) return [];
+	return data.map(toEvent);
+}
+
+/**
  * イベントのハッシュタグを持つ投稿を取得する（イベントルーム表示用）
  */
 export async function getEventPosts(
@@ -604,6 +666,28 @@ export async function getBroadcastRoomPosts(
 		.select(POST_LIST_SELECT)
 		.eq("broadcast_room_session_id", sessionId)
 		.is("parent_id", null);
+	if (sinceCreatedAt) query = query.gt("created_at", sinceCreatedAt);
+	const { data: rawPosts } = await query.order("created_at", { ascending: false }).limit(limit);
+	const orderedPosts = ascending ? [...(rawPosts ?? [])].reverse() : rawPosts;
+
+	// ルーム内ではそのルームのミュートを適用しない（明示的に入室しているため）
+	return enrichPostsWithCounts(supabase, (orderedPosts ?? []) as unknown as RawPost[], userId, {
+		includeMutedRoomPosts: true,
+	});
+}
+
+/**
+ * イベントルームの投稿を event_id で直接取得する（放送ルームの getBroadcastRoomPosts と同様）。
+ */
+export async function getEventRoomPosts(
+	supabase: SupabaseClient<Database>,
+	eventId: string,
+	userId: string | null,
+	options: { limit?: number; ascending?: boolean; sinceCreatedAt?: string } = {},
+): Promise<Post[]> {
+	const { limit = 100, ascending = false, sinceCreatedAt } = options;
+
+	let query = supabase.from("posts").select(POST_LIST_SELECT).eq("event_id", eventId).is("parent_id", null);
 	if (sinceCreatedAt) query = query.gt("created_at", sinceCreatedAt);
 	const { data: rawPosts } = await query.order("created_at", { ascending: false }).limit(limit);
 	const orderedPosts = ascending ? [...(rawPosts ?? [])].reverse() : rawPosts;
@@ -1087,7 +1171,7 @@ function toAdminReport(
 		reporter_id: row.reporter_id,
 		reporter_username: reporter?.username ?? "unknown",
 		reporter_display_name: reporter?.display_name ?? null,
-		target_type: row.target_type,
+		target_type: row.target_type as ReportTargetType,
 		target_id: row.target_id,
 		target_user_id: row.target_user_id,
 		target_username: targetUser?.username ?? null,
@@ -1097,9 +1181,9 @@ function toAdminReport(
 		target_moderation_reason: moderation?.reason ?? null,
 		post_content: postContent,
 		post_hidden_by_admin: postHiddenByAdmin,
-		reason: row.reason,
+		reason: row.reason as ReportReason,
 		details: row.details,
-		status: row.status,
+		status: row.status as ReportStatus,
 		created_at: row.created_at,
 		updated_at: row.updated_at,
 	};
@@ -2646,6 +2730,19 @@ export async function getActiveAnimeMuteIds(
 	return activeIds;
 }
 
+/**
+ * ユーザーがミュート中のイベントID一覧を取得する（フィード投稿フィルタ用）。
+ * イベントミュートは one-shot（イベントは再放送がないため期限・繰り返しの概念がない）。
+ */
+export async function getMutedEventIds(
+	supabase: SupabaseClient<Database>,
+	userId: string | null,
+): Promise<Set<string>> {
+	if (!userId) return new Set();
+	const { data } = await supabase.from("event_mutes").select("event_id").eq("user_id", userId);
+	return new Set((data ?? []).map((row) => row.event_id));
+}
+
 export async function getAnimeMutes(supabase: SupabaseClient<Database>, userId: string): Promise<AnimeMute[]> {
 	type Row = AnimeMuteRow & {
 		id: string;
@@ -2681,6 +2778,60 @@ export async function getAnimeMuteCandidate(supabase: SupabaseClient<Database>, 
 	return { id: String(data.id), title: data.title, cover_url: data.cover_url ?? null };
 }
 
+/** settings/mutes のイベントミュート一覧を取得する（イベントタイトル・開始日時を JOIN で付加） */
+export async function getEventMutes(supabase: SupabaseClient<Database>, userId: string): Promise<EventMute[]> {
+	type Row = {
+		id: string;
+		event_id: string;
+		created_at: string;
+		event: { title: string; scheduled_at: string; is_cancelled: boolean } | null;
+	};
+	const { data } = await supabase
+		.from("event_mutes")
+		.select(
+			"id, event_id, created_at, event:events!event_mutes_event_id_fkey ( title, scheduled_at, is_cancelled )",
+		)
+		.eq("user_id", userId)
+		.order("created_at", { ascending: false });
+	const rows = (data ?? []) as unknown as Row[];
+
+	return rows.map((row) => ({
+		id: row.id,
+		event_id: row.event_id,
+		created_at: row.created_at,
+		event_title: row.event?.title ?? "不明なイベント",
+		event_scheduled_at: row.event?.scheduled_at ?? "",
+		event_is_cancelled: row.event?.is_cancelled ?? false,
+	}));
+}
+
+export async function isEventMuted(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+	eventId: string,
+): Promise<boolean> {
+	const { data } = await supabase
+		.from("event_mutes")
+		.select("id")
+		.eq("user_id", userId)
+		.eq("event_id", eventId)
+		.maybeSingle();
+	return data !== null;
+}
+
+/**
+ * 通知オンにしているイベントID一覧を取得する（getBroadcastSubscriptions のイベント版）。
+ * 行の存在 = 通知オン。通知タイミングはリアタイルームと共通の broadcast_notification_settings で管理。
+ */
+export async function getEventNotificationSubscriptions(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+): Promise<string[]> {
+	const { data } = await supabase.from("event_notification_settings").select("event_id").eq("user_id", userId);
+	return (data ?? []).map((row) => row.event_id);
+}
+
+/** ユーザーの全イベント通知設定を取得する（/schedule でイベントごとのベルメニューに表示するため）。テーブルが小さいため一括取得する。 */
 export async function getOpenBroadcastRoomSessions(
 	supabase: SupabaseClient<Database>,
 	options?: { kind?: "episode" | "global" },
@@ -2689,7 +2840,7 @@ export async function getOpenBroadcastRoomSessions(
 	let query = supabase
 		.from("broadcast_room_sessions")
 		.select(
-			"id, anime_id, room_date, room_kind, room_key, scheduled_at, anime:anime!broadcast_room_sessions_anime_id_fkey ( id, title, cover_url )",
+			"id, anime_id, room_date, room_kind, room_key, scheduled_at, anime:anime!broadcast_room_sessions_anime_id_fkey ( id, title, cover_url, aired_from, aired_to, broadcast_day )",
 		)
 		.lte("posting_opens_at", now)
 		.gte("posting_closes_at", now)
@@ -2700,17 +2851,68 @@ export async function getOpenBroadcastRoomSessions(
 		console.error("getOpenBroadcastRoomSessions failed:", error);
 		return [];
 	}
-	type RawAnime = { id: number; title: string; cover_url: string | null };
-	return (data ?? []).map((row) => {
-		const anime = row.anime as unknown as RawAnime | null;
-		return {
-			id: row.id,
-			anime_id: String(row.anime_id),
-			room_date: row.room_date,
-			room_kind: row.room_kind as "episode" | "global",
-			room_key: row.room_key,
-			scheduled_at: row.scheduled_at,
-			anime: anime ? { id: String(anime.id), title: anime.title, cover_url: anime.cover_url ?? null } : null,
-		};
-	});
+	const rows = data ?? [];
+	const episodeRows = rows.filter((row) => row.room_kind === "episode");
+	const overrideBySessionKey = new Map<string, { is_cancelled: boolean | null }>();
+	let overrideLookupFailed = false;
+	if (episodeRows.length > 0) {
+		const animeIds = [...new Set(episodeRows.map((row) => row.anime_id))];
+		const roomDates = [...new Set(episodeRows.map((row) => row.room_date))];
+		// biome-ignore lint/suspicious/noExplicitAny: broadcast_room_overrides not yet in generated types
+		const reader = supabase as SupabaseClient<any>;
+		const { data: overrides, error: overrideError } = await reader
+			.from("broadcast_room_overrides")
+			.select("anime_id, room_date, is_cancelled")
+			.in("anime_id", animeIds)
+			.in("room_date", roomDates);
+		if (overrideError) {
+			console.error("getOpenBroadcastRoomSessions overrides failed:", overrideError);
+			overrideLookupFailed = true;
+		}
+		for (const override of (overrides as
+			| Pick<BroadcastRoomOverride, "anime_id" | "room_date" | "is_cancelled">[]
+			| null) ?? []) {
+			overrideBySessionKey.set(`${override.anime_id}:${override.room_date.slice(0, 10)}`, {
+				is_cancelled: override.is_cancelled,
+			});
+		}
+	}
+	type RawAnime = {
+		id: number;
+		title: string;
+		cover_url: string | null;
+		aired_from: string | null;
+		aired_to: string | null;
+		broadcast_day: number | null;
+	};
+	const rawAnimeForRow = (anime: unknown): RawAnime | null => {
+		const raw = Array.isArray(anime) ? anime[0] : anime;
+		return raw ? (raw as RawAnime) : null;
+	};
+	return rows
+		.filter((row) => {
+			if (row.room_kind !== "episode") return true;
+			const anime = rawAnimeForRow(row.anime);
+			if (!anime) return false;
+			if (overrideLookupFailed) {
+				// override取得の一時失敗でエピソードルームを全滅させない(fail-open)。
+				// 中止判定はできないため、通常スケジュール判定のみで表示する。
+				return animeIsScheduledForRoomDate(anime, row.room_date, false);
+			}
+			const override = overrideBySessionKey.get(`${row.anime_id}:${row.room_date.slice(0, 10)}`);
+			if (override?.is_cancelled) return false;
+			return animeIsScheduledForRoomDate(anime, row.room_date, override != null);
+		})
+		.map((row) => {
+			const anime = rawAnimeForRow(row.anime);
+			return {
+				id: row.id,
+				anime_id: String(row.anime_id),
+				room_date: row.room_date,
+				room_kind: row.room_kind as "episode" | "global",
+				room_key: row.room_key,
+				scheduled_at: row.scheduled_at,
+				anime: anime ? { id: String(anime.id), title: anime.title, cover_url: anime.cover_url ?? null } : null,
+			};
+		});
 }

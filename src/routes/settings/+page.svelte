@@ -44,7 +44,7 @@ const items = $derived.by((): Item[] => {
 			},
 			{
 				label: "ミュート設定",
-				description: "ワード・アニメのミュートをまとめて管理します",
+				description: "ワード・ルームのミュートをまとめて管理します",
 				href: "/settings/mutes",
 			},
 		];

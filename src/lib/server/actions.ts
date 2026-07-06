@@ -5,6 +5,7 @@ import {
 	toExchangeSubjectiveTags,
 	validateExchangeSubjectiveTags,
 } from "$lib/exchange-tags";
+import { getEvent, isAdminUser } from "$lib/server/queries";
 import { createServiceRoleClient } from "$lib/server/supabase-admin";
 import { publicUrlToStoragePath, validateImageBuffer } from "$lib/server/upload";
 import type { Database, Json } from "$lib/supabase/database.types";
@@ -27,6 +28,54 @@ type ModerationProfile = {
 	moderation_status: ModerationStatus;
 	moderation_until: string | null;
 };
+
+type RoomLinkTrendAnime = {
+	title: string | null;
+	official_hashtag: string[] | null;
+};
+
+type RoomLinkTrendSession = {
+	anime: RoomLinkTrendAnime | RoomLinkTrendAnime[] | null;
+};
+
+function fallbackRoomHashtag(title: string) {
+	return title.replace(/\s+/g, "").replace(/[^\p{L}\p{N}_]/gu, "");
+}
+
+function normalizeHashtagMetadata(value: string) {
+	return value.trim().replace(/^#+/, "").toLowerCase();
+}
+
+function firstRelatedRow<T>(value: T | T[] | null | undefined): T | null {
+	return Array.isArray(value) ? (value[0] ?? null) : (value ?? null);
+}
+
+async function getRoomLinkTrendHashtag(
+	supabase: SupabaseClient<Database>,
+	broadcastRoomSessionId: string | null,
+): Promise<string | null> {
+	if (!broadcastRoomSessionId) return null;
+
+	const { data, error } = await supabase
+		.from("broadcast_room_sessions")
+		.select("anime:anime!broadcast_room_sessions_anime_id_fkey ( title, official_hashtag )")
+		.eq("id", broadcastRoomSessionId)
+		.maybeSingle();
+
+	if (error || !data) {
+		if (error) console.error("room link trend hashtag lookup error:", error);
+		return null;
+	}
+
+	const anime = firstRelatedRow((data as unknown as RoomLinkTrendSession).anime);
+	if (!anime) return null;
+
+	const officialHashtag = anime.official_hashtag?.map(normalizeHashtagMetadata).find((tag) => tag.length > 0);
+	if (officialHashtag) return officialHashtag;
+
+	const fallback = fallbackRoomHashtag(anime.title ?? "");
+	return fallback ? normalizeHashtagMetadata(fallback) : null;
+}
 
 export function getAnimeExchangeErrorDetail(error: {
 	details?: unknown;
@@ -88,6 +137,7 @@ export async function insertPostWithHashtags(
 	broadcastRoomSessionId: string | null = null,
 	cwAnimeId: string | null = null,
 	additionalHashtags: string[] = [],
+	eventId: string | null = null,
 ) {
 	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
 	if (moderationFailure) return moderationFailure;
@@ -117,6 +167,7 @@ export async function insertPostWithHashtags(
 		cw_anime_id: cwAnimeId ? Number(cwAnimeId) : null,
 		quoted_post_id: quotedPostId || null,
 		broadcast_room_session_id: broadcastRoomSessionId,
+		event_id: eventId,
 	};
 	const postPayload = exchangeShare ? { ...basePost, exchange_share: exchangeShare as unknown as Json } : basePost;
 
@@ -132,10 +183,11 @@ export async function insertPostWithHashtags(
 	// ハッシュタグを一括登録（既存タグは ON CONFLICT DO NOTHING）。
 	// タグごとの insert+select ループは実況時の余分な往復になるため一括化している。
 	// メンション通知は DB トリガー notify_on_mention（migration 026）が生成する。
-	const additionalTags = additionalHashtags
-		.map((tag) => tag.trim().replace(/^#+/, "").toLowerCase())
-		.filter((tag) => tag.length > 0);
-	const tags = [...new Set([...extractHashtags(postContent), ...additionalTags])];
+	const additionalTags = additionalHashtags.map(normalizeHashtagMetadata).filter((tag) => tag.length > 0);
+	const roomLinkTrendHashtag =
+		additionalTags.length === 0 ? await getRoomLinkTrendHashtag(supabase, broadcastRoomSessionId) : null;
+	const roomLinkTags = roomLinkTrendHashtag ? [roomLinkTrendHashtag] : [];
+	const tags = [...new Set([...extractHashtags(postContent), ...additionalTags, ...roomLinkTags])];
 	if (tags.length > 0) {
 		await supabase.from("hashtags").upsert(
 			tags.map((name) => ({ name })),
@@ -479,8 +531,23 @@ export async function adminTogglePostVisibilityAction(
 /**
  * 新しいイベントを作成する
  */
-export async function createEventAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
-	const form = await request.formData();
+type ParsedEventForm = {
+	title: string;
+	description: string | null;
+	hashtag: string;
+	scheduledAtIso: string;
+	durationMinutes: number | null;
+	animeId: number | null;
+};
+
+/**
+ * イベント作成・編集フォームの共通バリデーション。
+ * createEventAction / updateEventAction の両方から使い、制約を一元管理する。
+ */
+async function parseEventForm(
+	form: FormData,
+	supabase: SupabaseClient<Database>,
+): Promise<{ ok: true; value: ParsedEventForm } | { ok: false; failure: ReturnType<typeof fail> }> {
 	const title = (form.get("title") as string | null)?.trim() ?? "";
 	const description = (form.get("description") as string | null)?.trim() || null;
 	const rawHashtag = (form.get("hashtag") as string | null)?.trim() ?? "";
@@ -488,25 +555,38 @@ export async function createEventAction(request: Request, supabase: SupabaseClie
 	const durationRaw = (form.get("duration_minutes") as string | null)?.trim() ?? "";
 	const animeIdRaw = (form.get("anime_id") as string | null)?.trim() ?? "";
 	const animeId = animeIdRaw ? parsePositiveInt(animeIdRaw) : null;
-	if (animeIdRaw && animeId === null) return fail(400, { message: "アニメIDの形式が正しくありません" });
-
-	if (!title) return fail(400, { message: "タイトルを入力してください" });
-	if (title.length > 100) return fail(400, { message: "タイトルは100文字以内で入力してください" });
-
-	const hashtag = rawHashtag.replace(/^#/, "").toLowerCase();
-	if (!hashtag) return fail(400, { message: "ハッシュタグを入力してください" });
-	if (hashtag.length > 50) return fail(400, { message: "ハッシュタグは50文字以内で入力してください" });
-	if (!/^[a-z0-9_\u3000-\u9fff\uff00-\uffef\u4e00-\u9fff]+$/u.test(hashtag)) {
-		return fail(400, { message: "ハッシュタグに使用できない文字が含まれています" });
+	if (animeIdRaw && animeId === null) {
+		return { ok: false, failure: fail(400, { message: "アニメIDの形式が正しくありません" }) };
 	}
 
-	if (!scheduledAtRaw) return fail(400, { message: "開始日時を入力してください" });
-	const scheduledAt = new Date(scheduledAtRaw);
-	if (Number.isNaN(scheduledAt.getTime())) return fail(400, { message: "開始日時の形式が正しくありません" });
+	if (!title) return { ok: false, failure: fail(400, { message: "タイトルを入力してください" }) };
+	if (title.length > 100) {
+		return { ok: false, failure: fail(400, { message: "タイトルは100文字以内で入力してください" }) };
+	}
 
-	const durationMinutes = durationRaw ? parseInt(durationRaw, 10) : null;
-	if (durationMinutes !== null && (Number.isNaN(durationMinutes) || durationMinutes <= 0)) {
-		return fail(400, { message: "配信時間は正の整数で入力してください" });
+	const hashtag = rawHashtag.replace(/^#/, "").toLowerCase();
+	if (!hashtag) return { ok: false, failure: fail(400, { message: "ルームリンクを入力してください" }) };
+	if (hashtag.length > 50) {
+		return { ok: false, failure: fail(400, { message: "ルームリンクは50文字以内で入力してください" }) };
+	}
+	// 英数・アンダースコア・ひらがな・カタカナ(長音符含む)・漢字・全角英数・半角カナのみ許可。
+	// 全角スペースや全角記号(旧レンジ 　 / ＀-／ 等)はタグとして不正なため弾く。
+	if (!/^[a-z0-9_ぁ-ゖァ-ヺー一-鿿０-９Ａ-Ｚａ-ｚｦ-ﾟ]+$/u.test(hashtag)) {
+		return { ok: false, failure: fail(400, { message: "ルームリンクに使用できない文字が含まれています" }) };
+	}
+
+	if (!scheduledAtRaw) return { ok: false, failure: fail(400, { message: "開始日時を入力してください" }) };
+	// datetime-local はタイムゾーンなしの文字列で届く。サーバーのTZ(本番はUTC)で解釈すると
+	// 9時間ずれるため、オフセットが付いていない場合は JST として明示的にパースする。
+	const hasOffset = /(?:Z|[+-]\d{2}:\d{2})$/.test(scheduledAtRaw);
+	const scheduledAt = new Date(hasOffset ? scheduledAtRaw : `${scheduledAtRaw}+09:00`);
+	if (Number.isNaN(scheduledAt.getTime())) {
+		return { ok: false, failure: fail(400, { message: "開始日時の形式が正しくありません" }) };
+	}
+
+	const durationMinutes = durationRaw ? parsePositiveInt(durationRaw) : null;
+	if (durationRaw && durationMinutes === null) {
+		return { ok: false, failure: fail(400, { message: "配信時間は正の整数で入力してください" }) };
 	}
 
 	if (animeId !== null) {
@@ -517,10 +597,22 @@ export async function createEventAction(request: Request, supabase: SupabaseClie
 			.maybeSingle();
 		if (animeError) {
 			console.error("anime lookup error:", animeError);
-			return fail(500, { message: "アニメの確認に失敗しました" });
+			return { ok: false, failure: fail(500, { message: "アニメの確認に失敗しました" }) };
 		}
-		if (!anime) return fail(400, { message: "アニメが見つかりません" });
+		if (!anime) return { ok: false, failure: fail(400, { message: "アニメが見つかりません" }) };
 	}
+
+	return {
+		ok: true,
+		value: { title, description, hashtag, scheduledAtIso: scheduledAt.toISOString(), durationMinutes, animeId },
+	};
+}
+
+export async function createEventAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
+	const form = await request.formData();
+	const parsed = await parseEventForm(form, supabase);
+	if (!parsed.ok) return parsed.failure;
+	const { title, description, hashtag, scheduledAtIso, durationMinutes, animeId } = parsed.value;
 
 	const { data: event, error } = await supabase
 		.from("events")
@@ -530,7 +622,7 @@ export async function createEventAction(request: Request, supabase: SupabaseClie
 			description,
 			hashtag,
 			anime_id: animeId,
-			scheduled_at: scheduledAt.toISOString(),
+			scheduled_at: scheduledAtIso,
 			duration_minutes: durationMinutes,
 		})
 		.select("id")
@@ -545,18 +637,54 @@ export async function createEventAction(request: Request, supabase: SupabaseClie
 }
 
 /**
- * イベントをキャンセルする（作成者のみ）
+ * イベントを更新する（管理者のみ — イベント作成自体が管理者限定のため権限も管理者に統一）
+ */
+export async function updateEventAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
+	const form = await request.formData();
+	const eventId = (form.get("event_id") as string | null)?.trim() ?? "";
+	if (!eventId) return fail(400, { message: "イベントIDが不正です" });
+	if (!(await isAdminUser(supabase, userId))) return fail(403, { message: "管理者権限が必要です" });
+
+	const event = await getEvent(supabase, eventId);
+	if (!event) return fail(404, { message: "イベントが見つかりません" });
+
+	const parsed = await parseEventForm(form, supabase);
+	if (!parsed.ok) return parsed.failure;
+	const { title, description, hashtag, scheduledAtIso, durationMinutes, animeId } = parsed.value;
+
+	const { error } = await supabase
+		.from("events")
+		.update({
+			title,
+			description,
+			hashtag,
+			anime_id: animeId,
+			scheduled_at: scheduledAtIso,
+			duration_minutes: durationMinutes,
+		})
+		.eq("id", eventId);
+
+	if (error) {
+		console.error("event update error:", error);
+		return fail(500, { message: "イベントの更新に失敗しました" });
+	}
+
+	return { success: true, eventId };
+}
+
+/**
+ * イベントをキャンセルする（管理者のみ — イベント作成自体が管理者限定のため権限も管理者に統一）
  */
 export async function cancelEventAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
 	const form = await request.formData();
 	const eventId = (form.get("event_id") as string | null)?.trim() ?? "";
 	if (!eventId) return fail(400, { message: "イベントIDが不正です" });
+	if (!(await isAdminUser(supabase, userId))) return fail(403, { message: "管理者権限が必要です" });
 
-	const { error } = await supabase
-		.from("events")
-		.update({ is_cancelled: true })
-		.eq("id", eventId)
-		.eq("creator_id", userId);
+	const event = await getEvent(supabase, eventId);
+	if (!event) return fail(404, { message: "イベントが見つかりません" });
+
+	const { error } = await supabase.from("events").update({ is_cancelled: true }).eq("id", eventId);
 
 	if (error) return fail(500, { message: "キャンセルに失敗しました" });
 	return { cancelled: true };
@@ -770,7 +898,7 @@ export async function exchangeAnimeAction(supabase: SupabaseClient<Database>, re
 
 	const { data, error } = await supabase.rpc("create_anime_exchange", {
 		p_anime_id: animeIdNumber,
-		p_comment: comment,
+		...(comment ? { p_comment: comment } : {}),
 		p_subjective_tags: subjectiveTags,
 	});
 
@@ -1206,6 +1334,73 @@ export async function removeAnimeMute(supabase: SupabaseClient<Database>, userId
 		.eq("anime_id", Number(animeId));
 	if (error) return fail(500, { message: "ミュート解除に失敗しました" });
 	return { roomMuteSuccess: true };
+}
+
+/**
+ * settings/mutes のイベントミュート追加フォームを処理する。
+ * イベントは再放送がないため one-shot（常にミュート＝そのイベントの投稿を恒久的に非表示）。
+ */
+export async function updateEventMuteAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
+	const form = await request.formData();
+	const eventId = (form.get("event_id") as string | null)?.trim() ?? "";
+	if (!eventId) return fail(400, { message: "イベントが見つかりません" });
+
+	const { error } = await supabase
+		.from("event_mutes")
+		.upsert({ user_id: userId, event_id: eventId }, { onConflict: "user_id,event_id" });
+	if (error) {
+		console.error("event mute upsert error:", error);
+		return fail(500, { message: "ミュート設定に失敗しました" });
+	}
+	return { eventMuteSuccess: true };
+}
+
+/** settings/mutes のイベントミュート解除フォームを処理する */
+export async function removeEventMuteAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
+	const form = await request.formData();
+	const eventId = (form.get("event_id") as string | null)?.trim() ?? "";
+	if (!eventId) return fail(400, { message: "ミュート設定が見つかりません" });
+
+	const { error } = await supabase.from("event_mutes").delete().eq("user_id", userId).eq("event_id", eventId);
+	if (error) return fail(500, { message: "ミュート解除に失敗しました" });
+	return { eventMuteSuccess: true };
+}
+
+/** イベント開始前通知設定（1分前/5分前/30分前）の upsert を処理する */
+/**
+ * イベント通知のオン/オフをトグルする（toggleBroadcastSubscription のイベント版）。
+ * 行の存在 = 通知オン。通知タイミングはリアタイルームと共通の
+ * broadcast_notification_settings で管理する。
+ */
+export async function toggleEventNotificationSubscription(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+	eventId: string,
+): Promise<{ subscribed: boolean }> {
+	const { data: existing, error: selectError } = await supabase
+		.from("event_notification_settings")
+		.select("event_id")
+		.eq("user_id", userId)
+		.eq("event_id", eventId)
+		.maybeSingle();
+
+	if (selectError) throw selectError;
+
+	if (existing) {
+		const { error: deleteError } = await supabase
+			.from("event_notification_settings")
+			.delete()
+			.eq("user_id", userId)
+			.eq("event_id", eventId);
+		if (deleteError) throw deleteError;
+		return { subscribed: false };
+	}
+
+	const { error: insertError } = await supabase
+		.from("event_notification_settings")
+		.insert({ user_id: userId, event_id: eventId });
+	if (insertError) throw insertError;
+	return { subscribed: true };
 }
 
 // linked_accounts は自動生成型未収録のためテーブル名のみ型アサーション使用

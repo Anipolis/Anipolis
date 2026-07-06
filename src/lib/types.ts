@@ -118,6 +118,7 @@ export interface Post {
 	anime_id: string | null;
 	broadcast_room_session_id: string | null;
 	anime_quote: AnimeQuote | null;
+	event_room: { id: string; title: string; hashtag: string } | null;
 	exchange_share: AnimeExchangeShare | null;
 	cw_anime_id: string | null;
 	cw_anime: { id: string; title: string; cover_url: string | null } | null;
@@ -158,6 +159,8 @@ export interface Notification {
 	recommendation_anime_cover_url: string | null;
 	broadcast_anime_title: string | null;
 	broadcast_anime_cover_url: string | null;
+	event_id: string | null;
+	event_title: string | null;
 }
 
 export interface Event {
@@ -315,11 +318,13 @@ export interface RawPost {
 	created_at: string;
 	image_urls?: string[] | null;
 	anime_id?: string | number | null;
+	event_id?: string | null;
 	broadcast_room_session_id?: string | null;
 	broadcast_room_session?:
 		| { room_date: string; room_kind?: "episode" | "global" | null; room_key?: string | null }
 		| { room_date: string; room_kind?: "episode" | "global" | null; room_key?: string | null }[]
 		| null;
+	event?: { id: string; title: string; hashtag: string } | { id: string; title: string; hashtag: string }[] | null;
 	exchange_share?: unknown;
 	anime?: {
 		id: string | number;
@@ -419,6 +424,10 @@ export function toPost(
 					user_score: null,
 				}
 			: null,
+		event_room: (() => {
+			const event = Array.isArray(raw.event) ? raw.event[0] : raw.event;
+			return event ? { id: event.id, title: event.title, hashtag: event.hashtag } : null;
+		})(),
 		exchange_share: toAnimeExchangeShare(raw.exchange_share),
 		cw_anime_id: raw.cw_anime_id != null ? String(raw.cw_anime_id) : null,
 		cw_anime: raw.cw_anime
@@ -460,6 +469,12 @@ function calcEpisodeNumber(
 	const session = Array.isArray(rawSession) ? rawSession[0] : rawSession;
 	if (session?.room_kind === "global") return null;
 	return calcEpisodeNumberFromDate(session?.room_date ?? null, airedFrom, broadcastTime);
+}
+
+/** イベントルームリンクチップの表示ラベル。設定された「ルームリンク」(タグ)をタグ表記で返す */
+export function buildEventRoomLabel(eventRoom: { title: string; hashtag: string }): string {
+	const tag = eventRoom.hashtag.trim().replace(/^#+/, "");
+	return tag.length > 0 ? `#${tag}` : eventRoom.title;
 }
 
 export function buildAnimeRoomLabel(anime: Pick<AnimeQuote, "title" | "official_hashtag" | "episode_number">): string {
@@ -540,6 +555,17 @@ export interface AnimeMute {
 	created_at: string;
 }
 
+// イベントは再放送がないため、ミュートは常に one-shot（そのイベントの投稿を恒久的に非表示にする）
+export interface EventMute {
+	id: string;
+	event_id: string;
+	created_at: string;
+	// JOIN で付加される表示用フィールド
+	event_title: string;
+	event_scheduled_at: string;
+	event_is_cancelled: boolean;
+}
+
 export interface BroadcastRoomSession {
 	id: string;
 	anime_id: number;
@@ -583,9 +609,12 @@ export interface BroadcastRoomOverride {
 
 export interface RoomExperimentRun {
 	id: string;
-	anime_id: string;
-	anime_title: string;
-	anime_cover_url: string | null;
+	room_kind: "episode" | "event";
+	anime_id?: string;
+	anime_title?: string;
+	anime_cover_url?: string | null;
+	event_id?: string;
+	event_title?: string;
 	started_at: string;
 	ended_at: string | null;
 	label: string | null;

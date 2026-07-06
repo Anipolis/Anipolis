@@ -31,6 +31,11 @@ function broadcastLabel(value: string | null): string {
 	if (value && new Date(value).getTime() <= Date.now()) return "の放送ルームが開始しました";
 	return "の放送ルームがまもなく開始します";
 }
+
+function eventBroadcastLabel(value: string | null): string {
+	if (value && new Date(value).getTime() <= Date.now()) return "が開始しました";
+	return "がまもなく開始します";
+}
 </script>
 
 <svelte:head> <title>通知 - Anipolis</title> </svelte:head>
@@ -55,26 +60,39 @@ function broadcastLabel(value: string | null): string {
 								<span class="i-lucide-calendar-clock"></span>
 							</div>
 							<div class="notification-body">
-								<p class="notification-text">
-									<strong>{notif.broadcast_anime_title ?? '登録したアニメ'}</strong>
-									{broadcastLabel(notif.broadcast_scheduled_at)}
-								</p>
-								{#if notif.broadcast_anime_id && notif.broadcast_room_date}
-									<a
-										href="/rooms/anime/{notif.broadcast_anime_id}/{notif.broadcast_room_date}"
-										class="notification-anime-preview"
-									>
-										{#if notif.broadcast_anime_cover_url}
-											<img
-												src={notif.broadcast_anime_cover_url}
-												alt={notif.broadcast_anime_title ?? '放送作品'}
-											>
-										{/if}
+								{#if notif.event_id}
+									<p class="notification-text">
+										<strong>{notif.event_title ?? 'イベント'}</strong>
+										{eventBroadcastLabel(notif.broadcast_scheduled_at)}
+									</p>
+									<a href="/events/{notif.event_id}" class="notification-anime-preview">
 										<span>
-											<strong>{notif.broadcast_anime_title ?? '放送ルーム'}</strong>
+											<strong>{notif.event_title ?? 'イベントルーム'}</strong>
 											<small>{formatBroadcastTime(notif.broadcast_scheduled_at)} 開始</small>
 										</span>
 									</a>
+								{:else}
+									<p class="notification-text">
+										<strong>{notif.broadcast_anime_title ?? '登録したアニメ'}</strong>
+										{broadcastLabel(notif.broadcast_scheduled_at)}
+									</p>
+									{#if notif.broadcast_anime_id && notif.broadcast_room_date}
+										<a
+											href="/rooms/anime/{notif.broadcast_anime_id}/{notif.broadcast_room_date}"
+											class="notification-anime-preview"
+										>
+											{#if notif.broadcast_anime_cover_url}
+												<img
+													src={notif.broadcast_anime_cover_url}
+													alt={notif.broadcast_anime_title ?? '放送作品'}
+												>
+											{/if}
+											<span>
+												<strong>{notif.broadcast_anime_title ?? '放送ルーム'}</strong>
+												<small>{formatBroadcastTime(notif.broadcast_scheduled_at)} 開始</small>
+											</span>
+										</a>
+									{/if}
 								{/if}
 								<span class="notification-time">{formatRelativeTime(notif.created_at)}</span>
 							</div>
