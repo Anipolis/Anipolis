@@ -159,6 +159,8 @@ export interface Notification {
 	recommendation_anime_cover_url: string | null;
 	broadcast_anime_title: string | null;
 	broadcast_anime_cover_url: string | null;
+	event_id: string | null;
+	event_title: string | null;
 }
 
 export interface Event {

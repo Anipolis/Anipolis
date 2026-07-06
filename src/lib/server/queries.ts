@@ -47,6 +47,8 @@ type NotificationBroadcastAnime = {
 	cover_url: string | null;
 };
 
+type NotificationEvent = { id: string; title: string };
+
 type NotificationRow = {
 	id: string;
 	type: string;
@@ -55,12 +57,14 @@ type NotificationRow = {
 	broadcast_anime_id: number | null;
 	broadcast_scheduled_at: string | null;
 	broadcast_room_date: string | null;
+	event_id: string | null;
 	read: boolean;
 	created_at: string;
 	actor: NotificationActor | NotificationActor[] | null;
 	post: NotificationPost | NotificationPost[] | null;
 	recommendation: NotificationRecommendation | NotificationRecommendation[] | null;
 	broadcast_anime: NotificationBroadcastAnime | NotificationBroadcastAnime[] | null;
+	event: NotificationEvent | NotificationEvent[] | null;
 };
 
 type EventRow = Omit<Database["public"]["Tables"]["events"]["Row"], "anime_id" | "updated_at"> & {
@@ -400,6 +404,7 @@ export async function getNotifications(
             broadcast_anime_id,
             broadcast_scheduled_at,
             broadcast_room_date,
+            event_id,
             read,
             created_at,
             actor:profiles!notifications_actor_id_fkey (
@@ -421,6 +426,10 @@ export async function getNotifications(
                 id,
                 title,
                 cover_url
+            ),
+            event:events!notifications_event_id_fkey (
+                id,
+                title
             )
         `)
 		.eq("recipient_id", userId)
@@ -434,6 +443,7 @@ export async function getNotifications(
 		const post = Array.isArray(row.post) ? row.post[0] : row.post;
 		const recommendation = Array.isArray(row.recommendation) ? row.recommendation[0] : row.recommendation;
 		const broadcastAnime = Array.isArray(row.broadcast_anime) ? row.broadcast_anime[0] : row.broadcast_anime;
+		const event = Array.isArray(row.event) ? row.event[0] : row.event;
 		return {
 			id: row["id"],
 			type: row.type as Notification["type"],
@@ -453,6 +463,8 @@ export async function getNotifications(
 			recommendation_anime_cover_url: recommendation?.anime?.cover_url ?? null,
 			broadcast_anime_title: broadcastAnime?.title ?? null,
 			broadcast_anime_cover_url: broadcastAnime?.cover_url ?? null,
+			event_id: row.event_id,
+			event_title: event?.title ?? null,
 		};
 	});
 }
