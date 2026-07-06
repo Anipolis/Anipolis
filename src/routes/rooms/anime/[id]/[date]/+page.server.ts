@@ -156,7 +156,9 @@ export const actions: Actions = {
 		const content = stripTrailingRoomHashtag(rawContent, hashtag);
 		if (!content) return fail(400, { message: "投稿内容を入力してください" });
 
-		return insertPostWithHashtags(supabase, user.id, content, null, [], anime.id, null, null, session.id, null, []);
+		return insertPostWithHashtags(supabase, user.id, content, null, [], anime.id, null, null, session.id, null, [
+			hashtag,
+		]);
 	},
 
 	deletePost: async ({ request, locals: { supabase, safeGetSession } }) => {
