@@ -1625,6 +1625,12 @@ $effect(() => {
 	color: var(--text);
 }
 
+@media (max-width: 960px) {
+	.detail-page {
+		padding-bottom: calc(80px + env(safe-area-inset-bottom));
+	}
+}
+
 /* Two-column layout */
 .anime-layout {
 	display: grid;
