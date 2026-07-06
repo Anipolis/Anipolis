@@ -40,6 +40,7 @@ type VisitRow = {
 	entered_at: string;
 	last_seen_at: string;
 	exited_at: string | null;
+	heartbeat_count: number;
 	session:
 		| {
 				id: string;
@@ -787,6 +788,7 @@ type EventVisitRow = {
 	entered_at: string;
 	last_seen_at: string;
 	exited_at: string | null;
+	heartbeat_count: number;
 };
 
 type EventPostRow = ExperimentPostCandidate & { event_id: string | null };
@@ -869,7 +871,7 @@ async function getEventRoomExperimentDashboardRuns(
 		supabase.from("events").select("id, title, scheduled_at, duration_minutes, is_cancelled").in("id", eventIds),
 		supabase
 			.from("room_experiment_visits")
-			.select("id, run_id, event_id, user_id, entered_at, last_seen_at, exited_at")
+			.select("id, run_id, event_id, user_id, entered_at, last_seen_at, exited_at, heartbeat_count")
 			.eq("room_kind", "event")
 			.in("run_id", eventRunIds),
 		supabase
@@ -921,6 +923,7 @@ async function getEventRoomExperimentDashboardRuns(
 					entered_at: visit.entered_at,
 					last_seen_at: visit.last_seen_at,
 					exited_at: visit.exited_at,
+					heartbeat_count: visit.heartbeat_count ?? 0,
 				}));
 
 			// filterRoomExperimentPosts はセッションID一致で絞り込むため、イベント投稿では
@@ -1014,7 +1017,7 @@ export async function getRoomExperimentDashboardData(
 		supabase
 			.from("room_experiment_visits")
 			.select(
-				"id, run_id, anime_id, broadcast_room_session_id, user_id, entered_at, last_seen_at, exited_at, session:broadcast_room_sessions!room_experiment_visits_broadcast_room_session_id_fkey ( id, room_date, room_kind, room_key, scheduled_at, posting_closes_at )",
+				"id, run_id, anime_id, broadcast_room_session_id, user_id, entered_at, last_seen_at, exited_at, heartbeat_count, session:broadcast_room_sessions!room_experiment_visits_broadcast_room_session_id_fkey ( id, room_date, room_kind, room_key, scheduled_at, posting_closes_at )",
 			)
 			.in("run_id", runIds),
 		supabase
@@ -1086,6 +1089,7 @@ export async function getRoomExperimentDashboardData(
 				entered_at: visit.entered_at,
 				last_seen_at: visit.last_seen_at,
 				exited_at: visit.exited_at,
+				heartbeat_count: visit.heartbeat_count ?? 0,
 			});
 			visitsBySession.set(session.id, group);
 		}

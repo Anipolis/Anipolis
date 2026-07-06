@@ -102,6 +102,43 @@ describe("calculateRoomExperimentMetrics", () => {
 		expect(room.average_stay_seconds).toBe(20 * 60);
 	});
 
+	it("caps stay by heartbeat count so re-entry away-gaps are excluded", () => {
+		// u1 は約5分(=10ハートビート)滞在 → 一時離席(アプリ内遷移) → 10分後に再入場。
+		// 再入場時の upsert で exited_at が消えるため entered→last_seen のスパンは20分に伸びるが、
+		// heartbeat_count は離席中増えず 10 のまま。離席分を除いた実滞在は約5分。
+		const metrics = calculateRoomExperimentMetrics(
+			{
+				id: "run-1",
+				started_at: runStartedAt,
+				ended_at: null,
+				rooms: [
+					{
+						broadcast_room_session_id: "session-1",
+						room_title: "2026-06-27",
+						scheduled_at: runStartedAt,
+						posting_closes_at: roomClosesAt,
+						visits: [
+							{
+								user_id: "u1",
+								entered_at: "2026-06-27T10:00:00.000Z",
+								last_seen_at: "2026-06-27T10:20:00.000Z",
+								exited_at: "2026-06-27T10:20:00.000Z",
+								heartbeat_count: 10,
+							},
+						],
+						posts: [],
+					},
+				],
+			},
+			new Date("2026-06-27T10:30:00.000Z"),
+			90_000,
+		);
+
+		const room = firstRoom(metrics);
+		// スパンは20分(1200秒)だが、上限 (10 + 1) * 30 = 330秒 が採用され離席10分が除外される。
+		expect(room.average_stay_seconds).toBe(330);
+	});
+
 	it("uses last_seen without early-exit rate when posting close is missing", () => {
 		const metrics = calculateRoomExperimentMetrics({
 			id: "run-1",
