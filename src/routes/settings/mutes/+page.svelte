@@ -5,7 +5,7 @@ import { enhance } from "$app/forms";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
 import SettingsBackLink from "$lib/components/SettingsBackLink.svelte";
-import type { AnimeMute } from "$lib/types";
+import type { AnimeMute, EventMute } from "$lib/types";
 import type { PageProps } from "./$types";
 
 let { data, form }: PageProps = $props();
@@ -77,6 +77,21 @@ const removeSubmit: SubmitFunction = () => {
 		}
 	};
 };
+
+// イベントミュート tab
+const removeEventMuteSubmit: SubmitFunction = () => {
+	return async ({ result, update }) => {
+		await update({ reset: false });
+		if (result.type !== "failure") {
+			await goto("/settings/mutes?tab=anime", { invalidateAll: true, replaceState: true });
+		}
+	};
+};
+
+function eventMuteDateLabel(mute: EventMute): string {
+	if (!mute.event_scheduled_at) return "";
+	return new Date(mute.event_scheduled_at).toLocaleString("ja-JP", { dateStyle: "medium", timeStyle: "short" });
+}
 
 const activeTab = $derived.by((): "word" | "anime" => {
 	const tab = page.url.searchParams.get("tab");
@@ -156,7 +171,7 @@ const activeTab = $derived.by((): "word" | "anime" => {
 					class="mute-tab"
 					class:active={activeTab === "anime"}
 					aria-current={activeTab === "anime" ? "page" : undefined}
-					>アニメ</a
+					>ルーム</a
 				>
 			</nav>
 
@@ -220,7 +235,7 @@ const activeTab = $derived.by((): "word" | "anime" => {
 
 				<section class="settings-section">
 					<p class="settings-section-desc">
-						ネタバレ防止のため、ミュート設定した作品の放送ルーム投稿をタイムラインで非表示にします。
+						ネタバレ防止のため、ミュートしたルーム（リアタイ・イベント）の投稿をタイムラインで非表示にします。
 					</p>
 
 					{#if data.virtualAnime}
@@ -248,8 +263,8 @@ const activeTab = $derived.by((): "word" | "anime" => {
 						</div>
 					{/if}
 
-					{#if data.mutes.length === 0 && !data.virtualAnime}
-						<p class="mute-empty">ミュート中の作品はありません。</p>
+					{#if data.mutes.length === 0 && data.eventMutes.length === 0 && !data.virtualAnime}
+						<p class="mute-empty">ミュート中のルームはありません。</p>
 					{:else if data.mutes.length > 0}
 						<div class="mute-items-list">
 							{#each data.mutes as mute (mute.anime_id)}
@@ -286,6 +301,31 @@ const activeTab = $derived.by((): "word" | "anime" => {
 									{#if editingAnimeId === mute.anime_id}
 										{@render muteForm(mute.anime_id, mute)}
 									{/if}
+								</div>
+							{/each}
+						</div>
+					{/if}
+					{#if data.eventMutes.length > 0}
+						<div class="mute-items-list">
+							{#each data.eventMutes as eventMute (eventMute.id)}
+								<div class="mute-item">
+									<div class="mute-row">
+										<div class="mute-meta">
+											<span class="mute-title">{eventMute.event_title}</span>
+											<span class="mute-status">{eventMuteDateLabel(eventMute)}</span>
+										</div>
+										<div class="mute-item-actions">
+											<form
+												method="POST"
+												action="?/removeEventMute"
+												use:enhance={removeEventMuteSubmit}
+												style="display:contents"
+											>
+												<input type="hidden" name="event_id" value={eventMute.event_id}>
+												<button type="submit" class="btn btn-ghost danger btn-sm">解除</button>
+											</form>
+										</div>
+									</div>
 								</div>
 							{/each}
 						</div>

@@ -40,6 +40,10 @@ let subscribedIds = $state(new Set<string>(untrack(() => data.subscriptions)));
 let mutedAnimeIds = $state(new Set<string>(untrack(() => data.mutedAnimeIds)));
 let roomMuteSettings = $state(untrack(() => data.roomMuteSettings));
 
+// Event mute / notification state — optimistic, keyed by event.id
+let mutedEventIds = $state(new Set<string>(untrack(() => data.mutedEventIds)));
+let eventSubscribedIds = $state(new Set<string>(untrack(() => data.eventNotificationSubscriptions)));
+
 // Which anime are currently in their notification window (client-side highlight)
 let notifyingIds = $state(new Set<string>());
 
@@ -102,6 +106,8 @@ $effect(() => {
 	subscribedIds = new Set<string>(data.subscriptions);
 	mutedAnimeIds = new Set<string>(data.mutedAnimeIds);
 	roomMuteSettings = data.roomMuteSettings;
+	mutedEventIds = new Set<string>(data.mutedEventIds);
+	eventSubscribedIds = new Set<string>(data.eventNotificationSubscriptions);
 });
 
 function formatDate(value: string) {
@@ -162,8 +168,11 @@ function effectiveBroadcastTime(anime: Anime, dateStr: string): string | null {
 	return resolveEffectiveBroadcastTime(anime, dateStr, data.broadcastOverrides[anime.id]);
 }
 
+type ScheduleDayEvent = (typeof data.days)[number]["events"][number];
+
 type ScheduleItem =
 	| { type: "anime"; anime: Anime }
+	| { type: "event"; event: ScheduleDayEvent }
 	| {
 			type: "suspension";
 			anime_id: string;
@@ -176,17 +185,19 @@ type ScheduleItem =
 function getScheduleItems(day: (typeof data.days)[number], dateStr: string): ScheduleItem[] {
 	return [
 		...day.anime.map((anime): ScheduleItem => ({ type: "anime", anime })),
+		...day.events.map((event): ScheduleItem => ({ type: "event", event })),
 		...day.announcements.map((announcement): ScheduleItem => ({ type: "suspension", ...announcement })),
-	].sort((a, b) => {
-		const aTime = a.type === "anime" ? effectiveBroadcastTime(a.anime, dateStr) : a.broadcast_time;
-		const bTime = b.type === "anime" ? effectiveBroadcastTime(b.anime, dateStr) : b.broadcast_time;
-		return (
-			(broadcastTimeMinutes(aTime) ?? Number.MAX_SAFE_INTEGER) -
-			(broadcastTimeMinutes(bTime) ?? Number.MAX_SAFE_INTEGER)
-		);
-	});
+	].sort(
+		(a, b) =>
+			(scheduleItemMinutes(a, dateStr) ?? Number.MAX_SAFE_INTEGER) -
+			(scheduleItemMinutes(b, dateStr) ?? Number.MAX_SAFE_INTEGER),
+	);
 }
 function scheduleItemMinutes(item: ScheduleItem, dateStr: string): number | null {
+	if (item.type === "event") {
+		const scheduled = new Date(item.event.scheduled_at);
+		return scheduled.getHours() * 60 + scheduled.getMinutes();
+	}
 	const time = item.type === "anime" ? effectiveBroadcastTime(item.anime, dateStr) : item.broadcast_time;
 	return broadcastTimeMinutes(time);
 }
@@ -347,6 +358,57 @@ function alertKey(animeId: string, date: string) {
 	return `${animeId}:${date}`;
 }
 
+function eventAlertKey(eventId: string) {
+	return `event:${eventId}`;
+}
+
+// Optimistic on/off toggle for event notifications — mirrors notifySubmit (anime bell menu)
+const eventNotifySubmit: SubmitFunction = ({ formData }) => {
+	const eventId = formData.get("event_id") as string;
+	const wasSubscribed = eventSubscribedIds.has(eventId);
+	if (wasSubscribed) {
+		eventSubscribedIds.delete(eventId);
+	} else {
+		eventSubscribedIds.add(eventId);
+	}
+	eventSubscribedIds = new Set(eventSubscribedIds);
+	return async ({ result, update }) => {
+		if (result.type === "failure") {
+			if (wasSubscribed) {
+				eventSubscribedIds.add(eventId);
+			} else {
+				eventSubscribedIds.delete(eventId);
+			}
+			eventSubscribedIds = new Set(eventSubscribedIds);
+		}
+		await update({ reset: false });
+	};
+};
+
+// Optimistic on/off toggle for event mute — the form's action switches between
+// updateEventMute / removeEventMute based on current state
+const eventMuteToggleSubmit: SubmitFunction = ({ formData }) => {
+	const eventId = formData.get("event_id") as string;
+	const wasMuted = mutedEventIds.has(eventId);
+	if (wasMuted) {
+		mutedEventIds.delete(eventId);
+	} else {
+		mutedEventIds.add(eventId);
+	}
+	mutedEventIds = new Set(mutedEventIds);
+	return async ({ result, update }) => {
+		if (result.type === "failure") {
+			if (wasMuted) {
+				mutedEventIds.add(eventId);
+			} else {
+				mutedEventIds.delete(eventId);
+			}
+			mutedEventIds = new Set(mutedEventIds);
+		}
+		await update({ reset: false });
+	};
+};
+
 // Check if anime status allows notifications (airing or upcoming only)
 function canSubscribe(anime: Anime): boolean {
 	const s = anime.computed_broadcast_status ?? anime.status;
@@ -455,38 +517,222 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 					{#if day.events.length === 0 && day.announcements.length === 0 && day.anime.length === 0}
 						<p class="empty-day">なし</p>
 					{:else}
-						{#each day.events as event (event.id)}
-							<a
-								href="/events/{event.id}"
-								class="event-slot"
-								class:event-slot--cancelled={event.is_cancelled}
+						{#snippet eventSlot(event: ScheduleDayEvent)}
+							{@const eventMuted = mutedEventIds.has(event.id)}
+							{@const eventSubscribed = eventSubscribedIds.has(event.id)}
+							<div
+								class="event-slot-wrap"
+								class:event-slot-wrap--menu-open={openAlertMenu === eventAlertKey(event.id)}
 							>
-								<div class="slot-cover-wrap">
-									{#if event.anime?.cover_url}
-										<img src={event.anime.cover_url} alt={event.anime.title} class="slot-cover">
-									{:else}
-										<div class="slot-cover slot-cover--event-placeholder">
-											<span class="i-lucide-calendar-days" aria-hidden="true"></span>
+								<a
+									href="/events/{event.id}"
+									class="event-slot"
+									class:event-slot--cancelled={event.is_cancelled}
+								>
+									<div class="slot-cover-wrap">
+										{#if event.anime?.cover_url}
+											<img src={event.anime.cover_url} alt={event.anime.title} class="slot-cover">
+										{:else}
+											<div class="slot-cover slot-cover--event-placeholder">
+												<span class="i-lucide-calendar-days" aria-hidden="true"></span>
+											</div>
+										{/if}
+									</div>
+									<div class="slot-info">
+										<div class="slot-meta-row">
+											<span class="slot-time slot-time--event"
+												>{formatTime(event.scheduled_at)}</span
+											>
+											<span class="slot-kind slot-kind--event">EVENT</span>
+										</div>
+										<span class="slot-title">{event.title}</span>
+										<span class="slot-bottom"
+											>{[event.anime?.title, `#${event.hashtag}`].filter(Boolean).join(" ・ ")}</span
+										>
+									</div>
+								</a>
+								{#if data.user}
+									<div class="room-alert-control">
+										<button
+											type="button"
+											class="notify-btn"
+											class:notify-btn--active={eventSubscribed}
+											class:notify-btn--muted={eventMuted}
+											title={eventMuted ? "ミュート中。通知またはミュートを設定" : "通知またはミュートを設定"}
+											aria-label={eventMuted ? "ミュート中。通知またはミュートを設定" : "通知またはミュートを設定"}
+											aria-expanded={openAlertMenu === eventAlertKey(event.id)}
+											onclick={() => {
+											const key = eventAlertKey(event.id);
+											openAlertMenu = openAlertMenu === key ? null : key;
+										}}
+										>
+											{#if eventMuted}
+												<svg
+													width="13"
+													height="13"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													aria-hidden="true"
+												>
+													<path d="M10.268 21a2 2 0 0 0 3.464 0" />
+													<path d="M17 17H4s3-2 3-9a5 5 0 0 1 .6-2.4" />
+													<path d="M9.3 3.3A6 6 0 0 1 18 8c0 2.2.3 3.9.8 5.2" />
+													<path d="m2 2 20 20" />
+												</svg>
+											{:else if eventSubscribed}
+												<svg
+													width="13"
+													height="13"
+													viewBox="0 0 24 24"
+													fill="currentColor"
+													stroke="currentColor"
+													stroke-width="1"
+													aria-hidden="true"
+												>
+													<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+													<path d="M13.73 21a2 2 0 0 1-3.46 0" />
+												</svg>
+											{:else}
+												<svg
+													width="13"
+													height="13"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													aria-hidden="true"
+												>
+													<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+													<path d="M13.73 21a2 2 0 0 1-3.46 0" />
+												</svg>
+											{/if}
+										</button>
+									</div>
+									{#if openAlertMenu === eventAlertKey(event.id)}
+										<button
+											type="button"
+											class="alert-menu-backdrop"
+											tabindex="-1"
+											aria-label="閉じる"
+											onclick={() => (openAlertMenu = null)}
+										></button>
+										<div class="room-alert-menu" aria-label="イベント設定">
+											{#if !event.is_cancelled}
+												<form
+													method="POST"
+													action="?/toggleEventNotification"
+													use:enhance={eventNotifySubmit}
+												>
+													<input type="hidden" name="event_id" value={event.id}>
+													<button
+														type="submit"
+														class="notify-toggle"
+														class:notify-toggle--on={eventSubscribed}
+													>
+														{#if eventSubscribed}
+															<svg
+																width="13"
+																height="13"
+																viewBox="0 0 24 24"
+																fill="currentColor"
+																stroke="currentColor"
+																stroke-width="1"
+																aria-hidden="true"
+															>
+																<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+																<path d="M13.73 21a2 2 0 0 1-3.46 0" />
+															</svg>
+														{:else}
+															<svg
+																width="13"
+																height="13"
+																viewBox="0 0 24 24"
+																fill="none"
+																stroke="currentColor"
+																stroke-width="2"
+																stroke-linecap="round"
+																stroke-linejoin="round"
+																aria-hidden="true"
+															>
+																<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+																<path d="M13.73 21a2 2 0 0 1-3.46 0" />
+															</svg>
+														{/if}
+														<span class="notify-toggle-label"
+															>{eventSubscribed ? "通知オン" : "通知オフ"}</span
+														>
+														<span class="notify-toggle-switch">
+															<span
+																class="notify-toggle-knob"
+																class:notify-toggle-knob--on={eventSubscribed}
+															></span>
+														</span>
+													</button>
+												</form>
+												<div class="menu-divider"></div>
+											{/if}
+											<form
+												method="POST"
+												action={eventMuted ? "?/removeEventMute" : "?/updateEventMute"}
+												use:enhance={eventMuteToggleSubmit}
+											>
+												<input type="hidden" name="event_id" value={event.id}>
+												<button
+													type="submit"
+													class="notify-toggle"
+													class:notify-toggle--on={eventMuted}
+												>
+													<svg
+														width="13"
+														height="13"
+														viewBox="0 0 24 24"
+														fill="none"
+														stroke="currentColor"
+														stroke-width="2"
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														aria-hidden="true"
+													>
+														<path d="M10.268 21a2 2 0 0 0 3.464 0" />
+														<path d="M17 17H4s3-2 3-9a5 5 0 0 1 .6-2.4" />
+														<path d="M9.3 3.3A6 6 0 0 1 18 8c0 2.2.3 3.9.8 5.2" />
+														<path d="m2 2 20 20" />
+													</svg>
+													<span class="notify-toggle-label"
+														>{eventMuted ? "ミュート中" : "ミュートオフ"}</span
+													>
+													<span class="notify-toggle-switch">
+														<span
+															class="notify-toggle-knob"
+															class:notify-toggle-knob--on={eventMuted}
+														></span>
+													</span>
+												</button>
+											</form>
+											<div class="menu-settings-link">
+												<a href="/settings/mutes" class="menu-settings-link-anchor">
+													<span class="i-lucide-settings-2" aria-hidden="true"></span>
+													ミュート設定を管理
+												</a>
+											</div>
 										</div>
 									{/if}
-								</div>
-								<div class="slot-info">
-									<div class="slot-meta-row">
-										<span class="slot-time slot-time--event">{formatTime(event.scheduled_at)}</span>
-										<span class="slot-kind slot-kind--event">EVENT</span>
-									</div>
-									<span class="slot-title">{event.title}</span>
-									<span class="slot-bottom"
-										>{[event.anime?.title, `#${event.hashtag}`].filter(Boolean).join(" ・ ")}</span
-									>
-								</div>
-							</a>
-						{/each}
+								{/if}
+							</div>
+						{/snippet}
 
 						{#each groupScheduleItemsByTimeBand(day, displayDate) as itemGroup, groupIndex (groupIndex)}
 							<div class="anime-time-group">
-								{#each itemGroup as item (item.type === "anime" ? item.anime.id : `suspension-${item.anime_id}-${item.room_date}`)}
-									{#if item.type === "suspension"}
+								{#each itemGroup as item (item.type === "anime" ? item.anime.id : item.type === "event" ? item.event.id : `suspension-${item.anime_id}-${item.room_date}`)}
+									{#if item.type === "event"}
+										{@render eventSlot(item.event)}
+									{:else if item.type === "suspension"}
 										<div class="anime-slot-wrap anime-slot-wrap--suspension" role="note">
 											<div class="anime-slot anime-slot--suspension">
 												<div class="slot-cover-wrap">
@@ -822,8 +1068,9 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 					>
 				</label>
 				<label>
-					<span>ハッシュタグ</span>
+					<span>ルームリンク</span>
 					<input class="input" type="text" name="hashtag" required maxlength="50" placeholder="Anipolis視聴">
+					<span class="event-field-hint">トレンド集計に使われるタグ名です</span>
 				</label>
 				<div class="event-anime-field">
 					<span id="event-anime-field-label" class="event-form-label">対象アニメ</span>
@@ -1026,6 +1273,15 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	animation: notify-pulse 1.8s ease-in-out infinite;
 	outline: 2px solid var(--accent, #6366f1);
 	outline-offset: 1px;
+}
+
+/* Event slot wrapper — holds the card + bell button, mirrors .anime-slot-wrap */
+.event-slot-wrap {
+	position: relative;
+	border-radius: 6px;
+}
+.event-slot-wrap--menu-open {
+	z-index: 4;
 }
 @keyframes notify-pulse {
 	0%,
@@ -1520,6 +1776,12 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	font-weight: 700;
 	color: var(--color-text-muted);
 }
+.event-field-hint {
+	font-size: 0.72rem;
+	font-weight: 400;
+	color: var(--color-text-muted);
+	opacity: 0.8;
+}
 .event-anime-selected,
 .event-anime-result {
 	display: grid;
@@ -1713,7 +1975,8 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 		width: 100%;
 		max-width: 388px;
 	}
-	.anime-time-group > .anime-slot-wrap:nth-child(odd) .room-alert-menu {
+	.anime-time-group > .anime-slot-wrap:nth-child(odd) .room-alert-menu,
+	.anime-time-group > .event-slot-wrap:nth-child(odd) .room-alert-menu {
 		left: 4px;
 		right: auto;
 		width: min(240px, calc(100vw - 32px));

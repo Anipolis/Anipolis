@@ -8,9 +8,11 @@ function noContent() {
 	return new Response(null, { status: 204 });
 }
 
-async function readBody(request: Request): Promise<{ session_id?: unknown; client_visit_key?: unknown }> {
+async function readBody(
+	request: Request,
+): Promise<{ session_id?: unknown; event_id?: unknown; client_visit_key?: unknown }> {
 	try {
-		return (await request.json()) as { session_id?: unknown; client_visit_key?: unknown };
+		return (await request.json()) as { session_id?: unknown; event_id?: unknown; client_visit_key?: unknown };
 	} catch {
 		return {};
 	}
@@ -22,14 +24,20 @@ export const POST: RequestHandler = async ({ request, locals: { safeGetSession }
 
 	const body = await readBody(request);
 	const sessionId = typeof body.session_id === "string" ? body.session_id.trim() : "";
+	const eventId = typeof body.event_id === "string" ? body.event_id.trim() : "";
 	const clientVisitKey = typeof body.client_visit_key === "string" ? body.client_visit_key.trim() : "";
-	if (!UUID_RE.test(sessionId)) return noContent();
+
+	const hasSessionId = UUID_RE.test(sessionId);
+	const hasEventId = UUID_RE.test(eventId);
+	// session_id と event_id はどちらか一方のみ指定される（放送回ルーム/イベントルームの排他ターゲット）。
+	if (hasSessionId === hasEventId) return noContent();
 
 	const supabase = createRoomExperimentServiceClient();
 	if (!supabase) return noContent();
 
 	const result = await createRoomExperimentVisit(supabase, user.id, {
-		sessionId,
+		sessionId: hasSessionId ? sessionId : undefined,
+		eventId: hasEventId ? eventId : undefined,
 		clientVisitKey,
 		userAgent: request.headers.get("user-agent"),
 	});

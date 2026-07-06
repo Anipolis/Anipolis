@@ -32,26 +32,28 @@ export type RoomExitSurveyAnswers = {
 	improvementPoints: string | null;
 };
 
-export type ParsedRoomExitSurveyRequest =
-	| {
-			action: "submit";
-			animeId: number;
-			broadcastRoomSessionId: string;
-			experimentRunId: string;
-			surveyVersion: string;
-			stayedSeconds: number;
-			postCount: number;
-			answers: RoomExitSurveyAnswers;
-	  }
-	| {
-			action: "skip";
-			animeId: number;
-			broadcastRoomSessionId: string;
-			experimentRunId: string;
-			surveyVersion: string;
-			stayedSeconds: number;
-			postCount: number;
-	  };
+type RoomExitSurveyTarget =
+	| { roomKind: "episode"; animeId: number; broadcastRoomSessionId: string; eventId: null }
+	| { roomKind: "event"; animeId: number | null; broadcastRoomSessionId: null; eventId: string };
+
+export type ParsedRoomExitSurveyRequest = RoomExitSurveyTarget &
+	(
+		| {
+				action: "submit";
+				experimentRunId: string;
+				surveyVersion: string;
+				stayedSeconds: number;
+				postCount: number;
+				answers: RoomExitSurveyAnswers;
+		  }
+		| {
+				action: "skip";
+				experimentRunId: string;
+				surveyVersion: string;
+				stayedSeconds: number;
+				postCount: number;
+		  }
+	);
 
 export type RoomExitSurveyAggregateRow = {
 	broadcast_room_session_id: string;
@@ -167,8 +169,8 @@ export function parseRoomExitSurveyRequest(body: unknown): ParseResult {
 	if (!isRecord(body)) return { ok: false, status: 400, message: "Invalid request body" };
 
 	const action = parseAction(body["action"]);
-	const animeId = parsePositiveInteger(body["anime_id"]);
 	const broadcastRoomSessionId = parseUuid(body["broadcast_room_session_id"]);
+	const eventId = parseUuid(body["event_id"]);
 	const experimentRunId = parseUuid(body["experiment_run_id"]);
 	const stayedSeconds = parseNonNegativeInteger(body["stayed_seconds"]);
 	const postCount = parseNonNegativeInteger(body["post_count"]);
@@ -178,14 +180,22 @@ export function parseRoomExitSurveyRequest(body: unknown): ParseResult {
 	}
 	const surveyVersion = ROOM_EXIT_SURVEY_VERSION;
 
-	if (
-		!action ||
-		!animeId ||
-		!broadcastRoomSessionId ||
-		!experimentRunId ||
-		stayedSeconds == null ||
-		postCount == null
-	) {
+	// event_id と broadcast_room_session_id はどちらか一方のみ指定される（放送回ルーム/イベントルームの排他ターゲット）。
+	if (broadcastRoomSessionId && eventId) {
+		return { ok: false, status: 400, message: "Invalid survey target" };
+	}
+	const target: RoomExitSurveyTarget | null = eventId
+		? { roomKind: "event", animeId: parsePositiveInteger(body["anime_id"]), broadcastRoomSessionId: null, eventId }
+		: broadcastRoomSessionId
+			? (() => {
+					const animeId = parsePositiveInteger(body["anime_id"]);
+					return animeId
+						? { roomKind: "episode" as const, animeId, broadcastRoomSessionId, eventId: null }
+						: null;
+				})()
+			: null;
+
+	if (!action || !target || !experimentRunId || stayedSeconds == null || postCount == null) {
 		return { ok: false, status: 400, message: "Invalid survey metadata" };
 	}
 
@@ -194,8 +204,7 @@ export function parseRoomExitSurveyRequest(body: unknown): ParseResult {
 			ok: true,
 			value: {
 				action,
-				animeId,
-				broadcastRoomSessionId,
+				...target,
 				experimentRunId,
 				surveyVersion,
 				stayedSeconds,
@@ -211,8 +220,7 @@ export function parseRoomExitSurveyRequest(body: unknown): ParseResult {
 		ok: true,
 		value: {
 			action,
-			animeId,
-			broadcastRoomSessionId,
+			...target,
 			experimentRunId,
 			surveyVersion,
 			stayedSeconds,
@@ -242,11 +250,17 @@ export function toRoomExitSurveyInsert(
 	userId: string,
 	request: ParsedRoomExitSurveyRequest,
 ): Database["public"]["Tables"]["room_exit_survey_responses"]["Insert"] {
+	const target = {
+		room_kind: request.roomKind,
+		anime_id: request.animeId,
+		broadcast_room_session_id: request.broadcastRoomSessionId,
+		event_id: request.eventId,
+	};
+
 	if (request.action === "skip") {
 		return {
 			user_id: userId,
-			anime_id: request.animeId,
-			broadcast_room_session_id: request.broadcastRoomSessionId,
+			...target,
 			experiment_run_id: request.experimentRunId,
 			survey_version: request.surveyVersion,
 			stayed_seconds: request.stayedSeconds,
@@ -258,8 +272,7 @@ export function toRoomExitSurveyInsert(
 
 	return {
 		user_id: userId,
-		anime_id: request.animeId,
-		broadcast_room_session_id: request.broadcastRoomSessionId,
+		...target,
 		experiment_run_id: request.experimentRunId,
 		survey_version: request.surveyVersion,
 		stayed_seconds: request.stayedSeconds,
@@ -287,25 +300,44 @@ function isSessionInRunWindow(session: { posting_closes_at: string | null }, run
 export async function getRoomExitSurveyLoadState(
 	supabase: SupabaseClient<Database>,
 	userId: string | null | undefined,
-	sessionId: string,
+	target: string | { eventId: string },
 ): Promise<RoomExitSurveyLoadState> {
 	if (!userId) return { alreadyAnswered: false, postCount: 0 };
 
+	const eventId = typeof target === "string" ? null : target.eventId;
+	const sessionId = typeof target === "string" ? target : null;
+
 	const [surveyResponse, surveyPostCount] = await Promise.all([
-		supabase
-			.from("room_exit_survey_responses")
-			.select("id")
-			.eq("user_id", userId)
-			.eq("broadcast_room_session_id", sessionId)
-			.eq("survey_version", ROOM_EXIT_SURVEY_VERSION)
-			.maybeSingle(),
-		supabase
-			.from("posts")
-			.select("id", { count: "exact", head: true })
-			.eq("user_id", userId)
-			.eq("broadcast_room_session_id", sessionId)
-			.is("parent_id", null)
-			.eq("hidden_by_admin", false),
+		eventId
+			? supabase
+					.from("room_exit_survey_responses")
+					.select("id")
+					.eq("user_id", userId)
+					.eq("event_id", eventId)
+					.eq("survey_version", ROOM_EXIT_SURVEY_VERSION)
+					.maybeSingle()
+			: supabase
+					.from("room_exit_survey_responses")
+					.select("id")
+					.eq("user_id", userId)
+					.eq("broadcast_room_session_id", sessionId as string)
+					.eq("survey_version", ROOM_EXIT_SURVEY_VERSION)
+					.maybeSingle(),
+		eventId
+			? supabase
+					.from("posts")
+					.select("id", { count: "exact", head: true })
+					.eq("user_id", userId)
+					.eq("event_id", eventId)
+					.is("parent_id", null)
+					.eq("hidden_by_admin", false)
+			: supabase
+					.from("posts")
+					.select("id", { count: "exact", head: true })
+					.eq("user_id", userId)
+					.eq("broadcast_room_session_id", sessionId as string)
+					.is("parent_id", null)
+					.eq("hidden_by_admin", false),
 	]);
 
 	if (surveyResponse.error) {
@@ -321,12 +353,64 @@ export async function getRoomExitSurveyLoadState(
 	};
 }
 
+async function saveEventRoomExitSurveyResponse(
+	writer: SupabaseClient<Database>,
+	validator: SupabaseClient<Database>,
+	userId: string,
+	request: Extract<ParsedRoomExitSurveyRequest, { roomKind: "event" }>,
+): Promise<SaveResult> {
+	const [{ data: event, error: eventError }, { data: run, error: runError }, { data: visit, error: visitError }] =
+		await Promise.all([
+			validator.from("events").select("id, is_cancelled").eq("id", request.eventId).maybeSingle(),
+			validator
+				.from("room_experiment_runs")
+				.select("id, event_id, room_kind, ended_at")
+				.eq("id", request.experimentRunId)
+				.maybeSingle(),
+			validator
+				.from("room_experiment_visits")
+				.select("id")
+				.eq("run_id", request.experimentRunId)
+				.eq("event_id", request.eventId)
+				.eq("user_id", userId)
+				.limit(1),
+		]);
+
+	if (eventError || runError || visitError) {
+		console.error("room exit survey validation query failed:", { eventError, runError, visitError });
+		return { ok: false, status: 500, message: "Survey validation failed" };
+	}
+	if (!event || event.is_cancelled) {
+		return { ok: false, status: 400, message: "Survey target room is invalid" };
+	}
+	if (!run || run.room_kind !== "event" || run.event_id !== request.eventId) {
+		return { ok: false, status: 400, message: "Survey target room is invalid" };
+	}
+	if (run.ended_at) {
+		return { ok: false, status: 400, message: "Survey target experiment has ended" };
+	}
+	if (!visit || visit.length === 0) {
+		return { ok: false, status: 403, message: "Survey target visit was not found" };
+	}
+
+	const { error } = await writer.from("room_exit_survey_responses").insert(toRoomExitSurveyInsert(userId, request));
+	if (!error) return { ok: true };
+	if (isDuplicateRoomExitSurveyError(error)) return { ok: true, duplicate: true };
+
+	console.error("room exit survey insert failed:", error);
+	return { ok: false, status: 500, message: "Survey insert failed" };
+}
+
 export async function saveRoomExitSurveyResponse(
 	writer: SupabaseClient<Database>,
 	validator: SupabaseClient<Database>,
 	userId: string,
 	request: ParsedRoomExitSurveyRequest,
 ): Promise<SaveResult> {
+	if (request.roomKind === "event") {
+		return saveEventRoomExitSurveyResponse(writer, validator, userId, request);
+	}
+
 	const [{ data: session, error: sessionError }, { data: run, error: runError }, { data: visit, error: visitError }] =
 		await Promise.all([
 			validator

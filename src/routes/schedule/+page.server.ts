@@ -1,5 +1,13 @@
 import { fail, redirect } from "@sveltejs/kit";
-import { createEventAction, removeAnimeMute, toggleBroadcastSubscription, upsertAnimeMute } from "$lib/server/actions";
+import {
+	createEventAction,
+	removeAnimeMute,
+	removeEventMuteAction,
+	toggleBroadcastSubscription,
+	toggleEventNotificationSubscription,
+	updateEventMuteAction,
+	upsertAnimeMute,
+} from "$lib/server/actions";
 import {
 	getActiveAnimeMuteIds,
 	getAnimeList,
@@ -7,7 +15,9 @@ import {
 	getBroadcastNotificationSettings,
 	getBroadcastRoomOverridesForAnimeIds,
 	getBroadcastSubscriptions,
+	getEventNotificationSubscriptions,
 	getEventsByRange,
+	getMutedEventIds,
 	isAdminUser,
 } from "$lib/server/queries";
 import type { Anime, BroadcastNotificationSettings, BroadcastRoomOverride, Event } from "$lib/types";
@@ -109,22 +119,33 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		end: toDateInputValue(addDays(weekStart, 6)),
 	};
 
-	const [animeList, events, subscriptions, notificationSettings, mutedAnimeIds, roomMutes, isAdmin] =
-		await Promise.all([
-			getAnimeList(supabase, { scheduleRange, limit: 1000, userId: user?.id ?? null }),
-			getEventsByRange(supabase, weekStart.toISOString(), weekEnd.toISOString()),
-			user ? getBroadcastSubscriptions(supabase, user.id) : Promise.resolve([] as string[]),
-			user
-				? getBroadcastNotificationSettings(supabase, user.id)
-				: Promise.resolve({
-						notify_1min: true,
-						notify_5min: true,
-						notify_30min: false,
-					} as BroadcastNotificationSettings),
-			user ? getActiveAnimeMuteIds(supabase, user.id) : Promise.resolve(new Set<string>()),
-			user ? getAnimeMutes(supabase, user.id) : Promise.resolve([]),
-			user ? isAdminUser(supabase, user.id) : Promise.resolve(false),
-		]);
+	const [
+		animeList,
+		events,
+		subscriptions,
+		notificationSettings,
+		mutedAnimeIds,
+		roomMutes,
+		isAdmin,
+		mutedEventIds,
+		eventNotificationSubscriptions,
+	] = await Promise.all([
+		getAnimeList(supabase, { scheduleRange, limit: 1000, userId: user?.id ?? null }),
+		getEventsByRange(supabase, weekStart.toISOString(), weekEnd.toISOString()),
+		user ? getBroadcastSubscriptions(supabase, user.id) : Promise.resolve([] as string[]),
+		user
+			? getBroadcastNotificationSettings(supabase, user.id)
+			: Promise.resolve({
+					notify_1min: true,
+					notify_5min: true,
+					notify_30min: false,
+				} as BroadcastNotificationSettings),
+		user ? getActiveAnimeMuteIds(supabase, user.id) : Promise.resolve(new Set<string>()),
+		user ? getAnimeMutes(supabase, user.id) : Promise.resolve([]),
+		user ? isAdminUser(supabase, user.id) : Promise.resolve(false),
+		user ? getMutedEventIds(supabase, user.id) : Promise.resolve(new Set<string>()),
+		user ? getEventNotificationSubscriptions(supabase, user.id) : Promise.resolve([] as string[]),
+	]);
 
 	const broadcastOverrides = await getBroadcastRoomOverridesForAnimeIds(
 		supabase,
@@ -203,6 +224,8 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		roomMuteSettings: Object.fromEntries(roomMutes.map((mute) => [mute.anime_id, mute])),
 		broadcastOverrides,
 		notificationSettings,
+		mutedEventIds: [...mutedEventIds],
+		eventNotificationSubscriptions,
 		weekStart: toDateInputValue(weekStart),
 		prevWeek: toDateInputValue(addDays(weekStart, -7)),
 		nextWeek: toDateInputValue(addDays(weekStart, 7)),
@@ -277,5 +300,29 @@ export const actions: Actions = {
 		const animeId = (form.get("anime_id") as string | null)?.trim() ?? "";
 		if (!animeId) return fail(400, { message: "ミュート設定が見つかりません" });
 		return removeAnimeMute(supabase, user.id, animeId);
+	},
+
+	updateEventMute: async ({ request, locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { message: "ログインが必要です" });
+		return updateEventMuteAction(request, supabase, user.id);
+	},
+
+	removeEventMute: async ({ request, locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { message: "ログインが必要です" });
+		return removeEventMuteAction(request, supabase, user.id);
+	},
+
+	toggleEventNotification: async ({ request, locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { message: "ログインが必要です" });
+
+		const form = await request.formData();
+		const eventId = (form.get("event_id") as string | null)?.trim() ?? "";
+		if (!eventId) return fail(400, { message: "event_idが必要です" });
+
+		const result = await toggleEventNotificationSubscription(supabase, user.id, eventId);
+		return { eventToggleSuccess: true, subscribed: result.subscribed, eventId };
 	},
 };
