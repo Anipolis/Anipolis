@@ -14,6 +14,8 @@ const SKELETON_COUNT = 5;
 let { data }: PageProps = $props();
 
 let onboardingDismissed = $state(true);
+let homeSidebarSlot = $state<HTMLElement | null>(null);
+let homeSidebarReady = $state(false);
 
 $effect(() => {
 	onboardingDismissed = localStorage.getItem("anipolis_onboarding_dismissed") === "1";
@@ -33,6 +35,29 @@ function loadMoreHref(lastCreatedAt: string, lastPostId: string): string {
 	const separator = base.includes("?") ? "&" : "?";
 	return `${base}${separator}before=${encodeURIComponent(lastCreatedAt)}&before_id=${encodeURIComponent(lastPostId)}`;
 }
+
+$effect(() => {
+	if (!homeSidebarSlot) return;
+
+	function updateHomeSidebarMetrics() {
+		if (!homeSidebarSlot) return;
+		const rect = homeSidebarSlot.getBoundingClientRect();
+		homeSidebarSlot.style.setProperty("--home-sidebar-left", `${rect.left}px`);
+		homeSidebarSlot.style.setProperty("--home-sidebar-top", `${rect.top}px`);
+		homeSidebarSlot.style.setProperty("--home-sidebar-width", `${rect.width}px`);
+		homeSidebarReady = true;
+	}
+
+	updateHomeSidebarMetrics();
+	const resizeObserver = new ResizeObserver(updateHomeSidebarMetrics);
+	resizeObserver.observe(homeSidebarSlot);
+	window.addEventListener("resize", updateHomeSidebarMetrics);
+
+	return () => {
+		resizeObserver.disconnect();
+		window.removeEventListener("resize", updateHomeSidebarMetrics);
+	};
+});
 
 $effect(() => {
 	if ((data.initialAnime || data.initialExchangeShare) && data.profile) {
@@ -232,11 +257,13 @@ $effect(() => {
 		{/await}
 	</main>
 
-	<aside class="sidebar-column">
-		{#if data.user}
-			<LiveRoomsPanel rooms={data.liveRooms} />
-		{/if}
-		<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
+	<aside class="sidebar-column home-sidebar-column" bind:this={homeSidebarSlot}>
+		<div class="home-sidebar-fixed scrollbar-thin-muted" class:home-sidebar-fixed-ready={homeSidebarReady}>
+			{#if data.user}
+				<LiveRoomsPanel rooms={data.liveRooms} />
+			{/if}
+			<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
+		</div>
 	</aside>
 </div>
 
@@ -345,6 +372,26 @@ $effect(() => {
 
 .compose-modal-body {
 	overflow-y: auto;
+}
+
+.home-sidebar-column {
+	position: static;
+}
+
+.home-sidebar-fixed {
+	position: fixed;
+	top: var(--home-sidebar-top, calc(var(--nav-height) + 24px));
+	bottom: 0;
+	left: var(--home-sidebar-left, 0);
+	width: var(--home-sidebar-width, var(--sidebar-width));
+	overflow-x: hidden;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	visibility: hidden;
+}
+
+.home-sidebar-fixed-ready {
+	visibility: visible;
 }
 
 /* Landing hero (unauthenticated) */
