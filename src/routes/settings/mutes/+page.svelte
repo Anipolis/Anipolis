@@ -171,7 +171,7 @@ const activeTab = $derived.by((): "word" | "anime" => {
 					class="mute-tab"
 					class:active={activeTab === "anime"}
 					aria-current={activeTab === "anime" ? "page" : undefined}
-					>アニメ</a
+					>ルーム</a
 				>
 			</nav>
 
@@ -235,7 +235,7 @@ const activeTab = $derived.by((): "word" | "anime" => {
 
 				<section class="settings-section">
 					<p class="settings-section-desc">
-						ネタバレ防止のため、ミュート設定した作品の放送ルーム投稿をタイムラインで非表示にします。
+						ネタバレ防止のため、ミュートしたルーム（リアタイ・イベント）の投稿をタイムラインで非表示にします。
 					</p>
 
 					{#if data.virtualAnime}
@@ -263,8 +263,8 @@ const activeTab = $derived.by((): "word" | "anime" => {
 						</div>
 					{/if}
 
-					{#if data.mutes.length === 0 && !data.virtualAnime}
-						<p class="mute-empty">ミュート中の作品はありません。</p>
+					{#if data.mutes.length === 0 && data.eventMutes.length === 0 && !data.virtualAnime}
+						<p class="mute-empty">ミュート中のルームはありません。</p>
 					{:else if data.mutes.length > 0}
 						<div class="mute-items-list">
 							{#each data.mutes as mute (mute.anime_id)}
@@ -305,17 +305,7 @@ const activeTab = $derived.by((): "word" | "anime" => {
 							{/each}
 						</div>
 					{/if}
-				</section>
-
-				<section class="settings-section">
-					<h2 class="settings-section-title">イベントミュート</h2>
-					<p class="settings-section-desc">
-						ミュートしたイベントの投稿はタイムラインで恒久的に非表示になります。
-					</p>
-
-					{#if data.eventMutes.length === 0}
-						<p class="mute-empty">ミュート中のイベントはありません。</p>
-					{:else}
+					{#if data.eventMutes.length > 0}
 						<div class="mute-items-list">
 							{#each data.eventMutes as eventMute (eventMute.id)}
 								<div class="mute-item">
@@ -380,15 +370,6 @@ const activeTab = $derived.by((): "word" | "anime" => {
 .settings-section {
 	padding-top: 18px;
 	margin-top: 0;
-}
-.settings-section + .settings-section {
-	margin-top: 18px;
-	border-top: 1px solid var(--color-border);
-}
-.settings-section-title {
-	margin: 0 0 8px;
-	font-size: 1rem;
-	color: var(--color-text);
 }
 .settings-section-desc,
 .mute-empty {

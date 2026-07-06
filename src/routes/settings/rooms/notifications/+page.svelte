@@ -46,7 +46,7 @@ const settingsSubmit: SubmitFunction = () => {
 				<p class="settings-section-desc">
 					スケジュールページでベル登録したアニメの放送やイベントの開始が近づくと、アプリ内通知をお届けし、
 					カレンダーのアイコンに未読マークを表示します。
-					複数選択した場合は、最も早いタイミングで一度だけ通知します。
+					複数選択した場合はそれぞれのタイミングで通知します。同じルームの通知は1件にまとめて更新されます。
 				</p>
 
 				<form method="POST" action="?/updateNotificationSettings" use:enhance={settingsSubmit}>
