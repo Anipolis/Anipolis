@@ -1,8 +1,8 @@
 import { redirect } from "@sveltejs/kit";
 import { env } from "$env/dynamic/private";
-import { env as publicEnv } from "$env/dynamic/public";
-import { isBetaMember, verifyGuildMembership } from "$lib/server/discord";
+import { isBetaGateEnabled, isBetaMember, verifyGuildMembership } from "$lib/server/discord";
 import { createServiceRoleClient } from "$lib/server/supabase-admin";
+import { sanitizeInternalRedirect } from "$lib/utils/url";
 import type { RequestHandler } from "./$types";
 
 /**
@@ -17,8 +17,7 @@ import type { RequestHandler } from "./$types";
  */
 export const GET: RequestHandler = async ({ url, locals: { supabase } }) => {
 	const code = url.searchParams.get("code");
-	const raw = url.searchParams.get("next") ?? "/";
-	const safeNext = raw.startsWith("/") && !raw.startsWith("//") && !raw.includes(":/") ? raw : "/";
+	const safeNext = sanitizeInternalRedirect(url.searchParams.get("next"));
 
 	if (!code) redirect(303, "/");
 
@@ -75,7 +74,7 @@ export const GET: RequestHandler = async ({ url, locals: { supabase } }) => {
 
 	// クローズドβ：所属検証を通っていないユーザー（Google / メール等）は
 	// セッションを破棄してログインを成立させない。
-	if (publicEnv["PUBLIC_CLOSED_BETA"] === "true" && !betaGranted) {
+	if (isBetaGateEnabled() && !betaGranted) {
 		await supabase.auth.signOut();
 		redirect(303, "/auth?error=not_member");
 	}

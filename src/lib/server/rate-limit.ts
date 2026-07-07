@@ -32,6 +32,18 @@ export function isRateLimited(key: string, limit: number, windowMs: number): boo
 	return bucket.count > limit;
 }
 
+/**
+ * RequestEvent からレート制限キー用のクライアントアドレスを安全に取得する。
+ * アドレスを取得できないアダプターでは共有バケット "unknown" にフォールバックする。
+ */
+export function getClientKey(event: { getClientAddress: () => string }): string {
+	try {
+		return event.getClientAddress();
+	} catch {
+		return "unknown";
+	}
+}
+
 export interface RateRule {
 	/** ルール名（バケットキーの一部になる） */
 	name: string;

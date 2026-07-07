@@ -23,6 +23,15 @@ function getJwtPayload(session: AuthSession | null) {
 	}
 }
 
+/**
+ * ユーザーがパスワード（email プロバイダー）を持つかを判定する。
+ *
+ * セキュリティ上の注意: `user_metadata.has_password` はクライアントが
+ * `supabase.auth.updateUser({ data })` で自由に書き換えられる値である。
+ * この関数の OR 条件では「パスワード確認を追加で要求する」フェイルセーフ方向にしか
+ * 働かないため問題ないが、**この判定を「検証をスキップしてよい」方向の分岐に
+ * 流用してはならない**。信頼できる信号は identities / app_metadata / amr のみ。
+ */
 export function hasPasswordProvider(user: AuthUser, session: AuthSession | null = null) {
 	const providers = user.app_metadata.providers;
 	const providerList = typeof providers === "string" ? [providers] : Array.isArray(providers) ? providers : [];

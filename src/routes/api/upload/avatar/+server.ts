@@ -1,5 +1,5 @@
 import { error, json } from "@sveltejs/kit";
-import { validateImageBuffer } from "$lib/server/upload";
+import { MULTIPART_OVERHEAD_BYTES, readFormDataWithLimit, validateImageBuffer } from "$lib/server/upload";
 import type { RequestHandler } from "./$types";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -9,7 +9,10 @@ export const POST: RequestHandler = async ({ request, locals: { supabase, safeGe
 	const { user } = await safeGetSession();
 	if (!user) error(401, "ログインが必要です");
 
-	const form = await request.formData();
+	const form = await readFormDataWithLimit(request, MAX_FILE_SIZE + MULTIPART_OVERHEAD_BYTES);
+	if (form === "too_large") error(413, "ファイルサイズが大きすぎます（最大2MB）");
+	if (form === "invalid") error(400, "ファイルが指定されていません");
+
 	const file = form.get("file") as File | null;
 
 	if (!file || file.size === 0) error(400, "ファイルが指定されていません");

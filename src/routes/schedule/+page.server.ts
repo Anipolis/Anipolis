@@ -28,6 +28,7 @@ import {
 	overrideForRoomDate,
 	roomDateKey,
 } from "$lib/utils/broadcast-room";
+import { eventBroadcastDateKey } from "$lib/utils/event-time";
 import type { Actions, PageServerLoad } from "./$types";
 
 interface BroadcastAnnouncement {
@@ -114,6 +115,8 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	const weekStart = rawWeek < minWeek ? minWeek : rawWeek > maxWeek ? maxWeek : rawWeek;
 	const weekEnd = addDays(weekStart, 7);
 	weekEnd.setMilliseconds(-1);
+	const eventRangeEnd = new Date(weekEnd);
+	eventRangeEnd.setHours(eventRangeEnd.getHours() + 4);
 	const scheduleRange = {
 		start: toDateInputValue(weekStart),
 		end: toDateInputValue(addDays(weekStart, 6)),
@@ -131,7 +134,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		eventNotificationSubscriptions,
 	] = await Promise.all([
 		getAnimeList(supabase, { scheduleRange, limit: 1000, userId: user?.id ?? null }),
-		getEventsByRange(supabase, weekStart.toISOString(), weekEnd.toISOString()),
+		getEventsByRange(supabase, weekStart.toISOString(), eventRangeEnd.toISOString()),
 		user ? getBroadcastSubscriptions(supabase, user.id) : Promise.resolve([] as string[]),
 		user
 			? getBroadcastNotificationSettings(supabase, user.id)
@@ -197,8 +200,10 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	}
 
 	for (const event of events) {
-		const day = new Date(event.scheduled_at).getDay();
-		days[day]?.events.push(event);
+		const date = eventBroadcastDateKey(event.scheduled_at);
+		if (!date || date < scheduleRange.start || date > scheduleRange.end) continue;
+		const day = days.find((candidate) => candidate.date === date);
+		day?.events.push(event);
 	}
 
 	for (const day of days) {
@@ -232,6 +237,8 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		canGoPrev: weekStart > minWeek,
 		canGoNext: weekStart < maxWeek,
 		defaultScheduledAt: `${toDateInputValue(new Date())}T20:00`,
+		defaultEventDate: eventBroadcastDateKey(new Date().toISOString()) ?? toDateInputValue(new Date()),
+		defaultEventTime: "20:00",
 	};
 };
 

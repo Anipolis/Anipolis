@@ -11,6 +11,7 @@ import {
 import { getAnime, getAnimeRankingTrending, getEvent, getEventRoomPosts, isAdminUser } from "$lib/server/queries";
 import { getRoomExitSurveyLoadState, ROOM_EXIT_SURVEY_VERSION } from "$lib/server/room-exit-survey";
 import { createRoomExperimentServiceClient, getActiveRoomExperimentRunForEvent } from "$lib/server/room-experiments";
+import { eventBroadcastDateKey } from "$lib/utils/event-time";
 import type { Actions, PageServerLoad } from "./$types";
 
 const DEFAULT_EVENT_DURATION_MINUTES = 6 * 60;
@@ -40,6 +41,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 	const scheduledMs = new Date(event.scheduled_at).getTime();
 	const durationMinutes = event.duration_minutes ?? DEFAULT_EVENT_DURATION_MINUTES;
 	const postingClosesAt = new Date(scheduledMs + durationMinutes * 60 * 1000).toISOString();
+	const roomDate = eventBroadcastDateKey(event.scheduled_at) ?? event.scheduled_at.slice(0, 10);
 
 	return {
 		event,
@@ -47,7 +49,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 		anime,
 		room: {
 			session_id: event.id,
-			date: event.scheduled_at.slice(0, 10),
+			date: roomDate,
 			kind: "event" as const,
 			hashtag: event.hashtag,
 			scheduled_at: event.scheduled_at,
@@ -106,7 +108,7 @@ export const actions: Actions = {
 			null,
 			null,
 			null,
-			[],
+			[event.hashtag],
 			event.id,
 		);
 	},

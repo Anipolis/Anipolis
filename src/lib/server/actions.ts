@@ -7,9 +7,15 @@ import {
 } from "$lib/exchange-tags";
 import { getEvent, isAdminUser } from "$lib/server/queries";
 import { createServiceRoleClient } from "$lib/server/supabase-admin";
-import { publicUrlToStoragePath, validateImageBuffer } from "$lib/server/upload";
+import {
+	MULTIPART_OVERHEAD_BYTES,
+	publicUrlToStoragePath,
+	readFormDataWithLimit,
+	validateImageBuffer,
+} from "$lib/server/upload";
 import type { Database, Json } from "$lib/supabase/database.types";
 import type { AnimeExchangeShare, AnimeStatus, BroadcastRoomMuteDuration } from "$lib/types";
+import { eventScheduledAtIsoFromBroadcastInput } from "$lib/utils/event-time";
 import { extractHashtags } from "$lib/utils/hashtag";
 
 const reportStatuses = new Set(["open", "reviewing", "resolved", "rejected"]);
@@ -36,6 +42,10 @@ type RoomLinkTrendAnime = {
 
 type RoomLinkTrendSession = {
 	anime: RoomLinkTrendAnime | RoomLinkTrendAnime[] | null;
+};
+
+type EventLinkTrendRow = {
+	hashtag: string | null;
 };
 
 function fallbackRoomHashtag(title: string) {
@@ -75,6 +85,22 @@ async function getRoomLinkTrendHashtag(
 
 	const fallback = fallbackRoomHashtag(anime.title ?? "");
 	return fallback ? normalizeHashtagMetadata(fallback) : null;
+}
+
+async function getEventLinkTrendHashtag(
+	supabase: SupabaseClient<Database>,
+	eventId: string | null,
+): Promise<string | null> {
+	if (!eventId) return null;
+
+	const { data, error } = await supabase.from("events").select("hashtag").eq("id", eventId).maybeSingle();
+	if (error || !data) {
+		if (error) console.error("event room link trend hashtag lookup error:", error);
+		return null;
+	}
+
+	const tag = normalizeHashtagMetadata((data as EventLinkTrendRow).hashtag ?? "");
+	return tag.length > 0 ? tag : null;
 }
 
 export function getAnimeExchangeErrorDetail(error: {
@@ -186,7 +212,9 @@ export async function insertPostWithHashtags(
 	const additionalTags = additionalHashtags.map(normalizeHashtagMetadata).filter((tag) => tag.length > 0);
 	const roomLinkTrendHashtag =
 		additionalTags.length === 0 ? await getRoomLinkTrendHashtag(supabase, broadcastRoomSessionId) : null;
-	const roomLinkTags = roomLinkTrendHashtag ? [roomLinkTrendHashtag] : [];
+	const eventLinkTrendHashtag =
+		additionalTags.length === 0 ? await getEventLinkTrendHashtag(supabase, eventId) : null;
+	const roomLinkTags = [roomLinkTrendHashtag, eventLinkTrendHashtag].filter((tag): tag is string => Boolean(tag));
 	const tags = [...new Set([...extractHashtags(postContent), ...additionalTags, ...roomLinkTags])];
 	if (tags.length > 0) {
 		await supabase.from("hashtags").upsert(
@@ -552,6 +580,8 @@ async function parseEventForm(
 	const description = (form.get("description") as string | null)?.trim() || null;
 	const rawHashtag = (form.get("hashtag") as string | null)?.trim() ?? "";
 	const scheduledAtRaw = (form.get("scheduled_at") as string | null)?.trim() ?? "";
+	const scheduledDateRaw = (form.get("scheduled_date") as string | null)?.trim() ?? "";
+	const scheduledTimeRaw = (form.get("scheduled_time") as string | null)?.trim() ?? "";
 	const durationRaw = (form.get("duration_minutes") as string | null)?.trim() ?? "";
 	const animeIdRaw = (form.get("anime_id") as string | null)?.trim() ?? "";
 	const animeId = animeIdRaw ? parsePositiveInt(animeIdRaw) : null;
@@ -575,14 +605,28 @@ async function parseEventForm(
 		return { ok: false, failure: fail(400, { message: "ルームリンクに使用できない文字が含まれています" }) };
 	}
 
-	if (!scheduledAtRaw) return { ok: false, failure: fail(400, { message: "開始日時を入力してください" }) };
-	// datetime-local はタイムゾーンなしの文字列で届く。サーバーのTZ(本番はUTC)で解釈すると
-	// 9時間ずれるため、オフセットが付いていない場合は JST として明示的にパースする。
-	const hasOffset = /(?:Z|[+-]\d{2}:\d{2})$/.test(scheduledAtRaw);
-	const scheduledAt = new Date(hasOffset ? scheduledAtRaw : `${scheduledAtRaw}+09:00`);
-	if (Number.isNaN(scheduledAt.getTime())) {
-		return { ok: false, failure: fail(400, { message: "開始日時の形式が正しくありません" }) };
+	let scheduledAtIso: string | null = null;
+	if (scheduledDateRaw || scheduledTimeRaw) {
+		if (!scheduledDateRaw || !scheduledTimeRaw) {
+			return { ok: false, failure: fail(400, { message: "開始日と開始時刻を入力してください" }) };
+		}
+		scheduledAtIso = eventScheduledAtIsoFromBroadcastInput(scheduledDateRaw, scheduledTimeRaw);
+		if (!scheduledAtIso) {
+			return { ok: false, failure: fail(400, { message: "開始時刻は 00:00〜27:59 の形式で入力してください" }) };
+		}
 	}
+	if (!scheduledAtIso) {
+		if (!scheduledAtRaw) return { ok: false, failure: fail(400, { message: "開始日時を入力してください" }) };
+		// datetime-local はタイムゾーンなしの文字列で届く。サーバーのTZ(本番はUTC)で解釈すると
+		// 9時間ずれるため、オフセットが付いていない場合は JST として明示的にパースする。
+		const hasOffset = /(?:Z|[+-]\d{2}:\d{2})$/.test(scheduledAtRaw);
+		const scheduledAt = new Date(hasOffset ? scheduledAtRaw : `${scheduledAtRaw}+09:00`);
+		if (Number.isNaN(scheduledAt.getTime())) {
+			return { ok: false, failure: fail(400, { message: "開始日時の形式が正しくありません" }) };
+		}
+		scheduledAtIso = scheduledAt.toISOString();
+	}
+	if (!scheduledAtIso) return { ok: false, failure: fail(400, { message: "開始日時を入力してください" }) };
 
 	const durationMinutes = durationRaw ? parsePositiveInt(durationRaw) : null;
 	if (durationRaw && durationMinutes === null) {
@@ -604,7 +648,7 @@ async function parseEventForm(
 
 	return {
 		ok: true,
-		value: { title, description, hashtag, scheduledAtIso: scheduledAt.toISOString(), durationMinutes, animeId },
+		value: { title, description, hashtag, scheduledAtIso, durationMinutes, animeId },
 	};
 }
 
@@ -1112,7 +1156,27 @@ export async function completeProfileSetupAction(
 	userId: string,
 	options: ProfileSetupOptions = {},
 ): Promise<ProfileSetupResult> {
-	const form = requestOrForm instanceof FormData ? requestOrForm : await requestOrForm.formData();
+	// アバターファイルを含むフォームのため、サイズ検証前の全量バッファを避けて上限付きで読む
+	const parsedForm =
+		requestOrForm instanceof FormData
+			? requestOrForm
+			: await readFormDataWithLimit(requestOrForm, ONBOARDING_MAX_AVATAR_SIZE + MULTIPART_OVERHEAD_BYTES);
+	if (parsedForm === "too_large") {
+		return {
+			error: "画像は2MB以内にしてください",
+			status: 413,
+			field: "avatar",
+			values: { username: "", display_name: "" },
+		};
+	}
+	if (parsedForm === "invalid") {
+		return {
+			error: "フォームの送信内容を読み取れませんでした",
+			status: 400,
+			values: { username: "", display_name: "" },
+		};
+	}
+	const form = parsedForm;
 	const usernameEntry = form.get("username");
 	const displayNameEntry = form.get("display_name");
 	const avatarChoiceEntry = form.get("avatar_choice");

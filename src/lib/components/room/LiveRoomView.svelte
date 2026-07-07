@@ -192,16 +192,25 @@ async function sendRoomExperimentHeartbeat() {
 	}
 }
 
+// 退出ビーコンの送信のみを担う。sessionStorage のキー削除はここでは行わない:
+// アプリ内遷移(onDestroy)や一時的な pagehide でも呼ばれるため、キーを残しておき、
+// 同一タブで戻ってきたときに同じ visit 行を再利用できるようにする。
+// 明示的な退出(退出ボタン→leaveRoom)でのみ clearRoomExperimentVisitKey() でキーを破棄する。
 function sendRoomExperimentExit() {
 	if (!roomExperimentVisitId || roomExperimentExitSent) return;
 	roomExperimentExitSent = true;
 	clearRoomExperimentHeartbeatTimer();
 	const url = `/api/room-experiment-visits/${roomExperimentVisitId}/exit`;
-	const sessionId = data.roomExperiment?.sessionId;
-	if (sessionId) sessionStorage.removeItem(getRoomExperimentVisitStorageKey(sessionId));
 	if (typeof navigator === "undefined") return;
 	if (navigator.sendBeacon?.(url)) return;
 	void fetch(url, { method: "POST", keepalive: true }).catch(() => undefined);
+}
+
+// 明示退出時のみ visit キーを破棄する。次回入場は新しい visit として扱われる。
+// 一時離席(アプリ内遷移)ではキーを残すため、再入場は同じ visit 行に集約される。
+function clearRoomExperimentVisitKey() {
+	const sessionId = data.roomExperiment?.sessionId;
+	if (sessionId) sessionStorage.removeItem(getRoomExperimentVisitStorageKey(sessionId));
 }
 
 function getStayedSeconds() {
@@ -217,6 +226,7 @@ function shouldShowExitSurvey() {
 }
 
 async function leaveRoom() {
+	clearRoomExperimentVisitKey();
 	sendRoomExperimentExit();
 	await goto("/");
 }

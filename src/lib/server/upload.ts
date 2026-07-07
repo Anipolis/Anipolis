@@ -62,6 +62,55 @@ export function validateImageBuffer(
 	return ext ? { mime, ext } : null;
 }
 
+/** multipart 境界・付随フィールド分の余裕。ファイル上限ちょうどのアップロードを弾かないために加算する */
+export const MULTIPART_OVERHEAD_BYTES = 64 * 1024;
+
+/**
+ * リクエストボディを上限付きでストリーミング読みして FormData として返す。
+ *
+ * `request.formData()` を直接呼ぶとサイズ検証前にボディ全量がメモリへバッファされるため、
+ * 巨大ボディの送りつけ（メモリ DoS）を上限到達時点の読み込み中断で防ぐ。
+ * 上限超過なら "too_large"、ボディなし・multipart として解釈不能なら "invalid" を返す。
+ */
+export async function readFormDataWithLimit(
+	request: Request,
+	maxBytes: number,
+): Promise<FormData | "too_large" | "invalid"> {
+	// Content-Length 申告による早期拒否（偽装可能だが正直なクライアントを速く弾ける）
+	const contentLength = Number(request.headers.get("content-length") ?? 0);
+	if (contentLength > maxBytes) return "too_large";
+
+	if (!request.body) return "invalid";
+
+	const reader = request.body.getReader();
+	const chunks: Uint8Array[] = [];
+	let totalBytes = 0;
+	while (true) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		totalBytes += value.byteLength;
+		if (totalBytes > maxBytes) {
+			await reader.cancel();
+			return "too_large";
+		}
+		chunks.push(value);
+	}
+
+	const body = new Uint8Array(totalBytes);
+	let offset = 0;
+	for (const chunk of chunks) {
+		body.set(chunk, offset);
+		offset += chunk.byteLength;
+	}
+
+	const contentType = request.headers.get("content-type") ?? "";
+	try {
+		return await new Response(body, { headers: { "content-type": contentType } }).formData();
+	} catch {
+		return "invalid";
+	}
+}
+
 /** Supabase Storage の public URL からバケット内パスを取り出す（不一致なら null） */
 export function publicUrlToStoragePath(url: string, bucket: string): string | null {
 	const marker = `/storage/v1/object/public/${bucket}/`;

@@ -2,7 +2,10 @@
 import { registerAnimeAction } from "$lib/server/anime-admin";
 import { buildAnimeListOptions, parseAnimeListFilters } from "$lib/server/anime-list-filters";
 import {
-	getAnimeList,
+	type AnimeListPageResult,
+	countAnimeRanking,
+	countUserAnimeList,
+	getAnimeListPage,
 	getAnimeRankingPopularity,
 	getAnimeRankingTopRated,
 	getAnimeRankingTrending,
@@ -45,60 +48,63 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		source,
 	} = filters;
 
-	let animes: Anime[];
+	// ── ページネーション ─────────────────────────────────────────
+	// 従来は最大1000件を毎回SSRペイロードに載せていた（P1）。1ページ分だけ返す。
+	const PAGE_SIZE = 50;
+	const pageParam = Number(url.searchParams.get("page") ?? "1");
+	const page = Number.isFinite(pageParam) && pageParam >= 1 ? Math.floor(pageParam) : 1;
+	const offset = (page - 1) * PAGE_SIZE;
+	const userId = user?.id ?? null;
+
+	/** ランキングビュー系タブ：件数0なら通常一覧にフォールバック（既存挙動を維持） */
+	const rankingTab = async (
+		kind: "popular" | "trending" | "top_rated",
+		fetchPage: (limit: number, off: number) => Promise<Anime[]>,
+	): Promise<AnimeListPageResult> => {
+		const total = await countAnimeRanking(supabase, kind);
+		if (total === 0) return getAnimeListPage(supabase, { page, pageSize: PAGE_SIZE, userId });
+		return { items: await fetchPage(PAGE_SIZE, offset), total };
+	};
+
+	let result: AnimeListPageResult;
 
 	if (filters.hasSearchFilters) {
-		if (tab === "mylist") {
-			if (!user) {
-				animes = [];
-				return {
-					animes: [],
-					tab,
-					search,
-					genre,
-					genres,
-					season,
-					broadcastYear,
-					broadcastSeason,
-					broadcastSeasons,
-					studio,
-					producer,
-					source,
-					user,
-					isAdmin,
-				};
-			}
-		}
-		animes = await getAnimeList(supabase, buildAnimeListOptions(filters, user?.id ?? null));
+		result =
+			tab === "mylist" && !user
+				? { items: [], total: 0 }
+				: await getAnimeListPage(supabase, {
+						...buildAnimeListOptions(filters, userId),
+						page,
+						pageSize: PAGE_SIZE,
+					});
 	} else if (tab === "mylist") {
-		animes = user ? await getUserAnimeList(supabase, user.id) : [];
+		result = user
+			? {
+					items: await getUserAnimeList(supabase, user.id, undefined, { limit: PAGE_SIZE, offset }),
+					total: await countUserAnimeList(supabase, user.id),
+				}
+			: { items: [], total: 0 };
 	} else if (tab === "trending") {
-		animes = await getAnimeRankingTrending(supabase, 1000);
-		if (animes.length === 0) {
-			animes = await getAnimeList(supabase, { limit: 1000, userId: user?.id ?? null });
-		}
+		result = await rankingTab("trending", (limit, off) => getAnimeRankingTrending(supabase, limit, off));
 	} else if (tab === "top_rated") {
-		animes = await getAnimeRankingTopRated(supabase, 1000);
-		if (animes.length === 0) {
-			animes = await getAnimeList(supabase, { limit: 1000, userId: user?.id ?? null });
-		}
+		result = await rankingTab("top_rated", (limit, off) => getAnimeRankingTopRated(supabase, limit, off));
 	} else if (tab === "airing") {
-		animes = await getAnimeList(supabase, { broadcastStatus: "airing", limit: 1000, userId: user?.id ?? null });
+		result = await getAnimeListPage(supabase, { broadcastStatus: "airing", userId, page, pageSize: PAGE_SIZE });
 	} else if (tab === "upcoming") {
-		animes = await getAnimeList(supabase, { broadcastStatus: "upcoming", limit: 1000, userId: user?.id ?? null });
+		result = await getAnimeListPage(supabase, { broadcastStatus: "upcoming", userId, page, pageSize: PAGE_SIZE });
 	} else if (tab === "all") {
-		animes = await getAnimeList(supabase, { limit: 1000, userId: user?.id ?? null });
+		result = await getAnimeListPage(supabase, { userId, page, pageSize: PAGE_SIZE });
 	} else if (tab === "register") {
-		animes = [];
+		result = { items: [], total: 0 };
 	} else {
-		animes = await getAnimeRankingPopularity(supabase, 1000);
-		if (animes.length === 0) {
-			animes = await getAnimeList(supabase, { limit: 1000, userId: user?.id ?? null });
-		}
+		result = await rankingTab("popular", (limit, off) => getAnimeRankingPopularity(supabase, limit, off));
 	}
 
 	return {
-		animes: animes.map(toAnimeListItem),
+		animes: result.items.map(toAnimeListItem),
+		total: result.total,
+		page,
+		pageSize: PAGE_SIZE,
 		tab,
 		search,
 		genre,

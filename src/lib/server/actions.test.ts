@@ -14,7 +14,10 @@ function maybeSingleChain(response: unknown): TableChain {
 	return chain;
 }
 
-function createInsertPostClient(roomAnime: { title: string | null; official_hashtag: string[] | null } | null) {
+function createInsertPostClient(
+	roomAnime: { title: string | null; official_hashtag: string[] | null } | null,
+	eventHashtag: string | null = null,
+) {
 	const insertedPosts: unknown[] = [];
 	const hashtagUpsert = vi.fn(async () => ({ error: null }));
 	const postHashtagUpsert = vi.fn(async () => ({ error: null }));
@@ -32,6 +35,9 @@ function createInsertPostClient(roomAnime: { title: string | null; official_hash
 			}
 			if (table === "broadcast_room_sessions") {
 				return maybeSingleChain({ data: { anime: roomAnime }, error: null });
+			}
+			if (table === "events") {
+				return maybeSingleChain({ data: eventHashtag ? { hashtag: eventHashtag } : null, error: null });
 			}
 			if (table === "posts") {
 				return {
@@ -88,6 +94,36 @@ describe("insertPostWithHashtags", () => {
 		expect(result).toEqual({ success: true, postId: "post-1" });
 		expect(insertedPosts).toContainEqual(expect.objectContaining({ broadcast_room_session_id: "session-1" }));
 		expect(hashtagUpsert).toHaveBeenCalledWith([{ name: "officialtag" }], {
+			onConflict: "name",
+			ignoreDuplicates: true,
+		});
+		expect(postHashtagUpsert).toHaveBeenCalledWith([{ post_id: "post-1", hashtag_id: 1 }], {
+			onConflict: "post_id,hashtag_id",
+			ignoreDuplicates: true,
+		});
+	});
+
+	it("adds the event room-link hashtag to trend metadata", async () => {
+		const { client, hashtagUpsert, postHashtagUpsert, insertedPosts } = createInsertPostClient(null, "#EventRoom");
+
+		const result = await insertPostWithHashtags(
+			client,
+			"user-1",
+			"plain event post",
+			null,
+			[],
+			"123",
+			null,
+			null,
+			null,
+			null,
+			[],
+			"event-1",
+		);
+
+		expect(result).toEqual({ success: true, postId: "post-1" });
+		expect(insertedPosts).toContainEqual(expect.objectContaining({ event_id: "event-1" }));
+		expect(hashtagUpsert).toHaveBeenCalledWith([{ name: "eventroom" }], {
 			onConflict: "name",
 			ignoreDuplicates: true,
 		});

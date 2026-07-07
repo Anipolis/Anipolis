@@ -99,26 +99,13 @@ let hasActiveFilters = $derived(
 			data.source,
 	),
 );
-let currentAnimeSectionIndex = $state(0);
-let animeSections = $derived(chunkAnimes(data.animes));
-let currentAnimeSection = $derived(animeSections[currentAnimeSectionIndex] ?? { start: 0, end: 0, items: [] });
-let visibleAnimeSectionPages = $derived(getVisibleAnimeSectionPages(animeSections, currentAnimeSectionIndex, 7));
-let visibleMobileAnimeSectionPages = $derived(getVisibleAnimeSectionPages(animeSections, currentAnimeSectionIndex, 5));
-let animeListContextKey = $derived(
-	[
-		data.tab,
-		data.search,
-		data.genre,
-		data.season,
-		data.broadcastYear,
-		data.broadcastSeason,
-		data.broadcastSeasons?.join(","),
-		data.studio,
-		data.producer,
-		data.source,
-	].join("\u0000"),
-);
-let previousAnimeListContextKey = $state<string | null>(null);
+// ページネーションはサーバー駆動（data.page / data.total）。表示は data.animes（現在ページ分）を直接使う。
+let pageSize = $derived(data.pageSize || ANIME_SECTION_SIZE);
+let totalPages = $derived(Math.max(1, Math.ceil((data.total ?? data.animes.length) / pageSize)));
+let currentAnimeSectionIndex = $derived(Math.min(Math.max((data.page ?? 1) - 1, 0), totalPages - 1));
+let pageStartRank = $derived(currentAnimeSectionIndex * pageSize);
+let visibleAnimeSectionPages = $derived(getVisibleAnimeSectionPages(totalPages, currentAnimeSectionIndex, 7));
+let visibleMobileAnimeSectionPages = $derived(getVisibleAnimeSectionPages(totalPages, currentAnimeSectionIndex, 5));
 let previousDataFilterKey = $state("");
 
 function toFilterState(): AnimeFilterState {
@@ -226,48 +213,36 @@ $effect(() => {
 	}
 });
 
-function chunkAnimes(animes: AnimeListItem[]) {
-	const sections: { start: number; end: number; items: AnimeListItem[] }[] = [];
-	for (let start = 0; start < animes.length; start += ANIME_SECTION_SIZE) {
-		const items = animes.slice(start, start + ANIME_SECTION_SIZE);
-		sections.push({ start, end: start + items.length, items });
-	}
-	return sections;
+/** 現在のフィルター/タブを保ったまま page=N を付けた一覧URLを組み立てる（page 1 は付けない） */
+function buildAnimePageUrl(pageIndex: number): string {
+	const base = buildCurrentAnimeListUrl();
+	if (pageIndex <= 0) return base;
+	const sep = base.includes("?") ? "&" : "?";
+	return `${base}${sep}page=${pageIndex + 1}`;
 }
 
-function setAnimeSectionIndex(index: number) {
-	currentAnimeSectionIndex = Math.min(Math.max(index, 0), Math.max(animeSections.length - 1, 0));
+function goToAnimePage(pageIndex: number) {
+	const clamped = Math.min(Math.max(pageIndex, 0), Math.max(totalPages - 1, 0));
+	if (clamped === currentAnimeSectionIndex) return;
+	goto(buildAnimePageUrl(clamped));
 }
 
-function getVisibleAnimeSectionPages(
-	sections: { start: number; end: number; items: AnimeListItem[] }[],
-	currentIndex: number,
-	visibleCount: number,
-) {
-	const maxStart = Math.max(sections.length - visibleCount, 0);
+/** ページャに表示するページ番号（0基点）とその件数レンジを返す */
+function getVisibleAnimeSectionPages(pageCount: number, currentIndex: number, visibleCount: number) {
+	const maxStart = Math.max(pageCount - visibleCount, 0);
 	const sideCount = Math.floor(visibleCount / 2);
 	const start = Math.min(Math.max(currentIndex - sideCount, 0), maxStart);
-	return sections.slice(start, start + visibleCount).map((section, offset) => ({
-		section,
-		index: start + offset,
-	}));
+	const end = Math.min(start + visibleCount, pageCount);
+	const pages: { index: number; rangeStart: number; rangeEnd: number }[] = [];
+	for (let index = start; index < end; index += 1) {
+		pages.push({
+			index,
+			rangeStart: index * pageSize,
+			rangeEnd: Math.min((index + 1) * pageSize, data.total ?? data.animes.length),
+		});
+	}
+	return pages;
 }
-
-$effect(() => {
-	if (previousAnimeListContextKey === null) {
-		previousAnimeListContextKey = animeListContextKey;
-		return;
-	}
-	if (animeListContextKey !== previousAnimeListContextKey) {
-		previousAnimeListContextKey = animeListContextKey;
-		currentAnimeSectionIndex = 0;
-	}
-});
-
-$effect(() => {
-	const maxIndex = Math.max(animeSections.length - 1, 0);
-	if (currentAnimeSectionIndex > maxIndex) currentAnimeSectionIndex = maxIndex;
-});
 
 function openQuickAdd(e: MouseEvent, anime: AnimeListItem) {
 	e.preventDefault();
@@ -647,38 +622,38 @@ function isAiringToday(anime: AnimeListItem): boolean {
 		</nav>
 
 		{#if data.search}
-			<p class="search-label">「{data.search}」の検索結果 — {data.animes.length}件</p>
+			<p class="search-label">「{data.search}」の検索結果 — {data.total ?? data.animes.length}件</p>
 		{:else if data.genre}
 			<p class="search-label">
 				ジャンル：<strong>{data.genre}</strong>
-				— {data.animes.length}件 <a href="/anime" class="filter-clear">✕</a>
+				— {data.total ?? data.animes.length}件 <a href="/anime" class="filter-clear">✕</a>
 			</p>
 		{:else if data.season}
 			<p class="search-label">
 				シーズン：<strong>{data.season}</strong>
-				— {data.animes.length}件 <a href="/anime" class="filter-clear">✕</a>
+				— {data.total ?? data.animes.length}件 <a href="/anime" class="filter-clear">✕</a>
 			</p>
 		{:else if data.broadcastYear || data.broadcastSeason || data.broadcastSeasons?.length}
 			<p class="search-label">
 				放送時期：<strong
 					>{[data.broadcastYear, ...(data.broadcastSeasons?.length ? data.broadcastSeasons : [data.broadcastSeason])].filter(Boolean).join(' ')}</strong
 				>
-				／ {data.animes.length}件 <a href="/anime" class="filter-clear">✕</a>
+				／ {data.total ?? data.animes.length}件 <a href="/anime" class="filter-clear">✕</a>
 			</p>
 		{:else if data.studio}
 			<p class="search-label">
 				スタジオ：<strong>{data.studio}</strong>
-				— {data.animes.length}件 <a href="/anime" class="filter-clear">✕</a>
+				— {data.total ?? data.animes.length}件 <a href="/anime" class="filter-clear">✕</a>
 			</p>
 		{:else if data.producer}
 			<p class="search-label">
 				制作：<strong>{data.producer}</strong>
-				— {data.animes.length}件 <a href="/anime" class="filter-clear">✕</a>
+				— {data.total ?? data.animes.length}件 <a href="/anime" class="filter-clear">✕</a>
 			</p>
 		{:else if data.source}
 			<p class="search-label">
 				原作：<strong>{data.source}</strong>
-				— {data.animes.length}件 <a href="/anime" class="filter-clear">✕</a>
+				— {data.total ?? data.animes.length}件 <a href="/anime" class="filter-clear">✕</a>
 			</p>
 		{/if}
 
@@ -705,8 +680,8 @@ function isAiringToday(anime: AnimeListItem): boolean {
 		{:else}
 			<div class="anime-list-surface">
 				<div class="anime-grid">
-					{#each currentAnimeSection.items as anime, sectionItemIndex}
-						{@const rankIndex = currentAnimeSection.start + sectionItemIndex}
+					{#each data.animes as anime, sectionItemIndex}
+						{@const rankIndex = pageStartRank + sectionItemIndex}
 						<a href={buildAnimeDetailUrl(anime.id)} class="anime-card">
 							<div class="anime-cover">
 								{#if anime.cover_url}
@@ -803,12 +778,12 @@ function isAiringToday(anime: AnimeListItem): boolean {
 					{/each}
 				</div>
 
-				{#if animeSections.length > 1}
+				{#if totalPages > 1}
 					<nav class="anime-section-bar" aria-label="50件ごとの表示切り替え">
 						<button
 							type="button"
 							class="anime-section-control"
-							onclick={() => setAnimeSectionIndex(0)}
+							onclick={() => goToAnimePage(0)}
 							disabled={currentAnimeSectionIndex === 0}
 							aria-label="最初の50件"
 						>
@@ -817,7 +792,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 						<button
 							type="button"
 							class="anime-section-control"
-							onclick={() => setAnimeSectionIndex(currentAnimeSectionIndex - 1)}
+							onclick={() => goToAnimePage(currentAnimeSectionIndex - 1)}
 							disabled={currentAnimeSectionIndex === 0}
 							aria-label="前の50件"
 						>
@@ -828,8 +803,8 @@ function isAiringToday(anime: AnimeListItem): boolean {
 								type="button"
 								class="anime-section-page anime-section-page--desktop"
 								class:active={currentAnimeSectionIndex === page.index}
-								onclick={() => setAnimeSectionIndex(page.index)}
-								aria-label={`${page.section.start + 1}-${page.section.end}件を表示`}
+								onclick={() => goToAnimePage(page.index)}
+								aria-label={`${page.rangeStart + 1}-${page.rangeEnd}件を表示`}
 								aria-current={currentAnimeSectionIndex === page.index ? 'page' : undefined}
 							>
 								{page.index + 1}
@@ -840,8 +815,8 @@ function isAiringToday(anime: AnimeListItem): boolean {
 								type="button"
 								class="anime-section-page anime-section-page--mobile"
 								class:active={currentAnimeSectionIndex === page.index}
-								onclick={() => setAnimeSectionIndex(page.index)}
-								aria-label={`${page.section.start + 1}-${page.section.end}件を表示`}
+								onclick={() => goToAnimePage(page.index)}
+								aria-label={`${page.rangeStart + 1}-${page.rangeEnd}件を表示`}
 								aria-current={currentAnimeSectionIndex === page.index ? 'page' : undefined}
 							>
 								{page.index + 1}
@@ -850,8 +825,8 @@ function isAiringToday(anime: AnimeListItem): boolean {
 						<button
 							type="button"
 							class="anime-section-control"
-							onclick={() => setAnimeSectionIndex(currentAnimeSectionIndex + 1)}
-							disabled={currentAnimeSectionIndex === animeSections.length - 1}
+							onclick={() => goToAnimePage(currentAnimeSectionIndex + 1)}
+							disabled={currentAnimeSectionIndex === totalPages - 1}
 							aria-label="次の50件"
 						>
 							<span aria-hidden="true">›</span>
@@ -859,8 +834,8 @@ function isAiringToday(anime: AnimeListItem): boolean {
 						<button
 							type="button"
 							class="anime-section-control"
-							onclick={() => setAnimeSectionIndex(animeSections.length - 1)}
-							disabled={currentAnimeSectionIndex === animeSections.length - 1}
+							onclick={() => goToAnimePage(totalPages - 1)}
+							disabled={currentAnimeSectionIndex === totalPages - 1}
 							aria-label="最後の50件"
 						>
 							<span aria-hidden="true">»</span>

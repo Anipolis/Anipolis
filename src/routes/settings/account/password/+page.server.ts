@@ -1,5 +1,6 @@
 import { fail, redirect } from "@sveltejs/kit";
 import { hasPasswordProvider } from "$lib/server/auth";
+import { isRateLimited } from "$lib/server/rate-limit";
 import type { Actions, PageServerLoad } from "./$types";
 
 const MIN_PASSWORD_LENGTH = 6;
@@ -29,6 +30,15 @@ export const actions: Actions = {
 				return fail(400, {
 					field: "current_password",
 					message: "現在のパスワードを入力してください",
+				});
+			}
+
+			// セッションを奪われた場合の現在パスワード総当たり対策（ユーザー単位）。
+			// form action は hooks の /api/* リミッターの対象外のためここで制限する
+			if (isRateLimited(`set-password:${user.id}`, 5, 15 * 60_000)) {
+				return fail(429, {
+					field: "current_password",
+					message: "試行回数が多すぎます。しばらく待ってからお試しください",
 				});
 			}
 
