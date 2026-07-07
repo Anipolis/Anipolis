@@ -43,6 +43,10 @@ type RoomLinkTrendSession = {
 	anime: RoomLinkTrendAnime | RoomLinkTrendAnime[] | null;
 };
 
+type EventLinkTrendRow = {
+	hashtag: string | null;
+};
+
 function fallbackRoomHashtag(title: string) {
 	return title.replace(/\s+/g, "").replace(/[^\p{L}\p{N}_]/gu, "");
 }
@@ -80,6 +84,22 @@ async function getRoomLinkTrendHashtag(
 
 	const fallback = fallbackRoomHashtag(anime.title ?? "");
 	return fallback ? normalizeHashtagMetadata(fallback) : null;
+}
+
+async function getEventLinkTrendHashtag(
+	supabase: SupabaseClient<Database>,
+	eventId: string | null,
+): Promise<string | null> {
+	if (!eventId) return null;
+
+	const { data, error } = await supabase.from("events").select("hashtag").eq("id", eventId).maybeSingle();
+	if (error || !data) {
+		if (error) console.error("event room link trend hashtag lookup error:", error);
+		return null;
+	}
+
+	const tag = normalizeHashtagMetadata((data as EventLinkTrendRow).hashtag ?? "");
+	return tag.length > 0 ? tag : null;
 }
 
 export function getAnimeExchangeErrorDetail(error: {
@@ -191,7 +211,9 @@ export async function insertPostWithHashtags(
 	const additionalTags = additionalHashtags.map(normalizeHashtagMetadata).filter((tag) => tag.length > 0);
 	const roomLinkTrendHashtag =
 		additionalTags.length === 0 ? await getRoomLinkTrendHashtag(supabase, broadcastRoomSessionId) : null;
-	const roomLinkTags = roomLinkTrendHashtag ? [roomLinkTrendHashtag] : [];
+	const eventLinkTrendHashtag =
+		additionalTags.length === 0 ? await getEventLinkTrendHashtag(supabase, eventId) : null;
+	const roomLinkTags = [roomLinkTrendHashtag, eventLinkTrendHashtag].filter((tag): tag is string => Boolean(tag));
 	const tags = [...new Set([...extractHashtags(postContent), ...additionalTags, ...roomLinkTags])];
 	if (tags.length > 0) {
 		await supabase.from("hashtags").upsert(
