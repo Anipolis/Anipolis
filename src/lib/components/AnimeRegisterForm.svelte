@@ -484,7 +484,7 @@ async function handleFileChange(e: Event) {
 						{/if}
 						<input
 							type="file"
-							accept="image/jpeg,image/png,image/webp"
+							accept="image/jpeg,image/png,image/webp,image/avif"
 							onchange={handleFileChange}
 							disabled={imageProcessing}
 							class="cover-file-input"
