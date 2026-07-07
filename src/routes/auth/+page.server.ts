@@ -1,9 +1,10 @@
 import { fail, redirect } from "@sveltejs/kit";
-import { env as publicEnv } from "$env/dynamic/public";
 import { linkAccounts } from "$lib/server/actions";
-import { isBetaMember } from "$lib/server/discord";
+import { isBetaGateEnabled, isBetaMember } from "$lib/server/discord";
 import { getExtraAccounts, setExtraAccounts } from "$lib/server/multi-account";
+import { getClientKey, isRateLimited } from "$lib/server/rate-limit";
 import { createServiceRoleClient } from "$lib/server/supabase-admin";
+import { sanitizeInternalRedirect } from "$lib/utils/url";
 import type { Actions, PageServerLoad } from "./$types";
 
 const MIN_PASSWORD_LENGTH = 6;
@@ -11,12 +12,11 @@ const MIN_PASSWORD_LENGTH = 6;
 // クローズドβ中は Discord ログインのみ許可する。
 // UI は非表示だがアクションエンドポイントは直接 POST 可能なため、サーバー側でも遮断する。
 function isClosedBeta(): boolean {
-	return publicEnv["PUBLIC_CLOSED_BETA"] === "true";
+	return isBetaGateEnabled();
 }
 
 function getSafeNext(raw: FormDataEntryValue | string | null): string {
-	const next = typeof raw === "string" ? raw : "/";
-	return next.startsWith("/") && !next.startsWith("//") && !next.includes(":/") ? next : "/";
+	return sanitizeInternalRedirect(typeof raw === "string" ? raw : "/");
 }
 
 function normalizeUsername(value: FormDataEntryValue | null): string {
@@ -45,7 +45,11 @@ export const load: PageServerLoad = async ({ url, locals: { safeGetSession } }) 
 };
 
 export const actions: Actions = {
-	login: async ({ request, locals: { supabase } }) => {
+	login: async (event) => {
+		const {
+			request,
+			locals: { supabase },
+		} = event;
 		if (isClosedBeta()) {
 			return fail(403, { mode: "login", email: "", message: "現在はDiscordログインのみご利用いただけます" });
 		}
@@ -56,6 +60,15 @@ export const actions: Actions = {
 
 		if (!email || !password) {
 			return fail(400, { mode: "login", email, message: "メールアドレスとパスワードを入力してください" });
+		}
+
+		// パスワード総当たり対策（IP 単位）。form action は hooks の /api/* リミッターの対象外のためここで制限する
+		if (isRateLimited(`auth-login:${getClientKey(event)}`, 10, 5 * 60_000)) {
+			return fail(429, {
+				mode: "login",
+				email,
+				message: "試行回数が多すぎます。しばらく待ってからお試しください",
+			});
 		}
 
 		const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -71,7 +84,11 @@ export const actions: Actions = {
 		redirect(303, next);
 	},
 
-	register: async ({ request, locals: { supabase } }) => {
+	register: async (event) => {
+		const {
+			request,
+			locals: { supabase },
+		} = event;
 		if (isClosedBeta()) {
 			return fail(403, {
 				mode: "register",
@@ -131,6 +148,15 @@ export const actions: Actions = {
 			});
 		}
 
+		// アカウント大量作成対策（IP 単位）
+		if (isRateLimited(`auth-register:${getClientKey(event)}`, 5, 10 * 60_000)) {
+			return fail(429, {
+				mode: "register",
+				...values,
+				message: "試行回数が多すぎます。しばらく待ってからお試しください",
+			});
+		}
+
 		const { data, error } = await supabase.auth.signUp({
 			email,
 			password,
@@ -175,6 +201,14 @@ export const actions: Actions = {
 			return fail(400, {
 				mode: "add_account",
 				message: "メールアドレスとパスワードを入力してください",
+			});
+		}
+
+		// 他人アカウントのパスワード総当たり対策（ログイン中ユーザー単位）
+		if (isRateLimited(`auth-add-account:${ownerUser.id}`, 5, 10 * 60_000)) {
+			return fail(429, {
+				mode: "add_account",
+				message: "試行回数が多すぎます。しばらく待ってからお試しください",
 			});
 		}
 

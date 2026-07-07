@@ -7,7 +7,12 @@ import {
 } from "$lib/exchange-tags";
 import { getEvent, isAdminUser } from "$lib/server/queries";
 import { createServiceRoleClient } from "$lib/server/supabase-admin";
-import { publicUrlToStoragePath, validateImageBuffer } from "$lib/server/upload";
+import {
+	MULTIPART_OVERHEAD_BYTES,
+	publicUrlToStoragePath,
+	readFormDataWithLimit,
+	validateImageBuffer,
+} from "$lib/server/upload";
 import type { Database, Json } from "$lib/supabase/database.types";
 import type { AnimeExchangeShare, AnimeStatus, BroadcastRoomMuteDuration } from "$lib/types";
 import { extractHashtags } from "$lib/utils/hashtag";
@@ -1112,7 +1117,27 @@ export async function completeProfileSetupAction(
 	userId: string,
 	options: ProfileSetupOptions = {},
 ): Promise<ProfileSetupResult> {
-	const form = requestOrForm instanceof FormData ? requestOrForm : await requestOrForm.formData();
+	// アバターファイルを含むフォームのため、サイズ検証前の全量バッファを避けて上限付きで読む
+	const parsedForm =
+		requestOrForm instanceof FormData
+			? requestOrForm
+			: await readFormDataWithLimit(requestOrForm, ONBOARDING_MAX_AVATAR_SIZE + MULTIPART_OVERHEAD_BYTES);
+	if (parsedForm === "too_large") {
+		return {
+			error: "画像は2MB以内にしてください",
+			status: 413,
+			field: "avatar",
+			values: { username: "", display_name: "" },
+		};
+	}
+	if (parsedForm === "invalid") {
+		return {
+			error: "フォームの送信内容を読み取れませんでした",
+			status: 400,
+			values: { username: "", display_name: "" },
+		};
+	}
+	const form = parsedForm;
 	const usernameEntry = form.get("username");
 	const displayNameEntry = form.get("display_name");
 	const avatarChoiceEntry = form.get("avatar_choice");

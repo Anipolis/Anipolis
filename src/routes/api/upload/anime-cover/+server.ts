@@ -3,7 +3,7 @@ import { error, json } from "@sveltejs/kit";
 import { env } from "$env/dynamic/private";
 import { PUBLIC_SUPABASE_URL } from "$env/static/public";
 import { isAdminUser } from "$lib/server/queries";
-import { validateImageBuffer } from "$lib/server/upload";
+import { MULTIPART_OVERHEAD_BYTES, readFormDataWithLimit, validateImageBuffer } from "$lib/server/upload";
 import type { RequestHandler } from "./$types";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -14,7 +14,10 @@ export const POST: RequestHandler = async ({ request, locals: { supabase, safeGe
 	if (!user) error(401, "ログインが必要です");
 	if (!(await isAdminUser(supabase, user.id))) error(403, "権限がありません");
 
-	const form = await request.formData();
+	const form = await readFormDataWithLimit(request, MAX_FILE_SIZE + MULTIPART_OVERHEAD_BYTES);
+	if (form === "too_large") error(413, "ファイルサイズが大きすぎます（最大10MB）");
+	if (form === "invalid") error(400, "ファイルが指定されていません");
+
 	const fileEntry = form.get("file");
 	const animeIdEntry = form.get("anime_id");
 
