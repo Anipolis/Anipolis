@@ -1,12 +1,15 @@
 export const ROOM_EXPERIMENT_HEARTBEAT_INTERVAL_MS = 30_000;
 export const ROOM_EXPERIMENT_STALE_AFTER_MS = 90_000;
 export const ROOM_EXPERIMENT_BOUNCE_SECONDS = 60;
+export const ROOM_EXPERIMENT_HEARTBEAT_INTERVAL_SECONDS = ROOM_EXPERIMENT_HEARTBEAT_INTERVAL_MS / 1000;
 
 export type ExperimentVisitInput = {
 	user_id: string;
 	entered_at: string;
 	last_seen_at: string;
 	exited_at: string | null;
+	// 実アクティブ秒数の見積もりに使う。未指定なら滞在時間に上限をかけない(従来動作)。
+	heartbeat_count?: number;
 };
 
 export type ExperimentPostCandidate = {
@@ -107,7 +110,15 @@ function visitStaySeconds(visit: ExperimentVisitInput, runEndedMs: number | null
 	if (enteredMs == null) return null;
 	if (!isStayEligible(visit, postingClosesMs)) return null;
 	const endMs = boundedEndMs(visit, runEndedMs, postingClosesMs);
-	return Math.max(0, Math.floor((endMs - enteredMs) / 1000));
+	const spanSeconds = Math.max(0, Math.floor((endMs - enteredMs) / 1000));
+	// 一時離席→再入場では entered→last_seen のスパンに離席時間が混ざる。
+	// ハートビートは離席中は止まり再入場(upsert)でも増えないため、その回数から
+	// 見積もった実アクティブ秒数を上限にして離席分を除外する。
+	// (heartbeat_count + 1) で最後のハートビート以降の端数区間まで含める。
+	// 離席が無い通常の訪問では上限がスパン以上になり、従来どおりスパン値になる。
+	if (visit.heartbeat_count == null) return spanSeconds;
+	const activeCapSeconds = (visit.heartbeat_count + 1) * ROOM_EXPERIMENT_HEARTBEAT_INTERVAL_SECONDS;
+	return Math.min(spanSeconds, activeCapSeconds);
 }
 
 function calculateVisitStats(
