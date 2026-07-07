@@ -1508,6 +1508,65 @@ const ANIME_LIST_BASE_COLUMN_NAMES = [
 const ANIME_LIST_BASE_COLUMNS = ANIME_LIST_BASE_COLUMN_NAMES.join(", ");
 const ANIME_LIST_COLUMNS = [...ANIME_LIST_BASE_COLUMN_NAMES, "computed_broadcast_status"].join(", ");
 
+/** applyAnimeListFilters が扱う共有フィルター条件 */
+interface AnimeFilterInput {
+	season?: string | undefined;
+	broadcastYear?: string | undefined;
+	broadcastSeason?: string | undefined;
+	broadcastSeasons?: string[] | undefined;
+	scheduleRange?: { start: string; end: string } | undefined;
+	genre?: string | undefined;
+	genres?: string[] | undefined;
+	studio?: string | undefined;
+	producer?: string | undefined;
+	source?: string | undefined;
+	broadcastStatus?: string | undefined;
+	query?: string | undefined;
+	listedAnimeIds?: number[] | null | undefined;
+}
+
+/** PostgREST クエリビルダーが持つ、フィルター適用に必要なメソッド群 */
+interface AnimeFilterQuery<T> {
+	eq(column: string, value: string): T;
+	or(filters: string): T;
+	in(column: string, values: (string | number)[]): T;
+	not(column: string, operator: string, value: null): T;
+	contains(column: string, value: string[]): T;
+	gte(column: string, value: string): T;
+	lt(column: string, value: string): T;
+}
+
+/**
+ * アニメ一覧系クエリ（一覧・件数・候補ID取得）で共通のフィルター適用。
+ * getAnimeList / getAnimeListPage / getAnimeCount で同じ条件を重複記述していたのを一元化する。
+ * computed_broadcast_status で絞る broadcastStatus はビュー専用列なのでベーステーブルには渡さないこと。
+ */
+function applyAnimeListFilters<T extends AnimeFilterQuery<T>>(
+	query: T,
+	filters: AnimeFilterInput,
+	seasonFilter: string | null,
+): T {
+	const selectedGenres = normalizeGenreFilters(filters.genres ?? filters.genre);
+	let q = query;
+	if (filters.listedAnimeIds) q = q.in("id", filters.listedAnimeIds);
+	if (filters.season) q = q.eq("season", filters.season);
+	if (seasonFilter) q = q.or(seasonFilter);
+	if (filters.broadcastYear) q = applyAiredYearFilter(q, filters.broadcastYear);
+	if (filters.scheduleRange) {
+		q = q
+			.not("broadcast_day", "is", null)
+			.or(`aired_from.is.null,aired_from.lte.${filters.scheduleRange.end}`)
+			.or(`aired_to.is.null,aired_to.gte.${filters.scheduleRange.start}`);
+	}
+	if (selectedGenres.length) q = q.or(buildGenreFilter(selectedGenres));
+	if (filters.studio) q = q.or(arrayContainsAny(["studio", "studio_en"], filters.studio));
+	if (filters.producer) q = q.contains("producer", [filters.producer]);
+	if (filters.source) q = q.eq("source", filters.source);
+	if (filters.broadcastStatus) q = q.eq("computed_broadcast_status", filters.broadcastStatus);
+	if (filters.query) q = q.or(buildTitleSearchFilter(filters.query));
+	return q;
+}
+
 /**
  * アニメ一覧を取得する（season / status フィルター対応）
  */
@@ -1537,29 +1596,30 @@ export async function getAnimeList(
 	const listedAnimeIds = listedByUserId ? await getListedAnimeIds(supabase, listedByUserId) : null;
 	if (listedAnimeIds && listedAnimeIds.length === 0) return [];
 
-	let query = supabase
-		.from("anime_with_computed_broadcast_status")
-		.select(ANIME_LIST_COLUMNS)
-		.order("created_at", { ascending: false })
-		.limit(limit);
-
-	if (listedAnimeIds) query = query.in("id", listedAnimeIds);
-	if (season) query = query.eq("season", season);
 	const seasonFilter = buildSeasonFilter(undefined, broadcastSeasons?.length ? broadcastSeasons : broadcastSeason);
-	if (seasonFilter) query = query.or(seasonFilter);
-	if (broadcastYear) query = applyAiredYearFilter(query, broadcastYear);
-	if (scheduleRange) {
-		query = query
-			.not("broadcast_day", "is", null)
-			.or(`aired_from.is.null,aired_from.lte.${scheduleRange.end}`)
-			.or(`aired_to.is.null,aired_to.gte.${scheduleRange.start}`);
-	}
-	if (selectedGenres.length) query = query.or(buildGenreFilter(selectedGenres));
-	if (studio) query = query.or(arrayContainsAny(["studio", "studio_en"], studio));
-	if (producer) query = query.contains("producer", [producer]);
-	if (source) query = query.eq("source", source);
-	if (broadcastStatus) query = query.eq("computed_broadcast_status", broadcastStatus);
-	if (searchQuery) query = query.or(buildTitleSearchFilter(searchQuery));
+	const query = applyAnimeListFilters(
+		supabase
+			.from("anime_with_computed_broadcast_status")
+			.select(ANIME_LIST_COLUMNS)
+			.order("created_at", { ascending: false })
+			.limit(limit),
+		{
+			season,
+			broadcastYear,
+			broadcastSeason,
+			broadcastSeasons,
+			scheduleRange,
+			genre,
+			genres,
+			studio,
+			producer,
+			source,
+			broadcastStatus,
+			query: searchQuery,
+			listedAnimeIds,
+		},
+		seasonFilter,
+	);
 
 	const { data, error } = await query;
 	const rows =
@@ -1573,6 +1633,162 @@ export async function getAnimeList(
 	const animes: Anime[] = mappedAnimes.map(({ anime }) => anime);
 	if (userId) return enrichAnimeWithUserEntries(supabase, animes, userId);
 	return animes;
+}
+
+export interface AnimeListPageResult {
+	items: Anime[];
+	total: number;
+}
+
+/** 候補ID並べ替え用の軽量行（重い一覧列は含めない） */
+export type AnimeCandidate = {
+	id: number;
+	created_at: string;
+	genre: string[] | null;
+	genre_en: string[] | null;
+};
+
+/**
+ * 候補配列を sortBy に従って並べ、ページ用に並んだ ID 配列（文字列）を返す純関数。
+ * DB 側で created_at DESC 済みの前提で、配列インデックスを created 順のタイブレークに使う。
+ * 既存の sortAnimeListItems と同じ優先順位（metric → top_rated件数 → ジャンル一致 → 新着）を再現する。
+ */
+export function rankAnimeCandidateIds(
+	candidates: AnimeCandidate[],
+	metrics: Map<string, { primary: number; secondary: number }>,
+	sortBy: NonNullable<AnimeListOptions["sortBy"]>,
+	selectedGenres: string[],
+): string[] {
+	const genreMatch = (c: AnimeCandidate): number => {
+		if (selectedGenres.length === 0) return 0;
+		const set = new Set([...(c.genre ?? []), ...(c.genre_en ?? [])].map((g) => g.toLowerCase()));
+		return selectedGenres.reduce((n, g) => n + (set.has(g.toLowerCase()) ? 1 : 0), 0);
+	};
+	const withIndex = candidates.map((c, index) => ({ c, index }));
+
+	if (sortBy === "created") {
+		withIndex.sort((a, b) => (selectedGenres.length ? genreMatch(b.c) - genreMatch(a.c) : 0) || a.index - b.index);
+		return withIndex.map(({ c }) => String(c.id));
+	}
+
+	withIndex.sort((a, b) => {
+		const am = metrics.get(String(a.c.id));
+		const bm = metrics.get(String(b.c.id));
+		const primaryDelta = (bm?.primary ?? 0) - (am?.primary ?? 0);
+		if (primaryDelta !== 0) return primaryDelta;
+		if (sortBy === "top_rated") {
+			const secondaryDelta = (bm?.secondary ?? 0) - (am?.secondary ?? 0);
+			if (secondaryDelta !== 0) return secondaryDelta;
+		}
+		if (selectedGenres.length) {
+			const genreDelta = genreMatch(b.c) - genreMatch(a.c);
+			if (genreDelta !== 0) return genreDelta;
+		}
+		return a.index - b.index;
+	});
+	return withIndex.map(({ c }) => String(c.id));
+}
+
+const ANIME_CANDIDATE_COLUMNS = "id, created_at, genre, genre_en";
+
+/** フィルター済みの候補行（軽量列）を created_at DESC で取得する。ビュー失敗時はベーステーブルへ */
+async function fetchAnimeCandidates(
+	supabase: SupabaseClient<Database>,
+	filters: AnimeFilterInput,
+	seasonFilter: string | null,
+): Promise<AnimeCandidate[]> {
+	const viewRes = await applyAnimeListFilters(
+		supabase
+			.from("anime_with_computed_broadcast_status")
+			.select(ANIME_CANDIDATE_COLUMNS)
+			.order("created_at", { ascending: false })
+			.limit(2000),
+		filters,
+		seasonFilter,
+	);
+	if (!viewRes.error && viewRes.data) return viewRes.data as unknown as AnimeCandidate[];
+
+	// broadcastStatus はビュー専用列なのでベーステーブルには渡さない
+	const { broadcastStatus: _broadcastStatus, ...baseFilters } = filters;
+	const baseRes = await applyAnimeListFilters(
+		supabase.from("anime").select(ANIME_CANDIDATE_COLUMNS).order("created_at", { ascending: false }).limit(2000),
+		baseFilters,
+		seasonFilter,
+	);
+	return (baseRes.data ?? []) as unknown as AnimeCandidate[];
+}
+
+/**
+ * アニメ一覧を1ページ分だけ取得する（P1: SSR ペイロード削減 / P2: DB 相当のグローバル順を保証）。
+ *
+ * まず軽量な候補行（id/created_at/ジャンル）を取得して total と正しい並び順を確定し、
+ * 重い一覧列は現在ページの ID 群（最大 pageSize 件）だけ後段でまとめて取得する。
+ * これにより「最新N件を取ってからJSで人気順に並べ替える」既存の不整合（P2）も解消する。
+ */
+export async function getAnimeListPage(
+	supabase: SupabaseClient<Database>,
+	options: AnimeListOptions & { page?: number; pageSize?: number },
+): Promise<AnimeListPageResult> {
+	const { page = 1, pageSize = 50, sortBy = "created", userId, listedByUserId } = options;
+	const selectedGenres = normalizeGenreFilters(options.genres ?? options.genre);
+
+	const listedAnimeIds = listedByUserId ? await getListedAnimeIds(supabase, listedByUserId) : null;
+	if (listedAnimeIds && listedAnimeIds.length === 0) return { items: [], total: 0 };
+
+	const seasonFilter = buildSeasonFilter(
+		undefined,
+		options.broadcastSeasons?.length ? options.broadcastSeasons : options.broadcastSeason,
+	);
+	const filters: AnimeFilterInput = {
+		season: options.season,
+		broadcastYear: options.broadcastYear,
+		broadcastSeason: options.broadcastSeason,
+		broadcastSeasons: options.broadcastSeasons,
+		scheduleRange: options.scheduleRange,
+		genre: options.genre,
+		genres: options.genres,
+		studio: options.studio,
+		producer: options.producer,
+		source: options.source,
+		broadcastStatus: options.broadcastStatus,
+		query: options.query,
+		listedAnimeIds,
+	};
+
+	const candidates = await fetchAnimeCandidates(supabase, filters, seasonFilter);
+	const total = candidates.length;
+	if (total === 0) return { items: [], total: 0 };
+
+	const metrics =
+		sortBy === "created"
+			? new Map<string, { primary: number; secondary: number }>()
+			: await getAnimeRankingMetrics(
+					supabase,
+					candidates.map((c) => String(c.id)),
+					sortBy,
+				);
+
+	const orderedIds = rankAnimeCandidateIds(candidates, metrics, sortBy, selectedGenres);
+	const start = Math.max(0, (page - 1) * pageSize);
+	const pageIds = orderedIds.slice(start, start + pageSize);
+	if (pageIds.length === 0) return { items: [], total };
+
+	const animes = await fetchAnimesByIds(supabase, pageIds);
+
+	// メトリクス値を一覧カード表示用に反映（sortAnimeListItems と同じ規則）
+	for (const anime of animes) {
+		const metric = metrics.get(anime.id);
+		if (!metric) continue;
+		if (sortBy === "popular") anime.list_count = metric.primary;
+		if (sortBy === "trending") anime.recent_count = metric.primary;
+		if (sortBy === "top_rated") {
+			anime.avg_score = normalizeAverageScore(metric.primary, metric.secondary);
+			anime.score_count = metric.secondary;
+		}
+	}
+
+	if (userId) return { items: await enrichAnimeWithUserEntries(supabase, animes, userId), total };
+	return { items: animes, total };
 }
 
 export async function getAnimeCount(
@@ -1967,13 +2183,34 @@ export async function getAnimeRelations(
 /**
  * 人気ランキング（総マイリスト登録数順）
  */
-export async function getAnimeRankingPopularity(supabase: SupabaseClient<Database>, limit = 20): Promise<Anime[]> {
+/** ランキングビューの総件数（ページャの総ページ算出用） */
+export async function countAnimeRanking(
+	supabase: SupabaseClient<Database>,
+	kind: "popular" | "trending" | "top_rated",
+): Promise<number> {
+	if (kind === "top_rated") {
+		const { count } = await supabase
+			.from("anime_top_rated")
+			.select("anime_id", { count: "exact", head: true })
+			.gt("score_count", 0);
+		return count ?? 0;
+	}
+	const view = kind === "popular" ? "anime_popularity" : "anime_trending";
+	const { count } = await supabase.from(view).select("anime_id", { count: "exact", head: true });
+	return count ?? 0;
+}
+
+export async function getAnimeRankingPopularity(
+	supabase: SupabaseClient<Database>,
+	limit = 20,
+	offset = 0,
+): Promise<Anime[]> {
 	const { data, error } = await supabase
 		.from("anime_popularity")
 		.select("anime_id, list_count")
 		.order("list_count", { ascending: false })
 		.order("anime_id", { ascending: true })
-		.limit(limit);
+		.range(offset, offset + limit - 1);
 	if (error || !data || data.length === 0) return [];
 
 	const rankedIds = data.map((row) => String(row.anime_id));
@@ -1985,13 +2222,17 @@ export async function getAnimeRankingPopularity(supabase: SupabaseClient<Databas
 /**
  * トレンドランキング（直近7日間のアクティビティ順）
  */
-export async function getAnimeRankingTrending(supabase: SupabaseClient<Database>, limit = 20): Promise<Anime[]> {
+export async function getAnimeRankingTrending(
+	supabase: SupabaseClient<Database>,
+	limit = 20,
+	offset = 0,
+): Promise<Anime[]> {
 	const { data, error } = await supabase
 		.from("anime_trending")
 		.select("anime_id, recent_count")
 		.order("recent_count", { ascending: false })
 		.order("anime_id", { ascending: true })
-		.limit(limit);
+		.range(offset, offset + limit - 1);
 	if (error || !data || data.length === 0) return [];
 
 	const rankedIds = data.map((row) => String(row.anime_id));
@@ -2012,7 +2253,11 @@ export async function getTrendingHashtags(supabase: SupabaseClient<Database>, li
 /**
  * 高評価ランキング（平均スコア順）
  */
-export async function getAnimeRankingTopRated(supabase: SupabaseClient<Database>, limit = 20): Promise<Anime[]> {
+export async function getAnimeRankingTopRated(
+	supabase: SupabaseClient<Database>,
+	limit = 20,
+	offset = 0,
+): Promise<Anime[]> {
 	const { data, error } = await supabase
 		.from("anime_top_rated")
 		.select("anime_id, avg_score, score_count")
@@ -2020,7 +2265,7 @@ export async function getAnimeRankingTopRated(supabase: SupabaseClient<Database>
 		.order("avg_score", { ascending: false })
 		.order("score_count", { ascending: false })
 		.order("anime_id", { ascending: true })
-		.limit(limit);
+		.range(offset, offset + limit - 1);
 	if (error || !data || data.length === 0) return [];
 
 	const rankedIds = data.map((row) => String(row.anime_id));
@@ -2042,10 +2287,26 @@ export async function getAnimeRankingTopRated(supabase: SupabaseClient<Database>
 /**
  * ユーザーのマイリストを取得する
  */
+/** マイリストの総件数（ページャの総ページ算出用） */
+export async function countUserAnimeList(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+	status?: AnimeStatus,
+): Promise<number> {
+	let query = supabase
+		.from("user_anime_list")
+		.select("anime_id", { count: "exact", head: true })
+		.eq("user_id", userId);
+	if (status) query = query.eq("status", status);
+	const { count } = await query;
+	return count ?? 0;
+}
+
 export async function getUserAnimeList(
 	supabase: SupabaseClient<Database>,
 	userId: string,
 	status?: AnimeStatus,
+	range?: { limit: number; offset: number },
 ): Promise<Anime[]> {
 	let query = supabase
 		.from("user_anime_list")
@@ -2054,6 +2315,7 @@ export async function getUserAnimeList(
 		.order("updated_at", { ascending: false });
 
 	if (status) query = query.eq("status", status);
+	if (range) query = query.range(range.offset, range.offset + range.limit - 1);
 
 	const { data, error } = await query;
 	if (error || !data) return [];
