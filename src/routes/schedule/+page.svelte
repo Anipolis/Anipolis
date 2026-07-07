@@ -16,6 +16,7 @@ import {
 	minutesUntilBroadcast as resolveMinutesUntilBroadcast,
 	roomLiveKey,
 } from "$lib/utils/broadcast-room";
+import { eventBroadcastMinutes, eventBroadcastTimeInputValue } from "$lib/utils/event-time";
 import type { ActionData, PageProps } from "./$types";
 
 let { data, form }: PageProps & { form: ActionData } = $props();
@@ -120,20 +121,12 @@ function formatShortDate(value: string): string {
 }
 
 function formatTime(iso: string) {
-	// 放送スケジュールはJST基準のため、閲覧ブラウザのTZに依存させない
-	return new Date(iso).toLocaleTimeString("ja-JP", {
-		timeZone: "Asia/Tokyo",
-		hour: "2-digit",
-		minute: "2-digit",
-	});
+	return eventBroadcastTimeInputValue(iso);
 }
 
 /** イベント開始時刻の JST での「0時からの経過分」。アニメの broadcast_time との時刻順ソートに使う */
 function eventMinutesInJst(iso: string): number {
-	const [hour, minute] = new Date(iso)
-		.toLocaleTimeString("ja-JP", { timeZone: "Asia/Tokyo", hour12: false, hour: "2-digit", minute: "2-digit" })
-		.split(":");
-	return Number(hour) * 60 + Number(minute);
+	return eventBroadcastMinutes(iso) ?? Number.MAX_SAFE_INTEGER;
 }
 
 function openEventDialog() {
@@ -1073,13 +1066,20 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 				</label>
 				<label>
 					<span>開始日時</span>
-					<input
-						class="input"
-						type="datetime-local"
-						name="scheduled_at"
-						required
-						value={data.defaultScheduledAt}
-					>
+					<div class="event-date-time-row">
+						<input class="input" type="date" name="scheduled_date" required value={data.defaultEventDate}>
+						<input
+							class="input"
+							type="text"
+							name="scheduled_time"
+							required
+							inputmode="numeric"
+							pattern="([01]?[0-9]|2[0-7]):[0-5][0-9]|28:00"
+							placeholder="26:00"
+							value={data.defaultEventTime}
+						>
+					</div>
+					<span class="event-field-hint">深夜枠は 24:00〜28:00 の形式で入力できます</span>
 				</label>
 				<label>
 					<span>ルームリンク</span>
@@ -1795,6 +1795,11 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	font-weight: 400;
 	color: var(--color-text-muted);
 	opacity: 0.8;
+}
+.event-date-time-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 120px;
+	gap: 8px;
 }
 .event-anime-selected,
 .event-anime-result {

@@ -3,6 +3,7 @@ import type { SubmitFunction } from "@sveltejs/kit";
 import { enhance } from "$app/forms";
 import { trapFocus } from "$lib/actions/trapFocus";
 import type { Event } from "$lib/types";
+import { eventBroadcastDateInputValue, eventBroadcastTimeInputValue } from "$lib/utils/event-time";
 
 type EventSettingsEventData = Pick<
 	Event,
@@ -23,22 +24,6 @@ let editError = $state("");
 let confirmingCancel = $state(false);
 let cancelSubmitting = $state(false);
 let cancelError = $state("");
-
-function toDateTimeLocalValue(iso: string): string {
-	// サーバー側は datetime-local を JST として解釈するため、表示も Asia/Tokyo に固定する
-	// (ja-JP + hour12:false は "YYYY/MM/DD HH:mm" 形式を返す)
-	const formatted = new Date(iso).toLocaleString("ja-JP", {
-		timeZone: "Asia/Tokyo",
-		year: "numeric",
-		month: "2-digit",
-		day: "2-digit",
-		hour: "2-digit",
-		minute: "2-digit",
-		hour12: false,
-	});
-	const [datePart, timePart] = formatted.split(" ");
-	return `${datePart?.replaceAll("/", "-")}T${timePart}`;
-}
 
 $effect(() => {
 	if (open) return;
@@ -133,13 +118,25 @@ const handleCancelSubmit: SubmitFunction = () => {
 							</label>
 							<label>
 								<span>開始日時</span>
-								<input
-									class="input"
-									type="datetime-local"
-									name="scheduled_at"
-									required
-									value={toDateTimeLocalValue(event.scheduled_at)}
-								>
+								<div class="event-date-time-row">
+									<input
+										class="input"
+										type="date"
+										name="scheduled_date"
+										required
+										value={eventBroadcastDateInputValue(event.scheduled_at)}
+									>
+									<input
+										class="input"
+										type="text"
+										name="scheduled_time"
+										required
+										inputmode="numeric"
+										pattern="([01]?[0-9]|2[0-7]):[0-5][0-9]|28:00"
+										value={eventBroadcastTimeInputValue(event.scheduled_at)}
+									>
+								</div>
+								<span class="field-hint">深夜枠は 24:00〜28:00 の形式で入力できます</span>
 							</label>
 							<label>
 								<span>ルームリンク</span>
@@ -324,6 +321,11 @@ const handleCancelSubmit: SubmitFunction = () => {
 	font-size: 0.76rem;
 	color: var(--color-text-muted);
 	opacity: 0.8;
+}
+.event-date-time-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 120px;
+	gap: 8px;
 }
 .form-error {
 	margin: 10px 0 0;
