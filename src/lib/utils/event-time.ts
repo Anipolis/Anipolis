@@ -21,8 +21,7 @@ export function parseExtendedClockTime(value: string): ExtendedClockTime | null 
 	if (!match) return null;
 	const hour = Number(match[1]);
 	const minute = Number(match[2]);
-	if (hour < 0 || hour > MAX_EXTENDED_HOUR) return null;
-	if (hour === MAX_EXTENDED_HOUR && minute !== 0) return null;
+	if (hour < 0 || hour >= MAX_EXTENDED_HOUR) return null;
 	return { hour, minute };
 }
 

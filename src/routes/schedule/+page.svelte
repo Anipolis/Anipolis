@@ -60,7 +60,7 @@ function getDisplayDayOrder(): number[] {
 
 function getCurrentBroadcastDate(now = new Date()): Date {
 	const date = new Date(now);
-	// Late-night broadcasts through 28:00 (04:00 next day) belong to the previous broadcast date.
+	// Late-night broadcasts before 28:00 (04:00 next day) belong to the previous broadcast date.
 	if (date.getHours() < 4) date.setDate(date.getDate() - 1);
 	return date;
 }
@@ -1067,19 +1067,27 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 				<label>
 					<span>開始日時</span>
 					<div class="event-date-time-row">
-						<input class="input" type="date" name="scheduled_date" required value={data.defaultEventDate}>
+						<input
+							class="input"
+							type="date"
+							name="scheduled_date"
+							required
+							aria-label="開始日"
+							value={data.defaultEventDate}
+						>
 						<input
 							class="input"
 							type="text"
 							name="scheduled_time"
 							required
 							inputmode="numeric"
-							pattern="([01]?[0-9]|2[0-7]):[0-5][0-9]|28:00"
+							pattern="([01]?[0-9]|2[0-7]):[0-5][0-9]"
 							placeholder="26:00"
+							aria-label="開始時刻"
 							value={data.defaultEventTime}
 						>
 					</div>
-					<span class="event-field-hint">深夜枠は 24:00〜28:00 の形式で入力できます</span>
+					<span class="event-field-hint">深夜枠は 24:00〜27:59 の形式で入力できます</span>
 				</label>
 				<label>
 					<span>ルームリンク</span>

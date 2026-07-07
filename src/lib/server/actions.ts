@@ -585,7 +585,7 @@ async function parseEventForm(
 		}
 		scheduledAtIso = eventScheduledAtIsoFromBroadcastInput(scheduledDateRaw, scheduledTimeRaw);
 		if (!scheduledAtIso) {
-			return { ok: false, failure: fail(400, { message: "開始時刻は 00:00〜28:00 の形式で入力してください" }) };
+			return { ok: false, failure: fail(400, { message: "開始時刻は 00:00〜27:59 の形式で入力してください" }) };
 		}
 	}
 	if (!scheduledAtIso) {

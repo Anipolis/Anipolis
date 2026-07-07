@@ -124,6 +124,7 @@ const handleCancelSubmit: SubmitFunction = () => {
 										type="date"
 										name="scheduled_date"
 										required
+										aria-label="開始日"
 										value={eventBroadcastDateInputValue(event.scheduled_at)}
 									>
 									<input
@@ -132,11 +133,12 @@ const handleCancelSubmit: SubmitFunction = () => {
 										name="scheduled_time"
 										required
 										inputmode="numeric"
-										pattern="([01]?[0-9]|2[0-7]):[0-5][0-9]|28:00"
+										pattern="([01]?[0-9]|2[0-7]):[0-5][0-9]"
+										aria-label="開始時刻"
 										value={eventBroadcastTimeInputValue(event.scheduled_at)}
 									>
 								</div>
-								<span class="field-hint">深夜枠は 24:00〜28:00 の形式で入力できます</span>
+								<span class="field-hint">深夜枠は 24:00〜27:59 の形式で入力できます</span>
 							</label>
 							<label>
 								<span>ルームリンク</span>
