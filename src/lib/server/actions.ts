@@ -15,6 +15,7 @@ import {
 } from "$lib/server/upload";
 import type { Database, Json } from "$lib/supabase/database.types";
 import type { AnimeExchangeShare, AnimeStatus, BroadcastRoomMuteDuration } from "$lib/types";
+import { eventScheduledAtIsoFromBroadcastInput } from "$lib/utils/event-time";
 import { extractHashtags } from "$lib/utils/hashtag";
 
 const reportStatuses = new Set(["open", "reviewing", "resolved", "rejected"]);
@@ -579,6 +580,8 @@ async function parseEventForm(
 	const description = (form.get("description") as string | null)?.trim() || null;
 	const rawHashtag = (form.get("hashtag") as string | null)?.trim() ?? "";
 	const scheduledAtRaw = (form.get("scheduled_at") as string | null)?.trim() ?? "";
+	const scheduledDateRaw = (form.get("scheduled_date") as string | null)?.trim() ?? "";
+	const scheduledTimeRaw = (form.get("scheduled_time") as string | null)?.trim() ?? "";
 	const durationRaw = (form.get("duration_minutes") as string | null)?.trim() ?? "";
 	const animeIdRaw = (form.get("anime_id") as string | null)?.trim() ?? "";
 	const animeId = animeIdRaw ? parsePositiveInt(animeIdRaw) : null;
@@ -602,14 +605,28 @@ async function parseEventForm(
 		return { ok: false, failure: fail(400, { message: "ルームリンクに使用できない文字が含まれています" }) };
 	}
 
-	if (!scheduledAtRaw) return { ok: false, failure: fail(400, { message: "開始日時を入力してください" }) };
-	// datetime-local はタイムゾーンなしの文字列で届く。サーバーのTZ(本番はUTC)で解釈すると
-	// 9時間ずれるため、オフセットが付いていない場合は JST として明示的にパースする。
-	const hasOffset = /(?:Z|[+-]\d{2}:\d{2})$/.test(scheduledAtRaw);
-	const scheduledAt = new Date(hasOffset ? scheduledAtRaw : `${scheduledAtRaw}+09:00`);
-	if (Number.isNaN(scheduledAt.getTime())) {
-		return { ok: false, failure: fail(400, { message: "開始日時の形式が正しくありません" }) };
+	let scheduledAtIso: string | null = null;
+	if (scheduledDateRaw || scheduledTimeRaw) {
+		if (!scheduledDateRaw || !scheduledTimeRaw) {
+			return { ok: false, failure: fail(400, { message: "開始日と開始時刻を入力してください" }) };
+		}
+		scheduledAtIso = eventScheduledAtIsoFromBroadcastInput(scheduledDateRaw, scheduledTimeRaw);
+		if (!scheduledAtIso) {
+			return { ok: false, failure: fail(400, { message: "開始時刻は 00:00〜27:59 の形式で入力してください" }) };
+		}
 	}
+	if (!scheduledAtIso) {
+		if (!scheduledAtRaw) return { ok: false, failure: fail(400, { message: "開始日時を入力してください" }) };
+		// datetime-local はタイムゾーンなしの文字列で届く。サーバーのTZ(本番はUTC)で解釈すると
+		// 9時間ずれるため、オフセットが付いていない場合は JST として明示的にパースする。
+		const hasOffset = /(?:Z|[+-]\d{2}:\d{2})$/.test(scheduledAtRaw);
+		const scheduledAt = new Date(hasOffset ? scheduledAtRaw : `${scheduledAtRaw}+09:00`);
+		if (Number.isNaN(scheduledAt.getTime())) {
+			return { ok: false, failure: fail(400, { message: "開始日時の形式が正しくありません" }) };
+		}
+		scheduledAtIso = scheduledAt.toISOString();
+	}
+	if (!scheduledAtIso) return { ok: false, failure: fail(400, { message: "開始日時を入力してください" }) };
 
 	const durationMinutes = durationRaw ? parsePositiveInt(durationRaw) : null;
 	if (durationRaw && durationMinutes === null) {
@@ -631,7 +648,7 @@ async function parseEventForm(
 
 	return {
 		ok: true,
-		value: { title, description, hashtag, scheduledAtIso: scheduledAt.toISOString(), durationMinutes, animeId },
+		value: { title, description, hashtag, scheduledAtIso, durationMinutes, animeId },
 	};
 }
 
