@@ -66,6 +66,11 @@ type NotificationRow = {
 	recommendation: NotificationRecommendation | NotificationRecommendation[] | null;
 	broadcast_anime: NotificationBroadcastAnime | NotificationBroadcastAnime[] | null;
 	event: NotificationEvent | NotificationEvent[] | null;
+	mylist_anime_id: number | null;
+	mylist_status: string | null;
+	mylist_anime: NotificationBroadcastAnime | NotificationBroadcastAnime[] | null;
+	exchange_anime_id: number | null;
+	exchange_anime: NotificationBroadcastAnime | NotificationBroadcastAnime[] | null;
 };
 
 type EventRow = Omit<Database["public"]["Tables"]["events"]["Row"], "anime_id" | "updated_at"> & {
@@ -394,8 +399,9 @@ export async function getNotifications(
 	supabase: SupabaseClient<Database>,
 	userId: string,
 	limit = 50,
+	types?: readonly string[],
 ): Promise<Notification[]> {
-	const { data, error } = await supabase
+	let query = supabase
 		.from("notifications")
 		.select(`
             id,
@@ -406,6 +412,9 @@ export async function getNotifications(
             broadcast_scheduled_at,
             broadcast_room_date,
             event_id,
+            mylist_anime_id,
+            mylist_status,
+            exchange_anime_id,
             read,
             created_at,
             actor:profiles!notifications_actor_id_fkey (
@@ -431,11 +440,27 @@ export async function getNotifications(
             event:events!notifications_event_id_fkey (
                 id,
                 title
+            ),
+            mylist_anime:anime!notifications_mylist_anime_id_fkey (
+                id,
+                title,
+                cover_url
+            ),
+            exchange_anime:anime!notifications_exchange_anime_id_fkey (
+                id,
+                title,
+                cover_url
             )
         `)
 		.eq("recipient_id", userId)
 		.order("created_at", { ascending: false })
 		.limit(limit);
+
+	if (types && types.length > 0) {
+		query = query.in("type", types as string[]);
+	}
+
+	const { data, error } = await query;
 
 	if (error || !data) return [];
 
@@ -445,6 +470,8 @@ export async function getNotifications(
 		const recommendation = Array.isArray(row.recommendation) ? row.recommendation[0] : row.recommendation;
 		const broadcastAnime = Array.isArray(row.broadcast_anime) ? row.broadcast_anime[0] : row.broadcast_anime;
 		const event = Array.isArray(row.event) ? row.event[0] : row.event;
+		const mylistAnime = Array.isArray(row.mylist_anime) ? row.mylist_anime[0] : row.mylist_anime;
+		const exchangeAnime = Array.isArray(row.exchange_anime) ? row.exchange_anime[0] : row.exchange_anime;
 		return {
 			id: row["id"],
 			type: row.type as Notification["type"],
@@ -466,6 +493,13 @@ export async function getNotifications(
 			broadcast_anime_cover_url: broadcastAnime?.cover_url ?? null,
 			event_id: row.event_id,
 			event_title: event?.title ?? null,
+			mylist_anime_id: row.mylist_anime_id != null ? String(row.mylist_anime_id) : null,
+			mylist_status: (row.mylist_status as Notification["mylist_status"]) ?? null,
+			mylist_anime_title: mylistAnime?.title ?? null,
+			mylist_anime_cover_url: mylistAnime?.cover_url ?? null,
+			exchange_anime_id: row.exchange_anime_id != null ? String(row.exchange_anime_id) : null,
+			exchange_anime_title: exchangeAnime?.title ?? null,
+			exchange_anime_cover_url: exchangeAnime?.cover_url ?? null,
 		};
 	});
 }
@@ -478,7 +512,10 @@ export async function getUnreadNotificationCount(supabase: SupabaseClient<Databa
 		.from("notifications")
 		.select("id", { count: "exact", head: true })
 		.eq("recipient_id", userId)
-		.eq("read", false);
+		.eq("read", false)
+		// マイリスト通知は大量生成され得るため、ナビの合計バッジには含めない
+		// （マイリストタブ側の個別バッジでのみ表示する）
+		.neq("type", "mylist_status" as never);
 
 	return count ?? 0;
 }
@@ -495,6 +532,40 @@ export async function getUnreadBroadcastNotificationCount(
 		.eq("type", "broadcast" as never);
 
 	return count ?? 0;
+}
+
+export interface NotificationCategoryCounts {
+	normal: number;
+	room: number;
+	mylist: number;
+}
+
+/**
+ * 通知タブごとの未読数を返す。
+ * - room   = broadcast
+ * - mylist = mylist_status
+ * - normal = 上記以外（total - room - mylist）
+ */
+export async function getUnreadNotificationCountsByCategory(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+): Promise<NotificationCategoryCounts> {
+	// getUnreadNotificationCount は mylist_status を除外済み（= normal + room 相当）
+	const [nonMylistTotal, room, mylist] = await Promise.all([
+		getUnreadNotificationCount(supabase, userId),
+		getUnreadBroadcastNotificationCount(supabase, userId),
+		(async () => {
+			const { count } = await supabase
+				.from("notifications")
+				.select("id", { count: "exact", head: true })
+				.eq("recipient_id", userId)
+				.eq("read", false)
+				.eq("type", "mylist_status" as never);
+			return count ?? 0;
+		})(),
+	]);
+
+	return { normal: Math.max(0, nonMylistTotal - room), room, mylist };
 }
 
 // ================================================================
