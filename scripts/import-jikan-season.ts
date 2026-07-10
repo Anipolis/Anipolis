@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { translateAnimeSource } from "../src/lib/anime-vocabulary.ts";
-import { isHttpUrl as isHttpUrlUtil, isMalUrl } from "../src/lib/utils/url.js";
+import { isHttpUrl as isHttpUrlUtil, isMalUrl } from "../src/lib/utils/url.ts";
 
 type SeasonName = "winter" | "spring" | "summer" | "fall";
 
@@ -93,6 +93,20 @@ type JikanAnimeFullResponse = {
 	data?: JikanAnime;
 };
 
+type AniListSeasonResponse = {
+	data?: {
+		Page?: {
+			pageInfo?: {
+				hasNextPage?: boolean;
+			};
+			media?: {
+				idMal?: number | null;
+			}[];
+		};
+	};
+	errors?: { message?: string }[];
+};
+
 type AnimeImportRow = {
 	mal_id: number;
 	title: string;
@@ -152,11 +166,19 @@ type ExistingAnimeValues = Pick<
 >;
 
 const BASE_URL = "https://api.jikan.moe/v4";
+const ANILIST_GRAPHQL_URL = "https://graphql.anilist.co";
 const VALID_SEASONS = new Set<SeasonName>(["winter", "spring", "summer", "fall"]);
+const ANILIST_SEASON_BY_NAME: Record<SeasonName, string> = {
+	winter: "WINTER",
+	spring: "SPRING",
+	summer: "SUMMER",
+	fall: "FALL",
+};
 const REQUEST_WAIT_MIN_MS = 500;
 const REQUEST_WAIT_MAX_MS = 1_000;
 const RETRY_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
 const MAX_RETRIES = 5;
+const FALLBACK_DETAIL_MAX_RETRIES = 1;
 const UPSERT_BATCH_SIZE = 100;
 const BLOCKED_RESOURCE_KEYWORDS = ["namuwiki", "bangumi"];
 const BLOCKED_TYPES = new Set(["music", "pv", "cm"]);
@@ -375,14 +397,25 @@ const STUDIO_JA_BY_EN: Record<string, string> = {
 };
 
 function parseArgs(argv: string[]) {
-	const options: { year?: number; season?: SeasonName; dryRun: boolean; enrichLinks: boolean } = {
+	const options: {
+		year?: number;
+		season?: SeasonName;
+		dryRun: boolean;
+		enrichLinks: boolean;
+		fallbackAnilist: boolean;
+	} = {
 		dryRun: false,
 		enrichLinks: true,
+		fallbackAnilist: false,
 	};
 
 	for (let index = 0; index < argv.length; index += 1) {
 		const arg = argv[index];
 		const next = argv[index + 1];
+
+		if (arg === "--") {
+			continue;
+		}
 
 		if (arg === "--dry-run") {
 			options.dryRun = true;
@@ -391,6 +424,11 @@ function parseArgs(argv: string[]) {
 
 		if (arg === "--skip-link-enrichment") {
 			options.enrichLinks = false;
+			continue;
+		}
+
+		if (arg === "--fallback-anilist") {
+			options.fallbackAnilist = true;
 			continue;
 		}
 
@@ -411,14 +449,24 @@ function parseArgs(argv: string[]) {
 	}
 
 	if (!Number.isInteger(options.year) || !options.year || options.year < 1900) {
-		throw new Error("Usage: pnpm import:jikan -- --year 2026 --season winter [--dry-run] [--skip-link-enrichment]");
+		throw new Error(
+			"Usage: pnpm import:jikan -- --year 2026 --season winter [--dry-run] [--skip-link-enrichment] [--fallback-anilist]",
+		);
 	}
 
 	if (!options.season) {
-		throw new Error("Usage: pnpm import:jikan -- --year 2026 --season winter [--dry-run] [--skip-link-enrichment]");
+		throw new Error(
+			"Usage: pnpm import:jikan -- --year 2026 --season winter [--dry-run] [--skip-link-enrichment] [--fallback-anilist]",
+		);
 	}
 
-	return { year: options.year, season: options.season, dryRun: options.dryRun, enrichLinks: options.enrichLinks };
+	return {
+		year: options.year,
+		season: options.season,
+		dryRun: options.dryRun,
+		enrichLinks: options.enrichLinks,
+		fallbackAnilist: options.fallbackAnilist,
+	};
 }
 
 function isSeasonName(value: string): value is SeasonName {
@@ -444,8 +492,8 @@ function retryDelayMs(response: Response | null, attempt: number) {
 	return Math.min(30_000, 2_000 * 2 ** attempt) + randomInt(250, 1_000);
 }
 
-async function fetchJsonWithRetry(url: string): Promise<JikanSeasonResponse | null> {
-	for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
+async function fetchJsonWithRetry(url: string, maxRetries = MAX_RETRIES): Promise<JikanSeasonResponse | null> {
+	for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
 		let response: Response | null = null;
 
 		try {
@@ -462,17 +510,17 @@ async function fetchJsonWithRetry(url: string): Promise<JikanSeasonResponse | nu
 			const shouldRetry = RETRY_STATUS_CODES.has(response.status);
 			console.warn(`Request failed: ${response.status} ${response.statusText} ${body.slice(0, 200)}`);
 
-			if (!shouldRetry || attempt === MAX_RETRIES) return null;
+			if (!shouldRetry || attempt === maxRetries) return null;
 
 			const delayMs = retryDelayMs(response, attempt);
-			console.warn(`Retrying in ${Math.round(delayMs / 1_000)}s... (${attempt + 1}/${MAX_RETRIES})`);
+			console.warn(`Retrying in ${Math.round(delayMs / 1_000)}s... (${attempt + 1}/${maxRetries})`);
 			await sleep(delayMs);
 		} catch (error) {
 			console.warn(`Request error: ${error instanceof Error ? error.message : String(error)}`);
-			if (attempt === MAX_RETRIES) return null;
+			if (attempt === maxRetries) return null;
 
 			const delayMs = retryDelayMs(response, attempt);
-			console.warn(`Retrying in ${Math.round(delayMs / 1_000)}s... (${attempt + 1}/${MAX_RETRIES})`);
+			console.warn(`Retrying in ${Math.round(delayMs / 1_000)}s... (${attempt + 1}/${maxRetries})`);
 			await sleep(delayMs);
 		} finally {
 			const waitMs = randomInt(REQUEST_WAIT_MIN_MS, REQUEST_WAIT_MAX_MS);
@@ -483,9 +531,96 @@ async function fetchJsonWithRetry(url: string): Promise<JikanSeasonResponse | nu
 	return null;
 }
 
-async function fetchAnimeFull(malId: number) {
-	const payload = await fetchJsonWithRetry(`${BASE_URL}/anime/${malId}/full`);
+async function fetchAnimeFull(malId: number, maxRetries = MAX_RETRIES) {
+	const payload = await fetchJsonWithRetry(`${BASE_URL}/anime/${malId}/full`, maxRetries);
 	return (payload as JikanAnimeFullResponse | null)?.data ?? null;
+}
+
+async function fetchAniListSeasonMalIds(year: number, season: SeasonName) {
+	const malIds: number[] = [];
+	let page = 1;
+	let hasNextPage = true;
+
+	while (hasNextPage) {
+		const query = `
+			query ($season: MediaSeason!, $seasonYear: Int!, $page: Int!) {
+				Page(page: $page, perPage: 50) {
+					pageInfo {
+						hasNextPage
+					}
+					media(type: ANIME, season: $season, seasonYear: $seasonYear, sort: POPULARITY_DESC) {
+						idMal
+					}
+				}
+			}
+		`;
+
+		console.log(`Fetching AniList MAL IDs page ${page}: ${year} ${ANILIST_SEASON_BY_NAME[season]}`);
+		const response = await fetch(ANILIST_GRAPHQL_URL, {
+			method: "POST",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json",
+				"User-Agent": "Anipolis seasonal anime importer",
+			},
+			body: JSON.stringify({
+				query,
+				variables: {
+					season: ANILIST_SEASON_BY_NAME[season],
+					seasonYear: year,
+					page,
+				},
+			}),
+		});
+
+		const payload = (await response.json()) as AniListSeasonResponse;
+
+		if (!response.ok || payload.errors?.length) {
+			const message = payload.errors
+				?.map((error) => error.message)
+				.filter(Boolean)
+				.join(", ");
+			throw new Error(
+				`AniList fallback failed: ${response.status} ${response.statusText}${message ? ` ${message}` : ""}`,
+			);
+		}
+
+		const pageMalIds = (payload.data?.Page?.media ?? [])
+			.map((anime) => anime.idMal)
+			.filter((malId): malId is number => typeof malId === "number");
+
+		malIds.push(...pageMalIds);
+		console.log(`AniList page ${page} fetched... ${pageMalIds.length} MAL IDs found (${malIds.length} total)`);
+
+		hasNextPage = payload.data?.Page?.pageInfo?.hasNextPage === true;
+		page += 1;
+
+		const waitMs = randomInt(REQUEST_WAIT_MIN_MS, REQUEST_WAIT_MAX_MS);
+		await sleep(waitMs);
+	}
+
+	return [...new Set(malIds)];
+}
+
+async function fetchSeasonAnimeViaAniList(year: number, season: SeasonName) {
+	const malIds = await fetchAniListSeasonMalIds(year, season);
+	const animes: JikanAnime[] = [];
+
+	console.log(`Fetching ${malIds.length} Jikan anime details from AniList MAL IDs.`);
+
+	for (const [index, malId] of malIds.entries()) {
+		console.log(`Fetching Jikan anime detail ${index + 1}/${malIds.length}: MAL ${malId}`);
+		const anime = await fetchAnimeFull(malId, FALLBACK_DETAIL_MAX_RETRIES);
+
+		if (!anime) {
+			console.warn(`Jikan anime detail skipped: MAL ${malId}`);
+			continue;
+		}
+
+		animes.push(anime);
+	}
+
+	return animes;
 }
 
 async function fetchSeasonAnime(year: number, season: SeasonName) {
@@ -501,8 +636,7 @@ async function fetchSeasonAnime(year: number, season: SeasonName) {
 		const payload = await fetchJsonWithRetry(url.toString());
 
 		if (!payload) {
-			console.warn(`Page ${page} skipped after retries.`);
-			break;
+			throw new Error(`Jikan season page ${page} failed after retries.`);
 		}
 
 		const pageItems = payload.data ?? [];
@@ -918,11 +1052,11 @@ function dedupeAnimeRows(rows: AnimeImportRow[]) {
 
 function getSupabaseClient() {
 	const supabaseUrl = process.env["PUBLIC_SUPABASE_URL"] ?? process.env["SUPABASE_URL"];
-	const serviceRoleKey = process.env["SUPABASE_SERVICE_ROLE_KEY"];
+	const serviceRoleKey = process.env["SUPABASE_SERVICE_ROLE_KEY"] ?? process.env["SUPABASE_SECRET_KEY"];
 
 	if (!supabaseUrl || !serviceRoleKey) {
 		throw new Error(
-			"Set PUBLIC_SUPABASE_URL (or SUPABASE_URL) and SUPABASE_SERVICE_ROLE_KEY before running the importer.",
+			"Set PUBLIC_SUPABASE_URL (or SUPABASE_URL) and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_SECRET_KEY) before running the importer.",
 		);
 	}
 
@@ -1041,15 +1175,47 @@ async function syncAnimeRelations(animes: JikanAnime[], savedMalIds: Set<number>
 }
 
 async function main() {
-	const { year, season, dryRun, enrichLinks } = parseArgs(process.argv.slice(2));
+	const { year, season, dryRun, enrichLinks, fallbackAnilist } = parseArgs(process.argv.slice(2));
+
+	if (!dryRun) {
+		const supabaseUrl = process.env["PUBLIC_SUPABASE_URL"] ?? process.env["SUPABASE_URL"];
+		getSupabaseClient();
+		console.log(`Writing to Supabase: ${new URL(supabaseUrl ?? "").host}`);
+	}
 
 	console.log(`Starting Jikan season import: ${year} ${season}${dryRun ? " (dry-run)" : ""}`);
-	const rawAnimes = await fetchSeasonAnime(year, season);
-	const animes = enrichLinks ? await enrichAnimeLinks(rawAnimes) : rawAnimes;
+	let rawAnimes: JikanAnime[];
+	let linksAlreadyEnriched = false;
+
+	if (fallbackAnilist) {
+		console.log("Using AniList MAL ID fallback source.");
+		rawAnimes = await fetchSeasonAnimeViaAniList(year, season);
+		linksAlreadyEnriched = true;
+	} else {
+		try {
+			rawAnimes = await fetchSeasonAnime(year, season);
+		} catch (error) {
+			console.warn(
+				`Jikan season endpoint failed: ${error instanceof Error ? error.message : String(error)}. Falling back to AniList MAL IDs.`,
+			);
+			rawAnimes = await fetchSeasonAnimeViaAniList(year, season);
+			linksAlreadyEnriched = true;
+		}
+	}
+
+	if (rawAnimes.length === 0) {
+		throw new Error(`No anime fetched for ${year} ${season}; aborting without database writes.`);
+	}
+
+	const animes = enrichLinks && !linksAlreadyEnriched ? await enrichAnimeLinks(rawAnimes) : rawAnimes;
 	const filteredAnimes = filterBlockedTypeAnime(filterBlockedResourceAnime(animes));
 	const rows = dedupeAnimeRows(filteredAnimes.map((anime) => mapJikanAnime(anime, year, season)));
 
 	console.log(`Mapped ${rows.length} anime rows.`);
+
+	if (rows.length === 0) {
+		throw new Error(`No anime rows mapped for ${year} ${season}; aborting without database writes.`);
+	}
 
 	if (dryRun) {
 		console.log(JSON.stringify(rows.slice(0, 3), null, 2));
