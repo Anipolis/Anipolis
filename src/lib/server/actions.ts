@@ -1481,3 +1481,58 @@ export async function linkAccounts(
 	]);
 	return { error: error ? error.message : null };
 }
+
+// invites/invite_redemptions は自動生成型未収録のため .rpc()/.from() に型アサーションを使用
+export async function createInviteAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
+	const form = await request.formData();
+	const maxUsesRaw = (form.get("max_uses") as string | null)?.trim() ?? "";
+	const expiresAtRaw = (form.get("expires_at") as string | null)?.trim() ?? "";
+
+	const maxUses = maxUsesRaw ? Number(maxUsesRaw) : 1;
+	if (!Number.isSafeInteger(maxUses) || maxUses <= 0) {
+		return fail(400, { inviteMessage: "使用回数は1以上の整数で指定してください" });
+	}
+
+	let expiresAtIso: string | null = null;
+	if (expiresAtRaw) {
+		const parsed = new Date(expiresAtRaw);
+		if (Number.isNaN(parsed.getTime())) {
+			return fail(400, { inviteMessage: "有効期限の形式が正しくありません" });
+		}
+		expiresAtIso = parsed.toISOString();
+	}
+
+	// biome-ignore lint/suspicious/noExplicitAny: invite RPCs not yet in auto-generated DB types
+	const { data, error } = await (supabase as any).rpc("create_invite", {
+		p_max_uses: maxUses,
+		p_expires_at: expiresAtIso,
+	});
+
+	if (error) {
+		console.error("create_invite error:", { userId, error });
+		const detail = typeof error.details === "string" ? error.details : null;
+		if (detail === "INVITE_CREATE_LIMIT") {
+			return fail(429, {
+				inviteMessage: "招待の同時発行数が上限に達しています。既存の招待が使われるか失効するまでお待ちください",
+			});
+		}
+		return fail(500, { inviteMessage: "招待コードの発行に失敗しました" });
+	}
+
+	return { inviteSuccess: true, inviteCode: data as string };
+}
+
+export async function revokeInviteAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
+	const form = await request.formData();
+	const inviteId = (form.get("invite_id") as string | null)?.trim() ?? "";
+	if (!inviteId) return fail(400, { inviteMessage: "招待IDが不正です" });
+
+	// biome-ignore lint/suspicious/noExplicitAny: invite RPCs not yet in auto-generated DB types
+	const { error } = await (supabase as any).rpc("revoke_invite", { p_invite_id: inviteId });
+	if (error) {
+		console.error("revoke_invite error:", { userId, error });
+		return fail(500, { inviteMessage: "招待の失効に失敗しました" });
+	}
+
+	return { inviteRevoked: true };
+}
