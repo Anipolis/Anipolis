@@ -975,9 +975,9 @@ export async function getAdminDashboardData(supabase: SupabaseClient<Database>):
 		countRows(supabase, "reports", (query) => query.eq("status", "reviewing")),
 		countRows(supabase, "reports", (query) => query.gte("created_at", today.toISOString())),
 		countRows(supabase, "reports", (query) => query.gte("created_at", weekAgo.toISOString())),
-		countRows(supabase, "profiles", (query) => query.gte("created_at", today.toISOString())),
+		countRealUsers(supabase, (query) => query.gte("created_at", today.toISOString())),
 		countRows(supabase, "posts", (query) => query.gte("created_at", today.toISOString())),
-		countRows(supabase, "profiles"),
+		countRealUsers(supabase),
 		countRows(supabase, "posts"),
 		countRows(supabase, "account_moderation", (query) => query.eq("status", "restricted")),
 		countRows(supabase, "account_moderation", (query) => query.eq("status", "banned")),
@@ -1155,8 +1155,24 @@ async function countRows(
 type CountQuery = {
 	eq: (column: string, value: string) => CountQuery;
 	gte: (column: string, value: string) => CountQuery;
+	not: (column: string, operator: string, value: string) => CountQuery;
 	then: Promise<{ count: number | null }>["then"];
 };
+
+// アニメトレードのプール在庫用に SQL で直接投入されたダミーアカウント
+// （pool_dummy_01〜50）が profiles に存在するため、ユーザー数の集計から
+// username パターンで除外する。
+const DUMMY_USERNAME_PATTERN = "pool_dummy_%";
+
+function countRealUsers(
+	supabase: SupabaseClient<Database>,
+	apply?: (query: CountQuery) => CountQuery,
+): Promise<number> {
+	return countRows(supabase, "profiles", (query) => {
+		const filtered = query.not("username", "like", DUMMY_USERNAME_PATTERN);
+		return apply ? apply(filtered) : filtered;
+	});
+}
 
 function toAdminReport(
 	row: AdminReportRow,
