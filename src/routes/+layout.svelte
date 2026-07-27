@@ -60,8 +60,13 @@ $effect.pre(() => {
 onMount(() => {
 	const {
 		data: { subscription },
-	} = data.supabase.auth.onAuthStateChange(() => {
-		invalidate("supabase:auth");
+	} = data.supabase.auth.onAuthStateChange((_event, newSession) => {
+		// サーバー側が把握しているセッションと食い違ったときだけ再取得する。
+		// ガードがないと毎ページロードの INITIAL_SESSION でも layout server load が
+		// 走り、プロフィール等を無駄に再取得してしまう。
+		if (newSession?.expires_at !== data.session?.expires_at) {
+			invalidate("supabase:auth");
+		}
 	});
 	const notificationInterval = setInterval(() => {
 		void refreshNotificationCounts();
