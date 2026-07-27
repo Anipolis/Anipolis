@@ -6,6 +6,9 @@ let { data, form }: PageProps = $props();
 const activeMode = $derived((form?.mode ?? data.mode) as "login" | "register" | "add_account");
 const next = $derived(data.next ?? "/");
 let inviteCodeValue = $state(data.inviteCode ?? "");
+// クローズドβが有効かつ、まだ有効な招待コードを確認できていない間は
+// 招待コード入力とDiscordの二択のみを表示し、Google/X/メールは隠す。
+const hasInviteAccess = $derived(!data.betaGateEnabled || data.inviteCodeValid);
 </script>
 
 <svelte:head>
@@ -88,8 +91,43 @@ let inviteCodeValue = $state(data.inviteCode ?? "");
 					<button type="submit" class="btn btn-primary auth-wide-button">アカウントを追加</button>
 					<a href="/" class="btn btn-ghost auth-wide-button" style="text-align:center">キャンセル</a>
 				</form>
+			{:else if activeMode === 'register' && !hasInviteAccess}
+				<p class="auth-info-text">
+					このサービスは現在、クローズドβテスト中です。招待コードを入力するか、Discordサーバーのメンバーとしてログインしてください。
+					既にアカウントをお持ちの場合は<a href="/auth?mode=login&next={encodeURIComponent(next)}"
+						>ログイン</a
+					>へ。
+				</p>
+
+				<form method="POST" action="?/applyInvite" class="auth-form">
+					<input type="hidden" name="next" value={next}>
+					<div class="field">
+						<label for="invite-code-gate" class="field-label">招待コード</label>
+						<input
+							id="invite-code-gate"
+							name="invite_code"
+							type="text"
+							class="field-input"
+							autocomplete="off"
+							bind:value={inviteCodeValue}
+							placeholder="招待してくれた方から届いたコードを入力してください"
+							required
+						>
+					</div>
+					<button type="submit" class="btn btn-primary auth-wide-button">招待コードを確認</button>
+				</form>
+
+				<div class="auth-divider"><span>または</span></div>
+
+				<form method="POST" action="?/discord" class="auth-oauth-form">
+					<input type="hidden" name="next" value={next}>
+					<input type="hidden" name="invite_code" value={inviteCodeValue}>
+					<button type="submit" class="btn btn-outline auth-wide-button">
+						Discordサーバーのメンバーとして続ける
+					</button>
+				</form>
 			{:else}
-				{#if data.betaGateEnabled}
+				{#if data.betaGateEnabled && activeMode !== 'login'}
 					<div class="field">
 						<label for="invite-code" class="field-label">招待コード</label>
 						<input

@@ -29,7 +29,7 @@ function getInviteCodeInput(form: FormData): string {
 	return (form.get("invite_code") as string | null)?.trim() ?? "";
 }
 
-export const load: PageServerLoad = async ({ url, cookies, locals: { safeGetSession } }) => {
+export const load: PageServerLoad = async ({ url, cookies, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 	const next = getSafeNext(url.searchParams.get("next"));
 	const rawMode = url.searchParams.get("mode");
@@ -48,16 +48,48 @@ export const load: PageServerLoad = async ({ url, cookies, locals: { safeGetSess
 	if (queryInviteCode) setInviteCodeCookie(cookies, queryInviteCode);
 	const inviteCode = queryInviteCode || getInviteCodeCookie(cookies) || "";
 
+	const betaGateEnabled = isBetaGateEnabled();
+	// 招待リンクを踏んでいない/有効な招待コードをまだ持っていない場合、
+	// Google・X・メールログインは一切表示しない（招待コード入力かDiscordの二択のみ）。
+	// 有効性はここで都度確認する（消費はしない check_invite_code）。
+	const inviteCodeValid = betaGateEnabled && inviteCode ? await validateInviteCode(supabase, inviteCode) : false;
+
 	return {
 		mode,
 		next,
-		betaGateEnabled: isBetaGateEnabled(),
+		betaGateEnabled,
 		inviteCode,
+		inviteCodeValid,
 		error: url.searchParams.get("error"),
 	};
 };
 
 export const actions: Actions = {
+	// 招待リンクを踏んでいないユーザーが招待コードを手入力して確認するための専用action。
+	// 成功したら Cookie に保存して ?invite= 付きでリロードし、load() 側の
+	// inviteCodeValid を true にして Google/X/メールフォームを表示させる。
+	applyInvite: async ({ request, url, cookies, locals: { supabase } }) => {
+		const form = await request.formData();
+		const inviteCodeInput = getInviteCodeInput(form);
+		const mode = url.searchParams.get("mode") === "register" ? "register" : "login";
+		const next = getSafeNext(form.get("next"));
+
+		if (!inviteCodeInput) {
+			return fail(400, { mode, message: "招待コードを入力してください" });
+		}
+
+		const valid = await validateInviteCode(supabase, inviteCodeInput);
+		if (!valid) {
+			return fail(400, { mode, message: "招待コードが無効です" });
+		}
+
+		setInviteCodeCookie(cookies, inviteCodeInput);
+		redirect(
+			303,
+			`/auth?mode=${mode}&next=${encodeURIComponent(next)}&invite=${encodeURIComponent(inviteCodeInput)}`,
+		);
+	},
+
 	login: async (event) => {
 		const {
 			request,

@@ -10,7 +10,9 @@ let { data, form }: PageProps = $props();
 let username = $state(untrack(() => data.username ?? ""));
 let displayName = $state(untrack(() => data.displayName ?? ""));
 let submitting = $state(false);
-let avatarChoice = $state<"oauth" | "upload" | "none">(untrack(() => (data.avatarUrl ? "oauth" : "none")));
+// 招待制になりGoogle/Discord/X等ログイン元の写真が意図せず適用されうるため、
+// デフォルトはアイコンなし（グレー）。ログイン元の画像は「候補を使う」で明示的に選んだ時のみ使う。
+let avatarChoice = $state<"oauth" | "upload" | "none">("none");
 let avatarPreviewUrl = $state<string | null>(null);
 let avatarMessage = $state("");
 let avatarFileInput = $state<HTMLInputElement | null>(null);
@@ -44,13 +46,13 @@ function updateAvatarFile(event: Event) {
 	if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
 		avatarMessage = "JPEG、PNG、WebP形式の画像を選択してください。";
 		clearSelectedAvatarFile();
-		avatarChoice = data.avatarUrl ? "oauth" : "none";
+		avatarChoice = "none";
 		return;
 	}
 	if (file.size > 2 * 1024 * 1024) {
 		avatarMessage = "画像は2MB以内にしてください。";
 		clearSelectedAvatarFile();
-		avatarChoice = data.avatarUrl ? "oauth" : "none";
+		avatarChoice = "none";
 		return;
 	}
 
