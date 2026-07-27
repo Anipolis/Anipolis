@@ -13,7 +13,7 @@ import { getExtraAccounts, setExtraAccounts } from "$lib/server/multi-account";
 import { getClientKey, isRateLimited } from "$lib/server/rate-limit";
 import { createServiceRoleClient } from "$lib/server/supabase-admin";
 import { sanitizeInternalRedirect } from "$lib/utils/url";
-import type { Actions, PageServerLoad } from "./$types";
+import type { Actions, PageServerLoad, RequestEvent } from "./$types";
 
 const MIN_PASSWORD_LENGTH = 6;
 
@@ -44,15 +44,29 @@ export const load: PageServerLoad = async ({ url, cookies, locals: { supabase, s
 
 	// 招待リンク（/auth?invite=CODE）を踏んだ場合は、OAuth の往復を挟んでも
 	// 持ち越せるよう署名付き Cookie にも保存しておく（手入力欄のプリフィルにも使う）。
-	const queryInviteCode = url.searchParams.get("invite")?.trim() ?? "";
-	if (queryInviteCode) setInviteCodeCookie(cookies, queryInviteCode);
-	const inviteCode = queryInviteCode || getInviteCodeCookie(cookies) || "";
-
+	// ただし無効なコードで既存の有効な Cookie を上書きしないよう、
+	// ゲート有効時は検証を通ったコードだけを優先して保存する。
+	// 有効性の確認は消費しない check_invite_code で都度行う。
 	const betaGateEnabled = isBetaGateEnabled();
+	const queryInviteCode = url.searchParams.get("invite")?.trim() ?? "";
+	const cookieInviteCode = getInviteCodeCookie(cookies) ?? "";
+
+	let inviteCode = queryInviteCode || cookieInviteCode;
 	// 招待リンクを踏んでいない/有効な招待コードをまだ持っていない場合、
 	// Google・X・メールログインは一切表示しない（招待コード入力かDiscordの二択のみ）。
-	// 有効性はここで都度確認する（消費はしない check_invite_code）。
-	const inviteCodeValid = betaGateEnabled && inviteCode ? await validateInviteCode(supabase, inviteCode) : false;
+	let inviteCodeValid = false;
+	if (betaGateEnabled) {
+		const queryValid = queryInviteCode ? await validateInviteCode(supabase, queryInviteCode) : false;
+		if (queryValid || (queryInviteCode && !cookieInviteCode)) setInviteCodeCookie(cookies, queryInviteCode);
+		if (queryValid) {
+			inviteCodeValid = true;
+		} else if (cookieInviteCode) {
+			inviteCode = cookieInviteCode;
+			inviteCodeValid = await validateInviteCode(supabase, cookieInviteCode);
+		}
+	} else if (queryInviteCode) {
+		setInviteCodeCookie(cookies, queryInviteCode);
+	}
 
 	return {
 		mode,
@@ -66,9 +80,15 @@ export const load: PageServerLoad = async ({ url, cookies, locals: { supabase, s
 
 export const actions: Actions = {
 	// 招待リンクを踏んでいないユーザーが招待コードを手入力して確認するための専用action。
-	// 成功したら Cookie に保存して ?invite= 付きでリロードし、load() 側の
-	// inviteCodeValid を true にして Google/X/メールフォームを表示させる。
-	applyInvite: async ({ request, url, cookies, locals: { supabase } }) => {
+	// 成功したら Cookie に保存してリロードし、load() 側の inviteCodeValid を true に
+	// して Google/X/メールフォームを表示させる（コードは URL に載せず Cookie で運ぶ）。
+	applyInvite: async (event) => {
+		const {
+			request,
+			url,
+			cookies,
+			locals: { supabase },
+		} = event;
 		const form = await request.formData();
 		const inviteCodeInput = getInviteCodeInput(form);
 		const mode = url.searchParams.get("mode") === "register" ? "register" : "login";
@@ -78,16 +98,18 @@ export const actions: Actions = {
 			return fail(400, { mode, message: "招待コードを入力してください" });
 		}
 
+		// 招待コード総当たり対策（IP 単位）
+		if (isRateLimited(`auth-invite:${getClientKey(event)}`, 10, 5 * 60_000)) {
+			return fail(429, { mode, message: "試行回数が多すぎます。しばらく待ってからお試しください" });
+		}
+
 		const valid = await validateInviteCode(supabase, inviteCodeInput);
 		if (!valid) {
 			return fail(400, { mode, message: "招待コードが無効です" });
 		}
 
 		setInviteCodeCookie(cookies, inviteCodeInput);
-		redirect(
-			303,
-			`/auth?mode=${mode}&next=${encodeURIComponent(next)}&invite=${encodeURIComponent(inviteCodeInput)}`,
-		);
+		redirect(303, `/auth?mode=${mode}&next=${encodeURIComponent(next)}`);
 	},
 
 	login: async (event) => {
@@ -126,9 +148,11 @@ export const actions: Actions = {
 		}
 
 		if (isBetaGateEnabled() && !isBetaMember(data.user)) {
+			// needInvite: ログインタブは通常招待コード欄を出さないため、
+			// このフラグでUI側に入力欄を表示させる
 			if (!inviteCodeInput) {
 				await supabase.auth.signOut();
-				return fail(403, { mode: "login", email, message: "招待コードを入力してください" });
+				return fail(403, { mode: "login", email, needInvite: true, message: "招待コードを入力してください" });
 			}
 
 			const redeemResult = await redeemInviteCode(supabase, inviteCodeInput);
@@ -137,6 +161,7 @@ export const actions: Actions = {
 				return fail(403, {
 					mode: "login",
 					email,
+					needInvite: true,
 					message: redeemResult.detail
 						? inviteRedeemErrorMessage(redeemResult.detail)
 						: "招待コードが無効です",
@@ -196,6 +221,16 @@ export const actions: Actions = {
 			});
 		}
 
+		// アカウント大量作成・招待コード総当たり対策（IP 単位）。
+		// 招待コード検証より前に置き、リミッター素通しでの総当たりを防ぐ
+		if (isRateLimited(`auth-register:${getClientKey(event)}`, 5, 10 * 60_000)) {
+			return fail(429, {
+				mode: "register",
+				...values,
+				message: "試行回数が多すぎます。しばらく待ってからお試しください",
+			});
+		}
+
 		// アカウント作成前に招待コードを検証する（無効なコードでアカウントだけ作られる事故を防ぐ）
 		if (isBetaGateEnabled()) {
 			if (!inviteCodeInput) {
@@ -219,15 +254,6 @@ export const actions: Actions = {
 				...values,
 				field: "username",
 				message: "このユーザー名はすでに使われています",
-			});
-		}
-
-		// アカウント大量作成対策（IP 単位）
-		if (isRateLimited(`auth-register:${getClientKey(event)}`, 5, 10 * 60_000)) {
-			return fail(429, {
-				mode: "register",
-				...values,
-				message: "試行回数が多すぎます。しばらく待ってからお試しください",
 			});
 		}
 
@@ -423,62 +449,38 @@ export const actions: Actions = {
 		redirect(303, "/");
 	},
 
-	google: async ({ request, url, cookies, locals: { supabase } }) => {
-		const form = await request.formData();
-		const next = getSafeNext(form.get("next"));
-		const inviteCodeInput = getInviteCodeInput(form);
-		if (isBetaGateEnabled() && inviteCodeInput) setInviteCodeCookie(cookies, inviteCodeInput);
-		const redirectTo = `${url.origin}/auth/callback?next=${encodeURIComponent(next)}`;
+	google: (event) => startOAuth(event, "google", "Google"),
 
-		const { data, error } = await supabase.auth.signInWithOAuth({
-			provider: "google",
-			options: { redirectTo },
-		});
+	// "x" は OAuth 2.0 の X プロバイダー（"twitter" は旧 OAuth 1.0a）。
+	// X Developer Portal + Supabase Dashboard 側で X (OAuth 2.0) の有効化が
+	// 別途必要 — 未設定だとここでエラーになる。
+	twitter: (event) => startOAuth(event, "x", "X"),
 
-		if (error || !data.url) {
-			return fail(400, { mode: "login", message: "Googleログインを開始できませんでした" });
-		}
-
-		redirect(303, data.url);
-	},
-
-	twitter: async ({ request, url, cookies, locals: { supabase } }) => {
-		const form = await request.formData();
-		const next = getSafeNext(form.get("next"));
-		const inviteCodeInput = getInviteCodeInput(form);
-		if (isBetaGateEnabled() && inviteCodeInput) setInviteCodeCookie(cookies, inviteCodeInput);
-		const redirectTo = `${url.origin}/auth/callback?next=${encodeURIComponent(next)}`;
-
-		// Supabase 側のプロバイダー名は Dashboard の設定と一致させること（X Developer Portal +
-		// Supabase Dashboard での有効化が別途必要 — 未設定だとここでエラーになる）。
-		const { data, error } = await supabase.auth.signInWithOAuth({
-			provider: "twitter",
-			options: { redirectTo },
-		});
-
-		if (error || !data.url) {
-			return fail(400, { mode: "login", message: "Xログインを開始できませんでした" });
-		}
-
-		redirect(303, data.url);
-	},
-
-	discord: async ({ request, url, cookies, locals: { supabase } }) => {
-		const form = await request.formData();
-		const next = getSafeNext(form.get("next"));
-		const inviteCodeInput = getInviteCodeInput(form);
-		if (isBetaGateEnabled() && inviteCodeInput) setInviteCodeCookie(cookies, inviteCodeInput);
-		const redirectTo = `${url.origin}/auth/callback?next=${encodeURIComponent(next)}`;
-
-		const { data, error } = await supabase.auth.signInWithOAuth({
-			provider: "discord",
-			options: { redirectTo, scopes: "identify email" },
-		});
-
-		if (error || !data.url) {
-			return fail(400, { mode: "login", message: "Discordログインを開始できませんでした" });
-		}
-
-		redirect(303, data.url);
-	},
+	discord: (event) => startOAuth(event, "discord", "Discord", { scopes: "identify email" }),
 };
+
+// google / twitter(x) / discord 共通の OAuth 開始処理。
+// フォームの招待コードを署名付き Cookie に退避してから認可 URL へ 303 する。
+async function startOAuth(
+	{ request, url, cookies, locals: { supabase } }: Pick<RequestEvent, "request" | "url" | "cookies" | "locals">,
+	provider: "google" | "x" | "discord",
+	label: string,
+	options: { scopes?: string } = {},
+) {
+	const form = await request.formData();
+	const next = getSafeNext(form.get("next"));
+	const inviteCodeInput = getInviteCodeInput(form);
+	if (isBetaGateEnabled() && inviteCodeInput) setInviteCodeCookie(cookies, inviteCodeInput);
+	const redirectTo = `${url.origin}/auth/callback?next=${encodeURIComponent(next)}`;
+
+	const { data, error } = await supabase.auth.signInWithOAuth({
+		provider,
+		options: { redirectTo, ...options },
+	});
+
+	if (error || !data.url) {
+		return fail(400, { mode: "login", message: `${label}ログインを開始できませんでした` });
+	}
+
+	redirect(303, data.url);
+}

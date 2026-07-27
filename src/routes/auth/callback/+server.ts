@@ -58,8 +58,9 @@ export const GET: RequestHandler = async ({ url, cookies, locals: { supabase } }
 		if (granted) {
 			const { error: grantError } = await grantBetaAccess(user.id);
 			if (grantError) {
+				console.error("grantBetaAccess failed after Discord verification:", { userId: user.id });
 				await supabase.auth.signOut();
-				redirect(303, "/auth?error=not_member");
+				redirect(303, "/auth?error=grant_failed");
 			}
 			betaGranted = true;
 		}
@@ -67,13 +68,18 @@ export const GET: RequestHandler = async ({ url, cookies, locals: { supabase } }
 
 	// ② 招待コード（Cookie 経由）— Discord で許可されなかった場合、または
 	// Discord 以外（Google / X / メール）のログインで試みる。
-	if (!betaGranted) {
+	// ゲート無効時は招待コードを無駄に消費しないようスキップする。
+	if (isBetaGateEnabled() && !betaGranted) {
 		const inviteCode = getInviteCodeCookie(cookies);
 		if (inviteCode) {
 			const redeemResult = await redeemInviteCode(supabase, inviteCode);
 			if (redeemResult.success) {
 				const { error: grantError } = await grantBetaAccess(user.id);
-				if (!grantError) {
+				if (grantError) {
+					// 償還は user_id 単位で冪等（再ログインで再試行すれば付与だけやり直せる）
+					console.error("grantBetaAccess failed after invite redemption:", { userId: user.id });
+					errorCode = "grant_failed";
+				} else {
 					betaGranted = true;
 					clearInviteCodeCookie(cookies);
 				}

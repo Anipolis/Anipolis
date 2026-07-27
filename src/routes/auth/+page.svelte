@@ -61,6 +61,10 @@ const hasInviteAccess = $derived(!data.betaGateEnabled || data.inviteCodeValid);
 				<div class="flash-error" role="alert">招待コードが無効です。</div>
 			{:else if data.error === 'invite_exhausted'}
 				<div class="flash-error" role="alert">この招待コードは使用回数の上限に達しています。</div>
+			{:else if data.error === 'grant_failed'}
+				<div class="flash-error" role="alert">
+					アクセス許可の付与に失敗しました。しばらく待ってから再度ログインしてください。
+				</div>
 			{/if}
 
 			{#if activeMode === 'add_account'}
@@ -127,7 +131,7 @@ const hasInviteAccess = $derived(!data.betaGateEnabled || data.inviteCodeValid);
 					</button>
 				</form>
 			{:else}
-				{#if data.betaGateEnabled && activeMode !== 'login'}
+				{#if data.betaGateEnabled && (activeMode !== 'login' || (form && 'needInvite' in form && form.needInvite))}
 					<div class="field">
 						<label for="invite-code" class="field-label">招待コード</label>
 						<input

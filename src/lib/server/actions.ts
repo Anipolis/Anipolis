@@ -1531,6 +1531,10 @@ export async function revokeInviteAction(request: Request, supabase: SupabaseCli
 	const { error } = await (supabase as any).rpc("revoke_invite", { p_invite_id: inviteId });
 	if (error) {
 		console.error("revoke_invite error:", { userId, error });
+		// 42501 = RPC 側の権限チェック（発行者本人・管理者以外）による拒否
+		if (error.code === "42501") {
+			return fail(403, { inviteMessage: "この招待を失効させる権限がありません" });
+		}
 		return fail(500, { inviteMessage: "招待の失効に失敗しました" });
 	}
 

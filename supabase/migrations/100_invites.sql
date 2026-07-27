@@ -114,6 +114,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
+-- SECURITY DEFINER 関数はデフォルトで PUBLIC に EXECUTE が付与されるため明示的に剥奪する
+REVOKE ALL ON FUNCTION public.create_invite(integer, timestamptz) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.create_invite(integer, timestamptz) TO authenticated;
 
 -- ----------------------------------------------------------------
@@ -179,8 +181,15 @@ BEGIN
         RAISE EXCEPTION 'invite exhausted' USING DETAIL = 'INVITE_EXHAUSTED';
     END IF;
 
+    -- 同時多重リクエスト対策：並行トランザクションが先に償還を挿入していた場合は
+    -- unique_violation で失敗させず冪等に成功扱いとし、use_count も増やさない。
     INSERT INTO public.invite_redemptions (invite_id, user_id)
-    VALUES (target_invite.id, current_user_id);
+    VALUES (target_invite.id, current_user_id)
+    ON CONFLICT (user_id) DO NOTHING;
+
+    IF NOT FOUND THEN
+        RETURN;
+    END IF;
 
     UPDATE public.invites
        SET use_count = use_count + 1
@@ -188,6 +197,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
+REVOKE ALL ON FUNCTION public.redeem_invite(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.redeem_invite(text) TO authenticated;
 
 -- ----------------------------------------------------------------
@@ -217,4 +227,5 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
+REVOKE ALL ON FUNCTION public.revoke_invite(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.revoke_invite(uuid) TO authenticated;

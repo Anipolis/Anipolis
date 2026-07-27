@@ -962,7 +962,7 @@ export async function getInvites(
 	options: { allUsers?: boolean } = {},
 ): Promise<InviteRow[]> {
 	// biome-ignore lint/suspicious/noExplicitAny: invites not yet in auto-generated DB types
-	let query = (supabase as any).from("invites").select("*").order("created_at", { ascending: false });
+	let query = (supabase as any).from("invites").select("*").order("created_at", { ascending: false }).limit(200);
 	if (!options.allUsers) {
 		query = query.eq("created_by", userId);
 	}
@@ -988,7 +988,13 @@ export async function getInvitesWithCreators(supabase: SupabaseClient<Database>)
 	if (invites.length === 0) return [];
 
 	const creatorIds = Array.from(new Set(invites.map((invite) => invite.created_by)));
-	const { data: profiles } = await supabase.from("profiles").select("id, username").in("id", creatorIds);
+	const { data: profiles, error: profilesError } = await supabase
+		.from("profiles")
+		.select("id, username")
+		.in("id", creatorIds);
+	if (profilesError) {
+		console.error("getInvitesWithCreators profiles error:", profilesError);
+	}
 	const usernameByCreatorId = new Map((profiles ?? []).map((p) => [p.id, p.username]));
 
 	return invites.map((invite) => ({
