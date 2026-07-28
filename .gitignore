@@ -19,6 +19,9 @@ coverage/
 # Resumable Jikan importer checkpoints
 .jikan-import-cache/
 
+# Syoboi Calendar importer snapshots
+.syobocal-import-cache/
+
 # Supabase temporary metadata
 supabase/.temp/
 

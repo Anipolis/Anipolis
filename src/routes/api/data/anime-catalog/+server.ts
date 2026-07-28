@@ -13,7 +13,7 @@ const PAGE_SIZE = 1_000;
 
 type SourceRecordRow = {
 	mal_id: number;
-	source: "anime_offline_database" | "jikan" | "wikidata" | "manual";
+	source: "anime_offline_database" | "jikan" | "wikidata" | "syobocal" | "manual";
 	source_version: string;
 	source_url: string;
 	source_updated_at: string | null;
@@ -70,7 +70,7 @@ export const GET: RequestHandler = async ({ locals: { supabase } }) => {
 			name: "Anipolis ODbL derivative of anime-offline-database",
 			scope: "anime-offline-database derived records only",
 			is_complete_anipolis_catalog: false,
-			excluded_sources: ["wikidata", "jikan", "manual"],
+			excluded_sources: ["wikidata", "jikan", "syobocal", "manual"],
 			exclusion_reason: "Third-party and manually curated data are kept outside this ODbL derivative.",
 			generated_at: new Date().toISOString(),
 			license: {

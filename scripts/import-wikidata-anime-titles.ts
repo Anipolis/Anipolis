@@ -1,5 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
 import {
+	ANIME_CATALOG_SEASON_SOURCES,
+	type AnimeCatalogSeasonSource,
+	collectAnimeCatalogSeasonMalIds,
+} from "../src/lib/anime-catalog-season.ts";
+import {
 	groupWikidataJapaneseTitles,
 	toWikidataPageUrl,
 	WIKIDATA_PROPERTY_MAL_ANIME_ID_URL,
@@ -10,7 +15,7 @@ import {
 
 type SeasonName = "winter" | "spring" | "summer" | "fall";
 
-type AnimeOfflineSourceData = {
+type AnimeSeasonSourceData = {
 	mal_id: number;
 	title: string;
 	season: string;
@@ -18,11 +23,11 @@ type AnimeOfflineSourceData = {
 
 type AnimeSourceRecordRow = {
 	mal_id: number;
-	source: "anime_offline_database" | "jikan" | "wikidata";
-	normalized_data: AnimeOfflineSourceData;
+	source: AnimeCatalogSeasonSource | "wikidata";
+	normalized_data: AnimeSeasonSourceData;
 };
 
-type AnimeOfflineSourceRow = Pick<AnimeSourceRecordRow, "mal_id" | "normalized_data">;
+type AnimeSeasonSourceRow = Pick<AnimeSourceRecordRow, "mal_id" | "source">;
 
 type WikidataNormalizedData = {
 	mal_id: number;
@@ -115,21 +120,22 @@ function sleep(ms: number) {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function fetchAnimeOfflineSourceRows(
+async function fetchAnimeSeasonSourceRows(
 	supabase: ReturnType<typeof getSupabaseClient>,
 	season: string,
-): Promise<AnimeOfflineSourceRow[]> {
-	const rows: AnimeOfflineSourceRow[] = [];
+): Promise<AnimeSeasonSourceRow[]> {
+	const rows: AnimeSeasonSourceRow[] = [];
 	for (let start = 0; ; start += DATABASE_BATCH_SIZE) {
 		const { data, error } = await supabase
 			.from("anime_source_records")
-			.select("mal_id,normalized_data")
-			.eq("source", "anime_offline_database")
+			.select("mal_id,source")
+			.in("source", [...ANIME_CATALOG_SEASON_SOURCES])
 			.filter("normalized_data->>season", "eq", season)
 			.order("mal_id", { ascending: true })
+			.order("source", { ascending: true })
 			.range(start, start + DATABASE_BATCH_SIZE - 1);
-		if (error) throw new Error(`Could not read ODbL source records: ${error.message}`);
-		rows.push(...((data ?? []) as AnimeOfflineSourceRow[]));
+		if (error) throw new Error(`Could not read ODbL/Jikan season source records: ${error.message}`);
+		rows.push(...((data ?? []) as AnimeSeasonSourceRow[]));
 		if (!data || data.length < DATABASE_BATCH_SIZE) break;
 	}
 	return rows;
@@ -210,15 +216,16 @@ async function main() {
 	const options = parseArgs(process.argv.slice(2));
 	const season = `${options.year}-${options.season}`;
 	const supabase = getSupabaseClient();
-	const offlineRows = await fetchAnimeOfflineSourceRows(supabase, season);
-	if (offlineRows.length === 0) throw new Error(`No ODbL source records found for ${season}.`);
+	const seasonSourceRows = await fetchAnimeSeasonSourceRows(supabase, season);
+	if (seasonSourceRows.length === 0) throw new Error(`No ODbL or Jikan source records found for ${season}.`);
+	const malIds = collectAnimeCatalogSeasonMalIds(seasonSourceRows);
 
-	const bindings = await fetchWikidataBindings(offlineRows.map((row) => row.mal_id));
+	const bindings = await fetchWikidataBindings(malIds);
 	const records = groupWikidataJapaneseTitles(bindings);
 	const sourceRows = buildSourceRows(records);
 	const conflicts = sourceRows.filter((row) => row.normalized_data.title_ja === null);
 	console.log(
-		`Wikidata coverage: ${sourceRows.length}/${offlineRows.length}; ${conflicts.length} records have conflicting Japanese labels.`,
+		`Wikidata coverage: ${sourceRows.length}/${malIds.length}; ${conflicts.length} records have conflicting Japanese labels.`,
 	);
 
 	if (options.dryRun) {

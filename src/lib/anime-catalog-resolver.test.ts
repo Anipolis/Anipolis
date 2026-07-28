@@ -94,6 +94,39 @@ describe("resolveAnimeCatalog", () => {
 		expect(resolved.fieldSources["title"]?.source).toBe("manual");
 	});
 
+	it("uses a confirmed Syobocal title and official links ahead of other imported sources", () => {
+		const resolved = resolveAnimeCatalog([
+			source("anime_offline_database", { title: "Example", status: "finished" }),
+			source("wikidata", { title_ja: "別の検証済みタイトル" }),
+			source("jikan", {
+				title_ja: "Jikanタイトル",
+				official_site_url: "https://jikan.example/anime",
+			}),
+			source("syobocal", {
+				title_ja: "しょぼいカレンダー正式タイトル",
+				official_site_url: "https://official.example/anime",
+				official_x_url: "https://x.com/example",
+				resources: [{ name: "公式", url: "https://official.example/anime" }],
+			}),
+		]);
+
+		expect(resolved.canonical).toMatchObject({
+			title: "しょぼいカレンダー正式タイトル",
+			official_site_url: "https://official.example/anime",
+			official_x_url: "https://x.com/example",
+			metadata_ready: true,
+		});
+		expect(resolved.fieldSources["title"]).toEqual({ source: "syobocal", confidence: "verified" });
+		expect(resolved.fieldSources["official_site_url"]).toEqual({
+			source: "syobocal",
+			confidence: "verified",
+		});
+		expect(resolved.canonical.resources).toContainEqual({
+			name: "しょぼいカレンダー",
+			url: "https://example.com/syobocal",
+		});
+	});
+
 	it("resolves corporate studio aliases through a stable Wikidata identity", () => {
 		const resolved = resolveAnimeCatalog(
 			[

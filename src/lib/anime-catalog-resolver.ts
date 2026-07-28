@@ -1,6 +1,6 @@
 import { normalizeStudioAlias, type StudioNameMapping } from "./wikidata-studio-names.ts";
 
-export type CatalogSourceName = "manual" | "wikidata" | "jikan" | "anime_offline_database" | "legacy";
+export type CatalogSourceName = "manual" | "syobocal" | "wikidata" | "jikan" | "anime_offline_database" | "legacy";
 export type ResolutionConfidence = "verified" | "source" | "fallback";
 
 export type CatalogSourceRecord = {
@@ -186,18 +186,23 @@ function mergeResources(
 	legacy: unknown,
 	sourceRecords: readonly CatalogSourceRecord[],
 	jikan: Record<string, unknown>,
+	syobocal: Record<string, unknown>,
 ): { name: string; url: string }[] {
 	const sourceNames = {
 		anime_offline_database: "anime-offline-database",
+		syobocal: "しょぼいカレンダー",
 		wikidata: "Wikidata",
 	} as const;
 	const combined = [
 		...resourceLinks(legacy),
 		...resourceLinks(jikan["resources"]),
+		...resourceLinks(syobocal["resources"]),
 		...sourceRecords
 			.filter(
 				(record): record is CatalogSourceRecord & { source: keyof typeof sourceNames } =>
-					record.source === "anime_offline_database" || record.source === "wikidata",
+					record.source === "anime_offline_database" ||
+					record.source === "syobocal" ||
+					record.source === "wikidata",
 			)
 			.map((record) => ({ name: sourceNames[record.source], url: record.source_url })),
 	];
@@ -219,6 +224,7 @@ export function resolveAnimeCatalog(
 ): AnimeCatalogResolution {
 	const bySource = new Map(sourceRecords.map((record) => [record.source, asRecord(record.normalized_data)]));
 	const offline = bySource.get("anime_offline_database") ?? {};
+	const syobocal = bySource.get("syobocal") ?? {};
 	const wikidata = bySource.get("wikidata") ?? {};
 	const jikan = bySource.get("jikan") ?? {};
 	const manual = bySource.get("manual") ?? {};
@@ -226,6 +232,7 @@ export function resolveAnimeCatalog(
 	if (!malId) throw new Error("A MAL ID is required to resolve an anime catalog row.");
 
 	const offlineTitle = stringValue(offline, "title");
+	const syobocalJapaneseTitle = stringValue(syobocal, "title_ja");
 	const wikidataJapaneseTitle = stringValue(wikidata, "title_ja");
 	const jikanJapaneseTitle =
 		stringValue(jikan, "title_ja") ??
@@ -234,6 +241,7 @@ export function resolveAnimeCatalog(
 		legacyRow?.title && containsJapaneseScript(legacyRow.title) ? legacyRow.title : undefined;
 	const title = firstDefined([
 		candidate(stringValue(manual, "title"), "manual", "verified"),
+		candidate(syobocalJapaneseTitle, "syobocal", "verified"),
 		candidate(wikidataJapaneseTitle, "wikidata", "verified"),
 		candidate(jikanJapaneseTitle, "jikan", "verified"),
 		candidate(legacyJapaneseTitle, "legacy", "fallback"),
@@ -291,8 +299,16 @@ export function resolveAnimeCatalog(
 	const airedFrom = resolveNullableString("aired_from", false);
 	const airedTo = resolveNullableString("aired_to", false);
 	const broadcastTime = resolveNullableString("broadcast_time", false);
-	const officialSiteUrl = resolveNullableString("official_site_url", false);
-	const officialXUrl = resolveNullableString("official_x_url", false);
+	const resolveOfficialUrl = (key: "official_site_url" | "official_x_url") =>
+		firstDefined<string | null>([
+			candidate(nullableStringValue(manual, key), "manual", "verified"),
+			candidate(nullableStringValue(syobocal, key), "syobocal", "verified"),
+			candidate(nullableStringValue(jikan, key), "jikan", "source"),
+			candidate(legacyRow?.[key], "legacy", "fallback"),
+			{ value: null, source: "legacy", confidence: "fallback" },
+		]);
+	const officialSiteUrl = resolveOfficialUrl("official_site_url");
+	const officialXUrl = resolveOfficialUrl("official_x_url");
 	const coverUrl = resolveNullableString("cover_url", false);
 	const status = firstDefined([
 		candidate(stringValue(manual, "status"), "manual", "verified"),
@@ -378,7 +394,7 @@ export function resolveAnimeCatalog(
 	]);
 
 	const verifiedDisplayTitle =
-		["manual", "wikidata", "jikan"].includes(title.source) && title.confidence === "verified";
+		["manual", "syobocal", "wikidata", "jikan"].includes(title.source) && title.confidence === "verified";
 	const resolutionStatus = verifiedDisplayTitle ? "verified" : legacyJapaneseTitle ? "review" : "unverified";
 	const resolutionReasons = verifiedDisplayTitle
 		? []
@@ -437,7 +453,7 @@ export function resolveAnimeCatalog(
 			broadcast_time: broadcastTime.value,
 			official_site_url: officialSiteUrl.value,
 			official_x_url: officialXUrl.value,
-			resources: mergeResources(legacyRow?.resources, sourceRecords, jikan),
+			resources: mergeResources(legacyRow?.resources, sourceRecords, jikan, syobocal),
 			cover_url: coverUrl.value,
 			metadata_ready: resolutionStatus === "verified",
 		},

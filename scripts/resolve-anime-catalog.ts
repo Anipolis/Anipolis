@@ -6,6 +6,11 @@ import {
 	type LegacyAnimeCatalogRow,
 	resolveAnimeCatalog,
 } from "../src/lib/anime-catalog-resolver.ts";
+import {
+	ANIME_CATALOG_SEASON_SOURCES,
+	type AnimeCatalogSeasonSource,
+	collectAnimeCatalogSeasonMalIds,
+} from "../src/lib/anime-catalog-season.ts";
 import { normalizeStudioAlias, type StudioNameMapping } from "../src/lib/wikidata-studio-names.ts";
 
 type SeasonName = "winter" | "spring" | "summer" | "fall";
@@ -14,6 +19,11 @@ type SourceRecordRow = CatalogSourceRecord & {
 	id: number;
 	source_version: string;
 	imported_at: string;
+};
+
+type SeasonSourceRecordRow = {
+	mal_id: number;
+	source: AnimeCatalogSeasonSource;
 };
 
 type ResolutionRecordInsert = {
@@ -159,21 +169,22 @@ function getSupabaseClient() {
 	});
 }
 
-async function fetchOfflineRecords(
+async function fetchSeasonSourceRecords(
 	supabase: ReturnType<typeof getSupabaseClient>,
 	season: string,
-): Promise<SourceRecordRow[]> {
-	const rows: SourceRecordRow[] = [];
+): Promise<SeasonSourceRecordRow[]> {
+	const rows: SeasonSourceRecordRow[] = [];
 	for (let start = 0; ; start += BATCH_SIZE) {
 		const { data, error } = await supabase
 			.from("anime_source_records")
-			.select("id,mal_id,source,source_version,source_url,normalized_data,imported_at")
-			.eq("source", "anime_offline_database")
+			.select("mal_id,source")
+			.in("source", [...ANIME_CATALOG_SEASON_SOURCES])
 			.filter("normalized_data->>season", "eq", season)
 			.order("mal_id", { ascending: true })
+			.order("source", { ascending: true })
 			.range(start, start + BATCH_SIZE - 1);
-		if (error) throw new Error(`Could not read ODbL source records: ${error.message}`);
-		rows.push(...((data ?? []) as SourceRecordRow[]));
+		if (error) throw new Error(`Could not read ODbL/Jikan season source records: ${error.message}`);
+		rows.push(...((data ?? []) as SeasonSourceRecordRow[]));
 		if (!data || data.length < BATCH_SIZE) break;
 	}
 	return rows;
@@ -405,9 +416,9 @@ async function main() {
 	const options = parseArgs(process.argv.slice(2));
 	const season = `${options.year}-${options.season}`;
 	const supabase = getSupabaseClient();
-	const offlineRecords = await fetchOfflineRecords(supabase, season);
-	if (offlineRecords.length === 0) throw new Error(`No ODbL source records found for ${season}.`);
-	const malIds = offlineRecords.map((record) => record.mal_id);
+	const seasonSourceRecords = await fetchSeasonSourceRecords(supabase, season);
+	if (seasonSourceRecords.length === 0) throw new Error(`No ODbL or Jikan source records found for ${season}.`);
+	const malIds = collectAnimeCatalogSeasonMalIds(seasonSourceRecords);
 	const [sourceRecords, legacyRows] = await Promise.all([
 		fetchAllSourceRecords(supabase, malIds),
 		fetchLegacyRows(supabase, malIds),

@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { ANIME_CATALOG_SEASON_SOURCES, type AnimeCatalogSeasonSource } from "../src/lib/anime-catalog-season.ts";
 import { WIKIDATA_SPARQL_ENDPOINT } from "../src/lib/wikidata-anime-titles.ts";
 import {
 	type CanonicalStudioNames,
@@ -18,7 +19,7 @@ type SeasonName = "winter" | "spring" | "summer" | "fall";
 
 type SourceRecord = {
 	mal_id: number;
-	source: "anime_offline_database" | "jikan";
+	source: AnimeCatalogSeasonSource;
 	normalized_data: Record<string, unknown>;
 };
 
@@ -110,30 +111,21 @@ function getSupabaseClient() {
 }
 
 async function fetchSeasonSources(supabase: ReturnType<typeof getSupabaseClient>, season: string) {
-	const offline: SourceRecord[] = [];
+	const records: SourceRecord[] = [];
 	for (let start = 0; ; start += BATCH_SIZE) {
 		const { data, error } = await supabase
 			.from("anime_source_records")
 			.select("mal_id,source,normalized_data")
-			.eq("source", "anime_offline_database")
+			.in("source", [...ANIME_CATALOG_SEASON_SOURCES])
 			.filter("normalized_data->>season", "eq", season)
+			.order("mal_id", { ascending: true })
+			.order("source", { ascending: true })
 			.range(start, start + BATCH_SIZE - 1);
-		if (error) throw new Error(`Could not read ODbL source records: ${error.message}`);
-		offline.push(...((data ?? []) as SourceRecord[]));
+		if (error) throw new Error(`Could not read ODbL/Jikan season source records: ${error.message}`);
+		records.push(...((data ?? []) as SourceRecord[]));
 		if (!data || data.length < BATCH_SIZE) break;
 	}
-	const malIds = offline.map((record) => record.mal_id);
-	const jikan: SourceRecord[] = [];
-	for (let start = 0; start < malIds.length; start += BATCH_SIZE) {
-		const { data, error } = await supabase
-			.from("anime_source_records")
-			.select("mal_id,source,normalized_data")
-			.eq("source", "jikan")
-			.in("mal_id", malIds.slice(start, start + BATCH_SIZE));
-		if (error) throw new Error(`Could not read Jikan source records: ${error.message}`);
-		jikan.push(...((data ?? []) as SourceRecord[]));
-	}
-	return [...offline, ...jikan];
+	return records;
 }
 
 function strings(value: unknown): string[] {
