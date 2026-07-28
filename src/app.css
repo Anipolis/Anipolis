@@ -1178,12 +1178,18 @@ textarea {
 	white-space: nowrap;
 }
 
-.trending-panel-footer-link {
-	display: block;
+.trending-panel-footer-links {
+	display: flex;
+	align-items: center;
+	gap: 6px;
 	margin-top: 12px;
 	padding: 0 4px;
 	color: var(--color-text-muted);
 	font-size: 12px;
+}
+
+.trending-panel-footer-link {
+	color: inherit;
 	text-decoration: none;
 }
 

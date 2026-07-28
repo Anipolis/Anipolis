@@ -5,6 +5,7 @@ import { fade, scale } from "svelte/transition";
 import { enhance } from "$app/forms";
 import { page } from "$app/state";
 import { trapFocus } from "$lib/actions/trapFocus";
+import { findAnimeOfflineSource, isAnimeOfflineSource } from "$lib/anime-offline-database";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
 import type { BroadcastRoomOverride } from "$lib/types";
@@ -44,6 +45,7 @@ const displayResources = $derived(
 		data.anime.official_x_url,
 	),
 );
+const animeOfflineSource = $derived(findAnimeOfflineSource(data.anime.resources));
 // スマホ版左カラム用: ラベルを廃した、タップ検索可能な静的メタ情報チップ
 const compactMetaLinks = $derived([
 	...displayStudios.map((s) => ({ text: s, href: `/anime?studio=${encodeURIComponent(s)}` })),
@@ -124,7 +126,7 @@ function buildDisplayResources(
 	if (malId) links.push({ name: "MAL", url: `https://myanimelist.net/anime/${malId}` });
 	links.push(
 		...resources
-			.filter((resource) => resource.name && isHttpUrl(resource.url))
+			.filter((resource) => resource.name && isHttpUrl(resource.url) && !isAnimeOfflineSource(resource))
 			.map((resource) => {
 				if (isMalUrl(resource.url) || resource.name.toLowerCase() === "mal") {
 					return null;
@@ -486,6 +488,15 @@ $effect(() => {
 					<span class="meta-chip aired">
 						{formatAiredPeriod(data.anime.aired_from, data.anime.aired_to)}
 					</span>
+				{/if}
+				{#if animeOfflineSource}
+					<div class="anime-data-attribution">
+						<span>作品メタデータ:</span>
+						<a href={animeOfflineSource.url} target="_blank" rel="noopener noreferrer"
+							>anime-offline-database</a
+						>
+						<a href="/data-sources">ODbL 1.0・詳細</a>
+					</div>
 				{/if}
 			</div>
 		</div>
@@ -1814,6 +1825,23 @@ $effect(() => {
 	font-weight: 600;
 	letter-spacing: 0.04em;
 	text-transform: uppercase;
+}
+.anime-data-attribution {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 8px;
+	padding: 10px 14px 0;
+	border-top: 1px solid var(--border);
+	color: var(--text-muted);
+	font-size: 0.72rem;
+	line-height: 1.5;
+}
+.anime-data-attribution a {
+	color: var(--accent);
+	text-decoration: none;
+}
+.anime-data-attribution a:hover {
+	text-decoration: underline;
 }
 .copyright {
 	font-size: 0.72rem;
