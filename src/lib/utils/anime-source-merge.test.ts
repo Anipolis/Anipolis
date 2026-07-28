@@ -71,4 +71,13 @@ describe("mergeJikanCanonicalRow", () => {
 		expect(merged.resources.some((resource) => resource.name === "anime-offline-database")).toBe(true);
 		expect(merged.resources.some((resource) => resource.name === "AniDB")).toBe(true);
 	});
+
+	it("keeps a Wikidata Japanese title when the romaji title is not populated", () => {
+		const merged = mergeJikanCanonicalRow(
+			jikan,
+			offlineExisting({ title: "火狩りの王 第1期", title_romaji: null }),
+		);
+
+		expect(merged.title).toBe("火狩りの王 第1期");
+	});
 });

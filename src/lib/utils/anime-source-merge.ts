@@ -1,4 +1,4 @@
-import { isAnimeOfflineSource } from "$lib/anime-offline-database";
+import { containsJapaneseScript, isAnimeOfflineSource } from "$lib/anime-offline-database";
 import type { AnimeResourceLink } from "$lib/types";
 import { isMalUrl } from "$lib/utils/url";
 
@@ -61,7 +61,8 @@ export function mergeJikanCanonicalRow(
 	const resources = mergeResourceLinks(existing.resources, jikan.resources);
 	const hasAnimeOfflineBaseline = resources.some(isAnimeOfflineSource);
 	const existingTitleIsFallback =
-		existing.title_romaji === null || existing.title.trim() === existing.title_romaji.trim();
+		!containsJapaneseScript(existing.title) &&
+		(existing.title_romaji === null || existing.title.trim() === existing.title_romaji.trim());
 	const existingStudio = existing.studio ?? [];
 	const existingStudioEn = existing.studio_en ?? [];
 	const existingStudioIsFallback =

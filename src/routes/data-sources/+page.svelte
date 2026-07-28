@@ -5,6 +5,11 @@ import {
 	ANIME_OFFLINE_REPOSITORY_URL,
 	ANIPOLIS_TRANSFORMATION_URL,
 } from "$lib/anime-offline-database";
+import {
+	WIKIDATA_CC0_URL,
+	WIKIDATA_PROPERTY_MAL_ANIME_ID_URL,
+	WIKIDATA_TRANSFORMATION_URL,
+} from "$lib/wikidata-anime-titles";
 </script>
 
 <svelte:head>
@@ -34,6 +39,11 @@ import {
 			<a href="/api/data/anime-catalog">アニメ作品カタログAPI</a>から取得できます。
 			このAPIはJikanや手動編集を含むAnipolis全作品データの配布ではありません。
 		</p>
+		<p>
+			日本語タイトルの補完には、<a href={WIKIDATA_PROPERTY_MAL_ANIME_ID_URL}>MyAnimeList anime ID（P4086）</a>
+			で作品を照合したWikidataの日本語ラベルも利用します。Wikidataの構造化データは
+			<a href={WIKIDATA_CC0_URL}>CC0</a>で提供されています。
+		</p>
 	</section>
 
 	<section>
@@ -42,7 +52,12 @@ import {
 			<li>MyAnimeListの作品URLからMAL IDを抽出し、作品の照合キーとして使用します。</li>
 			<li>タイトル、話数、種別、公開状況、シーズン、制作スタジオをソース別レコードへ保存します。</li>
 			<li>話数・種別・公開状況・シーズンなど同等の項目は、このODbLデータを表示用データの基礎にします。</li>
-			<li>タイトルには言語区分がないため、日本語表示名は既存値またはJikan・手動データで補完します。</li>
+			<li>
+				タイトルには言語区分がないため、synonyms内の仮名を含む値は未検証候補として保存し、自動適用しません。
+			</li>
+			<li>
+				日本語表示名は既存値を維持し、未補完のODbLタイトルだけWikidataの単一日本語ラベルで安全に補完します。
+			</li>
 			<li>上流のタグはAnipolisのジャンル分類と意味が異なるため、自動取り込みしません。</li>
 			<li>関連作品は関係種別を判別できないため、自動取り込みしません。</li>
 			<li>画像の権利はデータベースライセンスとは別なので、画像URLや画像自体は取り込みません。</li>
@@ -53,9 +68,11 @@ import {
 		<h2>再現可能性</h2>
 		<p>
 			ソース別レコードには、取り込みに使用した固定リリース、更新日、正規化結果を保存します。変換処理の全体は
-			<a href={ANIPOLIS_TRANSFORMATION_URL}>公開インポータースクリプト</a>で確認できます。
+			<a href={ANIPOLIS_TRANSFORMATION_URL}>ODbLインポーター</a>と
+			<a href={WIKIDATA_TRANSFORMATION_URL}>Wikidataインポーター</a>で確認できます。
 		</p>
-		<pre><code>pnpm import:anime-offline -- --year 2023 --season winter --dry-run</code></pre>
+		<pre><code>pnpm import:anime-offline -- --year 2023 --season winter --dry-run
+pnpm import:wikidata-titles -- --year 2023 --season winter --dry-run</code></pre>
 	</section>
 
 	<section>

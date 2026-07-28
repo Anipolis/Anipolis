@@ -16,6 +16,7 @@ export type AnimeOfflineEntry = {
 	type: string;
 	episodes: number;
 	status: string;
+	synonyms?: string[];
 	animeSeason: {
 		season: string;
 		year: number;
@@ -32,6 +33,10 @@ export type AnimeOfflineDataset = {
 	lastUpdate: string;
 	data: AnimeOfflineEntry[];
 };
+
+export function containsJapaneseScript(value: string): boolean {
+	return /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/u.test(value);
+}
 
 export type AnimeOfflineCanonicalRow = {
 	mal_id: number;
@@ -161,7 +166,8 @@ export function mergeAnimeOfflineCanonicalRow(
 	const existingStudio = existing.studio ?? [];
 	const existingStudioEn = existing.studio_en ?? [];
 	const existingTitleIsFallback =
-		existing.title_romaji === null || existing.title.trim() === existing.title_romaji.trim();
+		!containsJapaneseScript(existing.title) &&
+		(existing.title_romaji === null || existing.title.trim() === existing.title_romaji.trim());
 	const existingStudioIsFallback =
 		existingStudio.length === 0 ||
 		JSON.stringify(existingStudio.map((name) => name.toLowerCase())) ===

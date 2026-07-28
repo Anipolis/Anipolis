@@ -12,6 +12,7 @@ import {
 	mergeAnimeOfflineSource,
 	pinLatestGithubReleaseAssetUrl,
 } from "../src/lib/anime-offline-database.ts";
+import { getKanaTitleCandidates } from "../src/lib/wikidata-anime-titles.ts";
 
 type AnimeImportRow = AnimeOfflineCanonicalRow;
 
@@ -24,6 +25,8 @@ type AnimeOfflineNormalizedData = {
 	status: "airing" | "finished" | "upcoming";
 	season: string;
 	studios: string[];
+	title_ja_candidates: string[];
+	title_ja_candidates_basis: "contains_kana_unverified";
 };
 
 type AnimeSourceRecordInsert = {
@@ -219,7 +222,7 @@ function dedupeRows(rows: AnimeImportRow[]): AnimeImportRow[] {
 	return [...new Map(rows.map((row) => [row.mal_id, row])).values()];
 }
 
-function toNormalizedSourceData(row: AnimeImportRow): AnimeOfflineNormalizedData {
+function toNormalizedSourceData(row: AnimeImportRow, titleJaCandidates: string[]): AnimeOfflineNormalizedData {
 	return {
 		mal_id: row.mal_id,
 		title: row.title,
@@ -229,13 +232,28 @@ function toNormalizedSourceData(row: AnimeImportRow): AnimeOfflineNormalizedData
 		status: row.status,
 		season: row.season,
 		studios: row.studio_en,
+		title_ja_candidates: titleJaCandidates,
+		title_ja_candidates_basis: "contains_kana_unverified",
 	};
+}
+
+function buildTitleCandidatesByMalId(entries: AnimeOfflineEntry[]): Map<number, string[]> {
+	const candidatesByMalId = new Map<number, string[]>();
+	for (const entry of entries) {
+		const malId = getMalIdFromSources(entry.sources);
+		if (!malId) continue;
+		const candidates = getKanaTitleCandidates(entry.synonyms ?? []);
+		const previous = candidatesByMalId.get(malId) ?? [];
+		candidatesByMalId.set(malId, [...new Set([...previous, ...candidates])]);
+	}
+	return candidatesByMalId;
 }
 
 function buildSourceRecordRows(
 	rows: AnimeImportRow[],
 	resolvedUrl: string,
 	sourceUpdatedAt: string,
+	titleCandidatesByMalId: Map<number, string[]>,
 ): AnimeSourceRecordInsert[] {
 	const importedAt = new Date().toISOString();
 	const sourceVersion = getGithubReleaseVersion(resolvedUrl);
@@ -245,7 +263,7 @@ function buildSourceRecordRows(
 		source_version: sourceVersion,
 		source_url: resolvedUrl,
 		source_updated_at: sourceUpdatedAt || null,
-		normalized_data: toNormalizedSourceData(row),
+		normalized_data: toNormalizedSourceData(row, titleCandidatesByMalId.get(row.mal_id) ?? []),
 		imported_at: importedAt,
 	}));
 }
@@ -285,7 +303,7 @@ async function upsertRows(supabase: ReturnType<typeof getSupabaseClient>, rows: 
 	}
 }
 
-function printFormatInspection(rows: AnimeImportRow[]) {
+function printFormatInspection(rows: AnimeImportRow[], titleCandidatesByMalId: Map<number, string[]>) {
 	const hasJapaneseScript = (value: string) => /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/u.test(value);
 	const japaneseTitleCount = rows.filter((row) => hasJapaneseScript(row.title)).length;
 	const studios = rows.flatMap((row) => row.studio_en);
@@ -296,6 +314,10 @@ function printFormatInspection(rows: AnimeImportRow[]) {
 	);
 	console.log(
 		`Studio format: ${lowercaseStudioCount}/${studios.length} values are entirely lowercase (${studios.length} total values).`,
+	);
+	const candidateRecords = [...titleCandidatesByMalId.values()].filter((candidates) => candidates.length > 0);
+	console.log(
+		`Kana title candidates: ${candidateRecords.length}/${rows.length} records; ${candidateRecords.filter((candidates) => candidates.length > 1).length} have multiple candidates.`,
 	);
 	console.log(
 		`Title samples: ${rows
@@ -323,16 +345,17 @@ async function main() {
 			return row ? [row] : [];
 		}),
 	);
+	const titleCandidatesByMalId = buildTitleCandidatesByMalId(seasonEntries);
 
 	console.log(`Dataset release asset: ${resolvedUrl}`);
 	console.log(`Dataset last update: ${dataset.lastUpdate}`);
 	console.log(`Matched ${seasonEntries.length} seasonal entries; mapped ${rows.length} entries with MAL IDs.`);
-	printFormatInspection(rows);
+	printFormatInspection(rows, titleCandidatesByMalId);
 
 	if (rows.length === 0) {
 		throw new Error(`No importable entries found for ${options.year} ${options.season}.`);
 	}
-	const sourceRecordRows = buildSourceRecordRows(rows, resolvedUrl, dataset.lastUpdate);
+	const sourceRecordRows = buildSourceRecordRows(rows, resolvedUrl, dataset.lastUpdate, titleCandidatesByMalId);
 
 	if (options.dryRun) {
 		console.log(JSON.stringify(sourceRecordRows.slice(0, 3), null, 2));
