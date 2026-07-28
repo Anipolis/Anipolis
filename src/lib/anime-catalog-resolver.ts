@@ -183,10 +183,20 @@ function resourceLinks(value: unknown): { name: string; url: string }[] {
 	});
 }
 
+function publicSyobocalResources(value: unknown): { name: string; url: string }[] {
+	return resourceLinks(value).filter((resource) => {
+		if (resource.name.toLocaleLowerCase() !== "wikipedia") return false;
+		try {
+			const hostname = new URL(resource.url).hostname.toLocaleLowerCase();
+			return hostname === "ja.wikipedia.org" || hostname === "ja.m.wikipedia.org";
+		} catch {
+			return false;
+		}
+	});
+}
+
 function mergeResources(
-	legacy: unknown,
 	sourceRecords: readonly CatalogSourceRecord[],
-	jikan: Record<string, unknown>,
 	syobocal: Record<string, unknown>,
 ): { name: string; url: string }[] {
 	const sourceNames = {
@@ -195,9 +205,7 @@ function mergeResources(
 		wikidata: "Wikidata",
 	} as const;
 	const combined = [
-		...resourceLinks(legacy),
-		...resourceLinks(jikan["resources"]),
-		...resourceLinks(syobocal["resources"]),
+		...publicSyobocalResources(syobocal["resources"]),
 		...sourceRecords
 			.filter(
 				(record): record is CatalogSourceRecord & { source: keyof typeof sourceNames } =>
@@ -454,7 +462,7 @@ export function resolveAnimeCatalog(
 			broadcast_time: broadcastTime.value,
 			official_site_url: officialSiteUrl.value,
 			official_x_url: officialXUrl.value,
-			resources: mergeResources(legacyRow?.resources, sourceRecords, jikan, syobocal),
+			resources: mergeResources(sourceRecords, syobocal),
 			cover_url: coverUrl.value,
 			metadata_ready: resolutionStatus === "verified",
 		},

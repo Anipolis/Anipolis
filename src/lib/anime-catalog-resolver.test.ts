@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { type CatalogSourceRecord, resolveAnimeCatalog, selectVerifiedRomajiCandidate } from "./anime-catalog-resolver";
+import {
+	type CatalogSourceRecord,
+	type LegacyAnimeCatalogRow,
+	resolveAnimeCatalog,
+	selectVerifiedRomajiCandidate,
+} from "./anime-catalog-resolver";
 
 function source(name: CatalogSourceRecord["source"], normalizedData: Record<string, unknown>): CatalogSourceRecord {
 	return {
@@ -7,6 +12,32 @@ function source(name: CatalogSourceRecord["source"], normalizedData: Record<stri
 		source: name,
 		source_url: `https://example.com/${name}`,
 		normalized_data: normalizedData,
+	};
+}
+
+function legacy(resources: { name: string; url: string }[]): LegacyAnimeCatalogRow {
+	return {
+		mal_id: 43760,
+		title: "Legacy title",
+		title_en: null,
+		title_romaji: null,
+		episode_count: null,
+		type: null,
+		status: "finished",
+		aired_from: null,
+		aired_to: null,
+		season: "2023-winter",
+		source: null,
+		studio: null,
+		studio_en: null,
+		genre: null,
+		genre_en: null,
+		broadcast_day: null,
+		broadcast_time: null,
+		official_site_url: null,
+		official_x_url: null,
+		resources,
+		cover_url: null,
 	};
 }
 
@@ -125,6 +156,31 @@ describe("resolveAnimeCatalog", () => {
 			name: "しょぼいカレンダー",
 			url: "https://example.com/syobocal",
 		});
+	});
+
+	it("publishes only verified Wikipedia and provenance resources", () => {
+		const resolved = resolveAnimeCatalog(
+			[
+				source("anime_offline_database", { title: "Example", status: "finished" }),
+				source("jikan", {
+					resources: [{ name: "Streaming", url: "https://stream.example/anime" }],
+				}),
+				source("syobocal", {
+					resources: [
+						{ name: "AT-X", url: "https://www.at-x.com/program/detail/1" },
+						{ name: "Wikipedia", url: "https://ja.wikipedia.org/wiki/Example" },
+						{ name: "Wikipedia", url: "https://example.com/not-wikipedia" },
+					],
+				}),
+			],
+			legacy([{ name: "テレビ東京", url: "https://www.tv-tokyo.co.jp/anime/example" }]),
+		);
+
+		expect(resolved.canonical.resources).toEqual([
+			{ name: "anime-offline-database", url: "https://example.com/anime_offline_database" },
+			{ name: "しょぼいカレンダー", url: "https://example.com/syobocal" },
+			{ name: "Wikipedia", url: "https://ja.wikipedia.org/wiki/Example" },
+		]);
 	});
 
 	it("resolves corporate studio aliases through a stable Wikidata identity", () => {

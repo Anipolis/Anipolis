@@ -32,6 +32,12 @@ Wikipedia経由で同一性を確認できても、しょぼいカレンダー�
 `anime_source_records.normalized_data.resources` に保存する。Wikipedia本文やInfoboxは
 取り込まず、作品同一性の照合と出典リンクだけに利用する。
 
+`Comment` に含まれるテレビ局、配信サイト、商品などのリンクは
+`syobocal_titles.raw_data` と `syobocal_titles.links` に内部スナップショットとして残すが、
+公開用の `anime.resources` には含めない。公式サイトと公式Xはそれぞれの専用項目で扱う。
+resolverは公開リソースを現在のソースレコードから再構築し、過去に公開用DBへ入った
+放送局リンクを引き継がない。
+
 ## 運用
 
 初回に `105_syobocal_wikipedia_mapping_method.sql` を適用する。その後は通常の

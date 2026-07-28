@@ -1480,15 +1480,7 @@ async function main() {
 		const verifiedWikipedia = wikipedia.find(
 			(candidate) => candidate.malId === proposal.malId && candidate.tid === proposal.tid,
 		);
-		const resources = [
-			...title.links,
-			...(verifiedWikipedia ? [{ name: "Wikipedia", url: verifiedWikipedia.sourceUrl }] : []),
-		].filter(
-			(resource, index, values) =>
-				values.findIndex(
-					(candidate) => candidate.url.toLocaleLowerCase() === resource.url.toLocaleLowerCase(),
-				) === index,
-		);
+		const resources = verifiedWikipedia ? [{ name: "Wikipedia", url: verifiedWikipedia.sourceUrl }] : [];
 		return [
 			{
 				mal_id: proposal.malId,
