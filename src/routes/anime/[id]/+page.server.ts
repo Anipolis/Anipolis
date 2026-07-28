@@ -3,6 +3,7 @@ import { recommendAnimeAction, removeUserAnimeEntry, upsertUserAnimeEntry } from
 import { addBroadcastOverrideAction, deleteBroadcastOverrideAction, updateAnimeAction } from "$lib/server/anime-admin";
 import {
 	getAnime,
+	getAnimeDataAttributions,
 	getAnimeRelations,
 	getBroadcastRoomOverridesForAnime,
 	getBroadcastRoomScheduleSnapshotsForAnime,
@@ -33,8 +34,9 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 
 	if (!anime) throw error(404, "アニメが見つかりません");
 
-	const [relations, broadcastOverrides, events, scheduleSnapshots] = await Promise.all([
+	const [relations, dataAttributions, broadcastOverrides, events, scheduleSnapshots] = await Promise.all([
 		getAnimeRelations(supabase, anime.mal_id),
+		getAnimeDataAttributions(supabase, anime.mal_id),
 		getBroadcastRoomOverridesForAnime(supabase, params.id),
 		getEventsForAnime(supabase, Number(anime.id)),
 		getBroadcastRoomScheduleSnapshotsForAnime(supabase, Number(anime.id)),
@@ -68,7 +70,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 		? [...episodeByDate.values()].sort((left, right) => right.date.localeCompare(left.date))
 		: [];
 
-	return { anime, user, isAdmin, listedUsers, relations, episodes, broadcastOverrides, events };
+	return { anime, user, isAdmin, listedUsers, relations, dataAttributions, episodes, broadcastOverrides, events };
 };
 
 export const actions: Actions = {

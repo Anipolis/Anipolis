@@ -195,26 +195,8 @@ function publicSyobocalResources(value: unknown): { name: string; url: string }[
 	});
 }
 
-function mergeResources(
-	sourceRecords: readonly CatalogSourceRecord[],
-	syobocal: Record<string, unknown>,
-): { name: string; url: string }[] {
-	const sourceNames = {
-		anime_offline_database: "anime-offline-database",
-		syobocal: "しょぼいカレンダー",
-		wikidata: "Wikidata",
-	} as const;
-	const combined = [
-		...publicSyobocalResources(syobocal["resources"]),
-		...sourceRecords
-			.filter(
-				(record): record is CatalogSourceRecord & { source: keyof typeof sourceNames } =>
-					record.source === "anime_offline_database" ||
-					record.source === "syobocal" ||
-					record.source === "wikidata",
-			)
-			.map((record) => ({ name: sourceNames[record.source], url: record.source_url })),
-	];
+function mergeResources(syobocal: Record<string, unknown>): { name: string; url: string }[] {
+	const combined = publicSyobocalResources(syobocal["resources"]);
 	const seen = new Set<string>();
 	return combined
 		.filter((resource) => {
@@ -462,7 +444,7 @@ export function resolveAnimeCatalog(
 			broadcast_time: broadcastTime.value,
 			official_site_url: officialSiteUrl.value,
 			official_x_url: officialXUrl.value,
-			resources: mergeResources(sourceRecords, syobocal),
+			resources: mergeResources(syobocal),
 			cover_url: coverUrl.value,
 			metadata_ready: resolutionStatus === "verified",
 		},

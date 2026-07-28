@@ -78,10 +78,7 @@ describe("resolveAnimeCatalog", () => {
 			metadata_ready: true,
 		});
 		expect(first.fieldSources["studio"]).toEqual({ source: "jikan", confidence: "source" });
-		expect(first.canonical.resources).toEqual([
-			{ name: "anime-offline-database", url: "https://example.com/anime_offline_database" },
-			{ name: "Wikidata", url: "https://example.com/wikidata" },
-		]);
+		expect(first.canonical.resources).toEqual([]);
 	});
 
 	it("keeps unresolved ODbL metadata as draft instead of publishing inferred titles", () => {
@@ -152,13 +149,10 @@ describe("resolveAnimeCatalog", () => {
 			source: "syobocal",
 			confidence: "verified",
 		});
-		expect(resolved.canonical.resources).toContainEqual({
-			name: "しょぼいカレンダー",
-			url: "https://example.com/syobocal",
-		});
+		expect(resolved.canonical.resources).toEqual([]);
 	});
 
-	it("publishes only verified Wikipedia and provenance resources", () => {
+	it("publishes only verified Wikipedia as a work resource", () => {
 		const resolved = resolveAnimeCatalog(
 			[
 				source("anime_offline_database", { title: "Example", status: "finished" }),
@@ -177,8 +171,6 @@ describe("resolveAnimeCatalog", () => {
 		);
 
 		expect(resolved.canonical.resources).toEqual([
-			{ name: "anime-offline-database", url: "https://example.com/anime_offline_database" },
-			{ name: "しょぼいカレンダー", url: "https://example.com/syobocal" },
 			{ name: "Wikipedia", url: "https://ja.wikipedia.org/wiki/Example" },
 		]);
 	});

@@ -27,15 +27,28 @@ import {
 		<p class="eyebrow">DATA SOURCES</p>
 		<h1>作品データの出典</h1>
 		<p class="lead">
-			Anipolisでは、作品データの一部に <a href={ANIME_OFFLINE_REPOSITORY_URL}>anime-offline-database</a>
-			を利用しています。対象作品には作品ページ上でも出典を表示します。
+			Anipolisでは、作品ごとに実際に利用したデータ出典を作品ページの最下部に表示します。作品を閲覧するための外部リンクと、データ作成の出典は分けて扱います。
 		</p>
 	</header>
 
 	<section>
-		<h2>ライセンス</h2>
+		<h2>表示上の区分</h2>
+		<ul>
+			<li>
+				「公式リンク」は公式サイトと公式X、「リソース」はMALと検証済みWikipediaなど、作品を閲覧するためのリンクです。
+			</li>
+			<li>ページ最下部の「データ出典」は、表示データの作成に実際に利用したソースだけを示します。</li>
+			<li>
+				照合方法、信頼度、生データ、取り込み日時などの監査情報は管理用として保持し、作品ページでは公開しません。
+			</li>
+		</ul>
+	</section>
+
+	<section>
+		<h2>ライセンスと利用範囲</h2>
 		<p>
-			データベースは <a href={ANIME_OFFLINE_ODBL_URL}>Open Database License 1.0（ODbL）</a>、
+			作品カタログの基礎には <a href={ANIME_OFFLINE_REPOSITORY_URL}>anime-offline-database</a>
+			を利用しています。データベースは <a href={ANIME_OFFLINE_ODBL_URL}>Open Database License 1.0（ODbL）</a>、
 			データベース内の個々の内容は <a href={ANIME_OFFLINE_DBCL_URL}>Database Contents License 1.0（DbCL）</a>
 			に基づきます。
 		</p>
@@ -52,6 +65,10 @@ import {
 		<p>
 			スタジオ名はWikidataの<a href={WIKIDATA_ANIMATION_STUDIO_URL}>アニメーションスタジオ</a>項目と
 			<a href={WIKIDATA_MAL_COMPANY_PROPERTY_URL}>MyAnimeList company ID（P11490）</a>を組織の識別に利用します。
+		</p>
+		<p>
+			不足項目の補完と照合にはJikan
+			APIとしょぼいカレンダーを利用します。これらの生データはODbL派生カタログAPIへ混在させず、作品ページにも内部スナップショットや照合証拠を公開しません。
 		</p>
 	</section>
 

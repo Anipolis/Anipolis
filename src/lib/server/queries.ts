@@ -4,6 +4,7 @@ import { buildPostCardSelect } from "$lib/server/post-selects";
 import type { Database } from "$lib/supabase/database.types";
 import type {
 	Anime,
+	AnimeDataAttribution,
 	AnimeExchangeItem,
 	AnimeExchangeShare,
 	AnimeMute,
@@ -2128,6 +2129,22 @@ export async function getAnime(
 	}
 
 	return anime;
+}
+
+export async function getAnimeDataAttributions(
+	supabase: SupabaseClient<Database>,
+	malId: number | null,
+): Promise<AnimeDataAttribution[]> {
+	if (malId == null) return [];
+
+	const { data, error } = await supabase
+		.from("anime_data_attributions" as never)
+		.select("anime_mal_id, source, label, source_url, license_label, license_url")
+		.eq("anime_mal_id", malId)
+		.order("source", { ascending: true });
+
+	if (error || !data) return [];
+	return data as unknown as AnimeDataAttribution[];
 }
 
 export async function getAnimeRelations(

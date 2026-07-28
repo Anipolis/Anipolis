@@ -38,6 +38,11 @@ Wikipedia経由で同一性を確認できても、しょぼいカレンダー�
 resolverは公開リソースを現在のソースレコードから再構築し、過去に公開用DBへ入った
 放送局リンクを引き継がない。
 
+検証済みWikipedia URLは作品を閲覧するためのリンクとして `anime.resources` に公開する。
+一方、しょぼいカレンダー、Wikidata、Jikan、anime-offline-databaseの利用実績は
+`anime_data_attributions` に最小限の出典情報だけを投影し、作品詳細ページ最下部に表示する。
+フィールド単位の採用元、照合方法、生スナップショット、取り込み日時は内部テーブルに留める。
+
 ## 運用
 
 初回に `105_syobocal_wikipedia_mapping_method.sql` を適用する。その後は通常の

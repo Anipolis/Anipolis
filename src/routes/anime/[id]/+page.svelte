@@ -5,7 +5,6 @@ import { fade, scale } from "svelte/transition";
 import { enhance } from "$app/forms";
 import { page } from "$app/state";
 import { trapFocus } from "$lib/actions/trapFocus";
-import { findAnimeOfflineSource, isAnimeOfflineSource } from "$lib/anime-offline-database";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
 import type { BroadcastRoomOverride } from "$lib/types";
@@ -45,7 +44,6 @@ const displayResources = $derived(
 		data.anime.official_x_url,
 	),
 );
-const animeOfflineSource = $derived(findAnimeOfflineSource(data.anime.resources));
 // スマホ版左カラム用: ラベルを廃した、タップ検索可能な静的メタ情報チップ
 const compactMetaLinks = $derived([
 	...displayStudios.map((s) => ({ text: s, href: `/anime?studio=${encodeURIComponent(s)}` })),
@@ -126,7 +124,7 @@ function buildDisplayResources(
 	if (malId) links.push({ name: "MAL", url: `https://myanimelist.net/anime/${malId}` });
 	links.push(
 		...resources
-			.filter((resource) => resource.name && isHttpUrl(resource.url) && !isAnimeOfflineSource(resource))
+			.filter((resource) => resource.name && isHttpUrl(resource.url))
 			.map((resource) => {
 				if (isMalUrl(resource.url) || resource.name.toLowerCase() === "mal") {
 					return null;
@@ -1433,11 +1431,23 @@ $effect(() => {
 		</div>
 	</div>
 
-	{#if animeOfflineSource}
+	{#if data.dataAttributions.length > 0}
 		<footer class="anime-data-source">
 			<span class="anime-data-source-title">データ出典</span>
-			<a href={animeOfflineSource.url} target="_blank" rel="noopener noreferrer">anime-offline-database</a>
-			<span>（ODbL 1.0）</span>
+			{#each data.dataAttributions as attribution, index (attribution.source)}
+				{#if index > 0}
+					<span aria-hidden="true">・</span>
+				{/if}
+				<a href={attribution.source_url} target="_blank" rel="noopener noreferrer">{attribution.label}</a>
+				{#if attribution.license_label && attribution.license_url}
+					<span
+						>（<a href={attribution.license_url} target="_blank" rel="noopener noreferrer"
+							>{attribution.license_label}</a
+						>）</span
+					>
+				{/if}
+			{/each}
+			<span aria-hidden="true">・</span>
 			<a href="/data-sources">利用データと変換手順</a>
 		</footer>
 	{/if}

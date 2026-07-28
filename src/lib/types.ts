@@ -206,6 +206,17 @@ export interface AnimeResourceLink {
 	url: string;
 }
 
+export type AnimeDataAttributionSource = "anime_offline_database" | "jikan" | "wikidata" | "syobocal";
+
+export interface AnimeDataAttribution {
+	anime_mal_id: number;
+	source: AnimeDataAttributionSource;
+	label: string;
+	source_url: string;
+	license_label: string | null;
+	license_url: string | null;
+}
+
 export interface AnimeRelation {
 	relation_type: string;
 	related_anime_mal_id: number;

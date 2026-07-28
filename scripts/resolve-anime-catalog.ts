@@ -12,6 +12,8 @@ import {
 	type AnimeCatalogSeasonSource,
 	collectAnimeCatalogSeasonMalIds,
 } from "../src/lib/anime-catalog-season.ts";
+import { buildAnimeDataAttributions } from "../src/lib/anime-data-attributions.ts";
+import type { AnimeDataAttribution } from "../src/lib/types.ts";
 import { normalizeStudioAlias, type StudioNameMapping } from "../src/lib/wikidata-studio-names.ts";
 
 type SeasonName = "winter" | "spring" | "summer" | "fall";
@@ -62,6 +64,11 @@ type StudioSourceRow = {
 type ResolverDatabase = {
 	public: {
 		Tables: {
+			anime_data_attributions: {
+				Row: AnimeDataAttribution;
+				Insert: AnimeDataAttribution;
+				Update: Partial<AnimeDataAttribution>;
+			};
 			anime_source_records: {
 				Row: SourceRecordRow;
 				Insert: SourceRecordRow;
@@ -351,6 +358,28 @@ async function saveResolutions(supabase: ReturnType<typeof getSupabaseClient>, r
 	}
 }
 
+async function syncAnimeDataAttributions(
+	supabase: ReturnType<typeof getSupabaseClient>,
+	malIds: readonly number[],
+	sourceRecords: readonly SourceRecordRow[],
+) {
+	for (let start = 0; start < malIds.length; start += BATCH_SIZE) {
+		const { error } = await supabase
+			.from("anime_data_attributions")
+			.delete()
+			.in("anime_mal_id", malIds.slice(start, start + BATCH_SIZE));
+		if (error) throw new Error(`Could not replace anime data attributions: ${error.message}`);
+	}
+	const attributionRows = buildAnimeDataAttributions(sourceRecords);
+	for (let start = 0; start < attributionRows.length; start += BATCH_SIZE) {
+		const { error } = await supabase
+			.from("anime_data_attributions")
+			.insert(attributionRows.slice(start, start + BATCH_SIZE));
+		if (error) throw new Error(`Could not save anime data attributions: ${error.message}`);
+	}
+	console.log(`Published ${attributionRows.length} data attributions for ${malIds.length} anime.`);
+}
+
 function readJikanRelations(records: readonly SourceRecordRow[]): Map<number, AnimeRelationRow[]> {
 	const relationsByMalId = new Map<number, AnimeRelationRow[]>();
 	for (const record of records) {
@@ -444,8 +473,9 @@ async function main() {
 	const changed = resolutions.filter(
 		(resolution) => changedFields(resolution, legacyByMalId.get(resolution.canonical.mal_id)).length > 0,
 	);
+	const dataAttributions = buildAnimeDataAttributions(sourceRecords);
 	console.log(
-		`Resolution preview for ${season}: ${resolutions.length} total; ${counts.verified} displayable; ${counts.review + counts.unverified} hidden (${counts.review} review, ${counts.unverified} unverified); ${changed.length} canonical rows change.`,
+		`Resolution preview for ${season}: ${resolutions.length} total; ${counts.verified} displayable; ${counts.review + counts.unverified} hidden (${counts.review} review, ${counts.unverified} unverified); ${changed.length} canonical rows change; ${dataAttributions.length} public attributions.`,
 	);
 	console.log(
 		JSON.stringify(
@@ -466,6 +496,7 @@ async function main() {
 	}
 	await saveResolutions(supabase, resolutions);
 	await syncResolvedRelations(supabase, readJikanRelations(sourceRecords));
+	await syncAnimeDataAttributions(supabase, malIds, sourceRecords);
 	console.log(`Catalog resolution complete for ${season}.`);
 }
 
