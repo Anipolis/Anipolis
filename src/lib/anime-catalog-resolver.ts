@@ -33,6 +33,7 @@ export type LegacyAnimeCatalogRow = {
 	official_x_url: string | null;
 	resources: unknown;
 	cover_url: string | null;
+	metadata_ready?: boolean;
 };
 
 export type AnimeCatalogCanonicalRow = Omit<LegacyAnimeCatalogRow, "resources"> & {

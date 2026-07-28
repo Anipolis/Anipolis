@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { createClient } from "@supabase/supabase-js";
 import {
 	type AnimeCatalogCanonicalRow,
@@ -125,6 +126,7 @@ const LEGACY_COLUMNS = [
 	"official_x_url",
 	"resources",
 	"cover_url",
+	"metadata_ready",
 ].join(",");
 
 function parseArgs(argv: string[]): Options {
@@ -313,17 +315,13 @@ async function fetchStudioMappings(
 }
 
 function valuesDiffer(left: unknown, right: unknown): boolean {
-	return JSON.stringify(left) !== JSON.stringify(right);
+	return !isDeepStrictEqual(left, right);
 }
 
 function changedFields(resolution: AnimeCatalogResolution, legacy: LegacyAnimeCatalogRow | undefined): string[] {
 	if (!legacy) return Object.keys(resolution.canonical);
 	return Object.entries(resolution.canonical)
-		.filter(([field, value]) =>
-			field === "metadata_ready"
-				? value !== true
-				: valuesDiffer(value, legacy[field as keyof LegacyAnimeCatalogRow]),
-		)
+		.filter(([field, value]) => valuesDiffer(value, legacy[field as keyof LegacyAnimeCatalogRow]))
 		.map(([field]) => field);
 }
 
