@@ -1,16 +1,4 @@
--- Keep catalog visibility independent from metadata verification, and normalize studio identities.
-
-DROP POLICY IF EXISTS "anime: published metadata visible unless hidden by admin" ON public.anime;
-DROP POLICY IF EXISTS "anime: visible unless hidden by admin" ON public.anime;
-CREATE POLICY "anime: visible unless hidden by admin"
-    ON public.anime FOR SELECT
-    USING (
-        NOT hidden_by_admin
-        OR public.is_current_user_admin()
-    );
-
-COMMENT ON COLUMN public.anime.metadata_ready IS
-    'Resolver verification marker for editorial review. It does not control public catalog visibility.';
+-- Normalize studio identities while preserving the metadata-ready public visibility gate.
 
 ALTER TABLE public.anime_resolution_records
     DROP CONSTRAINT IF EXISTS anime_resolution_records_publication_status_check;
@@ -29,7 +17,45 @@ ALTER TABLE public.anime_resolution_records
     CHECK (resolution_status IN ('unverified', 'review', 'verified'));
 
 COMMENT ON COLUMN public.anime_resolution_records.resolution_status IS
-    'Editorial verification state. Catalog visibility is controlled separately by hidden_by_admin.';
+    'Editorial verification state. Only verified rows set metadata_ready and appear in the public catalog.';
+
+CREATE OR REPLACE VIEW public.anime_popularity
+WITH (security_invoker = true) AS
+SELECT
+    a.id AS anime_id,
+    COUNT(ual.anime_id) AS list_count
+FROM public.anime a
+LEFT JOIN public.user_anime_list ual ON ual.anime_id = a.id
+WHERE a.metadata_ready
+    AND (NOT a.hidden_by_admin OR public.is_current_user_admin())
+GROUP BY a.id;
+
+CREATE OR REPLACE VIEW public.anime_trending
+WITH (security_invoker = true) AS
+SELECT
+    a.id AS anime_id,
+    COUNT(ual.anime_id) AS recent_count
+FROM public.anime a
+LEFT JOIN public.user_anime_list ual
+    ON ual.anime_id = a.id
+    AND ual.updated_at >= now() - interval '7 days'
+WHERE a.metadata_ready
+    AND (NOT a.hidden_by_admin OR public.is_current_user_admin())
+GROUP BY a.id;
+
+CREATE OR REPLACE VIEW public.anime_top_rated
+WITH (security_invoker = true) AS
+SELECT
+    a.id AS anime_id,
+    COALESCE(AVG(ual.score) FILTER (WHERE ual.score IS NOT NULL), 0) AS avg_score,
+    COUNT(ual.score) FILTER (WHERE ual.score IS NOT NULL) AS score_count
+FROM public.anime a
+LEFT JOIN public.user_anime_list ual ON ual.anime_id = a.id
+WHERE a.metadata_ready
+    AND (NOT a.hidden_by_admin OR public.is_current_user_admin())
+GROUP BY a.id;
+
+GRANT SELECT ON public.anime_popularity, public.anime_trending, public.anime_top_rated TO anon, authenticated;
 
 CREATE TABLE IF NOT EXISTS public.studio_source_records (
     source text NOT NULL CHECK (source IN ('wikidata')),

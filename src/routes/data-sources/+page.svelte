@@ -87,7 +87,7 @@ pnpm import:wikidata-titles -- --year 2023 --season winter --dry-run
 pnpm import:wikidata-studios -- --year 2023 --season winter --dry-run
 pnpm resolve:anime-catalog -- --year 2023 --season winter --dry-run</code></pre>
 		<p>
-			各インポーターは表示用データを直接更新しません。すべてのソースを保存した後、resolverが項目ごとの優先順位と出典を適用します。検証状態は公開可否と分離し、未検証の作品もカタログから欠落させません。
+			各インポーターは表示用データを直接更新しません。すべてのソースを保存した後、resolverが項目ごとの優先順位と出典を適用し、検証済みの作品だけを一般カタログへ表示します。未検証作品もソースレコードと監査結果は保持します。
 		</p>
 	</section>
 

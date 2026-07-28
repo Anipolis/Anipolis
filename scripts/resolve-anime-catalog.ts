@@ -424,7 +424,7 @@ async function main() {
 		(resolution) => changedFields(resolution, legacyByMalId.get(resolution.canonical.mal_id)).length > 0,
 	);
 	console.log(
-		`Resolution preview for ${season}: ${resolutions.length} visible; ${counts.verified} verified, ${counts.review} review, ${counts.unverified} unverified; ${changed.length} canonical rows change.`,
+		`Resolution preview for ${season}: ${resolutions.length} total; ${counts.verified} displayable; ${counts.review + counts.unverified} hidden (${counts.review} review, ${counts.unverified} unverified); ${changed.length} canonical rows change.`,
 	);
 	console.log(
 		JSON.stringify(

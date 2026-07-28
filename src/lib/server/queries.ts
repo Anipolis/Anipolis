@@ -1502,6 +1502,7 @@ const ANIME_LIST_BASE_COLUMN_NAMES = [
 	"aired_to",
 	"room_type",
 	"hidden_by_admin",
+	"metadata_ready",
 ];
 
 /** ベーステーブル（anime）用 — computed_broadcast_status はビューにしかない */
@@ -1526,7 +1527,7 @@ interface AnimeFilterInput {
 
 /** PostgREST クエリビルダーが持つ、フィルター適用に必要なメソッド群 */
 interface AnimeFilterQuery<T> {
-	eq(column: string, value: string): T;
+	eq(column: string, value: string | boolean): T;
 	or(filters: string): T;
 	in(column: string, values: (string | number)[]): T;
 	not(column: string, operator: string, value: null): T;
@@ -1546,7 +1547,7 @@ function applyAnimeListFilters<T extends AnimeFilterQuery<T>>(
 	seasonFilter: string | null,
 ): T {
 	const selectedGenres = normalizeGenreFilters(filters.genres ?? filters.genre);
-	let q = query;
+	let q = query.eq("metadata_ready", true);
 	if (filters.listedAnimeIds) q = q.in("id", filters.listedAnimeIds);
 	if (filters.season) q = q.eq("season", filters.season);
 	if (seasonFilter) q = q.or(seasonFilter);
@@ -1818,7 +1819,10 @@ export async function getAnimeCount(
 	} = options;
 	const selectedGenres = normalizeGenreFilters(genres ?? genre);
 
-	let q = supabase.from("anime_with_computed_broadcast_status").select("id", { count: "exact", head: true });
+	let q = supabase
+		.from("anime_with_computed_broadcast_status")
+		.select("id", { count: "exact", head: true })
+		.eq("metadata_ready", true);
 
 	const seasonFilter = buildSeasonFilter(
 		broadcastYear,
@@ -1834,7 +1838,7 @@ export async function getAnimeCount(
 	const { count, error } = await q;
 
 	if (error || count === null) {
-		let fallback = supabase.from("anime").select("id", { count: "exact", head: true });
+		let fallback = supabase.from("anime").select("id", { count: "exact", head: true }).eq("metadata_ready", true);
 		if (seasonFilter) fallback = fallback.or(seasonFilter);
 		if (selectedGenres.length) fallback = fallback.or(buildGenreFilter(selectedGenres));
 		if (studio) fallback = fallback.or(arrayContainsAny(["studio", "studio_en"], studio));
@@ -1860,6 +1864,7 @@ async function getAnimeListRowsFromBaseTable(
 	let query = supabase
 		.from("anime")
 		.select(ANIME_LIST_BASE_COLUMNS)
+		.eq("metadata_ready", true)
 		.order("created_at", { ascending: false })
 		.limit(limit);
 
@@ -2703,10 +2708,17 @@ async function fetchAnimesByIds(supabase: SupabaseClient<Database>, ids: string[
 	const { data, error } = await supabase
 		.from("anime_with_computed_broadcast_status")
 		.select(ANIME_LIST_COLUMNS)
+		.eq("metadata_ready", true)
 		.in("id", ids.map(Number));
 	const rows =
 		error || !data
-			? (await supabase.from("anime").select(ANIME_LIST_BASE_COLUMNS).in("id", ids.map(Number))).data
+			? (
+					await supabase
+						.from("anime")
+						.select(ANIME_LIST_BASE_COLUMNS)
+						.eq("metadata_ready", true)
+						.in("id", ids.map(Number))
+				).data
 			: data;
 	if (!rows) return [];
 	const map = new Map((rows as unknown as Record<string, unknown>[]).map((a) => [String(a["id"]), toAnime(a)]));
