@@ -1511,7 +1511,6 @@ const ANIME_LIST_COLUMNS = [...ANIME_LIST_BASE_COLUMN_NAMES, "computed_broadcast
 /** applyAnimeListFilters が扱う共有フィルター条件 */
 interface AnimeFilterInput {
 	season?: string | undefined;
-	broadcastYear?: string | undefined;
 	broadcastSeason?: string | undefined;
 	broadcastSeasons?: string[] | undefined;
 	scheduleRange?: { start: string; end: string } | undefined;
@@ -1551,7 +1550,6 @@ function applyAnimeListFilters<T extends AnimeFilterQuery<T>>(
 	if (filters.listedAnimeIds) q = q.in("id", filters.listedAnimeIds);
 	if (filters.season) q = q.eq("season", filters.season);
 	if (seasonFilter) q = q.or(seasonFilter);
-	if (filters.broadcastYear) q = applyAiredYearFilter(q, filters.broadcastYear);
 	if (filters.scheduleRange) {
 		q = q
 			.not("broadcast_day", "is", null)
@@ -1596,7 +1594,10 @@ export async function getAnimeList(
 	const listedAnimeIds = listedByUserId ? await getListedAnimeIds(supabase, listedByUserId) : null;
 	if (listedAnimeIds && listedAnimeIds.length === 0) return [];
 
-	const seasonFilter = buildSeasonFilter(undefined, broadcastSeasons?.length ? broadcastSeasons : broadcastSeason);
+	const seasonFilter = buildSeasonFilter(
+		broadcastYear,
+		broadcastSeasons?.length ? broadcastSeasons : broadcastSeason,
+	);
 	const query = applyAnimeListFilters(
 		supabase
 			.from("anime_with_computed_broadcast_status")
@@ -1605,7 +1606,6 @@ export async function getAnimeList(
 			.limit(limit),
 		{
 			season,
-			broadcastYear,
 			broadcastSeason,
 			broadcastSeasons,
 			scheduleRange,
@@ -1736,12 +1736,11 @@ export async function getAnimeListPage(
 	if (listedAnimeIds && listedAnimeIds.length === 0) return { items: [], total: 0 };
 
 	const seasonFilter = buildSeasonFilter(
-		undefined,
+		options.broadcastYear,
 		options.broadcastSeasons?.length ? options.broadcastSeasons : options.broadcastSeason,
 	);
 	const filters: AnimeFilterInput = {
 		season: options.season,
-		broadcastYear: options.broadcastYear,
 		broadcastSeason: options.broadcastSeason,
 		broadcastSeasons: options.broadcastSeasons,
 		scheduleRange: options.scheduleRange,
@@ -1821,9 +1820,11 @@ export async function getAnimeCount(
 
 	let q = supabase.from("anime_with_computed_broadcast_status").select("id", { count: "exact", head: true });
 
-	const seasonFilter = buildSeasonFilter(undefined, broadcastSeasons?.length ? broadcastSeasons : broadcastSeason);
+	const seasonFilter = buildSeasonFilter(
+		broadcastYear,
+		broadcastSeasons?.length ? broadcastSeasons : broadcastSeason,
+	);
 	if (seasonFilter) q = q.or(seasonFilter);
-	if (broadcastYear) q = applyAiredYearFilter(q, broadcastYear);
 	if (selectedGenres.length) q = q.or(buildGenreFilter(selectedGenres));
 	if (studio) q = q.or(arrayContainsAny(["studio", "studio_en"], studio));
 	if (producer) q = q.contains("producer", [producer]);
@@ -1835,7 +1836,6 @@ export async function getAnimeCount(
 	if (error || count === null) {
 		let fallback = supabase.from("anime").select("id", { count: "exact", head: true });
 		if (seasonFilter) fallback = fallback.or(seasonFilter);
-		if (broadcastYear) fallback = applyAiredYearFilter(fallback, broadcastYear);
 		if (selectedGenres.length) fallback = fallback.or(buildGenreFilter(selectedGenres));
 		if (studio) fallback = fallback.or(arrayContainsAny(["studio", "studio_en"], studio));
 		if (producer) fallback = fallback.contains("producer", [producer]);
@@ -1854,18 +1854,7 @@ async function getAnimeListRowsFromBaseTable(
 	seasonFilter: string | null,
 	listedAnimeIds: number[] | null = null,
 ): Promise<Record<string, unknown>[]> {
-	const {
-		season,
-		broadcastYear,
-		scheduleRange,
-		genre,
-		genres,
-		studio,
-		producer,
-		source,
-		limit = 20,
-		query: searchQuery,
-	} = options;
+	const { season, scheduleRange, genre, genres, studio, producer, source, limit = 20, query: searchQuery } = options;
 	const selectedGenres = normalizeGenreFilters(genres ?? genre);
 
 	let query = supabase
@@ -1877,7 +1866,6 @@ async function getAnimeListRowsFromBaseTable(
 	if (listedAnimeIds) query = query.in("id", listedAnimeIds);
 	if (season) query = query.eq("season", season);
 	if (seasonFilter) query = query.or(seasonFilter);
-	if (broadcastYear) query = applyAiredYearFilter(query, broadcastYear);
 	if (scheduleRange) {
 		query = query
 			.not("broadcast_day", "is", null)
@@ -1894,7 +1882,7 @@ async function getAnimeListRowsFromBaseTable(
 	return (data ?? []) as unknown as Record<string, unknown>[];
 }
 
-function buildSeasonFilter(year: string | undefined, seasons: string | string[] | undefined): string | null {
+export function buildSeasonFilter(year: string | undefined, seasons: string | string[] | undefined): string | null {
 	// 年は4桁数字のみ受け付ける（.or() 文字列への注入を防ぐ）
 	const trimmedYear = year?.trim();
 	const normalizedYear = trimmedYear && /^\d{4}$/.test(trimmedYear) ? trimmedYear : undefined;
@@ -1952,14 +1940,6 @@ function buildGenreFilter(genres: string[]): string {
 function normalizeGenreFilters(value: string | string[] | undefined): string[] {
 	const rawGenres = Array.isArray(value) ? value : (value ?? "").split(",");
 	return [...new Set(rawGenres.map((genre) => genre.trim()).filter(Boolean))];
-}
-
-function applyAiredYearFilter<
-	T extends { gte: (column: string, value: string) => T; lt: (column: string, value: string) => T },
->(query: T, year: string): T {
-	const normalizedYear = /^\d{4}$/.test(year.trim()) ? Number(year) : null;
-	if (normalizedYear === null) return query;
-	return query.gte("aired_from", `${normalizedYear}-01-01`).lt("aired_from", `${normalizedYear + 1}-01-01`);
 }
 
 function countGenreMatches(anime: Anime, selectedGenres: string[]): number {
