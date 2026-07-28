@@ -35,6 +35,7 @@ type SourceRecord = {
 type CatalogCandidate = {
 	malId: number;
 	title: string;
+	titleBasis: "verified_source" | "odbl_title_candidate" | "odbl_synonym_candidate";
 	firstYear: number | null;
 	firstMonth: number | null;
 	validFrom: string | null;
@@ -470,7 +471,20 @@ function stringValue(data: Record<string, unknown>, key: string): string | null 
 	return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function catalogCandidates(records: SourceRecord[], malIds: number[], fallbackYear: number, fallbackMonth: number) {
+function stringArrayValue(data: Record<string, unknown>, key: string): string[] {
+	const value = data[key];
+	if (!Array.isArray(value)) return [];
+	return [
+		...new Set(
+			value
+				.filter((item): item is string => typeof item === "string")
+				.map((item) => item.trim())
+				.filter(Boolean),
+		),
+	];
+}
+
+function catalogCandidates(records: SourceRecord[], malIds: number[], fallbackYear: number) {
 	const byMal = new Map<number, Map<SourceName, Record<string, unknown>>>();
 	for (const record of records) {
 		const sources = byMal.get(record.mal_id) ?? new Map();
@@ -487,27 +501,36 @@ function catalogCandidates(records: SourceRecord[], malIds: number[], fallbackYe
 			stringValue(jikan, "title_ja") ??
 			(containsJapaneseScript(stringValue(jikan, "title") ?? "") ? stringValue(jikan, "title") : null);
 		const offlineTitle = stringValue(offline, "title");
-		const title =
-			stringValue(manual, "title") ??
-			stringValue(wikidata, "title_ja") ??
-			jikanTitle ??
-			(offlineTitle && containsJapaneseScript(offlineTitle) ? offlineTitle : null);
-		if (!title || !containsJapaneseScript(title)) return [];
+		const verifiedTitle = stringValue(manual, "title") ?? stringValue(wikidata, "title_ja") ?? jikanTitle;
 		const airedFrom =
 			stringValue(manual, "aired_from") ?? stringValue(jikan, "aired_from") ?? stringValue(offline, "aired_from");
 		const airedTo =
 			stringValue(manual, "aired_to") ?? stringValue(jikan, "aired_to") ?? stringValue(offline, "aired_to");
 		const date = airedFrom?.match(/^(\d{4})-(\d{2})/);
-		return [
-			{
-				malId,
-				title,
-				firstYear: date ? Number.parseInt(date[1] ?? "", 10) : fallbackYear,
-				firstMonth: date ? Number.parseInt(date[2] ?? "", 10) : fallbackMonth,
-				validFrom: dateOnly(airedFrom),
-				validTo: dateOnly(airedTo),
-			},
+		const base = {
+			malId,
+			firstYear: date ? Number.parseInt(date[1] ?? "", 10) : fallbackYear,
+			firstMonth: date ? Number.parseInt(date[2] ?? "", 10) : null,
+			validFrom: dateOnly(airedFrom),
+			validTo: dateOnly(airedTo),
+		};
+		if (verifiedTitle && containsJapaneseScript(verifiedTitle)) {
+			return [{ ...base, title: verifiedTitle, titleBasis: "verified_source" as const }];
+		}
+		const offlineCandidates = [
+			...(offlineTitle && containsJapaneseScript(offlineTitle)
+				? [{ title: offlineTitle, titleBasis: "odbl_title_candidate" as const }]
+				: []),
+			...stringArrayValue(offline, "title_ja_candidates")
+				.filter(containsJapaneseScript)
+				.map((title) => ({ title, titleBasis: "odbl_synonym_candidate" as const })),
 		];
+		return [...new Map(offlineCandidates.map((candidate) => [candidate.title, candidate])).values()].map(
+			(candidate) => ({
+				...base,
+				...candidate,
+			}),
+		);
 	});
 }
 
@@ -628,16 +651,22 @@ async function fetchWikidataProposals(malIds: number[], candidates: Map<number, 
 }
 
 function buildMappings(
+	targetMalIds: readonly number[],
 	candidates: CatalogCandidate[],
-	titles: SyobocalTitle[],
+	matchingTitles: SyobocalTitle[],
+	allTitles: SyobocalTitle[],
 	manualMappings: ManualMapping[],
 	existingMappings: ExistingMapping[],
 	wikidataProposals: MappingProposal[],
 ) {
+	const targetMalIdSet = new Set(targetMalIds);
 	const candidatesByMal = new Map(candidates.map((candidate) => [candidate.malId, candidate]));
-	const titlesByTid = new Map(titles.map((title) => [title.tid, title]));
-	const exactProposals: MappingProposal[] = matchSyobocalTitlesExactly(candidates, titles).map((match) => {
-		const candidate = candidatesByMal.get(match.malId);
+	const titlesByTid = new Map(allTitles.map((title) => [title.tid, title]));
+	const exactProposals: MappingProposal[] = matchSyobocalTitlesExactly(candidates, matchingTitles).map((match) => {
+		const candidate =
+			candidates.find(
+				(value) => value.malId === match.malId && normalizeSyobocalTitle(value.title) === match.normalizedTitle,
+			) ?? candidatesByMal.get(match.malId);
 		const title = titlesByTid.get(match.tid);
 		return {
 			malId: match.malId,
@@ -650,6 +679,7 @@ function buildMappings(
 			evidence: {
 				normalized_title: match.normalizedTitle,
 				catalog_title: candidate?.title,
+				catalog_title_basis: candidate?.titleBasis,
 				syobocal_title: title?.title,
 			},
 			sourceUrl: `https://cal.syoboi.jp/tid/${match.tid}`,
@@ -658,13 +688,19 @@ function buildMappings(
 	});
 	for (const proposal of wikidataProposals) {
 		const title = titlesByTid.get(proposal.tid);
-		const candidate = candidatesByMal.get(proposal.malId);
+		const matchingCandidates = candidates.filter((candidate) => candidate.malId === proposal.malId);
 		proposal.useForTitle = Boolean(
-			title && candidate && normalizeSyobocalTitle(title.title) === normalizeSyobocalTitle(candidate.title),
+			title &&
+				matchingCandidates.some(
+					(candidate) => normalizeSyobocalTitle(title.title) === normalizeSyobocalTitle(candidate.title),
+				),
 		);
 		proposal.evidence = {
 			...proposal.evidence,
-			catalog_title: candidate?.title,
+			catalog_titles: matchingCandidates.map((candidate) => ({
+				title: candidate.title,
+				basis: candidate.titleBasis,
+			})),
 			syobocal_title: title?.title,
 		};
 		proposal.sourceVersion = title?.lastUpdate ?? proposal.sourceVersion;
@@ -690,7 +726,7 @@ function buildMappings(
 	const fileManual: MappingProposal[] = manualMappings.flatMap((mapping) => {
 		const candidate = candidatesByMal.get(mapping.mal_id);
 		const title = titlesByTid.get(mapping.tid);
-		if (!candidate || !title) return [];
+		if (!targetMalIdSet.has(mapping.mal_id) || !title) return [];
 		return [
 			{
 				malId: mapping.mal_id,
@@ -698,10 +734,11 @@ function buildMappings(
 				method: "manual",
 				selectionPriority: 4,
 				useForTitle: mapping.use_for_title ?? true,
-				validFrom: mapping.valid_from ?? candidate.validFrom,
-				validTo: mapping.valid_to ?? candidate.validTo,
+				validFrom: mapping.valid_from ?? candidate?.validFrom ?? null,
+				validTo: mapping.valid_to ?? candidate?.validTo ?? null,
 				evidence: {
-					catalog_title: candidate.title,
+					catalog_title: candidate?.title,
+					catalog_title_basis: candidate?.titleBasis,
 					syobocal_title: title.title,
 					note: mapping.note,
 					mapping_file: MANUAL_MAPPING_PATH,
@@ -751,6 +788,7 @@ async function upsertBatches(
 
 async function writeReviewReport(
 	season: string,
+	targetMalIds: readonly number[],
 	candidates: CatalogCandidate[],
 	titles: SyobocalTitle[],
 	selected: MappingProposal[],
@@ -758,21 +796,32 @@ async function writeReviewReport(
 	programCount: number,
 ) {
 	const selectedMalIds = new Set(selected.map((mapping) => mapping.malId));
-	const candidatesByMal = new Map(candidates.map((candidate) => [candidate.malId, candidate]));
+	const candidatesByMal = new Map<number, CatalogCandidate[]>();
+	for (const candidate of candidates) {
+		const values = candidatesByMal.get(candidate.malId) ?? [];
+		values.push(candidate);
+		candidatesByMal.set(candidate.malId, values);
+	}
 	const titlesByTid = new Map(titles.map((title) => [title.tid, title]));
+	const unresolvedMalIds = [...candidatesByMal.keys()].filter((malId) => !selectedMalIds.has(malId));
 	const report = {
 		season,
 		generated_at: new Date().toISOString(),
 		summary: {
-			verified_japanese_title_candidates: candidates.length,
+			target_mal_ids: targetMalIds.length,
+			mal_ids_with_japanese_title_candidates: candidatesByMal.size,
+			mal_ids_without_japanese_title_candidates: targetMalIds.length - candidatesByMal.size,
 			confirmed_mappings: selected.length,
-			unresolved_mappings: candidates.length - selected.length,
+			unresolved_mappings_with_title_candidates: unresolvedMalIds.length,
 			program_slots: programCount,
 		},
 		confirmed: selected
 			.map((mapping) => ({
 				mal_id: mapping.malId,
-				mal_title: candidatesByMal.get(mapping.malId)?.title ?? null,
+				mal_titles: (candidatesByMal.get(mapping.malId) ?? []).map((candidate) => ({
+					title: candidate.title,
+					basis: candidate.titleBasis,
+				})),
 				tid: mapping.tid,
 				syobocal_title: titlesByTid.get(mapping.tid)?.title ?? null,
 				match_method: mapping.method,
@@ -780,13 +829,15 @@ async function writeReviewReport(
 				source_url: `https://cal.syoboi.jp/tid/${mapping.tid}`,
 			}))
 			.sort((left, right) => left.mal_id - right.mal_id),
-		unresolved: candidates
-			.filter((candidate) => !selectedMalIds.has(candidate.malId))
-			.map((candidate) => ({
-				mal_id: candidate.malId,
-				title: candidate.title,
-				first_year: candidate.firstYear,
-				first_month: candidate.firstMonth,
+		unresolved: unresolvedMalIds
+			.map((malId) => ({
+				mal_id: malId,
+				titles: (candidatesByMal.get(malId) ?? []).map((candidate) => ({
+					title: candidate.title,
+					basis: candidate.titleBasis,
+				})),
+				first_year: candidatesByMal.get(malId)?.[0]?.firstYear ?? null,
+				first_month: candidatesByMal.get(malId)?.[0]?.firstMonth ?? null,
 			}))
 			.sort((left, right) => left.mal_id - right.mal_id),
 		conflicts: review,
@@ -857,10 +908,16 @@ async function main() {
 	const malIds = collectAnimeCatalogSeasonMalIds(seasonRows);
 	if (malIds.length === 0) throw new Error(`No ODbL or Jikan source records found for ${season}.`);
 	const records = await fetchSourceRecords(supabase, malIds);
-	const candidates = catalogCandidates(records, malIds, options.year, range.startMonth);
+	const candidates = catalogCandidates(records, malIds, options.year);
 	const candidatesByMal = new Map(candidates.map((candidate) => [candidate.malId, candidate]));
+	const candidateMalIds = new Set(candidates.map((candidate) => candidate.malId));
+	const verifiedCandidateMalIds = new Set(
+		candidates
+			.filter((candidate) => candidate.titleBasis === "verified_source")
+			.map((candidate) => candidate.malId),
+	);
 	console.log(
-		`${season}: ${malIds.length} source identities, ${candidates.length} verified Japanese title candidates.`,
+		`${season}: ${malIds.length} source identities, ${candidateMalIds.size} with Japanese title match candidates (${verifiedCandidateMalIds.size} from verified sources).`,
 	);
 
 	const [titles, manualMappings, existingMappings] = await Promise.all([
@@ -882,7 +939,15 @@ async function main() {
 		);
 		return [];
 	});
-	const mapping = buildMappings(candidates, titles, manualMappings, existingMappings, wikidata);
+	const mapping = buildMappings(
+		malIds,
+		candidates,
+		seasonalTitles,
+		titles,
+		manualMappings,
+		existingMappings,
+		wikidata,
+	);
 	console.log(
 		`Syobocal: ${titles.length} titles fetched, ${seasonalTitles.length} near season, ${mapping.selected.length} confirmed mappings.`,
 	);
@@ -908,15 +973,19 @@ async function main() {
 		if (missingChids.length > 0) throw new Error(`Missing Syobocal channels: ${missingChids.join(", ")}`);
 	}
 
-	const unresolved = candidates.filter((candidate) => !mapping.selected.some((row) => row.malId === candidate.malId));
+	const selectedMalIdsForReview = new Set(mapping.selected.map((row) => row.malId));
+	const unresolvedMalIds = [...candidateMalIds].filter((malId) => !selectedMalIdsForReview.has(malId));
 	console.log(
-		`Result: ${programs.length} program slots, ${channels.length} channels, ${unresolved.length} unmapped Japanese-title entries.`,
+		`Result: ${programs.length} program slots, ${channels.length} channels, ${unresolvedMalIds.length} unmapped entries with title candidates.`,
 	);
-	if (unresolved.length > 0) {
+	if (unresolvedMalIds.length > 0) {
 		console.log("Unresolved MAL IDs:");
-		for (const candidate of unresolved) console.log(`  ${candidate.malId}\t${candidate.title}`);
+		for (const malId of unresolvedMalIds) {
+			const titleCandidates = candidates.filter((candidate) => candidate.malId === malId);
+			console.log(`  ${malId}\t${titleCandidates.map((candidate) => candidate.title).join(" / ")}`);
+		}
 	}
-	await writeReviewReport(season, candidates, titles, mapping.selected, mapping.review, programs.length);
+	await writeReviewReport(season, malIds, candidates, titles, mapping.selected, mapping.review, programs.length);
 	if (options.dryRun) {
 		console.log("Dry run: no database rows were written.");
 		return;

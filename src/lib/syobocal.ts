@@ -24,7 +24,16 @@ export type SyobocalExactTitleMatch = {
 };
 
 export function normalizeSyobocalTitle(value: string): string {
-	return value.normalize("NFKC").trim().replace(/\s+/g, " ");
+	return value
+		.normalize("NFKC")
+		.trim()
+		.replace(/[〜～]/g, "~")
+		.replace(/[‐‑‒–—―−]/g, "-")
+		.replace(/\s+/g, "")
+		.replace(
+			/(?:\((?:第)?\d+期\)|(?:第)?\d+期|第?\d+シーズン|シーズン\d+|season\d+|\d+(?:st|nd|rd|th)?season)$/i,
+			"",
+		);
 }
 
 export function parseSyobocalLinks(comment: string): SyobocalLink[] {
@@ -66,7 +75,8 @@ function monthDistance(
 	rightYear: number | null,
 	rightMonth: number | null,
 ): number | null {
-	if (leftYear === null || leftMonth === null || rightYear === null || rightMonth === null) return null;
+	if (leftYear === null || rightYear === null) return null;
+	if (leftMonth === null || rightMonth === null) return Math.abs(leftYear - rightYear) * 12;
 	return Math.abs(leftYear * 12 + leftMonth - (rightYear * 12 + rightMonth));
 }
 

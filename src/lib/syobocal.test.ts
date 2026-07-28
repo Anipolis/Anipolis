@@ -9,7 +9,10 @@ import {
 
 describe("Syoboi Calendar title helpers", () => {
 	it("normalizes width and whitespace without fuzzy matching", () => {
-		expect(normalizeSyobocalTitle(" 葬送のフリーレン（第２期） ")).toBe("葬送のフリーレン(第2期)");
+		expect(normalizeSyobocalTitle(" 葬送のフリーレン（第２期） ")).toBe("葬送のフリーレン");
+		expect(normalizeSyobocalTitle("火狩りの王 第1期")).toBe("火狩りの王");
+		expect(normalizeSyobocalTitle("ヴィンランド・サガ SEASON 2")).toBe("ヴィンランド・サガ");
+		expect(normalizeSyobocalTitle("英雄王 〜そして〜")).toBe("英雄王~そして~");
 	});
 
 	it("extracts labeled links and selects official destinations", () => {
@@ -54,5 +57,17 @@ describe("Syoboi Calendar title helpers", () => {
 			{ malId: 1, tid: 10, normalizedTitle: "同名作品" },
 			{ malId: 2, tid: 20, normalizedTitle: "同名作品" },
 		]);
+	});
+
+	it("uses a season year even when an exact broadcast month is unavailable", () => {
+		expect(
+			matchSyobocalTitlesExactly(
+				[{ malId: 1, title: "同名作品", firstYear: 2026, firstMonth: null }],
+				[
+					{ tid: 10, title: "同名作品", firstYear: 2025, firstMonth: 1 },
+					{ tid: 20, title: "同名作品", firstYear: 2026, firstMonth: 3 },
+				],
+			),
+		).toEqual([{ malId: 1, tid: 20, normalizedTitle: "同名作品" }]);
 	});
 });
