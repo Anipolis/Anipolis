@@ -133,6 +133,7 @@ export type Database = {
 					genre: string[] | null;
 					genre_en: string[] | null;
 					hidden_by_admin: boolean;
+					metadata_ready: boolean;
 					id: number;
 					mal_id: number | null;
 					official_hashtag: string[] | null;
@@ -168,6 +169,7 @@ export type Database = {
 					genre?: string[] | null;
 					genre_en?: string[] | null;
 					hidden_by_admin?: boolean;
+					metadata_ready?: boolean;
 					id?: never;
 					mal_id?: number | null;
 					official_hashtag?: string[] | null;
@@ -203,6 +205,7 @@ export type Database = {
 					genre?: string[] | null;
 					genre_en?: string[] | null;
 					hidden_by_admin?: boolean;
+					metadata_ready?: boolean;
 					id?: never;
 					mal_id?: number | null;
 					official_hashtag?: string[] | null;
@@ -221,6 +224,74 @@ export type Database = {
 					title_en?: string | null;
 					title_romaji?: string | null;
 					type?: string | null;
+				};
+				Relationships: [];
+			};
+			anime_resolution_records: {
+				Row: {
+					field_sources: Json;
+					mal_id: number;
+					publication_reasons: Json;
+					publication_status: string;
+					resolved_at: string;
+					resolved_data: Json;
+				};
+				Insert: {
+					field_sources: Json;
+					mal_id: number;
+					publication_reasons?: Json;
+					publication_status: string;
+					resolved_at?: string;
+					resolved_data: Json;
+				};
+				Update: {
+					field_sources?: Json;
+					mal_id?: number;
+					publication_reasons?: Json;
+					publication_status?: string;
+					resolved_at?: string;
+					resolved_data?: Json;
+				};
+				Relationships: [
+					{
+						foreignKeyName: "anime_resolution_records_mal_id_fkey";
+						columns: ["mal_id"];
+						isOneToOne: true;
+						referencedRelation: "anime";
+						referencedColumns: ["mal_id"];
+					},
+				];
+			};
+			anime_source_records: {
+				Row: {
+					id: number;
+					imported_at: string;
+					mal_id: number;
+					normalized_data: Json;
+					source: string;
+					source_updated_at: string | null;
+					source_url: string;
+					source_version: string;
+				};
+				Insert: {
+					id?: number;
+					imported_at?: string;
+					mal_id: number;
+					normalized_data: Json;
+					source: string;
+					source_updated_at?: string | null;
+					source_url: string;
+					source_version: string;
+				};
+				Update: {
+					id?: number;
+					imported_at?: string;
+					mal_id?: number;
+					normalized_data?: Json;
+					source?: string;
+					source_updated_at?: string | null;
+					source_url?: string;
+					source_version?: string;
 				};
 				Relationships: [];
 			};
@@ -2118,6 +2189,7 @@ export type Database = {
 					genre: string[] | null;
 					genre_en: string[] | null;
 					hidden_by_admin: boolean | null;
+					metadata_ready: boolean | null;
 					id: number | null;
 					mal_id: number | null;
 					official_hashtag: string[] | null;
@@ -2154,6 +2226,7 @@ export type Database = {
 					genre?: string[] | null;
 					genre_en?: string[] | null;
 					hidden_by_admin?: boolean | null;
+					metadata_ready?: boolean | null;
 					id?: number | null;
 					mal_id?: number | null;
 					official_hashtag?: string[] | null;
@@ -2190,6 +2263,7 @@ export type Database = {
 					genre?: string[] | null;
 					genre_en?: string[] | null;
 					hidden_by_admin?: boolean | null;
+					metadata_ready?: boolean | null;
 					id?: number | null;
 					mal_id?: number | null;
 					official_hashtag?: string[] | null;

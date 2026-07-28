@@ -38,7 +38,7 @@ export function containsJapaneseScript(value: string): boolean {
 	return /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/u.test(value);
 }
 
-export type AnimeOfflineCanonicalRow = {
+export type AnimeOfflineMappedSourceRow = {
 	mal_id: number;
 	title: string;
 	title_romaji: string | null;
@@ -146,47 +146,6 @@ export function pinLatestGithubReleaseAssetUrl(datasetUrl: string, latestRelease
 	}
 
 	return `${dataset.origin}${assetMatch[1]}/releases/download/${tagMatch[2]}/${assetMatch[2]}`;
-}
-
-function preferSourceString(sourceValue: string | null, existingValue: string | null): string | null {
-	return sourceValue?.trim() ? sourceValue : existingValue;
-}
-
-export function mergeAnimeOfflineCanonicalRow(
-	source: AnimeOfflineCanonicalRow,
-	existing:
-		| (Omit<AnimeOfflineCanonicalRow, "studio" | "studio_en"> & {
-				studio: string[] | null;
-				studio_en: string[] | null;
-		  })
-		| undefined,
-): AnimeOfflineCanonicalRow {
-	if (!existing) return source;
-
-	const existingStudio = existing.studio ?? [];
-	const existingStudioEn = existing.studio_en ?? [];
-	const existingTitleIsFallback =
-		!containsJapaneseScript(existing.title) &&
-		(existing.title_romaji === null || existing.title.trim() === existing.title_romaji.trim());
-	const existingStudioIsFallback =
-		existingStudio.length === 0 ||
-		JSON.stringify(existingStudio.map((name) => name.toLowerCase())) ===
-			JSON.stringify(existingStudioEn.map((name) => name.toLowerCase()));
-
-	return {
-		...source,
-		// The upstream title has no language label. Keep an established Japanese/display title.
-		title: existingTitleIsFallback ? source.title : existing.title.trim() || source.title,
-		title_romaji: existing.title_romaji ?? source.title_romaji,
-		episode_count: preferSourceString(source.episode_count, existing.episode_count),
-		type: preferSourceString(source.type, existing.type),
-		status: source.status,
-		season: source.season,
-		// studio is the display/Japanese field; studio_en is the source baseline.
-		studio: existingStudioIsFallback ? source.studio : existingStudio,
-		studio_en: existingStudioEn.length > 0 ? existingStudioEn : source.studio_en,
-		resources: mergeAnimeOfflineSource(existing.resources ?? [], source.resources[0]?.url ?? ""),
-	};
 }
 
 export function getGithubReleaseVersion(sourceUrl: string): string {

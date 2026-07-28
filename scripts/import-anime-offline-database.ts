@@ -1,20 +1,19 @@
 import { createClient } from "@supabase/supabase-js";
 import {
-	type AnimeOfflineCanonicalRow,
 	type AnimeOfflineEntry,
+	type AnimeOfflineMappedSourceRow,
 	type AnimeOfflineSeason,
 	getGithubReleaseVersion,
 	getMalIdFromSources,
 	isAnimeOfflineDataset,
 	mapAnimeOfflineStatus,
 	mapAnimeOfflineType,
-	mergeAnimeOfflineCanonicalRow,
 	mergeAnimeOfflineSource,
 	pinLatestGithubReleaseAssetUrl,
 } from "../src/lib/anime-offline-database.ts";
 import { getKanaTitleCandidates } from "../src/lib/wikidata-anime-titles.ts";
 
-type AnimeImportRow = AnimeOfflineCanonicalRow;
+type AnimeImportRow = AnimeOfflineMappedSourceRow;
 
 type AnimeOfflineNormalizedData = {
 	mal_id: number;
@@ -42,11 +41,6 @@ type AnimeSourceRecordInsert = {
 type ImportDatabase = {
 	public: {
 		Tables: {
-			anime: {
-				Insert: AnimeImportRow;
-				Update: Partial<AnimeImportRow>;
-				Row: AnimeImportRow;
-			};
 			anime_source_records: {
 				Insert: AnimeSourceRecordInsert;
 				Update: Partial<AnimeSourceRecordInsert>;
@@ -279,30 +273,6 @@ async function upsertSourceRecords(supabase: ReturnType<typeof getSupabaseClient
 	}
 }
 
-async function upsertRows(supabase: ReturnType<typeof getSupabaseClient>, rows: AnimeImportRow[]) {
-	let saved = 0;
-
-	for (let start = 0; start < rows.length; start += UPSERT_BATCH_SIZE) {
-		const sourceBatch = rows.slice(start, start + UPSERT_BATCH_SIZE);
-		const malIds = sourceBatch.map((row) => row.mal_id);
-		const { data: existingData, error: readError } = await supabase
-			.from("anime")
-			.select("mal_id,title,title_romaji,episode_count,type,status,season,studio,studio_en,resources")
-			.in("mal_id", malIds);
-
-		if (readError) throw new Error(`Could not read existing anime: ${readError.message}`);
-
-		const existingByMalId = new Map(((existingData ?? []) as AnimeImportRow[]).map((row) => [row.mal_id, row]));
-		const batch = sourceBatch.map((row) => mergeAnimeOfflineCanonicalRow(row, existingByMalId.get(row.mal_id)));
-		const { error: writeError } = await supabase.from("anime").upsert(batch, { onConflict: "mal_id" });
-
-		if (writeError) throw new Error(`Supabase upsert failed: ${writeError.message}`);
-
-		saved += batch.length;
-		console.log(`Supabase upserted ${saved}/${rows.length} rows.`);
-	}
-}
-
 function printFormatInspection(rows: AnimeImportRow[], titleCandidatesByMalId: Map<number, string[]>) {
 	const hasJapaneseScript = (value: string) => /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/u.test(value);
 	const japaneseTitleCount = rows.filter((row) => hasJapaneseScript(row.title)).length;
@@ -367,8 +337,7 @@ async function main() {
 	const supabase = getSupabaseClient();
 	console.log(`Writing to Supabase: ${new URL(supabaseUrl ?? "").host}`);
 	await upsertSourceRecords(supabase, sourceRecordRows);
-	await upsertRows(supabase, rows);
-	console.log(`Import complete: ${rows.length} rows processed.`);
+	console.log(`Source import complete: ${rows.length} rows processed. Run the catalog resolver to publish them.`);
 }
 
 main().catch((error) => {

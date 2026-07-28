@@ -72,7 +72,11 @@ import {
 			<a href={WIKIDATA_TRANSFORMATION_URL}>Wikidataインポーター</a>で確認できます。
 		</p>
 		<pre><code>pnpm import:anime-offline -- --year 2023 --season winter --dry-run
-pnpm import:wikidata-titles -- --year 2023 --season winter --dry-run</code></pre>
+pnpm import:wikidata-titles -- --year 2023 --season winter --dry-run
+pnpm resolve:anime-catalog -- --year 2023 --season winter --dry-run</code></pre>
+		<p>
+			各インポーターは表示用データを直接更新しません。すべてのソースを保存した後、resolverが項目ごとの優先順位と出典を適用し、公開可能な作品だけを表示用カタログへ反映します。
+		</p>
 	</section>
 
 	<section>

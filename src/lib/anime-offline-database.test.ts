@@ -5,7 +5,6 @@ import {
 	getMalIdFromSources,
 	mapAnimeOfflineStatus,
 	mapAnimeOfflineType,
-	mergeAnimeOfflineCanonicalRow,
 	mergeAnimeOfflineSource,
 	pinLatestGithubReleaseAssetUrl,
 } from "./anime-offline-database";
@@ -58,55 +57,5 @@ describe("anime-offline-database helpers", () => {
 				"https://github.com/manami-project/anime-offline-database/releases/download/2026-27/data.json",
 			),
 		).toBe("2026-27");
-	});
-
-	it("uses ODbL core fields without replacing an established Japanese display title", () => {
-		const source = {
-			mal_id: 43760,
-			title: "Hikari no Ou",
-			title_romaji: null,
-			episode_count: "10",
-			type: "TV",
-			status: "finished" as const,
-			season: "2023-winter",
-			studio: ["signal.md"],
-			studio_en: ["signal.md"],
-			resources: [{ name: "anime-offline-database", url: "https://example.com/2026-27.json" }],
-		};
-		const existing = {
-			...source,
-			title: "火狩りの王",
-			title_romaji: "The Fire Hunter",
-			episode_count: "9",
-			status: "airing" as const,
-			studio: ["シグナル・エムディ"],
-			studio_en: ["Signal.MD"],
-		};
-
-		expect(mergeAnimeOfflineCanonicalRow(source, existing)).toMatchObject({
-			title: "火狩りの王",
-			title_romaji: "The Fire Hunter",
-			episode_count: "10",
-			status: "finished",
-			studio: ["シグナル・エムディ"],
-			studio_en: ["Signal.MD"],
-		});
-	});
-
-	it("keeps a Wikidata Japanese title when the romaji title is not populated", () => {
-		const source = {
-			mal_id: 43760,
-			title: "Hikari no Ou",
-			title_romaji: null,
-			episode_count: "10",
-			type: "TV",
-			status: "finished" as const,
-			season: "2023-winter",
-			studio: ["signal.md"],
-			studio_en: ["signal.md"],
-			resources: [{ name: "anime-offline-database", url: "https://example.com/2026-27.json" }],
-		};
-
-		expect(mergeAnimeOfflineCanonicalRow(source, { ...source, title: "火狩りの王" }).title).toBe("火狩りの王");
 	});
 });

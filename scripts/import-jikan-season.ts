@@ -1,12 +1,8 @@
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createClient } from "@supabase/supabase-js";
+import { containsJapaneseScript } from "../src/lib/anime-offline-database.ts";
 import { translateAnimeSource } from "../src/lib/anime-vocabulary.ts";
-import {
-	type ExistingCanonicalRow,
-	type JikanCanonicalRow,
-	mergeJikanCanonicalRow,
-} from "../src/lib/utils/anime-source-merge.ts";
 import {
 	ConsecutiveStatusCircuitBreaker,
 	meetsMinimumCompleteness,
@@ -29,7 +25,10 @@ type AnimeResourceLink = {
 };
 
 type NamedResource = {
+	mal_id?: number | null;
+	type?: string | null;
 	name?: string | null;
+	url?: string | null;
 };
 
 type JikanRelationEntry = {
@@ -119,7 +118,29 @@ type AniListSeasonResponse = {
 	errors?: { message?: string }[];
 };
 
-type AnimeImportRow = JikanCanonicalRow;
+type AnimeImportRow = {
+	mal_id: number;
+	title: string;
+	title_en: string | null;
+	title_romaji: string | null;
+	episode_count: string | null;
+	type: string | null;
+	status: "airing" | "finished" | "upcoming";
+	aired_from: string | null;
+	aired_to: string | null;
+	season: string;
+	source: string | null;
+	studio: string[];
+	studio_en: string[];
+	genre: string[];
+	genre_en: string[];
+	broadcast_day: number | null;
+	broadcast_time: string | null;
+	official_site_url: string | null;
+	official_x_url: string | null;
+	resources: AnimeResourceLink[];
+	cover_url: string | null;
+};
 
 type AnimeRelationImportRow = {
 	anime_mal_id: number;
@@ -128,34 +149,25 @@ type AnimeRelationImportRow = {
 	related_title: string;
 };
 
+type JikanNormalizedData = AnimeImportRow & {
+	title_ja: string | null;
+	studio_entities: { mal_id: number | null; name: string; url: string | null }[];
+	relations: AnimeRelationImportRow[];
+};
+
 type JikanSourceRecordInsert = {
 	mal_id: number;
 	source: "jikan";
 	source_version: "v4";
 	source_url: string;
 	source_updated_at: null;
-	normalized_data: AnimeImportRow;
+	normalized_data: JikanNormalizedData;
 	imported_at: string;
 };
 
 type ImportDatabase = {
 	public: {
 		Tables: {
-			anime: {
-				Insert: AnimeImportRow;
-				Update: Partial<AnimeImportRow>;
-				Row: AnimeImportRow & {
-					id: number;
-					created_at: string;
-				};
-			};
-			anime_relations: {
-				Insert: AnimeRelationImportRow;
-				Update: Partial<AnimeRelationImportRow>;
-				Row: AnimeRelationImportRow & {
-					created_at: string;
-				};
-			};
 			anime_source_records: {
 				Insert: JikanSourceRecordInsert;
 				Update: Partial<JikanSourceRecordInsert>;
@@ -164,8 +176,6 @@ type ImportDatabase = {
 		};
 	};
 };
-
-type ExistingAnimeValues = ExistingCanonicalRow;
 
 type ImportCheckpoint = {
 	version: 1;
@@ -1143,6 +1153,33 @@ function mapAnimeRelations(anime: JikanAnime): AnimeRelationImportRow[] {
 	});
 }
 
+function mapStudioEntities(anime: JikanAnime): JikanNormalizedData["studio_entities"] {
+	return (anime.studios ?? []).flatMap((studio) => {
+		const name = studio.name?.trim();
+		if (!name) return [];
+		return [
+			{
+				mal_id: typeof studio.mal_id === "number" ? studio.mal_id : null,
+				name,
+				url: studio.url?.trim() || null,
+			},
+		];
+	});
+}
+
+function toJikanNormalizedData(row: AnimeImportRow, anime: JikanAnime | undefined): JikanNormalizedData {
+	return {
+		...row,
+		title_ja: anime
+			? anime.title_japanese?.trim() || findTitleByType(anime, "Japanese")
+			: containsJapaneseScript(row.title)
+				? row.title
+				: null,
+		studio_entities: anime ? mapStudioEntities(anime) : [],
+		relations: anime ? mapAnimeRelations(anime) : [],
+	};
+}
+
 function mergeUniqueStrings(left: string[], right: string[]) {
 	return [...new Set([...left, ...right])];
 }
@@ -1221,31 +1258,7 @@ function getSupabaseClient() {
 	});
 }
 
-async function preserveExistingValuesOnPartialFailures(
-	supabase: ReturnType<typeof getSupabaseClient>,
-	batch: AnimeImportRow[],
-) {
-	const { data, error } = await supabase
-		.from("anime")
-		.select(
-			"mal_id,title,title_en,title_romaji,episode_count,type,status,aired_from,aired_to,season,source,studio,studio_en,genre,genre_en,broadcast_day,broadcast_time,official_site_url,official_x_url,resources,cover_url",
-		)
-		.in(
-			"mal_id",
-			batch.map((row) => row.mal_id),
-		);
-
-	if (error) {
-		console.warn(`Could not read existing anime values before upsert: ${error.message}`);
-		return batch;
-	}
-
-	const existingValuesByMalId = new Map(((data ?? []) as ExistingAnimeValues[]).map((row) => [row.mal_id, row]));
-
-	return batch.map((row) => mergeJikanCanonicalRow(row, existingValuesByMalId.get(row.mal_id)));
-}
-
-async function upsertJikanSourceRecords(rows: AnimeImportRow[]) {
+async function upsertJikanSourceRecords(rows: AnimeImportRow[], animeByMalId: Map<number, JikanAnime>) {
 	const supabase = getSupabaseClient();
 	const importedAt = new Date().toISOString();
 	let saved = 0;
@@ -1257,7 +1270,7 @@ async function upsertJikanSourceRecords(rows: AnimeImportRow[]) {
 			source_version: "v4",
 			source_url: `${BASE_URL}/anime/${row.mal_id}/full`,
 			source_updated_at: null,
-			normalized_data: row,
+			normalized_data: toJikanNormalizedData(row, animeByMalId.get(row.mal_id)),
 			imported_at: importedAt,
 		}));
 		const { error } = await supabase.from("anime_source_records").upsert(batch, { onConflict: "mal_id,source" });
@@ -1265,59 +1278,6 @@ async function upsertJikanSourceRecords(rows: AnimeImportRow[]) {
 		saved += batch.length;
 		console.log(`Saved ${saved}/${rows.length} Jikan source records.`);
 	}
-}
-
-async function upsertAnimeRows(rows: AnimeImportRow[]) {
-	const supabase = getSupabaseClient();
-	const savedMalIds = new Set<number>();
-	let saved = 0;
-
-	for (let start = 0; start < rows.length; start += UPSERT_BATCH_SIZE) {
-		const batch = await preserveExistingValuesOnPartialFailures(
-			supabase,
-			rows.slice(start, start + UPSERT_BATCH_SIZE),
-		);
-		const { error } = await supabase.from("anime").upsert(batch, { onConflict: "mal_id" });
-
-		if (error) {
-			console.error(`Supabase upsert failed for batch ${start / UPSERT_BATCH_SIZE + 1}: ${error.message}`);
-			continue;
-		}
-
-		for (const row of batch) savedMalIds.add(row.mal_id);
-		saved += batch.length;
-		console.log(`Supabase upserted ${saved}/${rows.length} rows`);
-	}
-
-	return savedMalIds;
-}
-
-async function syncAnimeRelations(animes: JikanAnime[], savedMalIds: Set<number>) {
-	const supabase = getSupabaseClient();
-	let synced = 0;
-
-	for (const anime of animes) {
-		if (!savedMalIds.has(anime.mal_id) || anime.relations === undefined) continue;
-
-		const { error: deleteError } = await supabase.from("anime_relations").delete().eq("anime_mal_id", anime.mal_id);
-		if (deleteError) {
-			console.error(`Could not replace anime relations for MAL ${anime.mal_id}: ${deleteError.message}`);
-			continue;
-		}
-
-		const relationRows = mapAnimeRelations(anime);
-		if (relationRows.length > 0) {
-			const { error: insertError } = await supabase.from("anime_relations").insert(relationRows);
-			if (insertError) {
-				console.error(`Could not save anime relations for MAL ${anime.mal_id}: ${insertError.message}`);
-				continue;
-			}
-		}
-
-		synced += relationRows.length;
-	}
-
-	console.log(`Synced ${synced} anime relations.`);
 }
 
 async function main() {
@@ -1387,9 +1347,7 @@ async function main() {
 		return;
 	}
 
-	await upsertJikanSourceRecords(rows);
-	const savedMalIds = await upsertAnimeRows(rows);
-	await syncAnimeRelations(filteredAnimes, savedMalIds);
+	await upsertJikanSourceRecords(rows, new Map(filteredAnimes.map((anime) => [anime.mal_id, anime])));
 
 	if (fetchResult.usesCheckpoint && fetchResult.failedMalIds.length === 0) {
 		await clearImportCheckpoint(year, season);
@@ -1398,7 +1356,7 @@ async function main() {
 		console.warn(`Import checkpoint retained for ${fetchResult.failedMalIds.length} missing MAL IDs.`);
 	}
 
-	console.log(`Import complete: ${rows.length} rows processed.`);
+	console.log(`Source import complete: ${rows.length} rows processed. Run the catalog resolver to publish them.`);
 }
 
 main().catch((error) => {

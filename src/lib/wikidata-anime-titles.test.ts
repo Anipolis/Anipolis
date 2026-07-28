@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-	getKanaTitleCandidates,
-	groupWikidataJapaneseTitles,
-	shouldApplyWikidataTitle,
-	toWikidataPageUrl,
-} from "./wikidata-anime-titles";
+import { getKanaTitleCandidates, groupWikidataJapaneseTitles, toWikidataPageUrl } from "./wikidata-anime-titles";
 
 describe("Wikidata anime title helpers", () => {
 	it("keeps kana-containing synonyms as unverified candidates", () => {
@@ -24,6 +19,8 @@ describe("Wikidata anime title helpers", () => {
 				mal: { value: "43760" },
 				item: { value: "http://www.wikidata.org/entity/Q122856067" },
 				jaLabel: { value: "火狩りの王 第1期" },
+				enLabel: { value: "The Fire Hunter, season 1" },
+				enAlias: { value: "Hikari no Ou, season 1" },
 			},
 			{
 				mal: { value: "43760" },
@@ -36,12 +33,8 @@ describe("Wikidata anime title helpers", () => {
 			malId: 43760,
 			titleJa: null,
 			titleJaCandidates: ["火狩りの王", "火狩りの王 第1期"],
+			titleEn: "The Fire Hunter, season 1",
+			titleEnAliases: ["Hikari no Ou, season 1"],
 		});
-	});
-
-	it("only replaces the untouched ODbL fallback title", () => {
-		expect(shouldApplyWikidataTitle("Hikari no Ou", "Hikari no Ou", "火狩りの王")).toBe(true);
-		expect(shouldApplyWikidataTitle("火狩りの王", "Hikari no Ou", "火狩りの王")).toBe(false);
-		expect(shouldApplyWikidataTitle("Custom title", "Hikari no Ou", "火狩りの王")).toBe(false);
 	});
 });

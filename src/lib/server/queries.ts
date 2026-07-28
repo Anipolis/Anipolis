@@ -2622,6 +2622,7 @@ function toAnime(raw: Record<string, unknown>): Anime {
 		broadcast_station: (raw["broadcast_station"] as string[] | null) ?? null,
 		room_type: raw["room_type"] === "global" ? "global" : "episode",
 		hidden_by_admin: raw["hidden_by_admin"] === true,
+		metadata_ready: raw["metadata_ready"] !== false,
 		created_at: String(raw["created_at"]),
 	};
 }

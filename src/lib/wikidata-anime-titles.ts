@@ -9,18 +9,19 @@ export type WikidataBinding = {
 	mal?: { value?: string };
 	item?: { value?: string };
 	jaLabel?: { value?: string };
+	enLabel?: { value?: string };
+	enAlias?: { value?: string };
 };
 
 export type WikidataTitleRecord = {
 	malId: number;
 	titleJa: string | null;
 	titleJaCandidates: string[];
+	titleEn: string | null;
+	titleEnCandidates: string[];
+	titleEnAliases: string[];
 	itemUrls: string[];
 };
-
-export function containsJapaneseScript(value: string): boolean {
-	return /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/u.test(value);
-}
 
 export function getKanaTitleCandidates(values: readonly string[]): string[] {
 	return [
@@ -34,7 +35,10 @@ export function getKanaTitleCandidates(values: readonly string[]): string[] {
 }
 
 export function groupWikidataJapaneseTitles(bindings: readonly WikidataBinding[]): WikidataTitleRecord[] {
-	const grouped = new Map<number, { titles: Set<string>; itemUrls: Set<string> }>();
+	const grouped = new Map<
+		number,
+		{ jaTitles: Set<string>; enTitles: Set<string>; enAliases: Set<string>; itemUrls: Set<string> }
+	>();
 
 	for (const binding of bindings) {
 		const malId = Number.parseInt(binding.mal?.value ?? "", 10);
@@ -42,19 +46,32 @@ export function groupWikidataJapaneseTitles(bindings: readonly WikidataBinding[]
 		const itemUrl = binding.item?.value?.trim();
 		if (!Number.isSafeInteger(malId) || malId < 1 || !title || !itemUrl) continue;
 
-		const record = grouped.get(malId) ?? { titles: new Set<string>(), itemUrls: new Set<string>() };
-		record.titles.add(title);
+		const record = grouped.get(malId) ?? {
+			jaTitles: new Set<string>(),
+			enTitles: new Set<string>(),
+			enAliases: new Set<string>(),
+			itemUrls: new Set<string>(),
+		};
+		record.jaTitles.add(title);
+		const enTitle = binding.enLabel?.value?.trim();
+		const enAlias = binding.enAlias?.value?.trim();
+		if (enTitle) record.enTitles.add(enTitle);
+		if (enAlias) record.enAliases.add(enAlias);
 		record.itemUrls.add(itemUrl);
 		grouped.set(malId, record);
 	}
 
 	return [...grouped.entries()]
 		.map(([malId, record]) => {
-			const titleJaCandidates = [...record.titles].sort();
+			const titleJaCandidates = [...record.jaTitles].sort();
+			const titleEnCandidates = [...record.enTitles].sort();
 			return {
 				malId,
 				titleJa: titleJaCandidates.length === 1 ? (titleJaCandidates[0] ?? null) : null,
 				titleJaCandidates,
+				titleEn: titleEnCandidates.length === 1 ? (titleEnCandidates[0] ?? null) : null,
+				titleEnCandidates,
+				titleEnAliases: [...record.enAliases].sort(),
 				itemUrls: [...record.itemUrls].sort(),
 			};
 		})
@@ -64,17 +81,4 @@ export function groupWikidataJapaneseTitles(bindings: readonly WikidataBinding[]
 export function toWikidataPageUrl(entityUrl: string): string {
 	const itemId = entityUrl.match(/^https?:\/\/www\.wikidata\.org\/entity\/(Q\d+)$/)?.[1];
 	return itemId ? `https://www.wikidata.org/wiki/${itemId}` : entityUrl;
-}
-
-export function shouldApplyWikidataTitle(
-	currentTitle: string,
-	animeOfflineTitle: string,
-	wikidataTitle: string | null,
-): boolean {
-	return (
-		Boolean(wikidataTitle?.trim()) &&
-		!containsJapaneseScript(currentTitle) &&
-		currentTitle.trim() === animeOfflineTitle.trim() &&
-		currentTitle.trim() !== wikidataTitle?.trim()
-	);
 }

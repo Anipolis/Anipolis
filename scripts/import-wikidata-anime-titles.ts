@@ -1,7 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import {
 	groupWikidataJapaneseTitles,
-	shouldApplyWikidataTitle,
 	toWikidataPageUrl,
 	WIKIDATA_PROPERTY_MAL_ANIME_ID_URL,
 	WIKIDATA_SOURCE_NAME,
@@ -29,6 +28,9 @@ type WikidataNormalizedData = {
 	mal_id: number;
 	title_ja: string | null;
 	title_ja_candidates: string[];
+	title_en: string | null;
+	title_en_candidates: string[];
+	title_en_aliases: string[];
 	language: "ja";
 	item_urls: string[];
 };
@@ -43,12 +45,6 @@ type WikidataSourceRecordInsert = {
 	imported_at: string;
 };
 
-type ExistingAnimeRow = {
-	mal_id: number;
-	title: string;
-	resources: { name: string; url: string }[] | null;
-};
-
 type ImportDatabase = {
 	public: {
 		Tables: {
@@ -56,11 +52,6 @@ type ImportDatabase = {
 				Row: AnimeSourceRecordRow;
 				Insert: WikidataSourceRecordInsert;
 				Update: Partial<WikidataSourceRecordInsert>;
-			};
-			anime: {
-				Row: ExistingAnimeRow;
-				Insert: ExistingAnimeRow;
-				Update: Partial<ExistingAnimeRow>;
 			};
 		};
 	};
@@ -150,11 +141,19 @@ async function fetchWikidataBindings(malIds: number[]): Promise<WikidataBinding[
 		const batch = malIds.slice(start, start + WIKIDATA_BATCH_SIZE);
 		const values = batch.map((malId) => `"${malId}"`).join(" ");
 		const query = `
-			SELECT ?mal ?item ?jaLabel WHERE {
+			SELECT ?mal ?item ?jaLabel ?enLabel ?enAlias WHERE {
 				VALUES ?mal { ${values} }
 				?item wdt:P4086 ?mal.
 				?item rdfs:label ?jaLabel.
 				FILTER(LANG(?jaLabel) = "ja")
+				OPTIONAL {
+					?item rdfs:label ?enLabel.
+					FILTER(LANG(?enLabel) = "en")
+				}
+				OPTIONAL {
+					?item skos:altLabel ?enAlias.
+					FILTER(LANG(?enAlias) = "en")
+				}
 			}
 		`;
 		const url = new URL(WIKIDATA_SPARQL_ENDPOINT);
@@ -188,6 +187,9 @@ function buildSourceRows(records: ReturnType<typeof groupWikidataJapaneseTitles>
 			mal_id: record.malId,
 			title_ja: record.titleJa,
 			title_ja_candidates: record.titleJaCandidates,
+			title_en: record.titleEn,
+			title_en_candidates: record.titleEnCandidates,
+			title_en_aliases: record.titleEnAliases,
 			language: "ja",
 			item_urls: record.itemUrls.map(toWikidataPageUrl),
 		},
@@ -202,61 +204,6 @@ async function saveSourceRows(supabase: ReturnType<typeof getSupabaseClient>, ro
 		if (error) throw new Error(`Could not save Wikidata source records: ${error.message}`);
 	}
 	console.log(`Saved ${rows.length} Wikidata source records.`);
-}
-
-function mergeWikidataResource(resources: ExistingAnimeRow["resources"], itemUrl: string) {
-	return [
-		...(resources ?? []).filter((resource) => resource.name !== "Wikidata (日本語タイトル)"),
-		{ name: "Wikidata (日本語タイトル)", url: itemUrl },
-	];
-}
-
-async function applyTitles(
-	supabase: ReturnType<typeof getSupabaseClient>,
-	offlineRows: AnimeOfflineSourceRow[],
-	sourceRows: WikidataSourceRecordInsert[],
-	dryRun = false,
-) {
-	const offlineByMalId = new Map(offlineRows.map((row) => [row.mal_id, row.normalized_data]));
-	const applicableSourceRows = sourceRows.filter((row) => row.normalized_data.title_ja !== null);
-	const animeByMalId = new Map<number, ExistingAnimeRow>();
-
-	for (let start = 0; start < applicableSourceRows.length; start += DATABASE_BATCH_SIZE) {
-		const malIds = applicableSourceRows.slice(start, start + DATABASE_BATCH_SIZE).map((row) => row.mal_id);
-		const { data, error } = await supabase.from("anime").select("mal_id,title,resources").in("mal_id", malIds);
-		if (error) throw new Error(`Could not read anime titles: ${error.message}`);
-		for (const row of (data ?? []) as ExistingAnimeRow[]) animeByMalId.set(row.mal_id, row);
-	}
-
-	const updates = applicableSourceRows.flatMap((sourceRow) => {
-		const anime = animeByMalId.get(sourceRow.mal_id);
-		const offline = offlineByMalId.get(sourceRow.mal_id);
-		const titleJa = sourceRow.normalized_data.title_ja;
-		if (!anime || !offline || !shouldApplyWikidataTitle(anime.title, offline.title, titleJa)) return [];
-		return [{ anime, sourceRow, titleJa: titleJa as string }];
-	});
-	if (dryRun) {
-		console.log(`Would apply ${updates.length} Wikidata Japanese titles to ODbL fallback titles.`);
-		return;
-	}
-
-	for (let start = 0; start < updates.length; start += 10) {
-		const batch = updates.slice(start, start + 10);
-		await Promise.all(
-			batch.map(async ({ anime, sourceRow, titleJa }) => {
-				const { error } = await supabase
-					.from("anime")
-					.update({
-						title: titleJa,
-						resources: mergeWikidataResource(anime.resources, sourceRow.source_url),
-					})
-					.eq("mal_id", anime.mal_id);
-				if (error) throw new Error(`Could not update MAL ${anime.mal_id}: ${error.message}`);
-			}),
-		);
-	}
-
-	console.log(`Applied ${updates.length} Wikidata Japanese titles to ODbL fallback titles.`);
 }
 
 async function main() {
@@ -276,13 +223,12 @@ async function main() {
 
 	if (options.dryRun) {
 		console.log(JSON.stringify(sourceRows.slice(0, 10), null, 2));
-		await applyTitles(supabase, offlineRows, sourceRows, true);
 		console.log("Dry run complete. No database writes were made.");
 		return;
 	}
 
 	await saveSourceRows(supabase, sourceRows);
-	await applyTitles(supabase, offlineRows, sourceRows);
+	console.log("Source import complete. Run the catalog resolver to publish the resolved titles.");
 }
 
 main().catch((error) => {

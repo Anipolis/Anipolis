@@ -251,6 +251,7 @@ export interface Anime {
 	broadcast_station: string[] | null;
 	room_type: AnimeRoomType;
 	hidden_by_admin: boolean;
+	metadata_ready: boolean;
 	created_at: string;
 	// 集計フィールド（クエリ時に付加）
 	list_count?: number;

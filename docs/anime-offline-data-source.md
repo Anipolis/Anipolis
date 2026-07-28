@@ -16,7 +16,7 @@ Anipolisの作品カタログの一部は、`manami-project/anime-offline-databa
 
 このURLによって使用した入力を作品単位で特定する。再実行時は同名リソースを新しい固定URLに置換する。
 
-変換結果はまず `anime_source_records` に `source = anime_offline_database` として保存する。表示用の `anime` はこのODbLデータを基礎とし、ODbLに同等項目が存在しない場合だけJikanまたは手動データで補完する。Jikanの正規化結果も同じテーブルへ保存するが、公開ポリシーでは取得できない。
+変換結果は `anime_source_records` に `source = anime_offline_database` として保存する。インポーターは表示用の `anime` を直接更新しない。専用resolverがODbLデータを基礎に、Wikidata、Jikan、手動データをフィールド単位で解決する。Jikanの正規化結果も同じテーブルへ保存するが、公開ポリシーでは取得できない。
 
 ## 変換規則
 
@@ -60,6 +60,8 @@ pnpm import:anime-offline -- --year 2023 --season winter --dry-run
 pnpm import:anime-offline -- --year 2023 --season winter
 pnpm import:wikidata-titles -- --year 2023 --season winter --dry-run
 pnpm import:wikidata-titles -- --year 2023 --season winter
+pnpm resolve:anime-catalog -- --year 2023 --season winter --dry-run
+pnpm resolve:anime-catalog -- --year 2023 --season winter
 ```
 
 別の固定入力を再現する場合は `--dataset-url` を指定する。本番書き込みには `PUBLIC_SUPABASE_URL` と `SUPABASE_SECRET_KEY`（または従来の同等環境変数）が必要である。公開用の publishable key では書き込みを行わない。
