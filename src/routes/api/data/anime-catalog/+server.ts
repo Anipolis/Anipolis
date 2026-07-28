@@ -1,38 +1,47 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { json } from "@sveltejs/kit";
 import {
 	ANIME_OFFLINE_DBCL_URL,
 	ANIME_OFFLINE_LICENSE_URL,
 	ANIME_OFFLINE_ODBL_URL,
 	ANIME_OFFLINE_REPOSITORY_URL,
-	ANIME_OFFLINE_SOURCE_NAME,
 	ANIPOLIS_TRANSFORMATION_URL,
-	findAnimeOfflineSource,
 } from "$lib/anime-offline-database";
-import type { AnimeResourceLink } from "$lib/types";
 import type { RequestHandler } from "./$types";
 
 const PAGE_SIZE = 1_000;
 
-function toResourceLinks(value: unknown): AnimeResourceLink[] {
-	if (!Array.isArray(value)) return [];
+type SourceRecordRow = {
+	mal_id: number;
+	source: "anime_offline_database" | "jikan";
+	source_version: string;
+	source_url: string;
+	source_updated_at: string | null;
+	normalized_data: Record<string, unknown>;
+	imported_at: string;
+};
 
-	return value.flatMap((candidate) => {
-		if (!candidate || typeof candidate !== "object") return [];
-		const resource = candidate as { name?: unknown; url?: unknown };
-		return typeof resource.name === "string" && typeof resource.url === "string"
-			? [{ name: resource.name, url: resource.url }]
-			: [];
-	});
-}
+type SourceRecordDatabase = {
+	public: {
+		Tables: {
+			anime_source_records: {
+				Row: SourceRecordRow;
+				Insert: SourceRecordRow;
+				Update: Partial<SourceRecordRow>;
+			};
+		};
+	};
+};
 
 export const GET: RequestHandler = async ({ locals: { supabase } }) => {
 	const rows: Array<Record<string, unknown>> = [];
+	const sourceReader = supabase as unknown as SupabaseClient<SourceRecordDatabase>;
 
 	for (let start = 0; ; start += PAGE_SIZE) {
-		const { data, error } = await supabase
-			.from("anime")
-			.select("mal_id,title,title_romaji,episode_count,type,status,season,studio,studio_en,resources")
-			.filter("resources", "cs", JSON.stringify([{ name: ANIME_OFFLINE_SOURCE_NAME }]))
+		const { data, error } = await sourceReader
+			.from("anime_source_records")
+			.select("mal_id,source_version,source_url,source_updated_at,normalized_data,imported_at")
+			.eq("source", "anime_offline_database")
 			.order("mal_id", { ascending: true })
 			.range(start, start + PAGE_SIZE - 1);
 
@@ -44,31 +53,25 @@ export const GET: RequestHandler = async ({ locals: { supabase } }) => {
 		if (!data || data.length < PAGE_SIZE) break;
 	}
 
-	const sourceUrls = new Set<string>();
-	const data = rows.flatMap((row) => {
-		const attribution = findAnimeOfflineSource(toResourceLinks(row["resources"]));
-		if (!attribution || typeof row["mal_id"] !== "number") return [];
-		sourceUrls.add(attribution.url);
-
-		return [
-			{
-				mal_id: row["mal_id"],
-				title: row["title"],
-				title_romaji: row["title_romaji"],
-				episode_count: row["episode_count"],
-				type: row["type"],
-				status: row["status"],
-				season: row["season"],
-				studio: row["studio"],
-				studio_en: row["studio_en"],
-				source_url: attribution.url,
-			},
-		];
-	});
+	const sourceUrls = [
+		...new Set(rows.map((row) => row["source_url"]).filter((url): url is string => typeof url === "string")),
+	].sort();
+	const sourceVersions = [
+		...new Set(
+			rows
+				.map((row) => row["source_version"])
+				.filter((version): version is string => typeof version === "string"),
+		),
+	].sort();
+	const data = rows.map((row) => row["normalized_data"]);
 
 	return json(
 		{
-			name: "Anipolis anime catalog derived from anime-offline-database",
+			name: "Anipolis ODbL derivative of anime-offline-database",
+			scope: "anime-offline-database derived records only",
+			is_complete_anipolis_catalog: false,
+			excluded_sources: ["jikan", "manual"],
+			exclusion_reason: "Third-party and manually curated data are kept outside this ODbL derivative.",
 			generated_at: new Date().toISOString(),
 			license: {
 				name: "Open Database License 1.0 and Database Contents License 1.0",
@@ -78,7 +81,8 @@ export const GET: RequestHandler = async ({ locals: { supabase } }) => {
 			},
 			source: {
 				repository: ANIME_OFFLINE_REPOSITORY_URL,
-				release_assets: [...sourceUrls].sort(),
+				versions: sourceVersions,
+				release_assets: sourceUrls,
 			},
 			transformation: ANIPOLIS_TRANSFORMATION_URL,
 			count: data.length,

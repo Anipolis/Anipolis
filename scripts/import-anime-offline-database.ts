@@ -1,31 +1,39 @@
 import { createClient } from "@supabase/supabase-js";
 import {
+	type AnimeOfflineCanonicalRow,
 	type AnimeOfflineEntry,
 	type AnimeOfflineSeason,
+	getGithubReleaseVersion,
 	getMalIdFromSources,
 	isAnimeOfflineDataset,
 	mapAnimeOfflineStatus,
 	mapAnimeOfflineType,
+	mergeAnimeOfflineCanonicalRow,
 	mergeAnimeOfflineSource,
 	pinLatestGithubReleaseAssetUrl,
 } from "../src/lib/anime-offline-database.ts";
 
-type AnimeResourceLink = {
-	name: string;
-	url: string;
-};
+type AnimeImportRow = AnimeOfflineCanonicalRow;
 
-type AnimeImportRow = {
+type AnimeOfflineNormalizedData = {
 	mal_id: number;
 	title: string;
-	title_romaji: string | null;
+	title_language: null;
 	episode_count: string | null;
 	type: string | null;
 	status: "airing" | "finished" | "upcoming";
 	season: string;
-	studio: string[];
-	studio_en: string[];
-	resources: AnimeResourceLink[];
+	studios: string[];
+};
+
+type AnimeSourceRecordInsert = {
+	mal_id: number;
+	source: "anime_offline_database";
+	source_version: string;
+	source_url: string;
+	source_updated_at: string | null;
+	normalized_data: AnimeOfflineNormalizedData;
+	imported_at: string;
 };
 
 type ImportDatabase = {
@@ -35,6 +43,11 @@ type ImportDatabase = {
 				Insert: AnimeImportRow;
 				Update: Partial<AnimeImportRow>;
 				Row: AnimeImportRow;
+			};
+			anime_source_records: {
+				Insert: AnimeSourceRecordInsert;
+				Update: Partial<AnimeSourceRecordInsert>;
+				Row: AnimeSourceRecordInsert & { id: number };
 			};
 		};
 	};
@@ -191,7 +204,7 @@ function mapEntry(
 	return {
 		mal_id: malId,
 		title,
-		title_romaji: title,
+		title_romaji: null,
 		episode_count: Number.isInteger(entry.episodes) && entry.episodes > 0 ? String(entry.episodes) : null,
 		type: mapAnimeOfflineType(entry.type),
 		status: mapAnimeOfflineStatus(entry.status),
@@ -206,32 +219,49 @@ function dedupeRows(rows: AnimeImportRow[]): AnimeImportRow[] {
 	return [...new Map(rows.map((row) => [row.mal_id, row])).values()];
 }
 
-function preferExistingString(previous: string | null, next: string | null): string | null {
-	return previous?.trim() ? previous : next;
-}
-
-function preferExistingList(previous: string[] | null, next: string[]): string[] {
-	return previous && previous.length > 0 ? previous : next;
-}
-
-function mergeExistingRow(row: AnimeImportRow, existing: AnimeImportRow | undefined): AnimeImportRow {
-	if (!existing) return row;
-
+function toNormalizedSourceData(row: AnimeImportRow): AnimeOfflineNormalizedData {
 	return {
-		...row,
-		title: existing.title.trim() || row.title,
-		title_romaji: preferExistingString(existing.title_romaji, row.title_romaji),
-		episode_count: preferExistingString(existing.episode_count, row.episode_count),
-		type: preferExistingString(existing.type, row.type),
-		status: existing.status,
-		studio: preferExistingList(existing.studio, row.studio),
-		studio_en: preferExistingList(existing.studio_en, row.studio_en),
-		resources: mergeAnimeOfflineSource(existing.resources ?? [], row.resources[0]?.url ?? ""),
+		mal_id: row.mal_id,
+		title: row.title,
+		title_language: null,
+		episode_count: row.episode_count,
+		type: row.type,
+		status: row.status,
+		season: row.season,
+		studios: row.studio_en,
 	};
 }
 
-async function upsertRows(rows: AnimeImportRow[]) {
-	const supabase = getSupabaseClient();
+function buildSourceRecordRows(
+	rows: AnimeImportRow[],
+	resolvedUrl: string,
+	sourceUpdatedAt: string,
+): AnimeSourceRecordInsert[] {
+	const importedAt = new Date().toISOString();
+	const sourceVersion = getGithubReleaseVersion(resolvedUrl);
+	return rows.map((row) => ({
+		mal_id: row.mal_id,
+		source: "anime_offline_database",
+		source_version: sourceVersion,
+		source_url: resolvedUrl,
+		source_updated_at: sourceUpdatedAt || null,
+		normalized_data: toNormalizedSourceData(row),
+		imported_at: importedAt,
+	}));
+}
+
+async function upsertSourceRecords(supabase: ReturnType<typeof getSupabaseClient>, rows: AnimeSourceRecordInsert[]) {
+	let saved = 0;
+	for (let start = 0; start < rows.length; start += UPSERT_BATCH_SIZE) {
+		const batch = rows.slice(start, start + UPSERT_BATCH_SIZE);
+		const { error } = await supabase.from("anime_source_records").upsert(batch, { onConflict: "mal_id,source" });
+		if (error) throw new Error(`Could not save ODbL source records: ${error.message}`);
+		saved += batch.length;
+		console.log(`Saved ${saved}/${rows.length} ODbL source records.`);
+	}
+}
+
+async function upsertRows(supabase: ReturnType<typeof getSupabaseClient>, rows: AnimeImportRow[]) {
 	let saved = 0;
 
 	for (let start = 0; start < rows.length; start += UPSERT_BATCH_SIZE) {
@@ -245,7 +275,7 @@ async function upsertRows(rows: AnimeImportRow[]) {
 		if (readError) throw new Error(`Could not read existing anime: ${readError.message}`);
 
 		const existingByMalId = new Map(((existingData ?? []) as AnimeImportRow[]).map((row) => [row.mal_id, row]));
-		const batch = sourceBatch.map((row) => mergeExistingRow(row, existingByMalId.get(row.mal_id)));
+		const batch = sourceBatch.map((row) => mergeAnimeOfflineCanonicalRow(row, existingByMalId.get(row.mal_id)));
 		const { error: writeError } = await supabase.from("anime").upsert(batch, { onConflict: "mal_id" });
 
 		if (writeError) throw new Error(`Supabase upsert failed: ${writeError.message}`);
@@ -253,6 +283,30 @@ async function upsertRows(rows: AnimeImportRow[]) {
 		saved += batch.length;
 		console.log(`Supabase upserted ${saved}/${rows.length} rows.`);
 	}
+}
+
+function printFormatInspection(rows: AnimeImportRow[]) {
+	const hasJapaneseScript = (value: string) => /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/u.test(value);
+	const japaneseTitleCount = rows.filter((row) => hasJapaneseScript(row.title)).length;
+	const studios = rows.flatMap((row) => row.studio_en);
+	const lowercaseStudioCount = studios.filter((studio) => studio === studio.toLowerCase()).length;
+
+	console.log(
+		`Title format: ${japaneseTitleCount}/${rows.length} contain Japanese script; ${rows.length - japaneseTitleCount}/${rows.length} do not.`,
+	);
+	console.log(
+		`Studio format: ${lowercaseStudioCount}/${studios.length} values are entirely lowercase (${studios.length} total values).`,
+	);
+	console.log(
+		`Title samples: ${rows
+			.slice(0, 10)
+			.map((row) => row.title)
+			.join(" | ")}`,
+	);
+	const representativeRows = rows.filter((row) => row.type === "TV" && Number(row.episode_count) > 1).slice(0, 10);
+	console.log(
+		`Multi-episode TV samples: ${representativeRows.map((row) => `${row.mal_id}:${row.title}`).join(" | ")}`,
+	);
 }
 
 async function main() {
@@ -273,21 +327,24 @@ async function main() {
 	console.log(`Dataset release asset: ${resolvedUrl}`);
 	console.log(`Dataset last update: ${dataset.lastUpdate}`);
 	console.log(`Matched ${seasonEntries.length} seasonal entries; mapped ${rows.length} entries with MAL IDs.`);
+	printFormatInspection(rows);
 
 	if (rows.length === 0) {
 		throw new Error(`No importable entries found for ${options.year} ${options.season}.`);
 	}
+	const sourceRecordRows = buildSourceRecordRows(rows, resolvedUrl, dataset.lastUpdate);
 
 	if (options.dryRun) {
-		console.log(JSON.stringify(rows.slice(0, 3), null, 2));
+		console.log(JSON.stringify(sourceRecordRows.slice(0, 3), null, 2));
 		console.log("Dry run complete. No database writes were made.");
 		return;
 	}
 
 	const supabaseUrl = process.env["PUBLIC_SUPABASE_URL"] ?? process.env["SUPABASE_URL"];
-	getSupabaseClient();
+	const supabase = getSupabaseClient();
 	console.log(`Writing to Supabase: ${new URL(supabaseUrl ?? "").host}`);
-	await upsertRows(rows);
+	await upsertSourceRecords(supabase, sourceRecordRows);
+	await upsertRows(supabase, rows);
 	console.log(`Import complete: ${rows.length} rows processed.`);
 }
 
