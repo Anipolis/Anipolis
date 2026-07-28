@@ -18,6 +18,10 @@ export type WikidataTitleRecord = {
 	itemUrls: string[];
 };
 
+export function containsJapaneseScript(value: string): boolean {
+	return /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/u.test(value);
+}
+
 export function getKanaTitleCandidates(values: readonly string[]): string[] {
 	return [
 		...new Set(
@@ -74,5 +78,3 @@ export function shouldApplyWikidataTitle(
 		currentTitle.trim() !== wikidataTitle?.trim()
 	);
 }
-
-import { containsJapaneseScript } from "./anime-offline-database";
