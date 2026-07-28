@@ -10,15 +10,18 @@ import {
 import {
 	findSyobocalOfficialSiteUrl,
 	findSyobocalOfficialXUrl,
+	findSyobocalWikipediaArticleLinks,
+	findSyobocalWikipediaKeywordLinks,
 	matchSyobocalTitlesExactly,
 	normalizeSyobocalTitle,
 	parseSyobocalLinks,
+	type SyobocalWikipediaArticleLink,
 } from "../src/lib/syobocal.ts";
 import { jstDate, rollingSyobocalProgramRange, selectPrimarySyobocalPrograms } from "../src/lib/syobocal-schedule.ts";
 
 type SeasonName = "winter" | "spring" | "summer" | "fall";
 type SourceName = AnimeCatalogSeasonSource | "manual" | "wikidata" | "syobocal";
-type MatchMethod = "manual" | "wikidata_property" | "normalized_title_exact";
+type MatchMethod = "manual" | "wikidata_property" | "wikipedia_wikidata" | "normalized_title_exact";
 
 type Options = {
 	year: number;
@@ -55,6 +58,7 @@ type SyobocalTitle = {
 	firstChannel: string | null;
 	comment: string;
 	links: { name: string; url: string }[];
+	wikipediaLinks: SyobocalWikipediaArticleLink[];
 	officialSiteUrl: string | null;
 	officialXUrl: string | null;
 	raw: Record<string, unknown>;
@@ -131,6 +135,7 @@ const DATABASE_BATCH_SIZE = 100;
 const WIKIDATA_BATCH_SIZE = 100;
 const PROGRAM_TID_BATCH_SIZE = 10;
 const SYOBOCAL_ENDPOINT = "https://cal.syoboi.jp/db.php";
+const JAPANESE_WIKIPEDIA_ENDPOINT = "https://ja.wikipedia.org/w/api.php";
 const WIKIDATA_ENDPOINT = "https://query.wikidata.org/sparql";
 const USER_AGENT = "Anipolis/1.0 (https://github.com/Anipolis/Anipolis)";
 const CACHE_DIR = ".syobocal-import-cache";
@@ -315,7 +320,19 @@ function parseTitle(raw: Record<string, unknown>): SyobocalTitle | null {
 	const title = textValue(raw, "Title");
 	if (!tid || !title) return null;
 	const comment = textValue(raw, "Comment") ?? "";
+	const keywords = textValue(raw, "Keywords") ?? "";
 	const links = parseSyobocalLinks(comment);
+	const wikipediaLinks = [
+		...findSyobocalWikipediaKeywordLinks(keywords),
+		...findSyobocalWikipediaArticleLinks(comment),
+	].filter(
+		(link, index, values) =>
+			values.findIndex(
+				(candidate) =>
+					candidate.articleTitle.normalize("NFKC").toLocaleLowerCase() ===
+					link.articleTitle.normalize("NFKC").toLocaleLowerCase(),
+			) === index,
+	);
 	return {
 		tid,
 		lastUpdate: textValue(raw, "LastUpdate"),
@@ -328,6 +345,7 @@ function parseTitle(raw: Record<string, unknown>): SyobocalTitle | null {
 		firstChannel: textValue(raw, "FirstCh"),
 		comment,
 		links,
+		wikipediaLinks,
 		officialSiteUrl: findSyobocalOfficialSiteUrl(links),
 		officialXUrl: findSyobocalOfficialXUrl(links),
 		raw,
@@ -382,7 +400,7 @@ async function fetchTitles(): Promise<SyobocalTitle[]> {
 		"TitleLookup",
 		{
 			TID: "*",
-			Fields: "TID,LastUpdate,Title,ShortTitle,TitleYomi,Comment,Cat,FirstYear,FirstMonth,FirstCh",
+			Fields: "TID,LastUpdate,Title,ShortTitle,TitleYomi,Comment,Keywords,Cat,FirstYear,FirstMonth,FirstCh",
 		},
 		"titles.xml",
 	);
@@ -651,6 +669,179 @@ async function fetchWikidataProposals(malIds: number[], candidates: Map<number, 
 	});
 }
 
+function wikipediaTitleKey(value: string): string {
+	return value.normalize("NFKC").replaceAll("_", " ").trim().toLocaleLowerCase();
+}
+
+function wikidataItemId(value: unknown): string | null {
+	return typeof value === "string" && /^Q[1-9]\d*$/.test(value) ? value : null;
+}
+
+async function fetchWikipediaWikidataItems(articleTitles: string[]): Promise<Map<string, string>> {
+	const result = new Map<string, string>();
+	const uniqueTitles = [...new Map(articleTitles.map((title) => [wikipediaTitleKey(title), title])).values()];
+	for (let start = 0; start < uniqueTitles.length; start += 40) {
+		const batch = uniqueTitles.slice(start, start + 40);
+		const url = new URL(JAPANESE_WIKIPEDIA_ENDPOINT);
+		url.searchParams.set("action", "query");
+		url.searchParams.set("format", "json");
+		url.searchParams.set("formatversion", "2");
+		url.searchParams.set("redirects", "1");
+		url.searchParams.set("prop", "pageprops");
+		url.searchParams.set("ppprop", "wikibase_item");
+		url.searchParams.set("titles", batch.join("|"));
+		const response = await fetchWithRetry(url, "application/json");
+		const payload = asRecord(await response.json());
+		const query = asRecord(payload["query"]);
+		const aliases = new Map<string, string>();
+		for (const entry of [...asArray(query["normalized"]), ...asArray(query["redirects"])]) {
+			const row = asRecord(entry);
+			const from = textValue(row, "from");
+			const to = textValue(row, "to");
+			if (from && to) aliases.set(wikipediaTitleKey(from), to);
+		}
+		const itemByTitle = new Map<string, string>();
+		for (const entry of asArray(query["pages"])) {
+			const page = asRecord(entry);
+			const title = textValue(page, "title");
+			const item = wikidataItemId(asRecord(page["pageprops"])["wikibase_item"]);
+			if (title && item) itemByTitle.set(wikipediaTitleKey(title), item);
+		}
+		for (const requestedTitle of batch) {
+			let resolvedTitle = requestedTitle;
+			const visited = new Set<string>();
+			for (;;) {
+				const key = wikipediaTitleKey(resolvedTitle);
+				if (visited.has(key)) break;
+				visited.add(key);
+				const next = aliases.get(key);
+				if (!next) break;
+				resolvedTitle = next;
+			}
+			const item = itemByTitle.get(wikipediaTitleKey(resolvedTitle));
+			if (item) result.set(wikipediaTitleKey(requestedTitle), item);
+		}
+		console.log(
+			`Wikipedia articles resolved for ${Math.min(start + batch.length, uniqueTitles.length)}/${uniqueTitles.length} keywords.`,
+		);
+		await sleep(250);
+	}
+	return result;
+}
+
+type WikidataMalBinding = {
+	item?: { value?: string };
+	mal?: { value?: string };
+};
+
+async function fetchWikidataMalIds(itemIds: string[]): Promise<Map<string, Set<number>>> {
+	const result = new Map<string, Set<number>>();
+	for (let start = 0; start < itemIds.length; start += WIKIDATA_BATCH_SIZE) {
+		const batch = itemIds.slice(start, start + WIKIDATA_BATCH_SIZE);
+		const query = `SELECT ?item ?mal WHERE {
+			VALUES ?item { ${batch.map((item) => `wd:${item}`).join(" ")} }
+			?item wdt:P4086 ?mal.
+		}`;
+		const url = new URL(WIKIDATA_ENDPOINT);
+		url.searchParams.set("query", query);
+		url.searchParams.set("format", "json");
+		const response = await fetchWithRetry(url, "application/sparql-results+json");
+		const payload = (await response.json()) as { results?: { bindings?: WikidataMalBinding[] } };
+		for (const binding of payload.results?.bindings ?? []) {
+			const item = binding.item?.value?.match(/\/(Q[1-9]\d*)$/)?.[1];
+			const malId = Number.parseInt(binding.mal?.value ?? "", 10);
+			if (!item || !Number.isSafeInteger(malId)) continue;
+			const values = result.get(item) ?? new Set<number>();
+			values.add(malId);
+			result.set(item, values);
+		}
+		await sleep(250);
+	}
+	return result;
+}
+
+async function fetchWikipediaProposals(
+	targetMalIds: readonly number[],
+	candidates: readonly CatalogCandidate[],
+	titles: readonly SyobocalTitle[],
+): Promise<MappingProposal[]> {
+	const linkedTitles = titles.flatMap((title) => title.wikipediaLinks.map((link) => ({ title, link })));
+	if (linkedTitles.length === 0) return [];
+	const itemByArticle = await fetchWikipediaWikidataItems(linkedTitles.map(({ link }) => link.articleTitle));
+	const malIdsByItem = await fetchWikidataMalIds([...new Set(itemByArticle.values())]);
+	const targetMalIdSet = new Set(targetMalIds);
+	const evidenceByTid = new Map<
+		number,
+		{ malId: number; title: SyobocalTitle; link: SyobocalWikipediaArticleLink; item: string }[]
+	>();
+	for (const { title, link } of linkedTitles) {
+		const item = itemByArticle.get(wikipediaTitleKey(link.articleTitle));
+		if (!item) continue;
+		const malIds = [...(malIdsByItem.get(item) ?? [])];
+		if (malIds.length !== 1 || !targetMalIdSet.has(malIds[0] as number)) continue;
+		const rows = evidenceByTid.get(title.tid) ?? [];
+		rows.push({ malId: malIds[0] as number, title, link, item });
+		evidenceByTid.set(title.tid, rows);
+	}
+
+	const unambiguous = [...evidenceByTid.entries()].flatMap(([tid, rows]) => {
+		const malIds = [...new Set(rows.map((row) => row.malId))];
+		return malIds.length === 1 ? rows.map((row) => ({ ...row, tid })) : [];
+	});
+	const byMal = new Map<number, typeof unambiguous>();
+	for (const row of unambiguous) {
+		const rows = byMal.get(row.malId) ?? [];
+		rows.push(row);
+		byMal.set(row.malId, rows);
+	}
+	const candidatesByMal = new Map<number, CatalogCandidate[]>();
+	for (const candidate of candidates) {
+		const values = candidatesByMal.get(candidate.malId) ?? [];
+		values.push(candidate);
+		candidatesByMal.set(candidate.malId, values);
+	}
+	const proposals = [...byMal.entries()].flatMap(([malId, rows]): MappingProposal[] => {
+		const tids = [...new Set(rows.map((row) => row.tid))];
+		if (tids.length !== 1) return [];
+		const title = rows[0]?.title;
+		if (!title) return [];
+		const catalogCandidates = candidatesByMal.get(malId) ?? [];
+		return [
+			{
+				malId,
+				tid: tids[0] as number,
+				method: "wikipedia_wikidata",
+				selectionPriority: 1.5,
+				useForTitle: catalogCandidates.some(
+					(candidate) => normalizeSyobocalTitle(candidate.title) === normalizeSyobocalTitle(title.title),
+				),
+				validFrom: catalogCandidates[0]?.validFrom ?? null,
+				validTo: catalogCandidates[0]?.validTo ?? null,
+				evidence: {
+					wikipedia_links: rows.map((row) => ({
+						url: row.link.url,
+						article_title: row.link.articleTitle,
+						basis: row.link.basis,
+						wikidata_item: `https://www.wikidata.org/wiki/${row.item}`,
+					})),
+					wikidata_mal_id: malId,
+					catalog_titles: catalogCandidates.map((candidate) => ({
+						title: candidate.title,
+						basis: candidate.titleBasis,
+					})),
+					syobocal_title: title.title,
+				},
+				sourceUrl: rows[0]?.link.url ?? `https://cal.syoboi.jp/tid/${title.tid}`,
+				sourceVersion: title.lastUpdate,
+			},
+		];
+	});
+	console.log(
+		`Wikipedia/Wikidata mapping: ${linkedTitles.length} links, ${itemByArticle.size} QIDs, ${proposals.length} unambiguous MAL mappings.`,
+	);
+	return proposals;
+}
+
 function buildMappings(
 	targetMalIds: readonly number[],
 	candidates: CatalogCandidate[],
@@ -659,6 +850,7 @@ function buildMappings(
 	manualMappings: ManualMapping[],
 	existingMappings: ExistingMapping[],
 	wikidataProposals: MappingProposal[],
+	wikipediaProposals: MappingProposal[],
 ) {
 	const targetMalIdSet = new Set(targetMalIds);
 	const candidatesByMal = new Map(candidates.map((candidate) => [candidate.malId, candidate]));
@@ -750,7 +942,13 @@ function buildMappings(
 		];
 	});
 
-	const proposals = [...exactProposals, ...wikidataProposals, ...existingManual, ...fileManual];
+	const proposals = [
+		...exactProposals,
+		...wikipediaProposals,
+		...wikidataProposals,
+		...existingManual,
+		...fileManual,
+	];
 	const selected = new Map<number, MappingProposal>();
 	const review: string[] = [];
 	for (const proposal of proposals) {
@@ -1119,6 +1317,12 @@ async function main() {
 		);
 		return [];
 	});
+	const wikipedia = await fetchWikipediaProposals(malIds, candidates, seasonalTitles).catch((error) => {
+		console.warn(
+			`Wikipedia/Wikidata mapping lookup failed; continuing without Wikipedia keyword mappings: ${String(error)}`,
+		);
+		return [];
+	});
 	const mapping = buildMappings(
 		malIds,
 		candidates,
@@ -1127,6 +1331,7 @@ async function main() {
 		manualMappings,
 		existingMappings,
 		wikidata,
+		wikipedia,
 	);
 	console.log(
 		`Syobocal: ${titles.length} titles fetched, ${seasonalTitles.length} near season, ${mapping.selected.length} confirmed mappings.`,
@@ -1272,6 +1477,18 @@ async function main() {
 	const sourceRows = mapping.selected.flatMap((proposal) => {
 		const title = selectedTitleByTid.get(proposal.tid);
 		if (!title) return [];
+		const verifiedWikipedia = wikipedia.find(
+			(candidate) => candidate.malId === proposal.malId && candidate.tid === proposal.tid,
+		);
+		const resources = [
+			...title.links,
+			...(verifiedWikipedia ? [{ name: "Wikipedia", url: verifiedWikipedia.sourceUrl }] : []),
+		].filter(
+			(resource, index, values) =>
+				values.findIndex(
+					(candidate) => candidate.url.toLocaleLowerCase() === resource.url.toLocaleLowerCase(),
+				) === index,
+		);
 		return [
 			{
 				mal_id: proposal.malId,
@@ -1287,7 +1504,8 @@ async function main() {
 					title_yomi: proposal.useForTitle ? title.titleYomi : null,
 					official_site_url: title.officialSiteUrl,
 					official_x_url: title.officialXUrl,
-					resources: title.links,
+					wikipedia_url: verifiedWikipedia?.sourceUrl ?? null,
+					resources,
 				},
 				imported_at: importedAt,
 			},

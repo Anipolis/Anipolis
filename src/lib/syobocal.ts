@@ -3,6 +3,11 @@ export type SyobocalLink = {
 	url: string;
 };
 
+export type SyobocalWikipediaArticleLink = SyobocalLink & {
+	articleTitle: string;
+	basis: "keyword" | "comment_link";
+};
+
 export type SyobocalTitleMatchCandidate = {
 	malId: number;
 	title: string;
@@ -47,6 +52,84 @@ export function parseSyobocalLinks(comment: string): SyobocalLink[] {
 		if (seen.has(key)) continue;
 		seen.add(key);
 		links.push({ name, url });
+	}
+	return links;
+}
+
+export function japaneseWikipediaArticleTitle(value: string): string | null {
+	try {
+		const url = new URL(value);
+		const hostname = url.hostname.toLocaleLowerCase();
+		if (hostname !== "ja.wikipedia.org" && hostname !== "ja.m.wikipedia.org") return null;
+		if (!url.pathname.startsWith("/wiki/")) return null;
+		const articleTitle = decodeURIComponent(url.pathname.slice("/wiki/".length)).replaceAll("_", " ").trim();
+		if (!articleTitle) return null;
+		const namespace = articleTitle.split(":", 1)[0]?.toLocaleLowerCase();
+		if (
+			namespace &&
+			new Set([
+				"special",
+				"wikipedia",
+				"category",
+				"file",
+				"help",
+				"template",
+				"portal",
+				"talk",
+				"特別",
+				"カテゴリ",
+				"ファイル",
+				"ヘルプ",
+				"テンプレート",
+				"ポータル",
+			]).has(namespace)
+		) {
+			return null;
+		}
+		return articleTitle;
+	} catch {
+		return null;
+	}
+}
+
+export function findSyobocalWikipediaArticleLinks(comment: string): SyobocalWikipediaArticleLink[] {
+	const links: SyobocalWikipediaArticleLink[] = [];
+	const seen = new Set<string>();
+	for (const match of comment.matchAll(/\[\[([^\]\r\n]*?)\s+(https?:\/\/[^\]\s]+)\]\]/gi)) {
+		const name = match[1]?.trim();
+		const sourceUrl = match[2]?.trim();
+		if (!name || !sourceUrl) continue;
+		const articleTitle = japaneseWikipediaArticleTitle(sourceUrl);
+		if (!articleTitle) continue;
+		const key = articleTitle.normalize("NFKC").toLocaleLowerCase();
+		if (seen.has(key)) continue;
+		seen.add(key);
+		links.push({
+			name: "Wikipedia",
+			url: `https://ja.wikipedia.org/wiki/${encodeURIComponent(articleTitle.replaceAll(" ", "_"))}`,
+			articleTitle,
+			basis: "comment_link",
+		});
+	}
+	return links;
+}
+
+export function findSyobocalWikipediaKeywordLinks(keywords: string): SyobocalWikipediaArticleLink[] {
+	const links: SyobocalWikipediaArticleLink[] = [];
+	const seen = new Set<string>();
+	for (const value of keywords.split(",")) {
+		const match = value.trim().match(/^wikipedia:(.+)$/i);
+		const articleTitle = match?.[1]?.trim();
+		if (!articleTitle) continue;
+		const key = articleTitle.normalize("NFKC").toLocaleLowerCase();
+		if (seen.has(key)) continue;
+		seen.add(key);
+		links.push({
+			name: "Wikipedia",
+			url: `https://ja.wikipedia.org/wiki/${encodeURIComponent(articleTitle.replaceAll(" ", "_"))}`,
+			articleTitle,
+			basis: "keyword",
+		});
 	}
 	return links;
 }
