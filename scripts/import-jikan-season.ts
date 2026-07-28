@@ -1,5 +1,6 @@
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { createClient } from "@supabase/supabase-js";
 import { containsJapaneseScript } from "../src/lib/anime-offline-database.ts";
 import { translateAnimeSource } from "../src/lib/anime-vocabulary.ts";
@@ -307,7 +308,7 @@ const GENRE_JA_BY_EN: Record<string, string> = {
 	Shounen: "少年向け",
 };
 
-const STUDIO_JA_BY_EN: Record<string, string> = {
+export const STUDIO_JA_BY_EN: Record<string, string> = {
 	"8bit": "エイトビット",
 	AIC: "AIC",
 	"Ajia-do": "亜細亜堂",
@@ -1359,7 +1360,10 @@ async function main() {
 	console.log(`Source import complete: ${rows.length} rows processed. Run the catalog resolver to publish them.`);
 }
 
-main().catch((error) => {
-	console.error(error instanceof Error ? error.message : String(error));
-	process.exitCode = 1;
-});
+const invokedPath = process.argv[1];
+if (invokedPath && import.meta.url === pathToFileURL(invokedPath).href) {
+	main().catch((error) => {
+		console.error(error instanceof Error ? error.message : String(error));
+		process.exitCode = 1;
+	});
+}

@@ -25,7 +25,7 @@ Wikidata ───────────────┤                       
 | ローマ字 | manual → Jikan default → Wikidata別名で検証できたODbLタイトル → legacy → ODbL候補 |
 | 話数・種別・状態・シーズン | manual → ODbL → Jikan → legacy |
 | 放送日・放送時刻・公式URL | manual → Jikan → legacy |
-| スタジオ | manual → Wikidata組織名 → Jikan → legacy → ODbL候補 |
+| スタジオ | manual → Wikidata組織IDで同定したJikan既存名 → Wikidataラベル → legacy → ODbL候補 |
 
 Jikanソースレコードにはスタジオ名だけでなく `studios[].mal_id` とURLも保存する。ODbLのスタジオ文字列は
 同一性が確認できないため候補として扱い、Jikanの識別済みスタジオを上書きしない。
@@ -49,6 +49,9 @@ resolverは各作品を次の検証状態へ分類する。
 スタジオ名は固定の英日辞書だけに依存せず、`studio_source_records` の組織レコードと
 `studio_name_aliases` の正規化別名を優先して解決する。Wikidataのアニメーションスタジオを取得し、英語ラベル・別名を
 ODbL/Jikanの入力名と一意に照合できた場合だけ日本語名を採用する。同じ別名が複数組織に一致する場合は推測しない。
+Wikidataの `name_ja` / `name_en` は出典ラベルとして保持し、表示には `canonical_name_ja` /
+`canonical_name_en` を使う。同じ組織にJikan由来の既存名があればその表記を優先し、なければWikidataラベルを使う。
+別名は最終文字列ではなくWikidata組織ID単位で集約するため、同一組織の複数表記を作品データへ重複保存しない。
 
 ```sh
 pnpm import:wikidata-studios -- --year 2023 --season winter --dry-run

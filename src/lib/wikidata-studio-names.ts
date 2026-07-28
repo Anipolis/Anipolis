@@ -23,9 +23,22 @@ export type WikidataStudioRecord = {
 };
 
 export type StudioNameMapping = {
+	sourceKey: string;
 	nameJa: string | null;
 	nameEn: string;
 	sourceUrl: string;
+};
+
+export type CanonicalStudioNames = {
+	nameJa: string | null;
+	nameEn: string;
+	source: "jikan" | "wikidata";
+};
+
+export type JikanStudioNameRecord = {
+	studio?: unknown;
+	studio_en?: unknown;
+	studio_entities?: unknown;
 };
 
 export type StudioSourceCandidate = {
@@ -134,4 +147,62 @@ export function matchStudioNames(
 		}
 	}
 	return result;
+}
+
+function stringList(value: unknown): string[] {
+	return Array.isArray(value)
+		? value
+				.filter((item): item is string => typeof item === "string")
+				.map((item) => item.trim())
+				.filter(Boolean)
+		: [];
+}
+
+export function selectCanonicalStudioNames(
+	studios: readonly WikidataStudioRecord[],
+	jikanRecords: readonly JikanStudioNameRecord[],
+	matches: ReadonlyMap<string, WikidataStudioRecord>,
+): Map<string, CanonicalStudioNames> {
+	const jikanNames = new Map<string, { ja: Set<string>; en: Set<string> }>();
+	for (const record of jikanRecords) {
+		const namesJa = stringList(record.studio);
+		const namesEn = stringList(record.studio_en);
+		const entities = Array.isArray(record.studio_entities) ? record.studio_entities : [];
+		const count = Math.max(namesJa.length, namesEn.length, entities.length);
+		for (let index = 0; index < count; index += 1) {
+			const entity = entities[index];
+			const entityName =
+				entity && typeof entity === "object" && !Array.isArray(entity)
+					? (entity as Record<string, unknown>)["name"]
+					: undefined;
+			const nameEn = namesEn[index] ?? (typeof entityName === "string" ? entityName.trim() : "");
+			if (!nameEn) continue;
+			const studio = matches.get(normalizeStudioAlias(nameEn));
+			if (!studio) continue;
+			const names = jikanNames.get(studio.sourceKey) ?? { ja: new Set<string>(), en: new Set<string>() };
+			names.en.add(nameEn);
+			const nameJa = namesJa[index];
+			if (nameJa) names.ja.add(nameJa);
+			jikanNames.set(studio.sourceKey, names);
+		}
+	}
+
+	return new Map(
+		studios.map((studio) => {
+			const preferred = jikanNames.get(studio.sourceKey);
+			if (preferred && (preferred.en.size > 1 || preferred.ja.size > 1)) {
+				throw new Error(
+					`Conflicting Jikan studio names for ${studio.sourceKey}: ${JSON.stringify({ ja: [...preferred.ja], en: [...preferred.en] })}`,
+				);
+			}
+			const nameEn = preferred?.en.values().next().value;
+			const nameJa = preferred?.ja.values().next().value;
+			return [
+				studio.sourceKey,
+				nameEn
+					? { nameJa: nameJa ?? nameEn, nameEn, source: "jikan" as const }
+					: { nameJa: studio.nameJa, nameEn: studio.nameEn, source: "wikidata" as const },
+			];
+		}),
+	);
 }

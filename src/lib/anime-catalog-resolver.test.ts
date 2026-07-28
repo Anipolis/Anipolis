@@ -91,6 +91,7 @@ describe("resolveAnimeCatalog", () => {
 			],
 			undefined,
 			() => ({
+				sourceKey: "Q2090847",
 				nameJa: "手塚プロダクション",
 				nameEn: "Tezuka Productions",
 				sourceUrl: "https://www.wikidata.org/wiki/Q2090847",

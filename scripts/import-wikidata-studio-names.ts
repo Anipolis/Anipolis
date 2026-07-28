@@ -1,15 +1,18 @@
 import { createClient } from "@supabase/supabase-js";
 import { WIKIDATA_SPARQL_ENDPOINT } from "../src/lib/wikidata-anime-titles.ts";
 import {
+	type CanonicalStudioNames,
 	groupWikidataStudios,
 	matchStudioNames,
 	normalizeStudioAlias,
 	type StudioSourceCandidate,
+	selectCanonicalStudioNames,
 	WIKIDATA_ANIMATION_STUDIO_ITEM,
 	WIKIDATA_MAL_COMPANY_PROPERTY,
 	type WikidataStudioBinding,
 	type WikidataStudioRecord,
 } from "../src/lib/wikidata-studio-names.ts";
+import { STUDIO_JA_BY_EN } from "./import-jikan-season.ts";
 
 type SeasonName = "winter" | "spring" | "summer" | "fall";
 
@@ -26,6 +29,9 @@ type StudioSourceInsert = {
 	source_version: string;
 	name_ja: string | null;
 	name_en: string;
+	canonical_name_ja: string | null;
+	canonical_name_en: string;
+	canonical_name_source: "jikan" | "wikidata";
 	aliases: string[];
 	mal_company_id: number | null;
 	imported_at: string;
@@ -197,21 +203,35 @@ async function fetchWikidataStudios(): Promise<WikidataStudioRecord[]> {
 	return groupWikidataStudios(payload.results?.bindings ?? []);
 }
 
-function buildRows(sourceNames: string[], matches: Map<string, WikidataStudioRecord>) {
+function buildRows(
+	sourceNames: string[],
+	matches: Map<string, WikidataStudioRecord>,
+	canonicalNames: ReadonlyMap<string, CanonicalStudioNames>,
+) {
 	const importedAt = new Date().toISOString();
 	const sourceVersion = importedAt.slice(0, 10);
 	const matchedStudios = [...new Map([...matches.values()].map((studio) => [studio.sourceKey, studio])).values()];
-	const sourceRows: StudioSourceInsert[] = matchedStudios.map((studio) => ({
-		source: "wikidata",
-		source_key: studio.sourceKey,
-		source_url: studio.sourceUrl,
-		source_version: sourceVersion,
-		name_ja: studio.nameJa,
-		name_en: studio.nameEn,
-		aliases: studio.aliases,
-		mal_company_id: studio.malCompanyId,
-		imported_at: importedAt,
-	}));
+	const sourceRows: StudioSourceInsert[] = matchedStudios.map((studio) => {
+		const canonical = canonicalNames.get(studio.sourceKey) ?? {
+			nameJa: studio.nameJa,
+			nameEn: studio.nameEn,
+			source: "wikidata" as const,
+		};
+		return {
+			source: "wikidata",
+			source_key: studio.sourceKey,
+			source_url: studio.sourceUrl,
+			source_version: sourceVersion,
+			name_ja: studio.nameJa,
+			name_en: studio.nameEn,
+			canonical_name_ja: canonical.nameJa,
+			canonical_name_en: canonical.nameEn,
+			canonical_name_source: canonical.source,
+			aliases: studio.aliases,
+			mal_company_id: studio.malCompanyId,
+			imported_at: importedAt,
+		};
+	});
 	const aliasRowsByKey = new Map<string, StudioAliasInsert>();
 	for (const alias of sourceNames) {
 		const aliasKey = normalizeStudioAlias(alias);
@@ -254,14 +274,28 @@ async function main() {
 	const options = parseArgs(process.argv.slice(2));
 	const season = `${options.year}-${options.season}`;
 	const supabase = getSupabaseClient();
-	const sourceCandidates = collectStudioCandidates(await fetchSeasonSources(supabase, season));
+	const sourceRecords = await fetchSeasonSources(supabase, season);
+	const sourceCandidates = collectStudioCandidates(sourceRecords);
 	const sourceNames = sourceCandidates.map((candidate) => candidate.name);
 	const wikidataStudios = await fetchWikidataStudios();
 	const matches = matchStudioNames(sourceCandidates, wikidataStudios);
-	const { sourceRows, aliasRows } = buildRows(sourceNames, matches);
-	const japaneseCount = sourceRows.filter((row) => row.name_ja).length;
+	const matchedStudios = [...new Map([...matches.values()].map((studio) => [studio.sourceKey, studio])).values()];
+	const canonicalNames = selectCanonicalStudioNames(
+		matchedStudios,
+		[
+			{
+				studio: Object.values(STUDIO_JA_BY_EN),
+				studio_en: Object.keys(STUDIO_JA_BY_EN),
+			},
+			...sourceRecords.filter((record) => record.source === "jikan").map((record) => record.normalized_data),
+		],
+		matches,
+	);
+	const { sourceRows, aliasRows } = buildRows(sourceNames, matches, canonicalNames);
+	const japaneseCount = sourceRows.filter((row) => row.canonical_name_ja).length;
+	const jikanNameCount = sourceRows.filter((row) => row.canonical_name_source === "jikan").length;
 	console.log(
-		`Studio resolution preview for ${season}: ${sourceNames.length} source names; ${aliasRows.length} matched aliases; ${sourceRows.length} identities; ${japaneseCount} Japanese names.`,
+		`Studio resolution preview for ${season}: ${sourceNames.length} source names; ${aliasRows.length} matched aliases; ${sourceRows.length} identities; ${japaneseCount} Japanese names; ${jikanNameCount} Jikan-preferred names.`,
 	);
 	const tezukaExample = aliasRows.find((row) => row.alias_key === "tezukaproductions");
 	if (tezukaExample) {

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { groupWikidataStudios, matchStudioNames, normalizeStudioAlias } from "./wikidata-studio-names";
+import {
+	groupWikidataStudios,
+	matchStudioNames,
+	normalizeStudioAlias,
+	selectCanonicalStudioNames,
+} from "./wikidata-studio-names";
 
 describe("Wikidata studio names", () => {
 	it("normalizes corporate suffixes without maintaining a spelling dictionary", () => {
@@ -62,5 +67,34 @@ describe("Wikidata studio names", () => {
 		};
 		const matches = matchStudioNames([{ name: "A1 Pictures Incorporated", malCompanyId: 56 }], [studio]);
 		expect(matches.get("a1pictures")?.sourceKey).toBe("Q277763");
+	});
+
+	it("uses established Jikan display names after Wikidata identifies the studio", () => {
+		const studio = {
+			sourceKey: "Q1065717",
+			sourceUrl: "https://www.wikidata.org/wiki/Q1065717",
+			nameJa: "ジェー・シー・スタッフ",
+			nameEn: "J.C.Staff",
+			aliases: ["J.C. Staff"],
+			malCompanyId: 7,
+		};
+		const matches = matchStudioNames([{ name: "J.C.Staff", malCompanyId: 7 }], [studio]);
+		const names = selectCanonicalStudioNames(
+			[studio],
+			[
+				{
+					studio: ["J.C.STAFF"],
+					studio_en: ["J.C.Staff"],
+					studio_entities: [{ mal_id: 7, name: "J.C.Staff" }],
+				},
+			],
+			matches,
+		);
+
+		expect(names.get("Q1065717")).toEqual({
+			nameJa: "J.C.STAFF",
+			nameEn: "J.C.Staff",
+			source: "jikan",
+		});
 	});
 });

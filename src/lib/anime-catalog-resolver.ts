@@ -100,8 +100,21 @@ function nonEmptyStringArrayValue(record: Record<string, unknown>, key: string):
 	return value && value.length > 0 ? value : undefined;
 }
 
-function uniqueStrings(values: readonly string[]): string[] {
-	return [...new Set(values)];
+function canonicalStudioNames(
+	rawNames: readonly string[],
+	mappings: readonly (StudioNameMapping | undefined)[],
+	nameFor: (rawName: string, mapping: StudioNameMapping | undefined) => string,
+): string[] {
+	const seenIdentities = new Set<string>();
+	return rawNames.flatMap((rawName, index) => {
+		const mapping = mappings[index];
+		const identity = mapping
+			? `wikidata:${mapping.sourceKey}`
+			: `unmapped:${rawName.normalize("NFKC").toLocaleLowerCase()}`;
+		if (seenIdentities.has(identity)) return [];
+		seenIdentities.add(identity);
+		return [nameFor(rawName, mapping)];
+	});
 }
 
 function firstDefined<T>(values: readonly (ResolvedValue<T> | undefined)[]): ResolvedValue<T> {
@@ -301,11 +314,10 @@ export function resolveAnimeCatalog(
 		candidate(stringArrayValue(manual, "studio"), "manual", "verified"),
 		hasMappedStudio && rawStudioNames.value
 			? {
-					value: uniqueStrings(
-						rawStudioNames.value.map(
-							(name, index) =>
-								mappedStudioNames?.[index]?.nameJa ?? mappedStudioNames?.[index]?.nameEn ?? name,
-						),
+					value: canonicalStudioNames(
+						rawStudioNames.value,
+						mappedStudioNames ?? [],
+						(name, mapping) => mapping?.nameJa ?? mapping?.nameEn ?? name,
 					),
 					source: "wikidata",
 					confidence: "verified",
@@ -320,8 +332,10 @@ export function resolveAnimeCatalog(
 		candidate(stringArrayValue(manual, "studio_en"), "manual", "verified"),
 		hasMappedStudio && rawStudioNames.value
 			? {
-					value: uniqueStrings(
-						rawStudioNames.value.map((name, index) => mappedStudioNames?.[index]?.nameEn ?? name),
+					value: canonicalStudioNames(
+						rawStudioNames.value,
+						mappedStudioNames ?? [],
+						(name, mapping) => mapping?.nameEn ?? name,
 					),
 					source: "wikidata",
 					confidence: "verified",

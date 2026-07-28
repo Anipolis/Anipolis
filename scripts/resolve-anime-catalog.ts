@@ -43,6 +43,8 @@ type StudioSourceRow = {
 	source_key: string;
 	name_ja: string | null;
 	name_en: string;
+	canonical_name_ja: string | null;
+	canonical_name_en: string;
 	source_url: string;
 };
 
@@ -272,7 +274,7 @@ async function fetchStudioMappings(
 	for (let start = 0; start < sourceKeys.length; start += BATCH_SIZE) {
 		const { data, error } = await supabase
 			.from("studio_source_records")
-			.select("source,source_key,name_ja,name_en,source_url")
+			.select("source,source_key,name_ja,name_en,canonical_name_ja,canonical_name_en,source_url")
 			.eq("source", "wikidata")
 			.in("source_key", sourceKeys.slice(start, start + BATCH_SIZE));
 		if (error) throw new Error(`Could not read studio identities: ${error.message}`);
@@ -283,7 +285,17 @@ async function fetchStudioMappings(
 		aliases.flatMap((alias) => {
 			const studio = studioByKey.get(alias.source_key);
 			return studio
-				? [[alias.alias_key, { nameJa: studio.name_ja, nameEn: studio.name_en, sourceUrl: studio.source_url }]]
+				? [
+						[
+							alias.alias_key,
+							{
+								sourceKey: studio.source_key,
+								nameJa: studio.canonical_name_ja,
+								nameEn: studio.canonical_name_en,
+								sourceUrl: studio.source_url,
+							},
+						],
+					]
 				: [];
 		}),
 	);
