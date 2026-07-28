@@ -231,24 +231,24 @@ export type Database = {
 				Row: {
 					field_sources: Json;
 					mal_id: number;
-					publication_reasons: Json;
-					publication_status: string;
+					resolution_reasons: Json;
+					resolution_status: string;
 					resolved_at: string;
 					resolved_data: Json;
 				};
 				Insert: {
 					field_sources: Json;
 					mal_id: number;
-					publication_reasons?: Json;
-					publication_status: string;
+					resolution_reasons?: Json;
+					resolution_status: string;
 					resolved_at?: string;
 					resolved_data: Json;
 				};
 				Update: {
 					field_sources?: Json;
 					mal_id?: number;
-					publication_reasons?: Json;
-					publication_status?: string;
+					resolution_reasons?: Json;
+					resolution_status?: string;
 					resolved_at?: string;
 					resolved_data?: Json;
 				};
@@ -290,6 +290,77 @@ export type Database = {
 					normalized_data?: Json;
 					source?: string;
 					source_updated_at?: string | null;
+					source_url?: string;
+					source_version?: string;
+				};
+				Relationships: [];
+			};
+			studio_name_aliases: {
+				Row: {
+					alias: string;
+					alias_key: string;
+					imported_at: string;
+					match_method: string;
+					source: string;
+					source_key: string;
+				};
+				Insert: {
+					alias: string;
+					alias_key: string;
+					imported_at?: string;
+					match_method: string;
+					source: string;
+					source_key: string;
+				};
+				Update: {
+					alias?: string;
+					alias_key?: string;
+					imported_at?: string;
+					match_method?: string;
+					source?: string;
+					source_key?: string;
+				};
+				Relationships: [
+					{
+						foreignKeyName: "studio_name_aliases_source_source_key_fkey";
+						columns: ["source", "source_key"];
+						isOneToOne: false;
+						referencedRelation: "studio_source_records";
+						referencedColumns: ["source", "source_key"];
+					},
+				];
+			};
+			studio_source_records: {
+				Row: {
+					aliases: Json;
+					imported_at: string;
+					mal_company_id: number | null;
+					name_en: string;
+					name_ja: string | null;
+					source: string;
+					source_key: string;
+					source_url: string;
+					source_version: string;
+				};
+				Insert: {
+					aliases?: Json;
+					imported_at?: string;
+					mal_company_id?: number | null;
+					name_en: string;
+					name_ja?: string | null;
+					source: string;
+					source_key: string;
+					source_url: string;
+					source_version: string;
+				};
+				Update: {
+					aliases?: Json;
+					imported_at?: string;
+					mal_company_id?: number | null;
+					name_en?: string;
+					name_ja?: string | null;
+					source?: string;
+					source_key?: string;
 					source_url?: string;
 					source_version?: string;
 				};

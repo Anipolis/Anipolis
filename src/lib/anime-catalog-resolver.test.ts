@@ -65,7 +65,7 @@ describe("resolveAnimeCatalog", () => {
 
 		expect(resolved.canonical.title).toBe("Hikari no Ou");
 		expect(resolved.canonical.metadata_ready).toBe(false);
-		expect(resolved.publicationStatus).toBe("draft");
+		expect(resolved.resolutionStatus).toBe("unverified");
 	});
 
 	it("lets manual values override every imported source", () => {
@@ -78,6 +78,28 @@ describe("resolveAnimeCatalog", () => {
 		expect(resolved.canonical.title).toBe("火狩りの王（確認済み）");
 		expect(resolved.canonical.studio).toEqual(["手動スタジオ"]);
 		expect(resolved.fieldSources["title"]?.source).toBe("manual");
+	});
+
+	it("resolves corporate studio aliases through a stable Wikidata identity", () => {
+		const resolved = resolveAnimeCatalog(
+			[
+				source("anime_offline_database", {
+					title: "Tsunlise",
+					status: "finished",
+					studios: ["tezuka productions co., ltd."],
+				}),
+			],
+			undefined,
+			() => ({
+				nameJa: "手塚プロダクション",
+				nameEn: "Tezuka Productions",
+				sourceUrl: "https://www.wikidata.org/wiki/Q2090847",
+			}),
+		);
+
+		expect(resolved.canonical.studio).toEqual(["手塚プロダクション"]);
+		expect(resolved.canonical.studio_en).toEqual(["Tezuka Productions"]);
+		expect(resolved.fieldSources["studio"]).toEqual({ source: "wikidata", confidence: "verified" });
 	});
 });
 

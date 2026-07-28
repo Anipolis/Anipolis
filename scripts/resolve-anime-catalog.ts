@@ -6,6 +6,7 @@ import {
 	type LegacyAnimeCatalogRow,
 	resolveAnimeCatalog,
 } from "../src/lib/anime-catalog-resolver.ts";
+import { normalizeStudioAlias, type StudioNameMapping } from "../src/lib/wikidata-studio-names.ts";
 
 type SeasonName = "winter" | "spring" | "summer" | "fall";
 
@@ -19,8 +20,8 @@ type ResolutionRecordInsert = {
 	mal_id: number;
 	resolved_data: AnimeCatalogCanonicalRow;
 	field_sources: AnimeCatalogResolution["fieldSources"];
-	publication_status: AnimeCatalogResolution["publicationStatus"];
-	publication_reasons: string[];
+	resolution_status: AnimeCatalogResolution["resolutionStatus"];
+	resolution_reasons: string[];
 	resolved_at: string;
 };
 
@@ -29,6 +30,20 @@ type AnimeRelationRow = {
 	related_anime_mal_id: number;
 	relation_type: string;
 	related_title: string;
+};
+
+type StudioAliasRow = {
+	alias_key: string;
+	source: "wikidata";
+	source_key: string;
+};
+
+type StudioSourceRow = {
+	source: "wikidata";
+	source_key: string;
+	name_ja: string | null;
+	name_en: string;
+	source_url: string;
 };
 
 type ResolverDatabase = {
@@ -53,6 +68,16 @@ type ResolverDatabase = {
 				Row: AnimeRelationRow;
 				Insert: AnimeRelationRow;
 				Update: Partial<AnimeRelationRow>;
+			};
+			studio_name_aliases: {
+				Row: StudioAliasRow;
+				Insert: StudioAliasRow;
+				Update: Partial<StudioAliasRow>;
+			};
+			studio_source_records: {
+				Row: StudioSourceRow;
+				Insert: StudioSourceRow;
+				Update: Partial<StudioSourceRow>;
 			};
 		};
 	};
@@ -184,6 +209,86 @@ async function fetchLegacyRows(
 	return rows;
 }
 
+function studioStrings(value: unknown): string[] {
+	return Array.isArray(value)
+		? value
+				.filter((item): item is string => typeof item === "string")
+				.map((item) => item.trim())
+				.filter(Boolean)
+		: [];
+}
+
+function collectStudioAliasKeys(
+	sourceRecords: readonly SourceRecordRow[],
+	legacyRows: readonly LegacyAnimeCatalogRow[],
+): string[] {
+	const keys = new Set<string>();
+	const add = (name: string) => {
+		const key = normalizeStudioAlias(name);
+		if (key) keys.add(key);
+	};
+	for (const row of legacyRows) {
+		for (const name of [...(row.studio ?? []), ...(row.studio_en ?? [])]) add(name);
+	}
+	for (const source of sourceRecords) {
+		const data =
+			source.normalized_data !== null && typeof source.normalized_data === "object"
+				? (source.normalized_data as Record<string, unknown>)
+				: {};
+		for (const name of [
+			...studioStrings(data["studios"]),
+			...studioStrings(data["studio"]),
+			...studioStrings(data["studio_en"]),
+		]) {
+			add(name);
+		}
+	}
+	return [...keys];
+}
+
+async function fetchStudioMappings(
+	supabase: ReturnType<typeof getSupabaseClient>,
+	sourceRecords: readonly SourceRecordRow[],
+	legacyRows: readonly LegacyAnimeCatalogRow[],
+): Promise<Map<string, StudioNameMapping>> {
+	const aliasKeys = collectStudioAliasKeys(sourceRecords, legacyRows);
+	const aliases: StudioAliasRow[] = [];
+	for (let start = 0; start < aliasKeys.length; start += BATCH_SIZE) {
+		const { data, error } = await supabase
+			.from("studio_name_aliases")
+			.select("alias_key,source,source_key")
+			.in("alias_key", aliasKeys.slice(start, start + BATCH_SIZE));
+		if (error) {
+			if (error.code === "42P01" || error.code === "PGRST205") {
+				console.warn("Studio name tables are not available yet; continuing without localized studio mappings.");
+				return new Map();
+			}
+			throw new Error(`Could not read studio aliases: ${error.message}`);
+		}
+		aliases.push(...((data ?? []) as StudioAliasRow[]));
+	}
+	const sourceKeys = [...new Set(aliases.map((alias) => alias.source_key))];
+	const studios: StudioSourceRow[] = [];
+	for (let start = 0; start < sourceKeys.length; start += BATCH_SIZE) {
+		const { data, error } = await supabase
+			.from("studio_source_records")
+			.select("source,source_key,name_ja,name_en,source_url")
+			.eq("source", "wikidata")
+			.in("source_key", sourceKeys.slice(start, start + BATCH_SIZE));
+		if (error) throw new Error(`Could not read studio identities: ${error.message}`);
+		studios.push(...((data ?? []) as StudioSourceRow[]));
+	}
+	const studioByKey = new Map(studios.map((studio) => [studio.source_key, studio]));
+	return new Map(
+		aliases.flatMap((alias) => {
+			const studio = studioByKey.get(alias.source_key);
+			return studio
+				? [[alias.alias_key, { nameJa: studio.name_ja, nameEn: studio.name_en, sourceUrl: studio.source_url }]]
+				: [];
+		}),
+	);
+}
+
 function valuesDiffer(left: unknown, right: unknown): boolean {
 	return JSON.stringify(left) !== JSON.stringify(right);
 }
@@ -213,8 +318,8 @@ async function saveResolutions(supabase: ReturnType<typeof getSupabaseClient>, r
 			mal_id: resolution.canonical.mal_id,
 			resolved_data: resolution.canonical,
 			field_sources: resolution.fieldSources,
-			publication_status: resolution.publicationStatus,
-			publication_reasons: resolution.publicationReasons,
+			resolution_status: resolution.resolutionStatus,
+			resolution_reasons: resolution.resolutionReasons,
 			resolved_at: resolvedAt,
 		}));
 		const { error: resolutionError } = await supabase
@@ -295,6 +400,7 @@ async function main() {
 		fetchAllSourceRecords(supabase, malIds),
 		fetchLegacyRows(supabase, malIds),
 	]);
+	const studioMappings = await fetchStudioMappings(supabase, sourceRecords, legacyRows);
 	const recordsByMalId = new Map<number, SourceRecordRow[]>();
 	for (const record of sourceRecords) {
 		const records = recordsByMalId.get(record.mal_id) ?? [];
@@ -303,27 +409,29 @@ async function main() {
 	}
 	const legacyByMalId = new Map(legacyRows.map((row) => [row.mal_id, row]));
 	const resolutions = malIds.map((malId) =>
-		resolveAnimeCatalog(recordsByMalId.get(malId) ?? [], legacyByMalId.get(malId)),
+		resolveAnimeCatalog(recordsByMalId.get(malId) ?? [], legacyByMalId.get(malId), (name) =>
+			studioMappings.get(normalizeStudioAlias(name)),
+		),
 	);
 	const counts = resolutions.reduce(
 		(result, resolution) => {
-			result[resolution.publicationStatus] += 1;
+			result[resolution.resolutionStatus] += 1;
 			return result;
 		},
-		{ draft: 0, review: 0, published: 0 },
+		{ unverified: 0, review: 0, verified: 0 },
 	);
 	const changed = resolutions.filter(
 		(resolution) => changedFields(resolution, legacyByMalId.get(resolution.canonical.mal_id)).length > 0,
 	);
 	console.log(
-		`Resolution preview for ${season}: ${resolutions.length} total; ${counts.published} published, ${counts.review} review, ${counts.draft} draft; ${changed.length} canonical rows change.`,
+		`Resolution preview for ${season}: ${resolutions.length} visible; ${counts.verified} verified, ${counts.review} review, ${counts.unverified} unverified; ${changed.length} canonical rows change.`,
 	);
 	console.log(
 		JSON.stringify(
 			changed.slice(0, 10).map((resolution) => ({
 				mal_id: resolution.canonical.mal_id,
 				title: resolution.canonical.title,
-				publication_status: resolution.publicationStatus,
+				resolution_status: resolution.resolutionStatus,
 				changed_fields: changedFields(resolution, legacyByMalId.get(resolution.canonical.mal_id)),
 				field_sources: resolution.fieldSources,
 			})),

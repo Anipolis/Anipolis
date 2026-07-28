@@ -25,22 +25,33 @@ Wikidata ───────────────┤                       
 | ローマ字 | manual → Jikan default → Wikidata別名で検証できたODbLタイトル → legacy → ODbL候補 |
 | 話数・種別・状態・シーズン | manual → ODbL → Jikan → legacy |
 | 放送日・放送時刻・公式URL | manual → Jikan → legacy |
-| スタジオ | manual → Jikan変換結果 → legacy → ODbL候補 |
+| スタジオ | manual → Wikidata組織名 → Jikan → legacy → ODbL候補 |
 
 Jikanソースレコードにはスタジオ名だけでなく `studios[].mal_id` とURLも保存する。ODbLのスタジオ文字列は
 同一性が確認できないため候補として扱い、Jikanの識別済みスタジオを上書きしない。
 
-## 公開判定
+## 検証状態と公開
 
-resolverは各作品を次の状態へ分類する。
+resolverは各作品を次の検証状態へ分類する。これは公開可否とは独立している。
 
-- `published`: manual、Wikidata、Jikanのいずれかで表示タイトルを確認できた
+- `verified`: manual、Wikidata、Jikanのいずれかで表示タイトルを確認できた
 - `review`: 日本語表示タイトルは既存DBにあるが、ソース別の根拠がまだない
-- `draft`: 確認済み表示タイトルがない
+- `unverified`: 確認済み表示タイトルがない
 
-`published` の作品だけ `anime.metadata_ready = true` になる。RLSは `metadata_ready = false` の作品を
-一般ユーザーから隠すが、管理者とソースレコードからは引き続き確認できる。英字だけの正式日本語タイトルも
-WikidataまたはJikanの言語情報に基づいて公開できるため、文字種だけでは判定しない。
+`verified` の作品だけ `anime.metadata_ready = true` になるが、未検証作品もカタログには表示する。
+公開を止めるのは管理者が `hidden_by_admin` を設定した場合だけであり、検証不足を理由に既存データを欠損させない。
+英字だけの正式日本語タイトルもWikidataまたはJikanの言語情報に基づいて検証できるため、文字種だけでは判定しない。
+
+## スタジオ名
+
+スタジオ名は固定の英日辞書だけに依存せず、`studio_source_records` の組織レコードと
+`studio_name_aliases` の正規化別名を優先して解決する。Wikidataのアニメーションスタジオを取得し、英語ラベル・別名を
+ODbL/Jikanの入力名と一意に照合できた場合だけ日本語名を採用する。同じ別名が複数組織に一致する場合は推測しない。
+
+```sh
+pnpm import:wikidata-studios -- --year 2023 --season winter --dry-run
+pnpm import:wikidata-studios -- --year 2023 --season winter
+```
 
 ## 再現と監査
 
@@ -49,5 +60,5 @@ pnpm resolve:anime-catalog -- --year 2023 --season winter --dry-run
 pnpm resolve:anime-catalog -- --year 2023 --season winter
 ```
 
-`anime_resolution_records` は最新の解決値、フィールドごとの採用ソース、信頼度、公開判定理由を保存する。
-書き込み前には必ずドライランで変更件数と公開件数を確認する。
+`anime_resolution_records` は最新の解決値、フィールドごとの採用ソース、信頼度、検証状態と理由を保存する。
+書き込み前には必ずドライランで変更件数と検証件数を確認する。

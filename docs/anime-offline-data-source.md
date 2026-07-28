@@ -60,6 +60,8 @@ pnpm import:anime-offline -- --year 2023 --season winter --dry-run
 pnpm import:anime-offline -- --year 2023 --season winter
 pnpm import:wikidata-titles -- --year 2023 --season winter --dry-run
 pnpm import:wikidata-titles -- --year 2023 --season winter
+pnpm import:wikidata-studios -- --year 2023 --season winter --dry-run
+pnpm import:wikidata-studios -- --year 2023 --season winter
 pnpm resolve:anime-catalog -- --year 2023 --season winter --dry-run
 pnpm resolve:anime-catalog -- --year 2023 --season winter
 ```

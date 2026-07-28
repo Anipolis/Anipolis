@@ -10,6 +10,11 @@ import {
 	WIKIDATA_PROPERTY_MAL_ANIME_ID_URL,
 	WIKIDATA_TRANSFORMATION_URL,
 } from "$lib/wikidata-anime-titles";
+import {
+	WIKIDATA_ANIMATION_STUDIO_URL,
+	WIKIDATA_MAL_COMPANY_PROPERTY_URL,
+	WIKIDATA_STUDIO_TRANSFORMATION_URL,
+} from "$lib/wikidata-studio-names";
 </script>
 
 <svelte:head>
@@ -44,6 +49,10 @@ import {
 			で作品を照合したWikidataの日本語ラベルも利用します。Wikidataの構造化データは
 			<a href={WIKIDATA_CC0_URL}>CC0</a>で提供されています。
 		</p>
+		<p>
+			スタジオ名はWikidataの<a href={WIKIDATA_ANIMATION_STUDIO_URL}>アニメーションスタジオ</a>項目と
+			<a href={WIKIDATA_MAL_COMPANY_PROPERTY_URL}>MyAnimeList company ID（P11490）</a>を組織の識別に利用します。
+		</p>
 	</section>
 
 	<section>
@@ -58,6 +67,7 @@ import {
 			<li>
 				日本語表示名は既存値を維持し、未補完のODbLタイトルだけWikidataの単一日本語ラベルで安全に補完します。
 			</li>
+			<li>スタジオはWikidataの英語ラベル・別名と一意に一致した組織だけ、日本語名と正規英語名へ変換します。</li>
 			<li>上流のタグはAnipolisのジャンル分類と意味が異なるため、自動取り込みしません。</li>
 			<li>関連作品は関係種別を判別できないため、自動取り込みしません。</li>
 			<li>画像の権利はデータベースライセンスとは別なので、画像URLや画像自体は取り込みません。</li>
@@ -69,13 +79,15 @@ import {
 		<p>
 			ソース別レコードには、取り込みに使用した固定リリース、更新日、正規化結果を保存します。変換処理の全体は
 			<a href={ANIPOLIS_TRANSFORMATION_URL}>ODbLインポーター</a>と
-			<a href={WIKIDATA_TRANSFORMATION_URL}>Wikidataインポーター</a>で確認できます。
+			<a href={WIKIDATA_TRANSFORMATION_URL}>Wikidataタイトルインポーター</a>、
+			<a href={WIKIDATA_STUDIO_TRANSFORMATION_URL}>Wikidataスタジオインポーター</a>で確認できます。
 		</p>
 		<pre><code>pnpm import:anime-offline -- --year 2023 --season winter --dry-run
 pnpm import:wikidata-titles -- --year 2023 --season winter --dry-run
+pnpm import:wikidata-studios -- --year 2023 --season winter --dry-run
 pnpm resolve:anime-catalog -- --year 2023 --season winter --dry-run</code></pre>
 		<p>
-			各インポーターは表示用データを直接更新しません。すべてのソースを保存した後、resolverが項目ごとの優先順位と出典を適用し、公開可能な作品だけを表示用カタログへ反映します。
+			各インポーターは表示用データを直接更新しません。すべてのソースを保存した後、resolverが項目ごとの優先順位と出典を適用します。検証状態は公開可否と分離し、未検証の作品もカタログから欠落させません。
 		</p>
 	</section>
 

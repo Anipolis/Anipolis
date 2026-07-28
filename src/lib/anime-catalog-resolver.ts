@@ -1,3 +1,5 @@
+import type { StudioNameMapping } from "./wikidata-studio-names";
+
 export type CatalogSourceName = "manual" | "wikidata" | "jikan" | "anime_offline_database" | "legacy";
 export type ResolutionConfidence = "verified" | "source" | "fallback";
 
@@ -41,8 +43,8 @@ export type AnimeCatalogCanonicalRow = Omit<LegacyAnimeCatalogRow, "resources"> 
 export type AnimeCatalogResolution = {
 	canonical: AnimeCatalogCanonicalRow;
 	fieldSources: Record<string, { source: CatalogSourceName; confidence: ResolutionConfidence }>;
-	publicationStatus: "draft" | "review" | "published";
-	publicationReasons: string[];
+	resolutionStatus: "unverified" | "review" | "verified";
+	resolutionReasons: string[];
 };
 
 type ResolvedValue<T> = {
@@ -183,6 +185,7 @@ function mergeResources(
 export function resolveAnimeCatalog(
 	sourceRecords: readonly CatalogSourceRecord[],
 	legacyRow?: LegacyAnimeCatalogRow,
+	resolveStudioName: (name: string) => StudioNameMapping | undefined = () => undefined,
 ): AnimeCatalogResolution {
 	const bySource = new Map(sourceRecords.map((record) => [record.source, asRecord(record.normalized_data)]));
 	const offline = bySource.get("anime_offline_database") ?? {};
@@ -281,8 +284,43 @@ export function resolveAnimeCatalog(
 			candidate(nonEmptyStringArrayValue(offline, offlineKey), "anime_offline_database", "fallback"),
 			{ value: null, source: "legacy", confidence: "fallback" },
 		]);
-	const studio = resolveArray("studio", "studio", "studios");
-	const studioEnglish = resolveArray("studio_en", "studio_en", "studios");
+	const rawStudioNames = firstDefined<string[] | null>([
+		candidate(nonEmptyStringArrayValue(jikan, "studio_en"), "jikan", "source"),
+		candidate(nonEmptyStringArrayValue(jikan, "studio"), "jikan", "source"),
+		candidate(legacyRow?.studio_en?.length ? legacyRow.studio_en : undefined, "legacy", "fallback"),
+		candidate(nonEmptyStringArrayValue(offline, "studios"), "anime_offline_database", "fallback"),
+		{ value: null, source: "legacy", confidence: "fallback" },
+	]);
+	const mappedStudioNames = rawStudioNames.value?.map(resolveStudioName);
+	const hasMappedStudio = mappedStudioNames?.some(Boolean) ?? false;
+	const studio = firstDefined<string[] | null>([
+		candidate(stringArrayValue(manual, "studio"), "manual", "verified"),
+		hasMappedStudio && rawStudioNames.value
+			? {
+					value: rawStudioNames.value.map(
+						(name, index) =>
+							mappedStudioNames?.[index]?.nameJa ?? mappedStudioNames?.[index]?.nameEn ?? name,
+					),
+					source: "wikidata",
+					confidence: "verified",
+				}
+			: undefined,
+		candidate(nonEmptyStringArrayValue(jikan, "studio"), "jikan", "source"),
+		candidate(legacyRow?.studio?.length ? legacyRow.studio : undefined, "legacy", "fallback"),
+		candidate(nonEmptyStringArrayValue(offline, "studios"), "anime_offline_database", "fallback"),
+		{ value: null, source: "legacy", confidence: "fallback" },
+	]);
+	const studioEnglish = firstDefined<string[] | null>([
+		candidate(stringArrayValue(manual, "studio_en"), "manual", "verified"),
+		hasMappedStudio && rawStudioNames.value
+			? {
+					value: rawStudioNames.value.map((name, index) => mappedStudioNames?.[index]?.nameEn ?? name),
+					source: "wikidata",
+					confidence: "verified",
+				}
+			: undefined,
+		rawStudioNames,
+	]);
 	const genre = resolveArray("genre", "genre", "genres");
 	const genreEnglish = resolveArray("genre_en", "genre_en", "genres");
 	const broadcastDay = firstDefined<number | null>([
@@ -294,8 +332,8 @@ export function resolveAnimeCatalog(
 
 	const verifiedDisplayTitle =
 		["manual", "wikidata", "jikan"].includes(title.source) && title.confidence === "verified";
-	const publicationStatus = verifiedDisplayTitle ? "published" : legacyJapaneseTitle ? "review" : "draft";
-	const publicationReasons = verifiedDisplayTitle
+	const resolutionStatus = verifiedDisplayTitle ? "verified" : legacyJapaneseTitle ? "review" : "unverified";
+	const resolutionReasons = verifiedDisplayTitle
 		? []
 		: [
 				legacyJapaneseTitle
@@ -354,10 +392,10 @@ export function resolveAnimeCatalog(
 			official_x_url: officialXUrl.value,
 			resources: mergeResources(legacyRow?.resources, sourceRecords, jikan),
 			cover_url: coverUrl.value,
-			metadata_ready: publicationStatus === "published",
+			metadata_ready: resolutionStatus === "verified",
 		},
 		fieldSources,
-		publicationStatus,
-		publicationReasons,
+		resolutionStatus,
+		resolutionReasons,
 	};
 }
