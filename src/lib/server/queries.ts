@@ -2809,6 +2809,34 @@ export async function getBroadcastRoomSession(
 	return (data?.[0] as BroadcastRoomSession | undefined) ?? null;
 }
 
+export async function getBroadcastRoomScheduleSnapshotsForAnime(
+	supabase: SupabaseClient<Database>,
+	animeId: number,
+): Promise<import("$lib/utils/broadcast-episodes").BroadcastEpisodeSlot[]> {
+	// biome-ignore lint/suspicious/noExplicitAny: migration 104 columns are not in generated types until applied
+	const reader = supabase as SupabaseClient<any>;
+	const { data, error } = await reader
+		.from("broadcast_room_sessions")
+		.select("room_date,episode_number,episode_title,posting_opens_at")
+		.eq("anime_id", animeId)
+		.eq("room_kind", "episode")
+		.lte("posting_opens_at", new Date().toISOString())
+		.order("room_date", { ascending: true });
+	if (error) {
+		console.error("getBroadcastRoomScheduleSnapshotsForAnime failed:", error);
+		return [];
+	}
+	return (data ?? []).map((row: Record<string, unknown>) => {
+		const episodeNumber = typeof row["episode_number"] === "number" ? row["episode_number"] : null;
+		return {
+			date: String(row["room_date"] ?? "").slice(0, 10),
+			start: episodeNumber,
+			end: episodeNumber,
+			label: typeof row["episode_title"] === "string" ? row["episode_title"] : null,
+		};
+	});
+}
+
 export async function getGlobalAnimeLobbySession(
 	supabase: SupabaseClient<Database>,
 	animeId: string,
@@ -3097,10 +3125,12 @@ export async function getOpenBroadcastRoomSessions(
 	options?: { kind?: "episode" | "global" },
 ): Promise<OpenBroadcastRoomSummary[]> {
 	const now = new Date().toISOString();
-	let query = supabase
+	// biome-ignore lint/suspicious/noExplicitAny: migration 104 columns are not in generated types until applied
+	const sessionReader = supabase as SupabaseClient<any>;
+	let query = sessionReader
 		.from("broadcast_room_sessions")
 		.select(
-			"id, anime_id, room_date, room_kind, room_key, scheduled_at, anime:anime!broadcast_room_sessions_anime_id_fkey ( id, title, cover_url, aired_from, aired_to, broadcast_day )",
+			"id, anime_id, room_date, room_kind, room_key, scheduled_at, schedule_source, anime:anime!broadcast_room_sessions_anime_id_fkey ( id, title, cover_url, aired_from, aired_to, broadcast_day )",
 		)
 		.lte("posting_opens_at", now)
 		.gte("posting_closes_at", now)
@@ -3111,7 +3141,17 @@ export async function getOpenBroadcastRoomSessions(
 		console.error("getOpenBroadcastRoomSessions failed:", error);
 		return [];
 	}
-	const rows = data ?? [];
+	type RawOpenBroadcastRoomRow = {
+		id: string;
+		anime_id: number;
+		room_date: string;
+		room_kind: "episode" | "global";
+		room_key: string;
+		scheduled_at: string;
+		schedule_source: string | null;
+		anime: unknown;
+	};
+	const rows = (data ?? []) as RawOpenBroadcastRoomRow[];
 	const episodeRows = rows.filter((row) => row.room_kind === "episode");
 	const overrideBySessionKey = new Map<string, { is_cancelled: boolean | null }>();
 	let overrideLookupFailed = false;
@@ -3154,13 +3194,14 @@ export async function getOpenBroadcastRoomSessions(
 			if (row.room_kind !== "episode") return true;
 			const anime = rawAnimeForRow(row.anime);
 			if (!anime) return false;
+			const override = overrideBySessionKey.get(`${row.anime_id}:${row.room_date.slice(0, 10)}`);
+			if (override?.is_cancelled) return false;
+			if (row.schedule_source === "syobocal") return true;
 			if (overrideLookupFailed) {
 				// override取得の一時失敗でエピソードルームを全滅させない(fail-open)。
 				// 中止判定はできないため、通常スケジュール判定のみで表示する。
 				return animeIsScheduledForRoomDate(anime, row.room_date, false);
 			}
-			const override = overrideBySessionKey.get(`${row.anime_id}:${row.room_date.slice(0, 10)}`);
-			if (override?.is_cancelled) return false;
 			return animeIsScheduledForRoomDate(anime, row.room_date, override != null);
 		})
 		.map((row) => {

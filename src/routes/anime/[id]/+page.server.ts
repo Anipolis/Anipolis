@@ -5,6 +5,7 @@ import {
 	getAnime,
 	getAnimeRelations,
 	getBroadcastRoomOverridesForAnime,
+	getBroadcastRoomScheduleSnapshotsForAnime,
 	getEventsForAnime,
 	getUsersWhoListedAnime,
 	isAdminUser,
@@ -32,13 +33,14 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 
 	if (!anime) throw error(404, "アニメが見つかりません");
 
-	const [relations, broadcastOverrides, events] = await Promise.all([
+	const [relations, broadcastOverrides, events, scheduleSnapshots] = await Promise.all([
 		getAnimeRelations(supabase, anime.mal_id),
 		getBroadcastRoomOverridesForAnime(supabase, params.id),
 		getEventsForAnime(supabase, Number(anime.id)),
+		getBroadcastRoomScheduleSnapshotsForAnime(supabase, Number(anime.id)),
 	]);
 
-	const episodes =
+	const inferredEpisodes =
 		isEligibleForRoomLog(anime.season) &&
 		anime.room_type === "episode" &&
 		anime.aired_from != null &&
@@ -52,6 +54,19 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 					overrides: broadcastOverrides,
 				}).reverse()
 			: [];
+	const episodeByDate = new Map(inferredEpisodes.map((episode) => [episode.date, episode]));
+	for (const snapshot of scheduleSnapshots) {
+		const inferred = episodeByDate.get(snapshot.date);
+		episodeByDate.set(snapshot.date, {
+			date: snapshot.date,
+			start: snapshot.start ?? inferred?.start ?? null,
+			end: snapshot.end ?? inferred?.end ?? null,
+			label: snapshot.label ?? inferred?.label ?? null,
+		});
+	}
+	const episodes = isEligibleForRoomLog(anime.season)
+		? [...episodeByDate.values()].sort((left, right) => right.date.localeCompare(left.date))
+		: [];
 
 	return { anime, user, isAdmin, listedUsers, relations, episodes, broadcastOverrides, events };
 };

@@ -14,6 +14,7 @@ import {
 	normalizeSyobocalTitle,
 	parseSyobocalLinks,
 } from "../src/lib/syobocal.ts";
+import { jstDate, rollingSyobocalProgramRange, selectPrimarySyobocalPrograms } from "../src/lib/syobocal-schedule.ts";
 
 type SeasonName = "winter" | "spring" | "summer" | "fall";
 type SourceName = AnimeCatalogSeasonSource | "manual" | "wikidata" | "syobocal";
@@ -23,7 +24,7 @@ type Options = {
 	year: number;
 	season: SeasonName;
 	dryRun: boolean;
-	skipPrograms: boolean;
+	syncPrograms: boolean;
 };
 
 type SourceRecord = {
@@ -137,9 +138,9 @@ const MANUAL_MAPPING_PATH = "scripts/data/syobocal-manual-mappings.json";
 const xmlParser = new XMLParser({ ignoreAttributes: true, parseTagValue: false, trimValues: false });
 
 function parseArgs(argv: string[]): Options {
-	const options: Partial<Options> & Pick<Options, "dryRun" | "skipPrograms"> = {
+	const options: Partial<Options> & Pick<Options, "dryRun" | "syncPrograms"> = {
 		dryRun: false,
-		skipPrograms: false,
+		syncPrograms: false,
 	};
 	for (let index = 0; index < argv.length; index += 1) {
 		const arg = argv[index];
@@ -149,8 +150,8 @@ function parseArgs(argv: string[]): Options {
 			options.dryRun = true;
 			continue;
 		}
-		if (arg === "--skip-programs") {
-			options.skipPrograms = true;
+		if (arg === "--sync-programs") {
+			options.syncPrograms = true;
 			continue;
 		}
 		if (arg === "--year" && next) {
@@ -167,13 +168,16 @@ function parseArgs(argv: string[]): Options {
 		throw new Error(`Unknown argument: ${arg}`);
 	}
 	if (!Number.isInteger(options.year) || !options.year || options.year < 1900 || !options.season) {
-		throw new Error("Usage: pnpm import:syobocal -- --year 2023 --season winter [--dry-run] [--skip-programs]");
+		throw new Error(
+			"Usage: pnpm import:syobocal -- --year 2023 --season winter [--dry-run]\n" +
+				"   or: pnpm sync:syobocal-programs -- --year 2026 --season summer [--dry-run]",
+		);
 	}
 	return {
 		year: options.year,
 		season: options.season,
 		dryRun: options.dryRun,
-		skipPrograms: options.skipPrograms,
+		syncPrograms: options.syncPrograms,
 	};
 }
 
@@ -244,13 +248,10 @@ function seasonRange(year: number, season: SeasonName) {
 	const startMonth = startMonths[season];
 	const endYear = season === "fall" ? year + 1 : year;
 	const endMonth = season === "fall" ? 1 : startMonth + 3;
-	const format = (valueYear: number, valueMonth: number) =>
-		`${valueYear}${String(valueMonth).padStart(2, "0")}01_000000`;
 	return {
 		startMonth,
 		startDate: `${year}-${String(startMonth).padStart(2, "0")}-01`,
 		endDate: `${endYear}-${String(endMonth).padStart(2, "0")}-01`,
-		apiRange: `${format(year, startMonth)}-${format(endYear, endMonth)}`,
 	};
 }
 
@@ -899,10 +900,189 @@ async function saveMappings(
 	);
 }
 
+type AnimeRoomRow = {
+	id: number;
+	mal_id: number;
+	room_type: string | null;
+	metadata_ready: boolean;
+	hidden_by_admin: boolean;
+	broadcast_room_pre_open_minutes: number | null;
+	broadcast_room_post_close_minutes: number | null;
+};
+
+type BroadcastRoomSessionRow = {
+	id: string;
+	anime_id: number;
+	room_key: string;
+	schedule_source: string | null;
+	source_program_id: number | null;
+	schedule_frozen_at: string | null;
+	scheduled_at: string;
+	posting_opens_at: string;
+};
+
+async function fetchAnimeRoomRows(supabase: ReturnType<typeof getSupabaseClient>, malIds: number[]) {
+	const rows: AnimeRoomRow[] = [];
+	for (let start = 0; start < malIds.length; start += DATABASE_BATCH_SIZE) {
+		const { data, error } = await supabase
+			.from("anime")
+			.select(
+				"id,mal_id,room_type,metadata_ready,hidden_by_admin,broadcast_room_pre_open_minutes,broadcast_room_post_close_minutes",
+			)
+			.in("mal_id", malIds.slice(start, start + DATABASE_BATCH_SIZE));
+		if (error) throw new Error(`Could not read anime room settings: ${error.message}`);
+		rows.push(...((data ?? []) as AnimeRoomRow[]));
+	}
+	return rows;
+}
+
+function buildBroadcastRoomSessionRows(
+	animeRows: AnimeRoomRow[],
+	mappings: MappingProposal[],
+	titles: SyobocalTitle[],
+	channels: SyobocalChannel[],
+	programs: SyobocalProgram[],
+	importedAt: string,
+) {
+	const animeByMal = new Map(animeRows.map((anime) => [anime.mal_id, anime]));
+	const primaryPrograms = selectPrimarySyobocalPrograms(mappings, titles, channels, programs);
+	const now = Date.now();
+	const rows = primaryPrograms.flatMap((program) => {
+		const anime = animeByMal.get(program.malId);
+		if (!anime || anime.room_type === "global" || !anime.metadata_ready || anime.hidden_by_admin) return [];
+		const startsAt = Date.parse(program.startsAt);
+		const endsAt = Date.parse(program.endsAt);
+		const durationMinutes = Math.round((endsAt - startsAt) / 60_000);
+		if (!Number.isFinite(startsAt) || !Number.isFinite(endsAt) || durationMinutes < 1 || durationMinutes > 1_440) {
+			return [];
+		}
+		const preOpenMinutes = anime.broadcast_room_pre_open_minutes ?? 5;
+		const postCloseMinutes = anime.broadcast_room_post_close_minutes ?? 30;
+		const postingOpensAt = startsAt - preOpenMinutes * 60_000;
+		if (postingOpensAt <= now) return [];
+		const roomDate = jstDate(program.startsAt);
+		return [
+			{
+				anime_id: anime.id,
+				room_date: roomDate,
+				room_kind: "episode",
+				room_key: roomDate,
+				scheduled_at: program.startsAt,
+				duration_minutes: durationMinutes,
+				posting_opens_at: new Date(postingOpensAt).toISOString(),
+				posting_closes_at: new Date(endsAt + postCloseMinutes * 60_000).toISOString(),
+				schedule_source: "syobocal",
+				source_program_id: program.pid,
+				source_title_id: program.tid,
+				source_channel_id: program.chid,
+				source_channel_name: program.channelName,
+				episode_number: program.episodeNumber,
+				episode_title: program.subtitle,
+				source_snapshot: {
+					syobocal_pid: program.pid,
+					syobocal_tid: program.tid,
+					syobocal_chid: program.chid,
+					channel_name: program.channelName,
+					episode_number: program.episodeNumber,
+					episode_title: program.subtitle,
+					scheduled_at: program.startsAt,
+					ends_at: program.endsAt,
+					source_url: `https://cal.syoboi.jp/tid/${program.tid}`,
+					captured_at: importedAt,
+				},
+			},
+		];
+	});
+
+	const byAnimeDate = new Map<string, (typeof rows)[number]>();
+	for (const row of rows) {
+		const key = `${row.anime_id}:${row.room_date}`;
+		const current = byAnimeDate.get(key);
+		if (!current || Date.parse(row.scheduled_at) < Date.parse(current.scheduled_at)) byAnimeDate.set(key, row);
+	}
+	return [...byAnimeDate.values()].sort(
+		(left, right) => Date.parse(left.scheduled_at) - Date.parse(right.scheduled_at),
+	);
+}
+
+async function saveBroadcastRoomSessions(
+	supabase: ReturnType<typeof getSupabaseClient>,
+	rows: ReturnType<typeof buildBroadcastRoomSessionRows>,
+	window: { startDate: string; endDate: string },
+	targetAnimeIds: readonly number[],
+) {
+	const animeIds = [...new Set(targetAnimeIds)];
+	if (animeIds.length === 0) return;
+	const existing: BroadcastRoomSessionRow[] = [];
+	for (let start = 0; start < animeIds.length; start += DATABASE_BATCH_SIZE) {
+		const { data, error } = await supabase
+			.from("broadcast_room_sessions")
+			.select(
+				"id,anime_id,room_key,schedule_source,source_program_id,schedule_frozen_at,scheduled_at,posting_opens_at",
+			)
+			.eq("room_kind", "episode")
+			.in("anime_id", animeIds.slice(start, start + DATABASE_BATCH_SIZE));
+		if (error)
+			throw new Error(`Could not read broadcast room sessions (apply migration 104 first): ${error.message}`);
+		existing.push(...((data ?? []) as BroadcastRoomSessionRow[]));
+	}
+	const byPid = new Map(
+		existing.flatMap((session) =>
+			session.source_program_id === null ? [] : ([[session.source_program_id, session]] as const),
+		),
+	);
+	const byAnimeDate = new Map(existing.map((session) => [`${session.anime_id}:${session.room_key}`, session]));
+	const now = Date.now();
+	const existingRows: Record<string, unknown>[] = [];
+	const newRows: Record<string, unknown>[] = [];
+	const usedExistingIds = new Set<string>();
+	for (const row of rows) {
+		const current = byPid.get(row.source_program_id) ?? byAnimeDate.get(`${row.anime_id}:${row.room_key}`);
+		if (current) {
+			if (current.schedule_frozen_at || Date.parse(current.posting_opens_at) <= now) continue;
+			usedExistingIds.add(current.id);
+			existingRows.push({ id: current.id, ...row });
+		} else {
+			newRows.push(row);
+		}
+	}
+	await upsertBatches(supabase, "broadcast_room_sessions", existingRows, "id");
+	await upsertBatches(supabase, "broadcast_room_sessions", newRows, "anime_id,room_kind,room_key");
+	const staleIds = existing
+		.filter(
+			(session) =>
+				session.schedule_source === "syobocal" &&
+				!usedExistingIds.has(session.id) &&
+				!session.schedule_frozen_at &&
+				Date.parse(session.posting_opens_at) > now &&
+				jstDate(session.scheduled_at) >= window.startDate &&
+				jstDate(session.scheduled_at) < window.endDate,
+		)
+		.map((session) => session.id);
+	for (let start = 0; start < staleIds.length; start += DATABASE_BATCH_SIZE) {
+		const { error } = await supabase
+			.from("broadcast_room_sessions")
+			.delete()
+			.in("id", staleIds.slice(start, start + DATABASE_BATCH_SIZE));
+		if (error) throw new Error(`Could not remove stale future room sessions: ${error.message}`);
+	}
+	console.log(
+		`Saved ${existingRows.length + newRows.length} future room snapshots; removed ${staleIds.length} stale future sessions.`,
+	);
+}
+
+async function pruneExpiredSyobocalPrograms(supabase: ReturnType<typeof getSupabaseClient>) {
+	const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1_000).toISOString();
+	const { error, count } = await supabase.from("syobocal_programs").delete({ count: "exact" }).lt("ends_at", cutoff);
+	if (error) throw new Error(`Could not prune expired Syobocal program rows: ${error.message}`);
+	console.log(`Pruned ${count ?? 0} Syobocal program rows older than seven days.`);
+}
+
 async function main() {
 	const options = parseArgs(process.argv.slice(2));
 	const season = `${options.year}-${options.season}`;
 	const range = seasonRange(options.year, options.season);
+	const importedAt = new Date().toISOString();
 	const supabase = getSupabaseClient();
 	const seasonRows = await fetchSeasonRows(supabase, season);
 	const malIds = collectAnimeCatalogSeasonMalIds(seasonRows);
@@ -964,25 +1144,47 @@ async function main() {
 	];
 	let programs: SyobocalProgram[] = [];
 	let channels: SyobocalChannel[] = [];
-	if (!options.skipPrograms && mapping.selected.length > 0) {
-		programs = await fetchPrograms([...selectedTitleByTid.keys()], range.apiRange);
+	const programRange = options.syncPrograms ? rollingSyobocalProgramRange(range.startDate, range.endDate) : null;
+	if (options.syncPrograms && !programRange) {
+		console.log(`${season} is outside the rolling program window; no Syobocal program rows will be fetched.`);
+	}
+	if (programRange && mapping.selected.length > 0) {
+		console.log(`Program sync range: ${programRange.startDate} through ${programRange.endDate} (end exclusive).`);
+		programs = await fetchPrograms([...selectedTitleByTid.keys()], programRange.apiRange);
 		const allChannels = await fetchChannels();
 		const usedChids = new Set(programs.map((program) => program.chid));
 		channels = allChannels.filter((channel) => usedChids.has(channel.chid));
 		const missingChids = [...usedChids].filter((chid) => !channels.some((channel) => channel.chid === chid));
 		if (missingChids.length > 0) throw new Error(`Missing Syobocal channels: ${missingChids.join(", ")}`);
 	}
+	const animeRoomRows = programRange
+		? await fetchAnimeRoomRows(
+				supabase,
+				mapping.selected.map((proposal) => proposal.malId),
+			)
+		: [];
+	const roomSessionRows = buildBroadcastRoomSessionRows(
+		animeRoomRows,
+		mapping.selected,
+		[...selectedTitleByTid.values()],
+		channels,
+		programs,
+		importedAt,
+	);
 
 	const selectedMalIdsForReview = new Set(mapping.selected.map((row) => row.malId));
 	const unresolvedMalIds = [...candidateMalIds].filter((malId) => !selectedMalIdsForReview.has(malId));
 	console.log(
-		`Result: ${programs.length} program slots, ${channels.length} channels, ${unresolvedMalIds.length} unmapped entries with title candidates.`,
+		`Result: ${programs.length} rolling program slots, ${channels.length} channels, ${roomSessionRows.length} future room snapshots, ${unresolvedMalIds.length} unmapped entries with title candidates.`,
 	);
 	if (unresolvedMalIds.length > 0) {
 		console.log("Unresolved MAL IDs:");
-		for (const malId of unresolvedMalIds) {
+		for (const malId of unresolvedMalIds.slice(0, 25)) {
 			const titleCandidates = candidates.filter((candidate) => candidate.malId === malId);
 			console.log(`  ${malId}\t${titleCandidates.map((candidate) => candidate.title).join(" / ")}`);
+		}
+		if (unresolvedMalIds.length > 25) {
+			console.log(`  ... ${unresolvedMalIds.length - 25} more; see the review report.`);
 		}
 	}
 	await writeReviewReport(season, malIds, candidates, titles, mapping.selected, mapping.review, programs.length);
@@ -991,7 +1193,6 @@ async function main() {
 		return;
 	}
 
-	const importedAt = new Date().toISOString();
 	await upsertBatches(
 		supabase,
 		"syobocal_titles",
@@ -1058,6 +1259,15 @@ async function main() {
 			})),
 			"pid",
 		);
+	}
+	if (programRange) {
+		await saveBroadcastRoomSessions(
+			supabase,
+			roomSessionRows,
+			programRange,
+			animeRoomRows.map((anime) => anime.id),
+		);
+		await pruneExpiredSyobocalPrograms(supabase);
 	}
 	const sourceRows = mapping.selected.flatMap((proposal) => {
 		const title = selectedTitleByTid.get(proposal.tid);

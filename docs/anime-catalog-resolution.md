@@ -82,14 +82,33 @@ DBを直接編集せず次の形式で手動対応ファイルへ追加する。
 放送枠は作品一行へ集約せずPID・チャンネル単位で保持し、開始・終了日時は日本時間付きの絶対日時へ変換する。
 これらと `source = syobocal` のレコードは内部表示用であり、ODbL派生データAPIには含めない。
 
+通常の `import:syobocal` は過去シーズンを含めタイトル・対応・公式リンクだけを取り込み、放送枠を取得しない。
+放送枠は `sync:syobocal-programs` で対象シーズンと「前日から90日先」の交差範囲だけを同期する。
+7日より古い `syobocal_programs` は同期後に削除する。
+
+実況ルームには `broadcast_room_sessions` へ、採用時点のPID・TID・ChID・局名・話数・サブタイトル・開始終了日時を
+スナップショットとして複製する。基準局はしょぼいタイトルの `FirstCh` と一致する局を優先し、一致する局がなければ
+同じ話数で最も早い放送枠を使う。複数局の番組枠は表示用キャッシュに残すが、実況ルームは作品・放送日につき一つとする。
+ルームの投稿受付開始後、または最初の投稿が付いた後はスナップショットを凍結し、後続同期で日時や話数を変更しない。
+訂正が必要な場合は `schedule_correction_note` に理由を残す。投稿からセッションへの外部キーは `ON DELETE RESTRICT` とし、
+しょぼいの過去番組枠を削除しても実況ログとの対応は失われない。
+
 ```sh
 pnpm import:syobocal -- --year 2023 --season winter --dry-run
 pnpm import:syobocal -- --year 2023 --season winter
 pnpm resolve:anime-catalog -- --year 2023 --season winter --dry-run
 pnpm resolve:anime-catalog -- --year 2023 --season winter
+
+pnpm import:syobocal -- --year 2026 --season summer
+pnpm resolve:anime-catalog -- --year 2026 --season summer
+pnpm sync:syobocal-programs -- --year 2026 --season summer --dry-run
+pnpm sync:syobocal-programs -- --year 2026 --season summer
 ```
 
-マイグレーションは初回に `103_syobocal_catalog_and_programs.sql` を一度だけ適用する。シーズンを取り込むたびに
+番組同期は `metadata_ready = true` かつ管理者が非表示にしていない作品だけ実況ルーム化するため、現在クールではresolverの後に実行する。
+
+マイグレーションは初回に `103_syobocal_catalog_and_programs.sql` と
+`104_broadcast_room_schedule_snapshots.sql` を順番に一度だけ適用する。シーズンを取り込むたびに
 マイグレーションを再適用する必要はない。XML取得に失敗した場合は直近のローカルスナップショットを利用するが、
 キャッシュもない場合は停止し、不完全なレスポンスを保存しない。
 
