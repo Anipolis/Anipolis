@@ -489,15 +489,6 @@ $effect(() => {
 						{formatAiredPeriod(data.anime.aired_from, data.anime.aired_to)}
 					</span>
 				{/if}
-				{#if animeOfflineSource}
-					<div class="anime-data-attribution">
-						<span>作品メタデータ:</span>
-						<a href={animeOfflineSource.url} target="_blank" rel="noopener noreferrer"
-							>anime-offline-database</a
-						>
-						<a href="/data-sources">ODbL 1.0・詳細</a>
-					</div>
-				{/if}
 			</div>
 		</div>
 
@@ -1441,6 +1432,15 @@ $effect(() => {
 			{/if}
 		</div>
 	</div>
+
+	{#if animeOfflineSource}
+		<footer class="anime-data-source">
+			<span class="anime-data-source-title">データ出典</span>
+			<a href={animeOfflineSource.url} target="_blank" rel="noopener noreferrer">anime-offline-database</a>
+			<span>（ODbL 1.0）</span>
+			<a href="/data-sources">利用データと変換手順</a>
+		</footer>
+	{/if}
 </div>
 
 <svelte:window onkeydown={handleModalKeydown} />
@@ -1826,21 +1826,27 @@ $effect(() => {
 	letter-spacing: 0.04em;
 	text-transform: uppercase;
 }
-.anime-data-attribution {
+.anime-data-source {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 4px 8px;
-	padding: 10px 14px 0;
+	align-items: baseline;
+	gap: 4px 6px;
+	margin-top: 36px;
+	padding-top: 16px;
 	border-top: 1px solid var(--border);
 	color: var(--text-muted);
 	font-size: 0.72rem;
 	line-height: 1.5;
 }
-.anime-data-attribution a {
+.anime-data-source-title {
+	margin-right: 4px;
+	font-weight: 600;
+}
+.anime-data-source a {
 	color: var(--accent);
 	text-decoration: none;
 }
-.anime-data-attribution a:hover {
+.anime-data-source a:hover {
 	text-decoration: underline;
 }
 .copyright {
