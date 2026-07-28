@@ -68,6 +68,20 @@ describe("resolveAnimeCatalog", () => {
 		expect(resolved.resolutionStatus).toBe("unverified");
 	});
 
+	it("deduplicates unresolved studio spelling variants by normalized alias", () => {
+		const resolved = resolveAnimeCatalog([
+			source("anime_offline_database", {
+				title: "Example",
+				season: "2023-winter",
+				status: "finished",
+				studios: ["geek toys inc.", "geektoys"],
+			}),
+		]);
+
+		expect(resolved.canonical.studio).toEqual(["geek toys inc."]);
+		expect(resolved.canonical.studio_en).toEqual(["geek toys inc."]);
+	});
+
 	it("lets manual values override every imported source", () => {
 		const resolved = resolveAnimeCatalog([
 			source("anime_offline_database", { title: "Hikari no Ou", status: "finished" }),

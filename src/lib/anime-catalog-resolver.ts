@@ -1,4 +1,4 @@
-import type { StudioNameMapping } from "./wikidata-studio-names";
+import { normalizeStudioAlias, type StudioNameMapping } from "./wikidata-studio-names.ts";
 
 export type CatalogSourceName = "manual" | "wikidata" | "jikan" | "anime_offline_database" | "legacy";
 export type ResolutionConfidence = "verified" | "source" | "fallback";
@@ -100,6 +100,21 @@ function nonEmptyStringArrayValue(record: Record<string, unknown>, key: string):
 	return value && value.length > 0 ? value : undefined;
 }
 
+function studioIdentityKey(value: string): string {
+	return normalizeStudioAlias(value) || value.normalize("NFKC").toLocaleLowerCase();
+}
+
+function uniqueStudioAliases(values: string[] | undefined): string[] | undefined {
+	if (!values) return undefined;
+	const seen = new Set<string>();
+	return values.filter((value) => {
+		const key = studioIdentityKey(value);
+		if (seen.has(key)) return false;
+		seen.add(key);
+		return true;
+	});
+}
+
 function canonicalStudioNames(
 	rawNames: readonly string[],
 	mappings: readonly (StudioNameMapping | undefined)[],
@@ -108,9 +123,7 @@ function canonicalStudioNames(
 	const seenIdentities = new Set<string>();
 	return rawNames.flatMap((rawName, index) => {
 		const mapping = mappings[index];
-		const identity = mapping
-			? `wikidata:${mapping.sourceKey}`
-			: `unmapped:${rawName.normalize("NFKC").toLocaleLowerCase()}`;
+		const identity = mapping ? `wikidata:${mapping.sourceKey}` : `unmapped:${studioIdentityKey(rawName)}`;
 		if (seenIdentities.has(identity)) return [];
 		seenIdentities.add(identity);
 		return [nameFor(rawName, mapping)];
@@ -302,10 +315,18 @@ export function resolveAnimeCatalog(
 			{ value: null, source: "legacy", confidence: "fallback" },
 		]);
 	const rawStudioNames = firstDefined<string[] | null>([
-		candidate(nonEmptyStringArrayValue(jikan, "studio_en"), "jikan", "source"),
-		candidate(nonEmptyStringArrayValue(jikan, "studio"), "jikan", "source"),
-		candidate(legacyRow?.studio_en?.length ? legacyRow.studio_en : undefined, "legacy", "fallback"),
-		candidate(nonEmptyStringArrayValue(offline, "studios"), "anime_offline_database", "fallback"),
+		candidate(uniqueStudioAliases(nonEmptyStringArrayValue(jikan, "studio_en")), "jikan", "source"),
+		candidate(uniqueStudioAliases(nonEmptyStringArrayValue(jikan, "studio")), "jikan", "source"),
+		candidate(
+			uniqueStudioAliases(legacyRow?.studio_en?.length ? legacyRow.studio_en : undefined),
+			"legacy",
+			"fallback",
+		),
+		candidate(
+			uniqueStudioAliases(nonEmptyStringArrayValue(offline, "studios")),
+			"anime_offline_database",
+			"fallback",
+		),
 		{ value: null, source: "legacy", confidence: "fallback" },
 	]);
 	const mappedStudioNames = rawStudioNames.value?.map(resolveStudioName);
@@ -323,9 +344,13 @@ export function resolveAnimeCatalog(
 					confidence: "verified",
 				}
 			: undefined,
-		candidate(nonEmptyStringArrayValue(jikan, "studio"), "jikan", "source"),
-		candidate(legacyRow?.studio?.length ? legacyRow.studio : undefined, "legacy", "fallback"),
-		candidate(nonEmptyStringArrayValue(offline, "studios"), "anime_offline_database", "fallback"),
+		candidate(uniqueStudioAliases(nonEmptyStringArrayValue(jikan, "studio")), "jikan", "source"),
+		candidate(uniqueStudioAliases(legacyRow?.studio?.length ? legacyRow.studio : undefined), "legacy", "fallback"),
+		candidate(
+			uniqueStudioAliases(nonEmptyStringArrayValue(offline, "studios")),
+			"anime_offline_database",
+			"fallback",
+		),
 		{ value: null, source: "legacy", confidence: "fallback" },
 	]);
 	const studioEnglish = firstDefined<string[] | null>([
