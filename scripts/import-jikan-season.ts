@@ -1,5 +1,12 @@
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { createClient } from "@supabase/supabase-js";
 import { translateAnimeSource } from "../src/lib/anime-vocabulary.ts";
+import {
+	ConsecutiveStatusCircuitBreaker,
+	meetsMinimumCompleteness,
+	summarizeImportCompleteness,
+} from "../src/lib/utils/jikan-import-resilience.ts";
 import { isHttpUrl as isHttpUrlUtil, isMalUrl } from "../src/lib/utils/url.ts";
 
 type SeasonName = "winter" | "spring" | "summer" | "fall";
@@ -165,6 +172,23 @@ type ExistingAnimeValues = Pick<
 	"mal_id" | "official_site_url" | "official_x_url" | "resources" | "cover_url"
 >;
 
+type ImportCheckpoint = {
+	version: 1;
+	year: number;
+	season: SeasonName;
+	expectedMalIds: number[];
+	animeByMalId: Record<string, JikanAnime>;
+	failedMalIds: number[];
+	updatedAt: string;
+};
+
+type SeasonFetchResult = {
+	animes: JikanAnime[];
+	expectedMalIds: number[];
+	failedMalIds: number[];
+	usesCheckpoint: boolean;
+};
+
 const BASE_URL = "https://api.jikan.moe/v4";
 const ANILIST_GRAPHQL_URL = "https://graphql.anilist.co";
 const VALID_SEASONS = new Set<SeasonName>(["winter", "spring", "summer", "fall"]);
@@ -174,16 +198,29 @@ const ANILIST_SEASON_BY_NAME: Record<SeasonName, string> = {
 	summer: "SUMMER",
 	fall: "FALL",
 };
-const REQUEST_WAIT_MIN_MS = 500;
-const REQUEST_WAIT_MAX_MS = 1_000;
+const REQUEST_WAIT_MIN_MS = 1_100;
+const REQUEST_WAIT_MAX_MS = 1_500;
 const RETRY_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
 const MAX_RETRIES = 5;
 const FALLBACK_DETAIL_MAX_RETRIES = 1;
+const MAX_CONSECUTIVE_504_RESPONSES = 5;
+const MIN_IMPORT_COMPLETENESS_RATIO = 0.95;
 const UPSERT_BATCH_SIZE = 100;
+const IMPORT_CHECKPOINT_DIRECTORY = join(process.cwd(), ".jikan-import-cache");
 const BLOCKED_RESOURCE_KEYWORDS = ["namuwiki", "bangumi"];
 const BLOCKED_TYPES = new Set(["music", "pv", "cm"]);
 const FINITE_RELEASE_TYPES = new Set(["movie", "ona", "ova", "tvspecial", "special"]);
 const LATE_NIGHT_EXTENSION_END_HOUR = 4;
+const jikanCircuitBreaker = new ConsecutiveStatusCircuitBreaker(504, MAX_CONSECUTIVE_504_RESPONSES);
+
+class JikanCircuitOpenError extends Error {
+	constructor() {
+		super(
+			`Jikan returned ${MAX_CONSECUTIVE_504_RESPONSES} consecutive HTTP 504 responses; stopping to avoid hammering the upstream service.`,
+		);
+		this.name = "JikanCircuitOpenError";
+	}
+}
 
 const GENRE_JA_BY_EN: Record<string, string> = {
 	Action: "アクション",
@@ -481,6 +518,78 @@ function randomInt(min: number, max: number) {
 	return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
+function importCheckpointPath(year: number, season: SeasonName) {
+	return join(IMPORT_CHECKPOINT_DIRECTORY, `${year}-${season}.json`);
+}
+
+function emptyImportCheckpoint(year: number, season: SeasonName): ImportCheckpoint {
+	return {
+		version: 1,
+		year,
+		season,
+		expectedMalIds: [],
+		animeByMalId: {},
+		failedMalIds: [],
+		updatedAt: new Date().toISOString(),
+	};
+}
+
+function isImportCheckpoint(value: unknown, year: number, season: SeasonName): value is ImportCheckpoint {
+	if (!value || typeof value !== "object") return false;
+
+	const checkpoint = value as Partial<ImportCheckpoint>;
+	return (
+		checkpoint.version === 1 &&
+		checkpoint.year === year &&
+		checkpoint.season === season &&
+		Array.isArray(checkpoint.expectedMalIds) &&
+		checkpoint.animeByMalId !== null &&
+		typeof checkpoint.animeByMalId === "object" &&
+		Array.isArray(checkpoint.failedMalIds) &&
+		typeof checkpoint.updatedAt === "string"
+	);
+}
+
+async function loadImportCheckpoint(year: number, season: SeasonName) {
+	const path = importCheckpointPath(year, season);
+
+	try {
+		const parsed: unknown = JSON.parse(await readFile(path, "utf8"));
+		if (!isImportCheckpoint(parsed, year, season)) {
+			console.warn(`Ignoring invalid Jikan import checkpoint: ${path}`);
+			return emptyImportCheckpoint(year, season);
+		}
+
+		return parsed;
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+			console.warn(
+				`Could not read Jikan import checkpoint ${path}: ${error instanceof Error ? error.message : String(error)}`,
+			);
+		}
+
+		return emptyImportCheckpoint(year, season);
+	}
+}
+
+async function saveImportCheckpoint(checkpoint: ImportCheckpoint) {
+	await mkdir(IMPORT_CHECKPOINT_DIRECTORY, { recursive: true });
+	checkpoint.updatedAt = new Date().toISOString();
+
+	const path = importCheckpointPath(checkpoint.year, checkpoint.season);
+	const temporaryPath = `${path}.${process.pid}.tmp`;
+	await writeFile(temporaryPath, `${JSON.stringify(checkpoint, null, 2)}\n`, "utf8");
+	await rename(temporaryPath, path);
+}
+
+async function clearImportCheckpoint(year: number, season: SeasonName) {
+	try {
+		await unlink(importCheckpointPath(year, season));
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+	}
+}
+
 function retryDelayMs(response: Response | null, attempt: number) {
 	const retryAfter = response?.headers.get("retry-after");
 	const retryAfterSeconds = retryAfter ? Number.parseInt(retryAfter, 10) : Number.NaN;
@@ -504,7 +613,14 @@ async function fetchJsonWithRetry(url: string, maxRetries = MAX_RETRIES): Promis
 				},
 			});
 
-			if (response.ok) return (await response.json()) as JikanSeasonResponse;
+			if (response.ok) {
+				jikanCircuitBreaker.record(response.status);
+				return (await response.json()) as JikanSeasonResponse;
+			}
+
+			if (jikanCircuitBreaker.record(response.status)) {
+				throw new JikanCircuitOpenError();
+			}
 
 			const body = await response.text();
 			const shouldRetry = RETRY_STATUS_CODES.has(response.status);
@@ -516,6 +632,8 @@ async function fetchJsonWithRetry(url: string, maxRetries = MAX_RETRIES): Promis
 			console.warn(`Retrying in ${Math.round(delayMs / 1_000)}s... (${attempt + 1}/${maxRetries})`);
 			await sleep(delayMs);
 		} catch (error) {
+			if (error instanceof JikanCircuitOpenError) throw error;
+
 			console.warn(`Request error: ${error instanceof Error ? error.message : String(error)}`);
 			if (attempt === maxRetries) return null;
 
@@ -604,23 +722,62 @@ async function fetchAniListSeasonMalIds(year: number, season: SeasonName) {
 
 async function fetchSeasonAnimeViaAniList(year: number, season: SeasonName) {
 	const malIds = await fetchAniListSeasonMalIds(year, season);
-	const animes: JikanAnime[] = [];
+	const checkpoint = await loadImportCheckpoint(year, season);
+	const expectedMalIdSet = new Set(malIds);
 
-	console.log(`Fetching ${malIds.length} Jikan anime details from AniList MAL IDs.`);
+	checkpoint.expectedMalIds = malIds;
+	checkpoint.animeByMalId = Object.fromEntries(
+		Object.entries(checkpoint.animeByMalId).filter(([malId]) => expectedMalIdSet.has(Number(malId))),
+	);
+	checkpoint.failedMalIds = malIds.filter((malId) => checkpoint.animeByMalId[String(malId)] === undefined);
+	await saveImportCheckpoint(checkpoint);
 
-	for (const [index, malId] of malIds.entries()) {
-		console.log(`Fetching Jikan anime detail ${index + 1}/${malIds.length}: MAL ${malId}`);
-		const anime = await fetchAnimeFull(malId, FALLBACK_DETAIL_MAX_RETRIES);
+	const pendingMalIds = checkpoint.failedMalIds;
+	const resumedCount = malIds.length - pendingMalIds.length;
+
+	if (resumedCount > 0) {
+		console.log(`Resuming from checkpoint with ${resumedCount}/${malIds.length} Jikan anime details cached.`);
+	}
+	console.log(`Fetching ${pendingMalIds.length} missing Jikan anime details from AniList MAL IDs.`);
+
+	for (const [index, malId] of pendingMalIds.entries()) {
+		console.log(`Fetching Jikan anime detail ${index + 1}/${pendingMalIds.length}: MAL ${malId}`);
+
+		let anime: JikanAnime | null;
+		try {
+			anime = await fetchAnimeFull(malId, FALLBACK_DETAIL_MAX_RETRIES);
+		} catch (error) {
+			checkpoint.failedMalIds = malIds.filter(
+				(expectedMalId) => checkpoint.animeByMalId[String(expectedMalId)] === undefined,
+			);
+			await saveImportCheckpoint(checkpoint);
+			throw error;
+		}
 
 		if (!anime) {
 			console.warn(`Jikan anime detail skipped: MAL ${malId}`);
+			await saveImportCheckpoint(checkpoint);
 			continue;
 		}
 
-		animes.push(anime);
+		checkpoint.animeByMalId[String(malId)] = anime;
+		checkpoint.failedMalIds = malIds.filter(
+			(expectedMalId) => checkpoint.animeByMalId[String(expectedMalId)] === undefined,
+		);
+		await saveImportCheckpoint(checkpoint);
 	}
 
-	return animes;
+	const animes = malIds.flatMap((malId) => {
+		const anime = checkpoint.animeByMalId[String(malId)];
+		return anime ? [anime] : [];
+	});
+
+	return {
+		animes,
+		expectedMalIds: malIds,
+		failedMalIds: checkpoint.failedMalIds,
+		usesCheckpoint: true,
+	} satisfies SeasonFetchResult;
 }
 
 async function fetchSeasonAnime(year: number, season: SeasonName) {
@@ -648,7 +805,12 @@ async function fetchSeasonAnime(year: number, season: SeasonName) {
 		page += 1;
 	}
 
-	return animes;
+	return {
+		animes,
+		expectedMalIds: animes.map((anime) => anime.mal_id),
+		failedMalIds: [],
+		usesCheckpoint: false,
+	} satisfies SeasonFetchResult;
 }
 
 async function enrichAnimeLinks(animes: JikanAnime[]) {
@@ -1184,27 +1346,45 @@ async function main() {
 	}
 
 	console.log(`Starting Jikan season import: ${year} ${season}${dryRun ? " (dry-run)" : ""}`);
-	let rawAnimes: JikanAnime[];
+	let fetchResult: SeasonFetchResult;
 	let linksAlreadyEnriched = false;
 
 	if (fallbackAnilist) {
 		console.log("Using AniList MAL ID fallback source.");
-		rawAnimes = await fetchSeasonAnimeViaAniList(year, season);
+		fetchResult = await fetchSeasonAnimeViaAniList(year, season);
 		linksAlreadyEnriched = true;
 	} else {
 		try {
-			rawAnimes = await fetchSeasonAnime(year, season);
+			fetchResult = await fetchSeasonAnime(year, season);
 		} catch (error) {
+			if (error instanceof JikanCircuitOpenError) throw error;
+
 			console.warn(
 				`Jikan season endpoint failed: ${error instanceof Error ? error.message : String(error)}. Falling back to AniList MAL IDs.`,
 			);
-			rawAnimes = await fetchSeasonAnimeViaAniList(year, season);
+			fetchResult = await fetchSeasonAnimeViaAniList(year, season);
 			linksAlreadyEnriched = true;
 		}
 	}
 
+	const rawAnimes = fetchResult.animes;
 	if (rawAnimes.length === 0) {
 		throw new Error(`No anime fetched for ${year} ${season}; aborting without database writes.`);
+	}
+
+	const completeness = summarizeImportCompleteness(
+		fetchResult.expectedMalIds,
+		rawAnimes.map((anime) => anime.mal_id),
+	);
+	const completenessPercent = (completeness.ratio * 100).toFixed(1);
+	console.log(
+		`Import completeness: ${completeness.successfulCount}/${completeness.expectedCount} (${completenessPercent}%).`,
+	);
+
+	if (!meetsMinimumCompleteness(completeness, MIN_IMPORT_COMPLETENESS_RATIO)) {
+		throw new Error(
+			`Import completeness ${completenessPercent}% is below the ${MIN_IMPORT_COMPLETENESS_RATIO * 100}% safety threshold; aborting without database writes. ${completeness.missingIds.length} MAL IDs remain in the checkpoint.`,
+		);
 	}
 
 	const animes = enrichLinks && !linksAlreadyEnriched ? await enrichAnimeLinks(rawAnimes) : rawAnimes;
@@ -1225,6 +1405,14 @@ async function main() {
 
 	const savedMalIds = await upsertAnimeRows(rows);
 	await syncAnimeRelations(filteredAnimes, savedMalIds);
+
+	if (fetchResult.usesCheckpoint && fetchResult.failedMalIds.length === 0) {
+		await clearImportCheckpoint(year, season);
+		console.log("Import checkpoint cleared after a complete import.");
+	} else if (fetchResult.failedMalIds.length > 0) {
+		console.warn(`Import checkpoint retained for ${fetchResult.failedMalIds.length} missing MAL IDs.`);
+	}
+
 	console.log(`Import complete: ${rows.length} rows processed.`);
 }
 

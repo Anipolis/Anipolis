@@ -16,6 +16,9 @@ coverage/
 # Local logs
 *.log
 
+# Resumable Jikan importer checkpoints
+.jikan-import-cache/
+
 # Supabase temporary metadata
 supabase/.temp/
 
