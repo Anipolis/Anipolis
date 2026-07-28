@@ -100,6 +100,10 @@ function nonEmptyStringArrayValue(record: Record<string, unknown>, key: string):
 	return value && value.length > 0 ? value : undefined;
 }
 
+function uniqueStrings(values: readonly string[]): string[] {
+	return [...new Set(values)];
+}
+
 function firstDefined<T>(values: readonly (ResolvedValue<T> | undefined)[]): ResolvedValue<T> {
 	for (const value of values) {
 		if (value !== undefined) return value;
@@ -297,9 +301,11 @@ export function resolveAnimeCatalog(
 		candidate(stringArrayValue(manual, "studio"), "manual", "verified"),
 		hasMappedStudio && rawStudioNames.value
 			? {
-					value: rawStudioNames.value.map(
-						(name, index) =>
-							mappedStudioNames?.[index]?.nameJa ?? mappedStudioNames?.[index]?.nameEn ?? name,
+					value: uniqueStrings(
+						rawStudioNames.value.map(
+							(name, index) =>
+								mappedStudioNames?.[index]?.nameJa ?? mappedStudioNames?.[index]?.nameEn ?? name,
+						),
 					),
 					source: "wikidata",
 					confidence: "verified",
@@ -314,7 +320,9 @@ export function resolveAnimeCatalog(
 		candidate(stringArrayValue(manual, "studio_en"), "manual", "verified"),
 		hasMappedStudio && rawStudioNames.value
 			? {
-					value: rawStudioNames.value.map((name, index) => mappedStudioNames?.[index]?.nameEn ?? name),
+					value: uniqueStrings(
+						rawStudioNames.value.map((name, index) => mappedStudioNames?.[index]?.nameEn ?? name),
+					),
 					source: "wikidata",
 					confidence: "verified",
 				}

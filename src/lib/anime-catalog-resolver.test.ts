@@ -86,7 +86,7 @@ describe("resolveAnimeCatalog", () => {
 				source("anime_offline_database", {
 					title: "Tsunlise",
 					status: "finished",
-					studios: ["tezuka productions co., ltd."],
+					studios: ["tezuka productions co., ltd.", "Tezuka Productions"],
 				}),
 			],
 			undefined,
