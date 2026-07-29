@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { computeBroadcastStatus } from "$lib/broadcast-status";
 import { toValidExchangeSubjectiveTags } from "$lib/exchange-tags";
 import { buildPostCardSelect } from "$lib/server/post-selects";
 import type { Database } from "$lib/supabase/database.types";
@@ -2775,19 +2776,12 @@ function toBroadcastStatus(raw: Record<string, unknown>): BroadcastStatus {
 		return computed;
 	}
 
-	const today = new Date();
-	const jstToday = new Date(today.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
-	const airedFrom = typeof raw["aired_from"] === "string" ? raw["aired_from"].slice(0, 10) : null;
-	const airedTo = typeof raw["aired_to"] === "string" ? raw["aired_to"].slice(0, 10) : null;
-	const rawType = typeof raw["type"] === "string" ? raw["type"] : null;
-	const normalizedType = rawType?.toLowerCase().replace(/[^a-z0-9]/g, "") ?? "";
-	const isFiniteReleaseType = ["movie", "ona", "ova", "tvspecial", "special"].includes(normalizedType);
-
-	if (airedFrom && airedFrom > jstToday) return "upcoming";
-	if (airedTo && airedTo < jstToday) return "finished";
-	if (airedFrom && airedFrom <= jstToday && !airedTo && isFiniteReleaseType) return "finished";
-	if (airedFrom && airedFrom <= jstToday && (!airedTo || airedTo >= jstToday)) return "airing";
-	return "unknown";
+	return computeBroadcastStatus({
+		airedFrom: typeof raw["aired_from"] === "string" ? raw["aired_from"] : null,
+		airedTo: typeof raw["aired_to"] === "string" ? raw["aired_to"] : null,
+		type: typeof raw["type"] === "string" ? raw["type"] : null,
+		status: typeof raw["status"] === "string" ? raw["status"] : null,
+	});
 }
 
 export async function getBroadcastSubscriptions(supabase: SupabaseClient<Database>, userId: string): Promise<string[]> {
