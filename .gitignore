@@ -18,6 +18,9 @@ coverage/
 
 # Resumable Jikan importer checkpoints
 .jikan-import-cache/
+.mal-import-cache/
+.copyright-cache/
+scripts/local/
 
 # Syoboi Calendar importer snapshots
 .syobocal-import-cache/

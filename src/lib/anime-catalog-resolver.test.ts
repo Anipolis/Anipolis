@@ -197,6 +197,48 @@ describe("resolveAnimeCatalog", () => {
 		expect(resolved.canonical.studio_en).toEqual(["Tezuka Productions"]);
 		expect(resolved.fieldSources["studio"]).toEqual({ source: "wikidata", confidence: "verified" });
 	});
+
+	it("ranks the official MAL API above Jikan and below confirmed Japanese sources", () => {
+		const resolved = resolveAnimeCatalog([
+			source("anime_offline_database", { title: "Example", status: "finished" }),
+			source("jikan", { title_ja: "Jikanタイトル", title_en: "Jikan English" }),
+			source("mal", { title_ja: "MAL公式タイトル", title_en: "MAL English" }),
+			source("syobocal", { title_ja: "しょぼいカレンダー正式タイトル" }),
+		]);
+
+		expect(resolved.canonical.title).toBe("しょぼいカレンダー正式タイトル");
+		expect(resolved.canonical.title_en).toBe("MAL English");
+		expect(resolved.fieldSources["title_en"]).toEqual({ source: "mal", confidence: "source" });
+	});
+
+	it("marks resolution verified when MAL supplies the only Japanese title", () => {
+		const resolved = resolveAnimeCatalog([
+			source("anime_offline_database", { title: "Example", status: "finished" }),
+			source("mal", { title_ja: "MAL公式タイトル" }),
+		]);
+
+		expect(resolved.canonical.title).toBe("MAL公式タイトル");
+		expect(resolved.canonical.metadata_ready).toBe(true);
+		expect(resolved.fieldSources["title"]).toEqual({ source: "mal", confidence: "verified" });
+	});
+
+	it("does not let a sparse MAL record shadow Jikan values it lacks", () => {
+		const resolved = resolveAnimeCatalog([
+			source("anime_offline_database", { title: "Example", status: "finished" }),
+			source("jikan", {
+				title_ja: "Jikanタイトル",
+				official_site_url: "https://official.example/anime",
+				studio: ["マッドハウス"],
+				broadcast_day: 5,
+			}),
+			source("mal", { title_ja: "MAL公式タイトル", studio_en: ["MADHOUSE"] }),
+		]);
+
+		expect(resolved.canonical.title).toBe("MAL公式タイトル");
+		expect(resolved.canonical.official_site_url).toBe("https://official.example/anime");
+		expect(resolved.canonical.broadcast_day).toBe(5);
+		expect(resolved.fieldSources["broadcast_day"]?.source).toBe("jikan");
+	});
 });
 
 describe("selectVerifiedRomajiCandidate", () => {

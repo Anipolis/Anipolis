@@ -19,14 +19,23 @@ Wikidata ───────────────┤                       
 インポーターの実行順は、保存済みのソースレコードから得られる解決結果に影響しない。管理画面でMAL ID付き作品を
 編集すると、DBトリガーが編集結果を `source = manual` として保存する。resolverを再実行しても手動編集は最優先で維持される。
 
+## MAL公式API（source = mal）
+
+`import:mal` は `api.myanimelist.net/v2` から事実メタデータ（タイトル・話数・種別・放送日・制作会社・ジャンル）を
+取得し `source = mal` として保存する。同じMALデータのスクレイピング経由であるJikanより一段上、確認済み日本語
+ソース（しょぼいカレンダー・Wikidata）より下に位置づける。あらすじ・スコア・画像は規約上の配慮から取り込まない。
+MALが提供しないフィールド（公式URL・リソース・カバー画像）は正規化データにキー自体を含めず、Jikan値を
+nullで遮蔽しない。`mal` レコードはJikanと同様に内部利用限定で、ODbL派生データAPIには含めない。
+利用には `MAL_CLIENT_ID` が必要。解決対象シーズンの決定には関与しない（ODbL ∪ Jikanのまま）。
+
 ## フィールド優先規則
 
 | フィールド | 優先順位 |
 | --- | --- |
-| 表示タイトル | manual → 対応確認済みのしょぼいカレンダー → Wikidata日本語ラベル → Jikan日本語タイトル → legacy → ODbL |
-| 英語タイトル | manual → Jikan英語タイトル → Wikidata英語ラベル → legacy |
-| ローマ字 | manual → Jikan default → Wikidata別名で検証できたODbLタイトル → legacy → ODbL候補 |
-| 話数・種別・状態・シーズン | manual → ODbL → Jikan → legacy |
+| 表示タイトル | manual → 対応確認済みのしょぼいカレンダー → Wikidata日本語ラベル → MAL公式API日本語タイトル → Jikan日本語タイトル → legacy → ODbL |
+| 英語タイトル | manual → MAL公式API → Jikan英語タイトル → Wikidata英語ラベル → legacy |
+| ローマ字 | manual → MAL公式API → Jikan default → Wikidata別名で検証できたODbLタイトル → legacy → ODbL候補 |
+| 話数・種別・状態・シーズン | manual → ODbL → MAL公式API → Jikan → legacy |
 | 公式URL | manual → しょぼいカレンダー → Jikan → legacy |
 | 放送日・放送時刻 | `syobocal_programs` の絶対日時を表示用に利用。従来フィールドはmanual → Jikan → legacy |
 | スタジオ | manual → Wikidata組織IDで同定したJikan既存名 → Wikidataラベル → legacy → ODbL候補 |

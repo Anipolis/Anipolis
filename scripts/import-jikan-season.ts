@@ -196,6 +196,9 @@ type SeasonFetchResult = {
 };
 
 const BASE_URL = "https://api.jikan.moe/v4";
+// Fetch from a self-hosted jikan-rest instance when JIKAN_BASE_URL is set;
+// source_url provenance keeps the canonical BASE_URL either way.
+const FETCH_BASE_URL = process.env["JIKAN_BASE_URL"] ?? BASE_URL;
 const ANILIST_GRAPHQL_URL = "https://graphql.anilist.co";
 const VALID_SEASONS = new Set<SeasonName>(["winter", "spring", "summer", "fall"]);
 const ANILIST_SEASON_BY_NAME: Record<SeasonName, string> = {
@@ -228,7 +231,7 @@ class JikanCircuitOpenError extends Error {
 	}
 }
 
-const GENRE_JA_BY_EN: Record<string, string> = {
+export const GENRE_JA_BY_EN: Record<string, string> = {
 	Action: "アクション",
 	Adventure: "アドベンチャー",
 	"Avant Garde": "アバンギャルド",
@@ -656,7 +659,7 @@ async function fetchJsonWithRetry(url: string, maxRetries = MAX_RETRIES): Promis
 }
 
 async function fetchAnimeFull(malId: number, maxRetries = MAX_RETRIES) {
-	const payload = await fetchJsonWithRetry(`${BASE_URL}/anime/${malId}/full`, maxRetries);
+	const payload = await fetchJsonWithRetry(`${FETCH_BASE_URL}/anime/${malId}/full`, maxRetries);
 	return (payload as JikanAnimeFullResponse | null)?.data ?? null;
 }
 
@@ -792,7 +795,7 @@ async function fetchSeasonAnime(year: number, season: SeasonName) {
 	let hasNextPage = true;
 
 	while (hasNextPage) {
-		const url = new URL(`${BASE_URL}/seasons/${year}/${season}`);
+		const url = new URL(`${FETCH_BASE_URL}/seasons/${year}/${season}`);
 		url.searchParams.set("page", String(page));
 
 		console.log(`Fetching page ${page}: ${url.toString()}`);
@@ -967,7 +970,7 @@ function normalizeBroadcastTime(time: string | null | undefined) {
 	return `${String(hour).padStart(2, "0")}:${match[2]}`;
 }
 
-function normalizeBroadcastSchedule(broadcast: JikanAnime["broadcast"]) {
+export function normalizeBroadcastSchedule(broadcast: JikanAnime["broadcast"]) {
 	const broadcastDay = normalizeBroadcastDay(broadcast?.day);
 	const broadcastTime = normalizeBroadcastTime(broadcast?.time);
 

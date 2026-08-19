@@ -1,6 +1,13 @@
 import { normalizeStudioAlias, type StudioNameMapping } from "./wikidata-studio-names.ts";
 
-export type CatalogSourceName = "manual" | "syobocal" | "wikidata" | "jikan" | "anime_offline_database" | "legacy";
+export type CatalogSourceName =
+	| "manual"
+	| "syobocal"
+	| "wikidata"
+	| "mal"
+	| "jikan"
+	| "anime_offline_database"
+	| "legacy";
 export type ResolutionConfidence = "verified" | "source" | "fallback";
 
 export type CatalogSourceRecord = {
@@ -217,6 +224,7 @@ export function resolveAnimeCatalog(
 	const offline = bySource.get("anime_offline_database") ?? {};
 	const syobocal = bySource.get("syobocal") ?? {};
 	const wikidata = bySource.get("wikidata") ?? {};
+	const mal = bySource.get("mal") ?? {};
 	const jikan = bySource.get("jikan") ?? {};
 	const manual = bySource.get("manual") ?? {};
 	const malId = sourceRecords[0]?.mal_id ?? legacyRow?.mal_id;
@@ -225,6 +233,9 @@ export function resolveAnimeCatalog(
 	const offlineTitle = stringValue(offline, "title");
 	const syobocalJapaneseTitle = stringValue(syobocal, "title_ja");
 	const wikidataJapaneseTitle = stringValue(wikidata, "title_ja");
+	const malJapaneseTitle =
+		stringValue(mal, "title_ja") ??
+		(containsJapaneseScript(stringValue(mal, "title") ?? "") ? stringValue(mal, "title") : undefined);
 	const jikanJapaneseTitle =
 		stringValue(jikan, "title_ja") ??
 		(containsJapaneseScript(stringValue(jikan, "title") ?? "") ? stringValue(jikan, "title") : undefined);
@@ -234,9 +245,11 @@ export function resolveAnimeCatalog(
 		candidate(stringValue(manual, "title"), "manual", "verified"),
 		candidate(syobocalJapaneseTitle, "syobocal", "verified"),
 		candidate(wikidataJapaneseTitle, "wikidata", "verified"),
+		candidate(malJapaneseTitle, "mal", "verified"),
 		candidate(jikanJapaneseTitle, "jikan", "verified"),
 		candidate(legacyJapaneseTitle, "legacy", "fallback"),
 		candidate(offlineTitle, "anime_offline_database", "source"),
+		candidate(stringValue(mal, "title"), "mal", "source"),
 		candidate(stringValue(jikan, "title"), "jikan", "source"),
 		candidate(legacyRow?.title, "legacy", "fallback"),
 		{ value: `MAL ${malId}`, source: "legacy", confidence: "fallback" },
@@ -244,6 +257,7 @@ export function resolveAnimeCatalog(
 
 	const titleEnglish = firstDefined<string | null>([
 		candidate(nullableStringValue(manual, "title_en"), "manual", "verified"),
+		candidate(nullableStringValue(mal, "title_en"), "mal", "source"),
 		candidate(nullableStringValue(jikan, "title_en"), "jikan", "source"),
 		candidate(nullableStringValue(wikidata, "title_en"), "wikidata", "source"),
 		candidate(legacyRow?.title_en, "legacy", "fallback"),
@@ -257,6 +271,7 @@ export function resolveAnimeCatalog(
 	);
 	const titleRomaji = firstDefined<string | null>([
 		candidate(nullableStringValue(manual, "title_romaji"), "manual", "verified"),
+		candidate(nullableStringValue(mal, "title_romaji"), "mal", "source"),
 		candidate(nullableStringValue(jikan, "title_romaji"), "jikan", "source"),
 		candidate(verifiedRomaji, "wikidata", "verified"),
 		candidate(legacyRow?.title_romaji, "legacy", "fallback"),
@@ -269,9 +284,11 @@ export function resolveAnimeCatalog(
 			...(preferOffline
 				? [
 						candidate(nullableStringValue(offline, key), "anime_offline_database", "source"),
+						candidate(nullableStringValue(mal, key), "mal", "source"),
 						candidate(nullableStringValue(jikan, key), "jikan", "source"),
 					]
 				: [
+						candidate(nullableStringValue(mal, key), "mal", "source"),
 						candidate(nullableStringValue(jikan, key), "jikan", "source"),
 						candidate(nullableStringValue(offline, key), "anime_offline_database", "source"),
 					]),
@@ -304,6 +321,7 @@ export function resolveAnimeCatalog(
 	const status = firstDefined([
 		candidate(stringValue(manual, "status"), "manual", "verified"),
 		candidate(stringValue(offline, "status"), "anime_offline_database", "source"),
+		candidate(stringValue(mal, "status"), "mal", "source"),
 		candidate(stringValue(jikan, "status"), "jikan", "source"),
 		candidate(legacyRow?.status, "legacy", "fallback"),
 		{ value: "upcoming", source: "legacy", confidence: "fallback" },
@@ -312,6 +330,7 @@ export function resolveAnimeCatalog(
 	const resolveArray = (manualKey: string, jikanKey: string, offlineKey: string): ResolvedValue<string[] | null> =>
 		firstDefined<string[] | null>([
 			candidate(stringArrayValue(manual, manualKey), "manual", "verified"),
+			candidate(nonEmptyStringArrayValue(mal, jikanKey), "mal", "source"),
 			candidate(nonEmptyStringArrayValue(jikan, jikanKey), "jikan", "source"),
 			candidate(
 				legacyRow?.[manualKey as keyof LegacyAnimeCatalogRow] as string[] | null | undefined,
@@ -322,7 +341,9 @@ export function resolveAnimeCatalog(
 			{ value: null, source: "legacy", confidence: "fallback" },
 		]);
 	const rawStudioNames = firstDefined<string[] | null>([
+		candidate(uniqueStudioAliases(nonEmptyStringArrayValue(mal, "studio_en")), "mal", "source"),
 		candidate(uniqueStudioAliases(nonEmptyStringArrayValue(jikan, "studio_en")), "jikan", "source"),
+		candidate(uniqueStudioAliases(nonEmptyStringArrayValue(mal, "studio")), "mal", "source"),
 		candidate(uniqueStudioAliases(nonEmptyStringArrayValue(jikan, "studio")), "jikan", "source"),
 		candidate(
 			uniqueStudioAliases(legacyRow?.studio_en?.length ? legacyRow.studio_en : undefined),
@@ -351,6 +372,7 @@ export function resolveAnimeCatalog(
 					confidence: "verified",
 				}
 			: undefined,
+		candidate(uniqueStudioAliases(nonEmptyStringArrayValue(mal, "studio")), "mal", "source"),
 		candidate(uniqueStudioAliases(nonEmptyStringArrayValue(jikan, "studio")), "jikan", "source"),
 		candidate(uniqueStudioAliases(legacyRow?.studio?.length ? legacyRow.studio : undefined), "legacy", "fallback"),
 		candidate(
@@ -379,13 +401,14 @@ export function resolveAnimeCatalog(
 	const genreEnglish = resolveArray("genre_en", "genre_en", "genres");
 	const broadcastDay = firstDefined<number | null>([
 		candidate(numberValue(manual, "broadcast_day"), "manual", "verified"),
+		candidate(numberValue(mal, "broadcast_day"), "mal", "source"),
 		candidate(numberValue(jikan, "broadcast_day"), "jikan", "source"),
 		candidate(legacyRow?.broadcast_day, "legacy", "fallback"),
 		{ value: null, source: "legacy", confidence: "fallback" },
 	]);
 
 	const verifiedDisplayTitle =
-		["manual", "syobocal", "wikidata", "jikan"].includes(title.source) && title.confidence === "verified";
+		["manual", "syobocal", "wikidata", "mal", "jikan"].includes(title.source) && title.confidence === "verified";
 	const resolutionStatus = verifiedDisplayTitle ? "verified" : legacyJapaneseTitle ? "review" : "unverified";
 	const resolutionReasons = verifiedDisplayTitle
 		? []

@@ -16,6 +16,12 @@ const ATTRIBUTION_DEFINITIONS: Record<AnimeDataAttributionSource, AttributionDef
 		license_label: null,
 		license_url: null,
 	},
+	mal: {
+		source: "mal",
+		label: "MyAnimeList",
+		license_label: null,
+		license_url: null,
+	},
 	wikidata: {
 		source: "wikidata",
 		label: "Wikidata",

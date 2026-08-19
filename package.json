@@ -27,6 +27,7 @@
 		"lint:fix": "biome check . --write",
 		"format": "biome format --write .",
 		"import:jikan": "node --env-file-if-exists=.env --experimental-strip-types scripts/import-jikan-season.ts",
+		"import:mal": "node --env-file-if-exists=.env --experimental-strip-types scripts/import-mal-season.ts",
 		"import:anime-offline": "node --env-file-if-exists=.env --experimental-strip-types scripts/import-anime-offline-database.ts",
 		"import:wikidata-titles": "node --env-file-if-exists=.env --experimental-strip-types scripts/import-wikidata-anime-titles.ts",
 		"import:wikidata-studios": "node --env-file-if-exists=.env --experimental-strip-types scripts/import-wikidata-studio-names.ts",
