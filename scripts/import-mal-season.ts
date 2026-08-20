@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createClient } from "@supabase/supabase-js";
 import {
@@ -278,8 +278,11 @@ async function fetchMalAnime(malId: number, clientId: string): Promise<MalAnimeN
 	}
 }
 
+// MAL spells some names differently from Jikan (e.g. "MADHOUSE" vs
+// "Madhouse"), so dictionary lookup is case-insensitive.
 function translateNames(names: string[], dictionary: Record<string, string>): string[] {
-	return names.map((name) => dictionary[name] ?? name);
+	const lowered = new Map(Object.entries(dictionary).map(([key, value]) => [key.toLowerCase(), value]));
+	return names.map((name) => lowered.get(name.toLowerCase()) ?? name);
 }
 
 function fullDateOnly(value: string | undefined): string | undefined {
@@ -433,6 +436,13 @@ async function main() {
 	}
 
 	await saveSourceRows(supabase, rows);
+	// Clear the checkpoint so a future re-run refreshes from the live API
+	// instead of replaying this run's cached snapshots.
+	try {
+		await unlink(importCheckpointPath(options.year, options.season));
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+	}
 	console.log("Source import complete. Run the catalog resolver to publish the resolved fields.");
 }
 

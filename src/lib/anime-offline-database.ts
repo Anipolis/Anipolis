@@ -44,7 +44,7 @@ export type AnimeOfflineMappedSourceRow = {
 	title_romaji: string | null;
 	episode_count: string | null;
 	type: string | null;
-	status: "airing" | "finished" | "upcoming";
+	status: "airing" | "finished" | "upcoming" | null;
 	season: string;
 	studio: string[];
 	studio_en: string[];
@@ -84,14 +84,16 @@ export function mapAnimeOfflineType(type: string): string | null {
 	return types[type.toUpperCase()] ?? null;
 }
 
-export function mapAnimeOfflineStatus(status: string): "airing" | "finished" | "upcoming" {
+// UNKNOWN maps to null so the resolver skips the candidate instead of
+// treating a coerced "upcoming" as authoritative over MAL/Jikan.
+export function mapAnimeOfflineStatus(status: string): "airing" | "finished" | "upcoming" | null {
 	const statuses: Record<string, "airing" | "finished" | "upcoming"> = {
 		FINISHED: "finished",
 		ONGOING: "airing",
 		UPCOMING: "upcoming",
 	};
 
-	return statuses[status.toUpperCase()] ?? "upcoming";
+	return statuses[status.toUpperCase()] ?? null;
 }
 
 export function isAnimeOfflineDataset(value: unknown): value is AnimeOfflineDataset {

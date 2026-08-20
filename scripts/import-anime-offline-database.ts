@@ -21,7 +21,9 @@ type AnimeOfflineNormalizedData = {
 	title_language: null;
 	episode_count: string | null;
 	type: string | null;
-	status: "airing" | "finished" | "upcoming";
+	// Omitted entirely when the upstream status is UNKNOWN, so the resolver
+	// falls through to MAL/Jikan instead of a coerced value.
+	status?: "airing" | "finished" | "upcoming";
 	season: string;
 	studios: string[];
 	title_ja_candidates: string[];
@@ -223,7 +225,7 @@ function toNormalizedSourceData(row: AnimeImportRow, titleJaCandidates: string[]
 		title_language: null,
 		episode_count: row.episode_count,
 		type: row.type,
-		status: row.status,
+		...(row.status ? { status: row.status } : {}),
 		season: row.season,
 		studios: row.studio_en,
 		title_ja_candidates: titleJaCandidates,

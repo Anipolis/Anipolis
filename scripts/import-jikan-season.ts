@@ -153,7 +153,7 @@ type AnimeRelationImportRow = {
 type JikanNormalizedData = AnimeImportRow & {
 	title_ja: string | null;
 	studio_entities: { mal_id: number | null; name: string; url: string | null }[];
-	relations: AnimeRelationImportRow[];
+	relations?: AnimeRelationImportRow[];
 };
 
 type JikanSourceRecordInsert = {
@@ -1180,7 +1180,10 @@ function toJikanNormalizedData(row: AnimeImportRow, anime: JikanAnime | undefine
 				? row.title
 				: null,
 		studio_entities: anime ? mapStudioEntities(anime) : [],
-		relations: anime ? mapAnimeRelations(anime) : [],
+		// Omit the key when full enrichment did not run: "not fetched" must be
+		// distinguishable from "has no relations" so the resolver does not
+		// wipe existing anime_relations rows on a degraded import.
+		...(anime ? { relations: mapAnimeRelations(anime) } : {}),
 	};
 }
 
@@ -1246,7 +1249,7 @@ function dedupeAnimeRows(rows: AnimeImportRow[]) {
 
 function getSupabaseClient() {
 	const supabaseUrl = process.env["PUBLIC_SUPABASE_URL"] ?? process.env["SUPABASE_URL"];
-	const serviceRoleKey = process.env["SUPABASE_SERVICE_ROLE_KEY"] ?? process.env["SUPABASE_SECRET_KEY"];
+	const serviceRoleKey = process.env["SUPABASE_SECRET_KEY"] ?? process.env["SUPABASE_SERVICE_ROLE_KEY"];
 
 	if (!supabaseUrl || !serviceRoleKey) {
 		throw new Error(

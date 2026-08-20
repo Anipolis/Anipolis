@@ -28,6 +28,7 @@ describe("anime-offline-database helpers", () => {
 		expect(mapAnimeOfflineStatus("FINISHED")).toBe("finished");
 		expect(mapAnimeOfflineStatus("ONGOING")).toBe("airing");
 		expect(mapAnimeOfflineStatus("UPCOMING")).toBe("upcoming");
+		expect(mapAnimeOfflineStatus("UNKNOWN")).toBeNull();
 	});
 
 	it("keeps one replaceable attribution resource", () => {

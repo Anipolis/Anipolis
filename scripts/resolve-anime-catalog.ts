@@ -388,6 +388,9 @@ function readJikanRelations(records: readonly SourceRecordRow[]): Map<number, An
 			record.normalized_data !== null && typeof record.normalized_data === "object"
 				? (record.normalized_data as Record<string, unknown>)
 				: {};
+		// A record without a relations key means enrichment never ran for it;
+		// skip so we do not delete existing rows based on missing data.
+		if (!("relations" in normalized)) continue;
 		const relations = Array.isArray(normalized["relations"]) ? normalized["relations"] : [];
 		const validRelations = relations.flatMap((value) => {
 			if (value === null || typeof value !== "object" || Array.isArray(value)) return [];

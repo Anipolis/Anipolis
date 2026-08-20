@@ -463,6 +463,7 @@ async function fetchSeasonRows(supabase: ReturnType<typeof getSupabaseClient>, s
 			.in("source", [...ANIME_CATALOG_SEASON_SOURCES])
 			.filter("normalized_data->>season", "eq", season)
 			.order("mal_id", { ascending: true })
+			.order("source", { ascending: true })
 			.range(start, start + DATABASE_BATCH_SIZE - 1);
 		if (error) throw new Error(`Could not read ODbL/Jikan season records: ${error.message}`);
 		rows.push(...((data ?? []) as typeof rows));

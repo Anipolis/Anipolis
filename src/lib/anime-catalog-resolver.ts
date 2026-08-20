@@ -255,11 +255,14 @@ export function resolveAnimeCatalog(
 		{ value: `MAL ${malId}`, source: "legacy", confidence: "fallback" },
 	]);
 
+	// Imported sources contribute only positive values: a stored null means
+	// "the import did not find this", and must not shadow lower candidates.
+	// Only manual keeps null semantics (an intentional clear by an admin).
 	const titleEnglish = firstDefined<string | null>([
 		candidate(nullableStringValue(manual, "title_en"), "manual", "verified"),
-		candidate(nullableStringValue(mal, "title_en"), "mal", "source"),
-		candidate(nullableStringValue(jikan, "title_en"), "jikan", "source"),
-		candidate(nullableStringValue(wikidata, "title_en"), "wikidata", "source"),
+		candidate(stringValue(mal, "title_en"), "mal", "source"),
+		candidate(stringValue(jikan, "title_en"), "jikan", "source"),
+		candidate(stringValue(wikidata, "title_en"), "wikidata", "source"),
 		candidate(legacyRow?.title_en, "legacy", "fallback"),
 		{ value: null, source: "legacy", confidence: "fallback" },
 	]);
@@ -271,8 +274,8 @@ export function resolveAnimeCatalog(
 	);
 	const titleRomaji = firstDefined<string | null>([
 		candidate(nullableStringValue(manual, "title_romaji"), "manual", "verified"),
-		candidate(nullableStringValue(mal, "title_romaji"), "mal", "source"),
-		candidate(nullableStringValue(jikan, "title_romaji"), "jikan", "source"),
+		candidate(stringValue(mal, "title_romaji"), "mal", "source"),
+		candidate(stringValue(jikan, "title_romaji"), "jikan", "source"),
 		candidate(verifiedRomaji, "wikidata", "verified"),
 		candidate(legacyRow?.title_romaji, "legacy", "fallback"),
 		candidate(offlineTitle ?? null, "anime_offline_database", "fallback"),
@@ -283,14 +286,14 @@ export function resolveAnimeCatalog(
 			candidate(nullableStringValue(manual, key), "manual", "verified"),
 			...(preferOffline
 				? [
-						candidate(nullableStringValue(offline, key), "anime_offline_database", "source"),
-						candidate(nullableStringValue(mal, key), "mal", "source"),
-						candidate(nullableStringValue(jikan, key), "jikan", "source"),
+						candidate(stringValue(offline, key), "anime_offline_database", "source"),
+						candidate(stringValue(mal, key), "mal", "source"),
+						candidate(stringValue(jikan, key), "jikan", "source"),
 					]
 				: [
-						candidate(nullableStringValue(mal, key), "mal", "source"),
-						candidate(nullableStringValue(jikan, key), "jikan", "source"),
-						candidate(nullableStringValue(offline, key), "anime_offline_database", "source"),
+						candidate(stringValue(mal, key), "mal", "source"),
+						candidate(stringValue(jikan, key), "jikan", "source"),
+						candidate(stringValue(offline, key), "anime_offline_database", "source"),
 					]),
 			candidate(
 				legacyRow?.[key as keyof LegacyAnimeCatalogRow] as string | null | undefined,
@@ -310,8 +313,8 @@ export function resolveAnimeCatalog(
 	const resolveOfficialUrl = (key: "official_site_url" | "official_x_url") =>
 		firstDefined<string | null>([
 			candidate(nullableStringValue(manual, key), "manual", "verified"),
-			candidate(nullableStringValue(syobocal, key), "syobocal", "verified"),
-			candidate(nullableStringValue(jikan, key), "jikan", "source"),
+			candidate(stringValue(syobocal, key), "syobocal", "verified"),
+			candidate(stringValue(jikan, key), "jikan", "source"),
 			candidate(legacyRow?.[key], "legacy", "fallback"),
 			{ value: null, source: "legacy", confidence: "fallback" },
 		]);
@@ -372,8 +375,11 @@ export function resolveAnimeCatalog(
 					confidence: "verified",
 				}
 			: undefined,
-		candidate(uniqueStudioAliases(nonEmptyStringArrayValue(mal, "studio")), "mal", "source"),
+		// Japanese studio display prefers Jikan: both sides run the same EN→JA
+		// dictionary, but MAL spells names differently more often, so an
+		// untranslated MAL name must not shadow Jikan's translated one.
 		candidate(uniqueStudioAliases(nonEmptyStringArrayValue(jikan, "studio")), "jikan", "source"),
+		candidate(uniqueStudioAliases(nonEmptyStringArrayValue(mal, "studio")), "mal", "source"),
 		candidate(uniqueStudioAliases(legacyRow?.studio?.length ? legacyRow.studio : undefined), "legacy", "fallback"),
 		candidate(
 			uniqueStudioAliases(nonEmptyStringArrayValue(offline, "studios")),

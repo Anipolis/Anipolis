@@ -36,13 +36,16 @@ function normalizeChannelName(value: string): string {
 	return value.normalize("NFKC").toLocaleLowerCase().replace(/\s+/g, "");
 }
 
+// Intl.DateTimeFormat construction is expensive; reuse one instance.
+const JST_DATE_FORMATTER = new Intl.DateTimeFormat("en-CA", {
+	timeZone: "Asia/Tokyo",
+	year: "numeric",
+	month: "2-digit",
+	day: "2-digit",
+});
+
 export function jstDate(value: string | Date): string {
-	return new Intl.DateTimeFormat("en-CA", {
-		timeZone: "Asia/Tokyo",
-		year: "numeric",
-		month: "2-digit",
-		day: "2-digit",
-	}).format(typeof value === "string" ? new Date(value) : value);
+	return JST_DATE_FORMATTER.format(typeof value === "string" ? new Date(value) : value);
 }
 
 function episodeIdentity(program: SyobocalScheduleProgram): string {

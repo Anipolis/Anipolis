@@ -67,8 +67,8 @@ import {
 			<a href={WIKIDATA_MAL_COMPANY_PROPERTY_URL}>MyAnimeList company ID（P11490）</a>を組織の識別に利用します。
 		</p>
 		<p>
-			不足項目の補完と照合にはJikan
-			APIとしょぼいカレンダーを利用します。これらの生データはODbL派生カタログAPIへ混在させず、作品ページにも内部スナップショットや照合証拠を公開しません。
+			不足項目の補完と照合にはMyAnimeList公式API・Jikan
+			API・しょぼいカレンダーを利用します。MyAnimeList公式APIからは作品タイトル・話数・放送日・制作会社などの事実情報のみを取得し、あらすじ・スコア・画像は取得しません。これらの生データはODbL派生カタログAPIへ混在させず、作品ページにも内部スナップショットや照合証拠を公開しません。
 		</p>
 	</section>
 
@@ -112,6 +112,7 @@ pnpm resolve:anime-catalog -- --year 2023 --season winter --dry-run</code></pre>
 		<h2>MyAnimeListリンクについて</h2>
 		<p>
 			作品ページの「MAL」リンクは作品を参照するための外部リンクです。データセットの出典表示とは分けて表示しています。
+			出典表示に「MyAnimeList」とある項目は、MyAnimeList公式APIから取得した事実情報に基づきます。
 		</p>
 	</section>
 </main>
