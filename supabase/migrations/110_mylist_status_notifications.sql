@@ -1,5 +1,5 @@
 -- ================================================================
--- 098_mylist_status_notifications.sql
+-- 110_mylist_status_notifications.sql
 -- 通知タイプに mylist_status（フォロー中ユーザーのマイリスト
 -- ステータス変更）を追加する。
 --

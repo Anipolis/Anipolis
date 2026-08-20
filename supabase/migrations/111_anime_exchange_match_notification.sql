@@ -1,5 +1,5 @@
 -- ================================================================
--- 099_anime_exchange_match_notification.sql
+-- 111_anime_exchange_match_notification.sql
 -- 通知タイプに exchange_matched（アニメトレードのマッチ成立）を追加する。
 --
 -- トレードで「待機画面に移行していた」ユーザー（= 既存の waiting エントリの
