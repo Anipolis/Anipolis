@@ -4,6 +4,7 @@ import { page } from "$app/state";
 const backHref = $derived.by(() => {
 	const path = page.url.pathname;
 	if (path.startsWith("/settings/account")) return "/settings?section=account";
+	if (path.startsWith("/settings/invites")) return "/settings?section=account";
 	if (path.startsWith("/settings/rooms")) return "/settings?section=rooms";
 	return "/settings?section=privacy";
 });
