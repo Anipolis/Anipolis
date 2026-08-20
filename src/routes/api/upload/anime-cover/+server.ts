@@ -6,7 +6,7 @@ import { isAdminUser } from "$lib/server/queries";
 import { MULTIPART_OVERHEAD_BYTES, readFormDataWithLimit, validateImageBuffer } from "$lib/server/upload";
 import type { RequestHandler } from "./$types";
 
-const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 export const POST: RequestHandler = async ({ request, locals: { supabase, safeGetSession } }) => {
@@ -29,13 +29,13 @@ export const POST: RequestHandler = async ({ request, locals: { supabase, safeGe
 	if (animeId.length === 0) error(400, "アニメIDが指定されていません");
 	if (/[/\\:\0]/.test(animeId)) error(400, "アニメIDに無効な文字が含まれています");
 
-	if (!ALLOWED_TYPES.includes(file.type)) error(400, "対応していないファイル形式です（JPEG/PNG/WebP）");
+	if (!ALLOWED_TYPES.includes(file.type)) error(400, "対応していないファイル形式です（JPEG/PNG/WebP/AVIF）");
 	if (file.size > MAX_FILE_SIZE) error(400, "ファイルサイズが大きすぎます（最大10MB）");
 
 	// 保存する MIME・拡張子は申告値ではなくマジックバイトの判定結果を使う
 	const arrayBuffer = await file.arrayBuffer();
 	const validated = validateImageBuffer(arrayBuffer, ALLOWED_TYPES);
-	if (!validated) error(400, "対応していないファイル形式です（JPEG/PNG/WebP）");
+	if (!validated) error(400, "対応していないファイル形式です（JPEG/PNG/WebP/AVIF）");
 
 	const path = `${animeId}.${validated.ext}`;
 

@@ -1,7 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fail } from "@sveltejs/kit";
+import { validateImageBuffer } from "$lib/server/upload";
 import type { Database } from "$lib/supabase/database.types";
 import type { BroadcastOverrideKind } from "$lib/utils/broadcast-episodes";
+
+const ALLOWED_INLINE_COVER_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];
 
 type AnimeWriteResult = { success: true; animeId: string } | ReturnType<typeof fail<{ message: string }>>;
 
@@ -108,14 +111,16 @@ async function uploadInlineCover(supabase: SupabaseClient<Database>, fd: FormDat
 	let coverUrl = nullableText(fd, "cover_url") ?? fallbackCoverUrl;
 	const imageFile = fd.get("image_file");
 	if (imageFile instanceof File && imageFile.size > 0) {
-		const ext = imageFile.type === "image/webp" ? "webp" : "jpg";
-		const path = `pending_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
 		const arrayBuffer = await imageFile.arrayBuffer();
-		const { error: uploadError } = await supabase.storage
-			.from("anime-covers")
-			.upload(path, arrayBuffer, { contentType: imageFile.type, upsert: false });
-		if (!uploadError) {
-			coverUrl = supabase.storage.from("anime-covers").getPublicUrl(path).data.publicUrl;
+		const validated = validateImageBuffer(arrayBuffer, ALLOWED_INLINE_COVER_TYPES);
+		if (validated) {
+			const path = `pending_${Date.now()}_${Math.random().toString(36).slice(2)}.${validated.ext}`;
+			const { error: uploadError } = await supabase.storage
+				.from("anime-covers")
+				.upload(path, arrayBuffer, { contentType: validated.mime, upsert: false });
+			if (!uploadError) {
+				coverUrl = supabase.storage.from("anime-covers").getPublicUrl(path).data.publicUrl;
+			}
 		}
 	}
 	return coverUrl;

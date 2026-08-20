@@ -10,6 +10,7 @@ export const IMAGE_EXT_BY_MIME: Record<string, string> = {
 	"image/png": "png",
 	"image/gif": "gif",
 	"image/webp": "webp",
+	"image/avif": "avif",
 };
 
 /** 先頭バイト列から画像形式を判定する。未対応・非画像なら null */
@@ -44,6 +45,19 @@ export function sniffImageMime(bytes: Uint8Array): string | null {
 		bytes[11] === 0x50
 	) {
 		return "image/webp";
+	}
+	// AVIF: ISOBMFF box, offset 4-7 "ftyp", offset 8-11 major brand "avif"/"avis"
+	if (
+		bytes[4] === 0x66 &&
+		bytes[5] === 0x74 &&
+		bytes[6] === 0x79 &&
+		bytes[7] === 0x70 &&
+		bytes[8] === 0x61 &&
+		bytes[9] === 0x76 &&
+		bytes[10] === 0x69 &&
+		(bytes[11] === 0x66 || bytes[11] === 0x73)
+	) {
+		return "image/avif";
 	}
 	return null;
 }
