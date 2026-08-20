@@ -1,6 +1,5 @@
 import type { ServerLoad } from "@sveltejs/kit";
 import { error, redirect } from "@sveltejs/kit";
-import { markAllNotificationsRead } from "$lib/server/actions";
 import { getExtraAccounts, setExtraAccounts } from "$lib/server/multi-account";
 import {
 	getPendingReportsCount,
@@ -36,7 +35,7 @@ export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, c
 	}
 
 	// 放送通知の生成は migration 070 の pg_cron ジョブ（毎分）に移行済み
-	if (user && url.pathname === "/notifications") await markAllNotificationsRead(supabase, user.id);
+	// 通知の既読化は /notifications ページの load でタブ（カテゴリ）単位に行う
 
 	const filteredCookies = cookies.getAll().filter(({ name }) => /^sb-.+-auth-token/.test(name));
 	const storedExtraAccounts = getExtraAccounts(cookies);

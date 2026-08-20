@@ -372,6 +372,30 @@ export async function markAllNotificationsRead(supabase: SupabaseClient<Database
 	await supabase.from("notifications").update({ read: true }).eq("recipient_id", userId).eq("read", false);
 }
 
+export type NotificationCategory = "normal" | "room" | "mylist";
+
+/**
+ * 通知タブのカテゴリ単位で既読にする
+ * - room   = broadcast
+ * - mylist = mylist_status
+ * - normal = 上記以外
+ */
+export async function markCategoryNotificationsRead(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+	category: NotificationCategory,
+) {
+	const query = supabase.from("notifications").update({ read: true }).eq("recipient_id", userId).eq("read", false);
+
+	if (category === "room") {
+		await query.eq("type", "broadcast" as never);
+	} else if (category === "mylist") {
+		await query.eq("type", "mylist_status" as never);
+	} else {
+		await query.not("type", "in", "(broadcast,mylist_status)");
+	}
+}
+
 export async function updateReportStatusAction(request: Request, supabase: SupabaseClient<Database>, adminId: string) {
 	const form = await request.formData();
 	const reportId = (form.get("report_id") as string | null)?.trim() ?? "";
