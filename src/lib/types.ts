@@ -206,6 +206,17 @@ export interface AnimeResourceLink {
 	url: string;
 }
 
+export type AnimeDataAttributionSource = "anime_offline_database" | "jikan" | "mal" | "wikidata" | "syobocal";
+
+export interface AnimeDataAttribution {
+	anime_mal_id: number;
+	source: AnimeDataAttributionSource;
+	label: string;
+	source_url: string;
+	license_label: string | null;
+	license_url: string | null;
+}
+
 export interface AnimeRelation {
 	relation_type: string;
 	related_anime_mal_id: number;
@@ -251,6 +262,7 @@ export interface Anime {
 	broadcast_station: string[] | null;
 	room_type: AnimeRoomType;
 	hidden_by_admin: boolean;
+	metadata_ready: boolean;
 	created_at: string;
 	// 集計フィールド（クエリ時に付加）
 	list_count?: number;

@@ -42,4 +42,8 @@ let { trending, animeTrending = [] }: Props = $props();
 	{/if}
 </section>
 
-<a href="/privacy-policy" class="trending-panel-footer-link">プライバシーポリシー</a>
+<div class="trending-panel-footer-links">
+	<a href="/privacy-policy" class="trending-panel-footer-link">プライバシーポリシー</a>
+	<span aria-hidden="true">·</span>
+	<a href="/data-sources" class="trending-panel-footer-link">データ出典</a>
+</div>

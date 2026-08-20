@@ -1,9 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { computeBroadcastStatus } from "$lib/broadcast-status";
 import { toValidExchangeSubjectiveTags } from "$lib/exchange-tags";
 import { buildPostCardSelect } from "$lib/server/post-selects";
 import type { Database } from "$lib/supabase/database.types";
 import type {
 	Anime,
+	AnimeDataAttribution,
 	AnimeExchangeItem,
 	AnimeExchangeShare,
 	AnimeMute,
@@ -1502,6 +1504,7 @@ const ANIME_LIST_BASE_COLUMN_NAMES = [
 	"aired_to",
 	"room_type",
 	"hidden_by_admin",
+	"metadata_ready",
 ];
 
 /** ベーステーブル（anime）用 — computed_broadcast_status はビューにしかない */
@@ -1511,7 +1514,6 @@ const ANIME_LIST_COLUMNS = [...ANIME_LIST_BASE_COLUMN_NAMES, "computed_broadcast
 /** applyAnimeListFilters が扱う共有フィルター条件 */
 interface AnimeFilterInput {
 	season?: string | undefined;
-	broadcastYear?: string | undefined;
 	broadcastSeason?: string | undefined;
 	broadcastSeasons?: string[] | undefined;
 	scheduleRange?: { start: string; end: string } | undefined;
@@ -1527,7 +1529,7 @@ interface AnimeFilterInput {
 
 /** PostgREST クエリビルダーが持つ、フィルター適用に必要なメソッド群 */
 interface AnimeFilterQuery<T> {
-	eq(column: string, value: string): T;
+	eq(column: string, value: string | boolean): T;
 	or(filters: string): T;
 	in(column: string, values: (string | number)[]): T;
 	not(column: string, operator: string, value: null): T;
@@ -1547,11 +1549,10 @@ function applyAnimeListFilters<T extends AnimeFilterQuery<T>>(
 	seasonFilter: string | null,
 ): T {
 	const selectedGenres = normalizeGenreFilters(filters.genres ?? filters.genre);
-	let q = query;
+	let q = query.eq("metadata_ready", true);
 	if (filters.listedAnimeIds) q = q.in("id", filters.listedAnimeIds);
 	if (filters.season) q = q.eq("season", filters.season);
 	if (seasonFilter) q = q.or(seasonFilter);
-	if (filters.broadcastYear) q = applyAiredYearFilter(q, filters.broadcastYear);
 	if (filters.scheduleRange) {
 		q = q
 			.not("broadcast_day", "is", null)
@@ -1596,7 +1597,10 @@ export async function getAnimeList(
 	const listedAnimeIds = listedByUserId ? await getListedAnimeIds(supabase, listedByUserId) : null;
 	if (listedAnimeIds && listedAnimeIds.length === 0) return [];
 
-	const seasonFilter = buildSeasonFilter(undefined, broadcastSeasons?.length ? broadcastSeasons : broadcastSeason);
+	const seasonFilter = buildSeasonFilter(
+		broadcastYear,
+		broadcastSeasons?.length ? broadcastSeasons : broadcastSeason,
+	);
 	const query = applyAnimeListFilters(
 		supabase
 			.from("anime_with_computed_broadcast_status")
@@ -1605,7 +1609,6 @@ export async function getAnimeList(
 			.limit(limit),
 		{
 			season,
-			broadcastYear,
 			broadcastSeason,
 			broadcastSeasons,
 			scheduleRange,
@@ -1736,12 +1739,11 @@ export async function getAnimeListPage(
 	if (listedAnimeIds && listedAnimeIds.length === 0) return { items: [], total: 0 };
 
 	const seasonFilter = buildSeasonFilter(
-		undefined,
+		options.broadcastYear,
 		options.broadcastSeasons?.length ? options.broadcastSeasons : options.broadcastSeason,
 	);
 	const filters: AnimeFilterInput = {
 		season: options.season,
-		broadcastYear: options.broadcastYear,
 		broadcastSeason: options.broadcastSeason,
 		broadcastSeasons: options.broadcastSeasons,
 		scheduleRange: options.scheduleRange,
@@ -1819,11 +1821,16 @@ export async function getAnimeCount(
 	} = options;
 	const selectedGenres = normalizeGenreFilters(genres ?? genre);
 
-	let q = supabase.from("anime_with_computed_broadcast_status").select("id", { count: "exact", head: true });
+	let q = supabase
+		.from("anime_with_computed_broadcast_status")
+		.select("id", { count: "exact", head: true })
+		.eq("metadata_ready", true);
 
-	const seasonFilter = buildSeasonFilter(undefined, broadcastSeasons?.length ? broadcastSeasons : broadcastSeason);
+	const seasonFilter = buildSeasonFilter(
+		broadcastYear,
+		broadcastSeasons?.length ? broadcastSeasons : broadcastSeason,
+	);
 	if (seasonFilter) q = q.or(seasonFilter);
-	if (broadcastYear) q = applyAiredYearFilter(q, broadcastYear);
 	if (selectedGenres.length) q = q.or(buildGenreFilter(selectedGenres));
 	if (studio) q = q.or(arrayContainsAny(["studio", "studio_en"], studio));
 	if (producer) q = q.contains("producer", [producer]);
@@ -1833,9 +1840,8 @@ export async function getAnimeCount(
 	const { count, error } = await q;
 
 	if (error || count === null) {
-		let fallback = supabase.from("anime").select("id", { count: "exact", head: true });
+		let fallback = supabase.from("anime").select("id", { count: "exact", head: true }).eq("metadata_ready", true);
 		if (seasonFilter) fallback = fallback.or(seasonFilter);
-		if (broadcastYear) fallback = applyAiredYearFilter(fallback, broadcastYear);
 		if (selectedGenres.length) fallback = fallback.or(buildGenreFilter(selectedGenres));
 		if (studio) fallback = fallback.or(arrayContainsAny(["studio", "studio_en"], studio));
 		if (producer) fallback = fallback.contains("producer", [producer]);
@@ -1854,30 +1860,19 @@ async function getAnimeListRowsFromBaseTable(
 	seasonFilter: string | null,
 	listedAnimeIds: number[] | null = null,
 ): Promise<Record<string, unknown>[]> {
-	const {
-		season,
-		broadcastYear,
-		scheduleRange,
-		genre,
-		genres,
-		studio,
-		producer,
-		source,
-		limit = 20,
-		query: searchQuery,
-	} = options;
+	const { season, scheduleRange, genre, genres, studio, producer, source, limit = 20, query: searchQuery } = options;
 	const selectedGenres = normalizeGenreFilters(genres ?? genre);
 
 	let query = supabase
 		.from("anime")
 		.select(ANIME_LIST_BASE_COLUMNS)
+		.eq("metadata_ready", true)
 		.order("created_at", { ascending: false })
 		.limit(limit);
 
 	if (listedAnimeIds) query = query.in("id", listedAnimeIds);
 	if (season) query = query.eq("season", season);
 	if (seasonFilter) query = query.or(seasonFilter);
-	if (broadcastYear) query = applyAiredYearFilter(query, broadcastYear);
 	if (scheduleRange) {
 		query = query
 			.not("broadcast_day", "is", null)
@@ -1894,7 +1889,7 @@ async function getAnimeListRowsFromBaseTable(
 	return (data ?? []) as unknown as Record<string, unknown>[];
 }
 
-function buildSeasonFilter(year: string | undefined, seasons: string | string[] | undefined): string | null {
+export function buildSeasonFilter(year: string | undefined, seasons: string | string[] | undefined): string | null {
 	// 年は4桁数字のみ受け付ける（.or() 文字列への注入を防ぐ）
 	const trimmedYear = year?.trim();
 	const normalizedYear = trimmedYear && /^\d{4}$/.test(trimmedYear) ? trimmedYear : undefined;
@@ -1952,14 +1947,6 @@ function buildGenreFilter(genres: string[]): string {
 function normalizeGenreFilters(value: string | string[] | undefined): string[] {
 	const rawGenres = Array.isArray(value) ? value : (value ?? "").split(",");
 	return [...new Set(rawGenres.map((genre) => genre.trim()).filter(Boolean))];
-}
-
-function applyAiredYearFilter<
-	T extends { gte: (column: string, value: string) => T; lt: (column: string, value: string) => T },
->(query: T, year: string): T {
-	const normalizedYear = /^\d{4}$/.test(year.trim()) ? Number(year) : null;
-	if (normalizedYear === null) return query;
-	return query.gte("aired_from", `${normalizedYear}-01-01`).lt("aired_from", `${normalizedYear + 1}-01-01`);
 }
 
 function countGenreMatches(anime: Anime, selectedGenres: string[]): number {
@@ -2143,6 +2130,22 @@ export async function getAnime(
 	}
 
 	return anime;
+}
+
+export async function getAnimeDataAttributions(
+	supabase: SupabaseClient<Database>,
+	malId: number | null,
+): Promise<AnimeDataAttribution[]> {
+	if (malId == null) return [];
+
+	const { data, error } = await supabase
+		.from("anime_data_attributions" as never)
+		.select("anime_mal_id, source, label, source_url, license_label, license_url")
+		.eq("anime_mal_id", malId)
+		.order("source", { ascending: true });
+
+	if (error || !data) return [];
+	return data as unknown as AnimeDataAttribution[];
 }
 
 export async function getAnimeRelations(
@@ -2642,6 +2645,7 @@ function toAnime(raw: Record<string, unknown>): Anime {
 		broadcast_station: (raw["broadcast_station"] as string[] | null) ?? null,
 		room_type: raw["room_type"] === "global" ? "global" : "episode",
 		hidden_by_admin: raw["hidden_by_admin"] === true,
+		metadata_ready: raw["metadata_ready"] !== false,
 		created_at: String(raw["created_at"]),
 	};
 }
@@ -2722,10 +2726,17 @@ async function fetchAnimesByIds(supabase: SupabaseClient<Database>, ids: string[
 	const { data, error } = await supabase
 		.from("anime_with_computed_broadcast_status")
 		.select(ANIME_LIST_COLUMNS)
+		.eq("metadata_ready", true)
 		.in("id", ids.map(Number));
 	const rows =
 		error || !data
-			? (await supabase.from("anime").select(ANIME_LIST_BASE_COLUMNS).in("id", ids.map(Number))).data
+			? (
+					await supabase
+						.from("anime")
+						.select(ANIME_LIST_BASE_COLUMNS)
+						.eq("metadata_ready", true)
+						.in("id", ids.map(Number))
+				).data
 			: data;
 	if (!rows) return [];
 	const map = new Map((rows as unknown as Record<string, unknown>[]).map((a) => [String(a["id"]), toAnime(a)]));
@@ -2765,19 +2776,12 @@ function toBroadcastStatus(raw: Record<string, unknown>): BroadcastStatus {
 		return computed;
 	}
 
-	const today = new Date();
-	const jstToday = new Date(today.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
-	const airedFrom = typeof raw["aired_from"] === "string" ? raw["aired_from"].slice(0, 10) : null;
-	const airedTo = typeof raw["aired_to"] === "string" ? raw["aired_to"].slice(0, 10) : null;
-	const rawType = typeof raw["type"] === "string" ? raw["type"] : null;
-	const normalizedType = rawType?.toLowerCase().replace(/[^a-z0-9]/g, "") ?? "";
-	const isFiniteReleaseType = ["movie", "ona", "ova", "tvspecial", "special"].includes(normalizedType);
-
-	if (airedFrom && airedFrom > jstToday) return "upcoming";
-	if (airedTo && airedTo < jstToday) return "finished";
-	if (airedFrom && airedFrom <= jstToday && !airedTo && isFiniteReleaseType) return "finished";
-	if (airedFrom && airedFrom <= jstToday && (!airedTo || airedTo >= jstToday)) return "airing";
-	return "unknown";
+	return computeBroadcastStatus({
+		airedFrom: typeof raw["aired_from"] === "string" ? raw["aired_from"] : null,
+		airedTo: typeof raw["aired_to"] === "string" ? raw["aired_to"] : null,
+		type: typeof raw["type"] === "string" ? raw["type"] : null,
+		status: typeof raw["status"] === "string" ? raw["status"] : null,
+	});
 }
 
 export async function getBroadcastSubscriptions(supabase: SupabaseClient<Database>, userId: string): Promise<string[]> {
@@ -2814,6 +2818,34 @@ export async function getBroadcastRoomSession(
 		return null;
 	}
 	return (data?.[0] as BroadcastRoomSession | undefined) ?? null;
+}
+
+export async function getBroadcastRoomScheduleSnapshotsForAnime(
+	supabase: SupabaseClient<Database>,
+	animeId: number,
+): Promise<import("$lib/utils/broadcast-episodes").BroadcastEpisodeSlot[]> {
+	// biome-ignore lint/suspicious/noExplicitAny: migration 104 columns are not in generated types until applied
+	const reader = supabase as SupabaseClient<any>;
+	const { data, error } = await reader
+		.from("broadcast_room_sessions")
+		.select("room_date,episode_number,episode_title,posting_opens_at")
+		.eq("anime_id", animeId)
+		.eq("room_kind", "episode")
+		.lte("posting_opens_at", new Date().toISOString())
+		.order("room_date", { ascending: true });
+	if (error) {
+		console.error("getBroadcastRoomScheduleSnapshotsForAnime failed:", error);
+		return [];
+	}
+	return (data ?? []).map((row: Record<string, unknown>) => {
+		const episodeNumber = typeof row["episode_number"] === "number" ? row["episode_number"] : null;
+		return {
+			date: String(row["room_date"] ?? "").slice(0, 10),
+			start: episodeNumber,
+			end: episodeNumber,
+			label: typeof row["episode_title"] === "string" ? row["episode_title"] : null,
+		};
+	});
 }
 
 export async function getGlobalAnimeLobbySession(
@@ -3104,10 +3136,12 @@ export async function getOpenBroadcastRoomSessions(
 	options?: { kind?: "episode" | "global" },
 ): Promise<OpenBroadcastRoomSummary[]> {
 	const now = new Date().toISOString();
-	let query = supabase
+	// biome-ignore lint/suspicious/noExplicitAny: migration 104 columns are not in generated types until applied
+	const sessionReader = supabase as SupabaseClient<any>;
+	let query = sessionReader
 		.from("broadcast_room_sessions")
 		.select(
-			"id, anime_id, room_date, room_kind, room_key, scheduled_at, anime:anime!broadcast_room_sessions_anime_id_fkey ( id, title, cover_url, aired_from, aired_to, broadcast_day )",
+			"id, anime_id, room_date, room_kind, room_key, scheduled_at, schedule_source, anime:anime!broadcast_room_sessions_anime_id_fkey ( id, title, cover_url, aired_from, aired_to, broadcast_day )",
 		)
 		.lte("posting_opens_at", now)
 		.gte("posting_closes_at", now)
@@ -3118,7 +3152,17 @@ export async function getOpenBroadcastRoomSessions(
 		console.error("getOpenBroadcastRoomSessions failed:", error);
 		return [];
 	}
-	const rows = data ?? [];
+	type RawOpenBroadcastRoomRow = {
+		id: string;
+		anime_id: number;
+		room_date: string;
+		room_kind: "episode" | "global";
+		room_key: string;
+		scheduled_at: string;
+		schedule_source: string | null;
+		anime: unknown;
+	};
+	const rows = (data ?? []) as RawOpenBroadcastRoomRow[];
 	const episodeRows = rows.filter((row) => row.room_kind === "episode");
 	const overrideBySessionKey = new Map<string, { is_cancelled: boolean | null }>();
 	let overrideLookupFailed = false;
@@ -3161,13 +3205,14 @@ export async function getOpenBroadcastRoomSessions(
 			if (row.room_kind !== "episode") return true;
 			const anime = rawAnimeForRow(row.anime);
 			if (!anime) return false;
+			const override = overrideBySessionKey.get(`${row.anime_id}:${row.room_date.slice(0, 10)}`);
+			if (override?.is_cancelled) return false;
+			if (row.schedule_source === "syobocal") return true;
 			if (overrideLookupFailed) {
 				// override取得の一時失敗でエピソードルームを全滅させない(fail-open)。
 				// 中止判定はできないため、通常スケジュール判定のみで表示する。
 				return animeIsScheduledForRoomDate(anime, row.room_date, false);
 			}
-			const override = overrideBySessionKey.get(`${row.anime_id}:${row.room_date.slice(0, 10)}`);
-			if (override?.is_cancelled) return false;
 			return animeIsScheduledForRoomDate(anime, row.room_date, override != null);
 		})
 		.map((row) => {

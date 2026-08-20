@@ -1,3 +1,6 @@
 {
-	"extends": ["@tsconfig/svelte/tsconfig.json", "@tsconfig/strictest/tsconfig.json", "./.svelte-kit/tsconfig.json"]
+	"extends": ["@tsconfig/svelte/tsconfig.json", "@tsconfig/strictest/tsconfig.json", "./.svelte-kit/tsconfig.json"],
+	"compilerOptions": {
+		"allowImportingTsExtensions": true
+	}
 }
