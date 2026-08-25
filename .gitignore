@@ -20,6 +20,7 @@ coverage/
 .jikan-import-cache/
 .mal-import-cache/
 .copyright-cache/
+.x-cache/
 scripts/local/
 
 # Syoboi Calendar importer snapshots
