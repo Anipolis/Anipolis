@@ -26,8 +26,10 @@ import { jstBroadcastTimeLabel } from "$lib/syobocal-schedule";
 import type { Anime, BroadcastNotificationSettings, BroadcastRoomOverride, Event } from "$lib/types";
 import { formatBroadcastOverrideAnnouncement } from "$lib/utils/broadcast-episodes";
 import {
+	animeIsScheduledForRoomDate,
 	broadcastTimeSortValue,
 	effectiveBroadcastTime,
+	isEligibleForRoomLog,
 	overrideForRoomDate,
 	roomDateKey,
 } from "$lib/utils/broadcast-room";
@@ -111,15 +113,25 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		end: toDateInputValue(addDays(weekStart, 6)),
 	};
 
-	// しょぼい絶対: 掲載対象は「同期済みセッションがある」か「オーバーライドがある」作品のみ
-	const [sessions, overrideAnimeIdsInRange] = await Promise.all([
+	// しょぼい絶対: 今日以降の掲載対象は「同期済みセッションがある」か「オーバーライド
+	// がある」作品のみ。過去日はしょぼい番組データが残らないため、ルームページの
+	// 合成表示と同じルール（対象シーズン+曜日・放送期間）で履歴として掲載する。
+	const todayKey = toDateInputValue(new Date());
+	const hasPastDays = scheduleRange.start < todayKey;
+	const [sessions, overrideAnimeIdsInRange, pastFillList] = await Promise.all([
 		getScheduleBroadcastSessionsInRange(supabase, scheduleRange.start, scheduleRange.end),
 		getOverrideAnimeIdsInRange(supabase, scheduleRange.start, scheduleRange.end),
+		hasPastDays
+			? getAnimeList(supabase, { scheduleRange, limit: 1000, userId: user?.id ?? null })
+			: Promise.resolve([] as Anime[]),
 	]);
-	const scheduleAnimeIds = [...new Set([...sessions.map((session) => session.anime_id), ...overrideAnimeIdsInRange])];
+	const pastFillIds = pastFillList.map((anime) => Number(anime.id));
+	const scheduleAnimeIds = [
+		...new Set([...sessions.map((session) => session.anime_id), ...overrideAnimeIdsInRange]),
+	].filter((id) => !pastFillIds.includes(id));
 
 	const [
-		animeList,
+		sessionAnimeList,
 		events,
 		subscriptions,
 		notificationSettings,
@@ -147,6 +159,15 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		user ? getMutedEventIds(supabase, user.id) : Promise.resolve(new Set<string>()),
 		user ? getEventNotificationSubscriptions(supabase, user.id) : Promise.resolve([] as string[]),
 	]);
+
+	// セッション/オーバーライド由来と過去日補完の作品リストを統合
+	const animeList: Anime[] = [...pastFillList];
+	{
+		const known = new Set(animeList.map((anime) => anime.id));
+		for (const anime of sessionAnimeList) {
+			if (!known.has(anime.id)) animeList.push(anime);
+		}
+	}
 
 	const broadcastOverrides = await getBroadcastRoomOverridesForAnimeIds(
 		supabase,
@@ -186,6 +207,24 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 			broadcast_day: new Date(`${session.room_date}T00:00:00`).getDay(),
 			broadcast_time: jstBroadcastTimeLabel(session.scheduled_at) ?? anime.broadcast_time,
 		});
+	}
+
+	// 過去日の履歴掲載: しょぼいの番組データは過去に遡れないため、セッションが
+	// 残っていない過去日はルームページの合成表示と同じルール（対象シーズン+
+	// 曜日・放送期間ゲート）で補完する。今日以降はしょぼい絶対のまま。
+	for (const day of days) {
+		if (day.date >= todayKey) continue;
+		for (const anime of pastFillList) {
+			if (anime.room_type === "global") continue;
+			if (!isEligibleForRoomLog(anime.season)) continue;
+			if (!animeIsScheduledForRoomDate(anime, day.date, false)) continue;
+			const override = overrideForRoomDate(broadcastOverrides[anime.id], day.date);
+			if (override?.is_cancelled) {
+				pushAnnouncement(day, anime, override, broadcastOverrides);
+				continue;
+			}
+			if (!day.anime.some((scheduledAnime) => scheduledAnime.id === anime.id)) day.anime.push(anime);
+		}
 	}
 
 	// 管理者オーバーライド: 休止は告知、それ以外はセッション未生成でも掲載する
