@@ -20,7 +20,7 @@ import {
 } from "$lib/server/room-experiments";
 import type { Anime, BroadcastRoomOverride, BroadcastRoomSession } from "$lib/types";
 import { calcEpisodeNumberFromDate } from "$lib/types";
-import { animeIsScheduledForRoomDate, broadcastTimeMinutes } from "$lib/utils/broadcast-room";
+import { animeIsScheduledForRoomDate, broadcastTimeMinutes, isEligibleForRoomLog } from "$lib/utils/broadcast-room";
 import type { Actions, PageServerLoad } from "./$types";
 
 // 過去ルームの表示専用セッション。かつては閲覧時にフォールバックがセッション行を
@@ -100,6 +100,10 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 	// 曜日ゲートは実セッションが無い場合の合成時にだけ適用する。
 	let session = await getBroadcastRoomSession(supabase, anime.id, params.date);
 	if (!session) {
+		// ルーム対象外シーズン（2026-winter以前）は閉場済みルームも生成しない
+		if (!isEligibleForRoomLog(anime.season)) {
+			throw error(404, "放送ルームが見つかりません");
+		}
 		if (!animeIsScheduledForRoomDate(anime, params.date, override != null)) {
 			throw error(404, "放送ルームが見つかりません");
 		}

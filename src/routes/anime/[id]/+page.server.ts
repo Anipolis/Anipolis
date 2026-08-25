@@ -12,17 +12,8 @@ import {
 	isAdminUser,
 } from "$lib/server/queries";
 import { normalizedBroadcastEpisodeLabel } from "$lib/utils/broadcast-episodes";
-import { roomDateKey } from "$lib/utils/broadcast-room";
+import { isEligibleForRoomLog, roomDateKey } from "$lib/utils/broadcast-room";
 import type { Actions, PageServerLoad } from "./$types";
-
-function isEligibleForRoomLog(season: string | null): boolean {
-	if (!season) return false;
-	const parts = season.split("-");
-	const y = parseInt(parts[0] ?? "", 10);
-	const name = parts[1];
-	if (y > 2026) return true;
-	return y === 2026 && name !== "winter";
-}
 
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
