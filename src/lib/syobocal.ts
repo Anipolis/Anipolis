@@ -174,6 +174,8 @@ export function syobocalTypeConflicts(
 ): boolean {
 	if (!mediaType || category === null || category === undefined) return false;
 	const tvAnime = SYOBOCAL_TV_ANIME_CATEGORIES.has(category);
+	// "TV" × 映画カテゴリ(8)は意図的に許可: 劇場先行上映の作品はしょぼい側で
+	// cat 8 のTIDにTV放送も記録される（例: シャニマス1st/2nd season）。
 	if (mediaType === "TV") return !tvAnime && category !== 8;
 	if (mediaType === "Movie") return tvAnime || category === 7;
 	if (mediaType === "OVA") return tvAnime || category === 8;
@@ -279,8 +281,10 @@ export function matchSyobocalTitlesExactly(
 
 // Second-tier matcher for pairs the normalized-title matcher cannot see:
 // script differences (アトリ ⇔ ATRI via TitleYomi, シェンムー ⇔ Shenmue via the
-// Latin fold). Stricter than the exact matcher: both sides must carry premiere
-// dates within three months, and the pairing must be unique in both directions.
+// Latin fold). Compared with the exact matcher this REQUIRES premiere dates on
+// both sides, unique pairing in both directions, and a media-type check — but
+// its date window is wider (three months instead of one) to absorb
+// theatrical-advance and delayed-broadcast gaps.
 export function matchSyobocalTitlesByReading(
 	catalog: readonly SyobocalTitleMatchCandidate[],
 	titles: readonly SyobocalTitleForMatching[],

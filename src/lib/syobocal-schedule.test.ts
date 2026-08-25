@@ -124,6 +124,30 @@ describe("selectPrimarySyobocalPrograms", () => {
 		expect(selected[0]).toMatchObject({ pid: 4, channelName: "サンテレビ" });
 	});
 
+	it("breaks exact same-time ties with the title's home channel", () => {
+		const base = {
+			tid: 10,
+			endsAt: "2026-07-01T15:00:00.000Z",
+			episodeNumber: 1,
+			subtitle: null,
+			deleted: false,
+		};
+		const selected = selectPrimarySyobocalPrograms(
+			[{ malId: 1, tid: 10, validFrom: null, validTo: null }],
+			[{ tid: 10, firstChannel: "TOKYO MX" }],
+			[
+				{ chid: 1, name: "サンテレビ", epgName: null, channelGroupId: 8 },
+				{ chid: 2, name: "TOKYO MX", epgName: null, channelGroupId: 1 },
+			],
+			[
+				{ ...base, pid: 1, chid: 1, startsAt: "2026-07-01T14:00:00.000Z" },
+				{ ...base, pid: 2, chid: 2, startsAt: "2026-07-01T14:00:00.000Z" },
+			],
+		);
+		expect(selected).toHaveLength(1);
+		expect(selected[0]).toMatchObject({ pid: 2, channelName: "TOKYO MX" });
+	});
+
 	it("falls back to BS when a title has no terrestrial airing", () => {
 		const selected = selectPrimarySyobocalPrograms(
 			[{ malId: 1, tid: 10, validFrom: null, validTo: null }],

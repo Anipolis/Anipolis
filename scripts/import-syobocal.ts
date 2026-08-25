@@ -13,6 +13,8 @@ import {
 	findSyobocalOfficialXUrl,
 	findSyobocalWikipediaArticleLinks,
 	findSyobocalWikipediaKeywordLinks,
+	kanaFoldTitle,
+	latinFoldTitle,
 	matchSyobocalTitlesByReading,
 	matchSyobocalTitlesExactly,
 	normalizeSyobocalTitle,
@@ -1036,21 +1038,36 @@ function buildMappings(
 	});
 
 	// Reading/Latin second-tier matches: only for MAL entries and TIDs that no
-	// higher-confidence proposal already claims.
-	const claimedMalIds = new Set(
-		[...exactProposals, ...wikipediaProposals, ...wikidataProposals, ...existingManual, ...fileManual].map(
-			(proposal) => proposal.malId,
-		),
-	);
-	const claimedTids = new Set(
-		[...exactProposals, ...wikipediaProposals, ...wikidataProposals, ...existingManual, ...fileManual].map(
-			(proposal) => proposal.tid,
-		),
-	);
+	// higher-confidence proposal already claims. Proposals whose TID is missing
+	// from the title snapshot never reach `selected`, so they must not block a
+	// reading match for the same MAL entry.
+	const effectiveSeeds = [
+		...exactProposals,
+		...wikipediaProposals,
+		...wikidataProposals,
+		...existingManual,
+		...fileManual,
+	].filter((proposal) => titlesByTid.has(proposal.tid));
+	const claimedMalIds = new Set(effectiveSeeds.map((proposal) => proposal.malId));
+	const claimedTids = new Set(effectiveSeeds.map((proposal) => proposal.tid));
+	// The evidence must name the candidate title that actually matched; a MAL id
+	// can carry several title candidates (ODbL synonyms), so resolve via the
+	// match key instead of the last-one-wins candidatesByMal map.
+	const candidateMatchKeys = (candidate: CatalogCandidate): Set<string> => {
+		const keys = new Set<string>();
+		const kana = kanaFoldTitle(candidate.title);
+		if (kana.length >= 3) keys.add(`kana:${kana}`);
+		const latin = latinFoldTitle(candidate.title);
+		if (latin) keys.add(`latin:${latin}`);
+		return keys;
+	};
 	const readingProposals: MappingProposal[] = matchSyobocalTitlesByReading(candidates, matchingTitles).flatMap(
 		(match) => {
 			if (claimedMalIds.has(match.malId) || claimedTids.has(match.tid)) return [];
-			const candidate = candidatesByMal.get(match.malId);
+			const candidate =
+				candidates.find(
+					(value) => value.malId === match.malId && candidateMatchKeys(value).has(match.matchKey),
+				) ?? candidatesByMal.get(match.malId);
 			const title = titlesByTid.get(match.tid);
 			return [
 				{
