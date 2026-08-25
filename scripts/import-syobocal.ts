@@ -12,6 +12,7 @@ import {
 	findSyobocalOfficialXUrl,
 	findSyobocalWikipediaArticleLinks,
 	findSyobocalWikipediaKeywordLinks,
+	matchSyobocalTitlesByReading,
 	matchSyobocalTitlesExactly,
 	normalizeSyobocalTitle,
 	parseSyobocalLinks,
@@ -21,7 +22,12 @@ import { jstDate, rollingSyobocalProgramRange, selectPrimarySyobocalPrograms } f
 
 type SeasonName = "winter" | "spring" | "summer" | "fall";
 type SourceName = AnimeCatalogSeasonSource | "manual" | "wikidata" | "syobocal";
-type MatchMethod = "manual" | "wikidata_property" | "wikipedia_wikidata" | "normalized_title_exact";
+type MatchMethod =
+	| "manual"
+	| "wikidata_property"
+	| "wikipedia_wikidata"
+	| "normalized_title_exact"
+	| "reading_title_exact";
 
 type Options = {
 	year: number;
@@ -44,6 +50,7 @@ type CatalogCandidate = {
 	firstMonth: number | null;
 	validFrom: string | null;
 	validTo: string | null;
+	mediaType: string | null;
 };
 
 type SyobocalTitle = {
@@ -515,17 +522,28 @@ function catalogCandidates(records: SourceRecord[], malIds: number[], fallbackYe
 		const sources = byMal.get(malId) ?? new Map();
 		const manual = sources.get("manual") ?? {};
 		const wikidata = sources.get("wikidata") ?? {};
+		const mal = sources.get("mal") ?? {};
 		const jikan = sources.get("jikan") ?? {};
 		const offline = sources.get("anime_offline_database") ?? {};
 		const jikanTitle =
 			stringValue(jikan, "title_ja") ??
 			(containsJapaneseScript(stringValue(jikan, "title") ?? "") ? stringValue(jikan, "title") : null);
 		const offlineTitle = stringValue(offline, "title");
-		const verifiedTitle = stringValue(manual, "title") ?? stringValue(wikidata, "title_ja") ?? jikanTitle;
+		const verifiedTitle =
+			stringValue(manual, "title") ??
+			stringValue(wikidata, "title_ja") ??
+			stringValue(mal, "title_ja") ??
+			jikanTitle;
 		const airedFrom =
-			stringValue(manual, "aired_from") ?? stringValue(jikan, "aired_from") ?? stringValue(offline, "aired_from");
+			stringValue(manual, "aired_from") ??
+			stringValue(mal, "aired_from") ??
+			stringValue(jikan, "aired_from") ??
+			stringValue(offline, "aired_from");
 		const airedTo =
-			stringValue(manual, "aired_to") ?? stringValue(jikan, "aired_to") ?? stringValue(offline, "aired_to");
+			stringValue(manual, "aired_to") ??
+			stringValue(mal, "aired_to") ??
+			stringValue(jikan, "aired_to") ??
+			stringValue(offline, "aired_to");
 		const date = airedFrom?.match(/^(\d{4})-(\d{2})/);
 		const base = {
 			malId,
@@ -533,6 +551,7 @@ function catalogCandidates(records: SourceRecord[], malIds: number[], fallbackYe
 			firstMonth: date ? Number.parseInt(date[2] ?? "", 10) : null,
 			validFrom: dateOnly(airedFrom),
 			validTo: dateOnly(airedTo),
+			mediaType: stringValue(mal, "type") ?? stringValue(jikan, "type") ?? null,
 		};
 		if (verifiedTitle && containsJapaneseScript(verifiedTitle)) {
 			return [{ ...base, title: verifiedTitle, titleBasis: "verified_source" as const }];
@@ -943,8 +962,52 @@ function buildMappings(
 		];
 	});
 
+	// Reading/Latin second-tier matches: only for MAL entries and TIDs that no
+	// higher-confidence proposal already claims.
+	const claimedMalIds = new Set(
+		[...exactProposals, ...wikipediaProposals, ...wikidataProposals, ...existingManual, ...fileManual].map(
+			(proposal) => proposal.malId,
+		),
+	);
+	const claimedTids = new Set(
+		[...exactProposals, ...wikipediaProposals, ...wikidataProposals, ...existingManual, ...fileManual].map(
+			(proposal) => proposal.tid,
+		),
+	);
+	const readingProposals: MappingProposal[] = matchSyobocalTitlesByReading(candidates, matchingTitles).flatMap(
+		(match) => {
+			if (claimedMalIds.has(match.malId) || claimedTids.has(match.tid)) return [];
+			const candidate = candidatesByMal.get(match.malId);
+			const title = titlesByTid.get(match.tid);
+			return [
+				{
+					malId: match.malId,
+					tid: match.tid,
+					method: "reading_title_exact" as const,
+					selectionPriority: 0.9,
+					useForTitle: true,
+					validFrom: candidate?.validFrom ?? null,
+					validTo: candidate?.validTo ?? null,
+					evidence: {
+						match_key: match.matchKey,
+						catalog_title: candidate?.title,
+						catalog_title_basis: candidate?.titleBasis,
+						syobocal_title: title?.title,
+						syobocal_title_yomi: title?.titleYomi,
+					},
+					sourceUrl: `https://cal.syoboi.jp/tid/${match.tid}`,
+					sourceVersion: title?.lastUpdate ?? null,
+				},
+			];
+		},
+	);
+	if (readingProposals.length > 0) {
+		console.log(`Reading/Latin title matching added ${readingProposals.length} proposals.`);
+	}
+
 	const proposals = [
 		...exactProposals,
+		...readingProposals,
 		...wikipediaProposals,
 		...wikidataProposals,
 		...existingManual,
