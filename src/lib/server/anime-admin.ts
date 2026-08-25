@@ -169,6 +169,8 @@ async function buildAnimePayload(supabase: SupabaseClient<Database>, fd: FormDat
 		broadcast_duration_minutes: broadcastDurationMinutes,
 		broadcast_station: parseBroadcastStations(fd),
 		room_type: parseRoomType(fd),
+		// 管理画面からの保存は明示操作: 総合ロビー自動判定の対象から外す
+		room_type_source: "manual",
 	};
 }
 

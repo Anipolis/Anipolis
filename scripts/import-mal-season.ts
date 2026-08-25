@@ -26,6 +26,7 @@ const MAL_FIELDS = [
 	"media_type",
 	"status",
 	"num_episodes",
+	"average_episode_duration",
 	"start_season",
 	"broadcast",
 	"source",
@@ -66,6 +67,7 @@ type MalAnimeNode = {
 	media_type?: string;
 	status?: string;
 	num_episodes?: number;
+	average_episode_duration?: number;
 	start_season?: { year?: number; season?: string };
 	broadcast?: { day_of_the_week?: string; start_time?: string };
 	source?: string;
@@ -82,6 +84,8 @@ type MalNormalizedData = {
 	title_en?: string;
 	title_romaji?: string;
 	episode_count?: string;
+	/** 1話あたりの実尺（分）。総合ロビー自動判定のソース。 */
+	episode_duration_minutes?: number;
 	type?: string;
 	source?: string;
 	aired_from?: string;
@@ -327,6 +331,9 @@ function mapMalAnime(anime: MalAnimeNode, year: number, season: SeasonName): Mal
 	if (titleEn) normalized.title_en = titleEn;
 	if (titleRomaji) normalized.title_romaji = titleRomaji;
 	if (anime.num_episodes) normalized.episode_count = String(anime.num_episodes);
+	if (anime.average_episode_duration && anime.average_episode_duration > 0) {
+		normalized.episode_duration_minutes = Math.round(anime.average_episode_duration / 60);
+	}
 	const type = MEDIA_TYPE_LABELS[anime.media_type ?? ""];
 	if (type) normalized.type = type;
 	const sourceLabel = humanizeMalSource(anime.source);

@@ -597,6 +597,61 @@ async function readManualMappings(): Promise<ManualMapping[]> {
 	});
 }
 
+type ProgramSyncMapping = {
+	malId: number;
+	tid: number;
+	validFrom: string | null;
+	validTo: string | null;
+};
+
+// Every confirmed primary Syobocal mapping in the catalog, regardless of
+// season: the program sync follows these so the calendar and rooms are driven
+// by Syobocal alone.
+async function fetchAllPrimaryMappings(
+	supabase: ReturnType<typeof getSupabaseClient>,
+	dryRun: boolean,
+): Promise<ProgramSyncMapping[]> {
+	const rows: ProgramSyncMapping[] = [];
+	for (let start = 0; ; start += DATABASE_BATCH_SIZE) {
+		const { data, error } = await supabase
+			.from("anime_external_mappings")
+			.select("mal_id,external_key,valid_from,valid_to")
+			.eq("external_source", "syobocal")
+			.eq("is_primary", true)
+			.eq("match_status", "confirmed")
+			.order("mal_id", { ascending: true })
+			.range(start, start + DATABASE_BATCH_SIZE - 1);
+		if (error) {
+			if (dryRun && (error.code === "42P01" || error.code === "PGRST205")) return [];
+			throw new Error(`Could not read catalog-wide Syobocal mappings: ${error.message}`);
+		}
+		for (const row of data ?? []) {
+			const record = row as Record<string, unknown>;
+			const tid = Number.parseInt(String(record["external_key"] ?? ""), 10);
+			if (!Number.isSafeInteger(tid) || tid <= 0) continue;
+			rows.push({
+				malId: Number(record["mal_id"]),
+				tid,
+				validFrom: (record["valid_from"] as string | null) ?? null,
+				validTo: (record["valid_to"] as string | null) ?? null,
+			});
+		}
+		if (!data || data.length < DATABASE_BATCH_SIZE) break;
+	}
+	return rows;
+}
+
+function mergeProgramSyncMappings(
+	selected: readonly ProgramSyncMapping[],
+	catalogWide: readonly ProgramSyncMapping[],
+): ProgramSyncMapping[] {
+	const byMal = new Map<number, ProgramSyncMapping>();
+	for (const mapping of catalogWide) byMal.set(mapping.malId, mapping);
+	// This run's freshly selected mappings supersede stored rows for their MAL ids.
+	for (const mapping of selected) byMal.set(mapping.malId, mapping);
+	return [...byMal.values()];
+}
+
 async function fetchExistingMappings(
 	supabase: ReturnType<typeof getSupabaseClient>,
 	malIds: number[],
@@ -1200,7 +1255,7 @@ async function fetchAnimeRoomRows(supabase: ReturnType<typeof getSupabaseClient>
 
 function buildBroadcastRoomSessionRows(
 	animeRows: AnimeRoomRow[],
-	mappings: MappingProposal[],
+	mappings: readonly ProgramSyncMapping[],
 	titles: SyobocalTitle[],
 	channels: SyobocalChannel[],
 	programs: SyobocalProgram[],
@@ -1402,24 +1457,43 @@ async function main() {
 	);
 	for (const line of mapping.review) console.warn(`REVIEW: ${line}`);
 
+	const titleByTid = new Map(titles.map((title) => [title.tid, title] as const));
 	const selectedTitleByTid = new Map(
 		mapping.selected.flatMap((proposal) => {
-			const title = titles.find((candidate) => candidate.tid === proposal.tid);
+			const title = titleByTid.get(proposal.tid);
 			return title ? [[proposal.tid, title] as const] : [];
 		}),
 	);
+	// Syobocal is the source of truth for the calendar and rooms: program slots
+	// are synced for every confirmed primary mapping in the catalog, not just
+	// the imported season, so continuing shows keep their schedule and shows
+	// without current Syobocal programs disappear naturally.
+	const programMappings: ProgramSyncMapping[] = options.syncPrograms
+		? mergeProgramSyncMappings(mapping.selected, await fetchAllPrimaryMappings(supabase, options.dryRun))
+		: mapping.selected;
+	const programTids = [...new Set(programMappings.map((entry) => entry.tid))].filter((tid) => titleByTid.has(tid));
 	const titlesToStore = [
-		...new Map([...seasonalTitles, ...selectedTitleByTid.values()].map((title) => [title.tid, title])).values(),
+		...new Map(
+			[
+				...seasonalTitles,
+				...selectedTitleByTid.values(),
+				...programTids.flatMap((tid) => {
+					const title = titleByTid.get(tid);
+					return title ? [title] : [];
+				}),
+			].map((title) => [title.tid, title]),
+		).values(),
 	];
 	let programs: SyobocalProgram[] = [];
 	let channels: SyobocalChannel[] = [];
-	const programRange = options.syncPrograms ? rollingSyobocalProgramRange(range.startDate, range.endDate) : null;
-	if (options.syncPrograms && !programRange) {
-		console.log(`${season} is outside the rolling program window; no Syobocal program rows will be fetched.`);
-	}
-	if (programRange && mapping.selected.length > 0) {
-		console.log(`Program sync range: ${programRange.startDate} through ${programRange.endDate} (end exclusive).`);
-		programs = await fetchPrograms([...selectedTitleByTid.keys()], programRange.apiRange);
+	// The program window is purely rolling (yesterday through +91 days): with
+	// catalog-wide mappings the season clamp would wrongly cut continuing shows.
+	const programRange = options.syncPrograms ? rollingSyobocalProgramRange("1900-01-01", "2999-12-31") : null;
+	if (programRange && programMappings.length > 0) {
+		console.log(
+			`Program sync range: ${programRange.startDate} through ${programRange.endDate} (end exclusive) for ${programTids.length} mapped titles.`,
+		);
+		programs = await fetchPrograms(programTids, programRange.apiRange);
 		const allChannels = await fetchChannels();
 		const usedChids = new Set(programs.map((program) => program.chid));
 		channels = allChannels.filter((channel) => usedChids.has(channel.chid));
@@ -1427,15 +1501,15 @@ async function main() {
 		if (missingChids.length > 0) throw new Error(`Missing Syobocal channels: ${missingChids.join(", ")}`);
 	}
 	const animeRoomRows = programRange
-		? await fetchAnimeRoomRows(
-				supabase,
-				mapping.selected.map((proposal) => proposal.malId),
-			)
+		? await fetchAnimeRoomRows(supabase, [...new Set(programMappings.map((proposal) => proposal.malId))])
 		: [];
 	const roomSessionRows = buildBroadcastRoomSessionRows(
 		animeRoomRows,
-		mapping.selected,
-		[...selectedTitleByTid.values()],
+		programMappings,
+		programTids.flatMap((tid) => {
+			const title = titleByTid.get(tid);
+			return title ? [title] : [];
+		}),
 		channels,
 		programs,
 		importedAt,
