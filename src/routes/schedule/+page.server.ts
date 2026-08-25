@@ -22,6 +22,7 @@ import {
 	getScheduleBroadcastSessionsInRange,
 	isAdminUser,
 } from "$lib/server/queries";
+import { jstBroadcastTimeLabel } from "$lib/syobocal-schedule";
 import type { Anime, BroadcastNotificationSettings, BroadcastRoomOverride, Event } from "$lib/types";
 import { formatBroadcastOverrideAnnouncement } from "$lib/utils/broadcast-episodes";
 import {
@@ -69,20 +70,6 @@ function toDateInputValue(date: Date) {
 	const m = String(date.getMonth() + 1).padStart(2, "0");
 	const d = String(date.getDate()).padStart(2, "0");
 	return `${y}-${m}-${d}`;
-}
-
-// カレンダー掲載時刻はしょぼい由来のセッション時刻（JST）が唯一の情報源
-const JST_TIME_FORMATTER = new Intl.DateTimeFormat("ja-JP", {
-	timeZone: "Asia/Tokyo",
-	hour: "2-digit",
-	minute: "2-digit",
-	hour12: false,
-});
-
-function jstBroadcastTime(iso: string): string | null {
-	const parsed = new Date(iso);
-	if (Number.isNaN(parsed.getTime())) return null;
-	return JST_TIME_FORMATTER.format(parsed);
 }
 
 function announcementMessage(override: BroadcastRoomOverride): string {
@@ -193,10 +180,11 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 			continue;
 		}
 		if (day.anime.some((scheduledAnime) => scheduledAnime.id === anime.id)) continue;
+		// 掲載時刻はしょぼいの実枠（深夜は25:30のような24時間超表記で前日枠に載る）
 		day.anime.push({
 			...anime,
 			broadcast_day: new Date(`${session.room_date}T00:00:00`).getDay(),
-			broadcast_time: jstBroadcastTime(session.scheduled_at) ?? anime.broadcast_time,
+			broadcast_time: jstBroadcastTimeLabel(session.scheduled_at) ?? anime.broadcast_time,
 		});
 	}
 

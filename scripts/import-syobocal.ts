@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { createClient } from "@supabase/supabase-js";
@@ -18,7 +19,12 @@ import {
 	parseSyobocalLinks,
 	type SyobocalWikipediaArticleLink,
 } from "../src/lib/syobocal.ts";
-import { jstDate, rollingSyobocalProgramRange, selectPrimarySyobocalPrograms } from "../src/lib/syobocal-schedule.ts";
+import {
+	jstBroadcastDate,
+	jstDate,
+	rollingSyobocalProgramRange,
+	selectPrimarySyobocalPrograms,
+} from "../src/lib/syobocal-schedule.ts";
 
 type SeasonName = "winter" | "spring" | "summer" | "fall";
 type SourceName = AnimeCatalogSeasonSource | "manual" | "wikidata" | "syobocal";
@@ -442,7 +448,9 @@ async function fetchPrograms(tids: number[], range: string): Promise<SyobocalPro
 	const programs: SyobocalProgram[] = [];
 	for (let start = 0; start < tids.length; start += PROGRAM_TID_BATCH_SIZE) {
 		const batch = tids.slice(start, start + PROGRAM_TID_BATCH_SIZE);
-		const cacheName = `programs/${range}-${batch.join("-")}.xml`;
+		// A joined TID list exceeds Windows path limits at this batch size; hash it.
+		const batchKey = createHash("sha1").update(batch.join(",")).digest("hex").slice(0, 16);
+		const cacheName = `programs/${range}-${batchKey}.xml`;
 		const payload = await readCachedXml(
 			"ProgLookup",
 			{ TID: batch.join(","), Range: range, JOIN: "SubTitles" },
@@ -1282,7 +1290,9 @@ function buildBroadcastRoomSessionRows(
 		const postCloseMinutes = anime.broadcast_room_post_close_minutes ?? 30;
 		const postingOpensAt = startsAt - preOpenMinutes * 60_000;
 		if (postingOpensAt <= now) return [];
-		const roomDate = jstDate(program.startsAt);
+		// 深夜アニメ慣習: 4時前の枠は前日の放送日として room_date を振る
+		// （overrides / ensure_broadcast_room_session と同じ基準）
+		const roomDate = jstBroadcastDate(program.startsAt);
 		return [
 			{
 				anime_id: anime.id,

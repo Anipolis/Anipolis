@@ -52,6 +52,37 @@ export function jstDate(value: string | Date): string {
 	return JST_DATE_FORMATTER.format(typeof value === "string" ? new Date(value) : value);
 }
 
+const JST_HOUR_FORMATTER = new Intl.DateTimeFormat("en-GB", {
+	timeZone: "Asia/Tokyo",
+	hour: "2-digit",
+	minute: "2-digit",
+	hour12: false,
+});
+
+const LATE_NIGHT_BOUNDARY_HOUR = 4;
+
+/**
+ * 放送日付（深夜アニメ慣習）: JSTで午前4時より前の枠は前日の放送として扱う。
+ * broadcast_room_overrides / ensure_broadcast_room_session の room_date と同じ基準。
+ */
+export function jstBroadcastDate(value: string | Date): string {
+	const date = typeof value === "string" ? new Date(value) : value;
+	return jstDate(new Date(date.getTime() - LATE_NIGHT_BOUNDARY_HOUR * 60 * 60 * 1000));
+}
+
+/** 放送時刻表示（深夜アニメ慣習）: 午前4時より前は「25:30」のような24時間超表記 */
+export function jstBroadcastTimeLabel(value: string | Date): string | null {
+	const date = typeof value === "string" ? new Date(value) : value;
+	if (Number.isNaN(date.getTime())) return null;
+	const formatted = JST_HOUR_FORMATTER.format(date);
+	const [hourText, minuteText] = formatted.split(":");
+	const hour = Number.parseInt(hourText ?? "", 10);
+	if (!Number.isFinite(hour) || minuteText === undefined) return null;
+	return hour < LATE_NIGHT_BOUNDARY_HOUR
+		? `${hour + 24}:${minuteText}`
+		: `${String(hour).padStart(2, "0")}:${minuteText}`;
+}
+
 function episodeIdentity(program: SyobocalScheduleProgram): string {
 	if (program.episodeNumber !== null) return `episode:${program.episodeNumber}`;
 	if (program.subtitle) return `subtitle:${program.subtitle.normalize("NFKC").trim()}`;
@@ -99,7 +130,8 @@ export function selectPrimarySyobocalPrograms(
 			if (program.tid !== mapping.tid || program.deleted) return false;
 			if (!isSchedulableProgram(program)) return false;
 			if (channelTier(channelByChid.get(program.chid)) === null) return false;
-			const date = jstDate(program.startsAt);
+			// クール境界は放送日慣習で判定する（9/30深夜25:30の枠は9月クール側）
+			const date = jstBroadcastDate(program.startsAt);
 			return (!mapping.validFrom || date >= mapping.validFrom) && (!mapping.validTo || date <= mapping.validTo);
 		});
 		const byEpisode = new Map<string, SyobocalScheduleProgram[]>();

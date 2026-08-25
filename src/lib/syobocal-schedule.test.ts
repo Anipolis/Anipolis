@@ -1,5 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { rollingSyobocalProgramRange, selectPrimarySyobocalPrograms } from "./syobocal-schedule";
+import {
+	jstBroadcastDate,
+	jstBroadcastTimeLabel,
+	rollingSyobocalProgramRange,
+	selectPrimarySyobocalPrograms,
+} from "./syobocal-schedule";
+
+describe("late-night broadcast convention", () => {
+	it("assigns pre-4am slots to the previous broadcast day with 24h+ time labels", () => {
+		// 火曜25:30 = 水曜01:30 JST = 火曜16:30 UTC
+		expect(jstBroadcastDate("2026-07-07T16:30:00.000Z")).toBe("2026-07-07");
+		expect(jstBroadcastTimeLabel("2026-07-07T16:30:00.000Z")).toBe("25:30");
+		// 通常枠はそのまま
+		expect(jstBroadcastDate("2026-07-07T09:45:00.000Z")).toBe("2026-07-07");
+		expect(jstBroadcastTimeLabel("2026-07-07T09:45:00.000Z")).toBe("18:45");
+		// 4:00ちょうどは当日扱い (JST 04:00 = 前日19:00 UTC)
+		expect(jstBroadcastDate("2026-07-06T19:00:00.000Z")).toBe("2026-07-07");
+		expect(jstBroadcastTimeLabel("2026-07-06T19:00:00.000Z")).toBe("04:00");
+	});
+});
 
 describe("selectPrimarySyobocalPrograms", () => {
 	it("uses FirstCh for each episode and falls back to the earliest channel", () => {
