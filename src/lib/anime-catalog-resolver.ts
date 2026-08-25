@@ -424,6 +424,14 @@ export function resolveAnimeCatalog(
 					: "Verified Japanese display title is missing.",
 			];
 
+	// Music videos, PVs and CMs are never published (same policy as the Jikan
+	// importer's BLOCKED_TYPES). The check uses the MAL/Jikan media label
+	// directly: anime-offline-database has no music type and mislabels these
+	// entries as "Special", so the resolved type alone cannot be trusted.
+	const mediaTypeLabel = (stringValue(mal, "type") ?? stringValue(jikan, "type"))?.toLowerCase() ?? null;
+	const blockedMediaType = mediaTypeLabel !== null && ["music", "pv", "cm"].includes(mediaTypeLabel);
+	if (blockedMediaType) resolutionReasons.push("Music/PV/CM entries are not published.");
+
 	const resolvedFields = {
 		title,
 		title_en: titleEnglish,
@@ -475,7 +483,7 @@ export function resolveAnimeCatalog(
 			official_x_url: officialXUrl.value,
 			resources: mergeResources(syobocal),
 			cover_url: coverUrl.value,
-			metadata_ready: resolutionStatus === "verified",
+			metadata_ready: resolutionStatus === "verified" && !blockedMediaType,
 		},
 		fieldSources,
 		resolutionStatus,

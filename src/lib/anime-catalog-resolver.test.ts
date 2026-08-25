@@ -122,6 +122,16 @@ describe("resolveAnimeCatalog", () => {
 		expect(resolved.fieldSources["title"]?.source).toBe("manual");
 	});
 
+	it("never publishes Music/PV/CM entries even with a verified title", () => {
+		const resolved = resolveAnimeCatalog([
+			source("anime_offline_database", { title: "Example MV", type: "Special", status: "finished" }),
+			source("mal", { title_ja: "検証済みのMVタイトル", type: "Music" }),
+		]);
+		expect(resolved.resolutionStatus).toBe("verified");
+		expect(resolved.canonical.metadata_ready).toBe(false);
+		expect(resolved.resolutionReasons).toContain("Music/PV/CM entries are not published.");
+	});
+
 	it("uses a confirmed Syobocal title and official links ahead of other imported sources", () => {
 		const resolved = resolveAnimeCatalog([
 			source("anime_offline_database", { title: "Example", status: "finished" }),
