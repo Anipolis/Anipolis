@@ -140,7 +140,9 @@ type MappingProposal = {
 const VALID_SEASONS = new Set<SeasonName>(["winter", "spring", "summer", "fall"]);
 const DATABASE_BATCH_SIZE = 100;
 const WIKIDATA_BATCH_SIZE = 100;
-const PROGRAM_TID_BATCH_SIZE = 10;
+// Catalog-wide program sync queries ~1,800 TIDs; large batches with a gentle
+// interval keep the request count low enough for Syobocal's rate limit.
+const PROGRAM_TID_BATCH_SIZE = 50;
 const SYOBOCAL_ENDPOINT = "https://cal.syoboi.jp/db.php";
 const JAPANESE_WIKIPEDIA_ENDPOINT = "https://ja.wikipedia.org/w/api.php";
 const WIKIDATA_ENDPOINT = "https://query.wikidata.org/sparql";
@@ -318,6 +320,9 @@ function responseItems(payload: unknown, responseKey: string, itemsKey: string, 
 	const response = asRecord(asRecord(payload)[responseKey]);
 	const result = asRecord(response["Result"]);
 	const code = textValue(result, "Code");
+	// 404 means "no rows matched" (e.g. a program lookup for titles with no
+	// slots in the range), which is a normal empty result, not a failure.
+	if (code === "404") return [];
 	if (code && code !== "200") throw new Error(`Syobocal returned ${code}: ${textValue(result, "Message") ?? ""}`);
 	return asArray(asRecord(response[itemsKey])[itemKey]).map(asRecord);
 }
@@ -456,7 +461,7 @@ async function fetchPrograms(tids: number[], range: string): Promise<SyobocalPro
 		console.log(
 			`Syobocal programs fetched for ${Math.min(start + batch.length, tids.length)}/${tids.length} TIDs.`,
 		);
-		await sleep(250);
+		await sleep(1000);
 	}
 	return [...new Map(programs.map((program) => [program.pid, program])).values()];
 }
