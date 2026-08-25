@@ -140,7 +140,7 @@ describe("selectPrimarySyobocalPrograms", () => {
 		expect(selected[0]).toMatchObject({ pid: 2, channelName: "BS11" });
 	});
 
-	it("skips rerun slots and unnumbered recap specials", () => {
+	it("skips rerun slots but keeps recap specials for the override system", () => {
 		const base = {
 			tid: 10,
 			chid: 1,
@@ -152,9 +152,10 @@ describe("selectPrimarySyobocalPrograms", () => {
 			[{ tid: 10, firstChannel: null }],
 			[{ chid: 1, name: "TOKYO MX", epgName: null, channelGroupId: 1 }],
 			[
-				// rerun of episode 1 (Flag bit 8)
+				// rerun of episode 1 (Flag bit 8): would duplicate its room
 				{ ...base, pid: 1, startsAt: "2026-07-01T14:00:00.000Z", episodeNumber: 1, subtitle: null, flags: 8 },
-				// unnumbered recap special
+				// unnumbered recap special: opens a room; the broadcast room override
+				// system (総集編/一挙放送) labels it and holds the episode counter
 				{
 					...base,
 					pid: 2,
@@ -173,8 +174,7 @@ describe("selectPrimarySyobocalPrograms", () => {
 				},
 			],
 		);
-		expect(selected).toHaveLength(1);
-		expect(selected[0]).toMatchObject({ pid: 3, episodeNumber: 2 });
+		expect(selected.map((program) => program.pid)).toEqual([2, 3]);
 	});
 });
 

@@ -73,17 +73,13 @@ function channelTier(channel: SyobocalScheduleChannel | undefined): number | nul
 }
 
 const RERUN_FLAG = 8;
-// Unnumbered slots whose subtitle marks a recap/special are not episodes;
-// numbered ones are kept even when labeled (e.g. an in-sequence recap counted
-// by the broadcaster still opens its scheduled room).
-const RECAP_SUBTITLE =
-	/総集編|一挙|振り返り|ダイジェスト|特別編|特番|傑作選|セレクション|放送直前|直前スペシャル|おさらい/;
 
+// Only rerun slots are dropped here: they would duplicate an episode's room on
+// a later date. Recap/special/marathon slots DO open rooms by design — the
+// broadcast room override system (総集編/一挙放送/放送休止/時間変更) labels them
+// and controls the episode counter downstream.
 function isSchedulableProgram(program: SyobocalScheduleProgram): boolean {
-	if (((program.flags ?? 0) & RERUN_FLAG) !== 0) return false;
-	if (program.episodeNumber === null && program.subtitle && RECAP_SUBTITLE.test(program.subtitle.normalize("NFKC")))
-		return false;
-	return true;
+	return ((program.flags ?? 0) & RERUN_FLAG) === 0;
 }
 
 export function selectPrimarySyobocalPrograms(
