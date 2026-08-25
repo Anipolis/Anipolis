@@ -232,13 +232,28 @@ export function resolveAnimeCatalog(
 
 	const offlineTitle = stringValue(offline, "title");
 	const syobocalJapaneseTitle = stringValue(syobocal, "title_ja");
-	const wikidataJapaneseTitle = stringValue(wikidata, "title_ja");
-	const malJapaneseTitle =
+	const rejectHangul = (value: string | undefined) =>
+		value && /[\p{Script=Hangul}]/u.test(value) ? undefined : value;
+	const wikidataJapaneseTitle = rejectHangul(stringValue(wikidata, "title_ja"));
+	// MALは韓国・中国作品の「日本語タイトル」欄に現地語題をそのまま入れることが
+	// ある。かなを含まない題は、日本側ソース（しょぼいマッピング / Wikidata日本語
+	// ラベル / manual）の裏付けがない限り検証済みとして扱わない。ハングルは常に拒否。
+	const japaneseSideCorroborated =
+		bySource.has("syobocal") || wikidataJapaneseTitle !== undefined || stringValue(manual, "title") !== undefined;
+	const acceptJapaneseTitle = (value: string | undefined): string | undefined => {
+		if (!value) return undefined;
+		if (/[\p{Script=Hangul}]/u.test(value)) return undefined;
+		if (/[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(value)) return value;
+		return japaneseSideCorroborated ? value : undefined;
+	};
+	const malJapaneseTitle = acceptJapaneseTitle(
 		stringValue(mal, "title_ja") ??
-		(containsJapaneseScript(stringValue(mal, "title") ?? "") ? stringValue(mal, "title") : undefined);
-	const jikanJapaneseTitle =
+			(containsJapaneseScript(stringValue(mal, "title") ?? "") ? stringValue(mal, "title") : undefined),
+	);
+	const jikanJapaneseTitle = acceptJapaneseTitle(
 		stringValue(jikan, "title_ja") ??
-		(containsJapaneseScript(stringValue(jikan, "title") ?? "") ? stringValue(jikan, "title") : undefined);
+			(containsJapaneseScript(stringValue(jikan, "title") ?? "") ? stringValue(jikan, "title") : undefined),
+	);
 	const legacyJapaneseTitle =
 		legacyRow?.title && containsJapaneseScript(legacyRow.title) ? legacyRow.title : undefined;
 	const title = firstDefined([

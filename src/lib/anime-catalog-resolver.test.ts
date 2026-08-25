@@ -122,6 +122,28 @@ describe("resolveAnimeCatalog", () => {
 		expect(resolved.fieldSources["title"]?.source).toBe("manual");
 	});
 
+	it("rejects native-language titles smuggled into MAL's Japanese-title field", () => {
+		// 韓国作品: MALのja欄にハングル題
+		const korean = resolveAnimeCatalog([
+			source("anime_offline_database", { title: "Hello Carbot", status: "finished" }),
+			source("mal", { title_ja: "헬로 카봇 시즌8", type: "TV" }),
+		]);
+		expect(korean.canonical.metadata_ready).toBe(false);
+		// 中国作品: かな無しの中文題・日本側ソースの裏付けなし
+		const donghua = resolveAnimeCatalog([
+			source("anime_offline_database", { title: "Ya She", status: "finished" }),
+			source("mal", { title_ja: "哑舍", type: "ONA" }),
+		]);
+		expect(donghua.canonical.metadata_ready).toBe(false);
+		// 日本放送あり: しょぼいマッピングが裏付けになり、かな無し題でも公開
+		const broadcast = resolveAnimeCatalog([
+			source("mal", { title_ja: "天官賜福", type: "ONA" }),
+			source("syobocal", { official_site_url: "https://example.jp/" }),
+		]);
+		expect(broadcast.canonical.metadata_ready).toBe(true);
+		expect(broadcast.canonical.title).toBe("天官賜福");
+	});
+
 	it("never publishes Music/PV/CM entries even with a verified title", () => {
 		const resolved = resolveAnimeCatalog([
 			source("anime_offline_database", { title: "Example MV", type: "Special", status: "finished" }),
