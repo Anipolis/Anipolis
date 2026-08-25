@@ -148,7 +148,7 @@ const DATABASE_BATCH_SIZE = 100;
 const WIKIDATA_BATCH_SIZE = 100;
 // Catalog-wide program sync queries ~1,800 TIDs; large batches with a gentle
 // interval keep the request count low enough for Syobocal's rate limit.
-const PROGRAM_TID_BATCH_SIZE = 50;
+const PROGRAM_TID_BATCH_SIZE = 100;
 const SYOBOCAL_ENDPOINT = "https://cal.syoboi.jp/db.php";
 const JAPANESE_WIKIPEDIA_ENDPOINT = "https://ja.wikipedia.org/w/api.php";
 const WIKIDATA_ENDPOINT = "https://query.wikidata.org/sparql";
@@ -289,6 +289,11 @@ async function fetchWithRetry(url: URL, accept: string): Promise<Response> {
 				throw new Error(`${response.status} ${response.statusText}`);
 			}
 			lastError = new Error(`${response.status} ${response.statusText}`);
+			// Rate limiting needs a real cool-down, not a sub-second retry.
+			if (response.status === 429 && attempt < 4) {
+				await sleep(30_000 * attempt);
+				continue;
+			}
 		} catch (error) {
 			lastError = error;
 		}
@@ -1486,7 +1491,11 @@ async function main() {
 	const programMappings: ProgramSyncMapping[] = options.syncPrograms
 		? mergeProgramSyncMappings(mapping.selected, await fetchAllPrimaryMappings(supabase, options.dryRun))
 		: mapping.selected;
-	const programTids = [...new Set(programMappings.map((entry) => entry.tid))].filter((tid) => titleByTid.has(tid));
+	// Sorted for stable batch composition, so the per-batch response cache hits
+	// across reruns of the same day.
+	const programTids = [...new Set(programMappings.map((entry) => entry.tid))]
+		.filter((tid) => titleByTid.has(tid))
+		.sort((left, right) => left - right);
 	const titlesToStore = [
 		...new Map(
 			[
