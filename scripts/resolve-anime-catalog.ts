@@ -469,8 +469,16 @@ async function applyShortAnimeLobbyRule(
 	}
 	const currentByMal = new Map(rows.map((row) => [row.mal_id, row]));
 	let applied = 0;
+	// The batched upsert uses one column set for every row, so room_type must be
+	// present (with its current value) on ALL rows — a partial column would null
+	// out the untouched ones.
 	for (const resolution of resolutions) {
 		const malId = resolution.canonical.mal_id;
+		const current = currentByMal.get(malId);
+		const canonical = resolution.canonical as unknown as Record<string, unknown>;
+		canonical["room_type"] = current?.room_type ?? "episode";
+		canonical["room_type_source"] = current?.room_type_source ?? "default";
+		if (current?.room_type_source === "manual") continue;
 		const mal = (recordsByMalId.get(malId) ?? []).find((record) => record.source === "mal");
 		const normalized =
 			mal && mal.normalized_data !== null && typeof mal.normalized_data === "object"
@@ -478,11 +486,8 @@ async function applyShortAnimeLobbyRule(
 				: null;
 		const duration = normalized?.["episode_duration_minutes"];
 		if (typeof duration !== "number" || duration <= 0) continue;
-		const current = currentByMal.get(malId);
-		if (current?.room_type_source === "manual") continue;
 		const autoRoomType = duration <= SHORT_ANIME_LOBBY_MINUTES ? "global" : "episode";
-		if (current && current.room_type !== autoRoomType) {
-			const canonical = resolution.canonical as unknown as Record<string, unknown>;
+		if ((current?.room_type ?? "episode") !== autoRoomType) {
 			canonical["room_type"] = autoRoomType;
 			canonical["room_type_source"] = "auto";
 			applied += 1;
