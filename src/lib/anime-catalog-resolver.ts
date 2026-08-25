@@ -41,6 +41,8 @@ export type LegacyAnimeCatalogRow = {
 	resources: unknown;
 	cover_url: string | null;
 	metadata_ready?: boolean;
+	room_type?: string | null;
+	room_type_source?: string | null;
 };
 
 export type AnimeCatalogCanonicalRow = Omit<LegacyAnimeCatalogRow, "resources"> & {

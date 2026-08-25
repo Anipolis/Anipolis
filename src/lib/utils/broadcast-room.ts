@@ -36,13 +36,11 @@ function dateKeyToDate(value: string) {
  * 2026-winter以前の作品は、閉場済みルームであっても生成・表示しない。
  */
 export function isEligibleForRoomLog(season: string | null): boolean {
-	if (!season) return false;
-	const parts = season.split("-");
-	const year = Number.parseInt(parts[0] ?? "", 10);
-	const name = parts[1];
-	if (!Number.isFinite(year)) return false;
+	const match = season?.match(/^(\d{4})-(winter|spring|summer|fall)$/);
+	if (!match) return false;
+	const year = Number.parseInt(match[1] ?? "", 10);
 	if (year > 2026) return true;
-	return year === 2026 && name !== "winter";
+	return year === 2026 && match[2] !== "winter";
 }
 
 export function animeIsScheduledForRoomDate(

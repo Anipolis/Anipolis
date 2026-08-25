@@ -454,7 +454,7 @@ async function fetchPrograms(tids: number[], range: string): Promise<SyobocalPro
 	for (let start = 0; start < tids.length; start += PROGRAM_TID_BATCH_SIZE) {
 		const batch = tids.slice(start, start + PROGRAM_TID_BATCH_SIZE);
 		// A joined TID list exceeds Windows path limits at this batch size; hash it.
-		const batchKey = createHash("sha1").update(batch.join(",")).digest("hex").slice(0, 16);
+		const batchKey = createHash("sha256").update(batch.join(",")).digest("hex").slice(0, 16);
 		const cacheName = `programs/${range}-${batchKey}.xml`;
 		const payload = await readCachedXml(
 			"ProgLookup",

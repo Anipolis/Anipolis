@@ -134,6 +134,10 @@ const LEGACY_COLUMNS = [
 	"resources",
 	"cover_url",
 	"metadata_ready",
+	// applyShortAnimeLobbyRuleが全canonical行に注入するため、changedFieldsの
+	// 差分比較でノイズにならないよう既存値も読み込む
+	"room_type",
+	"room_type_source",
 ].join(",");
 
 function parseArgs(argv: string[]): Options {

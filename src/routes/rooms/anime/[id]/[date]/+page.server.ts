@@ -162,10 +162,11 @@ export const actions: Actions = {
 		if (override?.is_cancelled) {
 			return fail(404, { message: "放送ルームが見つかりません" });
 		}
-		if (!anime || !animeIsScheduledForRoomDate(anime, params.date, override != null)) {
-			return fail(404, { message: "放送ルームが見つかりません" });
-		}
+		if (!anime) return fail(404, { message: "放送ルームが見つかりません" });
 
+		// 表示側と同じ判定順: 実セッション（しょぼい同期・オーバーライド起点）が
+		// あれば曜日ゲートを通さない。深夜枠は room_date が放送日（前日）で
+		// MAL由来の broadcast_day と一致しないため、ゲート先行だと投稿が404になる。
 		const session = await getBroadcastRoomSession(supabase, anime.id, params.date);
 		if (!session) return fail(404, { message: "放送ルームが見つかりません" });
 		const now = Date.now();
