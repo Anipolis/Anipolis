@@ -18,10 +18,47 @@ import {
 	createRoomExperimentServiceClient,
 	getActiveRoomExperimentRunForAnime as getActiveExperimentRun,
 } from "$lib/server/room-experiments";
-import type { Anime } from "$lib/types";
+import type { Anime, BroadcastRoomOverride, BroadcastRoomSession } from "$lib/types";
 import { calcEpisodeNumberFromDate } from "$lib/types";
-import { animeIsScheduledForRoomDate } from "$lib/utils/broadcast-room";
+import { animeIsScheduledForRoomDate, broadcastTimeMinutes } from "$lib/utils/broadcast-room";
 import type { Actions, PageServerLoad } from "./$types";
+
+// 過去ルームの表示専用セッション。かつては閲覧時にフォールバックがセッション行を
+// 偽装生成して表示していたが、しょぼい絶対化でDBへの偽装生成を廃止したため、
+// 「行が無い閉場済みルーム」はこの合成オブジェクトで履歴閲覧だけを復元する
+// （投稿は締切済みで不可、投稿・アンケート等の参照は空を返す）。
+const SYNTHETIC_ROOM_SESSION_ID = "00000000-0000-0000-0000-000000000000";
+
+function synthesizeClosedRoomSession(
+	anime: Anime,
+	roomDate: string,
+	override: BroadcastRoomOverride | null,
+): BroadcastRoomSession | null {
+	const time = override?.broadcast_time ?? anime.broadcast_time;
+	const minutes = broadcastTimeMinutes(time);
+	if (minutes == null) return null;
+	const [year, month, day] = roomDate.split("-").map((part) => Number.parseInt(part, 10));
+	if (!year || !month || !day) return null;
+	// JST固定(+9): サーバーTZに依存させない
+	const scheduledMs = Date.UTC(year, month - 1, day, Math.floor(minutes / 60) - 9, minutes % 60);
+	const duration = override?.duration_minutes ?? anime.broadcast_duration_minutes ?? 30;
+	const preOpen = override?.pre_open_minutes ?? anime.broadcast_room_pre_open_minutes ?? 5;
+	const postClose = override?.post_close_minutes ?? anime.broadcast_room_post_close_minutes ?? 30;
+	const closesMs = scheduledMs + (duration + postClose) * 60_000;
+	// 未来・開催中のルームは実セッション（しょぼい同期かオーバーライド起点）が必須
+	if (closesMs > Date.now()) return null;
+	return {
+		id: SYNTHETIC_ROOM_SESSION_ID,
+		anime_id: Number(anime.id),
+		room_date: roomDate,
+		room_kind: "episode",
+		room_key: roomDate,
+		scheduled_at: new Date(scheduledMs).toISOString(),
+		duration_minutes: duration,
+		posting_opens_at: new Date(scheduledMs - preOpen * 60_000).toISOString(),
+		posting_closes_at: new Date(closesMs).toISOString(),
+	};
+}
 
 function fallbackRoomHashtag(title: string) {
 	return title.replace(/\s+/g, "").replace(/[^\p{L}\p{N}_]/gu, "");
@@ -57,11 +94,17 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 	if (override?.is_cancelled) {
 		throw error(404, "放送ルームが見つかりません");
 	}
-	if (!animeIsScheduledForRoomDate(anime, params.date, override != null)) {
-		throw error(404, "放送ルームが見つかりません");
-	}
 
-	const session = await getBroadcastRoomSession(supabase, anime.id, params.date);
+	// 実セッション（しょぼい同期・オーバーライド起点）が最優先。深夜枠は
+	// room_dateが放送日（前日）でMAL由来のbroadcast_dayと曜日が一致しないため、
+	// 曜日ゲートは実セッションが無い場合の合成時にだけ適用する。
+	let session = await getBroadcastRoomSession(supabase, anime.id, params.date);
+	if (!session) {
+		if (!animeIsScheduledForRoomDate(anime, params.date, override != null)) {
+			throw error(404, "放送ルームが見つかりません");
+		}
+		session = synthesizeClosedRoomSession(anime, params.date, override ?? null);
+	}
 	if (!session) throw error(404, "放送ルームが見つかりません");
 
 	const hashtag = roomHashtag(anime);
