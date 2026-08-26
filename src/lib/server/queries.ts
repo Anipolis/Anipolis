@@ -2965,15 +2965,18 @@ export async function getBroadcastRoomSession(
 export async function getBroadcastRoomScheduleSnapshotsForAnime(
 	supabase: SupabaseClient<Database>,
 	animeId: number,
-): Promise<import("$lib/utils/broadcast-episodes").BroadcastEpisodeSlot[]> {
+): Promise<(import("$lib/utils/broadcast-episodes").BroadcastEpisodeSlot & { opened: boolean })[]> {
 	// biome-ignore lint/suspicious/noExplicitAny: migration 104 columns are not in generated types until applied
 	const reader = supabase as SupabaseClient<any>;
+	// 未来セッションも返す: しょぼい話数はローリング同期の範囲でしか付かないため、
+	// 未開場の番号付きセッションが過去日付への逆算の唯一のアンカーになることがある。
+	// ログに表示してよいのは opened のものだけ（呼び出し側でフィルタする）。
+	const nowIso = new Date().toISOString();
 	const { data, error } = await reader
 		.from("broadcast_room_sessions")
 		.select("room_date,episode_number,episode_title,posting_opens_at")
 		.eq("anime_id", animeId)
 		.eq("room_kind", "episode")
-		.lte("posting_opens_at", new Date().toISOString())
 		.order("room_date", { ascending: true });
 	if (error) {
 		console.error("getBroadcastRoomScheduleSnapshotsForAnime failed:", error);
@@ -2981,11 +2984,13 @@ export async function getBroadcastRoomScheduleSnapshotsForAnime(
 	}
 	return (data ?? []).map((row: Record<string, unknown>) => {
 		const episodeNumber = typeof row["episode_number"] === "number" ? row["episode_number"] : null;
+		const postingOpensAt = typeof row["posting_opens_at"] === "string" ? row["posting_opens_at"] : null;
 		return {
 			date: String(row["room_date"] ?? "").slice(0, 10),
 			start: episodeNumber,
 			end: episodeNumber,
 			label: typeof row["episode_title"] === "string" ? row["episode_title"] : null,
+			opened: postingOpensAt !== null && postingOpensAt <= nowIso,
 		};
 	});
 }
