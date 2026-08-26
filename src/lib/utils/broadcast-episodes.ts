@@ -241,8 +241,10 @@ export function inferEpisodeNumbersBackward(
 			current = override.episode_start;
 			continue;
 		}
-		if (override && normalizedBroadcastEpisodeLabel(override) !== null) {
-			// 総集編等: 番号なし・カウント消費なし（ラベルは呼び出し側で設定済み）
+		if (slot.label != null || (override && normalizedBroadcastEpisodeLabel(override) !== null)) {
+			// 総集編・特番等: 番号なし・カウント消費なし。slot.label はオーバーライド
+			// 由来のほか、しょぼいが話数を付けずサブタイトルだけ付けた枠（「特番」等）
+			// も含む — しょぼい絶対の原則では話数なし枠は通常話ではない。
 			continue;
 		}
 		const candidate = current - 1;

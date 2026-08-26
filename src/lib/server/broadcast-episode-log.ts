@@ -50,17 +50,26 @@ export function buildBroadcastEpisodeLog(
 			];
 		}),
 	);
+	// 合成補完の曜日はしょぼい由来の話数付きセッション（アンカー）の曜日を最優先
+	// する。MAL由来の broadcast_day が AT-X 等の先行放送の曜日を指している作品
+	// （骸骨騎士様Ⅱ: MAL=月曜(AT-X) / 地上波最速=MX木曜）で、存在しない曜日の
+	// 日付を合成してしまうのを防ぐ。room_date は放送日慣習で統一されているので
+	// アンカーの曜日はそのままログの週次パターンになる。
+	const anchorSlot = [...slotByDate.values()]
+		.filter((slot) => slot.start != null)
+		.sort((left, right) => left.date.localeCompare(right.date))[0];
+	const effectiveBroadcastDay = anchorSlot ? new Date(`${anchorSlot.date}T00:00:00`).getDay() : anime.broadcast_day;
 	if (
 		isEligibleForRoomLog(anime.season) &&
 		anime.room_type === "episode" &&
 		anime.aired_from != null &&
-		anime.broadcast_day != null &&
+		effectiveBroadcastDay != null &&
 		anime.broadcast_time != null
 	) {
 		const todayKey = jstBroadcastDate(new Date());
 		const airedToKey = anime.aired_to?.slice(0, 10) ?? null;
 		const cursor = new Date(`${anime.aired_from.slice(0, 10)}T00:00:00`);
-		while (cursor.getDay() !== anime.broadcast_day) cursor.setDate(cursor.getDate() + 1);
+		while (cursor.getDay() !== effectiveBroadcastDay) cursor.setDate(cursor.getDate() + 1);
 		for (let guard = 0; guard < 400; guard += 1, cursor.setDate(cursor.getDate() + 7)) {
 			const date = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`;
 			if (date >= todayKey || (airedToKey && date > airedToKey)) break;
