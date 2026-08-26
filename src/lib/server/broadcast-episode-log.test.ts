@@ -64,6 +64,49 @@ describe("buildBroadcastEpisodeLog", () => {
 		]);
 	});
 
+	it("does not count unnumbered syobocal slots that carry their own subtitle (特番)", () => {
+		// ヤニねこパターン: しょぼいが話数を付けず「特番」とだけ題した枠は
+		// 通常話ではないので、逆算のカウントを消費しない。
+		const log = buildBroadcastEpisodeLog(
+			ANIME,
+			[
+				snapshot("2026-07-31"),
+				snapshot("2026-08-07"),
+				snapshot("2026-08-14", null, true, "特番"),
+				snapshot("2026-08-21"),
+				snapshot("2026-08-28", 4, false),
+			],
+			[],
+		);
+		expect(log.map((slot) => [slot.date, slot.start, slot.label])).toEqual([
+			["2026-07-31", 1, null],
+			["2026-08-07", 2, null],
+			["2026-08-14", null, "特番"],
+			["2026-08-21", 3, null],
+			["2026-08-28", 4, null],
+		]);
+	});
+
+	it("synthesizes gap dates on the anchor's weekday, not a stale broadcast_day", () => {
+		// 骸骨騎士様Ⅱパターン: MAL由来 broadcast_day がAT-X先行の月曜のままでも、
+		// しょぼいアンカー（木曜）の曜日で過去日を補完する。
+		const anime = {
+			...ANIME,
+			aired_from: "2026-07-06",
+			aired_to: "2026-08-06",
+			broadcast_day: 1,
+			broadcast_time: "22:00",
+		};
+		const log = buildBroadcastEpisodeLog(anime, [snapshot("2026-08-06", 5)], []);
+		expect(log.map((slot) => [slot.date, slot.start])).toEqual([
+			["2026-07-09", 1],
+			["2026-07-16", 2],
+			["2026-07-23", 3],
+			["2026-07-30", 4],
+			["2026-08-06", 5],
+		]);
+	});
+
 	it("drops cancelled dates even when a stale session row still exists", () => {
 		// 放送休止オーバーライドより前に（旧フォールバック等で）セッション行が
 		// 作られていた場合でも、ログから除外され番号カウントも消費しない。
