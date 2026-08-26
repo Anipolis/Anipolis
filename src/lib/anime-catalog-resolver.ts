@@ -326,7 +326,16 @@ export function resolveAnimeCatalog(
 	const source = resolveNullableString("source", false);
 	const airedFrom = resolveNullableString("aired_from", false);
 	const airedTo = resolveNullableString("aired_to", false);
-	const broadcastTime = resolveNullableString("broadcast_time", false);
+	// 放送時刻はしょぼい主局（地上波最速）由来を優先する。MAL/Jikanの値は
+	// AT-X等の先行放送を指すことがある（骸骨騎士様Ⅱ: MAL=月曜(AT-X)）。
+	const broadcastTime = firstDefined<string | null>([
+		candidate(nullableStringValue(manual, "broadcast_time"), "manual", "verified"),
+		candidate(stringValue(syobocal, "broadcast_time"), "syobocal", "verified"),
+		candidate(stringValue(mal, "broadcast_time"), "mal", "source"),
+		candidate(stringValue(jikan, "broadcast_time"), "jikan", "source"),
+		candidate(legacyRow?.broadcast_time, "legacy", "fallback"),
+		{ value: null, source: "legacy", confidence: "fallback" },
+	]);
 	const resolveOfficialUrl = (key: "official_site_url" | "official_x_url") =>
 		firstDefined<string | null>([
 			candidate(nullableStringValue(manual, key), "manual", "verified"),
@@ -424,6 +433,8 @@ export function resolveAnimeCatalog(
 	const genreEnglish = resolveArray("genre_en", "genre_en", "genres");
 	const broadcastDay = firstDefined<number | null>([
 		candidate(numberValue(manual, "broadcast_day"), "manual", "verified"),
+		// 放送曜日もしょぼい主局優先（broadcast_time と同じ理由）
+		candidate(numberValue(syobocal, "broadcast_day"), "syobocal", "verified"),
 		candidate(numberValue(mal, "broadcast_day"), "mal", "source"),
 		candidate(numberValue(jikan, "broadcast_day"), "jikan", "source"),
 		candidate(legacyRow?.broadcast_day, "legacy", "fallback"),
