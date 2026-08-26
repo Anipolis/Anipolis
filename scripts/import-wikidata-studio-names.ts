@@ -289,26 +289,18 @@ async function main() {
 	console.log(
 		`Studio resolution preview for ${season}: ${sourceNames.length} source names; ${aliasRows.length} matched aliases; ${sourceRows.length} identities; ${japaneseCount} Japanese names; ${jikanNameCount} Jikan-preferred names.`,
 	);
-	const tezukaExample = aliasRows.find((row) => row.alias_key === "tezukaproductions");
-	if (tezukaExample) {
-		console.log(
-			"Tezuka example:",
-			JSON.stringify({
-				alias: tezukaExample.alias,
-				studio: sourceRows.find((row) => row.source_key === tezukaExample.source_key),
-			}),
-		);
-	}
-	console.log(
-		JSON.stringify(
-			aliasRows
-				.slice(0, 20)
-				.map((alias) => ({ ...alias, studio: sourceRows.find((row) => row.source_key === alias.source_key) })),
-			null,
-			2,
-		),
-	);
 	if (options.dryRun) {
+		// 照合内容の確認はdry-runのときだけ出す（本番実行のログを埋めない）
+		console.log(
+			JSON.stringify(
+				aliasRows.slice(0, 20).map((alias) => ({
+					...alias,
+					studio: sourceRows.find((row) => row.source_key === alias.source_key),
+				})),
+				null,
+				2,
+			),
+		);
 		console.log("Dry run complete. No database writes were made.");
 		return;
 	}

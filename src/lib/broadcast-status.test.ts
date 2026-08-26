@@ -62,4 +62,10 @@ describe("computeBroadcastStatus", () => {
 			"airing",
 		);
 	});
+
+	it("returns unknown when neither dates nor a recognized status are available", () => {
+		expect(computeBroadcastStatus({ airedFrom: null, airedTo: null, type: "TV", status: null }, TODAY)).toBe(
+			"unknown",
+		);
+	});
 });

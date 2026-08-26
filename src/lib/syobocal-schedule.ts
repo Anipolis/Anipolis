@@ -86,7 +86,9 @@ export function jstBroadcastTimeLabel(value: string | Date): string | null {
 function episodeIdentity(program: SyobocalScheduleProgram): string {
 	if (program.episodeNumber !== null) return `episode:${program.episodeNumber}`;
 	if (program.subtitle) return `subtitle:${program.subtitle.normalize("NFKC").trim()}`;
-	return "unnumbered";
+	// 話数も副題も無い枠は放送日で区別する: 単一キーに潰すと別日の特番が
+	// 「同じ話の別局」扱いされて1本しか残らない。同日内の局違いは従来どおり統合。
+	return `unnumbered:${jstBroadcastDate(program.startsAt)}`;
 }
 
 // Syobocal ChGID groups for free-to-air TV. Everything else (CS incl. AT-X,

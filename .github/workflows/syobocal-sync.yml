@@ -81,6 +81,9 @@ jobs:
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           MAL_CLIENT_ID: ${{ secrets.MAL_CLIENT_ID }}
         run: |
+          # シーズン単位で失敗を隔離する: 1シーズン目のしょぼい照合が落ちても
+          # 2シーズン目まで巻き添えにしない。失敗があれば最後にジョブを失敗させる。
+          FAILED=0
           for TARGET in \
             "${{ steps.season.outputs.year }} ${{ steps.season.outputs.season }}" \
             "${{ steps.season.outputs.next_year }} ${{ steps.season.outputs.next_season }}"; do
@@ -88,6 +91,11 @@ jobs:
             echo "=== $1-$2 ==="
             pnpm import:mal -- --year "$1" --season "$2" || echo "MAL import for $1-$2 failed; continuing"
             pnpm import:jikan -- --year "$1" --season "$2" || echo "Jikan import for $1-$2 failed; continuing"
-            pnpm import:syobocal -- --year "$1" --season "$2"
-            pnpm resolve:anime-catalog -- --year "$1" --season "$2"
+            if pnpm import:syobocal -- --year "$1" --season "$2"; then
+              pnpm resolve:anime-catalog -- --year "$1" --season "$2" || { echo "Resolve for $1-$2 failed"; FAILED=1; }
+            else
+              echo "Syobocal import for $1-$2 failed; skipping resolve"
+              FAILED=1
+            fi
           done
+          exit "$FAILED"
