@@ -5,7 +5,7 @@ import {
 	inferEpisodeNumbersBackward,
 	normalizedBroadcastEpisodeLabel,
 } from "$lib/utils/broadcast-episodes";
-import { isEligibleForRoomLog, roomDateKey } from "$lib/utils/broadcast-room";
+import { broadcastTimeMinutes, isEligibleForRoomLog, roomDateKey } from "$lib/utils/broadcast-room";
 
 export type BroadcastEpisodeLogSlot = BroadcastEpisodeSlot & { opened: boolean };
 
@@ -69,6 +69,11 @@ export function buildBroadcastEpisodeLog(
 		const todayKey = jstBroadcastDate(new Date());
 		const airedToKey = anime.aired_to?.slice(0, 10) ?? null;
 		const cursor = new Date(`${anime.aired_from.slice(0, 10)}T00:00:00`);
+		// MALの開始日は24時超の慣習表記に対応せず、深夜帯では翌日の実日付が入る
+		// ことがある。24時以降の作品は1日前から探索を始めて放送日慣習（前日側）の
+		// 週次パターンに吸着させる。開始日が既に慣習日なら曜日が合わず素通りする
+		// だけなので影響しない。
+		if ((broadcastTimeMinutes(anime.broadcast_time) ?? 0) >= 24 * 60) cursor.setDate(cursor.getDate() - 1);
 		while (cursor.getDay() !== effectiveBroadcastDay) cursor.setDate(cursor.getDate() + 1);
 		for (let guard = 0; guard < 400; guard += 1, cursor.setDate(cursor.getDate() + 7)) {
 			const date = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`;

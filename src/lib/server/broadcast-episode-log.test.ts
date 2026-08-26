@@ -107,6 +107,26 @@ describe("buildBroadcastEpisodeLog", () => {
 		]);
 	});
 
+	it("snaps a day-late MAL aired_from back to the late-night convention weekday", () => {
+		// MALは24時超表記に対応せず、土曜25:30の初回を「日曜」の実日付で返すことが
+		// ある。1日前から探索して土曜(慣習日)の週次パターンに吸着させる。
+		const anime = {
+			...ANIME,
+			aired_from: "2026-07-05",
+			aired_to: "2026-08-01",
+			broadcast_day: 6,
+			broadcast_time: "25:30",
+		};
+		const log = buildBroadcastEpisodeLog(anime, [snapshot("2026-08-01", 5)], []);
+		expect(log.map((slot) => [slot.date, slot.start])).toEqual([
+			["2026-07-04", 1],
+			["2026-07-11", 2],
+			["2026-07-18", 3],
+			["2026-07-25", 4],
+			["2026-08-01", 5],
+		]);
+	});
+
 	it("drops cancelled dates even when a stale session row still exists", () => {
 		// 放送休止オーバーライドより前に（旧フォールバック等で）セッション行が
 		// 作られていた場合でも、ログから除外され番号カウントも消費しない。
