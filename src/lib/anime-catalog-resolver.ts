@@ -449,6 +449,15 @@ export function resolveAnimeCatalog(
 	const blockedMediaType = mediaTypeLabel !== null && ["music", "pv", "cm"].includes(mediaTypeLabel);
 	if (blockedMediaType) resolutionReasons.push("Music/PV/CM entries are not published.");
 
+	// 放送中の作品では anime-offline-database の話数がスナップショット時点で
+	// 固定された古い値になりがち（例: BEYBLADE X）。放送中はMAL/Jikanの現行値を
+	// 優先し、どちらにも無ければ「総話数未確定」として null にする。
+	if (status.value === "airing" && episodeCount.source === "anime_offline_database") {
+		const liveCount = stringValue(mal, "episode_count") ?? stringValue(jikan, "episode_count") ?? null;
+		episodeCount.value = liveCount;
+		if (liveCount !== null) episodeCount.source = stringValue(mal, "episode_count") ? "mal" : "jikan";
+	}
+
 	const resolvedFields = {
 		title,
 		title_en: titleEnglish,

@@ -12,7 +12,7 @@ import {
 	isAdminUser,
 } from "$lib/server/queries";
 import { normalizedBroadcastEpisodeLabel } from "$lib/utils/broadcast-episodes";
-import { isEligibleForRoomLog, roomDateKey } from "$lib/utils/broadcast-room";
+import { roomDateKey } from "$lib/utils/broadcast-room";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
@@ -34,23 +34,24 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 		getBroadcastRoomScheduleSnapshotsForAnime(supabase, Number(anime.id)),
 	]);
 
-	// 各話ルームの履歴は実際に開催されたセッション（しょぼい由来の話数付き
+	// 各話ルームの履歴は実際に存在するセッション（しょぼい由来の話数付き
 	// スナップショット）が唯一の情報源。曜日からの機械カウントは行わない。
 	// 管理者オーバーライドはラベル（総集編等）の上書きにだけ使う。
+	// シーズン境界（isEligibleForRoomLog）はルーム「合成」のゲートであり、
+	// 実在セッションの一覧には適用しない: 2026-spring以前開始の長期放送作品
+	// （BEYBLADE X等）も、サービス開始後に開催されたルームは列挙する。
 	const overrideByDate = new Map(broadcastOverrides.map((override) => [roomDateKey(override.room_date), override]));
-	const episodes = isEligibleForRoomLog(anime.season)
-		? scheduleSnapshots
-				.map((snapshot) => {
-					const override = overrideByDate.get(snapshot.date);
-					return {
-						date: snapshot.date,
-						start: snapshot.start,
-						end: snapshot.end,
-						label: (override ? normalizedBroadcastEpisodeLabel(override) : null) ?? snapshot.label,
-					};
-				})
-				.sort((left, right) => right.date.localeCompare(left.date))
-		: [];
+	const episodes = scheduleSnapshots
+		.map((snapshot) => {
+			const override = overrideByDate.get(snapshot.date);
+			return {
+				date: snapshot.date,
+				start: snapshot.start,
+				end: snapshot.end,
+				label: (override ? normalizedBroadcastEpisodeLabel(override) : null) ?? snapshot.label,
+			};
+		})
+		.sort((left, right) => right.date.localeCompare(left.date));
 
 	return { anime, user, isAdmin, listedUsers, relations, dataAttributions, episodes, broadcastOverrides, events };
 };

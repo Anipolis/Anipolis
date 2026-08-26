@@ -19,7 +19,6 @@ import {
 	getActiveRoomExperimentRunForAnime as getActiveExperimentRun,
 } from "$lib/server/room-experiments";
 import type { Anime, BroadcastRoomOverride, BroadcastRoomSession } from "$lib/types";
-import { calcEpisodeNumberFromDate } from "$lib/types";
 import { animeIsScheduledForRoomDate, broadcastTimeMinutes, isEligibleForRoomLog } from "$lib/utils/broadcast-room";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -112,7 +111,9 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 	if (!session) throw error(404, "放送ルームが見つかりません");
 
 	const hashtag = roomHashtag(anime);
-	const episodeNumber = calcEpisodeNumberFromDate(session.room_date, anime.aired_from, anime.broadcast_time);
+	// 話数はしょぼい番組表由来の値のみ（曜日からの機械カウントはしない）。
+	// 同期セッション以外（合成表示・オーバーライド起点）は話数なしで表示する。
+	const episodeNumber = session.episode_number ?? null;
 	const roomExperimentSupabase = user ? createRoomExperimentServiceClient() : null;
 	const [posts, trending, animeTrending, roomExperimentRun, roomExitSurveyLoadState] = await Promise.all([
 		getBroadcastRoomPosts(supabase, session.id, user?.id ?? null, { limit: 100, ascending: true }),
