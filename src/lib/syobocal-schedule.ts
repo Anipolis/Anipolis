@@ -126,6 +126,14 @@ export function selectPrimarySyobocalPrograms(
 	for (const mapping of mappings) {
 		const title = titleByTid.get(mapping.tid);
 		const preferredChannel = title?.firstChannel ? normalizeChannelName(title.firstChannel) : null;
+		const isPreferred = (program: SyobocalScheduleProgram) => {
+			if (!preferredChannel) return false;
+			const channel = channelByChid.get(program.chid);
+			return (
+				normalizeChannelName(channel?.name ?? "") === preferredChannel ||
+				normalizeChannelName(channel?.epgName ?? "") === preferredChannel
+			);
+		};
 		const eligible = programs.filter((program) => {
 			if (program.tid !== mapping.tid || program.deleted) return false;
 			if (!isSchedulableProgram(program)) return false;
@@ -134,8 +142,30 @@ export function selectPrimarySyobocalPrograms(
 			const date = jstBroadcastDate(program.startsAt);
 			return (!mapping.validFrom || date >= mapping.validFrom) && (!mapping.validTo || date <= mapping.validTo);
 		});
+		// 最速局ロック: 最大話数を最も早く放送する局（地上波優先）を主局とし、
+		// その局の枠だけを使う。遅れネット局で今も放送中の旧話が「その話の最速」
+		// として紛れ込み、本放送より古い話数のルームが立つのを防ぐ。
+		const numbered = eligible.filter((program) => program.episodeNumber !== null);
+		let primaryChid: number | null = null;
+		for (const tier of [0, 1]) {
+			const tierNumbered = numbered.filter((program) => channelTier(channelByChid.get(program.chid)) === tier);
+			if (tierNumbered.length === 0) continue;
+			const maxEpisode = Math.max(...tierNumbered.map((program) => program.episodeNumber ?? 0));
+			const leader = tierNumbered
+				.filter((program) => program.episodeNumber === maxEpisode)
+				.sort(
+					(left, right) =>
+						Date.parse(left.startsAt) - Date.parse(right.startsAt) ||
+						Number(isPreferred(right)) - Number(isPreferred(left)) ||
+						left.pid - right.pid,
+				)[0];
+			if (leader) primaryChid = leader.chid;
+			break;
+		}
+		const pool = primaryChid !== null ? eligible.filter((program) => program.chid === primaryChid) : eligible;
+
 		const byEpisode = new Map<string, SyobocalScheduleProgram[]>();
-		for (const program of eligible) {
+		for (const program of pool) {
 			const key = episodeIdentity(program);
 			const values = byEpisode.get(key) ?? [];
 			values.push(program);
@@ -145,14 +175,6 @@ export function selectPrimarySyobocalPrograms(
 		for (const candidates of byEpisode.values()) {
 			// Earliest airing on the best available tier (terrestrial before BS);
 			// the title's home channel only breaks exact same-time ties.
-			const isPreferred = (program: SyobocalScheduleProgram) => {
-				if (!preferredChannel) return false;
-				const channel = channelByChid.get(program.chid);
-				return (
-					normalizeChannelName(channel?.name ?? "") === preferredChannel ||
-					normalizeChannelName(channel?.epgName ?? "") === preferredChannel
-				);
-			};
 			const chosen = [...candidates].sort(
 				(left, right) =>
 					(channelTier(channelByChid.get(left.chid)) ?? 9) -
