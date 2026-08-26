@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { BroadcastRoomOverride } from "$lib/types";
-import { type BroadcastEpisodeSlot, inferEpisodeNumbersBackward } from "./broadcast-episodes";
+import {
+	type BroadcastEpisodeSlot,
+	inferEpisodeNumbersBackward,
+	inferEpisodeNumbersForward,
+} from "./broadcast-episodes";
 
 function slot(date: string, start: number | null = null, label: string | null = null): BroadcastEpisodeSlot {
 	return { date, start, end: start, label };
@@ -76,5 +80,36 @@ describe("inferEpisodeNumbersBackward", () => {
 		const mismatch = inferEpisodeNumbersBackward(slots, new Map());
 		expect(mismatch).toEqual({ kind: "underflow", date: "2026-07-14" });
 		expect(slots.map((s) => s.start)).toEqual([null, null, 1, 2]);
+	});
+});
+
+describe("inferEpisodeNumbersForward", () => {
+	it("numbers from episode 1 respecting recap and marathon overrides", () => {
+		const overrides = new Map<string, BroadcastRoomOverride>([
+			["2026-07-14", override({ room_date: "2026-07-14", episode_count_increment: 0, episode_label: "総集編" })],
+			["2026-07-21", override({ room_date: "2026-07-21", episode_start: 2, episode_end: 3 })],
+		]);
+		const slots = [
+			slot("2026-07-07"),
+			slot("2026-07-14", null, "総集編"),
+			slot("2026-07-21"),
+			slot("2026-07-28"),
+			slot("2026-08-04"),
+		];
+		const last = inferEpisodeNumbersForward(slots, overrides);
+		expect(slots.map((s) => [s.start, s.end])).toEqual([
+			[1, 1],
+			[null, null],
+			[2, 3],
+			[4, 4],
+			[5, 5],
+		]);
+		expect(last).toBe(5);
+	});
+
+	it("does not consume counts for slots that already carry a label", () => {
+		const slots = [slot("2026-07-07"), slot("2026-07-14", null, "特番"), slot("2026-07-21")];
+		expect(inferEpisodeNumbersForward(slots, new Map())).toBe(2);
+		expect(slots.map((s) => s.start)).toEqual([1, null, 2]);
 	});
 });
