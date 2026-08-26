@@ -8,6 +8,68 @@ const ALLOWED_INLINE_COVER_TYPES = ["image/jpeg", "image/png", "image/webp", "im
 
 type AnimeWriteResult = { success: true; animeId: string } | ReturnType<typeof fail<{ message: string }>>;
 
+// リゾルバ（anime-catalog-resolver）が manual ソースとして参照するキー。
+// 管理画面での編集をこのキーに限って anime_source_records(source='manual') に
+// 差分保存し、週次のカタログ再解決で上書きされないようにする。ここに無い
+// フィールド（broadcast_duration や room 系）はリゾルバが触らないので不要。
+const MANUAL_SOURCE_KEYS = [
+	"title",
+	"title_en",
+	"title_romaji",
+	"season",
+	"episode_count",
+	"type",
+	"source",
+	"aired_from",
+	"aired_to",
+	"genre",
+	"studio",
+	"producer",
+	"official_site_url",
+	"official_x_url",
+	"cover_url",
+	"broadcast_day",
+	"broadcast_time",
+] as const;
+
+/**
+ * 管理画面の編集内容を manual ソースレコードへ差分マージする。失敗しても
+ * anime 行の更新自体は成功しているので、ログだけ残して処理は続行する。
+ */
+async function upsertManualSourceRecord(
+	// biome-ignore lint/suspicious/noExplicitAny: generated types may lag behind source-record migrations
+	writer: SupabaseClient<any>,
+	malId: number,
+	previous: Record<string, unknown>,
+	payload: Record<string, unknown>,
+) {
+	const changed: Record<string, unknown> = {};
+	for (const key of MANUAL_SOURCE_KEYS) {
+		if (!(key in payload)) continue;
+		const next = payload[key] ?? null;
+		if (JSON.stringify(next) !== JSON.stringify(previous[key] ?? null)) changed[key] = next;
+	}
+	if (Object.keys(changed).length === 0) return;
+
+	const { data: existing } = await writer
+		.from("anime_source_records")
+		.select("normalized_data,source_url")
+		.eq("mal_id", malId)
+		.eq("source", "manual")
+		.maybeSingle();
+	const { error } = await writer.from("anime_source_records").upsert(
+		{
+			mal_id: malId,
+			source: "manual",
+			source_version: new Date().toISOString().slice(0, 10),
+			source_url: (existing?.source_url as string | null) ?? null,
+			normalized_data: { ...((existing?.normalized_data as Record<string, unknown>) ?? {}), ...changed },
+		},
+		{ onConflict: "mal_id,source" },
+	);
+	if (error) console.error("manual source record upsert failed:", error.message);
+}
+
 function normalizeBroadcastTime(value: string | null | undefined) {
 	const raw = value?.trim();
 	if (!raw) return null;
@@ -202,9 +264,25 @@ export async function updateAnimeAction(
 
 	// biome-ignore lint/suspicious/noExplicitAny: shared writer must tolerate generated type lag after migrations
 	const animeWriter = supabase as SupabaseClient<any>;
+	const { data: previousRow } = await animeWriter
+		.from("anime")
+		.select(`mal_id,${MANUAL_SOURCE_KEYS.join(",")}`)
+		.eq("id", animeId)
+		.maybeSingle();
 	const { data, error } = await animeWriter.from("anime").update(payload).eq("id", animeId).select("id").single();
 
 	if (error) return fail(500, { message: `更新エラー: ${error.message}` });
+
+	// 編集差分を manual ソースとして保存し、カタログ再解決での上書きを防ぐ
+	const malId = (previousRow as { mal_id: number | null } | null)?.mal_id;
+	if (malId != null) {
+		await upsertManualSourceRecord(
+			animeWriter,
+			malId,
+			(previousRow ?? {}) as Record<string, unknown>,
+			payload as Record<string, unknown>,
+		);
+	}
 	return { success: true, animeId: String((data as { id: number }).id) };
 }
 
