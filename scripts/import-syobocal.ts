@@ -1393,8 +1393,10 @@ async function saveBroadcastRoomSessions(
 	for (const row of rows) {
 		const current = byPid.get(row.source_program_id) ?? byAnimeDate.get(`${row.anime_id}:${row.room_key}`);
 		if (current) {
-			if (current.schedule_frozen_at || Date.parse(current.posting_opens_at) <= now) continue;
+			// 開場済み・凍結済みでも「現在の選定に含まれる」ことに変わりはないので
+			// used に数える（下の陳腐化削除の対象から外す）。更新はしない。
 			usedExistingIds.add(current.id);
+			if (current.schedule_frozen_at || Date.parse(current.posting_opens_at) <= now) continue;
 			existingRows.push({ id: current.id, ...row });
 		} else {
 			newRows.push(row);
@@ -1402,26 +1404,49 @@ async function saveBroadcastRoomSessions(
 	}
 	await upsertBatches(supabase, "broadcast_room_sessions", existingRows, "id");
 	await upsertBatches(supabase, "broadcast_room_sessions", newRows, "anime_id,room_kind,room_key");
-	const staleIds = existing
-		.filter(
-			(session) =>
-				session.schedule_source === "syobocal" &&
-				!usedExistingIds.has(session.id) &&
-				!session.schedule_frozen_at &&
-				Date.parse(session.posting_opens_at) > now &&
-				jstDate(session.scheduled_at) >= window.startDate &&
-				jstDate(session.scheduled_at) < window.endDate,
-		)
+	const staleCandidates = existing.filter(
+		(session) =>
+			session.schedule_source === "syobocal" &&
+			!usedExistingIds.has(session.id) &&
+			!session.schedule_frozen_at &&
+			jstDate(session.scheduled_at) >= window.startDate &&
+			jstDate(session.scheduled_at) < window.endDate,
+	);
+	const futureStaleIds = staleCandidates
+		.filter((session) => Date.parse(session.posting_opens_at) > now)
 		.map((session) => session.id);
+	// 開場済み（過去）でも、同期ウィンドウ内で現在の選定に含まれないしょぼい由来
+	// セッションは原則削除する: 最速局ロック導入前に作られた遅れネット局の枠が
+	// 過去日付になって残存し、ルームログの最新話が別局の旧話にズレるのを防ぐ
+	// （例: 猫と竜の読売テレビ8話が本来のTOKYO MX 8/22枠を差し置いて最新化）。
+	// ただし投稿が付いたルームは履歴保全のため残し、件数だけ知らせる。
+	const pastCandidates = staleCandidates.filter((session) => Date.parse(session.posting_opens_at) <= now);
+	const sessionIdsWithPosts = new Set<string>();
+	for (let start = 0; start < pastCandidates.length; start += DATABASE_BATCH_SIZE) {
+		const ids = pastCandidates.slice(start, start + DATABASE_BATCH_SIZE).map((session) => session.id);
+		const { data, error } = await supabase
+			.from("posts")
+			.select("broadcast_room_session_id")
+			.in("broadcast_room_session_id", ids);
+		if (error) throw new Error(`Could not check posts on stale held sessions: ${error.message}`);
+		for (const row of (data ?? []) as { broadcast_room_session_id: string | null }[]) {
+			if (row.broadcast_room_session_id) sessionIdsWithPosts.add(row.broadcast_room_session_id);
+		}
+	}
+	const pastStaleIds = pastCandidates
+		.filter((session) => !sessionIdsWithPosts.has(session.id))
+		.map((session) => session.id);
+	const keptHeldCount = pastCandidates.length - pastStaleIds.length;
+	const staleIds = [...futureStaleIds, ...pastStaleIds];
 	for (let start = 0; start < staleIds.length; start += DATABASE_BATCH_SIZE) {
 		const { error } = await supabase
 			.from("broadcast_room_sessions")
 			.delete()
 			.in("id", staleIds.slice(start, start + DATABASE_BATCH_SIZE));
-		if (error) throw new Error(`Could not remove stale future room sessions: ${error.message}`);
+		if (error) throw new Error(`Could not remove stale room sessions: ${error.message}`);
 	}
 	console.log(
-		`Saved ${existingRows.length + newRows.length} future room snapshots; removed ${staleIds.length} stale future sessions.`,
+		`Saved ${existingRows.length + newRows.length} future room snapshots; removed ${futureStaleIds.length} stale future and ${pastStaleIds.length} stale held sessions${keptHeldCount > 0 ? ` (kept ${keptHeldCount} with posts)` : ""}.`,
 	);
 }
 

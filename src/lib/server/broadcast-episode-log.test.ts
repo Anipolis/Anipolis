@@ -6,7 +6,7 @@ import { type BroadcastEpisodeLogSlot, buildBroadcastEpisodeLog } from "./broadc
 // スナップショットだけで決定的にテストする。
 const ANIME = {
 	season: "2026-spring",
-	room_type: "episode",
+	room_type: "episode" as const,
 	aired_from: "2026-04-10",
 	aired_to: null,
 	broadcast_day: null,
