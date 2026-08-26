@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { createClient } from "@supabase/supabase-js";
@@ -12,13 +13,20 @@ import {
 	findSyobocalOfficialXUrl,
 	findSyobocalWikipediaArticleLinks,
 	findSyobocalWikipediaKeywordLinks,
+	kanaFoldTitle,
+	latinFoldTitle,
 	matchSyobocalTitlesByReading,
 	matchSyobocalTitlesExactly,
 	normalizeSyobocalTitle,
 	parseSyobocalLinks,
 	type SyobocalWikipediaArticleLink,
 } from "../src/lib/syobocal.ts";
-import { jstDate, rollingSyobocalProgramRange, selectPrimarySyobocalPrograms } from "../src/lib/syobocal-schedule.ts";
+import {
+	jstBroadcastDate,
+	jstDate,
+	rollingSyobocalProgramRange,
+	selectPrimarySyobocalPrograms,
+} from "../src/lib/syobocal-schedule.ts";
 
 type SeasonName = "winter" | "spring" | "summer" | "fall";
 type SourceName = AnimeCatalogSeasonSource | "manual" | "wikidata" | "syobocal";
@@ -140,7 +148,9 @@ type MappingProposal = {
 const VALID_SEASONS = new Set<SeasonName>(["winter", "spring", "summer", "fall"]);
 const DATABASE_BATCH_SIZE = 100;
 const WIKIDATA_BATCH_SIZE = 100;
-const PROGRAM_TID_BATCH_SIZE = 10;
+// Catalog-wide program sync queries ~1,800 TIDs; large batches with a gentle
+// interval keep the request count low enough for Syobocal's rate limit.
+const PROGRAM_TID_BATCH_SIZE = 100;
 const SYOBOCAL_ENDPOINT = "https://cal.syoboi.jp/db.php";
 const JAPANESE_WIKIPEDIA_ENDPOINT = "https://ja.wikipedia.org/w/api.php";
 const WIKIDATA_ENDPOINT = "https://query.wikidata.org/sparql";
@@ -281,6 +291,11 @@ async function fetchWithRetry(url: URL, accept: string): Promise<Response> {
 				throw new Error(`${response.status} ${response.statusText}`);
 			}
 			lastError = new Error(`${response.status} ${response.statusText}`);
+			// Rate limiting needs a real cool-down, not a sub-second retry.
+			if (response.status === 429 && attempt < 4) {
+				await sleep(30_000 * attempt);
+				continue;
+			}
 		} catch (error) {
 			lastError = error;
 		}
@@ -318,6 +333,9 @@ function responseItems(payload: unknown, responseKey: string, itemsKey: string, 
 	const response = asRecord(asRecord(payload)[responseKey]);
 	const result = asRecord(response["Result"]);
 	const code = textValue(result, "Code");
+	// 404 means "no rows matched" (e.g. a program lookup for titles with no
+	// slots in the range), which is a normal empty result, not a failure.
+	if (code === "404") return [];
 	if (code && code !== "200") throw new Error(`Syobocal returned ${code}: ${textValue(result, "Message") ?? ""}`);
 	return asArray(asRecord(response[itemsKey])[itemKey]).map(asRecord);
 }
@@ -437,7 +455,9 @@ async function fetchPrograms(tids: number[], range: string): Promise<SyobocalPro
 	const programs: SyobocalProgram[] = [];
 	for (let start = 0; start < tids.length; start += PROGRAM_TID_BATCH_SIZE) {
 		const batch = tids.slice(start, start + PROGRAM_TID_BATCH_SIZE);
-		const cacheName = `programs/${range}-${batch.join("-")}.xml`;
+		// A joined TID list exceeds Windows path limits at this batch size; hash it.
+		const batchKey = createHash("sha256").update(batch.join(",")).digest("hex").slice(0, 16);
+		const cacheName = `programs/${range}-${batchKey}.xml`;
 		const payload = await readCachedXml(
 			"ProgLookup",
 			{ TID: batch.join(","), Range: range, JOIN: "SubTitles" },
@@ -456,7 +476,7 @@ async function fetchPrograms(tids: number[], range: string): Promise<SyobocalPro
 		console.log(
 			`Syobocal programs fetched for ${Math.min(start + batch.length, tids.length)}/${tids.length} TIDs.`,
 		);
-		await sleep(250);
+		await sleep(1000);
 	}
 	return [...new Map(programs.map((program) => [program.pid, program])).values()];
 }
@@ -595,6 +615,61 @@ async function readManualMappings(): Promise<ManualMapping[]> {
 			note: typeof row["note"] === "string" ? row["note"] : undefined,
 		};
 	});
+}
+
+type ProgramSyncMapping = {
+	malId: number;
+	tid: number;
+	validFrom: string | null;
+	validTo: string | null;
+};
+
+// Every confirmed primary Syobocal mapping in the catalog, regardless of
+// season: the program sync follows these so the calendar and rooms are driven
+// by Syobocal alone.
+async function fetchAllPrimaryMappings(
+	supabase: ReturnType<typeof getSupabaseClient>,
+	dryRun: boolean,
+): Promise<ProgramSyncMapping[]> {
+	const rows: ProgramSyncMapping[] = [];
+	for (let start = 0; ; start += DATABASE_BATCH_SIZE) {
+		const { data, error } = await supabase
+			.from("anime_external_mappings")
+			.select("mal_id,external_key,valid_from,valid_to")
+			.eq("external_source", "syobocal")
+			.eq("is_primary", true)
+			.eq("match_status", "confirmed")
+			.order("mal_id", { ascending: true })
+			.range(start, start + DATABASE_BATCH_SIZE - 1);
+		if (error) {
+			if (dryRun && (error.code === "42P01" || error.code === "PGRST205")) return [];
+			throw new Error(`Could not read catalog-wide Syobocal mappings: ${error.message}`);
+		}
+		for (const row of data ?? []) {
+			const record = row as Record<string, unknown>;
+			const tid = Number.parseInt(String(record["external_key"] ?? ""), 10);
+			if (!Number.isSafeInteger(tid) || tid <= 0) continue;
+			rows.push({
+				malId: Number(record["mal_id"]),
+				tid,
+				validFrom: (record["valid_from"] as string | null) ?? null,
+				validTo: (record["valid_to"] as string | null) ?? null,
+			});
+		}
+		if (!data || data.length < DATABASE_BATCH_SIZE) break;
+	}
+	return rows;
+}
+
+function mergeProgramSyncMappings(
+	selected: readonly ProgramSyncMapping[],
+	catalogWide: readonly ProgramSyncMapping[],
+): ProgramSyncMapping[] {
+	const byMal = new Map<number, ProgramSyncMapping>();
+	for (const mapping of catalogWide) byMal.set(mapping.malId, mapping);
+	// This run's freshly selected mappings supersede stored rows for their MAL ids.
+	for (const mapping of selected) byMal.set(mapping.malId, mapping);
+	return [...byMal.values()];
 }
 
 async function fetchExistingMappings(
@@ -963,21 +1038,36 @@ function buildMappings(
 	});
 
 	// Reading/Latin second-tier matches: only for MAL entries and TIDs that no
-	// higher-confidence proposal already claims.
-	const claimedMalIds = new Set(
-		[...exactProposals, ...wikipediaProposals, ...wikidataProposals, ...existingManual, ...fileManual].map(
-			(proposal) => proposal.malId,
-		),
-	);
-	const claimedTids = new Set(
-		[...exactProposals, ...wikipediaProposals, ...wikidataProposals, ...existingManual, ...fileManual].map(
-			(proposal) => proposal.tid,
-		),
-	);
+	// higher-confidence proposal already claims. Proposals whose TID is missing
+	// from the title snapshot never reach `selected`, so they must not block a
+	// reading match for the same MAL entry.
+	const effectiveSeeds = [
+		...exactProposals,
+		...wikipediaProposals,
+		...wikidataProposals,
+		...existingManual,
+		...fileManual,
+	].filter((proposal) => titlesByTid.has(proposal.tid));
+	const claimedMalIds = new Set(effectiveSeeds.map((proposal) => proposal.malId));
+	const claimedTids = new Set(effectiveSeeds.map((proposal) => proposal.tid));
+	// The evidence must name the candidate title that actually matched; a MAL id
+	// can carry several title candidates (ODbL synonyms), so resolve via the
+	// match key instead of the last-one-wins candidatesByMal map.
+	const candidateMatchKeys = (candidate: CatalogCandidate): Set<string> => {
+		const keys = new Set<string>();
+		const kana = kanaFoldTitle(candidate.title);
+		if (kana.length >= 3) keys.add(`kana:${kana}`);
+		const latin = latinFoldTitle(candidate.title);
+		if (latin) keys.add(`latin:${latin}`);
+		return keys;
+	};
 	const readingProposals: MappingProposal[] = matchSyobocalTitlesByReading(candidates, matchingTitles).flatMap(
 		(match) => {
 			if (claimedMalIds.has(match.malId) || claimedTids.has(match.tid)) return [];
-			const candidate = candidatesByMal.get(match.malId);
+			const candidate =
+				candidates.find(
+					(value) => value.malId === match.malId && candidateMatchKeys(value).has(match.matchKey),
+				) ?? candidatesByMal.get(match.malId);
 			const title = titlesByTid.get(match.tid);
 			return [
 				{
@@ -1200,7 +1290,7 @@ async function fetchAnimeRoomRows(supabase: ReturnType<typeof getSupabaseClient>
 
 function buildBroadcastRoomSessionRows(
 	animeRows: AnimeRoomRow[],
-	mappings: MappingProposal[],
+	mappings: readonly ProgramSyncMapping[],
 	titles: SyobocalTitle[],
 	channels: SyobocalChannel[],
 	programs: SyobocalProgram[],
@@ -1222,7 +1312,9 @@ function buildBroadcastRoomSessionRows(
 		const postCloseMinutes = anime.broadcast_room_post_close_minutes ?? 30;
 		const postingOpensAt = startsAt - preOpenMinutes * 60_000;
 		if (postingOpensAt <= now) return [];
-		const roomDate = jstDate(program.startsAt);
+		// 深夜アニメ慣習: 4時前の枠は前日の放送日として room_date を振る
+		// （overrides / ensure_broadcast_room_session と同じ基準）
+		const roomDate = jstBroadcastDate(program.startsAt);
 		return [
 			{
 				anime_id: anime.id,
@@ -1402,24 +1494,47 @@ async function main() {
 	);
 	for (const line of mapping.review) console.warn(`REVIEW: ${line}`);
 
+	const titleByTid = new Map(titles.map((title) => [title.tid, title] as const));
 	const selectedTitleByTid = new Map(
 		mapping.selected.flatMap((proposal) => {
-			const title = titles.find((candidate) => candidate.tid === proposal.tid);
+			const title = titleByTid.get(proposal.tid);
 			return title ? [[proposal.tid, title] as const] : [];
 		}),
 	);
+	// Syobocal is the source of truth for the calendar and rooms: program slots
+	// are synced for every confirmed primary mapping in the catalog, not just
+	// the imported season, so continuing shows keep their schedule and shows
+	// without current Syobocal programs disappear naturally.
+	const programMappings: ProgramSyncMapping[] = options.syncPrograms
+		? mergeProgramSyncMappings(mapping.selected, await fetchAllPrimaryMappings(supabase, options.dryRun))
+		: mapping.selected;
+	// Sorted for stable batch composition, so the per-batch response cache hits
+	// across reruns of the same day.
+	const programTids = [...new Set(programMappings.map((entry) => entry.tid))]
+		.filter((tid) => titleByTid.has(tid))
+		.sort((left, right) => left - right);
 	const titlesToStore = [
-		...new Map([...seasonalTitles, ...selectedTitleByTid.values()].map((title) => [title.tid, title])).values(),
+		...new Map(
+			[
+				...seasonalTitles,
+				...selectedTitleByTid.values(),
+				...programTids.flatMap((tid) => {
+					const title = titleByTid.get(tid);
+					return title ? [title] : [];
+				}),
+			].map((title) => [title.tid, title]),
+		).values(),
 	];
 	let programs: SyobocalProgram[] = [];
 	let channels: SyobocalChannel[] = [];
-	const programRange = options.syncPrograms ? rollingSyobocalProgramRange(range.startDate, range.endDate) : null;
-	if (options.syncPrograms && !programRange) {
-		console.log(`${season} is outside the rolling program window; no Syobocal program rows will be fetched.`);
-	}
-	if (programRange && mapping.selected.length > 0) {
-		console.log(`Program sync range: ${programRange.startDate} through ${programRange.endDate} (end exclusive).`);
-		programs = await fetchPrograms([...selectedTitleByTid.keys()], programRange.apiRange);
+	// The program window is purely rolling (yesterday through +91 days): with
+	// catalog-wide mappings the season clamp would wrongly cut continuing shows.
+	const programRange = options.syncPrograms ? rollingSyobocalProgramRange("1900-01-01", "2999-12-31") : null;
+	if (programRange && programMappings.length > 0) {
+		console.log(
+			`Program sync range: ${programRange.startDate} through ${programRange.endDate} (end exclusive) for ${programTids.length} mapped titles.`,
+		);
+		programs = await fetchPrograms(programTids, programRange.apiRange);
 		const allChannels = await fetchChannels();
 		const usedChids = new Set(programs.map((program) => program.chid));
 		channels = allChannels.filter((channel) => usedChids.has(channel.chid));
@@ -1427,15 +1542,15 @@ async function main() {
 		if (missingChids.length > 0) throw new Error(`Missing Syobocal channels: ${missingChids.join(", ")}`);
 	}
 	const animeRoomRows = programRange
-		? await fetchAnimeRoomRows(
-				supabase,
-				mapping.selected.map((proposal) => proposal.malId),
-			)
+		? await fetchAnimeRoomRows(supabase, [...new Set(programMappings.map((proposal) => proposal.malId))])
 		: [];
 	const roomSessionRows = buildBroadcastRoomSessionRows(
 		animeRoomRows,
-		mapping.selected,
-		[...selectedTitleByTid.values()],
+		programMappings,
+		programTids.flatMap((tid) => {
+			const title = titleByTid.get(tid);
+			return title ? [title] : [];
+		}),
 		channels,
 		programs,
 		importedAt,

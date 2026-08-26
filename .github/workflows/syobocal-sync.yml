@@ -1,15 +1,18 @@
 name: Syobocal sync
 
 # Keeps broadcast rooms and catalog mappings fresh:
-# - daily: program-table sync for the current season (time changes, cancelled
-#   slots and rescheduled episodes are absorbed by the importer's update/delete
+# - daily: program-table sync (catalog-wide mappings, rolling window; time
+#   changes and cancelled slots are absorbed by the importer's update/delete
 #   logic; channel selection sticks to the earliest terrestrial airing).
-# - weekly: full season import + catalog resolve (new titles, new mappings via
-#   the exact/reading matchers, official URLs).
+# - weekly: MAL + Jikan + Syobocal imports and catalog resolve for the current
+#   AND next season, so late-added MAL entries (e.g. announced mid-season) and
+#   their official links are picked up automatically. Jikan runs against the
+#   public API here; persistent 504s can be backfilled manually via the
+#   self-hosted instance (scripts/local/enrich-jikan-links.ts).
 #
 # Requires repository Actions secrets:
-#   PUBLIC_SUPABASE_URL, SUPABASE_SECRET_KEY
-# and migration 114 applied to the database.
+#   PUBLIC_SUPABASE_URL, SUPABASE_SECRET_KEY, MAL_CLIENT_ID
+# and migrations 114 + 115 applied to the database.
 
 on:
   schedule:
@@ -24,6 +27,9 @@ on:
         required: false
         default: "sync-programs"
 
+permissions:
+  contents: read
+
 concurrency:
   group: syobocal-sync
   cancel-in-progress: false
@@ -31,12 +37,14 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
-      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+    timeout-minutes: 75
     steps:
+      # persist-credentials: false — トークンを.git/configに残さない。
+      # Supabase等の資格情報はjobレベルではなく必要なステップにだけ渡す
+      # （pnpm installのpostinstallスクリプト等に秘匿値を見せない）。
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -44,27 +52,42 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
-      - name: Determine current season (JST)
+      - name: Determine current and next season (JST)
         id: season
         run: |
           MONTH=$(TZ=Asia/Tokyo date +%-m)
           YEAR=$(TZ=Asia/Tokyo date +%Y)
-          if [ "$MONTH" -le 3 ]; then SEASON=winter
-          elif [ "$MONTH" -le 6 ]; then SEASON=spring
-          elif [ "$MONTH" -le 9 ]; then SEASON=summer
-          else SEASON=fall; fi
+          if [ "$MONTH" -le 3 ]; then SEASON=winter; NEXT=spring; NEXT_YEAR=$YEAR
+          elif [ "$MONTH" -le 6 ]; then SEASON=spring; NEXT=summer; NEXT_YEAR=$YEAR
+          elif [ "$MONTH" -le 9 ]; then SEASON=summer; NEXT=fall; NEXT_YEAR=$YEAR
+          else SEASON=fall; NEXT=winter; NEXT_YEAR=$((YEAR + 1)); fi
           echo "year=$YEAR" >> "$GITHUB_OUTPUT"
           echo "season=$SEASON" >> "$GITHUB_OUTPUT"
-          echo "Current season: $YEAR-$SEASON"
+          echo "next_year=$NEXT_YEAR" >> "$GITHUB_OUTPUT"
+          echo "next_season=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "Current season: $YEAR-$SEASON / next: $NEXT_YEAR-$NEXT"
 
       - name: Sync program table (daily)
         if: github.event.schedule == '15 20 * * *' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'sync-programs')
+        env:
+          PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
         run: pnpm sync:syobocal-programs -- --year ${{ steps.season.outputs.year }} --season ${{ steps.season.outputs.season }}
 
-      - name: Full season import (weekly)
+      - name: Weekly imports and resolve (current + next season)
         if: github.event.schedule == '15 19 * * 0' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full-import')
-        run: pnpm import:syobocal -- --year ${{ steps.season.outputs.year }} --season ${{ steps.season.outputs.season }}
-
-      - name: Resolve catalog (weekly)
-        if: github.event.schedule == '15 19 * * 0' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full-import')
-        run: pnpm resolve:anime-catalog -- --year ${{ steps.season.outputs.year }} --season ${{ steps.season.outputs.season }}
+        env:
+          PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          MAL_CLIENT_ID: ${{ secrets.MAL_CLIENT_ID }}
+        run: |
+          for TARGET in \
+            "${{ steps.season.outputs.year }} ${{ steps.season.outputs.season }}" \
+            "${{ steps.season.outputs.next_year }} ${{ steps.season.outputs.next_season }}"; do
+            set -- $TARGET
+            echo "=== $1-$2 ==="
+            pnpm import:mal -- --year "$1" --season "$2" || echo "MAL import for $1-$2 failed; continuing"
+            pnpm import:jikan -- --year "$1" --season "$2" || echo "Jikan import for $1-$2 failed; continuing"
+            pnpm import:syobocal -- --year "$1" --season "$2"
+            pnpm resolve:anime-catalog -- --year "$1" --season "$2"
+          done

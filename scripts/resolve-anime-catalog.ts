@@ -134,6 +134,10 @@ const LEGACY_COLUMNS = [
 	"resources",
 	"cover_url",
 	"metadata_ready",
+	// applyShortAnimeLobbyRuleが全canonical行に注入するため、changedFieldsの
+	// 差分比較でノイズにならないよう既存値も読み込む
+	"room_type",
+	"room_type_source",
 ].join(",");
 
 function parseArgs(argv: string[]): Options {
@@ -442,6 +446,60 @@ async function syncResolvedRelations(
 	if (malIds.length > 0) console.log(`Resolved ${relationRows.length} relations for ${malIds.length} anime.`);
 }
 
+// 総合ロビー自動判定: MAL公式APIの1話実尺が15分以下の作品はエピソードルームでは
+// なく総合ロビーを使う。管理者が手動設定した作品（room_type_source='manual'）と、
+// 実尺が取得できていない作品には触れない。
+const SHORT_ANIME_LOBBY_MINUTES = 15;
+
+async function applyShortAnimeLobbyRule(
+	supabase: ReturnType<typeof getSupabaseClient>,
+	resolutions: AnimeCatalogResolution[],
+	recordsByMalId: Map<number, SourceRecordRow[]>,
+) {
+	const malIds = resolutions.map((resolution) => resolution.canonical.mal_id);
+	type RoomTypeRow = { mal_id: number; room_type: string | null; room_type_source: string | null };
+	const rows: RoomTypeRow[] = [];
+	for (let start = 0; start < malIds.length; start += BATCH_SIZE) {
+		const { data, error } = await supabase
+			.from("anime")
+			.select("mal_id,room_type,room_type_source")
+			.in("mal_id", malIds.slice(start, start + BATCH_SIZE));
+		if (error) {
+			// Migration 115 (room_type_source) not applied yet: skip the rule.
+			console.warn(`Short-anime lobby rule skipped (apply migration 115 first): ${error.message}`);
+			return;
+		}
+		rows.push(...((data ?? []) as unknown as RoomTypeRow[]));
+	}
+	const currentByMal = new Map(rows.map((row) => [row.mal_id, row]));
+	let applied = 0;
+	// The batched upsert uses one column set for every row, so room_type must be
+	// present (with its current value) on ALL rows — a partial column would null
+	// out the untouched ones.
+	for (const resolution of resolutions) {
+		const malId = resolution.canonical.mal_id;
+		const current = currentByMal.get(malId);
+		const canonical = resolution.canonical as unknown as Record<string, unknown>;
+		canonical["room_type"] = current?.room_type ?? "episode";
+		canonical["room_type_source"] = current?.room_type_source ?? "default";
+		if (current?.room_type_source === "manual") continue;
+		const mal = (recordsByMalId.get(malId) ?? []).find((record) => record.source === "mal");
+		const normalized =
+			mal && mal.normalized_data !== null && typeof mal.normalized_data === "object"
+				? (mal.normalized_data as Record<string, unknown>)
+				: null;
+		const duration = normalized?.["episode_duration_minutes"];
+		if (typeof duration !== "number" || duration <= 0) continue;
+		const autoRoomType = duration <= SHORT_ANIME_LOBBY_MINUTES ? "global" : "episode";
+		if ((current?.room_type ?? "episode") !== autoRoomType) {
+			canonical["room_type"] = autoRoomType;
+			canonical["room_type_source"] = "auto";
+			applied += 1;
+		}
+	}
+	if (applied > 0) console.log(`Short-anime lobby rule reclassified ${applied} rows.`);
+}
+
 async function main() {
 	const options = parseArgs(process.argv.slice(2));
 	const season = `${options.year}-${options.season}`;
@@ -466,6 +524,7 @@ async function main() {
 			studioMappings.get(normalizeStudioAlias(name)),
 		),
 	);
+	await applyShortAnimeLobbyRule(supabase, resolutions, recordsByMalId);
 	const counts = resolutions.reduce(
 		(result, resolution) => {
 			result[resolution.resolutionStatus] += 1;

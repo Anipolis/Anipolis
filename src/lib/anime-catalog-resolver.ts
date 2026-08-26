@@ -41,6 +41,8 @@ export type LegacyAnimeCatalogRow = {
 	resources: unknown;
 	cover_url: string | null;
 	metadata_ready?: boolean;
+	room_type?: string | null;
+	room_type_source?: string | null;
 };
 
 export type AnimeCatalogCanonicalRow = Omit<LegacyAnimeCatalogRow, "resources"> & {
@@ -232,13 +234,28 @@ export function resolveAnimeCatalog(
 
 	const offlineTitle = stringValue(offline, "title");
 	const syobocalJapaneseTitle = stringValue(syobocal, "title_ja");
-	const wikidataJapaneseTitle = stringValue(wikidata, "title_ja");
-	const malJapaneseTitle =
+	const rejectHangul = (value: string | undefined) =>
+		value && /[\p{Script=Hangul}]/u.test(value) ? undefined : value;
+	const wikidataJapaneseTitle = rejectHangul(stringValue(wikidata, "title_ja"));
+	// MALは韓国・中国作品の「日本語タイトル」欄に現地語題をそのまま入れることが
+	// ある。かなを含まない題は、日本側ソース（しょぼいマッピング / Wikidata日本語
+	// ラベル / manual）の裏付けがない限り検証済みとして扱わない。ハングルは常に拒否。
+	const japaneseSideCorroborated =
+		bySource.has("syobocal") || wikidataJapaneseTitle !== undefined || stringValue(manual, "title") !== undefined;
+	const acceptJapaneseTitle = (value: string | undefined): string | undefined => {
+		if (!value) return undefined;
+		if (/[\p{Script=Hangul}]/u.test(value)) return undefined;
+		if (/[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(value)) return value;
+		return japaneseSideCorroborated ? value : undefined;
+	};
+	const malJapaneseTitle = acceptJapaneseTitle(
 		stringValue(mal, "title_ja") ??
-		(containsJapaneseScript(stringValue(mal, "title") ?? "") ? stringValue(mal, "title") : undefined);
-	const jikanJapaneseTitle =
+			(containsJapaneseScript(stringValue(mal, "title") ?? "") ? stringValue(mal, "title") : undefined),
+	);
+	const jikanJapaneseTitle = acceptJapaneseTitle(
 		stringValue(jikan, "title_ja") ??
-		(containsJapaneseScript(stringValue(jikan, "title") ?? "") ? stringValue(jikan, "title") : undefined);
+			(containsJapaneseScript(stringValue(jikan, "title") ?? "") ? stringValue(jikan, "title") : undefined),
+	);
 	const legacyJapaneseTitle =
 		legacyRow?.title && containsJapaneseScript(legacyRow.title) ? legacyRow.title : undefined;
 	const title = firstDefined([
@@ -424,6 +441,14 @@ export function resolveAnimeCatalog(
 					: "Verified Japanese display title is missing.",
 			];
 
+	// Music videos, PVs and CMs are never published (same policy as the Jikan
+	// importer's BLOCKED_TYPES). The check uses the MAL/Jikan media label
+	// directly: anime-offline-database has no music type and mislabels these
+	// entries as "Special", so the resolved type alone cannot be trusted.
+	const mediaTypeLabel = (stringValue(mal, "type") ?? stringValue(jikan, "type"))?.toLowerCase() ?? null;
+	const blockedMediaType = mediaTypeLabel !== null && ["music", "pv", "cm"].includes(mediaTypeLabel);
+	if (blockedMediaType) resolutionReasons.push("Music/PV/CM entries are not published.");
+
 	const resolvedFields = {
 		title,
 		title_en: titleEnglish,
@@ -475,7 +500,7 @@ export function resolveAnimeCatalog(
 			official_x_url: officialXUrl.value,
 			resources: mergeResources(syobocal),
 			cover_url: coverUrl.value,
-			metadata_ready: resolutionStatus === "verified",
+			metadata_ready: resolutionStatus === "verified" && !blockedMediaType,
 		},
 		fieldSources,
 		resolutionStatus,

@@ -1601,6 +1601,8 @@ export interface AnimeListOptions {
 	broadcastStatus?: Exclude<BroadcastStatus, "unknown">;
 	sortBy?: "popular" | "trending" | "top_rated" | "created";
 	listedByUserId?: string | null;
+	/** 明示したanime.idのみに絞る（スケジュール等、対象集合が先に決まる文脈用） */
+	ids?: number[];
 	limit?: number;
 	userId?: string | null;
 	query?: string;
@@ -1727,7 +1729,14 @@ export async function getAnimeList(
 		query: searchQuery,
 	} = options;
 	const selectedGenres = normalizeGenreFilters(genres ?? genre);
-	const listedAnimeIds = listedByUserId ? await getListedAnimeIds(supabase, listedByUserId) : null;
+	const listedIds = listedByUserId ? await getListedAnimeIds(supabase, listedByUserId) : null;
+	if (listedIds && listedIds.length === 0) return [];
+	const listedAnimeIds =
+		options.ids != null
+			? listedIds
+				? listedIds.filter((id) => options.ids?.includes(id))
+				: options.ids
+			: listedIds;
 	if (listedAnimeIds && listedAnimeIds.length === 0) return [];
 
 	const seasonFilter = buildSeasonFilter(
@@ -3061,6 +3070,65 @@ export async function getBroadcastRoomOverridesForAnimeIds(
 		grouped[key].push(row);
 	}
 	return grouped;
+}
+
+export interface ScheduleBroadcastSession {
+	anime_id: number;
+	room_date: string;
+	scheduled_at: string;
+}
+
+/**
+ * 週間カレンダー用: しょぼい番組同期が作成したエピソードセッション。
+ * しょぼいがカレンダーの唯一の情報源なので、schedule_source='syobocal' のみを返す
+ * （オーバーライド起点の掲載は呼び出し側がオーバーライド行から組み立てる）。
+ */
+export async function getScheduleBroadcastSessionsInRange(
+	supabase: SupabaseClient<Database>,
+	startDate: string,
+	endDate: string,
+): Promise<ScheduleBroadcastSession[]> {
+	// biome-ignore lint/suspicious/noExplicitAny: migration 104 columns are not in generated types until applied
+	const reader = supabase as SupabaseClient<any>;
+	const { data, error } = await reader
+		.from("broadcast_room_sessions")
+		.select("anime_id,room_date,scheduled_at")
+		.eq("room_kind", "episode")
+		.eq("schedule_source", "syobocal")
+		.gte("room_date", startDate)
+		.lte("room_date", endDate)
+		.order("scheduled_at", { ascending: true })
+		.limit(2000);
+	if (error) {
+		console.error("schedule broadcast sessions query failed:", error);
+		return [];
+	}
+	return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+		anime_id: Number(row["anime_id"]),
+		room_date: String(row["room_date"] ?? "").slice(0, 10),
+		scheduled_at: String(row["scheduled_at"] ?? ""),
+	}));
+}
+
+/** 週間カレンダー用: 期間内にオーバーライドを持つanime_id（休止告知・臨時枠の掲載元） */
+export async function getOverrideAnimeIdsInRange(
+	supabase: SupabaseClient<Database>,
+	startDate: string,
+	endDate: string,
+): Promise<number[]> {
+	// biome-ignore lint/suspicious/noExplicitAny: broadcast_room_overrides not yet in generated types
+	const reader = supabase as SupabaseClient<any>;
+	const { data, error } = await reader
+		.from("broadcast_room_overrides")
+		.select("anime_id")
+		.gte("room_date", startDate)
+		.lte("room_date", endDate)
+		.limit(2000);
+	if (error) {
+		console.error("override anime ids query failed:", error);
+		return [];
+	}
+	return [...new Set(((data ?? []) as Record<string, unknown>[]).map((row) => Number(row["anime_id"])))];
 }
 
 export async function getBroadcastRoomMutes(

@@ -11,17 +11,9 @@ import {
 	getUsersWhoListedAnime,
 	isAdminUser,
 } from "$lib/server/queries";
-import { generateBroadcastEpisodeSlots } from "$lib/utils/broadcast-episodes";
+import { normalizedBroadcastEpisodeLabel } from "$lib/utils/broadcast-episodes";
+import { isEligibleForRoomLog, roomDateKey } from "$lib/utils/broadcast-room";
 import type { Actions, PageServerLoad } from "./$types";
-
-function isEligibleForRoomLog(season: string | null): boolean {
-	if (!season) return false;
-	const parts = season.split("-");
-	const y = parseInt(parts[0] ?? "", 10);
-	const name = parts[1];
-	if (y > 2026) return true;
-	return y === 2026 && name !== "winter";
-}
 
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
@@ -42,32 +34,22 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 		getBroadcastRoomScheduleSnapshotsForAnime(supabase, Number(anime.id)),
 	]);
 
-	const inferredEpisodes =
-		isEligibleForRoomLog(anime.season) &&
-		anime.room_type === "episode" &&
-		anime.aired_from != null &&
-		(anime.broadcast_day != null || broadcastOverrides.length > 0)
-			? generateBroadcastEpisodeSlots({
-					airedFrom: anime.aired_from,
-					airedTo: anime.aired_to ?? null,
-					broadcastDay: anime.broadcast_day,
-					broadcastTime: anime.broadcast_time,
-					episodeCount: anime.episode_count,
-					overrides: broadcastOverrides,
-				}).reverse()
-			: [];
-	const episodeByDate = new Map(inferredEpisodes.map((episode) => [episode.date, episode]));
-	for (const snapshot of scheduleSnapshots) {
-		const inferred = episodeByDate.get(snapshot.date);
-		episodeByDate.set(snapshot.date, {
-			date: snapshot.date,
-			start: snapshot.start ?? inferred?.start ?? null,
-			end: snapshot.end ?? inferred?.end ?? null,
-			label: snapshot.label ?? inferred?.label ?? null,
-		});
-	}
+	// 各話ルームの履歴は実際に開催されたセッション（しょぼい由来の話数付き
+	// スナップショット）が唯一の情報源。曜日からの機械カウントは行わない。
+	// 管理者オーバーライドはラベル（総集編等）の上書きにだけ使う。
+	const overrideByDate = new Map(broadcastOverrides.map((override) => [roomDateKey(override.room_date), override]));
 	const episodes = isEligibleForRoomLog(anime.season)
-		? [...episodeByDate.values()].sort((left, right) => right.date.localeCompare(left.date))
+		? scheduleSnapshots
+				.map((snapshot) => {
+					const override = overrideByDate.get(snapshot.date);
+					return {
+						date: snapshot.date,
+						start: snapshot.start,
+						end: snapshot.end,
+						label: (override ? normalizedBroadcastEpisodeLabel(override) : null) ?? snapshot.label,
+					};
+				})
+				.sort((left, right) => right.date.localeCompare(left.date))
 		: [];
 
 	return { anime, user, isAdmin, listedUsers, relations, dataAttributions, episodes, broadcastOverrides, events };

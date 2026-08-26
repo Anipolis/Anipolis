@@ -31,6 +31,18 @@ function dateKeyToDate(value: string) {
 	return date;
 }
 
+/**
+ * 各話ルーム（開催・ログ閲覧とも）の対象シーズン。サービス開始前の
+ * 2026-winter以前の作品は、閉場済みルームであっても生成・表示しない。
+ */
+export function isEligibleForRoomLog(season: string | null): boolean {
+	const match = season?.match(/^(\d{4})-(winter|spring|summer|fall)$/);
+	if (!match) return false;
+	const year = Number.parseInt(match[1] ?? "", 10);
+	if (year > 2026) return true;
+	return year === 2026 && match[2] !== "winter";
+}
+
 export function animeIsScheduledForRoomDate(
 	anime: BroadcastScheduleBounds,
 	dateKey: string,

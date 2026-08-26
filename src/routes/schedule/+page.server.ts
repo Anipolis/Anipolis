@@ -18,13 +18,18 @@ import {
 	getEventNotificationSubscriptions,
 	getEventsByRange,
 	getMutedEventIds,
+	getOverrideAnimeIdsInRange,
+	getScheduleBroadcastSessionsInRange,
 	isAdminUser,
 } from "$lib/server/queries";
+import { jstBroadcastTimeLabel } from "$lib/syobocal-schedule";
 import type { Anime, BroadcastNotificationSettings, BroadcastRoomOverride, Event } from "$lib/types";
 import { formatBroadcastOverrideAnnouncement } from "$lib/utils/broadcast-episodes";
 import {
+	animeIsScheduledForRoomDate,
 	broadcastTimeSortValue,
 	effectiveBroadcastTime,
+	isEligibleForRoomLog,
 	overrideForRoomDate,
 	roomDateKey,
 } from "$lib/utils/broadcast-room";
@@ -69,20 +74,6 @@ function toDateInputValue(date: Date) {
 	return `${y}-${m}-${d}`;
 }
 
-function toDateKey(value: string | null) {
-	return value?.slice(0, 10) ?? null;
-}
-
-function isAnimeOnAirDate(anime: Anime, date: string) {
-	const airedFrom = toDateKey(anime.aired_from);
-	if (airedFrom && date < airedFrom) return false;
-
-	const airedTo = toDateKey(anime.aired_to);
-	if (airedTo && date > airedTo) return false;
-
-	return true;
-}
-
 function announcementMessage(override: BroadcastRoomOverride): string {
 	return formatBroadcastOverrideAnnouncement(override);
 }
@@ -122,8 +113,25 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		end: toDateInputValue(addDays(weekStart, 6)),
 	};
 
+	// しょぼい絶対: 今日以降の掲載対象は「同期済みセッションがある」か「オーバーライド
+	// がある」作品のみ。過去日はしょぼい番組データが残らないため、ルームページの
+	// 合成表示と同じルール（対象シーズン+曜日・放送期間）で履歴として掲載する。
+	const todayKey = toDateInputValue(new Date());
+	const hasPastDays = scheduleRange.start < todayKey;
+	const [sessions, overrideAnimeIdsInRange, pastFillList] = await Promise.all([
+		getScheduleBroadcastSessionsInRange(supabase, scheduleRange.start, scheduleRange.end),
+		getOverrideAnimeIdsInRange(supabase, scheduleRange.start, scheduleRange.end),
+		hasPastDays
+			? getAnimeList(supabase, { scheduleRange, limit: 1000, userId: user?.id ?? null })
+			: Promise.resolve([] as Anime[]),
+	]);
+	const pastFillIds = pastFillList.map((anime) => Number(anime.id));
+	const scheduleAnimeIds = [
+		...new Set([...sessions.map((session) => session.anime_id), ...overrideAnimeIdsInRange]),
+	].filter((id) => !pastFillIds.includes(id));
+
 	const [
-		animeList,
+		sessionAnimeList,
 		events,
 		subscriptions,
 		notificationSettings,
@@ -133,7 +141,9 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		mutedEventIds,
 		eventNotificationSubscriptions,
 	] = await Promise.all([
-		getAnimeList(supabase, { scheduleRange, limit: 1000, userId: user?.id ?? null }),
+		scheduleAnimeIds.length
+			? getAnimeList(supabase, { ids: scheduleAnimeIds, limit: 1000, userId: user?.id ?? null })
+			: Promise.resolve([] as Anime[]),
 		getEventsByRange(supabase, weekStart.toISOString(), eventRangeEnd.toISOString()),
 		user ? getBroadcastSubscriptions(supabase, user.id) : Promise.resolve([] as string[]),
 		user
@@ -149,6 +159,15 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		user ? getMutedEventIds(supabase, user.id) : Promise.resolve(new Set<string>()),
 		user ? getEventNotificationSubscriptions(supabase, user.id) : Promise.resolve([] as string[]),
 	]);
+
+	// セッション/オーバーライド由来と過去日補完の作品リストを統合
+	const animeList: Anime[] = [...pastFillList];
+	{
+		const known = new Set(animeList.map((anime) => anime.id));
+		for (const anime of sessionAnimeList) {
+			if (!known.has(anime.id)) animeList.push(anime);
+		}
+	}
 
 	const broadcastOverrides = await getBroadcastRoomOverridesForAnimeIds(
 		supabase,
@@ -169,24 +188,51 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		announcements: [],
 	}));
 
-	for (const anime of animeList.filter((a): a is Anime & { broadcast_day: number } => a.broadcast_day != null)) {
-		if (anime.room_type === "global") continue;
-		const day = days[anime.broadcast_day];
-		if (day && isAnimeOnAirDate(anime, day.date)) {
+	// しょぼい同期セッション: 実在の番組枠だけがカレンダーに載る
+	const animeById = new Map(animeList.map((anime) => [Number(anime.id), anime]));
+	for (const session of sessions) {
+		const anime = animeById.get(session.anime_id);
+		if (!anime || anime.room_type === "global") continue;
+		const day = days.find((candidate) => candidate.date === session.room_date);
+		if (!day) continue;
+		const override = overrideForRoomDate(broadcastOverrides[anime.id], day.date);
+		if (override?.is_cancelled) {
+			pushAnnouncement(day, anime, override, broadcastOverrides);
+			continue;
+		}
+		if (day.anime.some((scheduledAnime) => scheduledAnime.id === anime.id)) continue;
+		// 掲載時刻はしょぼいの実枠（深夜は25:30のような24時間超表記で前日枠に載る）
+		day.anime.push({
+			...anime,
+			broadcast_day: new Date(`${session.room_date}T00:00:00`).getDay(),
+			broadcast_time: jstBroadcastTimeLabel(session.scheduled_at) ?? anime.broadcast_time,
+		});
+	}
+
+	// 過去日の履歴掲載: しょぼいの番組データは過去に遡れないため、セッションが
+	// 残っていない過去日はルームページの合成表示と同じルール（対象シーズン+
+	// 曜日・放送期間ゲート）で補完する。今日以降はしょぼい絶対のまま。
+	for (const day of days) {
+		if (day.date >= todayKey) continue;
+		for (const anime of pastFillList) {
+			if (anime.room_type === "global") continue;
+			if (!isEligibleForRoomLog(anime.season)) continue;
+			if (!animeIsScheduledForRoomDate(anime, day.date, false)) continue;
 			const override = overrideForRoomDate(broadcastOverrides[anime.id], day.date);
 			if (override?.is_cancelled) {
 				pushAnnouncement(day, anime, override, broadcastOverrides);
 				continue;
 			}
-			day.anime.push(anime);
+			if (!day.anime.some((scheduledAnime) => scheduledAnime.id === anime.id)) day.anime.push(anime);
 		}
 	}
 
+	// 管理者オーバーライド: 休止は告知、それ以外はセッション未生成でも掲載する
 	for (const anime of animeList) {
 		if (anime.room_type === "global") continue;
 		for (const override of broadcastOverrides[anime.id] ?? []) {
 			const date = roomDateKey(override.room_date);
-			if (date < scheduleRange.start || date > scheduleRange.end || !isAnimeOnAirDate(anime, date)) continue;
+			if (date < scheduleRange.start || date > scheduleRange.end) continue;
 
 			const day = days.find((candidate) => candidate.date === date);
 			if (day && override.is_cancelled) {

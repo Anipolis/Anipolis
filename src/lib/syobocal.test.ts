@@ -138,6 +138,8 @@ describe("syobocalTypeConflicts", () => {
 		expect(syobocalTypeConflicts("Movie", 8)).toBe(false);
 		expect(syobocalTypeConflicts("TV", 10)).toBe(false);
 		expect(syobocalTypeConflicts("TV", 7)).toBe(true);
+		// 劇場先行→TV放送の作品はしょぼい側がcat8のことがある（シャニマス型）
+		expect(syobocalTypeConflicts("TV", 8)).toBe(false);
 		expect(syobocalTypeConflicts(null, 1)).toBe(false);
 		expect(syobocalTypeConflicts("TV", null)).toBe(false);
 	});
@@ -151,22 +153,27 @@ describe("matchSyobocalTitlesByReading", () => {
 		expect(latinFoldTitle("おね→ショタ←おね THE ANIMATION")).toBe(null);
 	});
 
-	it("matches across scripts via TitleYomi and the Latin fold with date agreement", () => {
+	it("matches across scripts via TitleYomi and folded titles with date agreement", () => {
 		const matches = matchSyobocalTitlesByReading(
 			[
 				{ malId: 1, title: "アトリ", firstYear: 2026, firstMonth: 7 },
 				{ malId: 2, title: "シェンムー", firstYear: 2026, firstMonth: 1 },
 				{ malId: 3, title: "遠い作品", firstYear: 2010, firstMonth: 1 },
+				// mostly-Latin titles pair via the shared fold (kanaFoldTitle keeps
+				// Latin letters, so the kana: key wins before the latin: key)
+				{ malId: 4, title: "Shangri-La Frontier", firstYear: 2026, firstMonth: 4 },
 			],
 			[
 				{ tid: 10, title: "ATRI -My Dear Moments-", titleYomi: "あとり", firstYear: 2026, firstMonth: 7 },
 				{ tid: 20, title: "Shenmue the Animation", titleYomi: "しぇんむー", firstYear: 2026, firstMonth: 2 },
 				{ tid: 30, title: "遠い作品(新)", titleYomi: "とおいさくひん", firstYear: 2026, firstMonth: 1 },
+				{ tid: 40, title: "SHANGRI-LA FRONTIER", titleYomi: "しゃんぐりらふろんてぃあ", firstYear: 2026, firstMonth: 4 },
 			],
 		);
 		expect(matches).toEqual([
 			{ malId: 1, tid: 10, matchKey: "kana:あとり" },
 			{ malId: 2, tid: 20, matchKey: "kana:しぇんむー" },
+			{ malId: 4, tid: 40, matchKey: "kana:shangrilafrontier" },
 		]);
 	});
 
