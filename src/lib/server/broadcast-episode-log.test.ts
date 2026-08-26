@@ -64,6 +64,22 @@ describe("buildBroadcastEpisodeLog", () => {
 		]);
 	});
 
+	it("suppresses inferred numbers when backward numbering underflows", () => {
+		// 4掲載日に対して3話分しかない＝未登録の総集編・特番疑い。ずれた推定番号を
+		// 出さず、アンカー（実セッション）の番号だけ残す。
+		const log = buildBroadcastEpisodeLog(
+			ANIME,
+			[snapshot("2026-07-31"), snapshot("2026-08-07"), snapshot("2026-08-14"), snapshot("2026-08-21", 3, false)],
+			[],
+		);
+		expect(log.map((slot) => [slot.date, slot.start])).toEqual([
+			["2026-07-31", null],
+			["2026-08-07", null],
+			["2026-08-14", null],
+			["2026-08-21", 3],
+		]);
+	});
+
 	it("does not count unnumbered syobocal slots that carry their own subtitle (特番)", () => {
 		// ヤニねこパターン: しょぼいが話数を付けず「特番」とだけ題した枠は
 		// 通常話ではないので、逆算のカウントを消費しない。

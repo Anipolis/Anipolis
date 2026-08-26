@@ -125,10 +125,10 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 			? getAnimeList(supabase, { scheduleRange, limit: 1000, userId: user?.id ?? null })
 			: Promise.resolve([] as Anime[]),
 	]);
-	const pastFillIds = pastFillList.map((anime) => Number(anime.id));
+	const pastFillIds = new Set(pastFillList.map((anime) => Number(anime.id)));
 	const scheduleAnimeIds = [
 		...new Set([...sessions.map((session) => session.anime_id), ...overrideAnimeIdsInRange]),
-	].filter((id) => !pastFillIds.includes(id));
+	].filter((id) => !pastFillIds.has(id));
 
 	const [
 		sessionAnimeList,

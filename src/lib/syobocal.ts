@@ -55,7 +55,7 @@ export function normalizeSyobocalTitle(value: string): string {
 export function parseSyobocalLinks(comment: string): SyobocalLink[] {
 	const links: SyobocalLink[] = [];
 	const seen = new Set<string>();
-	for (const match of comment.matchAll(/-\[\[(.*?)\s+(https?:\/\/[^\]]+)\]\]/g)) {
+	for (const match of comment.matchAll(/-\[\[(.*?)\s+(https?:\/\/[^\]\s]+)\]\]/g)) {
 		const name = match[1]?.trim();
 		const url = match[2]?.trim();
 		if (!name || !url) continue;

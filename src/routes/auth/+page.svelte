@@ -131,7 +131,7 @@ const hasInviteAccess = $derived(!data.betaGateEnabled || data.inviteCodeValid);
 					</button>
 				</form>
 			{:else}
-				{#if data.betaGateEnabled && (activeMode !== 'login' || (form && 'needInvite' in form && form.needInvite))}
+				{#if data.betaGateEnabled && (activeMode !== 'login' || (form && 'needInvite' in form && form.needInvite) || ['not_member', 'invite_required', 'invalid_invite', 'invite_exhausted'].includes(data.error ?? ''))}
 					<div class="field">
 						<label for="invite-code" class="field-label">招待コード</label>
 						<input

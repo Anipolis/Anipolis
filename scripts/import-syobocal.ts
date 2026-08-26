@@ -289,7 +289,10 @@ async function fetchWithRetry(url: URL, accept: string): Promise<Response> {
 			const response = await fetch(url, { headers: { Accept: accept, "User-Agent": USER_AGENT } });
 			if (response.ok) return response;
 			if (response.status < 500 && response.status !== 429) {
-				throw new Error(`${response.status} ${response.statusText}`);
+				// 恒久エラー（400/404等）はリトライしても無駄なので即座に失敗させる。
+				// try内でthrowするとcatchに拾われてリトライ対象になってしまう。
+				lastError = new Error(`${response.status} ${response.statusText}`);
+				break;
 			}
 			lastError = new Error(`${response.status} ${response.statusText}`);
 			// Rate limiting needs a real cool-down, not a sub-second retry.
@@ -449,6 +452,17 @@ async function fetchChannels(): Promise<SyobocalChannel[]> {
 	if (channels.length < 10) {
 		throw new Error(`Syobocal channel snapshot is unexpectedly small (${channels.length} rows).`);
 	}
+	// ChGID欠損のチャンネルはtier判定でnullになり、その局の枠は黙って除外される。
+	// しょぼい側のデータ欠けや新規グループID追加に気づけるよう件数を出しておく。
+	const missingGroup = channels.filter((channel) => channel.channelGroupId === null);
+	if (missingGroup.length > 0) {
+		console.warn(
+			`${missingGroup.length} Syobocal channels have no ChGID and will be excluded from scheduling: ${missingGroup
+				.slice(0, 5)
+				.map((channel) => channel.name)
+				.join(", ")}${missingGroup.length > 5 ? ", ..." : ""}`,
+		);
+	}
 	return channels;
 }
 
@@ -507,7 +521,7 @@ async function fetchSourceRecords(supabase: ReturnType<typeof getSupabaseClient>
 			.from("anime_source_records")
 			.select("mal_id,source,normalized_data")
 			.in("mal_id", malIds.slice(start, start + DATABASE_BATCH_SIZE))
-			.in("source", ["manual", "wikidata", "jikan", "anime_offline_database"]);
+			.in("source", ["manual", "wikidata", "mal", "jikan", "anime_offline_database"]);
 		if (error) throw new Error(`Could not read anime source records: ${error.message}`);
 		rows.push(...((data ?? []) as SourceRecord[]));
 	}
@@ -1397,16 +1411,24 @@ async function saveBroadcastRoomSessions(
 	if (animeIds.length === 0) return;
 	const existing: BroadcastRoomSessionRow[] = [];
 	for (let start = 0; start < animeIds.length; start += DATABASE_BATCH_SIZE) {
-		const { data, error } = await supabase
-			.from("broadcast_room_sessions")
-			.select(
-				"id,anime_id,room_key,schedule_source,source_program_id,schedule_frozen_at,scheduled_at,posting_opens_at",
-			)
-			.eq("room_kind", "episode")
-			.in("anime_id", animeIds.slice(start, start + DATABASE_BATCH_SIZE));
-		if (error)
-			throw new Error(`Could not read broadcast room sessions (apply migration 104 first): ${error.message}`);
-		existing.push(...((data ?? []) as BroadcastRoomSessionRow[]));
+		// PostgRESTのmax_rows(1000)対策: 1バッチ内でもページングして全件読む。
+		// 取りこぼすと既存セッションがnewRows扱いになり、一意制約経由のupsertで
+		// 凍結・開場済みガードを迂回した更新や、誤った陳腐化削除につながる。
+		for (let page = 0; ; page += 1000) {
+			const { data, error } = await supabase
+				.from("broadcast_room_sessions")
+				.select(
+					"id,anime_id,room_key,schedule_source,source_program_id,schedule_frozen_at,scheduled_at,posting_opens_at",
+				)
+				.eq("room_kind", "episode")
+				.in("anime_id", animeIds.slice(start, start + DATABASE_BATCH_SIZE))
+				.order("id")
+				.range(page, page + 999);
+			if (error)
+				throw new Error(`Could not read broadcast room sessions (apply migration 104 first): ${error.message}`);
+			existing.push(...((data ?? []) as BroadcastRoomSessionRow[]));
+			if (!data || data.length < 1000) break;
+		}
 	}
 	const byPid = new Map(
 		existing.flatMap((session) =>

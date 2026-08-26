@@ -93,7 +93,20 @@ export function buildBroadcastEpisodeLog(
 	}
 	const ascending = [...slotByDate.values()].sort((left, right) => left.date.localeCompare(right.date));
 	// オーバーライド（話数明示・総集編）を尊重した逆算。整合しない作品は番号なしのまま。
-	inferEpisodeNumbersBackward(ascending, overrideByDate);
+	const unnumberedBefore = new Set(ascending.filter((slot) => slot.start == null).map((slot) => slot.date));
+	const mismatch = inferEpisodeNumbersBackward(ascending, overrideByDate);
+	if (mismatch?.kind === "underflow") {
+		// 話数より掲載日が多い＝未登録の総集編・特番がどこかにあり、逆算した番号は
+		// その日より古い側で1話ずれている可能性がある。推定番号は表示せず、実在
+		// セッションとオーバーライド明示の番号だけを残す（監査リストで手動補正する）。
+		for (const slot of ascending) {
+			if (!unnumberedBefore.has(slot.date)) continue;
+			const override = overrideByDate.get(slot.date);
+			if (override?.episode_start != null && override.episode_end != null) continue;
+			slot.start = null;
+			slot.end = null;
+		}
+	}
 	// アンカーが1件も無い＝しょぼい同期開始前に放送を終えた作品は、逆算の起点が
 	// 永遠に得られない。放送終了済みに限り、第1話からの前進カウントで補う
 	// （放送中でアンカーが無いのはマッピング不備なので番号なしのまま残す）。

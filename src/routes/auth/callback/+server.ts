@@ -85,6 +85,8 @@ export const GET: RequestHandler = async ({ url, cookies, locals: { supabase } }
 				}
 			} else {
 				errorCode = redeemResult.detail === "INVITE_EXHAUSTED" ? "invite_exhausted" : "invalid_invite";
+				// 無効・失効が確定したコードを残すと、再ログインのたびに同じエラーを踏む
+				clearInviteCodeCookie(cookies);
 			}
 		} else if (!discordIdentity) {
 			errorCode = "invite_required";

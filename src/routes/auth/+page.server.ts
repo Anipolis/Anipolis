@@ -57,7 +57,8 @@ export const load: PageServerLoad = async ({ url, cookies, locals: { supabase, s
 	let inviteCodeValid = false;
 	if (betaGateEnabled) {
 		const queryValid = queryInviteCode ? await validateInviteCode(supabase, queryInviteCode) : false;
-		if (queryValid || (queryInviteCode && !cookieInviteCode)) setInviteCodeCookie(cookies, queryInviteCode);
+		// 検証を通らないコードは保存しない（無効コードがCookieに居座るのを防ぐ）
+		if (queryValid) setInviteCodeCookie(cookies, queryInviteCode);
 		if (queryValid) {
 			inviteCodeValid = true;
 		} else if (cookieInviteCode) {

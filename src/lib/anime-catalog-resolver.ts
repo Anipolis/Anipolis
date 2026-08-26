@@ -170,13 +170,16 @@ export function selectVerifiedRomajiCandidate(
 	if (!offlineTitle || containsJapaneseScript(offlineTitle)) return undefined;
 	const normalizedOffline = normalizeLatinTitle(offlineTitle);
 	if (!normalizedOffline) return undefined;
+	// 部分一致は短い文字列だと無関係なエイリアスに誤爆する（例: \"ao\" が長い別作品名に
+	// 含まれる）ため、包含判定は両者が一定長以上のときだけ許す。完全一致は長さ不問。
+	const INCLUSION_MIN_LENGTH = 6;
 	const matchingAliases = aliases.filter((alias) => {
 		if (!alias.trim() || alias === englishTitle) return false;
 		const normalizedAlias = normalizeLatinTitle(alias);
+		if (normalizedAlias === normalizedOffline) return true;
 		return (
-			normalizedAlias === normalizedOffline ||
-			normalizedAlias.includes(normalizedOffline) ||
-			normalizedOffline.includes(normalizedAlias)
+			(normalizedOffline.length >= INCLUSION_MIN_LENGTH && normalizedAlias.includes(normalizedOffline)) ||
+			(normalizedAlias.length >= INCLUSION_MIN_LENGTH && normalizedOffline.includes(normalizedAlias))
 		);
 	});
 	return matchingAliases.length > 0 ? offlineTitle : undefined;
