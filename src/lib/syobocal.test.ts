@@ -167,7 +167,13 @@ describe("matchSyobocalTitlesByReading", () => {
 				{ tid: 10, title: "ATRI -My Dear Moments-", titleYomi: "あとり", firstYear: 2026, firstMonth: 7 },
 				{ tid: 20, title: "Shenmue the Animation", titleYomi: "しぇんむー", firstYear: 2026, firstMonth: 2 },
 				{ tid: 30, title: "遠い作品(新)", titleYomi: "とおいさくひん", firstYear: 2026, firstMonth: 1 },
-				{ tid: 40, title: "SHANGRI-LA FRONTIER", titleYomi: "しゃんぐりらふろんてぃあ", firstYear: 2026, firstMonth: 4 },
+				{
+					tid: 40,
+					title: "SHANGRI-LA FRONTIER",
+					titleYomi: "しゃんぐりらふろんてぃあ",
+					firstYear: 2026,
+					firstMonth: 4,
+				},
 			],
 		);
 		expect(matches).toEqual([
