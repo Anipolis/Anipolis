@@ -267,6 +267,45 @@ export function inferEpisodeNumbersBackward(
 	return mismatch;
 }
 
+/**
+ * アンカー（しょぼい話数）が1件も無い作品向けの前進カウント。同期開始前に
+ * 放送を終えた作品はしょぼいが過去に遡れず永遠に番号が付かないため、
+ * 第1話からの週次カウントで補う（ユーザー承認済みの例外運用）。
+ * オーバーライドの扱いは逆算と同じ:
+ * - episode_start/end 明示 → その値を採用し、続きから再カウント
+ * - ラベル持ち（総集編・特番等） → 番号を振らず、カウントも消費しない
+ * slots は日付昇順で渡すこと。返り値は最後に割り当てた話数（検証用）。
+ */
+export function inferEpisodeNumbersForward(
+	slots: BroadcastEpisodeSlot[],
+	overrides: ReadonlyMap<string, BroadcastRoomOverride>,
+): number | null {
+	let current = 1;
+	let lastAssigned: number | null = null;
+	for (const slot of slots) {
+		if (slot.start != null) {
+			// 既に番号を持つ（実セッション等）→ 続きから再カウント
+			current = (slot.end ?? slot.start) + 1;
+			lastAssigned = slot.end ?? slot.start;
+			continue;
+		}
+		const override = overrides.get(slot.date);
+		if (override?.episode_start != null && override.episode_end != null) {
+			slot.start = override.episode_start;
+			slot.end = override.episode_end;
+			current = override.episode_end + 1;
+			lastAssigned = override.episode_end;
+			continue;
+		}
+		if (slot.label != null || (override && normalizedBroadcastEpisodeLabel(override) !== null)) continue;
+		slot.start = current;
+		slot.end = current;
+		lastAssigned = current;
+		current += 1;
+	}
+	return lastAssigned;
+}
+
 export function resolveBroadcastEpisodeSlot(input: ResolveBroadcastEpisodeInput): BroadcastEpisodeSlot | null {
 	const target = parseDate(input.date);
 	const slots = generateBroadcastEpisodeSlots({ ...input, today: target });

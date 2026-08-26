@@ -127,6 +127,30 @@ describe("buildBroadcastEpisodeLog", () => {
 		]);
 	});
 
+	it("forward-numbers an ended show with no syobocal anchor", () => {
+		// 同期開始前に放送を終えた作品: アンカーが無いので第1話から前進カウント
+		const anime = {
+			...ANIME,
+			aired_from: "2026-07-04",
+			aired_to: "2026-07-25",
+			broadcast_day: 6,
+			broadcast_time: "21:00",
+		};
+		const log = buildBroadcastEpisodeLog(anime, [], []);
+		expect(log.map((slot) => [slot.date, slot.start])).toEqual([
+			["2026-07-04", 1],
+			["2026-07-11", 2],
+			["2026-07-18", 3],
+			["2026-07-25", 4],
+		]);
+	});
+
+	it("leaves an airing show without an anchor unnumbered (mapping issue, not countable)", () => {
+		const anime = { ...ANIME, aired_from: "2026-07-04", broadcast_day: 6, broadcast_time: "21:00" };
+		const log = buildBroadcastEpisodeLog(anime, [snapshot("2026-07-04"), snapshot("2026-07-11")], []);
+		expect(log.every((slot) => slot.start == null)).toBe(true);
+	});
+
 	it("drops cancelled dates even when a stale session row still exists", () => {
 		// 放送休止オーバーライドより前に（旧フォールバック等で）セッション行が
 		// 作られていた場合でも、ログから除外され番号カウントも消費しない。

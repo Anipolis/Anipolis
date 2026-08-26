@@ -3,6 +3,7 @@ import type { Anime, BroadcastRoomOverride } from "$lib/types";
 import {
 	type BroadcastEpisodeSlot,
 	inferEpisodeNumbersBackward,
+	inferEpisodeNumbersForward,
 	normalizedBroadcastEpisodeLabel,
 } from "$lib/utils/broadcast-episodes";
 import { broadcastTimeMinutes, isEligibleForRoomLog, roomDateKey } from "$lib/utils/broadcast-room";
@@ -93,5 +94,10 @@ export function buildBroadcastEpisodeLog(
 	const ascending = [...slotByDate.values()].sort((left, right) => left.date.localeCompare(right.date));
 	// オーバーライド（話数明示・総集編）を尊重した逆算。整合しない作品は番号なしのまま。
 	inferEpisodeNumbersBackward(ascending, overrideByDate);
+	// アンカーが1件も無い＝しょぼい同期開始前に放送を終えた作品は、逆算の起点が
+	// 永遠に得られない。放送終了済みに限り、第1話からの前進カウントで補う
+	// （放送中でアンカーが無いのはマッピング不備なので番号なしのまま残す）。
+	const ended = anime.aired_to != null && anime.aired_to.slice(0, 10) < jstBroadcastDate(new Date());
+	if (!anchorSlot && ended) inferEpisodeNumbersForward(ascending, overrideByDate);
 	return ascending;
 }
