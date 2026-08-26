@@ -35,8 +35,10 @@ const MANUAL_SOURCE_KEYS = [
 /**
  * 管理画面の編集内容を manual ソースレコードへ差分マージする。失敗しても
  * anime 行の更新自体は成功しているので、ログだけ残して処理は続行する。
+ * カバーアップロードAPIのような service-role 経路からも使う（DBトリガーの
+ * capture_anime_manual_source は auth.uid() が無いと発火しないため）。
  */
-async function upsertManualSourceRecord(
+export async function upsertManualSourceRecord(
 	// biome-ignore lint/suspicious/noExplicitAny: generated types may lag behind source-record migrations
 	writer: SupabaseClient<any>,
 	malId: number,

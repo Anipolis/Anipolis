@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { error, json } from "@sveltejs/kit";
 import { env } from "$env/dynamic/private";
 import { PUBLIC_SUPABASE_URL } from "$env/static/public";
+import { upsertManualSourceRecord } from "$lib/server/anime-admin";
 import { isAdminUser } from "$lib/server/queries";
 import { MULTIPART_OVERHEAD_BYTES, readFormDataWithLimit, validateImageBuffer } from "$lib/server/upload";
 import type { RequestHandler } from "./$types";
@@ -59,7 +60,7 @@ export const POST: RequestHandler = async ({ request, locals: { supabase, safeGe
 		.from("anime")
 		.update({ cover_url: publicUrl })
 		.eq("id", animeId)
-		.select("id")
+		.select("id,mal_id")
 		.single();
 
 	if (updateError || !updatedRow) {
@@ -69,6 +70,14 @@ export const POST: RequestHandler = async ({ request, locals: { supabase, safeGe
 			console.error("anime cover storage cleanup error (path=%s):", path, deleteError);
 		}
 		error(500, "DBの更新に失敗しました");
+	}
+
+	// service-role 経由の更新は capture_anime_manual_source トリガーが発火しない
+	// （auth.uid() なし）ため、manual ソースレコードを明示的に残す。これが無いと
+	// 次回のカタログ再解決でアップロードしたカバーが取り込み元の画像に戻る。
+	const malId = (updatedRow as { mal_id: number | null }).mal_id;
+	if (malId != null) {
+		await upsertManualSourceRecord(adminClient, malId, {}, { cover_url: publicUrl });
 	}
 
 	return json({ url: publicUrl });
