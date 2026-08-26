@@ -204,6 +204,31 @@ describe("resolveAnimeCatalog", () => {
 		expect(resolved.canonical.resources).toEqual([]);
 	});
 
+	it("prefers Syobocal's leading-channel broadcast day/time over MAL's pre-air slot", () => {
+		// 骸骨騎士様Ⅱパターン: MALはAT-X先行の月曜22:00、地上波最速はMX木曜24:00
+		const resolved = resolveAnimeCatalog([
+			source("syobocal", {
+				title_ja: "骸骨騎士様",
+				broadcast_day: 4,
+				broadcast_time: "24:00",
+				broadcast_station: "TOKYO MX",
+			}),
+			source("mal", { title_ja: "骸骨騎士様", broadcast_day: 1, broadcast_time: "22:00" }),
+		]);
+		expect(resolved.canonical).toMatchObject({ broadcast_day: 4, broadcast_time: "24:00" });
+		expect(resolved.fieldSources["broadcast_day"]).toEqual({ source: "syobocal", confidence: "verified" });
+		expect(resolved.fieldSources["broadcast_time"]).toEqual({ source: "syobocal", confidence: "verified" });
+	});
+
+	it("keeps manual broadcast fields above Syobocal", () => {
+		const resolved = resolveAnimeCatalog([
+			source("manual", { broadcast_day: 0, broadcast_time: "09:00" }),
+			source("syobocal", { title_ja: "作品", broadcast_day: 4, broadcast_time: "24:00" }),
+		]);
+		expect(resolved.canonical).toMatchObject({ broadcast_day: 0, broadcast_time: "09:00" });
+		expect(resolved.fieldSources["broadcast_day"]).toEqual({ source: "manual", confidence: "verified" });
+	});
+
 	it("publishes only verified Wikipedia as a work resource", () => {
 		const resolved = resolveAnimeCatalog(
 			[

@@ -23,6 +23,7 @@ import {
 } from "../src/lib/syobocal.ts";
 import {
 	jstBroadcastDate,
+	jstBroadcastTimeLabel,
 	jstDate,
 	rollingSyobocalProgramRange,
 	selectPrimarySyobocalPrograms,
@@ -1288,16 +1289,41 @@ async function fetchAnimeRoomRows(supabase: ReturnType<typeof getSupabaseClient>
 	return rows;
 }
 
+/**
+ * 主局番組から放送情報（曜日・時刻・局名）を導出する。最速局ロック後の
+ * 選定結果なので局は一貫しており、最新の枠が現在の放送体制を表す。
+ * MAL由来の broadcast_day/time が AT-X 等の先行放送を指す問題への根本対策
+ * （リゾルバが manual > syobocal > mal の順で参照する）。
+ */
+function deriveBroadcastFieldsByMal(primaryPrograms: ReturnType<typeof selectPrimarySyobocalPrograms>) {
+	const byMal = new Map<
+		number,
+		{ broadcast_day: number; broadcast_time: string | null; broadcast_station: string }
+	>();
+	const latestByMal = new Map<number, (typeof primaryPrograms)[number]>();
+	for (const program of primaryPrograms) {
+		const current = latestByMal.get(program.malId);
+		if (!current || Date.parse(program.startsAt) > Date.parse(current.startsAt)) {
+			latestByMal.set(program.malId, program);
+		}
+	}
+	for (const [malId, program] of latestByMal) {
+		const roomDate = jstBroadcastDate(program.startsAt);
+		byMal.set(malId, {
+			broadcast_day: new Date(`${roomDate}T00:00:00`).getDay(),
+			broadcast_time: jstBroadcastTimeLabel(program.startsAt),
+			broadcast_station: program.channelName,
+		});
+	}
+	return byMal;
+}
+
 function buildBroadcastRoomSessionRows(
 	animeRows: AnimeRoomRow[],
-	mappings: readonly ProgramSyncMapping[],
-	titles: SyobocalTitle[],
-	channels: SyobocalChannel[],
-	programs: SyobocalProgram[],
+	primaryPrograms: ReturnType<typeof selectPrimarySyobocalPrograms>,
 	importedAt: string,
 ) {
 	const animeByMal = new Map(animeRows.map((anime) => [anime.mal_id, anime]));
-	const primaryPrograms = selectPrimarySyobocalPrograms(mappings, titles, channels, programs);
 	const now = Date.now();
 	const rows = primaryPrograms.flatMap((program) => {
 		const anime = animeByMal.get(program.malId);
@@ -1569,8 +1595,7 @@ async function main() {
 	const animeRoomRows = programRange
 		? await fetchAnimeRoomRows(supabase, [...new Set(programMappings.map((proposal) => proposal.malId))])
 		: [];
-	const roomSessionRows = buildBroadcastRoomSessionRows(
-		animeRoomRows,
+	const primaryPrograms = selectPrimarySyobocalPrograms(
 		programMappings,
 		programTids.flatMap((tid) => {
 			const title = titleByTid.get(tid);
@@ -1578,8 +1603,9 @@ async function main() {
 		}),
 		channels,
 		programs,
-		importedAt,
 	);
+	const roomSessionRows = buildBroadcastRoomSessionRows(animeRoomRows, primaryPrograms, importedAt);
+	const broadcastFieldsByMal = deriveBroadcastFieldsByMal(primaryPrograms);
 
 	const selectedMalIdsForReview = new Set(mapping.selected.map((row) => row.malId));
 	const unresolvedMalIds = [...candidateMalIds].filter((malId) => !selectedMalIdsForReview.has(malId));
@@ -1678,6 +1704,29 @@ async function main() {
 		);
 		await pruneExpiredSyobocalPrograms(supabase);
 	}
+	// 番組データを取得しない実行（シーズン照合のみ）では放送情報を導出できない。
+	// normalized_data は丸ごと置き換わるので、既存レコードの放送情報を温存する。
+	const existingBroadcastByMal = new Map<number, Record<string, unknown>>();
+	{
+		const selectedIds = mapping.selected.map((proposal) => proposal.malId);
+		for (let start = 0; start < selectedIds.length; start += DATABASE_BATCH_SIZE) {
+			const { data, error } = await supabase
+				.from("anime_source_records")
+				.select("mal_id,normalized_data")
+				.eq("source", "syobocal")
+				.in("mal_id", selectedIds.slice(start, start + DATABASE_BATCH_SIZE));
+			if (error) throw new Error(`Could not read existing Syobocal source records: ${error.message}`);
+			for (const row of (data ?? []) as { mal_id: number; normalized_data: Record<string, unknown> }[]) {
+				const normalized = row.normalized_data;
+				if (normalized?.["broadcast_day"] === undefined) continue;
+				existingBroadcastByMal.set(row.mal_id, {
+					broadcast_day: normalized["broadcast_day"],
+					broadcast_time: normalized["broadcast_time"] ?? null,
+					broadcast_station: normalized["broadcast_station"] ?? null,
+				});
+			}
+		}
+	}
 	const sourceRows = mapping.selected.flatMap((proposal) => {
 		const title = selectedTitleByTid.get(proposal.tid);
 		if (!title) return [];
@@ -1702,6 +1751,8 @@ async function main() {
 					official_x_url: title.officialXUrl,
 					wikipedia_url: verifiedWikipedia?.sourceUrl ?? null,
 					resources,
+					// 地上波最速主局の放送情報（曜日・時刻・局名）。導出できない実行では既存値
+					...(broadcastFieldsByMal.get(proposal.malId) ?? existingBroadcastByMal.get(proposal.malId) ?? {}),
 				},
 				imported_at: importedAt,
 			},
