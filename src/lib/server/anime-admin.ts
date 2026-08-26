@@ -62,7 +62,8 @@ async function upsertManualSourceRecord(
 			mal_id: malId,
 			source: "manual",
 			source_version: new Date().toISOString().slice(0, 10),
-			source_url: (existing?.source_url as string | null) ?? null,
+			// source_url は NOT NULL: 既存が無い初回作成は MAL ページを充てる
+			source_url: (existing?.source_url as string | null) ?? `https://myanimelist.net/anime/${malId}`,
 			normalized_data: { ...((existing?.normalized_data as Record<string, unknown>) ?? {}), ...changed },
 		},
 		{ onConflict: "mal_id,source" },
