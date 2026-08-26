@@ -593,12 +593,10 @@ const timerLabel = $derived.by(() => {
 	return "このルームは終了しました";
 });
 
+// 「◯分枠」表示は廃止: イレギュラー放送で枠が変動すると実態とズレるため放送局のみ
 const broadcastMetaLine = $derived.by(() => {
 	if (isGlobalLobby) return "";
-	const station = data.anime?.broadcast_station?.filter(Boolean).join(" / ");
-	const frame = data.room.duration_minutes != null ? `${data.room.duration_minutes}分枠` : "";
-	if (station && frame) return `${station} · ${frame}`;
-	return station || frame;
+	return data.anime?.broadcast_station?.filter(Boolean).join(" / ") ?? "";
 });
 
 function formatCompactDate(iso: string) {
