@@ -33,15 +33,20 @@ export function buildBroadcastEpisodeLog(
 	overrides: readonly BroadcastRoomOverride[],
 ): BroadcastEpisodeLogSlot[] {
 	const overrideByDate = new Map(overrides.map((override) => [roomDateKey(override.room_date), override]));
+	// 放送休止オーバーライドの日はセッション行が残っていてもログから除外する
+	// （ルームページも休止日は404）。番号のカウントも消費しない。
 	const slotByDate = new Map<string, BroadcastEpisodeLogSlot>(
-		snapshots.map((snapshot) => {
+		snapshots.flatMap((snapshot) => {
 			const override = overrideByDate.get(snapshot.date);
+			if (override?.is_cancelled) return [];
 			return [
-				snapshot.date,
-				{
-					...snapshot,
-					label: (override ? normalizedBroadcastEpisodeLabel(override) : null) ?? snapshot.label,
-				},
+				[
+					snapshot.date,
+					{
+						...snapshot,
+						label: (override ? normalizedBroadcastEpisodeLabel(override) : null) ?? snapshot.label,
+					},
+				] as const,
 			];
 		}),
 	);
