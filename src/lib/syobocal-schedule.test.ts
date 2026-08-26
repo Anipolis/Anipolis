@@ -183,6 +183,38 @@ describe("selectPrimarySyobocalPrograms", () => {
 		expect(selected[0]).toMatchObject({ pid: 2, channelName: "BS11" });
 	});
 
+	it("locks onto the leading channel so lagged regional airings of old episodes are dropped", () => {
+		// 神の雫パターン: 同期ウィンドウ内で主局(MX)が第20-21話を放送中、
+		// 遅れネット局(KBS京都)はまだ第19話。旧話が「その話の最速」として
+		// 混入するとアンカー逆算が壊れる（false underflow）。
+		const base = {
+			tid: 10,
+			endsAt: "2026-08-28T15:00:00.000Z",
+			subtitle: null,
+			deleted: false,
+		};
+		const selected = selectPrimarySyobocalPrograms(
+			[{ malId: 1, tid: 10, validFrom: null, validTo: null }],
+			[{ tid: 10, firstChannel: "TOKYO MX" }],
+			[
+				{ chid: 1, name: "TOKYO MX", epgName: null, channelGroupId: 1 },
+				{ chid: 2, name: "KBS京都", epgName: null, channelGroupId: 8 },
+			],
+			[
+				// 主局: 第20話 → 第21話
+				{ ...base, pid: 1, chid: 1, startsAt: "2026-08-21T14:30:00.000Z", episodeNumber: 20 },
+				{ ...base, pid: 2, chid: 1, startsAt: "2026-08-28T14:30:00.000Z", episodeNumber: 21 },
+				// 遅れネット局: 主局より後の日付で旧話（第19話）を放送
+				{ ...base, pid: 3, chid: 2, startsAt: "2026-08-27T15:56:00.000Z", episodeNumber: 19 },
+			],
+		);
+		expect(selected.map((program) => [program.pid, program.episodeNumber])).toEqual([
+			[1, 20],
+			[2, 21],
+		]);
+		expect(selected.every((program) => program.channelName === "TOKYO MX")).toBe(true);
+	});
+
 	it("skips rerun slots but keeps recap specials for the override system", () => {
 		const base = {
 			tid: 10,
