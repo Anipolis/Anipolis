@@ -122,6 +122,26 @@ describe("resolveAnimeCatalog", () => {
 		expect(resolved.fieldSources["title"]?.source).toBe("manual");
 	});
 
+	it("does not trust the offline-database episode total while a show is airing", () => {
+		const airing = resolveAnimeCatalog([
+			source("anime_offline_database", { title: "長期作品", episode_count: "128", status: "airing" }),
+			source("mal", { title_ja: "ながいさくひん", status: "airing" }),
+		]);
+		expect(airing.canonical.episode_count).toBeNull();
+		// MALが総話数を出していれば放送中でも採用する
+		const announced = resolveAnimeCatalog([
+			source("anime_offline_database", { title: "長期作品", episode_count: "128", status: "airing" }),
+			source("mal", { title_ja: "ながいさくひん", status: "airing", episode_count: "24" }),
+		]);
+		expect(announced.canonical.episode_count).toBe("24");
+		// 放送終了後はスナップショット値で問題ない
+		const finished = resolveAnimeCatalog([
+			source("anime_offline_database", { title: "長期作品", episode_count: "128", status: "finished" }),
+			source("mal", { title_ja: "ながいさくひん", status: "finished" }),
+		]);
+		expect(finished.canonical.episode_count).toBe("128");
+	});
+
 	it("rejects native-language titles smuggled into MAL's Japanese-title field", () => {
 		// 韓国作品: MALのja欄にハングル題
 		const korean = resolveAnimeCatalog([

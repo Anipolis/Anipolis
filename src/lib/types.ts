@@ -605,6 +605,9 @@ export interface BroadcastRoomSession {
 	duration_minutes: number;
 	posting_opens_at: string;
 	posting_closes_at: string;
+	/** しょぼい番組表由来の話数・サブタイトル（同期セッションのみ） */
+	episode_number?: number | null;
+	episode_title?: string | null;
 }
 
 export interface OpenBroadcastRoomSummary {
