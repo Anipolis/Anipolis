@@ -201,6 +201,70 @@ export function generateBroadcastEpisodeSlots({
 		.filter((slot): slot is BroadcastEpisodeSlot => slot !== null);
 }
 
+export type AnchoredNumberingMismatch = { kind: "underflow"; date: string } | { kind: "leftover"; firstNumber: number };
+
+/**
+ * しょぼい由来の話数（アンカー）から過去方向へ週次逆算して、同期開始前の
+ * 日付に話数を振る。オーバーライドを尊重する:
+ * - episode_start/end 明示 → その値を採用し、そこから再逆算
+ * - 総集編等（話数進行なしのラベル） → 番号を振らず、カウントも消費しない
+ * 前方カウントと違い、誤差が出るとしても最古側に寄る。整合しない場合は
+ * mismatch を返す（underflow=第1話より前に到達 / leftover=最古が第1話にならない）。
+ * slots は日付昇順で渡すこと。
+ */
+export function inferEpisodeNumbersBackward(
+	slots: BroadcastEpisodeSlot[],
+	overrides: ReadonlyMap<string, BroadcastRoomOverride>,
+): AnchoredNumberingMismatch | null {
+	const anchorIndex = slots.findIndex((slot) => slot.start != null);
+	if (anchorIndex <= 0) {
+		// アンカー無し、またはアンカーより前の日付が無い
+		if (anchorIndex === 0 && slots[0]?.start != null && (slots[0]?.start ?? 1) > 1) {
+			return { kind: "leftover", firstNumber: slots[0]?.start ?? 1 };
+		}
+		return null;
+	}
+	let mismatch: AnchoredNumberingMismatch | null = null;
+	let current = slots[anchorIndex]?.start ?? 1;
+	for (let index = anchorIndex - 1; index >= 0; index -= 1) {
+		const slot = slots[index];
+		if (!slot) continue;
+		const override = overrides.get(slot.date);
+		if (slot.start != null) {
+			// 既に番号を持つ（別の実セッション等）→ 再アンカー
+			current = slot.start;
+			continue;
+		}
+		if (override?.episode_start != null && override.episode_end != null) {
+			slot.start = override.episode_start;
+			slot.end = override.episode_end;
+			current = override.episode_start;
+			continue;
+		}
+		if (override && normalizedBroadcastEpisodeLabel(override) !== null) {
+			// 総集編等: 番号なし・カウント消費なし（ラベルは呼び出し側で設定済み）
+			continue;
+		}
+		const candidate = current - 1;
+		if (candidate < 1) {
+			// 数えられる話数より掲載日が多い: 未登録の総集編・特番が疑われる
+			mismatch = mismatch ?? { kind: "underflow", date: slot.date };
+			continue;
+		}
+		slot.start = candidate;
+		slot.end = candidate;
+		current = candidate;
+	}
+	if (!mismatch) {
+		const firstNumbered = slots.find((slot) => slot.start != null);
+		if (firstNumbered && (firstNumbered.start ?? 1) > 1) {
+			// 最古の掲載日が第1話にならない: 休止週の未登録などが疑われる
+			mismatch = { kind: "leftover", firstNumber: firstNumbered.start ?? 1 };
+		}
+	}
+	return mismatch;
+}
+
 export function resolveBroadcastEpisodeSlot(input: ResolveBroadcastEpisodeInput): BroadcastEpisodeSlot | null {
 	const target = parseDate(input.date);
 	const slots = generateBroadcastEpisodeSlots({ ...input, today: target });

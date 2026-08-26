@@ -12,7 +12,7 @@ import {
 	isAdminUser,
 } from "$lib/server/queries";
 import { jstBroadcastDate } from "$lib/syobocal-schedule";
-import { normalizedBroadcastEpisodeLabel } from "$lib/utils/broadcast-episodes";
+import { inferEpisodeNumbersBackward, normalizedBroadcastEpisodeLabel } from "$lib/utils/broadcast-episodes";
 import { isEligibleForRoomLog, roomDateKey } from "$lib/utils/broadcast-room";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -42,7 +42,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 	// 実在セッションの一覧には適用しない: 2026-spring以前開始の長期放送作品
 	// （BEYBLADE X等）も、サービス開始後に開催されたルームは列挙する。
 	const overrideByDate = new Map(broadcastOverrides.map((override) => [roomDateKey(override.room_date), override]));
-	const episodeByDate = new Map(
+	const episodeByDate = new Map<string, import("$lib/utils/broadcast-episodes").BroadcastEpisodeSlot>(
 		scheduleSnapshots.map((snapshot) => {
 			const override = overrideByDate.get(snapshot.date);
 			return [
@@ -53,7 +53,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 					end: snapshot.end,
 					label: (override ? normalizedBroadcastEpisodeLabel(override) : null) ?? snapshot.label,
 				},
-			] as const;
+			];
 		}),
 	);
 	// しょぼい同期開始前の放送分にはセッション行が無い。ルームページの合成表示
@@ -85,7 +85,11 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 			});
 		}
 	}
-	const episodes = [...episodeByDate.values()].sort((left, right) => right.date.localeCompare(left.date));
+	// 同期開始前の合成日付に、しょぼい話数（アンカー）からの逆算で番号を振る。
+	// オーバーライド（話数明示・総集編）を尊重し、整合しない作品は番号なしのまま。
+	const ascending = [...episodeByDate.values()].sort((left, right) => left.date.localeCompare(right.date));
+	inferEpisodeNumbersBackward(ascending, overrideByDate);
+	const episodes = ascending.sort((left, right) => right.date.localeCompare(left.date));
 
 	return { anime, user, isAdmin, listedUsers, relations, dataAttributions, episodes, broadcastOverrides, events };
 };
