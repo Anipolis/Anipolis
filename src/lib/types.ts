@@ -304,6 +304,7 @@ export type AnimeListItem = Pick<
 	| "cover_url"
 	| "season"
 	| "episode_count"
+	| "type"
 	| "broadcast_day"
 	| "computed_broadcast_status"
 	| "user_entry"

@@ -751,6 +751,9 @@ function isAiringToday(anime: AnimeListItem): boolean {
 										aria-hidden={anime.season ? undefined : "true"}
 									>
 										{anime.season ?? '\u00A0'}
+										{#if anime.type && anime.type !== 'TV'}
+											<span class="anime-type-badge">{anime.type}</span>
+										{/if}
 									</span>
 								</div>
 								<div class="mylist-badge-slot">
@@ -1639,6 +1642,16 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	color: var(--color-text-muted);
 	overflow: hidden;
 	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+/* 同一シーズンに同名のTV版とSpecial/ONA版が並ぶことがあるため、非TVは媒体を明示 */
+.anime-type-badge {
+	margin-left: 4px;
+	padding: 0 4px;
+	border: 1px solid var(--color-border);
+	border-radius: 3px;
+	font-size: 0.62rem;
+	color: var(--color-text-muted);
 	white-space: nowrap;
 }
 .anime-season--placeholder {
