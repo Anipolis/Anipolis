@@ -64,6 +64,22 @@ describe("buildBroadcastEpisodeLog", () => {
 		]);
 	});
 
+	it("drops cancelled dates even when a stale session row still exists", () => {
+		// 放送休止オーバーライドより前に（旧フォールバック等で）セッション行が
+		// 作られていた場合でも、ログから除外され番号カウントも消費しない。
+		const overrides = [override({ room_date: "2026-08-07", is_cancelled: true })];
+		const log = buildBroadcastEpisodeLog(
+			ANIME,
+			[snapshot("2026-07-31"), snapshot("2026-08-07"), snapshot("2026-08-14"), snapshot("2026-08-21", 3, false)],
+			overrides,
+		);
+		expect(log.map((slot) => [slot.date, slot.start])).toEqual([
+			["2026-07-31", 1],
+			["2026-08-14", 2],
+			["2026-08-21", 3],
+		]);
+	});
+
 	it("applies recap overrides while numbering backward", () => {
 		const overrides = [override({ room_date: "2026-08-07", episode_count_increment: 0, episode_label: "総集編" })];
 		const log = buildBroadcastEpisodeLog(
