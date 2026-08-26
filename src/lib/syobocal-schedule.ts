@@ -7,6 +7,8 @@ export type SyobocalScheduleProgram = {
 	episodeNumber: number | null;
 	subtitle: string | null;
 	deleted: boolean;
+	/** Syobocal ProgItem Flag bitmask (1=注意, 2=新番組, 4=最終回, 8=再放送). */
+	flags?: number;
 };
 
 export type SyobocalScheduleMapping = {
@@ -25,6 +27,8 @@ export type SyobocalScheduleChannel = {
 	chid: number;
 	name: string;
 	epgName: string | null;
+	/** Syobocal ChGID; determines the broadcast tier (terrestrial / BS / excluded). */
+	channelGroupId?: number | null;
 };
 
 export type PrimarySyobocalProgram = SyobocalScheduleProgram & {
@@ -54,6 +58,30 @@ function episodeIdentity(program: SyobocalScheduleProgram): string {
 	return "unnumbered";
 }
 
+// Syobocal ChGID groups for free-to-air TV. Everything else (CS incl. AT-X,
+// web streams, radio) is excluded from broadcast room scheduling: rooms follow
+// the earliest terrestrial airing, falling back to BS-only titles.
+const TERRESTRIAL_CHANNEL_GROUPS = new Set([1, 8, 11, 13, 14, 18, 19, 20, 21, 22, 25, 26]);
+const BS_CHANNEL_GROUPS = new Set([2, 9, 28]);
+
+function channelTier(channel: SyobocalScheduleChannel | undefined): number | null {
+	const groupId = channel?.channelGroupId;
+	if (groupId === null || groupId === undefined) return null;
+	if (TERRESTRIAL_CHANNEL_GROUPS.has(groupId)) return 0;
+	if (BS_CHANNEL_GROUPS.has(groupId)) return 1;
+	return null;
+}
+
+const RERUN_FLAG = 8;
+
+// Only rerun slots are dropped here: they would duplicate an episode's room on
+// a later date. Recap/special/marathon slots DO open rooms by design — the
+// broadcast room override system (総集編/一挙放送/放送休止/時間変更) labels them
+// and controls the episode counter downstream.
+function isSchedulableProgram(program: SyobocalScheduleProgram): boolean {
+	return ((program.flags ?? 0) & RERUN_FLAG) === 0;
+}
+
 export function selectPrimarySyobocalPrograms(
 	mappings: readonly SyobocalScheduleMapping[],
 	titles: readonly SyobocalScheduleTitle[],
@@ -69,6 +97,8 @@ export function selectPrimarySyobocalPrograms(
 		const preferredChannel = title?.firstChannel ? normalizeChannelName(title.firstChannel) : null;
 		const eligible = programs.filter((program) => {
 			if (program.tid !== mapping.tid || program.deleted) return false;
+			if (!isSchedulableProgram(program)) return false;
+			if (channelTier(channelByChid.get(program.chid)) === null) return false;
 			const date = jstDate(program.startsAt);
 			return (!mapping.validFrom || date >= mapping.validFrom) && (!mapping.validTo || date <= mapping.validTo);
 		});
@@ -81,17 +111,23 @@ export function selectPrimarySyobocalPrograms(
 		}
 
 		for (const candidates of byEpisode.values()) {
-			const preferred = preferredChannel
-				? candidates.filter((program) => {
-						const channel = channelByChid.get(program.chid);
-						return (
-							normalizeChannelName(channel?.name ?? "") === preferredChannel ||
-							normalizeChannelName(channel?.epgName ?? "") === preferredChannel
-						);
-					})
-				: [];
-			const chosen = [...(preferred.length > 0 ? preferred : candidates)].sort(
-				(left, right) => Date.parse(left.startsAt) - Date.parse(right.startsAt) || left.pid - right.pid,
+			// Earliest airing on the best available tier (terrestrial before BS);
+			// the title's home channel only breaks exact same-time ties.
+			const isPreferred = (program: SyobocalScheduleProgram) => {
+				if (!preferredChannel) return false;
+				const channel = channelByChid.get(program.chid);
+				return (
+					normalizeChannelName(channel?.name ?? "") === preferredChannel ||
+					normalizeChannelName(channel?.epgName ?? "") === preferredChannel
+				);
+			};
+			const chosen = [...candidates].sort(
+				(left, right) =>
+					(channelTier(channelByChid.get(left.chid)) ?? 9) -
+						(channelTier(channelByChid.get(right.chid)) ?? 9) ||
+					Date.parse(left.startsAt) - Date.parse(right.startsAt) ||
+					Number(isPreferred(right)) - Number(isPreferred(left)) ||
+					left.pid - right.pid,
 			)[0];
 			if (!chosen) continue;
 			const channel = channelByChid.get(chosen.chid);

@@ -5,9 +5,13 @@ import {
 	findSyobocalWikipediaArticleLinks,
 	findSyobocalWikipediaKeywordLinks,
 	japaneseWikipediaArticleTitle,
+	kanaFoldTitle,
+	latinFoldTitle,
+	matchSyobocalTitlesByReading,
 	matchSyobocalTitlesExactly,
 	normalizeSyobocalTitle,
 	parseSyobocalLinks,
+	syobocalTypeConflicts,
 } from "./syobocal";
 
 describe("Syoboi Calendar title helpers", () => {
@@ -105,5 +109,84 @@ This uses [[work https://ja.wikipedia.org/wiki/Work_Title#Anime]] as a source.
 				],
 			),
 		).toEqual([{ malId: 1, tid: 20, normalizedTitle: "同名作品" }]);
+	});
+
+	it("refuses undated pairs", () => {
+		expect(
+			matchSyobocalTitlesExactly(
+				[{ malId: 1, title: "同名作品", firstYear: null, firstMonth: null }],
+				[{ tid: 10, title: "同名作品", firstYear: 2026, firstMonth: 1 }],
+			),
+		).toEqual([]);
+		// a same-titled TV parent and its mini both match one TID: ambiguous, none confirmed
+		expect(
+			matchSyobocalTitlesExactly(
+				[
+					{ malId: 1, title: "同名作品", firstYear: 2026, firstMonth: 1, mediaType: "TV" },
+					{ malId: 2, title: "同名作品", firstYear: 2026, firstMonth: 1, mediaType: "ONA" },
+				],
+				[{ tid: 10, title: "同名作品", firstYear: 2026, firstMonth: 1, category: 1 }],
+			),
+		).toEqual([]);
+	});
+});
+
+describe("syobocalTypeConflicts", () => {
+	it("flags cross-format pairs and passes unknowns", () => {
+		expect(syobocalTypeConflicts("ONA", 1)).toBe(true);
+		expect(syobocalTypeConflicts("Movie", 1)).toBe(true);
+		expect(syobocalTypeConflicts("Movie", 8)).toBe(false);
+		expect(syobocalTypeConflicts("TV", 10)).toBe(false);
+		expect(syobocalTypeConflicts("TV", 7)).toBe(true);
+		expect(syobocalTypeConflicts(null, 1)).toBe(false);
+		expect(syobocalTypeConflicts("TV", null)).toBe(false);
+	});
+});
+
+describe("matchSyobocalTitlesByReading", () => {
+	it("folds katakana to hiragana and mostly-Latin titles to a comparable key", () => {
+		expect(kanaFoldTitle("シェンムー")).toBe("しぇんむー");
+		expect(latinFoldTitle("Shenmue the Animation")).toBe("shenmuetheanimation");
+		// a katakana title with an English suffix must not collapse to the suffix
+		expect(latinFoldTitle("おね→ショタ←おね THE ANIMATION")).toBe(null);
+	});
+
+	it("matches across scripts via TitleYomi and the Latin fold with date agreement", () => {
+		const matches = matchSyobocalTitlesByReading(
+			[
+				{ malId: 1, title: "アトリ", firstYear: 2026, firstMonth: 7 },
+				{ malId: 2, title: "シェンムー", firstYear: 2026, firstMonth: 1 },
+				{ malId: 3, title: "遠い作品", firstYear: 2010, firstMonth: 1 },
+			],
+			[
+				{ tid: 10, title: "ATRI -My Dear Moments-", titleYomi: "あとり", firstYear: 2026, firstMonth: 7 },
+				{ tid: 20, title: "Shenmue the Animation", titleYomi: "しぇんむー", firstYear: 2026, firstMonth: 2 },
+				{ tid: 30, title: "遠い作品(新)", titleYomi: "とおいさくひん", firstYear: 2026, firstMonth: 1 },
+			],
+		);
+		expect(matches).toEqual([
+			{ malId: 1, tid: 10, matchKey: "kana:あとり" },
+			{ malId: 2, tid: 20, matchKey: "kana:しぇんむー" },
+		]);
+	});
+
+	it("stays silent on ambiguity and on pairs the exact matcher already owns", () => {
+		// two TIDs sharing one reading: ambiguous, no match
+		expect(
+			matchSyobocalTitlesByReading(
+				[{ malId: 1, title: "ふたご", firstYear: 2026, firstMonth: 1 }],
+				[
+					{ tid: 10, title: "フタゴ", titleYomi: "ふたご", firstYear: 2026, firstMonth: 1 },
+					{ tid: 20, title: "双子", titleYomi: "ふたご", firstYear: 2026, firstMonth: 1 },
+				],
+			),
+		).toEqual([]);
+		// identical normalized titles are the exact matcher's job
+		expect(
+			matchSyobocalTitlesByReading(
+				[{ malId: 1, title: "同じ題名", firstYear: 2026, firstMonth: 1 }],
+				[{ tid: 10, title: "同じ題名", titleYomi: "おなじだいめい", firstYear: 2026, firstMonth: 1 }],
+			),
+		).toEqual([]);
 	});
 });
