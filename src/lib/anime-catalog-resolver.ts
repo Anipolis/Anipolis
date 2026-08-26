@@ -463,7 +463,22 @@ export function resolveAnimeCatalog(
 	// 放送中の作品では anime-offline-database の話数がスナップショット時点で
 	// 固定された古い値になりがち（例: BEYBLADE X）。放送中はMAL/Jikanの現行値を
 	// 優先し、どちらにも無ければ「総話数未確定」として null にする。
-	if (status.value === "airing" && episodeCount.source === "anime_offline_database") {
+	// 「放送中」の判定は放送日付を優先する: ソースレコードの status は取り込みが
+	// 止まると陳腐化し（放送開始後もupcomingのまま等）、保存statusだけに頼ると
+	// このルールが素通り/誤発動する。日付が無い場合のみ status にフォールバック。
+	const todayJst = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo" }).format(new Date());
+	const airedFromKey = airedFrom.value?.slice(0, 10) ?? null;
+	const airedToKey = airedTo.value?.slice(0, 10) ?? null;
+	// 終了日不明（単発映画等はtoが無いままfinishedになる）は status で補完する
+	const effectivelyAiring =
+		airedFromKey != null && airedFromKey <= todayJst
+			? airedToKey != null
+				? airedToKey >= todayJst
+				: status.value !== "finished"
+			: airedFromKey != null
+				? false
+				: status.value === "airing";
+	if (effectivelyAiring && episodeCount.source === "anime_offline_database") {
 		const liveCount = stringValue(mal, "episode_count") ?? stringValue(jikan, "episode_count") ?? null;
 		episodeCount.value = liveCount;
 		if (liveCount !== null) episodeCount.source = stringValue(mal, "episode_count") ? "mal" : "jikan";

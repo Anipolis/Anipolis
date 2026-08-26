@@ -204,6 +204,36 @@ describe("resolveAnimeCatalog", () => {
 		expect(resolved.canonical.resources).toEqual([]);
 	});
 
+	it("applies the airing episode-count rule by dates even when the stored status is stale", () => {
+		// BLEACH禍進譚パターン: 放送開始済みなのにソースレコードが upcoming のまま
+		const resolved = resolveAnimeCatalog([
+			source("anime_offline_database", {
+				title: "Example",
+				episode_count: "12",
+				status: "upcoming",
+				aired_from: "2020-01-01",
+			}),
+			source("mal", { title_ja: "例の作品", status: "upcoming", aired_from: "2020-01-01" }),
+		]);
+		// 日付上は放送中（from過去・to無し・finishedでない）→ AODBの固定値は使わない
+		expect(resolved.canonical.episode_count).toBeNull();
+	});
+
+	it("keeps the offline episode total for a show that ended by dates despite a stale airing status", () => {
+		// ちびゴジラパターン: 終了済みなのにソースレコードが airing のまま
+		const resolved = resolveAnimeCatalog([
+			source("anime_offline_database", {
+				title: "Example",
+				episode_count: "24",
+				status: "airing",
+				aired_from: "2020-01-01",
+				aired_to: "2020-06-30",
+			}),
+			source("mal", { title_ja: "例の作品", status: "airing", aired_from: "2020-01-01", aired_to: "2020-06-30" }),
+		]);
+		expect(resolved.canonical.episode_count).toBe("24");
+	});
+
 	it("prefers Syobocal's leading-channel broadcast day/time over MAL's pre-air slot", () => {
 		// 骸骨騎士様Ⅱパターン: MALはAT-X先行の月曜22:00、地上波最速はMX木曜24:00
 		const resolved = resolveAnimeCatalog([

@@ -379,10 +379,12 @@ export async function addBroadcastOverrideAction(
 			duration_minutes: durationMinutes,
 			pre_open_minutes: preOpenMinutes,
 			post_close_minutes: postCloseMinutes,
-			episode_start: episodeStart,
-			episode_end: episodeEnd,
-			episode_label: episodeLabel,
-			episode_count_increment: episodeCountIncrement,
+			// 放送休止はルーム自体が立たないため話数系フィールドは意味を持たない。
+			// UIの種別切替で残った値が保存されないようサーバー側で落とす
+			episode_start: isCancelled ? null : episodeStart,
+			episode_end: isCancelled ? null : episodeEnd,
+			episode_label: isCancelled ? null : episodeLabel,
+			episode_count_increment: isCancelled ? null : episodeCountIncrement,
 			is_cancelled: isCancelled,
 			announcement_label: announcementLabel,
 			note: nullableText(fd, "note"),
