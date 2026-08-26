@@ -1324,7 +1324,6 @@ function buildBroadcastRoomSessionRows(
 	importedAt: string,
 ) {
 	const animeByMal = new Map(animeRows.map((anime) => [anime.mal_id, anime]));
-	const now = Date.now();
 	const rows = primaryPrograms.flatMap((program) => {
 		const anime = animeByMal.get(program.malId);
 		if (!anime || anime.room_type === "global" || !anime.metadata_ready || anime.hidden_by_admin) return [];
@@ -1337,7 +1336,10 @@ function buildBroadcastRoomSessionRows(
 		const preOpenMinutes = anime.broadcast_room_pre_open_minutes ?? 5;
 		const postCloseMinutes = anime.broadcast_room_post_close_minutes ?? 30;
 		const postingOpensAt = startsAt - preOpenMinutes * 60_000;
-		if (postingOpensAt <= now) return [];
+		// 開場済みの枠もここでは除外しない: ローリング窓の先頭（昨日）に落ちた
+		// 「昨夜開催されたばかりのルーム」も現在の選定の一部であり、除外すると
+		// 陳腐化クリーンアップが正当な開催済みセッションを削除してしまう。
+		// 開場済み行の扱い（既存は更新しない・新規は遡及作成）は保存側で行う。
 		// 深夜アニメ慣習: 4時前の枠は前日の放送日として room_date を振る
 		// （overrides / ensure_broadcast_room_session と同じ基準）
 		const roomDate = jstBroadcastDate(program.startsAt);
