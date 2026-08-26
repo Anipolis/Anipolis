@@ -489,9 +489,19 @@ async function applyShortAnimeLobbyRule(
 				? (mal.normalized_data as Record<string, unknown>)
 				: null;
 		const duration = normalized?.["episode_duration_minutes"];
-		if (typeof duration !== "number" || duration <= 0) continue;
-		const autoRoomType = duration <= SHORT_ANIME_LOBBY_MINUTES ? "global" : "episode";
-		if ((current?.room_type ?? "episode") !== autoRoomType) {
+		let autoRoomType: string | null = null;
+		if (typeof duration === "number" && duration > 0) {
+			autoRoomType = duration <= SHORT_ANIME_LOBBY_MINUTES ? "global" : "episode";
+		}
+		// 非TV（OVA/ONA/Movie/Special）で放送情報が無い作品は各話ルームを開けない
+		// （しょぼい同期の対象外・曜日合成も不可）ため総合ロビーに落とす。後から
+		// TV放送が付いた場合（ONAのTV放送等）は broadcast 情報が入り episode に戻る。
+		const isTv = (resolution.canonical.type ?? "").toLowerCase() === "tv";
+		const noBroadcastInfo = canonical["broadcast_day"] == null && canonical["broadcast_time"] == null;
+		if (!isTv && noBroadcastInfo && autoRoomType !== "global") {
+			autoRoomType = "global";
+		}
+		if (autoRoomType !== null && (current?.room_type ?? "episode") !== autoRoomType) {
 			canonical["room_type"] = autoRoomType;
 			canonical["room_type_source"] = "auto";
 			applied += 1;

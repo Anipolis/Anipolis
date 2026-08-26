@@ -204,6 +204,25 @@ describe("resolveAnimeCatalog", () => {
 		expect(resolved.canonical.resources).toEqual([]);
 	});
 
+	it("replaces a stale AODB season with the MAL season when only MAL matches aired_from", () => {
+		// 魔法使いの夜パターン: AODBは発表時の2026-winterのまま、実放送は11/20（fall）
+		const resolved = resolveAnimeCatalog([
+			source("anime_offline_database", { title: "Example", season: "2026-winter", status: "upcoming" }),
+			source("mal", { title_ja: "例の作品", season: "2026-fall", aired_from: "2026-11-20" }),
+		]);
+		expect(resolved.canonical.season).toBe("2026-fall");
+		expect(resolved.fieldSources["season"]).toEqual({ source: "mal", confidence: "source" });
+	});
+
+	it("keeps the AODB season when aired_from is only a placeholder that matches nothing", () => {
+		// 年始プレースホルダー（01-01）はどのクールとも矛盾しうるが、代替も整合しなければ据え置く
+		const resolved = resolveAnimeCatalog([
+			source("anime_offline_database", { title: "Example", season: "2026-fall", status: "upcoming" }),
+			source("mal", { title_ja: "例の作品", season: "2026-fall", aired_from: "2026-01-01" }),
+		]);
+		expect(resolved.canonical.season).toBe("2026-fall");
+	});
+
 	it("applies the airing episode-count rule by dates even when the stored status is stale", () => {
 		// BLEACH禍進譚パターン: 放送開始済みなのにソースレコードが upcoming のまま
 		const resolved = resolveAnimeCatalog([

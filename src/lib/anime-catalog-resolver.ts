@@ -217,6 +217,28 @@ function mergeResources(syobocal: Record<string, unknown>): { name: string; url:
 		.sort((left, right) => left.url.localeCompare(right.url));
 }
 
+const SEASON_MONTHS: Record<string, readonly number[]> = {
+	winter: [12, 1, 2, 3],
+	spring: [3, 4, 5, 6],
+	summer: [6, 7, 8, 9],
+	fall: [9, 10, 11, 12],
+};
+
+/** 「YYYY-season」が放送開始日の月とおおまかに整合するか（境界月は両側許容） */
+function seasonMatchesAiredFrom(season: string, airedFrom: string): boolean {
+	const match = season.match(/^(\d{4})-(winter|spring|summer|fall)$/);
+	if (!match) return true; // 形式外は判定しない（誤補正を避ける）
+	const year = Number(airedFrom.slice(0, 4));
+	const month = Number(airedFrom.slice(5, 7));
+	if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1) return true;
+	const seasonYear = Number(match[1]);
+	const months = SEASON_MONTHS[match[2] ?? ""] ?? [];
+	if (match[2] === "winter") {
+		return (year === seasonYear - 1 && month === 12) || (year === seasonYear && months.includes(month));
+	}
+	return year === seasonYear && months.includes(month);
+}
+
 export function resolveAnimeCatalog(
 	sourceRecords: readonly CatalogSourceRecord[],
 	legacyRow?: LegacyAnimeCatalogRow,
@@ -466,6 +488,31 @@ export function resolveAnimeCatalog(
 	// 「放送中」の判定は放送日付を優先する: ソースレコードの status は取り込みが
 	// 止まると陳腐化し（放送開始後もupcomingのまま等）、保存statusだけに頼ると
 	// このルールが素通り/誤発動する。日付が無い場合のみ status にフォールバック。
+	// season は AODB 優先だが、AODB のスナップショットは延期作品で「発表時の
+	// クール」のまま陳腐化する（魔法使いの夜: AODB=2026-winter / 実放送=11月）。
+	// 解決済み season が放送開始日と矛盾し、MAL/Jikan の season が開始日と
+	// 整合する場合のみそちらへ差し替える（manual はそのまま）。
+	if (season.source !== "manual" && season.value && airedFrom.value) {
+		const matches = seasonMatchesAiredFrom(season.value, airedFrom.value);
+		if (!matches) {
+			const alternative = (
+				[
+					{ value: stringValue(mal, "season"), source: "mal" as const },
+					{ value: stringValue(jikan, "season"), source: "jikan" as const },
+				] as const
+			).find(
+				(candidateSeason) =>
+					candidateSeason.value != null &&
+					seasonMatchesAiredFrom(candidateSeason.value, airedFrom.value ?? ""),
+			);
+			if (alternative?.value) {
+				season.value = alternative.value;
+				season.source = alternative.source;
+				season.confidence = "source";
+			}
+		}
+	}
+
 	const todayJst = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo" }).format(new Date());
 	const airedFromKey = airedFrom.value?.slice(0, 10) ?? null;
 	const airedToKey = airedTo.value?.slice(0, 10) ?? null;
