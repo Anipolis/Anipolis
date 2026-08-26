@@ -6,11 +6,14 @@ import {
 	toggleLikeAction,
 	toggleRepostAction,
 } from "$lib/server/actions";
+import { buildBroadcastEpisodeLog } from "$lib/server/broadcast-episode-log";
 import {
 	getAnime,
 	getAnimeRankingTrending,
 	getBroadcastRoomOverride,
+	getBroadcastRoomOverridesForAnime,
 	getBroadcastRoomPosts,
+	getBroadcastRoomScheduleSnapshotsForAnime,
 	getBroadcastRoomSession,
 } from "$lib/server/queries";
 import { getRoomExitSurveyLoadState, ROOM_EXIT_SURVEY_VERSION } from "$lib/server/room-exit-survey";
@@ -111,9 +114,18 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 	if (!session) throw error(404, "放送ルームが見つかりません");
 
 	const hashtag = roomHashtag(anime);
-	// 話数はしょぼい番組表由来の値のみ（曜日からの機械カウントはしない）。
-	// 同期セッション以外（合成表示・オーバーライド起点）は話数なしで表示する。
-	const episodeNumber = session.episode_number ?? null;
+	// 話数はしょぼい番組表由来の値が第一。番号の無いセッション（同期開始前の
+	// 実在・合成ルーム）は、詳細ページのルームログと同じアンカー逆算で補う
+	// （曜日からの機械カウントはしない）。一挙放送等の範囲はタイトルに使わない。
+	let episodeNumber = session.episode_number ?? null;
+	if (episodeNumber == null && isEligibleForRoomLog(anime.season)) {
+		const [snapshots, overrides] = await Promise.all([
+			getBroadcastRoomScheduleSnapshotsForAnime(supabase, Number(anime.id)),
+			getBroadcastRoomOverridesForAnime(supabase, params.id),
+		]);
+		const slot = buildBroadcastEpisodeLog(anime, snapshots, overrides).find((entry) => entry.date === params.date);
+		if (slot && slot.start != null && slot.start === slot.end) episodeNumber = slot.start;
+	}
 	const roomExperimentSupabase = user ? createRoomExperimentServiceClient() : null;
 	const [posts, trending, animeTrending, roomExperimentRun, roomExitSurveyLoadState] = await Promise.all([
 		getBroadcastRoomPosts(supabase, session.id, user?.id ?? null, { limit: 100, ascending: true }),
