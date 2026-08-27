@@ -32,10 +32,12 @@ export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession 
 	// 表示中タブのカテゴリのみ既読にする（他タブの未読バッジは残す）
 	await markCategoryNotificationsRead(supabase, user.id, tab);
 
-	const [normal, room, mylist, unreadCounts, trendingResult, animeTrending] = await Promise.all([
-		getNotifications(supabase, user.id, 50, NORMAL_TYPES),
-		getNotifications(supabase, user.id, 50, ROOM_TYPES),
-		getNotifications(supabase, user.id, 50, MYLIST_TYPES),
+	// タブは通常リンク遷移で毎回 load が走るため、表示するタブの一覧だけ取得する
+	// （非表示タブの分まで毎回50件×2カテゴリを取得しない）。未読バッジはカウント
+	// クエリ（getUnreadNotificationCountsByCategory）だけで賄える。
+	const typesByTab = { normal: NORMAL_TYPES, room: ROOM_TYPES, mylist: MYLIST_TYPES } as const;
+	const [activeList, unreadCounts, trendingResult, animeTrending] = await Promise.all([
+		getNotifications(supabase, user.id, 50, typesByTab[tab]),
 		getUnreadNotificationCountsByCategory(supabase, user.id),
 		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
 		getAnimeRankingTrending(supabase, 5),
@@ -43,7 +45,7 @@ export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession 
 
 	return {
 		tab,
-		notifications: { normal, room, mylist },
+		notifications: { normal: [], room: [], mylist: [], [tab]: activeList },
 		unreadCounts,
 		trending: trendingResult.data ?? [],
 		animeTrending,
