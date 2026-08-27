@@ -700,6 +700,9 @@ export async function fetchAniListSeasonMalIds(year: number, season: SeasonName)
 					page,
 				},
 			}),
+			// AniList が応答を返さない場合に無期限待ちしないための打ち切り。
+			// abort は呼び出し元の catch に流れ、保存済みIDのみでのフォールバックに到達する
+			signal: AbortSignal.timeout(30_000),
 		});
 
 		const payload = (await response.json()) as AniListSeasonResponse;
