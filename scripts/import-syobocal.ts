@@ -286,7 +286,12 @@ async function fetchWithRetry(url: URL, accept: string): Promise<Response> {
 	let lastError: unknown;
 	for (let attempt = 1; attempt <= 4; attempt += 1) {
 		try {
-			const response = await fetch(url, { headers: { Accept: accept, "User-Agent": USER_AGENT } });
+			// 応答が返らないままプロセスが無限に待つとリトライにもキャッシュ
+			// フォールバックにも到達しないため、1試行ごとに打ち切る
+			const response = await fetch(url, {
+				headers: { Accept: accept, "User-Agent": USER_AGENT },
+				signal: AbortSignal.timeout(60_000),
+			});
 			if (response.ok) return response;
 			if (response.status < 500 && response.status !== 429) {
 				// 恒久エラー（400/404等）はリトライしても無駄なので即座に失敗させる。
@@ -1119,10 +1124,18 @@ function buildMappings(
 		...fileManual,
 	];
 	const selected = new Map<number, MappingProposal>();
+	// 同一優先度の衝突で selected.delete した後、後続の候補が「未選択」と見なされて
+	// 再選択されるのを防ぐ。衝突が起きた優先度以下の候補は以降すべて無視する
+	// （より高優先度の照合は引き続き採用できる）。
+	const conflictedPriorityByMalId = new Map<number, number>();
 	const review: string[] = [];
 	for (const proposal of proposals) {
 		if (!titlesByTid.has(proposal.tid)) {
 			review.push(`MAL ${proposal.malId}: TID ${proposal.tid} was not found in the Syobocal title snapshot.`);
+			continue;
+		}
+		const conflictedPriority = conflictedPriorityByMalId.get(proposal.malId);
+		if (conflictedPriority !== undefined && proposal.selectionPriority <= conflictedPriority) {
 			continue;
 		}
 		const current = selected.get(proposal.malId);
@@ -1135,6 +1148,10 @@ function buildMappings(
 				`MAL ${proposal.malId}: conflicting ${proposal.method} mappings TID ${current.tid} / ${proposal.tid}.`,
 			);
 			selected.delete(proposal.malId);
+			conflictedPriorityByMalId.set(
+				proposal.malId,
+				Math.max(conflictedPriority ?? Number.NEGATIVE_INFINITY, proposal.selectionPriority),
+			);
 		}
 	}
 	return { proposals, selected: [...selected.values()], review };

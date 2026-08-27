@@ -207,7 +207,9 @@ function publicSyobocalResources(value: unknown): { name: string; url: string }[
 	});
 }
 
-function mergeResources(syobocal: Record<string, unknown>): { name: string; url: string }[] {
+// 公開リソースは現在のしょぼいソースレコードだけから再構築する（他ソースとの
+// マージはしない）。過去に公開用DBへ入った放送局リンク等を引き継がないための方針。
+function resolvePublicResources(syobocal: Record<string, unknown>): { name: string; url: string }[] {
 	const combined = publicSyobocalResources(syobocal["resources"]);
 	const seen = new Set<string>();
 	return combined
@@ -265,6 +267,10 @@ export function resolveAnimeCatalog(
 	// MALは韓国・中国作品の「日本語タイトル」欄に現地語題をそのまま入れることが
 	// ある。かなを含まない題は、日本側ソース（しょぼいマッピング / Wikidata日本語
 	// ラベル / manual）の裏付けがない限り検証済みとして扱わない。ハングルは常に拒否。
+	// しょぼいレコードの存在は「日本で放送された」ことの裏付けとして意図的に使う
+	// （use_for_title=false で title_ja が無くても、日本放送のあるかな無し題は
+	// 正当な日本語タイトルであることが多い。テスト「rejects native-language titles
+	// smuggled into MAL's Japanese-title field」の第3ケースが仕様）。
 	const japaneseSideCorroborated =
 		bySource.has("syobocal") || wikidataJapaneseTitle !== undefined || stringValue(manual, "title") !== undefined;
 	const acceptJapaneseTitle = (value: string | undefined): string | undefined => {
@@ -583,7 +589,7 @@ export function resolveAnimeCatalog(
 			broadcast_time: broadcastTime.value,
 			official_site_url: officialSiteUrl.value,
 			official_x_url: officialXUrl.value,
-			resources: mergeResources(syobocal),
+			resources: resolvePublicResources(syobocal),
 			cover_url: coverUrl.value,
 			metadata_ready: resolutionStatus === "verified" && !blockedMediaType,
 		},

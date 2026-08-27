@@ -18,6 +18,17 @@ describe("computeBroadcastStatus", () => {
 		expect(computeBroadcastStatus(anime, "2026-07-30")).toBe("finished");
 	});
 
+	it("finishes a released movie registered with the Japanese type label", () => {
+		// 管理画面の手動登録は type="映画"/"特別"。英数字正規化で空になっても
+		// 有限リリース形式として扱い、公開日到来後は finished にする
+		expect(
+			computeBroadcastStatus({ airedFrom: "2026-05-01", airedTo: null, type: "映画", status: "airing" }, TODAY),
+		).toBe("finished");
+		expect(
+			computeBroadcastStatus({ airedFrom: "2026-05-01", airedTo: null, type: "特別", status: "airing" }, TODAY),
+		).toBe("finished");
+	});
+
 	it("uses the source status when historical TV data has no end date", () => {
 		expect(
 			computeBroadcastStatus({ airedFrom: "2023-01-10", airedTo: null, type: "TV", status: "finished" }, TODAY),

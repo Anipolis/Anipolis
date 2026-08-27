@@ -77,7 +77,12 @@ export const POST: RequestHandler = async ({ request, locals: { supabase, safeGe
 	// 次回のカタログ再解決でアップロードしたカバーが取り込み元の画像に戻る。
 	const malId = (updatedRow as { mal_id: number | null }).mal_id;
 	if (malId != null) {
-		await upsertManualSourceRecord(adminClient, malId, {}, { cover_url: publicUrl });
+		const manualSaved = await upsertManualSourceRecord(adminClient, malId, {}, { cover_url: publicUrl });
+		if (!manualSaved) {
+			// manual レコードが無いと次回のカタログ再解決でカバーが取り込み元へ戻る。
+			// 部分更新を成功として返さず、再アップロードを促す。
+			error(500, "カバーは保存されましたが保護レコードの保存に失敗しました。もう一度アップロードしてください");
+		}
 	}
 
 	return json({ url: publicUrl });
