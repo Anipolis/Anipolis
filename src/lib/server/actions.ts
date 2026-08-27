@@ -18,6 +18,7 @@ import type { AnimeExchangeShare, AnimeStatus, BroadcastRoomMuteDuration } from 
 import { eventScheduledAtIsoFromBroadcastInput } from "$lib/utils/event-time";
 import { extractHashtags } from "$lib/utils/hashtag";
 
+const MAX_POST_IMAGES = 4;
 const reportStatuses = new Set(["open", "reviewing", "resolved", "rejected"]);
 const moderationStatuses = new Set(["active", "restricted", "banned"]);
 const animeExchangeErrorMessages = {
@@ -172,6 +173,18 @@ export async function insertPostWithHashtags(
 		return fail(400, { message: "本文、画像、アニメ引用、またはトレード結果を追加してください" });
 	}
 	if (content.length > 280) return fail(400, { message: "280文字以内で入力してください" });
+
+	// 画像は自分のフォルダにアップロードされた post-images の URL のみ、最大4枚まで受け付ける
+	// （クライアント側の4枚制限・アップロードAPIの検査を直接POSTで迂回されるのを防ぐ）
+	if (imageUrls.length > MAX_POST_IMAGES) {
+		return fail(400, { message: `画像は${MAX_POST_IMAGES}枚まで添付できます` });
+	}
+	for (const imageUrl of imageUrls) {
+		const storagePath = typeof imageUrl === "string" ? publicUrlToStoragePath(imageUrl, "post-images") : null;
+		if (!storagePath || !storagePath.startsWith(`${userId}/`)) {
+			return fail(400, { message: "添付画像のURLが不正です" });
+		}
+	}
 
 	if (parentId) {
 		const { data: parent } = await supabase.from("posts").select("id").eq("id", parentId).maybeSingle();
