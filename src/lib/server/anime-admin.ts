@@ -1,9 +1,84 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fail } from "@sveltejs/kit";
+import { validateImageBuffer } from "$lib/server/upload";
 import type { Database } from "$lib/supabase/database.types";
 import type { BroadcastOverrideKind } from "$lib/utils/broadcast-episodes";
 
+const ALLOWED_INLINE_COVER_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];
+
 type AnimeWriteResult = { success: true; animeId: string } | ReturnType<typeof fail<{ message: string }>>;
+
+// リゾルバ（anime-catalog-resolver）が manual ソースとして参照するキー。
+// 管理画面での編集をこのキーに限って anime_source_records(source='manual') に
+// 差分保存し、週次のカタログ再解決で上書きされないようにする。ここに無い
+// フィールド（broadcast_duration や room 系）はリゾルバが触らないので不要。
+const MANUAL_SOURCE_KEYS = [
+	"title",
+	"title_en",
+	"title_romaji",
+	"season",
+	"episode_count",
+	"type",
+	"source",
+	"aired_from",
+	"aired_to",
+	"genre",
+	"studio",
+	"producer",
+	"official_site_url",
+	"official_x_url",
+	"cover_url",
+	"broadcast_day",
+	"broadcast_time",
+] as const;
+
+/**
+ * 管理画面の編集内容を manual ソースレコードへ差分マージする。
+ * 成功（または保存すべき差分なし）で true、保存失敗で false を返す。
+ * 失敗を握りつぶすと anime 行だけ更新された「部分更新」になり、次回の
+ * カタログ再解決で編集値が取り込み元の値へ戻るため、呼び出し元は false を
+ * 失敗としてユーザーへ返すこと。
+ * カバーアップロードAPIのような service-role 経路からも使う（DBトリガーの
+ * capture_anime_manual_source は auth.uid() が無いと発火しないため）。
+ */
+export async function upsertManualSourceRecord(
+	// biome-ignore lint/suspicious/noExplicitAny: generated types may lag behind source-record migrations
+	writer: SupabaseClient<any>,
+	malId: number,
+	previous: Record<string, unknown>,
+	payload: Record<string, unknown>,
+) {
+	const changed: Record<string, unknown> = {};
+	for (const key of MANUAL_SOURCE_KEYS) {
+		if (!(key in payload)) continue;
+		const next = payload[key] ?? null;
+		if (JSON.stringify(next) !== JSON.stringify(previous[key] ?? null)) changed[key] = next;
+	}
+	if (Object.keys(changed).length === 0) return true;
+
+	const { data: existing } = await writer
+		.from("anime_source_records")
+		.select("normalized_data,source_url")
+		.eq("mal_id", malId)
+		.eq("source", "manual")
+		.maybeSingle();
+	const { error } = await writer.from("anime_source_records").upsert(
+		{
+			mal_id: malId,
+			source: "manual",
+			source_version: new Date().toISOString().slice(0, 10),
+			// source_url は NOT NULL: 既存が無い初回作成は MAL ページを充てる
+			source_url: (existing?.source_url as string | null) ?? `https://myanimelist.net/anime/${malId}`,
+			normalized_data: { ...((existing?.normalized_data as Record<string, unknown>) ?? {}), ...changed },
+		},
+		{ onConflict: "mal_id,source" },
+	);
+	if (error) {
+		console.error("manual source record upsert failed:", error.message);
+		return false;
+	}
+	return true;
+}
 
 function normalizeBroadcastTime(value: string | null | undefined) {
 	const raw = value?.trim();
@@ -108,14 +183,16 @@ async function uploadInlineCover(supabase: SupabaseClient<Database>, fd: FormDat
 	let coverUrl = nullableText(fd, "cover_url") ?? fallbackCoverUrl;
 	const imageFile = fd.get("image_file");
 	if (imageFile instanceof File && imageFile.size > 0) {
-		const ext = imageFile.type === "image/webp" ? "webp" : "jpg";
-		const path = `pending_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
 		const arrayBuffer = await imageFile.arrayBuffer();
-		const { error: uploadError } = await supabase.storage
-			.from("anime-covers")
-			.upload(path, arrayBuffer, { contentType: imageFile.type, upsert: false });
-		if (!uploadError) {
-			coverUrl = supabase.storage.from("anime-covers").getPublicUrl(path).data.publicUrl;
+		const validated = validateImageBuffer(arrayBuffer, ALLOWED_INLINE_COVER_TYPES);
+		if (validated) {
+			const path = `pending_${Date.now()}_${Math.random().toString(36).slice(2)}.${validated.ext}`;
+			const { error: uploadError } = await supabase.storage
+				.from("anime-covers")
+				.upload(path, arrayBuffer, { contentType: validated.mime, upsert: false });
+			if (!uploadError) {
+				coverUrl = supabase.storage.from("anime-covers").getPublicUrl(path).data.publicUrl;
+			}
 		}
 	}
 	return coverUrl;
@@ -164,6 +241,8 @@ async function buildAnimePayload(supabase: SupabaseClient<Database>, fd: FormDat
 		broadcast_duration_minutes: broadcastDurationMinutes,
 		broadcast_station: parseBroadcastStations(fd),
 		room_type: parseRoomType(fd),
+		// 管理画面からの保存は明示操作: 総合ロビー自動判定の対象から外す
+		room_type_source: "manual",
 	};
 }
 
@@ -195,9 +274,32 @@ export async function updateAnimeAction(
 
 	// biome-ignore lint/suspicious/noExplicitAny: shared writer must tolerate generated type lag after migrations
 	const animeWriter = supabase as SupabaseClient<any>;
+	const { data: previousRow } = await animeWriter
+		.from("anime")
+		.select(`mal_id,${MANUAL_SOURCE_KEYS.join(",")}`)
+		.eq("id", animeId)
+		.maybeSingle();
 	const { data, error } = await animeWriter.from("anime").update(payload).eq("id", animeId).select("id").single();
 
 	if (error) return fail(500, { message: `更新エラー: ${error.message}` });
+
+	// 編集差分を manual ソースとして保存し、カタログ再解決での上書きを防ぐ
+	const malId = (previousRow as { mal_id: number | null } | null)?.mal_id;
+	if (malId != null) {
+		const manualSaved = await upsertManualSourceRecord(
+			animeWriter,
+			malId,
+			(previousRow ?? {}) as Record<string, unknown>,
+			payload as Record<string, unknown>,
+		);
+		if (!manualSaved) {
+			// anime 行は更新済みだが manual レコードが無いと次回の再解決で戻る。
+			// 部分更新を成功として返さず、再保存を促す。
+			return fail(500, {
+				message: "更新は反映されましたが編集内容の保護レコードの保存に失敗しました。もう一度保存してください",
+			});
+		}
+	}
 	return { success: true, animeId: String((data as { id: number }).id) };
 }
 
@@ -294,10 +396,12 @@ export async function addBroadcastOverrideAction(
 			duration_minutes: durationMinutes,
 			pre_open_minutes: preOpenMinutes,
 			post_close_minutes: postCloseMinutes,
-			episode_start: episodeStart,
-			episode_end: episodeEnd,
-			episode_label: episodeLabel,
-			episode_count_increment: episodeCountIncrement,
+			// 放送休止はルーム自体が立たないため話数系フィールドは意味を持たない。
+			// UIの種別切替で残った値が保存されないようサーバー側で落とす
+			episode_start: isCancelled ? null : episodeStart,
+			episode_end: isCancelled ? null : episodeEnd,
+			episode_label: isCancelled ? null : episodeLabel,
+			episode_count_increment: isCancelled ? null : episodeCountIncrement,
 			is_cancelled: isCancelled,
 			announcement_label: announcementLabel,
 			note: nullableText(fd, "note"),

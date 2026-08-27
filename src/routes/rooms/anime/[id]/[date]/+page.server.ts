@@ -6,11 +6,14 @@ import {
 	toggleLikeAction,
 	toggleRepostAction,
 } from "$lib/server/actions";
+import { buildBroadcastEpisodeLog } from "$lib/server/broadcast-episode-log";
 import {
 	getAnime,
 	getAnimeRankingTrending,
 	getBroadcastRoomOverride,
+	getBroadcastRoomOverridesForAnime,
 	getBroadcastRoomPosts,
+	getBroadcastRoomScheduleSnapshotsForAnime,
 	getBroadcastRoomSession,
 } from "$lib/server/queries";
 import { getRoomExitSurveyLoadState, ROOM_EXIT_SURVEY_VERSION } from "$lib/server/room-exit-survey";
@@ -18,10 +21,52 @@ import {
 	createRoomExperimentServiceClient,
 	getActiveRoomExperimentRunForAnime as getActiveExperimentRun,
 } from "$lib/server/room-experiments";
-import type { Anime } from "$lib/types";
-import { calcEpisodeNumberFromDate } from "$lib/types";
-import { animeIsScheduledForRoomDate } from "$lib/utils/broadcast-room";
+import type { Anime, BroadcastRoomOverride, BroadcastRoomSession } from "$lib/types";
+import { animeIsScheduledForRoomDate, broadcastTimeMinutes, isEligibleForRoomLog } from "$lib/utils/broadcast-room";
 import type { Actions, PageServerLoad } from "./$types";
+
+// 過去ルームの表示専用セッション。かつては閲覧時にフォールバックがセッション行を
+// 偽装生成して表示していたが、しょぼい絶対化でDBへの偽装生成を廃止したため、
+// 「行が無い閉場済みルーム」はこの合成オブジェクトで履歴閲覧だけを復元する
+// （投稿は締切済みで不可、投稿・アンケート等の参照は空を返す）。
+const SYNTHETIC_ROOM_SESSION_ID = "00000000-0000-0000-0000-000000000000";
+
+function synthesizeClosedRoomSession(
+	anime: Anime,
+	roomDate: string,
+	override: BroadcastRoomOverride | null,
+): BroadcastRoomSession | null {
+	const time = override?.broadcast_time ?? anime.broadcast_time;
+	const minutes = broadcastTimeMinutes(time);
+	if (minutes == null) return null;
+	// parseInt は前方一致（"07junk" → 7）、Date.UTC は範囲外をロールオーバーするため、
+	// 形式と範囲を厳密に検証してから合成する
+	const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(roomDate);
+	if (!dateMatch) return null;
+	const year = Number(dateMatch[1]);
+	const month = Number(dateMatch[2]);
+	const day = Number(dateMatch[3]);
+	if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+	// JST固定(+9): サーバーTZに依存させない
+	const scheduledMs = Date.UTC(year, month - 1, day, Math.floor(minutes / 60) - 9, minutes % 60);
+	const duration = override?.duration_minutes ?? anime.broadcast_duration_minutes ?? 30;
+	const preOpen = override?.pre_open_minutes ?? anime.broadcast_room_pre_open_minutes ?? 5;
+	const postClose = override?.post_close_minutes ?? anime.broadcast_room_post_close_minutes ?? 30;
+	const closesMs = scheduledMs + (duration + postClose) * 60_000;
+	// 未来・開催中のルームは実セッション（しょぼい同期かオーバーライド起点）が必須
+	if (closesMs > Date.now()) return null;
+	return {
+		id: SYNTHETIC_ROOM_SESSION_ID,
+		anime_id: Number(anime.id),
+		room_date: roomDate,
+		room_kind: "episode",
+		room_key: roomDate,
+		scheduled_at: new Date(scheduledMs).toISOString(),
+		duration_minutes: duration,
+		posting_opens_at: new Date(scheduledMs - preOpen * 60_000).toISOString(),
+		posting_closes_at: new Date(closesMs).toISOString(),
+	};
+}
 
 function fallbackRoomHashtag(title: string) {
 	return title.replace(/\s+/g, "").replace(/[^\p{L}\p{N}_]/gu, "");
@@ -57,16 +102,40 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 	if (override?.is_cancelled) {
 		throw error(404, "放送ルームが見つかりません");
 	}
-	if (!animeIsScheduledForRoomDate(anime, params.date, override != null)) {
-		throw error(404, "放送ルームが見つかりません");
-	}
 
-	const session = await getBroadcastRoomSession(supabase, anime.id, params.date);
+	// 実セッション（しょぼい同期・オーバーライド起点）が最優先。深夜枠は
+	// room_dateが放送日（前日）でMAL由来のbroadcast_dayと曜日が一致しないため、
+	// 曜日ゲートは実セッションが無い場合の合成時にだけ適用する。
+	let session = await getBroadcastRoomSession(supabase, anime.id, params.date);
+	if (!session) {
+		// ルーム対象外シーズン（2026-winter以前）は閉場済みルームも生成しない
+		if (!isEligibleForRoomLog(anime.season)) {
+			throw error(404, "放送ルームが見つかりません");
+		}
+		if (!animeIsScheduledForRoomDate(anime, params.date, override != null)) {
+			throw error(404, "放送ルームが見つかりません");
+		}
+		session = synthesizeClosedRoomSession(anime, params.date, override ?? null);
+	}
 	if (!session) throw error(404, "放送ルームが見つかりません");
 
 	const hashtag = roomHashtag(anime);
-	const episodeNumber = calcEpisodeNumberFromDate(session.room_date, anime.aired_from, anime.broadcast_time);
-	const roomExperimentSupabase = user ? createRoomExperimentServiceClient() : null;
+	// 話数はしょぼい番組表由来の値が第一。番号の無いセッション（同期開始前の
+	// 実在・合成ルーム）は、詳細ページのルームログと同じアンカー逆算で補う
+	// （曜日からの機械カウントはしない）。一挙放送等の範囲はタイトルに使わない。
+	let episodeNumber = session.episode_number ?? null;
+	if (episodeNumber == null && isEligibleForRoomLog(anime.season)) {
+		const [snapshots, overrides] = await Promise.all([
+			getBroadcastRoomScheduleSnapshotsForAnime(supabase, Number(anime.id)),
+			getBroadcastRoomOverridesForAnime(supabase, params.id),
+		]);
+		const slot = buildBroadcastEpisodeLog(anime, snapshots, overrides).find((entry) => entry.date === params.date);
+		if (slot && slot.start != null && slot.start === slot.end) episodeNumber = slot.start;
+	}
+	// 合成セッションは実セッション行が無く、アンケート送信が実セッション検証で
+	// 400 になるため、実験・退室アンケートは無効化する（experimentRunId も付けない）
+	const isSyntheticSession = session.id === SYNTHETIC_ROOM_SESSION_ID;
+	const roomExperimentSupabase = user && !isSyntheticSession ? createRoomExperimentServiceClient() : null;
 	const [posts, trending, animeTrending, roomExperimentRun, roomExitSurveyLoadState] = await Promise.all([
 		getBroadcastRoomPosts(supabase, session.id, user?.id ?? null, { limit: 100, ascending: true }),
 		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
@@ -115,10 +184,11 @@ export const actions: Actions = {
 		if (override?.is_cancelled) {
 			return fail(404, { message: "放送ルームが見つかりません" });
 		}
-		if (!anime || !animeIsScheduledForRoomDate(anime, params.date, override != null)) {
-			return fail(404, { message: "放送ルームが見つかりません" });
-		}
+		if (!anime) return fail(404, { message: "放送ルームが見つかりません" });
 
+		// 表示側と同じ判定順: 実セッション（しょぼい同期・オーバーライド起点）が
+		// あれば曜日ゲートを通さない。深夜枠は room_date が放送日（前日）で
+		// MAL由来の broadcast_day と一致しないため、ゲート先行だと投稿が404になる。
 		const session = await getBroadcastRoomSession(supabase, anime.id, params.date);
 		if (!session) return fail(404, { message: "放送ルームが見つかりません" });
 		const now = Date.now();

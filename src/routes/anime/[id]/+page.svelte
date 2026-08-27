@@ -533,7 +533,7 @@ $effect(() => {
 							{/if}
 							<input
 								type="file"
-								accept="image/jpeg,image/png,image/webp"
+								accept="image/jpeg,image/png,image/webp,image/avif"
 								onchange={uploadCover}
 								disabled={coverUploading}
 							>
@@ -1430,6 +1430,27 @@ $effect(() => {
 			{/if}
 		</div>
 	</div>
+
+	{#if data.dataAttributions.length > 0}
+		<footer class="anime-data-source">
+			<span class="anime-data-source-title">データ出典</span>
+			{#each data.dataAttributions as attribution, index (attribution.source)}
+				{#if index > 0}
+					<span aria-hidden="true">・</span>
+				{/if}
+				<a href={attribution.source_url} target="_blank" rel="noopener noreferrer">{attribution.label}</a>
+				{#if attribution.license_label && attribution.license_url}
+					<span
+						>（<a href={attribution.license_url} target="_blank" rel="noopener noreferrer"
+							>{attribution.license_label}</a
+						>）</span
+					>
+				{/if}
+			{/each}
+			<span aria-hidden="true">・</span>
+			<a href="/data-sources">利用データと変換手順</a>
+		</footer>
+	{/if}
 </div>
 
 <svelte:window onkeydown={handleModalKeydown} />
@@ -1814,6 +1835,29 @@ $effect(() => {
 	font-weight: 600;
 	letter-spacing: 0.04em;
 	text-transform: uppercase;
+}
+.anime-data-source {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 4px 6px;
+	margin-top: 36px;
+	padding-top: 16px;
+	border-top: 1px solid var(--border);
+	color: var(--text-muted);
+	font-size: 0.72rem;
+	line-height: 1.5;
+}
+.anime-data-source-title {
+	margin-right: 4px;
+	font-weight: 600;
+}
+.anime-data-source a {
+	color: var(--accent);
+	text-decoration: none;
+}
+.anime-data-source a:hover {
+	text-decoration: underline;
 }
 .copyright {
 	font-size: 0.72rem;

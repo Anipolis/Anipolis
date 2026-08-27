@@ -1,25 +1,18 @@
 import { error, fail } from "@sveltejs/kit";
 import { recommendAnimeAction, removeUserAnimeEntry, upsertUserAnimeEntry } from "$lib/server/actions";
 import { addBroadcastOverrideAction, deleteBroadcastOverrideAction, updateAnimeAction } from "$lib/server/anime-admin";
+import { buildBroadcastEpisodeLog } from "$lib/server/broadcast-episode-log";
 import {
 	getAnime,
+	getAnimeDataAttributions,
 	getAnimeRelations,
 	getBroadcastRoomOverridesForAnime,
+	getBroadcastRoomScheduleSnapshotsForAnime,
 	getEventsForAnime,
 	getUsersWhoListedAnime,
 	isAdminUser,
 } from "$lib/server/queries";
-import { generateBroadcastEpisodeSlots } from "$lib/utils/broadcast-episodes";
 import type { Actions, PageServerLoad } from "./$types";
-
-function isEligibleForRoomLog(season: string | null): boolean {
-	if (!season) return false;
-	const parts = season.split("-");
-	const y = parseInt(parts[0] ?? "", 10);
-	const name = parts[1];
-	if (y > 2026) return true;
-	return y === 2026 && name !== "winter";
-}
 
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
@@ -32,28 +25,22 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 
 	if (!anime) throw error(404, "アニメが見つかりません");
 
-	const [relations, broadcastOverrides, events] = await Promise.all([
+	const [relations, dataAttributions, broadcastOverrides, events, scheduleSnapshots] = await Promise.all([
 		getAnimeRelations(supabase, anime.mal_id),
+		getAnimeDataAttributions(supabase, anime.mal_id),
 		getBroadcastRoomOverridesForAnime(supabase, params.id),
 		getEventsForAnime(supabase, Number(anime.id)),
+		getBroadcastRoomScheduleSnapshotsForAnime(supabase, Number(anime.id)),
 	]);
 
-	const episodes =
-		isEligibleForRoomLog(anime.season) &&
-		anime.room_type === "episode" &&
-		anime.aired_from != null &&
-		(anime.broadcast_day != null || broadcastOverrides.length > 0)
-			? generateBroadcastEpisodeSlots({
-					airedFrom: anime.aired_from,
-					airedTo: anime.aired_to ?? null,
-					broadcastDay: anime.broadcast_day,
-					broadcastTime: anime.broadcast_time,
-					episodeCount: anime.episode_count,
-					overrides: broadcastOverrides,
-				}).reverse()
-			: [];
+	// 各話ルームの履歴タイムライン（実在セッション+同期前の合成補完+アンカー逆算）
+	// の構築は buildBroadcastEpisodeLog に集約。未開場セッションは逆算のアンカー
+	// としてだけ使い、ログには開場済み（opened）の日付のみ載せる。
+	const episodes = buildBroadcastEpisodeLog(anime, scheduleSnapshots, broadcastOverrides)
+		.filter((slot) => slot.opened)
+		.sort((left, right) => right.date.localeCompare(left.date));
 
-	return { anime, user, isAdmin, listedUsers, relations, episodes, broadcastOverrides, events };
+	return { anime, user, isAdmin, listedUsers, relations, dataAttributions, episodes, broadcastOverrides, events };
 };
 
 export const actions: Actions = {

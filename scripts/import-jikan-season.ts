@@ -1,6 +1,15 @@
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { createClient } from "@supabase/supabase-js";
+import { containsJapaneseScript } from "../src/lib/anime-offline-database.ts";
 import { translateAnimeSource } from "../src/lib/anime-vocabulary.ts";
-import { isHttpUrl as isHttpUrlUtil, isMalUrl } from "../src/lib/utils/url.js";
+import {
+	ConsecutiveStatusCircuitBreaker,
+	meetsMinimumCompleteness,
+	summarizeImportCompleteness,
+} from "../src/lib/utils/jikan-import-resilience.ts";
+import { isHttpUrl as isHttpUrlUtil, isMalUrl } from "../src/lib/utils/url.ts";
 
 type SeasonName = "winter" | "spring" | "summer" | "fall";
 
@@ -17,7 +26,10 @@ type AnimeResourceLink = {
 };
 
 type NamedResource = {
+	mal_id?: number | null;
+	type?: string | null;
 	name?: string | null;
+	url?: string | null;
 };
 
 type JikanRelationEntry = {
@@ -93,6 +105,20 @@ type JikanAnimeFullResponse = {
 	data?: JikanAnime;
 };
 
+type AniListSeasonResponse = {
+	data?: {
+		Page?: {
+			pageInfo?: {
+				hasNextPage?: boolean;
+			};
+			media?: {
+				idMal?: number | null;
+			}[];
+		};
+	};
+	errors?: { message?: string }[];
+};
+
 type AnimeImportRow = {
 	mal_id: number;
 	title: string;
@@ -124,46 +150,88 @@ type AnimeRelationImportRow = {
 	related_title: string;
 };
 
+type JikanNormalizedData = AnimeImportRow & {
+	title_ja: string | null;
+	studio_entities: { mal_id: number | null; name: string; url: string | null }[];
+	relations?: AnimeRelationImportRow[];
+};
+
+type JikanSourceRecordInsert = {
+	mal_id: number;
+	source: "jikan";
+	source_version: "v4";
+	source_url: string;
+	source_updated_at: null;
+	normalized_data: JikanNormalizedData;
+	imported_at: string;
+};
+
 type ImportDatabase = {
 	public: {
 		Tables: {
-			anime: {
-				Insert: AnimeImportRow;
-				Update: Partial<AnimeImportRow>;
-				Row: AnimeImportRow & {
-					id: number;
-					created_at: string;
-				};
-			};
-			anime_relations: {
-				Insert: AnimeRelationImportRow;
-				Update: Partial<AnimeRelationImportRow>;
-				Row: AnimeRelationImportRow & {
-					created_at: string;
-				};
+			anime_source_records: {
+				Insert: JikanSourceRecordInsert;
+				Update: Partial<JikanSourceRecordInsert>;
+				Row: JikanSourceRecordInsert & { id: number };
 			};
 		};
 	};
 };
 
-type ExistingAnimeValues = Pick<
-	AnimeImportRow,
-	"mal_id" | "official_site_url" | "official_x_url" | "resources" | "cover_url"
->;
+type ImportCheckpoint = {
+	version: 1;
+	year: number;
+	season: SeasonName;
+	expectedMalIds: number[];
+	animeByMalId: Record<string, JikanAnime>;
+	failedMalIds: number[];
+	updatedAt: string;
+};
+
+type SeasonFetchResult = {
+	animes: JikanAnime[];
+	expectedMalIds: number[];
+	failedMalIds: number[];
+	usesCheckpoint: boolean;
+};
 
 const BASE_URL = "https://api.jikan.moe/v4";
+// Fetch from a self-hosted jikan-rest instance when JIKAN_BASE_URL is set;
+// source_url provenance keeps the canonical BASE_URL either way.
+const FETCH_BASE_URL = process.env["JIKAN_BASE_URL"] ?? BASE_URL;
+const ANILIST_GRAPHQL_URL = "https://graphql.anilist.co";
 const VALID_SEASONS = new Set<SeasonName>(["winter", "spring", "summer", "fall"]);
-const REQUEST_WAIT_MIN_MS = 500;
-const REQUEST_WAIT_MAX_MS = 1_000;
+const ANILIST_SEASON_BY_NAME: Record<SeasonName, string> = {
+	winter: "WINTER",
+	spring: "SPRING",
+	summer: "SUMMER",
+	fall: "FALL",
+};
+const REQUEST_WAIT_MIN_MS = 1_100;
+const REQUEST_WAIT_MAX_MS = 1_500;
 const RETRY_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
 const MAX_RETRIES = 5;
+const FALLBACK_DETAIL_MAX_RETRIES = 1;
+const MAX_CONSECUTIVE_504_RESPONSES = 5;
+const MIN_IMPORT_COMPLETENESS_RATIO = 0.95;
 const UPSERT_BATCH_SIZE = 100;
+const IMPORT_CHECKPOINT_DIRECTORY = join(process.cwd(), ".jikan-import-cache");
 const BLOCKED_RESOURCE_KEYWORDS = ["namuwiki", "bangumi"];
 const BLOCKED_TYPES = new Set(["music", "pv", "cm"]);
 const FINITE_RELEASE_TYPES = new Set(["movie", "ona", "ova", "tvspecial", "special"]);
 const LATE_NIGHT_EXTENSION_END_HOUR = 4;
+const jikanCircuitBreaker = new ConsecutiveStatusCircuitBreaker(504, MAX_CONSECUTIVE_504_RESPONSES);
 
-const GENRE_JA_BY_EN: Record<string, string> = {
+class JikanCircuitOpenError extends Error {
+	constructor() {
+		super(
+			`Jikan returned ${MAX_CONSECUTIVE_504_RESPONSES} consecutive HTTP 504 responses; stopping to avoid hammering the upstream service.`,
+		);
+		this.name = "JikanCircuitOpenError";
+	}
+}
+
+export const GENRE_JA_BY_EN: Record<string, string> = {
 	Action: "アクション",
 	Adventure: "アドベンチャー",
 	"Avant Garde": "アバンギャルド",
@@ -243,7 +311,7 @@ const GENRE_JA_BY_EN: Record<string, string> = {
 	Shounen: "少年向け",
 };
 
-const STUDIO_JA_BY_EN: Record<string, string> = {
+export const STUDIO_JA_BY_EN: Record<string, string> = {
 	"8bit": "エイトビット",
 	AIC: "AIC",
 	"Ajia-do": "亜細亜堂",
@@ -375,14 +443,25 @@ const STUDIO_JA_BY_EN: Record<string, string> = {
 };
 
 function parseArgs(argv: string[]) {
-	const options: { year?: number; season?: SeasonName; dryRun: boolean; enrichLinks: boolean } = {
+	const options: {
+		year?: number;
+		season?: SeasonName;
+		dryRun: boolean;
+		enrichLinks: boolean;
+		fallbackAnilist: boolean;
+	} = {
 		dryRun: false,
 		enrichLinks: true,
+		fallbackAnilist: false,
 	};
 
 	for (let index = 0; index < argv.length; index += 1) {
 		const arg = argv[index];
 		const next = argv[index + 1];
+
+		if (arg === "--") {
+			continue;
+		}
 
 		if (arg === "--dry-run") {
 			options.dryRun = true;
@@ -391,6 +470,11 @@ function parseArgs(argv: string[]) {
 
 		if (arg === "--skip-link-enrichment") {
 			options.enrichLinks = false;
+			continue;
+		}
+
+		if (arg === "--fallback-anilist") {
+			options.fallbackAnilist = true;
 			continue;
 		}
 
@@ -411,14 +495,24 @@ function parseArgs(argv: string[]) {
 	}
 
 	if (!Number.isInteger(options.year) || !options.year || options.year < 1900) {
-		throw new Error("Usage: pnpm import:jikan -- --year 2026 --season winter [--dry-run] [--skip-link-enrichment]");
+		throw new Error(
+			"Usage: pnpm import:jikan -- --year 2026 --season winter [--dry-run] [--skip-link-enrichment] [--fallback-anilist]",
+		);
 	}
 
 	if (!options.season) {
-		throw new Error("Usage: pnpm import:jikan -- --year 2026 --season winter [--dry-run] [--skip-link-enrichment]");
+		throw new Error(
+			"Usage: pnpm import:jikan -- --year 2026 --season winter [--dry-run] [--skip-link-enrichment] [--fallback-anilist]",
+		);
 	}
 
-	return { year: options.year, season: options.season, dryRun: options.dryRun, enrichLinks: options.enrichLinks };
+	return {
+		year: options.year,
+		season: options.season,
+		dryRun: options.dryRun,
+		enrichLinks: options.enrichLinks,
+		fallbackAnilist: options.fallbackAnilist,
+	};
 }
 
 function isSeasonName(value: string): value is SeasonName {
@@ -433,6 +527,78 @@ function randomInt(min: number, max: number) {
 	return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
+function importCheckpointPath(year: number, season: SeasonName) {
+	return join(IMPORT_CHECKPOINT_DIRECTORY, `${year}-${season}.json`);
+}
+
+function emptyImportCheckpoint(year: number, season: SeasonName): ImportCheckpoint {
+	return {
+		version: 1,
+		year,
+		season,
+		expectedMalIds: [],
+		animeByMalId: {},
+		failedMalIds: [],
+		updatedAt: new Date().toISOString(),
+	};
+}
+
+function isImportCheckpoint(value: unknown, year: number, season: SeasonName): value is ImportCheckpoint {
+	if (!value || typeof value !== "object") return false;
+
+	const checkpoint = value as Partial<ImportCheckpoint>;
+	return (
+		checkpoint.version === 1 &&
+		checkpoint.year === year &&
+		checkpoint.season === season &&
+		Array.isArray(checkpoint.expectedMalIds) &&
+		checkpoint.animeByMalId !== null &&
+		typeof checkpoint.animeByMalId === "object" &&
+		Array.isArray(checkpoint.failedMalIds) &&
+		typeof checkpoint.updatedAt === "string"
+	);
+}
+
+async function loadImportCheckpoint(year: number, season: SeasonName) {
+	const path = importCheckpointPath(year, season);
+
+	try {
+		const parsed: unknown = JSON.parse(await readFile(path, "utf8"));
+		if (!isImportCheckpoint(parsed, year, season)) {
+			console.warn(`Ignoring invalid Jikan import checkpoint: ${path}`);
+			return emptyImportCheckpoint(year, season);
+		}
+
+		return parsed;
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+			console.warn(
+				`Could not read Jikan import checkpoint ${path}: ${error instanceof Error ? error.message : String(error)}`,
+			);
+		}
+
+		return emptyImportCheckpoint(year, season);
+	}
+}
+
+async function saveImportCheckpoint(checkpoint: ImportCheckpoint) {
+	await mkdir(IMPORT_CHECKPOINT_DIRECTORY, { recursive: true });
+	checkpoint.updatedAt = new Date().toISOString();
+
+	const path = importCheckpointPath(checkpoint.year, checkpoint.season);
+	const temporaryPath = `${path}.${process.pid}.tmp`;
+	await writeFile(temporaryPath, `${JSON.stringify(checkpoint, null, 2)}\n`, "utf8");
+	await rename(temporaryPath, path);
+}
+
+async function clearImportCheckpoint(year: number, season: SeasonName) {
+	try {
+		await unlink(importCheckpointPath(year, season));
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+	}
+}
+
 function retryDelayMs(response: Response | null, attempt: number) {
 	const retryAfter = response?.headers.get("retry-after");
 	const retryAfterSeconds = retryAfter ? Number.parseInt(retryAfter, 10) : Number.NaN;
@@ -444,8 +610,8 @@ function retryDelayMs(response: Response | null, attempt: number) {
 	return Math.min(30_000, 2_000 * 2 ** attempt) + randomInt(250, 1_000);
 }
 
-async function fetchJsonWithRetry(url: string): Promise<JikanSeasonResponse | null> {
-	for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
+async function fetchJsonWithRetry(url: string, maxRetries = MAX_RETRIES): Promise<JikanSeasonResponse | null> {
+	for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
 		let response: Response | null = null;
 
 		try {
@@ -456,23 +622,32 @@ async function fetchJsonWithRetry(url: string): Promise<JikanSeasonResponse | nu
 				},
 			});
 
-			if (response.ok) return (await response.json()) as JikanSeasonResponse;
+			if (response.ok) {
+				jikanCircuitBreaker.record(response.status);
+				return (await response.json()) as JikanSeasonResponse;
+			}
+
+			if (jikanCircuitBreaker.record(response.status)) {
+				throw new JikanCircuitOpenError();
+			}
 
 			const body = await response.text();
 			const shouldRetry = RETRY_STATUS_CODES.has(response.status);
 			console.warn(`Request failed: ${response.status} ${response.statusText} ${body.slice(0, 200)}`);
 
-			if (!shouldRetry || attempt === MAX_RETRIES) return null;
+			if (!shouldRetry || attempt === maxRetries) return null;
 
 			const delayMs = retryDelayMs(response, attempt);
-			console.warn(`Retrying in ${Math.round(delayMs / 1_000)}s... (${attempt + 1}/${MAX_RETRIES})`);
+			console.warn(`Retrying in ${Math.round(delayMs / 1_000)}s... (${attempt + 1}/${maxRetries})`);
 			await sleep(delayMs);
 		} catch (error) {
+			if (error instanceof JikanCircuitOpenError) throw error;
+
 			console.warn(`Request error: ${error instanceof Error ? error.message : String(error)}`);
-			if (attempt === MAX_RETRIES) return null;
+			if (attempt === maxRetries) return null;
 
 			const delayMs = retryDelayMs(response, attempt);
-			console.warn(`Retrying in ${Math.round(delayMs / 1_000)}s... (${attempt + 1}/${MAX_RETRIES})`);
+			console.warn(`Retrying in ${Math.round(delayMs / 1_000)}s... (${attempt + 1}/${maxRetries})`);
 			await sleep(delayMs);
 		} finally {
 			const waitMs = randomInt(REQUEST_WAIT_MIN_MS, REQUEST_WAIT_MAX_MS);
@@ -483,9 +658,135 @@ async function fetchJsonWithRetry(url: string): Promise<JikanSeasonResponse | nu
 	return null;
 }
 
-async function fetchAnimeFull(malId: number) {
-	const payload = await fetchJsonWithRetry(`${BASE_URL}/anime/${malId}/full`);
+async function fetchAnimeFull(malId: number, maxRetries = MAX_RETRIES) {
+	const payload = await fetchJsonWithRetry(`${FETCH_BASE_URL}/anime/${malId}/full`, maxRetries);
 	return (payload as JikanAnimeFullResponse | null)?.data ?? null;
+}
+
+async function fetchAniListSeasonMalIds(year: number, season: SeasonName) {
+	const malIds: number[] = [];
+	let page = 1;
+	let hasNextPage = true;
+
+	while (hasNextPage) {
+		const query = `
+			query ($season: MediaSeason!, $seasonYear: Int!, $page: Int!) {
+				Page(page: $page, perPage: 50) {
+					pageInfo {
+						hasNextPage
+					}
+					media(type: ANIME, season: $season, seasonYear: $seasonYear, sort: POPULARITY_DESC) {
+						idMal
+					}
+				}
+			}
+		`;
+
+		console.log(`Fetching AniList MAL IDs page ${page}: ${year} ${ANILIST_SEASON_BY_NAME[season]}`);
+		const response = await fetch(ANILIST_GRAPHQL_URL, {
+			method: "POST",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json",
+				"User-Agent": "Anipolis seasonal anime importer",
+			},
+			body: JSON.stringify({
+				query,
+				variables: {
+					season: ANILIST_SEASON_BY_NAME[season],
+					seasonYear: year,
+					page,
+				},
+			}),
+		});
+
+		const payload = (await response.json()) as AniListSeasonResponse;
+
+		if (!response.ok || payload.errors?.length) {
+			const message = payload.errors
+				?.map((error) => error.message)
+				.filter(Boolean)
+				.join(", ");
+			throw new Error(
+				`AniList fallback failed: ${response.status} ${response.statusText}${message ? ` ${message}` : ""}`,
+			);
+		}
+
+		const pageMalIds = (payload.data?.Page?.media ?? [])
+			.map((anime) => anime.idMal)
+			.filter((malId): malId is number => typeof malId === "number");
+
+		malIds.push(...pageMalIds);
+		console.log(`AniList page ${page} fetched... ${pageMalIds.length} MAL IDs found (${malIds.length} total)`);
+
+		hasNextPage = payload.data?.Page?.pageInfo?.hasNextPage === true;
+		page += 1;
+
+		const waitMs = randomInt(REQUEST_WAIT_MIN_MS, REQUEST_WAIT_MAX_MS);
+		await sleep(waitMs);
+	}
+
+	return [...new Set(malIds)];
+}
+
+async function fetchSeasonAnimeViaAniList(year: number, season: SeasonName) {
+	const malIds = await fetchAniListSeasonMalIds(year, season);
+	const checkpoint = await loadImportCheckpoint(year, season);
+	const expectedMalIdSet = new Set(malIds);
+
+	checkpoint.expectedMalIds = malIds;
+	checkpoint.animeByMalId = Object.fromEntries(
+		Object.entries(checkpoint.animeByMalId).filter(([malId]) => expectedMalIdSet.has(Number(malId))),
+	);
+	checkpoint.failedMalIds = malIds.filter((malId) => checkpoint.animeByMalId[String(malId)] === undefined);
+	await saveImportCheckpoint(checkpoint);
+
+	const pendingMalIds = checkpoint.failedMalIds;
+	const resumedCount = malIds.length - pendingMalIds.length;
+
+	if (resumedCount > 0) {
+		console.log(`Resuming from checkpoint with ${resumedCount}/${malIds.length} Jikan anime details cached.`);
+	}
+	console.log(`Fetching ${pendingMalIds.length} missing Jikan anime details from AniList MAL IDs.`);
+
+	for (const [index, malId] of pendingMalIds.entries()) {
+		console.log(`Fetching Jikan anime detail ${index + 1}/${pendingMalIds.length}: MAL ${malId}`);
+
+		let anime: JikanAnime | null;
+		try {
+			anime = await fetchAnimeFull(malId, FALLBACK_DETAIL_MAX_RETRIES);
+		} catch (error) {
+			checkpoint.failedMalIds = malIds.filter(
+				(expectedMalId) => checkpoint.animeByMalId[String(expectedMalId)] === undefined,
+			);
+			await saveImportCheckpoint(checkpoint);
+			throw error;
+		}
+
+		if (!anime) {
+			console.warn(`Jikan anime detail skipped: MAL ${malId}`);
+			await saveImportCheckpoint(checkpoint);
+			continue;
+		}
+
+		checkpoint.animeByMalId[String(malId)] = anime;
+		checkpoint.failedMalIds = malIds.filter(
+			(expectedMalId) => checkpoint.animeByMalId[String(expectedMalId)] === undefined,
+		);
+		await saveImportCheckpoint(checkpoint);
+	}
+
+	const animes = malIds.flatMap((malId) => {
+		const anime = checkpoint.animeByMalId[String(malId)];
+		return anime ? [anime] : [];
+	});
+
+	return {
+		animes,
+		expectedMalIds: malIds,
+		failedMalIds: checkpoint.failedMalIds,
+		usesCheckpoint: true,
+	} satisfies SeasonFetchResult;
 }
 
 async function fetchSeasonAnime(year: number, season: SeasonName) {
@@ -494,15 +795,14 @@ async function fetchSeasonAnime(year: number, season: SeasonName) {
 	let hasNextPage = true;
 
 	while (hasNextPage) {
-		const url = new URL(`${BASE_URL}/seasons/${year}/${season}`);
+		const url = new URL(`${FETCH_BASE_URL}/seasons/${year}/${season}`);
 		url.searchParams.set("page", String(page));
 
 		console.log(`Fetching page ${page}: ${url.toString()}`);
 		const payload = await fetchJsonWithRetry(url.toString());
 
 		if (!payload) {
-			console.warn(`Page ${page} skipped after retries.`);
-			break;
+			throw new Error(`Jikan season page ${page} failed after retries.`);
 		}
 
 		const pageItems = payload.data ?? [];
@@ -514,7 +814,12 @@ async function fetchSeasonAnime(year: number, season: SeasonName) {
 		page += 1;
 	}
 
-	return animes;
+	return {
+		animes,
+		expectedMalIds: animes.map((anime) => anime.mal_id),
+		failedMalIds: [],
+		usesCheckpoint: false,
+	} satisfies SeasonFetchResult;
 }
 
 async function enrichAnimeLinks(animes: JikanAnime[]) {
@@ -665,7 +970,7 @@ function normalizeBroadcastTime(time: string | null | undefined) {
 	return `${String(hour).padStart(2, "0")}:${match[2]}`;
 }
 
-function normalizeBroadcastSchedule(broadcast: JikanAnime["broadcast"]) {
+export function normalizeBroadcastSchedule(broadcast: JikanAnime["broadcast"]) {
 	const broadcastDay = normalizeBroadcastDay(broadcast?.day);
 	const broadcastTime = normalizeBroadcastTime(broadcast?.time);
 
@@ -776,10 +1081,6 @@ function dedupeResourceLinks(resources: AnimeResourceLink[]) {
 	return deduped;
 }
 
-function removeMalResourceLinks(resources: AnimeResourceLink[]) {
-	return resources.filter((resource) => resource.name.toLowerCase() !== "mal" && !isMalUrl(resource.url));
-}
-
 function buildAnimeResources(anime: JikanAnime) {
 	const resources: AnimeResourceLink[] = [];
 
@@ -856,6 +1157,36 @@ function mapAnimeRelations(anime: JikanAnime): AnimeRelationImportRow[] {
 	});
 }
 
+function mapStudioEntities(anime: JikanAnime): JikanNormalizedData["studio_entities"] {
+	return (anime.studios ?? []).flatMap((studio) => {
+		const name = studio.name?.trim();
+		if (!name) return [];
+		return [
+			{
+				mal_id: typeof studio.mal_id === "number" ? studio.mal_id : null,
+				name,
+				url: studio.url?.trim() || null,
+			},
+		];
+	});
+}
+
+function toJikanNormalizedData(row: AnimeImportRow, anime: JikanAnime | undefined): JikanNormalizedData {
+	return {
+		...row,
+		title_ja: anime
+			? anime.title_japanese?.trim() || findTitleByType(anime, "Japanese")
+			: containsJapaneseScript(row.title)
+				? row.title
+				: null,
+		studio_entities: anime ? mapStudioEntities(anime) : [],
+		// Omit the key when full enrichment did not run: "not fetched" must be
+		// distinguishable from "has no relations" so the resolver does not
+		// wipe existing anime_relations rows on a degraded import.
+		...(anime ? { relations: mapAnimeRelations(anime) } : {}),
+	};
+}
+
 function mergeUniqueStrings(left: string[], right: string[]) {
 	return [...new Set([...left, ...right])];
 }
@@ -918,11 +1249,11 @@ function dedupeAnimeRows(rows: AnimeImportRow[]) {
 
 function getSupabaseClient() {
 	const supabaseUrl = process.env["PUBLIC_SUPABASE_URL"] ?? process.env["SUPABASE_URL"];
-	const serviceRoleKey = process.env["SUPABASE_SERVICE_ROLE_KEY"];
+	const serviceRoleKey = process.env["SUPABASE_SECRET_KEY"] ?? process.env["SUPABASE_SERVICE_ROLE_KEY"];
 
 	if (!supabaseUrl || !serviceRoleKey) {
 		throw new Error(
-			"Set PUBLIC_SUPABASE_URL (or SUPABASE_URL) and SUPABASE_SERVICE_ROLE_KEY before running the importer.",
+			"Set PUBLIC_SUPABASE_URL (or SUPABASE_URL) and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_SECRET_KEY) before running the importer.",
 		);
 	}
 
@@ -934,122 +1265,117 @@ function getSupabaseClient() {
 	});
 }
 
-async function preserveExistingValuesOnPartialFailures(
-	supabase: ReturnType<typeof getSupabaseClient>,
-	batch: AnimeImportRow[],
-) {
-	const malIdsNeedingExistingValues = batch
-		.filter(
-			(row) =>
-				row.official_site_url === null ||
-				row.official_x_url === null ||
-				row.resources.length === 0 ||
-				row.cover_url === null,
-		)
-		.map((row) => row.mal_id);
-
-	if (malIdsNeedingExistingValues.length === 0) return batch;
-
-	const { data, error } = await supabase
-		.from("anime")
-		.select("mal_id, official_site_url, official_x_url, resources, cover_url")
-		.in("mal_id", malIdsNeedingExistingValues);
-
-	if (error) {
-		console.warn(`Could not read existing anime values before upsert: ${error.message}`);
-		return batch;
-	}
-
-	const existingValuesByMalId = new Map(
-		((data ?? []) as ExistingAnimeValues[]).map((row) => [
-			row.mal_id,
-			{
-				official_site_url: row.official_site_url,
-				official_x_url: row.official_x_url,
-				resources: removeMalResourceLinks(row.resources ?? []),
-				cover_url: row.cover_url,
-			},
-		]),
-	);
-
-	return batch.map((row) => {
-		const existingValues = existingValuesByMalId.get(row.mal_id);
-
-		if (!existingValues) return row;
-
-		return {
-			...row,
-			official_site_url: row.official_site_url ?? existingValues.official_site_url,
-			official_x_url: row.official_x_url ?? existingValues.official_x_url,
-			resources: row.resources.length > 0 ? row.resources : existingValues.resources,
-			cover_url: row.cover_url ?? existingValues.cover_url,
-		};
-	});
-}
-
-async function upsertAnimeRows(rows: AnimeImportRow[]) {
+async function upsertJikanSourceRecords(rows: AnimeImportRow[], animeByMalId: Map<number, JikanAnime>) {
 	const supabase = getSupabaseClient();
-	const savedMalIds = new Set<number>();
+	const importedAt = new Date().toISOString();
 	let saved = 0;
 
 	for (let start = 0; start < rows.length; start += UPSERT_BATCH_SIZE) {
-		const batch = await preserveExistingValuesOnPartialFailures(
-			supabase,
-			rows.slice(start, start + UPSERT_BATCH_SIZE),
-		);
-		const { error } = await supabase.from("anime").upsert(batch, { onConflict: "mal_id" });
-
-		if (error) {
-			console.error(`Supabase upsert failed for batch ${start / UPSERT_BATCH_SIZE + 1}: ${error.message}`);
-			continue;
-		}
-
-		for (const row of batch) savedMalIds.add(row.mal_id);
+		const batch: JikanSourceRecordInsert[] = rows.slice(start, start + UPSERT_BATCH_SIZE).map((row) => ({
+			mal_id: row.mal_id,
+			source: "jikan",
+			source_version: "v4",
+			source_url: `${BASE_URL}/anime/${row.mal_id}/full`,
+			source_updated_at: null,
+			normalized_data: toJikanNormalizedData(row, animeByMalId.get(row.mal_id)),
+			imported_at: importedAt,
+		}));
+		const { error } = await supabase.from("anime_source_records").upsert(batch, { onConflict: "mal_id,source" });
+		if (error) throw new Error(`Could not save Jikan source records: ${error.message}`);
 		saved += batch.length;
-		console.log(`Supabase upserted ${saved}/${rows.length} rows`);
+		console.log(`Saved ${saved}/${rows.length} Jikan source records.`);
 	}
-
-	return savedMalIds;
 }
 
-async function syncAnimeRelations(animes: JikanAnime[], savedMalIds: Set<number>) {
+/**
+ * 完全取得に成功したシーズンについて、今回の取得結果に存在しない既存の jikan
+ * レコードを削除する。延期で別シーズンへ移動した作品やブロックフィルターで
+ * 除外済みの作品が古いシーズンに残り続けると、resolver が保存済み season 値で
+ * 候補抽出するため延期前のシーズンに掲載され続ける。
+ */
+async function reconcileSeasonSourceRecords(rows: AnimeImportRow[], year: number, season: string) {
 	const supabase = getSupabaseClient();
-	let synced = 0;
-
-	for (const anime of animes) {
-		if (!savedMalIds.has(anime.mal_id) || anime.relations === undefined) continue;
-
-		const { error: deleteError } = await supabase.from("anime_relations").delete().eq("anime_mal_id", anime.mal_id);
-		if (deleteError) {
-			console.error(`Could not replace anime relations for MAL ${anime.mal_id}: ${deleteError.message}`);
-			continue;
-		}
-
-		const relationRows = mapAnimeRelations(anime);
-		if (relationRows.length > 0) {
-			const { error: insertError } = await supabase.from("anime_relations").insert(relationRows);
-			if (insertError) {
-				console.error(`Could not save anime relations for MAL ${anime.mal_id}: ${insertError.message}`);
-				continue;
-			}
-		}
-
-		synced += relationRows.length;
+	const seasonValue = `${year}-${season}`;
+	const keepIds = rows.map((row) => row.mal_id);
+	// biome-ignore lint/suspicious/noExplicitAny: jsonb path filter is not covered by the local ImportDatabase type
+	let query = (supabase.from("anime_source_records") as any)
+		.delete()
+		.eq("source", "jikan")
+		.eq("normalized_data->>season", seasonValue);
+	if (keepIds.length > 0) query = query.not("mal_id", "in", `(${keepIds.join(",")})`);
+	const { data, error } = await query.select("mal_id");
+	if (error) throw new Error(`Could not reconcile stale Jikan records for ${seasonValue}: ${error.message}`);
+	const staleIds = ((data ?? []) as { mal_id: number }[]).map((row) => row.mal_id);
+	if (staleIds.length > 0) {
+		console.warn(`Removed ${staleIds.length} stale Jikan records for ${seasonValue}: ${staleIds.join(", ")}`);
+	} else {
+		console.log(`No stale Jikan records for ${seasonValue}.`);
 	}
-
-	console.log(`Synced ${synced} anime relations.`);
 }
 
 async function main() {
-	const { year, season, dryRun, enrichLinks } = parseArgs(process.argv.slice(2));
+	const { year, season, dryRun, enrichLinks, fallbackAnilist } = parseArgs(process.argv.slice(2));
+
+	if (!dryRun) {
+		const supabaseUrl = process.env["PUBLIC_SUPABASE_URL"] ?? process.env["SUPABASE_URL"];
+		getSupabaseClient();
+		console.log(`Writing to Supabase: ${new URL(supabaseUrl ?? "").host}`);
+	}
 
 	console.log(`Starting Jikan season import: ${year} ${season}${dryRun ? " (dry-run)" : ""}`);
-	const rawAnimes = await fetchSeasonAnime(year, season);
-	const animes = enrichLinks ? await enrichAnimeLinks(rawAnimes) : rawAnimes;
+	let fetchResult: SeasonFetchResult;
+	let linksAlreadyEnriched = false;
+	let usedAniListFallback = false;
+
+	if (fallbackAnilist) {
+		console.log("Using AniList MAL ID fallback source.");
+		fetchResult = await fetchSeasonAnimeViaAniList(year, season);
+		linksAlreadyEnriched = true;
+		usedAniListFallback = true;
+	} else {
+		try {
+			fetchResult = await fetchSeasonAnime(year, season);
+		} catch (error) {
+			if (error instanceof JikanCircuitOpenError) throw error;
+
+			console.warn(
+				`Jikan season endpoint failed: ${error instanceof Error ? error.message : String(error)}. Falling back to AniList MAL IDs.`,
+			);
+			fetchResult = await fetchSeasonAnimeViaAniList(year, season);
+			linksAlreadyEnriched = true;
+			usedAniListFallback = true;
+		}
+	}
+
+	const rawAnimes = fetchResult.animes;
+	if (rawAnimes.length === 0) {
+		throw new Error(`No anime fetched for ${year} ${season}; aborting without database writes.`);
+	}
+
+	const completeness = summarizeImportCompleteness(
+		fetchResult.expectedMalIds,
+		rawAnimes.map((anime) => anime.mal_id),
+	);
+	const completenessPercent = (completeness.ratio * 100).toFixed(1);
+	console.log(
+		`Import completeness: ${completeness.successfulCount}/${completeness.expectedCount} (${completenessPercent}%).`,
+	);
+
+	if (!meetsMinimumCompleteness(completeness, MIN_IMPORT_COMPLETENESS_RATIO)) {
+		throw new Error(
+			`Import completeness ${completenessPercent}% is below the ${MIN_IMPORT_COMPLETENESS_RATIO * 100}% safety threshold; aborting without database writes. ${completeness.missingIds.length} MAL IDs remain in the checkpoint.`,
+		);
+	}
+
+	const animes = enrichLinks && !linksAlreadyEnriched ? await enrichAnimeLinks(rawAnimes) : rawAnimes;
 	const filteredAnimes = filterBlockedTypeAnime(filterBlockedResourceAnime(animes));
 	const rows = dedupeAnimeRows(filteredAnimes.map((anime) => mapJikanAnime(anime, year, season)));
 
 	console.log(`Mapped ${rows.length} anime rows.`);
+
+	if (rows.length === 0) {
+		throw new Error(`No anime rows mapped for ${year} ${season}; aborting without database writes.`);
+	}
 
 	if (dryRun) {
 		console.log(JSON.stringify(rows.slice(0, 3), null, 2));
@@ -1057,12 +1383,31 @@ async function main() {
 		return;
 	}
 
-	const savedMalIds = await upsertAnimeRows(rows);
-	await syncAnimeRelations(filteredAnimes, savedMalIds);
-	console.log(`Import complete: ${rows.length} rows processed.`);
+	await upsertJikanSourceRecords(rows, new Map(filteredAnimes.map((anime) => [anime.mal_id, anime])));
+
+	// 完全取得に成功したときだけ、今回の結果に無い既存レコードを整合させる。
+	// 部分取得（チェックポイント残あり）や AniList フォールバックの結果で削除すると
+	// 取得漏れを「消えた作品」と誤認するため、その場合はスキップする。
+	if (!usedAniListFallback && fetchResult.failedMalIds.length === 0) {
+		await reconcileSeasonSourceRecords(rows, year, season);
+	} else {
+		console.warn(`Season reconcile skipped for ${year}-${season}: incomplete fetch or AniList fallback in use.`);
+	}
+
+	if (fetchResult.usesCheckpoint && fetchResult.failedMalIds.length === 0) {
+		await clearImportCheckpoint(year, season);
+		console.log("Import checkpoint cleared after a complete import.");
+	} else if (fetchResult.failedMalIds.length > 0) {
+		console.warn(`Import checkpoint retained for ${fetchResult.failedMalIds.length} missing MAL IDs.`);
+	}
+
+	console.log(`Source import complete: ${rows.length} rows processed. Run the catalog resolver to publish them.`);
 }
 
-main().catch((error) => {
-	console.error(error instanceof Error ? error.message : String(error));
-	process.exitCode = 1;
-});
+const invokedPath = process.argv[1];
+if (invokedPath && import.meta.url === pathToFileURL(invokedPath).href) {
+	main().catch((error) => {
+		console.error(error instanceof Error ? error.message : String(error));
+		process.exitCode = 1;
+	});
+}

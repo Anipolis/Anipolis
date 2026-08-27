@@ -1,0 +1,109 @@
+name: Syobocal sync
+
+# Keeps broadcast rooms and catalog mappings fresh:
+# - daily: program-table sync (catalog-wide mappings, rolling window; time
+#   changes and cancelled slots are absorbed by the importer's update/delete
+#   logic; channel selection sticks to the earliest terrestrial airing).
+# - weekly: MAL + Jikan + Syobocal imports and catalog resolve for the current
+#   AND next season, so late-added MAL entries (e.g. announced mid-season) and
+#   their official links are picked up automatically. Jikan runs against the
+#   public API here; persistent 504s can be backfilled manually via the
+#   self-hosted instance (scripts/local/enrich-jikan-links.ts).
+#
+# Requires repository Actions secrets:
+#   PUBLIC_SUPABASE_URL, SUPABASE_SECRET_KEY, MAL_CLIENT_ID
+# and migrations 114 + 115 applied to the database.
+
+on:
+  schedule:
+    # daily 05:15 JST (20:15 UTC): program slots for the current season
+    - cron: "15 20 * * *"
+    # weekly Monday 04:15 JST (Sunday 19:15 UTC): full import + resolve
+    - cron: "15 19 * * 0"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "sync-programs | full-import"
+        required: false
+        default: "sync-programs"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: syobocal-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      # persist-credentials: false — トークンを.git/configに残さない。
+      # Supabase等の資格情報はjobレベルではなく必要なステップにだけ渡す
+      # （pnpm installのpostinstallスクリプト等に秘匿値を見せない）。
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Determine current and next season (JST)
+        id: season
+        run: |
+          MONTH=$(TZ=Asia/Tokyo date +%-m)
+          YEAR=$(TZ=Asia/Tokyo date +%Y)
+          if [ "$MONTH" -le 3 ]; then SEASON=winter; NEXT=spring; NEXT_YEAR=$YEAR
+          elif [ "$MONTH" -le 6 ]; then SEASON=spring; NEXT=summer; NEXT_YEAR=$YEAR
+          elif [ "$MONTH" -le 9 ]; then SEASON=summer; NEXT=fall; NEXT_YEAR=$YEAR
+          else SEASON=fall; NEXT=winter; NEXT_YEAR=$((YEAR + 1)); fi
+          echo "year=$YEAR" >> "$GITHUB_OUTPUT"
+          echo "season=$SEASON" >> "$GITHUB_OUTPUT"
+          echo "next_year=$NEXT_YEAR" >> "$GITHUB_OUTPUT"
+          echo "next_season=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "Current season: $YEAR-$SEASON / next: $NEXT_YEAR-$NEXT"
+
+      - name: Sync program table (daily)
+        if: github.event.schedule == '15 20 * * *' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'sync-programs')
+        env:
+          PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: pnpm sync:syobocal-programs -- --year ${{ steps.season.outputs.year }} --season ${{ steps.season.outputs.season }}
+
+      - name: Weekly imports and resolve (current + next season)
+        if: github.event.schedule == '15 19 * * 0' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full-import')
+        env:
+          PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          MAL_CLIENT_ID: ${{ secrets.MAL_CLIENT_ID }}
+        run: |
+          # シーズン単位で失敗を隔離する: 1シーズン目のしょぼい照合が落ちても
+          # 2シーズン目まで巻き添えにしない。MAL/Jikan の失敗も後続（キャッシュ済み
+          # データでの resolve）は続行するが、同期できていないことが分かるように
+          # ジョブ自体は失敗させる。
+          # 実行順は Jikan → MAL: MAL インポートの対象IDは既存の ODbL/Jikan レコード
+          # から決まるため、逆順だと Jikan が初めて発見したIDが次回まで MAL 対象に
+          # ならない。
+          FAILED=0
+          for TARGET in \
+            "${{ steps.season.outputs.year }} ${{ steps.season.outputs.season }}" \
+            "${{ steps.season.outputs.next_year }} ${{ steps.season.outputs.next_season }}"; do
+            set -- $TARGET
+            echo "=== $1-$2 ==="
+            pnpm import:jikan -- --year "$1" --season "$2" || { echo "Jikan import for $1-$2 failed; continuing"; FAILED=1; }
+            pnpm import:mal -- --year "$1" --season "$2" || { echo "MAL import for $1-$2 failed; continuing"; FAILED=1; }
+            if pnpm import:syobocal -- --year "$1" --season "$2"; then
+              pnpm resolve:anime-catalog -- --year "$1" --season "$2" || { echo "Resolve for $1-$2 failed"; FAILED=1; }
+            else
+              echo "Syobocal import for $1-$2 failed; skipping resolve"
+              FAILED=1
+            fi
+          done
+          # ODbL公開カタログの静的成果物を再生成する（/api/data/anime-catalog が配信）。
+          # 上流が失敗していても、既存レコードからの再生成は安全なので常に試みる。
+          pnpm export:anime-catalog || { echo "Catalog export failed"; FAILED=1; }
+          exit "$FAILED"

@@ -506,19 +506,6 @@ function isAiringToday(anime: AnimeListItem): boolean {
 						</section>
 
 						<section class="filter-drawer-column">
-							<h2 class="filter-drawer-heading">制作会社</h2>
-							<label class="sr-only" for="desktop-anime-producer">制作会社</label>
-							<input
-								id="desktop-anime-producer"
-								type="text"
-								class="filter-input"
-								placeholder="制作会社名"
-								value={filterState.producer}
-								oninput={(e) => updateFilterStateDebounced({ producer: e.currentTarget.value })}
-							>
-						</section>
-
-						<section class="filter-drawer-column">
 							<h2 class="filter-drawer-heading">原作</h2>
 							<label class="sr-only" for="desktop-anime-source">原作</label>
 							<select
@@ -764,6 +751,9 @@ function isAiringToday(anime: AnimeListItem): boolean {
 										aria-hidden={anime.season ? undefined : "true"}
 									>
 										{anime.season ?? '\u00A0'}
+										{#if anime.type && anime.type !== 'TV'}
+											<span class="anime-type-badge">{anime.type}</span>
+										{/if}
 									</span>
 								</div>
 								<div class="mylist-badge-slot">
@@ -950,16 +940,6 @@ function isAiringToday(anime: AnimeListItem): boolean {
 							class="filter-sheet-input"
 							placeholder="スタジオ名"
 							bind:value={pendingStudio}
-						>
-					</section>
-
-					<section class="filter-sheet-section">
-						<h3 class="filter-sheet-section-label">制作会社</h3>
-						<input
-							type="text"
-							class="filter-sheet-input"
-							placeholder="制作会社名"
-							bind:value={pendingProducer}
 						>
 					</section>
 
@@ -1662,6 +1642,16 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	color: var(--color-text-muted);
 	overflow: hidden;
 	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+/* 同一シーズンに同名のTV版とSpecial/ONA版が並ぶことがあるため、非TVは媒体を明示 */
+.anime-type-badge {
+	margin-left: 4px;
+	padding: 0 4px;
+	border: 1px solid var(--color-border);
+	border-radius: 3px;
+	font-size: 0.62rem;
+	color: var(--color-text-muted);
 	white-space: nowrap;
 }
 .anime-season--placeholder {

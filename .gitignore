@@ -16,6 +16,16 @@ coverage/
 # Local logs
 *.log
 
+# Resumable Jikan importer checkpoints
+.jikan-import-cache/
+.mal-import-cache/
+.copyright-cache/
+.x-cache/
+scripts/local/
+
+# Syoboi Calendar importer snapshots
+.syobocal-import-cache/
+
 # Supabase temporary metadata
 supabase/.temp/
 

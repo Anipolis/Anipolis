@@ -1,6 +1,5 @@
 import type { ServerLoad } from "@sveltejs/kit";
 import { error, redirect } from "@sveltejs/kit";
-import { markAllNotificationsRead } from "$lib/server/actions";
 import { getExtraAccounts, setExtraAccounts } from "$lib/server/multi-account";
 import {
 	getPendingReportsCount,
@@ -17,7 +16,12 @@ function isOnboardingExempt(pathname: string): boolean {
 	return ONBOARDING_EXEMPT_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
-export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, cookies, url }) => {
+export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, cookies, url, depends }) => {
+	// クライアント側で認証状態が変わった（例：メール確認リンク着地時のハッシュ
+	// トークン検出）ときに invalidate("supabase:auth") でこの load ごと再実行し、
+	// session / profile を再取得できるようにする。宣言がないと +layout.ts しか
+	// 再実行されず、ここで計算した古い session が使い回されてしまう。
+	depends("supabase:auth");
 	const { session, user } = await safeGetSession();
 
 	const { data: profile, error: profileError } = user
@@ -36,7 +40,7 @@ export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, c
 	}
 
 	// 放送通知の生成は migration 070 の pg_cron ジョブ（毎分）に移行済み
-	if (user && url.pathname === "/notifications") await markAllNotificationsRead(supabase, user.id);
+	// 通知の既読化は /notifications ページの load でタブ（カテゴリ）単位に行う
 
 	const filteredCookies = cookies.getAll().filter(({ name }) => /^sb-.+-auth-token/.test(name));
 	const storedExtraAccounts = getExtraAccounts(cookies);
