@@ -181,7 +181,7 @@ export async function insertPostWithHashtags(
 	}
 	for (const imageUrl of imageUrls) {
 		const storagePath = typeof imageUrl === "string" ? publicUrlToStoragePath(imageUrl, "post-images") : null;
-		if (!storagePath || !storagePath.startsWith(`${userId}/`)) {
+		if (!storagePath?.startsWith(`${userId}/`)) {
 			return fail(400, { message: "添付画像のURLが不正です" });
 		}
 	}
