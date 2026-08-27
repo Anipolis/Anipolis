@@ -132,4 +132,47 @@ describe("insertPostWithHashtags", () => {
 			ignoreDuplicates: true,
 		});
 	});
+
+	it("rejects more than 4 attached images", async () => {
+		const { client, insertedPosts } = createInsertPostClient(null);
+		const ownUrl = (n: number) =>
+			`https://example.supabase.co/storage/v1/object/public/post-images/user-1/${n}.png`;
+
+		const result = await insertPostWithHashtags(client, "user-1", "too many images", null, [
+			ownUrl(1),
+			ownUrl(2),
+			ownUrl(3),
+			ownUrl(4),
+			ownUrl(5),
+		]);
+
+		expect(result).toMatchObject({ status: 400 });
+		expect(insertedPosts).toHaveLength(0);
+	});
+
+	it("rejects image URLs outside the poster's own post-images folder", async () => {
+		const { client, insertedPosts } = createInsertPostClient(null);
+		const foreignUrls = [
+			"https://example.supabase.co/storage/v1/object/public/post-images/user-2/steal.png",
+			"https://evil.example.com/image.png",
+		];
+
+		for (const url of foreignUrls) {
+			const result = await insertPostWithHashtags(client, "user-1", "bad image", null, [url]);
+			expect(result).toMatchObject({ status: 400 });
+		}
+		expect(insertedPosts).toHaveLength(0);
+	});
+
+	it("accepts up to 4 images from the poster's own folder", async () => {
+		const { client, insertedPosts } = createInsertPostClient(null);
+		const urls = [1, 2, 3, 4].map(
+			(n) => `https://example.supabase.co/storage/v1/object/public/post-images/user-1/${n}.png`,
+		);
+
+		const result = await insertPostWithHashtags(client, "user-1", "with images", null, urls);
+
+		expect(result).toEqual({ success: true, postId: "post-1" });
+		expect(insertedPosts).toContainEqual(expect.objectContaining({ image_urls: urls }));
+	});
 });

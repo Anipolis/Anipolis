@@ -63,6 +63,8 @@ export const API_RATE_RULES: RateRule[] = [
 	{ name: "reaction", pattern: /^\/api\/posts\/[^/]+\/reactions$/, limit: 60, windowMs: 60_000 },
 	{ name: "search", pattern: /^\/api\/(anime|users)\/search/, limit: 30, windowMs: 10_000 },
 	{ name: "anime-count", pattern: /^\/api\/anime\/count$/, limit: 30, windowMs: 10_000 },
+	// 全件エクスポート系はDB走査・巨大レスポンスを伴うため厳しめに絞る（通常はCDNキャッシュが受ける）
+	{ name: "data-export", pattern: /^\/api\/data\//, methods: ["GET"], limit: 2, windowMs: 60_000 },
 	{ name: "room-posts", pattern: /^\/api\/rooms\/posts$/, limit: 60, windowMs: 60_000 },
 	{
 		name: "room-experiment-visit",
