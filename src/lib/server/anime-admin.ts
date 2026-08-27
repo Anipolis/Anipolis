@@ -33,8 +33,11 @@ const MANUAL_SOURCE_KEYS = [
 ] as const;
 
 /**
- * 管理画面の編集内容を manual ソースレコードへ差分マージする。失敗しても
- * anime 行の更新自体は成功しているので、ログだけ残して処理は続行する。
+ * 管理画面の編集内容を manual ソースレコードへ差分マージする。
+ * 成功（または保存すべき差分なし）で true、保存失敗で false を返す。
+ * 失敗を握りつぶすと anime 行だけ更新された「部分更新」になり、次回の
+ * カタログ再解決で編集値が取り込み元の値へ戻るため、呼び出し元は false を
+ * 失敗としてユーザーへ返すこと。
  * カバーアップロードAPIのような service-role 経路からも使う（DBトリガーの
  * capture_anime_manual_source は auth.uid() が無いと発火しないため）。
  */
@@ -51,7 +54,7 @@ export async function upsertManualSourceRecord(
 		const next = payload[key] ?? null;
 		if (JSON.stringify(next) !== JSON.stringify(previous[key] ?? null)) changed[key] = next;
 	}
-	if (Object.keys(changed).length === 0) return;
+	if (Object.keys(changed).length === 0) return true;
 
 	const { data: existing } = await writer
 		.from("anime_source_records")
@@ -70,7 +73,11 @@ export async function upsertManualSourceRecord(
 		},
 		{ onConflict: "mal_id,source" },
 	);
-	if (error) console.error("manual source record upsert failed:", error.message);
+	if (error) {
+		console.error("manual source record upsert failed:", error.message);
+		return false;
+	}
+	return true;
 }
 
 function normalizeBroadcastTime(value: string | null | undefined) {
@@ -279,12 +286,19 @@ export async function updateAnimeAction(
 	// 編集差分を manual ソースとして保存し、カタログ再解決での上書きを防ぐ
 	const malId = (previousRow as { mal_id: number | null } | null)?.mal_id;
 	if (malId != null) {
-		await upsertManualSourceRecord(
+		const manualSaved = await upsertManualSourceRecord(
 			animeWriter,
 			malId,
 			(previousRow ?? {}) as Record<string, unknown>,
 			payload as Record<string, unknown>,
 		);
+		if (!manualSaved) {
+			// anime 行は更新済みだが manual レコードが無いと次回の再解決で戻る。
+			// 部分更新を成功として返さず、再保存を促す。
+			return fail(500, {
+				message: "更新は反映されましたが編集内容の保護レコードの保存に失敗しました。もう一度保存してください",
+			});
+		}
 	}
 	return { success: true, animeId: String((data as { id: number }).id) };
 }

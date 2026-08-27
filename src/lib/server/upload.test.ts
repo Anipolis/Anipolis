@@ -25,6 +25,33 @@ describe("sniffImageMime", () => {
 		expect(sniffImageMime(bytesFrom(head))).toBe("image/webp");
 	});
 
+	it("AVIF (major brand) を判定する", () => {
+		// size(0x14) + "ftyp" + "avif" + minor version + "mif1"
+		const head = [
+			0x00, 0x00, 0x00, 0x14, 0x66, 0x74, 0x79, 0x70, 0x61, 0x76, 0x69, 0x66, 0x00, 0x00, 0x00, 0x00, 0x6d, 0x69,
+			0x66, 0x31,
+		];
+		expect(sniffImageMime(bytesFrom(head, 24))).toBe("image/avif");
+	});
+
+	it("AVIF (compatible brand のみ) を判定する", () => {
+		// size(0x18) + "ftyp" + major "mif1" + minor version + compatible "mif1","avif"
+		const head = [
+			0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x6d, 0x69, 0x66, 0x31, 0x00, 0x00, 0x00, 0x00, 0x6d, 0x69,
+			0x66, 0x31, 0x61, 0x76, 0x69, 0x66,
+		];
+		expect(sniffImageMime(bytesFrom(head, 28))).toBe("image/avif");
+	});
+
+	it("AVIF ブランドを含まない ftyp は null", () => {
+		// size(0x14) + "ftyp" + major "mif1" + minor version + compatible "mif1"
+		const head = [
+			0x00, 0x00, 0x00, 0x14, 0x66, 0x74, 0x79, 0x70, 0x6d, 0x69, 0x66, 0x31, 0x00, 0x00, 0x00, 0x00, 0x6d, 0x69,
+			0x66, 0x31,
+		];
+		expect(sniffImageMime(bytesFrom(head, 24))).toBe(null);
+	});
+
 	it("SVG/HTML などの非対応形式は null", () => {
 		const svg = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"></svg>');
 		expect(sniffImageMime(svg)).toBe(null);

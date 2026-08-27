@@ -191,9 +191,15 @@ export function selectCanonicalStudioNames(
 		studios.map((studio) => {
 			const preferred = jikanNames.get(studio.sourceKey);
 			if (preferred && (preferred.en.size > 1 || preferred.ja.size > 1)) {
-				throw new Error(
-					`Conflicting Jikan studio names for ${studio.sourceKey}: ${JSON.stringify({ ja: [...preferred.ja], en: [...preferred.en] })}`,
+				// 1スタジオの表記競合でインポート全体を落とすと、照合済みの他スタジオも
+				// 保存されなくなる。競合したスタジオだけ Wikidata 名へフォールバックする。
+				console.warn(
+					`Conflicting Jikan studio names for ${studio.sourceKey}; falling back to Wikidata names: ${JSON.stringify({ ja: [...preferred.ja], en: [...preferred.en] })}`,
 				);
+				return [
+					studio.sourceKey,
+					{ nameJa: studio.nameJa, nameEn: studio.nameEn, source: "wikidata" as const },
+				] as const;
 			}
 			const nameEn = preferred?.en.values().next().value;
 			const nameJa = preferred?.ja.values().next().value;

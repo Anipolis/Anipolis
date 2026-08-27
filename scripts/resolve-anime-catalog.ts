@@ -465,9 +465,14 @@ async function applyShortAnimeLobbyRule(
 			.select("mal_id,room_type,room_type_source")
 			.in("mal_id", malIds.slice(start, start + BATCH_SIZE));
 		if (error) {
-			// Migration 115 (room_type_source) not applied yet: skip the rule.
-			console.warn(`Short-anime lobby rule skipped (apply migration 115 first): ${error.message}`);
-			return;
+			// Migration 115 (room_type_source) 未適用のスキーマ起因エラーだけ許容して
+			// ルールをスキップする。権限・接続などそれ以外のエラーは呼び出し元へ返す。
+			const code = (error as { code?: string }).code ?? "";
+			if (["42703", "42P01", "PGRST204", "PGRST205"].includes(code)) {
+				console.warn(`Short-anime lobby rule skipped (apply migration 115 first): ${error.message}`);
+				return;
+			}
+			throw new Error(`Could not load room_type columns for the short-anime lobby rule: ${error.message}`);
 		}
 		rows.push(...((data ?? []) as unknown as RoomTypeRow[]));
 	}

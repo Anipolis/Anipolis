@@ -3,6 +3,12 @@
 -- / broadcast_time is removed: episode sessions now exist only when the Syobocal
 -- program sync created them, or when an admin registered an explicit override
 -- for that date. Also adds tracking for automatic global-lobby classification.
+--
+-- 適用順の注意: 末尾の DELETE はフォールバック生成された未来セッションを消すため、
+-- Syobocal 同期が一度も完走していない環境で先に適用すると、broadcast_day/time しか
+-- 情報が無い作品の未来ルームが同期完了まで空になる（凍結済み・投稿済みは除外される
+-- ので整合性の破壊は無く、同期再実行で復旧する）。新環境では「Syobocal 同期を完走
+-- させてから適用」し、適用後に未来セッション件数を確認すること。
 
 -- 1) Track how room_type was decided so the automatic short-anime rule never
 --    overwrites an explicit admin choice.

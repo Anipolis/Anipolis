@@ -210,7 +210,8 @@ export type AnchoredNumberingMismatch = { kind: "underflow"; date: string } | { 
  * - 総集編等（話数進行なしのラベル） → 番号を振らず、カウントも消費しない
  * 前方カウントと違い、誤差が出るとしても最古側に寄る。整合しない場合は
  * mismatch を返す（underflow=第1話より前に到達 / leftover=最古が第1話にならない）。
- * slots は日付昇順で渡すこと。
+ * slots は日付昇順で渡すこと。渡した slots の要素の start/end は破壊的に更新される
+ * （返り値は mismatch のみで、番号は slots 側に書き込まれる）。
  */
 export function inferEpisodeNumbersBackward(
 	slots: BroadcastEpisodeSlot[],
@@ -219,9 +220,9 @@ export function inferEpisodeNumbersBackward(
 	const anchorIndex = slots.findIndex((slot) => slot.start != null);
 	if (anchorIndex <= 0) {
 		// アンカー無し、またはアンカーより前の日付が無い
-		if (anchorIndex === 0 && slots[0]?.start != null && (slots[0]?.start ?? 1) > 1) {
-			return { kind: "leftover", firstNumber: slots[0]?.start ?? 1 };
-		}
+		// （anchorIndex === 0 なら findIndex の条件から slots[0].start は必ず非 null）
+		const first = anchorIndex === 0 ? slots[0]?.start : null;
+		if (first != null && first > 1) return { kind: "leftover", firstNumber: first };
 		return null;
 	}
 	let mismatch: AnchoredNumberingMismatch | null = null;
@@ -274,7 +275,8 @@ export function inferEpisodeNumbersBackward(
  * オーバーライドの扱いは逆算と同じ:
  * - episode_start/end 明示 → その値を採用し、続きから再カウント
  * - ラベル持ち（総集編・特番等） → 番号を振らず、カウントも消費しない
- * slots は日付昇順で渡すこと。返り値は最後に割り当てた話数（検証用）。
+ * slots は日付昇順で渡すこと。渡した slots の要素の start/end は破壊的に更新される。
+ * 返り値は最後に割り当てた話数（検証用）。
  */
 export function inferEpisodeNumbersForward(
 	slots: BroadcastEpisodeSlot[],

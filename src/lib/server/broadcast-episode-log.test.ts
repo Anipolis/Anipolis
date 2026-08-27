@@ -4,6 +4,8 @@ import { type BroadcastEpisodeLogSlot, buildBroadcastEpisodeLog } from "./broadc
 
 // broadcast_day/time を null にして今日基準の合成補完を切り、実在セッションの
 // スナップショットだけで決定的にテストする。
+// 合成補完を使うテストは FIXED_TODAY を基準日として渡し、実行日に依存させない。
+const FIXED_TODAY = new Date("2026-09-01T00:00:00+09:00");
 const ANIME = {
 	season: "2026-spring",
 	room_type: "episode" as const,
@@ -113,7 +115,7 @@ describe("buildBroadcastEpisodeLog", () => {
 			broadcast_day: 1,
 			broadcast_time: "22:00",
 		};
-		const log = buildBroadcastEpisodeLog(anime, [snapshot("2026-08-06", 5)], []);
+		const log = buildBroadcastEpisodeLog(anime, [snapshot("2026-08-06", 5)], [], FIXED_TODAY);
 		expect(log.map((slot) => [slot.date, slot.start])).toEqual([
 			["2026-07-09", 1],
 			["2026-07-16", 2],
@@ -133,7 +135,7 @@ describe("buildBroadcastEpisodeLog", () => {
 			broadcast_day: 6,
 			broadcast_time: "25:30",
 		};
-		const log = buildBroadcastEpisodeLog(anime, [snapshot("2026-08-01", 5)], []);
+		const log = buildBroadcastEpisodeLog(anime, [snapshot("2026-08-01", 5)], [], FIXED_TODAY);
 		expect(log.map((slot) => [slot.date, slot.start])).toEqual([
 			["2026-07-04", 1],
 			["2026-07-11", 2],
@@ -152,7 +154,7 @@ describe("buildBroadcastEpisodeLog", () => {
 			broadcast_day: 6,
 			broadcast_time: "21:00",
 		};
-		const log = buildBroadcastEpisodeLog(anime, [], []);
+		const log = buildBroadcastEpisodeLog(anime, [], [], FIXED_TODAY);
 		expect(log.map((slot) => [slot.date, slot.start])).toEqual([
 			["2026-07-04", 1],
 			["2026-07-11", 2],
@@ -163,7 +165,7 @@ describe("buildBroadcastEpisodeLog", () => {
 
 	it("leaves an airing show without an anchor unnumbered (mapping issue, not countable)", () => {
 		const anime = { ...ANIME, aired_from: "2026-07-04", broadcast_day: 6, broadcast_time: "21:00" };
-		const log = buildBroadcastEpisodeLog(anime, [snapshot("2026-07-04"), snapshot("2026-07-11")], []);
+		const log = buildBroadcastEpisodeLog(anime, [snapshot("2026-07-04"), snapshot("2026-07-11")], [], FIXED_TODAY);
 		expect(log.every((slot) => slot.start == null)).toBe(true);
 	});
 
