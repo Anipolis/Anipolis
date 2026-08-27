@@ -82,15 +82,20 @@ jobs:
           MAL_CLIENT_ID: ${{ secrets.MAL_CLIENT_ID }}
         run: |
           # シーズン単位で失敗を隔離する: 1シーズン目のしょぼい照合が落ちても
-          # 2シーズン目まで巻き添えにしない。失敗があれば最後にジョブを失敗させる。
+          # 2シーズン目まで巻き添えにしない。MAL/Jikan の失敗も後続（キャッシュ済み
+          # データでの resolve）は続行するが、同期できていないことが分かるように
+          # ジョブ自体は失敗させる。
+          # 実行順は Jikan → MAL: MAL インポートの対象IDは既存の ODbL/Jikan レコード
+          # から決まるため、逆順だと Jikan が初めて発見したIDが次回まで MAL 対象に
+          # ならない。
           FAILED=0
           for TARGET in \
             "${{ steps.season.outputs.year }} ${{ steps.season.outputs.season }}" \
             "${{ steps.season.outputs.next_year }} ${{ steps.season.outputs.next_season }}"; do
             set -- $TARGET
             echo "=== $1-$2 ==="
-            pnpm import:mal -- --year "$1" --season "$2" || echo "MAL import for $1-$2 failed; continuing"
-            pnpm import:jikan -- --year "$1" --season "$2" || echo "Jikan import for $1-$2 failed; continuing"
+            pnpm import:jikan -- --year "$1" --season "$2" || { echo "Jikan import for $1-$2 failed; continuing"; FAILED=1; }
+            pnpm import:mal -- --year "$1" --season "$2" || { echo "MAL import for $1-$2 failed; continuing"; FAILED=1; }
             if pnpm import:syobocal -- --year "$1" --season "$2"; then
               pnpm resolve:anime-catalog -- --year "$1" --season "$2" || { echo "Resolve for $1-$2 failed"; FAILED=1; }
             else
@@ -98,4 +103,7 @@ jobs:
               FAILED=1
             fi
           done
+          # ODbL公開カタログの静的成果物を再生成する（/api/data/anime-catalog が配信）。
+          # 上流が失敗していても、既存レコードからの再生成は安全なので常に試みる。
+          pnpm export:anime-catalog || { echo "Catalog export failed"; FAILED=1; }
           exit "$FAILED"
