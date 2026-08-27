@@ -7,7 +7,12 @@ import {
 	collectAnimeCatalogSeasonMalIds,
 } from "../src/lib/anime-catalog-season.ts";
 import { translateAnimeSource } from "../src/lib/anime-vocabulary.ts";
-import { GENRE_JA_BY_EN, normalizeBroadcastSchedule, STUDIO_JA_BY_EN } from "./import-jikan-season.ts";
+import {
+	fetchAniListSeasonMalIds,
+	GENRE_JA_BY_EN,
+	normalizeBroadcastSchedule,
+	STUDIO_JA_BY_EN,
+} from "./import-jikan-season.ts";
 
 type SeasonName = "winter" | "spring" | "summer" | "fall";
 
@@ -392,9 +397,23 @@ async function main() {
 	const season = `${options.year}-${options.season}`;
 	const supabase = getSupabaseClient();
 
-	const malIds = await fetchSeasonMalIds(supabase, season);
-	if (malIds.length === 0) throw new Error(`No ODbL or Jikan season source records found for ${season}.`);
-	console.log(`Target MAL IDs for ${season}: ${malIds.length}`);
+	const storedMalIds = await fetchSeasonMalIds(supabase, season);
+	// 公開Jikanが長期停止しても新規作品の発見が止まらないよう、AniListの
+	// シーズン一覧も対象IDへ合流させる（詳細はMAL公式APIから取るのでJikan不要）。
+	// AniList障害時は既存レコード由来のIDだけで続行する。
+	let aniListMalIds: number[] = [];
+	try {
+		aniListMalIds = await fetchAniListSeasonMalIds(options.year, options.season);
+	} catch (error) {
+		console.warn(
+			`AniList season id fetch failed; continuing with stored ids only: ${error instanceof Error ? error.message : String(error)}`,
+		);
+	}
+	const malIds = [...new Set([...storedMalIds, ...aniListMalIds])].sort((left, right) => left - right);
+	if (malIds.length === 0) throw new Error(`No season MAL ids found for ${season} (stored records or AniList).`);
+	console.log(
+		`Target MAL IDs for ${season}: ${malIds.length} (stored: ${storedMalIds.length}, AniList: ${aniListMalIds.length})`,
+	);
 
 	const checkpoint = await loadImportCheckpoint(options.year, options.season);
 	const pendingMalIds = malIds.filter((malId) => checkpoint.animeByMalId[String(malId)] === undefined);
