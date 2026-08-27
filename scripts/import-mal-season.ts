@@ -443,6 +443,28 @@ async function main() {
 	}
 
 	await saveSourceRows(supabase, rows);
+	// 全対象IDの取得が完了した時点でのみここへ到達する（途中エラーは即throw）ため、
+	// 今回の結果に無い既存の mal レコード（404になったID・対象リストから外れたID）を
+	// このシーズンから削除して整合させる。残すと resolver が古い高優先度ソースを
+	// 採用し続ける。
+	{
+		const seasonValue = `${options.year}-${options.season}`;
+		const keepIds = rows.map((row) => row.mal_id);
+		// biome-ignore lint/suspicious/noExplicitAny: jsonb path filter is not covered by the local ImportDatabase type
+		let staleQuery = (supabase.from("anime_source_records") as any)
+			.delete()
+			.eq("source", "mal")
+			.eq("normalized_data->>season", seasonValue);
+		if (keepIds.length > 0) staleQuery = staleQuery.not("mal_id", "in", `(${keepIds.join(",")})`);
+		const { data: staleRows, error: staleError } = await staleQuery.select("mal_id");
+		if (staleError) {
+			throw new Error(`Could not reconcile stale MAL records for ${seasonValue}: ${staleError.message}`);
+		}
+		const staleIds = ((staleRows ?? []) as { mal_id: number }[]).map((row) => row.mal_id);
+		if (staleIds.length > 0) {
+			console.warn(`Removed ${staleIds.length} stale MAL records for ${seasonValue}: ${staleIds.join(", ")}`);
+		}
+	}
 	// Clear the checkpoint so a future re-run refreshes from the live API
 	// instead of replaying this run's cached snapshots.
 	try {

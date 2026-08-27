@@ -1287,6 +1287,32 @@ async function upsertJikanSourceRecords(rows: AnimeImportRow[], animeByMalId: Ma
 	}
 }
 
+/**
+ * 完全取得に成功したシーズンについて、今回の取得結果に存在しない既存の jikan
+ * レコードを削除する。延期で別シーズンへ移動した作品やブロックフィルターで
+ * 除外済みの作品が古いシーズンに残り続けると、resolver が保存済み season 値で
+ * 候補抽出するため延期前のシーズンに掲載され続ける。
+ */
+async function reconcileSeasonSourceRecords(rows: AnimeImportRow[], year: number, season: string) {
+	const supabase = getSupabaseClient();
+	const seasonValue = `${year}-${season}`;
+	const keepIds = rows.map((row) => row.mal_id);
+	// biome-ignore lint/suspicious/noExplicitAny: jsonb path filter is not covered by the local ImportDatabase type
+	let query = (supabase.from("anime_source_records") as any)
+		.delete()
+		.eq("source", "jikan")
+		.eq("normalized_data->>season", seasonValue);
+	if (keepIds.length > 0) query = query.not("mal_id", "in", `(${keepIds.join(",")})`);
+	const { data, error } = await query.select("mal_id");
+	if (error) throw new Error(`Could not reconcile stale Jikan records for ${seasonValue}: ${error.message}`);
+	const staleIds = ((data ?? []) as { mal_id: number }[]).map((row) => row.mal_id);
+	if (staleIds.length > 0) {
+		console.warn(`Removed ${staleIds.length} stale Jikan records for ${seasonValue}: ${staleIds.join(", ")}`);
+	} else {
+		console.log(`No stale Jikan records for ${seasonValue}.`);
+	}
+}
+
 async function main() {
 	const { year, season, dryRun, enrichLinks, fallbackAnilist } = parseArgs(process.argv.slice(2));
 
@@ -1299,11 +1325,13 @@ async function main() {
 	console.log(`Starting Jikan season import: ${year} ${season}${dryRun ? " (dry-run)" : ""}`);
 	let fetchResult: SeasonFetchResult;
 	let linksAlreadyEnriched = false;
+	let usedAniListFallback = false;
 
 	if (fallbackAnilist) {
 		console.log("Using AniList MAL ID fallback source.");
 		fetchResult = await fetchSeasonAnimeViaAniList(year, season);
 		linksAlreadyEnriched = true;
+		usedAniListFallback = true;
 	} else {
 		try {
 			fetchResult = await fetchSeasonAnime(year, season);
@@ -1315,6 +1343,7 @@ async function main() {
 			);
 			fetchResult = await fetchSeasonAnimeViaAniList(year, season);
 			linksAlreadyEnriched = true;
+			usedAniListFallback = true;
 		}
 	}
 
@@ -1355,6 +1384,15 @@ async function main() {
 	}
 
 	await upsertJikanSourceRecords(rows, new Map(filteredAnimes.map((anime) => [anime.mal_id, anime])));
+
+	// 完全取得に成功したときだけ、今回の結果に無い既存レコードを整合させる。
+	// 部分取得（チェックポイント残あり）や AniList フォールバックの結果で削除すると
+	// 取得漏れを「消えた作品」と誤認するため、その場合はスキップする。
+	if (!usedAniListFallback && fetchResult.failedMalIds.length === 0) {
+		await reconcileSeasonSourceRecords(rows, year, season);
+	} else {
+		console.warn(`Season reconcile skipped for ${year}-${season}: incomplete fetch or AniList fallback in use.`);
+	}
 
 	if (fetchResult.usesCheckpoint && fetchResult.failedMalIds.length === 0) {
 		await clearImportCheckpoint(year, season);

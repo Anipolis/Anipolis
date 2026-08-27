@@ -1,97 +1,37 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { json } from "@sveltejs/kit";
 import {
-	ANIME_OFFLINE_DBCL_URL,
-	ANIME_OFFLINE_LICENSE_URL,
-	ANIME_OFFLINE_ODBL_URL,
-	ANIME_OFFLINE_REPOSITORY_URL,
-	ANIPOLIS_TRANSFORMATION_URL,
-} from "$lib/anime-offline-database";
+	ANIME_CATALOG_EXPORT_BUCKET,
+	ANIME_CATALOG_EXPORT_OBJECT,
+	buildAnimeCatalogExport,
+} from "$lib/anime-catalog-export";
 import type { RequestHandler } from "./$types";
 
-const PAGE_SIZE = 1_000;
+const CACHE_CONTROL = "public, max-age=3600, s-maxage=86400";
 
-type SourceRecordRow = {
-	mal_id: number;
-	source: "anime_offline_database" | "jikan" | "mal" | "wikidata" | "syobocal" | "manual";
-	source_version: string;
-	source_url: string;
-	source_updated_at: string | null;
-	normalized_data: Record<string, unknown>;
-	imported_at: string;
-};
-
-type SourceRecordDatabase = {
-	public: {
-		Tables: {
-			anime_source_records: {
-				Row: SourceRecordRow;
-				Insert: SourceRecordRow;
-				Update: Partial<SourceRecordRow>;
-			};
-		};
-	};
-};
-
-export const GET: RequestHandler = async ({ locals: { supabase } }) => {
-	const rows: Array<Record<string, unknown>> = [];
-	const sourceReader = supabase as unknown as SupabaseClient<SourceRecordDatabase>;
-
-	for (let start = 0; ; start += PAGE_SIZE) {
-		const { data, error } = await sourceReader
-			.from("anime_source_records")
-			.select("mal_id,source_version,source_url,source_updated_at,normalized_data,imported_at")
-			.eq("source", "anime_offline_database")
-			.order("mal_id", { ascending: true })
-			.range(start, start + PAGE_SIZE - 1);
-
-		if (error) {
-			return json({ error: "anime catalog could not be generated" }, { status: 500 });
+export const GET: RequestHandler = async ({ locals: { supabase }, fetch }) => {
+	// 通常経路: syobocal-sync ワークフローが事前生成した成果物をストリーミング配信する。
+	// リクエスト時に全レコードをDB走査してメモリ展開しない（カタログ増加への耐性）。
+	const { data } = supabase.storage.from(ANIME_CATALOG_EXPORT_BUCKET).getPublicUrl(ANIME_CATALOG_EXPORT_OBJECT);
+	try {
+		const artifact = await fetch(data.publicUrl);
+		if (artifact.ok && artifact.body) {
+			return new Response(artifact.body, {
+				headers: {
+					"Content-Type": "application/json",
+					"Cache-Control": CACHE_CONTROL,
+				},
+			});
 		}
-
-		rows.push(...(data ?? []));
-		if (!data || data.length < PAGE_SIZE) break;
+	} catch (error) {
+		console.error("anime catalog artifact fetch failed:", error);
 	}
 
-	const sourceUrls = [
-		...new Set(rows.map((row) => row["source_url"]).filter((url): url is string => typeof url === "string")),
-	].sort();
-	const sourceVersions = [
-		...new Set(
-			rows
-				.map((row) => row["source_version"])
-				.filter((version): version is string => typeof version === "string"),
-		),
-	].sort();
-	const data = rows.map((row) => row["normalized_data"]);
-
-	return json(
-		{
-			name: "Anipolis ODbL derivative of anime-offline-database",
-			scope: "anime-offline-database derived records only",
-			is_complete_anipolis_catalog: false,
-			excluded_sources: ["wikidata", "jikan", "mal", "syobocal", "manual"],
-			exclusion_reason: "Third-party and manually curated data are kept outside this ODbL derivative.",
-			generated_at: new Date().toISOString(),
-			license: {
-				name: "Open Database License 1.0 and Database Contents License 1.0",
-				odbl: ANIME_OFFLINE_ODBL_URL,
-				dbcl: ANIME_OFFLINE_DBCL_URL,
-				upstream_license: ANIME_OFFLINE_LICENSE_URL,
-			},
-			source: {
-				repository: ANIME_OFFLINE_REPOSITORY_URL,
-				versions: sourceVersions,
-				release_assets: sourceUrls,
-			},
-			transformation: ANIPOLIS_TRANSFORMATION_URL,
-			count: data.length,
-			data,
-		},
-		{
-			headers: {
-				"Cache-Control": "public, max-age=3600, s-maxage=86400",
-			},
-		},
-	);
+	// フォールバック: 成果物が未生成（初回デプロイ直後など）の場合のみ動的生成する。
+	try {
+		const payload = await buildAnimeCatalogExport(supabase);
+		return json(payload, { headers: { "Cache-Control": CACHE_CONTROL } });
+	} catch (error) {
+		console.error("anime catalog dynamic generation failed:", error);
+		return json({ error: "anime catalog could not be generated" }, { status: 500 });
+	}
 };
