@@ -39,8 +39,14 @@ function synthesizeClosedRoomSession(
 	const time = override?.broadcast_time ?? anime.broadcast_time;
 	const minutes = broadcastTimeMinutes(time);
 	if (minutes == null) return null;
-	const [year, month, day] = roomDate.split("-").map((part) => Number.parseInt(part, 10));
-	if (!year || !month || !day) return null;
+	// parseInt は前方一致（"07junk" → 7）、Date.UTC は範囲外をロールオーバーするため、
+	// 形式と範囲を厳密に検証してから合成する
+	const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(roomDate);
+	if (!dateMatch) return null;
+	const year = Number(dateMatch[1]);
+	const month = Number(dateMatch[2]);
+	const day = Number(dateMatch[3]);
+	if (month < 1 || month > 12 || day < 1 || day > 31) return null;
 	// JST固定(+9): サーバーTZに依存させない
 	const scheduledMs = Date.UTC(year, month - 1, day, Math.floor(minutes / 60) - 9, minutes % 60);
 	const duration = override?.duration_minutes ?? anime.broadcast_duration_minutes ?? 30;
@@ -126,7 +132,10 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 		const slot = buildBroadcastEpisodeLog(anime, snapshots, overrides).find((entry) => entry.date === params.date);
 		if (slot && slot.start != null && slot.start === slot.end) episodeNumber = slot.start;
 	}
-	const roomExperimentSupabase = user ? createRoomExperimentServiceClient() : null;
+	// 合成セッションは実セッション行が無く、アンケート送信が実セッション検証で
+	// 400 になるため、実験・退室アンケートは無効化する（experimentRunId も付けない）
+	const isSyntheticSession = session.id === SYNTHETIC_ROOM_SESSION_ID;
+	const roomExperimentSupabase = user && !isSyntheticSession ? createRoomExperimentServiceClient() : null;
 	const [posts, trending, animeTrending, roomExperimentRun, roomExitSurveyLoadState] = await Promise.all([
 		getBroadcastRoomPosts(supabase, session.id, user?.id ?? null, { limit: 100, ascending: true }),
 		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),

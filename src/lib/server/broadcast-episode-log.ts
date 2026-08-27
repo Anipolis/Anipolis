@@ -32,6 +32,8 @@ export function buildBroadcastEpisodeLog(
 	anime: BroadcastEpisodeLogAnime,
 	snapshots: readonly BroadcastEpisodeLogSlot[],
 	overrides: readonly BroadcastRoomOverride[],
+	// 合成補完の打ち切りと放送終了判定の基準日。テストから固定日を渡せるようにする
+	today: Date = new Date(),
 ): BroadcastEpisodeLogSlot[] {
 	const overrideByDate = new Map(overrides.map((override) => [roomDateKey(override.room_date), override]));
 	// 放送休止オーバーライドの日はセッション行が残っていてもログから除外する
@@ -67,7 +69,7 @@ export function buildBroadcastEpisodeLog(
 		effectiveBroadcastDay != null &&
 		anime.broadcast_time != null
 	) {
-		const todayKey = jstBroadcastDate(new Date());
+		const todayKey = jstBroadcastDate(today);
 		const airedToKey = anime.aired_to?.slice(0, 10) ?? null;
 		const cursor = new Date(`${anime.aired_from.slice(0, 10)}T00:00:00`);
 		// MALの開始日は24時超の慣習表記に対応せず、深夜帯では翌日の実日付が入る
@@ -92,7 +94,10 @@ export function buildBroadcastEpisodeLog(
 		}
 	}
 	const ascending = [...slotByDate.values()].sort((left, right) => left.date.localeCompare(right.date));
-	// オーバーライド（話数明示・総集編）を尊重した逆算。整合しない作品は番号なしのまま。
+	// オーバーライド（話数明示・総集編）を尊重した逆算。
+	// underflow（話数より掲載日が多い）のときだけ推定番号を破棄する。
+	// leftover（最古が第1話にならない）は番号の連続性自体は壊れていないため、
+	// 推定番号を残したまま監査リスト側で扱う（mismatch の leftover はここでは未消費）。
 	const unnumberedBefore = new Set(ascending.filter((slot) => slot.start == null).map((slot) => slot.date));
 	const mismatch = inferEpisodeNumbersBackward(ascending, overrideByDate);
 	if (mismatch?.kind === "underflow") {
@@ -110,7 +115,7 @@ export function buildBroadcastEpisodeLog(
 	// アンカーが1件も無い＝しょぼい同期開始前に放送を終えた作品は、逆算の起点が
 	// 永遠に得られない。放送終了済みに限り、第1話からの前進カウントで補う
 	// （放送中でアンカーが無いのはマッピング不備なので番号なしのまま残す）。
-	const ended = anime.aired_to != null && anime.aired_to.slice(0, 10) < jstBroadcastDate(new Date());
+	const ended = anime.aired_to != null && anime.aired_to.slice(0, 10) < jstBroadcastDate(today);
 	if (!anchorSlot && ended) inferEpisodeNumbersForward(ascending, overrideByDate);
 	return ascending;
 }

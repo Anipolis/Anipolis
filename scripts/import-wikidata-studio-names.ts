@@ -189,6 +189,8 @@ async function fetchWikidataStudios(): Promise<WikidataStudioRecord[]> {
 			Accept: "application/sparql-results+json",
 			"User-Agent": "Anipolis/1.0 (https://github.com/Anipolis/Anipolis)",
 		},
+		// SPARQL エンドポイントが応答を返さない場合に無限待ちしないための打ち切り
+		signal: AbortSignal.timeout(120_000),
 	});
 	if (!response.ok) throw new Error(`Wikidata studio query failed: ${response.status} ${response.statusText}`);
 	const payload = (await response.json()) as { results?: { bindings?: WikidataStudioBinding[] } };

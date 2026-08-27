@@ -22,7 +22,7 @@ import {
 	getScheduleBroadcastSessionsInRange,
 	isAdminUser,
 } from "$lib/server/queries";
-import { jstBroadcastTimeLabel } from "$lib/syobocal-schedule";
+import { jstBroadcastDate, jstBroadcastTimeLabel } from "$lib/syobocal-schedule";
 import type { Anime, BroadcastNotificationSettings, BroadcastRoomOverride, Event } from "$lib/types";
 import { formatBroadcastOverrideAnnouncement } from "$lib/utils/broadcast-episodes";
 import {
@@ -116,7 +116,9 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	// しょぼい絶対: 今日以降の掲載対象は「同期済みセッションがある」か「オーバーライド
 	// がある」作品のみ。過去日はしょぼい番組データが残らないため、ルームページの
 	// 合成表示と同じルール（対象シーズン+曜日・放送期間）で履歴として掲載する。
-	const todayKey = toDateInputValue(new Date());
+	// 「今日」はサーバーTZのUTC日付ではなく、broadcast-episode-log と同じ
+	// JST・午前4時境界で判定する（JST 04:00〜09:00 はUTC日付が前日になるため）
+	const todayKey = jstBroadcastDate(new Date());
 	const hasPastDays = scheduleRange.start < todayKey;
 	const [sessions, overrideAnimeIdsInRange, pastFillList] = await Promise.all([
 		getScheduleBroadcastSessionsInRange(supabase, scheduleRange.start, scheduleRange.end),

@@ -88,11 +88,13 @@ CREATE INDEX IF NOT EXISTS studio_name_aliases_source_idx
 ALTER TABLE public.studio_source_records ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.studio_name_aliases ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "studio source records: public can read open sources" ON public.studio_source_records;
 CREATE POLICY "studio source records: public can read open sources"
     ON public.studio_source_records FOR SELECT
     TO anon, authenticated
     USING (source = 'wikidata');
 
+DROP POLICY IF EXISTS "studio name aliases: public can read open sources" ON public.studio_name_aliases;
 CREATE POLICY "studio name aliases: public can read open sources"
     ON public.studio_name_aliases FOR SELECT
     TO anon, authenticated

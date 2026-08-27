@@ -55,6 +55,8 @@ export function normalizeSyobocalTitle(value: string): string {
 export function parseSyobocalLinks(comment: string): SyobocalLink[] {
 	const links: SyobocalLink[] = [];
 	const seen = new Set<string>();
+	// 先頭の "-" はしょぼいのリンクリスト記法（"-[[名前 URL]]"）を要求する。
+	// findSyobocalWikipediaArticleLinks はリスト外の言及も拾うため "-" を要求しない。
 	for (const match of comment.matchAll(/-\[\[(.*?)\s+(https?:\/\/[^\]\s]+)\]\]/g)) {
 		const name = match[1]?.trim();
 		const url = match[2]?.trim();
@@ -87,12 +89,20 @@ export function japaneseWikipediaArticleTitle(value: string): string | null {
 				"template",
 				"portal",
 				"talk",
+				"user",
+				"project",
+				"module",
+				"mediawiki",
 				"特別",
 				"カテゴリ",
 				"ファイル",
 				"ヘルプ",
 				"テンプレート",
 				"ポータル",
+				"ノート",
+				"利用者",
+				"プロジェクト",
+				"モジュール",
 			]).has(namespace)
 		) {
 			return null;
@@ -106,6 +116,8 @@ export function japaneseWikipediaArticleTitle(value: string): string | null {
 export function findSyobocalWikipediaArticleLinks(comment: string): SyobocalWikipediaArticleLink[] {
 	const links: SyobocalWikipediaArticleLink[] = [];
 	const seen = new Set<string>();
+	// "-" 無しの [[名前 URL]] も対象（コメント本文中の言及からも記事リンクを拾うため）。
+	// リンク名が空の記法は拾わない（name は下のガードにのみ使い、表示名は "Wikipedia" に固定する）。
 	for (const match of comment.matchAll(/\[\[([^\]\r\n]*?)\s+(https?:\/\/[^\]\s]+)\]\]/gi)) {
 		const name = match[1]?.trim();
 		const sourceUrl = match[2]?.trim();
@@ -146,7 +158,13 @@ export function findSyobocalWikipediaKeywordLinks(keywords: string): SyobocalWik
 }
 
 export function findSyobocalOfficialSiteUrl(links: readonly SyobocalLink[]): string | null {
-	return links.find((link) => /^公式(?:\s|\(|（|$)/.test(link.name))?.url ?? null;
+	// 「公式」単体に加え「公式サイト」「公式ホームページ」等の表記揺れも受け付ける。
+	// 「公式X」「公式Twitter」等の SNS は対象外（無関係な「公式ショップ」等を拾わないよう
+	// 接尾辞はホワイトリスト方式にしている）。
+	return (
+		links.find((link) => /^公式(?:サイト|ホームページ|ページ|HP|Web(?:サイト)?)?(?:\s|\(|（|$)/i.test(link.name))
+			?.url ?? null
+	);
 }
 
 export function findSyobocalOfficialXUrl(links: readonly SyobocalLink[]): string | null {
@@ -228,6 +246,8 @@ export function matchSyobocalTitlesExactly(
 	const catalogByTitle = new Map<string, SyobocalTitleMatchCandidate[]>();
 	for (const candidate of catalog) {
 		const normalized = normalizeSyobocalTitle(candidate.title);
+		// 期表記だけのタイトル（"2期" 等）は正規化で空文字になる。空キー同士の一致は無意味。
+		if (!normalized) continue;
 		const entries = catalogByTitle.get(normalized) ?? [];
 		entries.push(candidate);
 		catalogByTitle.set(normalized, entries);
@@ -236,6 +256,7 @@ export function matchSyobocalTitlesExactly(
 	const titlesByTitle = new Map<string, SyobocalTitleForMatching[]>();
 	for (const title of titles) {
 		const normalized = normalizeSyobocalTitle(title.title);
+		if (!normalized) continue;
 		const entries = titlesByTitle.get(normalized) ?? [];
 		entries.push(title);
 		titlesByTitle.set(normalized, entries);
@@ -350,10 +371,17 @@ export function matchSyobocalTitlesByReading(
 	}
 
 	const matches: SyobocalReadingTitleMatch[] = [];
+	const pairCountByMalId = new Map<number, number>();
+	const pairCountByTid = new Map<number, number>();
 	for (const pair of pairs) {
-		const matchesForCatalog = pairs.filter((value) => value.catalogCandidate.malId === pair.catalogCandidate.malId);
-		const matchesForTitle = pairs.filter((value) => value.titleCandidate.tid === pair.titleCandidate.tid);
-		if (matchesForCatalog.length !== 1 || matchesForTitle.length !== 1) continue;
+		const malId = pair.catalogCandidate.malId;
+		const tid = pair.titleCandidate.tid;
+		pairCountByMalId.set(malId, (pairCountByMalId.get(malId) ?? 0) + 1);
+		pairCountByTid.set(tid, (pairCountByTid.get(tid) ?? 0) + 1);
+	}
+	for (const pair of pairs) {
+		if (pairCountByMalId.get(pair.catalogCandidate.malId) !== 1) continue;
+		if (pairCountByTid.get(pair.titleCandidate.tid) !== 1) continue;
 		matches.push({ malId: pair.catalogCandidate.malId, tid: pair.titleCandidate.tid, matchKey: pair.key });
 	}
 	return matches.sort((left, right) => left.malId - right.malId || left.tid - right.tid);

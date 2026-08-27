@@ -8,6 +8,9 @@ export type BroadcastStatusInput = {
 };
 
 const FINITE_RELEASE_TYPES = new Set(["movie", "ona", "ova", "tvspecial", "special"]);
+// 管理画面の手動登録は日本語ラベル（映画/特別）を使う。英数字正規化では空文字に
+// なって判定から漏れるため、日本語ラベルはそのまま照合する
+const JAPANESE_FINITE_RELEASE_TYPES = new Set(["映画", "特別"]);
 
 function dateOnly(value: string | null): string | null {
 	return value?.slice(0, 10) || null;
@@ -21,7 +24,8 @@ export function computeBroadcastStatus(input: BroadcastStatusInput, jstToday = g
 	const airedFrom = dateOnly(input.airedFrom);
 	const airedTo = dateOnly(input.airedTo);
 	const normalizedType = input.type?.toLowerCase().replace(/[^a-z0-9]/g, "") ?? "";
-	const isFiniteReleaseType = FINITE_RELEASE_TYPES.has(normalizedType);
+	const isFiniteReleaseType =
+		FINITE_RELEASE_TYPES.has(normalizedType) || JAPANESE_FINITE_RELEASE_TYPES.has(input.type?.trim() ?? "");
 
 	if (airedFrom && airedFrom > jstToday) return "upcoming";
 	if (airedTo && airedTo < jstToday) return "finished";

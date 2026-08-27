@@ -46,18 +46,23 @@ export function sniffImageMime(bytes: Uint8Array): string | null {
 	) {
 		return "image/webp";
 	}
-	// AVIF: ISOBMFF box, offset 4-7 "ftyp", offset 8-11 major brand "avif"/"avis"
-	if (
-		bytes[4] === 0x66 &&
-		bytes[5] === 0x74 &&
-		bytes[6] === 0x79 &&
-		bytes[7] === 0x70 &&
-		bytes[8] === 0x61 &&
-		bytes[9] === 0x76 &&
-		bytes[10] === 0x69 &&
-		(bytes[11] === 0x66 || bytes[11] === 0x73)
-	) {
-		return "image/avif";
+	// AVIF: ISOBMFF box, offset 4-7 "ftyp"。major brand が "avif"/"avis" でなくても
+	// （例: major brand "mif1"）、compatible_brands に "avif"/"avis" があれば有効な
+	// AVIF なので、ftyp box のサイズの範囲でブランドを走査する。
+	if (bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70) {
+		const boxSize = ((bytes[0] ?? 0) << 24) | ((bytes[1] ?? 0) << 16) | ((bytes[2] ?? 0) << 8) | (bytes[3] ?? 0);
+		// major brand(8-11) + minor version(12-15) の後に compatible_brands が並ぶ。
+		// box サイズ異常値でも先頭 256 バイトまでしか見ない。
+		const scanEnd = Math.min(boxSize >= 16 ? boxSize : 16, bytes.length, 256);
+		for (let offset = 8; offset + 4 <= scanEnd; offset += 4) {
+			if (offset === 12) continue; // minor version はブランドではない
+			const isAvifBrand =
+				bytes[offset] === 0x61 &&
+				bytes[offset + 1] === 0x76 &&
+				bytes[offset + 2] === 0x69 &&
+				(bytes[offset + 3] === 0x66 || bytes[offset + 3] === 0x73);
+			if (isAvifBrand) return "image/avif";
+		}
 	}
 	return null;
 }
