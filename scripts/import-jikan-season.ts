@@ -663,7 +663,9 @@ async function fetchAnimeFull(malId: number, maxRetries = MAX_RETRIES) {
 	return (payload as JikanAnimeFullResponse | null)?.data ?? null;
 }
 
-async function fetchAniListSeasonMalIds(year: number, season: SeasonName) {
+// import-mal-season.ts からも使う: 公開Jikanが長期停止しても、AniListの
+// シーズン一覧 + MAL公式APIの組み合わせで新規作品の発見が止まらないようにする。
+export async function fetchAniListSeasonMalIds(year: number, season: SeasonName) {
 	const malIds: number[] = [];
 	let page = 1;
 	let hasNextPage = true;

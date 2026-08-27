@@ -4,11 +4,14 @@ name: Syobocal sync
 # - daily: program-table sync (catalog-wide mappings, rolling window; time
 #   changes and cancelled slots are absorbed by the importer's update/delete
 #   logic; channel selection sticks to the earliest terrestrial airing).
-# - weekly: MAL + Jikan + Syobocal imports and catalog resolve for the current
+# - weekly: Jikan + MAL + Syobocal imports and catalog resolve for the current
 #   AND next season, so late-added MAL entries (e.g. announced mid-season) and
-#   their official links are picked up automatically. Jikan runs against the
-#   public API here; persistent 504s can be backfilled manually via the
-#   self-hosted instance (scripts/local/enrich-jikan-links.ts).
+#   their official links are picked up automatically. New-id discovery does not
+#   depend on Jikan: import:mal merges the AniList season listing into its
+#   target ids and fetches details from the official MAL API. Jikan runs against
+#   the public API here as a best-effort supplemental source; persistent 504s
+#   can be backfilled manually via the self-hosted instance
+#   (scripts/local/enrich-jikan-links.ts).
 #
 # Requires repository Actions secrets:
 #   PUBLIC_SUPABASE_URL, SUPABASE_SECRET_KEY, MAL_CLIENT_ID
@@ -82,19 +85,19 @@ jobs:
           MAL_CLIENT_ID: ${{ secrets.MAL_CLIENT_ID }}
         run: |
           # シーズン単位で失敗を隔離する: 1シーズン目のしょぼい照合が落ちても
-          # 2シーズン目まで巻き添えにしない。MAL/Jikan の失敗も後続（キャッシュ済み
-          # データでの resolve）は続行するが、同期できていないことが分かるように
-          # ジョブ自体は失敗させる。
-          # 実行順は Jikan → MAL: MAL インポートの対象IDは既存の ODbL/Jikan レコード
-          # から決まるため、逆順だと Jikan が初めて発見したIDが次回まで MAL 対象に
-          # ならない。
+          # 2シーズン目まで巻き添えにしない。
+          # 公開Jikanは慢性的な504で「落ちている前提」の補完ソース: 新規作品の発見は
+          # AniListシーズン一覧 + MAL公式API（import:mal 内で合流）が担うため、
+          # Jikan の失敗は警告アノテーションに留めてジョブは失敗させない
+          # （リンク補完はセルフホストjikan-restでの手動バックフィル経路がある）。
+          # MAL・しょぼい・resolve・成果物生成の失敗は同期不全なのでジョブを失敗させる。
           FAILED=0
           for TARGET in \
             "${{ steps.season.outputs.year }} ${{ steps.season.outputs.season }}" \
             "${{ steps.season.outputs.next_year }} ${{ steps.season.outputs.next_season }}"; do
             set -- $TARGET
             echo "=== $1-$2 ==="
-            pnpm import:jikan -- --year "$1" --season "$2" || { echo "Jikan import for $1-$2 failed; continuing"; FAILED=1; }
+            pnpm import:jikan -- --year "$1" --season "$2" || echo "::warning title=Jikan import failed::Jikan import for $1-$2 failed (public Jikan is expected to be flaky); jikan-sourced link enrichment deferred"
             pnpm import:mal -- --year "$1" --season "$2" || { echo "MAL import for $1-$2 failed; continuing"; FAILED=1; }
             if pnpm import:syobocal -- --year "$1" --season "$2"; then
               pnpm resolve:anime-catalog -- --year "$1" --season "$2" || { echo "Resolve for $1-$2 failed"; FAILED=1; }
