@@ -1329,7 +1329,12 @@ async function fetchAnimeRoomRows(supabase: ReturnType<typeof getSupabaseClient>
 function deriveBroadcastFieldsByMal(primaryPrograms: ReturnType<typeof selectPrimarySyobocalPrograms>) {
 	const byMal = new Map<
 		number,
-		{ broadcast_day: number; broadcast_time: string | null; broadcast_station: string }
+		{
+			broadcast_day: number;
+			broadcast_time: string | null;
+			broadcast_station: string;
+			broadcast_duration_minutes: number | null;
+		}
 	>();
 	const latestByMal = new Map<number, (typeof primaryPrograms)[number]>();
 	for (const program of primaryPrograms) {
@@ -1340,10 +1345,13 @@ function deriveBroadcastFieldsByMal(primaryPrograms: ReturnType<typeof selectPri
 	}
 	for (const [malId, program] of latestByMal) {
 		const roomDate = jstBroadcastDate(program.startsAt);
+		const slotMinutes = Math.round((Date.parse(program.endsAt) - Date.parse(program.startsAt)) / 60_000);
 		byMal.set(malId, {
 			broadcast_day: new Date(`${roomDate}T00:00:00`).getDay(),
 			broadcast_time: jstBroadcastTimeLabel(program.startsAt),
 			broadcast_station: program.channelName,
+			// 主局の実枠長（分）。セッション行と同じ1分〜24時間の妥当性ゲート
+			broadcast_duration_minutes: slotMinutes >= 1 && slotMinutes <= 1_440 ? slotMinutes : null,
 		});
 	}
 	return byMal;
@@ -1764,6 +1772,7 @@ async function main() {
 					broadcast_day: normalized["broadcast_day"],
 					broadcast_time: normalized["broadcast_time"] ?? null,
 					broadcast_station: normalized["broadcast_station"] ?? null,
+					broadcast_duration_minutes: normalized["broadcast_duration_minutes"] ?? null,
 				});
 			}
 		}
@@ -1787,7 +1796,10 @@ async function main() {
 					season,
 					title: proposal.useForTitle ? title.title : null,
 					title_ja: proposal.useForTitle ? title.title : null,
-					title_yomi: proposal.useForTitle ? title.titleYomi : null,
+					// 読みは表示題の採用判定(useForTitle)と無関係に正しい
+					// （同一作品の読みであることはマッピング確定で保証される）ため
+					// 常に保存する。かな検索のカバレッジに直結する。
+					title_yomi: title.titleYomi,
 					official_site_url: title.officialSiteUrl,
 					official_x_url: title.officialXUrl,
 					wikipedia_url: verifiedWikipedia?.sourceUrl ?? null,
@@ -1800,6 +1812,46 @@ async function main() {
 		];
 	});
 	await upsertBatches(supabase, "anime_source_records", sourceRows, "mal_id,source");
+	// 継続作品（今季シーズン外の確定マッピング）のしょぼいソースレコードにも
+	// 主局の放送情報（曜日・時刻・局名）を反映する。今季分は sourceRows が
+	// 丸ごと書き換えるので、ここでは放送フィールドだけを既存レコードへ
+	// マージし、タイトル等の他フィールドは温存する。
+	const seasonSourceMalIds = new Set(sourceRows.map((row) => row.mal_id));
+	const continuingMalIds = [...broadcastFieldsByMal.keys()].filter((malId) => !seasonSourceMalIds.has(malId));
+	let continuingUpdated = 0;
+	for (let start = 0; start < continuingMalIds.length; start += DATABASE_BATCH_SIZE) {
+		const { data, error } = await supabase
+			.from("anime_source_records")
+			.select("mal_id,normalized_data")
+			.eq("source", "syobocal")
+			.in("mal_id", continuingMalIds.slice(start, start + DATABASE_BATCH_SIZE));
+		if (error) throw new Error(`Could not read continuing Syobocal source records: ${error.message}`);
+		for (const row of (data ?? []) as { mal_id: number; normalized_data: Record<string, unknown> | null }[]) {
+			const fields = broadcastFieldsByMal.get(row.mal_id);
+			if (!fields) continue;
+			const normalized = row.normalized_data ?? {};
+			if (
+				normalized["broadcast_day"] === fields.broadcast_day &&
+				normalized["broadcast_time"] === fields.broadcast_time &&
+				normalized["broadcast_station"] === fields.broadcast_station &&
+				normalized["broadcast_duration_minutes"] === fields.broadcast_duration_minutes
+			) {
+				continue;
+			}
+			const { error: updateError } = await supabase
+				.from("anime_source_records")
+				.update({ normalized_data: { ...normalized, ...fields }, imported_at: importedAt })
+				.eq("source", "syobocal")
+				.eq("mal_id", row.mal_id);
+			if (updateError) {
+				throw new Error(`Could not update continuing Syobocal broadcast fields: ${updateError.message}`);
+			}
+			continuingUpdated += 1;
+		}
+	}
+	if (continuingUpdated > 0) {
+		console.log(`Updated broadcast fields on ${continuingUpdated} continuing Syobocal source records.`);
+	}
 	const selectedMalIds = new Set(mapping.selected.map((proposal) => proposal.malId));
 	const staleMalIds = malIds.filter((malId) => !selectedMalIds.has(malId));
 	for (let start = 0; start < staleMalIds.length; start += DATABASE_BATCH_SIZE) {

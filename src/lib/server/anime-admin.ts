@@ -11,7 +11,7 @@ type AnimeWriteResult = { success: true; animeId: string } | ReturnType<typeof f
 // リゾルバ（anime-catalog-resolver）が manual ソースとして参照するキー。
 // 管理画面での編集をこのキーに限って anime_source_records(source='manual') に
 // 差分保存し、週次のカタログ再解決で上書きされないようにする。ここに無い
-// フィールド（broadcast_duration や room 系）はリゾルバが触らないので不要。
+// フィールド（room 系等）はリゾルバが触らないので不要。
 const MANUAL_SOURCE_KEYS = [
 	"title",
 	"title_en",
@@ -30,6 +30,8 @@ const MANUAL_SOURCE_KEYS = [
 	"cover_url",
 	"broadcast_day",
 	"broadcast_time",
+	"broadcast_station",
+	"broadcast_duration_minutes",
 ] as const;
 
 /**
