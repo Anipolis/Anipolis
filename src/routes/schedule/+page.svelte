@@ -427,6 +427,12 @@ function currentEpisodeForSlot(
 	dateStr: string,
 	overrides: BroadcastRoomOverride[] = [],
 ): BroadcastEpisodeSlot | null {
+	// 話数はしょぼい番組表由来のセッション値が第一（ルームページと同じ優先順位）。
+	// 週次カウントは休止・特番を補正できず長期作品でずれるため、補完専用。
+	const sessionEpisode = data.sessionEpisodeNumbers[`${anime.id}:${dateStr}`];
+	if (sessionEpisode != null) {
+		return { date: dateStr, start: sessionEpisode, end: sessionEpisode, label: null };
+	}
 	if (!anime.aired_from) return null;
 	return resolveBroadcastEpisodeSlot({
 		date: dateStr,

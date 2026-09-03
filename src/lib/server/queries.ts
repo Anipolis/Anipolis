@@ -3097,6 +3097,7 @@ export interface ScheduleBroadcastSession {
 	anime_id: number;
 	room_date: string;
 	scheduled_at: string;
+	episode_number: number | null;
 }
 
 /**
@@ -3113,7 +3114,7 @@ export async function getScheduleBroadcastSessionsInRange(
 	const reader = supabase as SupabaseClient<any>;
 	const { data, error } = await reader
 		.from("broadcast_room_sessions")
-		.select("anime_id,room_date,scheduled_at")
+		.select("anime_id,room_date,scheduled_at,episode_number")
 		.eq("room_kind", "episode")
 		.eq("schedule_source", "syobocal")
 		.gte("room_date", startDate)
@@ -3128,6 +3129,7 @@ export async function getScheduleBroadcastSessionsInRange(
 		anime_id: Number(row["anime_id"]),
 		room_date: String(row["room_date"] ?? "").slice(0, 10),
 		scheduled_at: String(row["scheduled_at"] ?? ""),
+		episode_number: typeof row["episode_number"] === "number" ? row["episode_number"] : null,
 	}));
 }
 
