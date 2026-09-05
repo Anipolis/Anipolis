@@ -191,6 +191,14 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	}));
 
 	// しょぼい同期セッション: 実在の番組枠だけがカレンダーに載る
+	// 話数もしょぼい番組表由来の値が第一（長期作品は休止・特番で週次カウントが
+	// ずれるため、曜日からの機械カウントはセッションに番号が無い場合の補完のみ）
+	const sessionEpisodeNumbers: Record<string, number> = {};
+	for (const session of sessions) {
+		if (session.episode_number != null) {
+			sessionEpisodeNumbers[`${session.anime_id}:${session.room_date}`] = session.episode_number;
+		}
+	}
 	const animeById = new Map(animeList.map((anime) => [Number(anime.id), anime]));
 	for (const session of sessions) {
 		const anime = animeById.get(session.anime_id);
@@ -269,6 +277,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	return {
 		days,
 		dayLabels: DAY_LABELS,
+		sessionEpisodeNumbers,
 		events,
 		user,
 		isAdmin,
