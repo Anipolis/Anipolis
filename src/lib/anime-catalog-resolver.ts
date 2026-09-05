@@ -36,6 +36,9 @@ export type LegacyAnimeCatalogRow = {
 	genre_en: string[] | null;
 	broadcast_day: number | null;
 	broadcast_time: string | null;
+	broadcast_station: string[] | null;
+	broadcast_duration_minutes: number;
+	title_yomi: string | null;
 	official_site_url: string | null;
 	official_x_url: string | null;
 	resources: unknown;
@@ -108,6 +111,11 @@ function stringArrayValue(record: Record<string, unknown>, key: string): string[
 function nonEmptyStringArrayValue(record: Record<string, unknown>, key: string): string[] | undefined {
 	const value = stringArrayValue(record, key);
 	return value && value.length > 0 ? value : undefined;
+}
+
+function nullableStringArrayValue(record: Record<string, unknown>, key: string): string[] | null | undefined {
+	if (record[key] === null) return null;
+	return stringArrayValue(record, key);
 }
 
 function studioIdentityKey(value: string): string {
@@ -221,6 +229,10 @@ function resolvePublicResources(syobocal: Record<string, unknown>): { name: stri
 		})
 		.sort((left, right) => left.url.localeCompare(right.url));
 }
+
+// MAL本編尺を枠長の近似として採用してよい上限（ショートアニメのロビー
+// 自動分類 SHORT_ANIME_LOBBY_MINUTES と同じ閾値）
+const SHORT_SLOT_RUNTIME_MINUTES = 15;
 
 const SEASON_MONTHS: Record<string, readonly number[]> = {
 	winter: [12, 1, 2, 3],
@@ -471,6 +483,44 @@ export function resolveAnimeCatalog(
 		candidate(legacyRow?.broadcast_day, "legacy", "fallback"),
 		{ value: null, source: "legacy", confidence: "fallback" },
 	]);
+	// 放送局もしょぼい主局優先（曜日・時刻と同じ理由）。しょぼいは主局1局の
+	// 文字列、manual・既存行は配列。MAL/Jikanは局名を持たない。manualキャプチャ
+	// (migration 124)以前の管理画面入力は anime 行にしか残っていないため、
+	// legacy値のフォールバックで温存する。
+	const syobocalStation = stringValue(syobocal, "broadcast_station");
+	const broadcastStation = firstDefined<string[] | null>([
+		candidate(nullableStringArrayValue(manual, "broadcast_station"), "manual", "verified"),
+		candidate(syobocalStation ? [syobocalStation] : undefined, "syobocal", "verified"),
+		candidate(legacyRow?.broadcast_station, "legacy", "fallback"),
+		{ value: null, source: "legacy", confidence: "fallback" },
+	]);
+	// 放送枠の尺（分）。しょぼい主局の実枠長が第一。MALのepisode_duration_minutes
+	// は本編尺（CMを含まない）で枠長とは別物のため、既定30分が明らかに不適切な
+	// ショート枠（ロビー自動分類と同じ15分以下）に限って近似値として採用する。
+	// 30分枠の作品を24分等で上書きすると枠長としてはむしろ悪化する。
+	// 列はNOT NULL(既定30分)のため、null(明示クリア)の意味は持たせず正の分数のみ採用する
+	const positiveMinutes = (value: number | null | undefined): number | undefined =>
+		typeof value === "number" && value >= 1 && value <= 1_440 ? value : undefined;
+	const malRuntime = positiveMinutes(numberValue(mal, "episode_duration_minutes"));
+	const broadcastDurationMinutes = firstDefined<number>([
+		candidate(positiveMinutes(numberValue(manual, "broadcast_duration_minutes")), "manual", "verified"),
+		candidate(positiveMinutes(numberValue(syobocal, "broadcast_duration_minutes")), "syobocal", "verified"),
+		candidate(
+			malRuntime !== undefined && malRuntime <= SHORT_SLOT_RUNTIME_MINUTES ? malRuntime : undefined,
+			"mal",
+			"source",
+		),
+		candidate(legacyRow?.broadcast_duration_minutes, "legacy", "fallback"),
+		{ value: 30, source: "legacy", confidence: "fallback" },
+	]);
+	// タイトル読み。しょぼいのTitleYomiのみが供給源（use_for_title=falseの
+	// マッピングでは保存されないため、その場合はnullのまま）。
+	const titleYomi = firstDefined<string | null>([
+		candidate(nullableStringValue(manual, "title_yomi"), "manual", "verified"),
+		candidate(stringValue(syobocal, "title_yomi"), "syobocal", "verified"),
+		candidate(legacyRow?.title_yomi, "legacy", "fallback"),
+		{ value: null, source: "legacy", confidence: "fallback" },
+	]);
 
 	const verifiedDisplayTitle =
 		["manual", "syobocal", "wikidata", "mal", "jikan"].includes(title.source) && title.confidence === "verified";
@@ -557,6 +607,9 @@ export function resolveAnimeCatalog(
 		genre_en: genreEnglish,
 		broadcast_day: broadcastDay,
 		broadcast_time: broadcastTime,
+		broadcast_station: broadcastStation,
+		broadcast_duration_minutes: broadcastDurationMinutes,
+		title_yomi: titleYomi,
 		official_site_url: officialSiteUrl,
 		official_x_url: officialXUrl,
 		cover_url: coverUrl,
@@ -587,6 +640,9 @@ export function resolveAnimeCatalog(
 			genre_en: genreEnglish.value,
 			broadcast_day: broadcastDay.value,
 			broadcast_time: broadcastTime.value,
+			broadcast_station: broadcastStation.value,
+			broadcast_duration_minutes: broadcastDurationMinutes.value,
+			title_yomi: titleYomi.value,
 			official_site_url: officialSiteUrl.value,
 			official_x_url: officialXUrl.value,
 			resources: resolvePublicResources(syobocal),

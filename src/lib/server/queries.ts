@@ -2083,10 +2083,14 @@ export function quoteOrFilterValue(value: string): string {
 	return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
-/** title / title_en の部分一致検索用 .or() フィルターを生成する（入力は引用符リテラル化される） */
+/**
+ * title / title_en / title_yomi の部分一致検索用 .or() フィルターを生成する
+ * （入力は引用符リテラル化される）。title_yomi はしょぼい由来のひらがな読みで、
+ * かな入力からカタカナ題・英字題（BEYBLADE X等）を引けるようにする。
+ */
 export function buildTitleSearchFilter(searchQuery: string): string {
 	const pattern = quoteOrFilterValue(`%${searchQuery}%`);
-	return `title.ilike.${pattern},title_en.ilike.${pattern},source.ilike.${pattern}`;
+	return `title.ilike.${pattern},title_en.ilike.${pattern},title_yomi.ilike.${pattern},source.ilike.${pattern}`;
 }
 
 function arrayContainsAny(columns: string[], value: string) {

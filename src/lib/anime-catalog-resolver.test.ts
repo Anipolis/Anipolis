@@ -34,6 +34,9 @@ function legacy(resources: { name: string; url: string }[]): LegacyAnimeCatalogR
 		genre_en: null,
 		broadcast_day: null,
 		broadcast_time: null,
+		broadcast_station: null,
+		broadcast_duration_minutes: 30,
+		title_yomi: null,
 		official_site_url: null,
 		official_x_url: null,
 		resources,
@@ -267,6 +270,79 @@ describe("resolveAnimeCatalog", () => {
 		expect(resolved.canonical).toMatchObject({ broadcast_day: 4, broadcast_time: "24:00" });
 		expect(resolved.fieldSources["broadcast_day"]).toEqual({ source: "syobocal", confidence: "verified" });
 		expect(resolved.fieldSources["broadcast_time"]).toEqual({ source: "syobocal", confidence: "verified" });
+		// 主局の局名（単一文字列）は配列に持ち上げてカタログへ反映する
+		expect(resolved.canonical.broadcast_station).toEqual(["TOKYO MX"]);
+		expect(resolved.fieldSources["broadcast_station"]).toEqual({ source: "syobocal", confidence: "verified" });
+	});
+
+	it("keeps a manual broadcast station list above Syobocal's leading channel", () => {
+		const resolved = resolveAnimeCatalog([
+			source("manual", { broadcast_station: ["テレビ東京", "BSテレ東"] }),
+			source("syobocal", { title_ja: "作品", broadcast_station: "テレビ東京" }),
+		]);
+		expect(resolved.canonical.broadcast_station).toEqual(["テレビ東京", "BSテレ東"]);
+		expect(resolved.fieldSources["broadcast_station"]).toEqual({ source: "manual", confidence: "verified" });
+	});
+
+	it("clears the broadcast station when manual stores an explicit null", () => {
+		const resolved = resolveAnimeCatalog([
+			source("manual", { broadcast_station: null }),
+			source("syobocal", { title_ja: "作品", broadcast_station: "テレビ東京" }),
+		]);
+		expect(resolved.canonical.broadcast_station).toBeNull();
+		expect(resolved.fieldSources["broadcast_station"]).toEqual({ source: "manual", confidence: "verified" });
+	});
+
+	it("adopts the Syobocal leading-channel slot length and title yomi", () => {
+		const resolved = resolveAnimeCatalog([
+			source("syobocal", { title_ja: "作品", broadcast_duration_minutes: 15, title_yomi: "さくひん" }),
+			source("mal", { title_ja: "作品", episode_duration_minutes: 24 }),
+		]);
+		expect(resolved.canonical.broadcast_duration_minutes).toBe(15);
+		expect(resolved.fieldSources["broadcast_duration_minutes"]).toEqual({
+			source: "syobocal",
+			confidence: "verified",
+		});
+		expect(resolved.canonical.title_yomi).toBe("さくひん");
+		expect(resolved.fieldSources["title_yomi"]).toEqual({ source: "syobocal", confidence: "verified" });
+	});
+
+	it("does not treat MAL's full-length episode runtime as the broadcast slot length", () => {
+		// MALのepisode_duration_minutesは本編尺(24分等)で30分枠の枠長ではない
+		const resolved = resolveAnimeCatalog([source("mal", { title_ja: "作品", episode_duration_minutes: 24 })]);
+		expect(resolved.canonical.broadcast_duration_minutes).toBe(30);
+		expect(resolved.fieldSources["broadcast_duration_minutes"]).toEqual({
+			source: "legacy",
+			confidence: "fallback",
+		});
+	});
+
+	it("uses MAL's runtime as the slot length for short anime", () => {
+		const resolved = resolveAnimeCatalog([source("mal", { title_ja: "短編", episode_duration_minutes: 4 })]);
+		expect(resolved.canonical.broadcast_duration_minutes).toBe(4);
+		expect(resolved.fieldSources["broadcast_duration_minutes"]).toEqual({ source: "mal", confidence: "source" });
+	});
+
+	it("keeps a manual broadcast duration above Syobocal and MAL", () => {
+		const resolved = resolveAnimeCatalog([
+			source("manual", { broadcast_duration_minutes: 60 }),
+			source("syobocal", { title_ja: "作品", broadcast_duration_minutes: 30 }),
+			source("mal", { title_ja: "作品", episode_duration_minutes: 5 }),
+		]);
+		expect(resolved.canonical.broadcast_duration_minutes).toBe(60);
+		expect(resolved.fieldSources["broadcast_duration_minutes"]).toEqual({
+			source: "manual",
+			confidence: "verified",
+		});
+	});
+
+	it("preserves a pre-capture hand-entered station via the legacy row when Syobocal has none", () => {
+		// migration 124 以前の管理画面入力は anime 行にしか残っていない
+		const legacyRow = legacy([]);
+		legacyRow.broadcast_station = ["TOKYO MX", "BS11"];
+		const resolved = resolveAnimeCatalog([source("syobocal", { title_ja: "作品", broadcast_day: 4 })], legacyRow);
+		expect(resolved.canonical.broadcast_station).toEqual(["TOKYO MX", "BS11"]);
+		expect(resolved.fieldSources["broadcast_station"]).toEqual({ source: "legacy", confidence: "fallback" });
 	});
 
 	it("keeps manual broadcast fields above Syobocal", () => {
