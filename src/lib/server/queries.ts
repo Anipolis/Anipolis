@@ -1014,6 +1014,68 @@ export async function isAdminUser(supabase: SupabaseClient<Database>, userId: st
 	return data?.is_admin === true;
 }
 
+export type InviteRow = {
+	id: string;
+	code: string;
+	created_by: string;
+	max_uses: number;
+	use_count: number;
+	expires_at: string | null;
+	revoked_at: string | null;
+	created_at: string;
+};
+
+/**
+ * 招待コード一覧を取得する。allUsers=true（管理者専用）なら全ユーザーの招待、
+ * それ以外は自分が発行した招待のみ（RLS的にもこれ以外は見えない）。
+ */
+export async function getInvites(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+	options: { allUsers?: boolean } = {},
+): Promise<InviteRow[]> {
+	// biome-ignore lint/suspicious/noExplicitAny: invites not yet in auto-generated DB types
+	let query = (supabase as any).from("invites").select("*").order("created_at", { ascending: false }).limit(200);
+	if (!options.allUsers) {
+		query = query.eq("created_by", userId);
+	}
+
+	const { data, error } = await query;
+	if (error) {
+		console.error("getInvites error:", error);
+		return [];
+	}
+	return (data ?? []) as InviteRow[];
+}
+
+export type InviteWithCreator = InviteRow & { created_by_username: string | null };
+
+/**
+ * 管理者向け：全ユーザーの招待一覧に発行者のユーザー名を付与して返す。
+ * invites に発行者への外部キー結合を直接張らず（PostgREST のスキーマキャッシュに
+ * 未反映な自己参照/新規テーブルの結合は失敗しうるため）、profiles を別クエリで引いて
+ * クライアント側でマージする（enrichPostsWithCounts と同じ「別クエリで水和」方式）。
+ */
+export async function getInvitesWithCreators(supabase: SupabaseClient<Database>): Promise<InviteWithCreator[]> {
+	const invites = await getInvites(supabase, "", { allUsers: true });
+	if (invites.length === 0) return [];
+
+	const creatorIds = Array.from(new Set(invites.map((invite) => invite.created_by)));
+	const { data: profiles, error: profilesError } = await supabase
+		.from("profiles")
+		.select("id, username")
+		.in("id", creatorIds);
+	if (profilesError) {
+		console.error("getInvitesWithCreators profiles error:", profilesError);
+	}
+	const usernameByCreatorId = new Map((profiles ?? []).map((p) => [p.id, p.username]));
+
+	return invites.map((invite) => ({
+		...invite,
+		created_by_username: usernameByCreatorId.get(invite.created_by) ?? null,
+	}));
+}
+
 export async function getPendingReportsCount(supabase: SupabaseClient<Database>): Promise<number> {
 	const { count } = await supabase
 		.from("reports")
@@ -1048,9 +1110,9 @@ export async function getAdminDashboardData(supabase: SupabaseClient<Database>):
 		countRows(supabase, "reports", (query) => query.eq("status", "reviewing")),
 		countRows(supabase, "reports", (query) => query.gte("created_at", today.toISOString())),
 		countRows(supabase, "reports", (query) => query.gte("created_at", weekAgo.toISOString())),
-		countRows(supabase, "profiles", (query) => query.gte("created_at", today.toISOString())),
+		countRealUsers(supabase, (query) => query.gte("created_at", today.toISOString())),
 		countRows(supabase, "posts", (query) => query.gte("created_at", today.toISOString())),
-		countRows(supabase, "profiles"),
+		countRealUsers(supabase),
 		countRows(supabase, "posts"),
 		countRows(supabase, "account_moderation", (query) => query.eq("status", "restricted")),
 		countRows(supabase, "account_moderation", (query) => query.eq("status", "banned")),
@@ -1228,8 +1290,24 @@ async function countRows(
 type CountQuery = {
 	eq: (column: string, value: string) => CountQuery;
 	gte: (column: string, value: string) => CountQuery;
+	not: (column: string, operator: string, value: string) => CountQuery;
 	then: Promise<{ count: number | null }>["then"];
 };
+
+// アニメトレードのプール在庫用に SQL で直接投入されたダミーアカウント
+// （pool_dummy_01〜50）が profiles に存在するため、ユーザー数の集計から
+// username パターンで除外する。
+const DUMMY_USERNAME_PATTERN = "pool_dummy_%";
+
+function countRealUsers(
+	supabase: SupabaseClient<Database>,
+	apply?: (query: CountQuery) => CountQuery,
+): Promise<number> {
+	return countRows(supabase, "profiles", (query) => {
+		const filtered = query.not("username", "like", DUMMY_USERNAME_PATTERN);
+		return apply ? apply(filtered) : filtered;
+	});
+}
 
 function toAdminReport(
 	row: AdminReportRow,

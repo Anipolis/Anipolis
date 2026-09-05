@@ -33,6 +33,11 @@ const items = $derived.by((): Item[] => {
 				: "メールアドレスとパスワードでもログインできるようになります",
 			href: "/settings/account/password",
 		});
+		list.push({
+			label: "招待",
+			description: "招待コードを発行して他のユーザーを招待します",
+			href: "/settings/invites",
+		});
 		return list;
 	}
 	if (activeSection === "privacy") {

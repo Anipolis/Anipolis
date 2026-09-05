@@ -110,6 +110,13 @@ const dashboard = $derived(data.dashboard);
 			</div>
 			<span class="nav-link-arrow">→</span>
 		</a>
+		<a href="/admin/invites" class="nav-link">
+			<div class="nav-link-body">
+				<span class="nav-link-label">招待管理</span>
+				<span class="nav-link-sub">全ユーザーが発行した招待コードの一覧・失効</span>
+			</div>
+			<span class="nav-link-arrow">→</span>
+		</a>
 	</div>
 </main>
 

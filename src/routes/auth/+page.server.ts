@@ -1,19 +1,21 @@
 import { fail, redirect } from "@sveltejs/kit";
 import { linkAccounts } from "$lib/server/actions";
-import { isBetaGateEnabled, isBetaMember } from "$lib/server/discord";
+import { grantBetaAccess, isBetaGateEnabled, isBetaMember } from "$lib/server/discord";
+import {
+	clearInviteCodeCookie,
+	getInviteCodeCookie,
+	inviteRedeemErrorMessage,
+	redeemInviteCode,
+	setInviteCodeCookie,
+	validateInviteCode,
+} from "$lib/server/invites";
 import { getExtraAccounts, setExtraAccounts } from "$lib/server/multi-account";
 import { getClientKey, isRateLimited } from "$lib/server/rate-limit";
 import { createServiceRoleClient } from "$lib/server/supabase-admin";
 import { sanitizeInternalRedirect } from "$lib/utils/url";
-import type { Actions, PageServerLoad } from "./$types";
+import type { Actions, PageServerLoad, RequestEvent } from "./$types";
 
 const MIN_PASSWORD_LENGTH = 6;
-
-// クローズドβ中は Discord ログインのみ許可する。
-// UI は非表示だがアクションエンドポイントは直接 POST 可能なため、サーバー側でも遮断する。
-function isClosedBeta(): boolean {
-	return isBetaGateEnabled();
-}
 
 function getSafeNext(raw: FormDataEntryValue | string | null): string {
 	return sanitizeInternalRedirect(typeof raw === "string" ? raw : "/");
@@ -23,7 +25,11 @@ function normalizeUsername(value: FormDataEntryValue | null): string {
 	return (typeof value === "string" ? value : "").trim().toLowerCase();
 }
 
-export const load: PageServerLoad = async ({ url, locals: { safeGetSession } }) => {
+function getInviteCodeInput(form: FormData): string {
+	return (form.get("invite_code") as string | null)?.trim() ?? "";
+}
+
+export const load: PageServerLoad = async ({ url, cookies, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 	const next = getSafeNext(url.searchParams.get("next"));
 	const rawMode = url.searchParams.get("mode");
@@ -36,27 +42,88 @@ export const load: PageServerLoad = async ({ url, locals: { safeGetSession } }) 
 	// 未資格ユーザーは /auth に留め、not_member メッセージを表示できるようにする（ループ防止）。
 	if (mode !== "add_account" && user && isBetaMember(user)) redirect(303, next);
 
+	// 招待リンク（/auth?invite=CODE）を踏んだ場合は、OAuth の往復を挟んでも
+	// 持ち越せるよう署名付き Cookie にも保存しておく（手入力欄のプリフィルにも使う）。
+	// ただし無効なコードで既存の有効な Cookie を上書きしないよう、
+	// ゲート有効時は検証を通ったコードだけを優先して保存する。
+	// 有効性の確認は消費しない check_invite_code で都度行う。
+	const betaGateEnabled = isBetaGateEnabled();
+	const queryInviteCode = url.searchParams.get("invite")?.trim() ?? "";
+	const cookieInviteCode = getInviteCodeCookie(cookies) ?? "";
+
+	let inviteCode = queryInviteCode || cookieInviteCode;
+	// 招待リンクを踏んでいない/有効な招待コードをまだ持っていない場合、
+	// Google・X・メールログインは一切表示しない（招待コード入力かDiscordの二択のみ）。
+	let inviteCodeValid = false;
+	if (betaGateEnabled) {
+		const queryValid = queryInviteCode ? await validateInviteCode(supabase, queryInviteCode) : false;
+		// 検証を通らないコードは保存しない（無効コードがCookieに居座るのを防ぐ）
+		if (queryValid) setInviteCodeCookie(cookies, queryInviteCode);
+		if (queryValid) {
+			inviteCodeValid = true;
+		} else if (cookieInviteCode) {
+			inviteCode = cookieInviteCode;
+			inviteCodeValid = await validateInviteCode(supabase, cookieInviteCode);
+		}
+	} else if (queryInviteCode) {
+		setInviteCodeCookie(cookies, queryInviteCode);
+	}
+
 	return {
 		mode,
 		next,
-		closedBeta: isClosedBeta(),
+		betaGateEnabled,
+		inviteCode,
+		inviteCodeValid,
 		error: url.searchParams.get("error"),
 	};
 };
 
 export const actions: Actions = {
+	// 招待リンクを踏んでいないユーザーが招待コードを手入力して確認するための専用action。
+	// 成功したら Cookie に保存してリロードし、load() 側の inviteCodeValid を true に
+	// して Google/X/メールフォームを表示させる（コードは URL に載せず Cookie で運ぶ）。
+	applyInvite: async (event) => {
+		const {
+			request,
+			url,
+			cookies,
+			locals: { supabase },
+		} = event;
+		const form = await request.formData();
+		const inviteCodeInput = getInviteCodeInput(form);
+		const mode = url.searchParams.get("mode") === "register" ? "register" : "login";
+		const next = getSafeNext(form.get("next"));
+
+		if (!inviteCodeInput) {
+			return fail(400, { mode, message: "招待コードを入力してください" });
+		}
+
+		// 招待コード総当たり対策（IP 単位）
+		if (isRateLimited(`auth-invite:${getClientKey(event)}`, 10, 5 * 60_000)) {
+			return fail(429, { mode, message: "試行回数が多すぎます。しばらく待ってからお試しください" });
+		}
+
+		const valid = await validateInviteCode(supabase, inviteCodeInput);
+		if (!valid) {
+			return fail(400, { mode, message: "招待コードが無効です" });
+		}
+
+		setInviteCodeCookie(cookies, inviteCodeInput);
+		redirect(303, `/auth?mode=${mode}&next=${encodeURIComponent(next)}`);
+	},
+
 	login: async (event) => {
 		const {
 			request,
+			cookies,
 			locals: { supabase },
 		} = event;
-		if (isClosedBeta()) {
-			return fail(403, { mode: "login", email: "", message: "現在はDiscordログインのみご利用いただけます" });
-		}
 		const form = await request.formData();
 		const email = (form.get("email") as string | null)?.trim() ?? "";
 		const password = (form.get("password") as string | null) ?? "";
 		const next = getSafeNext(form.get("next"));
+		const inviteCodeInput = getInviteCodeInput(form) || getInviteCodeCookie(cookies) || "";
 
 		if (!email || !password) {
 			return fail(400, { mode: "login", email, message: "メールアドレスとパスワードを入力してください" });
@@ -71,14 +138,43 @@ export const actions: Actions = {
 			});
 		}
 
-		const { error } = await supabase.auth.signInWithPassword({ email, password });
+		const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
-		if (error) {
+		if (error || !data.user) {
 			return fail(400, {
 				mode: "login",
 				email,
 				message: "メールアドレスまたはパスワードが正しくありません",
 			});
+		}
+
+		if (isBetaGateEnabled() && !isBetaMember(data.user)) {
+			// needInvite: ログインタブは通常招待コード欄を出さないため、
+			// このフラグでUI側に入力欄を表示させる
+			if (!inviteCodeInput) {
+				await supabase.auth.signOut();
+				return fail(403, { mode: "login", email, needInvite: true, message: "招待コードを入力してください" });
+			}
+
+			const redeemResult = await redeemInviteCode(supabase, inviteCodeInput);
+			if (!redeemResult.success) {
+				await supabase.auth.signOut();
+				return fail(403, {
+					mode: "login",
+					email,
+					needInvite: true,
+					message: redeemResult.detail
+						? inviteRedeemErrorMessage(redeemResult.detail)
+						: "招待コードが無効です",
+				});
+			}
+
+			const { error: grantError } = await grantBetaAccess(data.user.id);
+			if (grantError) {
+				await supabase.auth.signOut();
+				return fail(500, { mode: "login", email, message: "アクセス許可の付与に失敗しました" });
+			}
+			clearInviteCodeCookie(cookies);
 		}
 
 		redirect(303, next);
@@ -87,23 +183,16 @@ export const actions: Actions = {
 	register: async (event) => {
 		const {
 			request,
+			cookies,
 			locals: { supabase },
 		} = event;
-		if (isClosedBeta()) {
-			return fail(403, {
-				mode: "register",
-				email: "",
-				username: "",
-				display_name: "",
-				message: "現在はDiscordログインのみご利用いただけます",
-			});
-		}
 		const form = await request.formData();
 		const email = (form.get("email") as string | null)?.trim() ?? "";
 		const password = (form.get("password") as string | null) ?? "";
 		const username = normalizeUsername(form.get("username"));
 		const displayName = (form.get("display_name") as string | null)?.trim() ?? "";
 		const next = getSafeNext(form.get("next"));
+		const inviteCodeInput = getInviteCodeInput(form) || getInviteCodeCookie(cookies) || "";
 
 		const values = { email, username, display_name: displayName };
 
@@ -133,6 +222,27 @@ export const actions: Actions = {
 			});
 		}
 
+		// アカウント大量作成・招待コード総当たり対策（IP 単位）。
+		// 招待コード検証より前に置き、リミッター素通しでの総当たりを防ぐ
+		if (isRateLimited(`auth-register:${getClientKey(event)}`, 5, 10 * 60_000)) {
+			return fail(429, {
+				mode: "register",
+				...values,
+				message: "試行回数が多すぎます。しばらく待ってからお試しください",
+			});
+		}
+
+		// アカウント作成前に招待コードを検証する（無効なコードでアカウントだけ作られる事故を防ぐ）
+		if (isBetaGateEnabled()) {
+			if (!inviteCodeInput) {
+				return fail(403, { mode: "register", ...values, message: "招待コードを入力してください" });
+			}
+			const inviteValid = await validateInviteCode(supabase, inviteCodeInput);
+			if (!inviteValid) {
+				return fail(403, { mode: "register", ...values, message: "招待コードが無効です" });
+			}
+		}
+
 		const { data: existingProfile } = await supabase
 			.from("profiles")
 			.select("id")
@@ -145,15 +255,6 @@ export const actions: Actions = {
 				...values,
 				field: "username",
 				message: "このユーザー名はすでに使われています",
-			});
-		}
-
-		// アカウント大量作成対策（IP 単位）
-		if (isRateLimited(`auth-register:${getClientKey(event)}`, 5, 10 * 60_000)) {
-			return fail(429, {
-				mode: "register",
-				...values,
-				message: "試行回数が多すぎます。しばらく待ってからお試しください",
 			});
 		}
 
@@ -178,7 +279,34 @@ export const actions: Actions = {
 			});
 		}
 
-		if (data.session) redirect(303, next);
+		if (data.session && data.user) {
+			if (isBetaGateEnabled()) {
+				const redeemResult = await redeemInviteCode(supabase, inviteCodeInput);
+				if (!redeemResult.success) {
+					await supabase.auth.signOut();
+					return fail(403, {
+						mode: "register",
+						...values,
+						message: redeemResult.detail
+							? inviteRedeemErrorMessage(redeemResult.detail)
+							: "招待コードの確認に失敗しました",
+					});
+				}
+
+				const { error: grantError } = await grantBetaAccess(data.user.id);
+				if (grantError) {
+					await supabase.auth.signOut();
+					return fail(500, { mode: "register", ...values, message: "アクセス許可の付与に失敗しました" });
+				}
+				clearInviteCodeCookie(cookies);
+			}
+
+			redirect(303, next);
+		}
+
+		// メール確認が必要なフロー：招待コードは Cookie に残しておき、確認後の
+		// ログイン/コールバックで拾えるようにする。
+		if (isBetaGateEnabled() && inviteCodeInput) setInviteCodeCookie(cookies, inviteCodeInput);
 
 		return {
 			mode: "register",
@@ -322,40 +450,38 @@ export const actions: Actions = {
 		redirect(303, "/");
 	},
 
-	google: async ({ request, url, locals: { supabase } }) => {
-		if (isClosedBeta()) {
-			return fail(403, { mode: "login", email: "", message: "現在はDiscordログインのみご利用いただけます" });
-		}
-		const form = await request.formData();
-		const next = getSafeNext(form.get("next"));
-		const redirectTo = `${url.origin}/auth/callback?next=${encodeURIComponent(next)}`;
+	google: (event) => startOAuth(event, "google", "Google"),
 
-		const { data, error } = await supabase.auth.signInWithOAuth({
-			provider: "google",
-			options: { redirectTo },
-		});
+	// "x" は OAuth 2.0 の X プロバイダー（"twitter" は旧 OAuth 1.0a）。
+	// X Developer Portal + Supabase Dashboard 側で X (OAuth 2.0) の有効化が
+	// 別途必要 — 未設定だとここでエラーになる。
+	twitter: (event) => startOAuth(event, "x", "X"),
 
-		if (error || !data.url) {
-			return fail(400, { mode: "login", message: "Googleログインを開始できませんでした" });
-		}
-
-		redirect(303, data.url);
-	},
-
-	discord: async ({ request, url, locals: { supabase } }) => {
-		const form = await request.formData();
-		const next = getSafeNext(form.get("next"));
-		const redirectTo = `${url.origin}/auth/callback?next=${encodeURIComponent(next)}`;
-
-		const { data, error } = await supabase.auth.signInWithOAuth({
-			provider: "discord",
-			options: { redirectTo, scopes: "identify email" },
-		});
-
-		if (error || !data.url) {
-			return fail(400, { mode: "login", message: "Discordログインを開始できませんでした" });
-		}
-
-		redirect(303, data.url);
-	},
+	discord: (event) => startOAuth(event, "discord", "Discord", { scopes: "identify email" }),
 };
+
+// google / twitter(x) / discord 共通の OAuth 開始処理。
+// フォームの招待コードを署名付き Cookie に退避してから認可 URL へ 303 する。
+async function startOAuth(
+	{ request, url, cookies, locals: { supabase } }: Pick<RequestEvent, "request" | "url" | "cookies" | "locals">,
+	provider: "google" | "x" | "discord",
+	label: string,
+	options: { scopes?: string } = {},
+) {
+	const form = await request.formData();
+	const next = getSafeNext(form.get("next"));
+	const inviteCodeInput = getInviteCodeInput(form);
+	if (isBetaGateEnabled() && inviteCodeInput) setInviteCodeCookie(cookies, inviteCodeInput);
+	const redirectTo = `${url.origin}/auth/callback?next=${encodeURIComponent(next)}`;
+
+	const { data, error } = await supabase.auth.signInWithOAuth({
+		provider,
+		options: { redirectTo, ...options },
+	});
+
+	if (error || !data.url) {
+		return fail(400, { mode: "login", message: `${label}ログインを開始できませんでした` });
+	}
+
+	redirect(303, data.url);
+}
