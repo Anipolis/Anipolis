@@ -185,12 +185,18 @@ async function fetchWikidataStudios(): Promise<WikidataStudioRecord[]> {
 	const url = new URL(WIKIDATA_SPARQL_ENDPOINT);
 	url.searchParams.set("query", query);
 	url.searchParams.set("format", "json");
-	const response = await fetchWithRetry(url, {
-		headers: {
-			Accept: "application/sparql-results+json",
-			"User-Agent": "Anipolis/1.0 (https://github.com/Anipolis/Anipolis)",
+	const response = await fetchWithRetry(
+		url,
+		{
+			headers: {
+				Accept: "application/sparql-results+json",
+				"User-Agent": "Anipolis/1.0 (https://github.com/Anipolis/Anipolis)",
+			},
 		},
-	});
+		{
+			timeoutMs: 120_000,
+		},
+	);
 	if (!response.ok) throw new Error(`Wikidata studio query failed: ${response.status} ${response.statusText}`);
 	const payload = (await response.json()) as { results?: { bindings?: WikidataStudioBinding[] } };
 	return groupWikidataStudios(payload.results?.bindings ?? []);

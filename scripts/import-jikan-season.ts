@@ -679,7 +679,6 @@ export async function fetchAniListSeasonMalIds(year: number, season: SeasonName)
 			},
 			{
 				maxRetries: MAX_RETRIES,
-				afterAttempt: () => sleep(randomInt(REQUEST_WAIT_MIN_MS, REQUEST_WAIT_MAX_MS)),
 			},
 		);
 

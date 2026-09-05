@@ -96,17 +96,17 @@ export const actions: Actions = {
 		const next = getSafeNext(form.get("next"));
 
 		if (!inviteCodeInput) {
-			return fail(400, { mode, message: "招待コードを入力してください" });
+			return fail(400, { mode, next, message: "招待コードを入力してください" });
 		}
 
 		// 招待コード総当たり対策（IP 単位）
 		if (isRateLimited(`auth-invite:${getClientKey(event)}`, 10, 5 * 60_000)) {
-			return fail(429, { mode, message: "試行回数が多すぎます。しばらく待ってからお試しください" });
+			return fail(429, { mode, next, message: "試行回数が多すぎます。しばらく待ってからお試しください" });
 		}
 
 		const valid = await validateInviteCode(supabase, inviteCodeInput);
 		if (!valid) {
-			return fail(400, { mode, message: "招待コードが無効です" });
+			return fail(400, { mode, next, message: "招待コードが無効です" });
 		}
 
 		setInviteCodeCookie(cookies, inviteCodeInput);

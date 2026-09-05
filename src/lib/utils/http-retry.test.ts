@@ -81,4 +81,38 @@ describe("fetchWithRetry", () => {
 		expect(signals[0]).toBeInstanceOf(AbortSignal);
 		fetchMock.mockRestore();
 	});
+
+	it("propagates a caller abort during fetch without retrying", async () => {
+		const controller = new AbortController();
+		const abortReason = new Error("caller cancelled");
+		const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+			controller.abort(abortReason);
+			throw abortReason;
+		});
+		const sleep = vi.fn();
+
+		await expect(
+			fetchWithRetry("https://example.test", { signal: controller.signal }, { maxRetries: 2, sleep }),
+		).rejects.toBe(abortReason);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		expect(sleep).not.toHaveBeenCalled();
+		fetchMock.mockRestore();
+	});
+
+	it("cancels a retry backoff when the caller aborts", async () => {
+		const controller = new AbortController();
+		const abortReason = new Error("caller cancelled during backoff");
+		const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(response(503));
+		const sleep = vi.fn(() => {
+			controller.abort(abortReason);
+			return new Promise<void>(() => {});
+		});
+
+		await expect(
+			fetchWithRetry("https://example.test", { signal: controller.signal }, { maxRetries: 2, sleep }),
+		).rejects.toBe(abortReason);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		expect(sleep).toHaveBeenCalledTimes(1);
+		fetchMock.mockRestore();
+	});
 });

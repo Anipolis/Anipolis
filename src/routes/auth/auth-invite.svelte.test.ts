@@ -21,7 +21,37 @@ describe("auth invite gate", () => {
 		} satisfies PageProps;
 
 		const page = mount(AuthPage, { target, props });
-		const form = target.querySelector<HTMLFormElement>('form[action="?/applyInvite&mode=register"]');
+		const form = target.querySelector<HTMLFormElement>(
+			'form[action="?/applyInvite&mode=register&next=%2Fanime%2F42"]',
+		);
+
+		expect(form).not.toBeNull();
+		expect(form?.querySelector<HTMLInputElement>('input[name="next"]')?.value).toBe("/anime/42");
+
+		await unmount(page);
+		target.remove();
+	});
+
+	it("keeps the failed action next value when the form returns an error", async () => {
+		const target = document.createElement("div");
+		document.body.appendChild(target);
+		const props = {
+			params: {},
+			data: {
+				mode: "register",
+				next: "/",
+				betaGateEnabled: true,
+				inviteCode: "",
+				inviteCodeValid: false,
+				error: null,
+			} as unknown as PageProps["data"],
+			form: { mode: "register", next: "/anime/42", message: "招待コードが無効です" },
+		} as unknown as PageProps;
+
+		const page = mount(AuthPage, { target, props });
+		const form = target.querySelector<HTMLFormElement>(
+			'form[action="?/applyInvite&mode=register&next=%2Fanime%2F42"]',
+		);
 
 		expect(form).not.toBeNull();
 		expect(form?.querySelector<HTMLInputElement>('input[name="next"]')?.value).toBe("/anime/42");
