@@ -7,9 +7,10 @@ export default defineConfig({
 		projects: [
 			{
 				extends: "./vite.config.js",
+				resolve: { conditions: ["browser"] },
 				test: {
 					name: "client",
-					environment: "happydom",
+					environment: "happy-dom",
 					include: ["src/**/*.svelte.test.ts"],
 					exclude: ["src/lib/server/**"],
 				},

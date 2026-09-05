@@ -58,12 +58,16 @@ export async function upsertManualSourceRecord(
 	}
 	if (Object.keys(changed).length === 0) return true;
 
-	const { data: existing } = await writer
+	const { data: existing, error: existingError } = await writer
 		.from("anime_source_records")
 		.select("normalized_data,source_url")
 		.eq("mal_id", malId)
 		.eq("source", "manual")
 		.maybeSingle();
+	if (existingError) {
+		console.error("manual source record read failed:", existingError.message);
+		return false;
+	}
 	const { error } = await writer.from("anime_source_records").upsert(
 		{
 			mal_id: malId,
