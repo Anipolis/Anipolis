@@ -1519,6 +1519,12 @@ export async function linkAccounts(
 	return { error: error ? error.message : null };
 }
 
+export function createInviteErrorStatus(error: { details?: unknown }): 403 | 429 | 500 {
+	if (error.details === "INVITE_FORBIDDEN") return 403;
+	if (error.details === "INVITE_CREATE_LIMIT") return 429;
+	return 500;
+}
+
 // invites/invite_redemptions は自動生成型未収録のため .rpc()/.from() に型アサーションを使用
 export async function createInviteAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
 	const form = await request.formData();
@@ -1547,13 +1553,16 @@ export async function createInviteAction(request: Request, supabase: SupabaseCli
 
 	if (error) {
 		console.error("create_invite error:", { userId, error });
-		const detail = typeof error.details === "string" ? error.details : null;
-		if (detail === "INVITE_CREATE_LIMIT") {
+		const status = createInviteErrorStatus(error);
+		if (status === 429) {
 			return fail(429, {
 				inviteMessage: "招待の同時発行数が上限に達しています。既存の招待が使われるか失効するまでお待ちください",
 			});
 		}
-		return fail(500, { inviteMessage: "招待コードの発行に失敗しました" });
+		if (status === 403) {
+			return fail(403, { inviteMessage: "招待コードを発行する権限がありません" });
+		}
+		return fail(status, { inviteMessage: "招待コードの発行に失敗しました" });
 	}
 
 	return { inviteSuccess: true, inviteCode: data as string };

@@ -4,7 +4,7 @@ import type { PageProps } from "./$types";
 let { data, form }: PageProps = $props();
 
 const activeMode = $derived((form?.mode ?? data.mode) as "login" | "register" | "add_account");
-const next = $derived(data.next ?? "/");
+const next = $derived((form && "next" in form && typeof form.next === "string" ? form.next : data.next) ?? "/");
 let inviteCodeValue = $state(data.inviteCode ?? "");
 // クローズドβが有効かつ、まだ有効な招待コードを確認できていない間は
 // 招待コード入力とDiscordの二択のみを表示し、Google/X/メールは隠す。
@@ -103,7 +103,11 @@ const hasInviteAccess = $derived(!data.betaGateEnabled || data.inviteCodeValid);
 					>へ。
 				</p>
 
-				<form method="POST" action="?/applyInvite" class="auth-form">
+				<form
+					method="POST"
+					action="?/applyInvite&mode=register&next={encodeURIComponent(next)}"
+					class="auth-form"
+				>
 					<input type="hidden" name="next" value={next}>
 					<div class="field">
 						<label for="invite-code-gate" class="field-label">招待コード</label>

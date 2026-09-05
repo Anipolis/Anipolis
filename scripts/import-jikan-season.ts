@@ -4,6 +4,8 @@ import { pathToFileURL } from "node:url";
 import { createClient } from "@supabase/supabase-js";
 import { containsJapaneseScript } from "../src/lib/anime-offline-database.ts";
 import { translateAnimeSource } from "../src/lib/anime-vocabulary.ts";
+import { isFiniteReleaseType } from "../src/lib/broadcast-status.ts";
+import { fetchWithRetry } from "../src/lib/utils/http-retry.ts";
 import {
 	ConsecutiveStatusCircuitBreaker,
 	meetsMinimumCompleteness,
@@ -218,7 +220,6 @@ const UPSERT_BATCH_SIZE = 100;
 const IMPORT_CHECKPOINT_DIRECTORY = join(process.cwd(), ".jikan-import-cache");
 const BLOCKED_RESOURCE_KEYWORDS = ["namuwiki", "bangumi"];
 const BLOCKED_TYPES = new Set(["music", "pv", "cm"]);
-const FINITE_RELEASE_TYPES = new Set(["movie", "ona", "ova", "tvspecial", "special"]);
 const LATE_NIGHT_EXTENSION_END_HOUR = 4;
 const jikanCircuitBreaker = new ConsecutiveStatusCircuitBreaker(504, MAX_CONSECUTIVE_504_RESPONSES);
 
@@ -599,63 +600,36 @@ async function clearImportCheckpoint(year: number, season: SeasonName) {
 	}
 }
 
-function retryDelayMs(response: Response | null, attempt: number) {
-	const retryAfter = response?.headers.get("retry-after");
-	const retryAfterSeconds = retryAfter ? Number.parseInt(retryAfter, 10) : Number.NaN;
-
-	if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
-		return retryAfterSeconds * 1_000 + randomInt(250, 750);
-	}
-
-	return Math.min(30_000, 2_000 * 2 ** attempt) + randomInt(250, 1_000);
-}
-
 async function fetchJsonWithRetry(url: string, maxRetries = MAX_RETRIES): Promise<JikanSeasonResponse | null> {
-	for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
-		let response: Response | null = null;
-
-		try {
-			response = await fetch(url, {
+	try {
+		const response = await fetchWithRetry(
+			url,
+			{
 				headers: {
 					Accept: "application/json",
 					"User-Agent": "Anipolis seasonal anime importer",
 				},
-			});
+			},
+			{
+				maxRetries,
+				retryStatuses: RETRY_STATUS_CODES,
+				afterAttempt: () => sleep(randomInt(REQUEST_WAIT_MIN_MS, REQUEST_WAIT_MAX_MS)),
+				onResponse: (response) => {
+					if (jikanCircuitBreaker.record(response.status)) throw new JikanCircuitOpenError();
+				},
+			},
+		);
 
-			if (response.ok) {
-				jikanCircuitBreaker.record(response.status);
-				return (await response.json()) as JikanSeasonResponse;
-			}
+		if (response.ok) return (await response.json()) as JikanSeasonResponse;
 
-			if (jikanCircuitBreaker.record(response.status)) {
-				throw new JikanCircuitOpenError();
-			}
-
-			const body = await response.text();
-			const shouldRetry = RETRY_STATUS_CODES.has(response.status);
-			console.warn(`Request failed: ${response.status} ${response.statusText} ${body.slice(0, 200)}`);
-
-			if (!shouldRetry || attempt === maxRetries) return null;
-
-			const delayMs = retryDelayMs(response, attempt);
-			console.warn(`Retrying in ${Math.round(delayMs / 1_000)}s... (${attempt + 1}/${maxRetries})`);
-			await sleep(delayMs);
-		} catch (error) {
-			if (error instanceof JikanCircuitOpenError) throw error;
-
-			console.warn(`Request error: ${error instanceof Error ? error.message : String(error)}`);
-			if (attempt === maxRetries) return null;
-
-			const delayMs = retryDelayMs(response, attempt);
-			console.warn(`Retrying in ${Math.round(delayMs / 1_000)}s... (${attempt + 1}/${maxRetries})`);
-			await sleep(delayMs);
-		} finally {
-			const waitMs = randomInt(REQUEST_WAIT_MIN_MS, REQUEST_WAIT_MAX_MS);
-			await sleep(waitMs);
-		}
+		const body = await response.text();
+		console.warn(`Request failed: ${response.status} ${response.statusText} ${body.slice(0, 200)}`);
+		return null;
+	} catch (error) {
+		if (error instanceof JikanCircuitOpenError) throw error;
+		console.warn(`Request error: ${error instanceof Error ? error.message : String(error)}`);
+		return null;
 	}
-
-	return null;
 }
 
 async function fetchAnimeFull(malId: number, maxRetries = MAX_RETRIES) {
@@ -685,25 +659,28 @@ export async function fetchAniListSeasonMalIds(year: number, season: SeasonName)
 		`;
 
 		console.log(`Fetching AniList MAL IDs page ${page}: ${year} ${ANILIST_SEASON_BY_NAME[season]}`);
-		const response = await fetch(ANILIST_GRAPHQL_URL, {
-			method: "POST",
-			headers: {
-				Accept: "application/json",
-				"Content-Type": "application/json",
-				"User-Agent": "Anipolis seasonal anime importer",
-			},
-			body: JSON.stringify({
-				query,
-				variables: {
-					season: ANILIST_SEASON_BY_NAME[season],
-					seasonYear: year,
-					page,
+		const response = await fetchWithRetry(
+			ANILIST_GRAPHQL_URL,
+			{
+				method: "POST",
+				headers: {
+					Accept: "application/json",
+					"Content-Type": "application/json",
+					"User-Agent": "Anipolis seasonal anime importer",
 				},
-			}),
-			// AniList が応答を返さない場合に無期限待ちしないための打ち切り。
-			// abort は呼び出し元の catch に流れ、保存済みIDのみでのフォールバックに到達する
-			signal: AbortSignal.timeout(30_000),
-		});
+				body: JSON.stringify({
+					query,
+					variables: {
+						season: ANILIST_SEASON_BY_NAME[season],
+						seasonYear: year,
+						page,
+					},
+				}),
+			},
+			{
+				maxRetries: MAX_RETRIES,
+			},
+		);
 
 		const payload = (await response.json()) as AniListSeasonResponse;
 
@@ -993,14 +970,6 @@ export function normalizeBroadcastSchedule(broadcast: JikanAnime["broadcast"]) {
 		broadcast_time: `${String(hour + 24).padStart(2, "0")}${broadcastTime.slice(2)}`,
 		aired_date_offset_days: -1,
 	};
-}
-
-function normalizeAnimeType(type: string | null | undefined) {
-	return type?.toLowerCase().replace(/[^a-z0-9]/g, "") ?? "";
-}
-
-function isFiniteReleaseType(type: string | null | undefined) {
-	return FINITE_RELEASE_TYPES.has(normalizeAnimeType(type));
 }
 
 function getJstDateOnly() {

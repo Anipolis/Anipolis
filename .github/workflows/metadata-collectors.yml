@@ -1,0 +1,71 @@
+name: Metadata collectors
+
+# 公式サイト由来のメタデータ収集を月次で回す:
+# - collect-copyright-notices: 解決済み公式サイトから©表記を収集。
+#   --apply は「未入力 かつ 単一のクリーン候補」だけを anime.copyright に
+#   書き込む。曖昧なページは常に候補ファイル止まり（人力レビュー）。
+# - collect-official-x: 公式サイトから公式Xリンクを抽出し、単一クリーン
+#   候補のみ manual ソースレコードへ書き込む。企業・放送局アカウントは
+#   自動適用しない。
+# - collect-wayback: 閉鎖済み公式サイト（fetch_failed）をWayback Machine
+#   から復元して©/Xを回収。前段2本のキャッシュ（.copyright-cache/.x-cache）
+#   を同一ジョブ内で引き継ぐ必要があるため順に実行する。
+# 候補・失敗リストはartifactsとしてアップロードし、人力レビューの入力にする。
+# JSレンダリング必須サイトの二次収集（collect-rendered-links, scripts/local）は
+# Chrome依存のため手動運用のまま。
+#
+# Requires repository Actions secrets: PUBLIC_SUPABASE_URL, SUPABASE_SECRET_KEY
+
+on:
+  schedule:
+    # monthly: 1st 21:15 UTC = 2日 06:15 JST（他の同期ジョブと時間帯をずらす）
+    - cron: "15 21 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: metadata-collectors
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Collect copyright notices, official X links, and Wayback recovery
+        env:
+          PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: |
+          # 各コレクターの失敗は独立: 1本落ちても残りは実行し、最後にまとめて失敗させる。
+          FAILED=0
+          pnpm collect:copyright -- --all --apply \
+            || { echo "::warning title=Copyright collector failed::collect-copyright-notices failed"; FAILED=1; }
+          pnpm collect:official-x -- --apply \
+            || { echo "::warning title=Official X collector failed::collect-official-x failed"; FAILED=1; }
+          pnpm collect:wayback -- --apply \
+            || { echo "::warning title=Wayback collector failed::collect-wayback failed"; FAILED=1; }
+          exit "$FAILED"
+
+      - name: Upload candidate review files
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: collector-review-files
+          path: |
+            .copyright-cache/
+            .x-cache/
+          if-no-files-found: warn
+          retention-days: 90

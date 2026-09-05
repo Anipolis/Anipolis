@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
 import type { Database } from "$lib/supabase/database.types";
-import { insertPostWithHashtags } from "./actions";
+import { createInviteErrorStatus, insertPostWithHashtags } from "./actions";
 
 type TableChain = Record<string, unknown>;
 
@@ -174,5 +174,20 @@ describe("insertPostWithHashtags", () => {
 
 		expect(result).toEqual({ success: true, postId: "post-1" });
 		expect(insertedPosts).toContainEqual(expect.objectContaining({ image_urls: urls }));
+	});
+});
+
+describe("createInviteErrorStatus", () => {
+	it("maps a beta-membership failure to HTTP 403", () => {
+		expect(createInviteErrorStatus({ details: "INVITE_FORBIDDEN" })).toBe(403);
+	});
+
+	it("keeps the invite creation limit at HTTP 429", () => {
+		expect(createInviteErrorStatus({ details: "INVITE_CREATE_LIMIT" })).toBe(429);
+	});
+
+	it("keeps unexpected RPC failures at HTTP 500", () => {
+		expect(createInviteErrorStatus({ details: "DATABASE_UNAVAILABLE" })).toBe(500);
+		expect(createInviteErrorStatus({})).toBe(500);
 	});
 });

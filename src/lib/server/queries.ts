@@ -2083,10 +2083,14 @@ export function quoteOrFilterValue(value: string): string {
 	return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
-/** title / title_en の部分一致検索用 .or() フィルターを生成する（入力は引用符リテラル化される） */
+/**
+ * title / title_en / title_yomi の部分一致検索用 .or() フィルターを生成する
+ * （入力は引用符リテラル化される）。title_yomi はしょぼい由来のひらがな読みで、
+ * かな入力からカタカナ題・英字題（BEYBLADE X等）を引けるようにする。
+ */
 export function buildTitleSearchFilter(searchQuery: string): string {
 	const pattern = quoteOrFilterValue(`%${searchQuery}%`);
-	return `title.ilike.${pattern},title_en.ilike.${pattern},source.ilike.${pattern}`;
+	return `title.ilike.${pattern},title_en.ilike.${pattern},title_yomi.ilike.${pattern},source.ilike.${pattern}`;
 }
 
 function arrayContainsAny(columns: string[], value: string) {
@@ -3097,6 +3101,7 @@ export interface ScheduleBroadcastSession {
 	anime_id: number;
 	room_date: string;
 	scheduled_at: string;
+	episode_number: number | null;
 }
 
 /**
@@ -3113,7 +3118,7 @@ export async function getScheduleBroadcastSessionsInRange(
 	const reader = supabase as SupabaseClient<any>;
 	const { data, error } = await reader
 		.from("broadcast_room_sessions")
-		.select("anime_id,room_date,scheduled_at")
+		.select("anime_id,room_date,scheduled_at,episode_number")
 		.eq("room_kind", "episode")
 		.eq("schedule_source", "syobocal")
 		.gte("room_date", startDate)
@@ -3128,6 +3133,7 @@ export async function getScheduleBroadcastSessionsInRange(
 		anime_id: Number(row["anime_id"]),
 		room_date: String(row["room_date"] ?? "").slice(0, 10),
 		scheduled_at: String(row["scheduled_at"] ?? ""),
+		episode_number: typeof row["episode_number"] === "number" ? row["episode_number"] : null,
 	}));
 }
 

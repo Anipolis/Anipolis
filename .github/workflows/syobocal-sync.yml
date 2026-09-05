@@ -4,14 +4,16 @@ name: Syobocal sync
 # - daily: program-table sync (catalog-wide mappings, rolling window; time
 #   changes and cancelled slots are absorbed by the importer's update/delete
 #   logic; channel selection sticks to the earliest terrestrial airing).
-# - weekly: Jikan + MAL + Syobocal imports and catalog resolve for the current
-#   AND next season, so late-added MAL entries (e.g. announced mid-season) and
-#   their official links are picked up automatically. New-id discovery does not
-#   depend on Jikan: import:mal merges the AniList season listing into its
-#   target ids and fetches details from the official MAL API. Jikan runs against
-#   the public API here as a best-effort supplemental source; persistent 504s
-#   can be backfilled manually via the self-hosted instance
-#   (scripts/local/enrich-jikan-links.ts).
+# - weekly: Jikan + MAL + Wikidata + Syobocal imports and catalog resolve for
+#   the current AND next season, so late-added MAL entries (e.g. announced
+#   mid-season) and their official links are picked up automatically. New-id
+#   discovery does not depend on Jikan: import:mal merges the AniList season
+#   listing into its target ids and fetches details from the official MAL API.
+#   Jikan runs against the public API here as a best-effort supplemental
+#   source; persistent 504s can be backfilled manually via the self-hosted
+#   instance (pnpm enrich:jikan-links). A bounded per-ID link
+#   enrichment pass against the public Jikan API also runs weekly so official
+#   site/X links keep filling in whenever Jikan is healthy.
 #
 # Requires repository Actions secrets:
 #   PUBLIC_SUPABASE_URL, SUPABASE_SECRET_KEY, MAL_CLIENT_ID
@@ -40,7 +42,8 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    # 週次はWikidata2本+Jikanリンク補完(--limit 600 ≒ 11分)が加わるため90分
+    timeout-minutes: 90
     steps:
       # persist-credentials: false — トークンを.git/configに残さない。
       # Supabase等の資格情報はjobレベルではなく必要なステップにだけ渡す
@@ -99,6 +102,11 @@ jobs:
             echo "=== $1-$2 ==="
             pnpm import:jikan -- --year "$1" --season "$2" || echo "::warning title=Jikan import failed::Jikan import for $1-$2 failed (public Jikan is expected to be flaky); jikan-sourced link enrichment deferred"
             pnpm import:mal -- --year "$1" --season "$2" || { echo "MAL import for $1-$2 failed; continuing"; FAILED=1; }
+            # Wikidataはタイトル解決の最上位ソース群（しょぼい照合の候補題にも
+            # 使われる）なので、しょぼいインポートより前に更新する。SPARQL
+            # エンドポイントの不調は翌週の実行で自然回復するため警告に留める。
+            pnpm import:wikidata-titles -- --year "$1" --season "$2" || echo "::warning title=Wikidata titles import failed::Wikidata title import for $1-$2 failed; catalog falls back to MAL/Jikan titles until the next weekly run"
+            pnpm import:wikidata-studios -- --year "$1" --season "$2" || echo "::warning title=Wikidata studios import failed::Wikidata studio import for $1-$2 failed; studio name localization deferred"
             if pnpm import:syobocal -- --year "$1" --season "$2"; then
               pnpm resolve:anime-catalog -- --year "$1" --season "$2" || { echo "Resolve for $1-$2 failed"; FAILED=1; }
             else
@@ -106,6 +114,11 @@ jobs:
               FAILED=1
             fi
           done
+          # 公式サイト/Xリンクの per-ID 補完（公開Jikan・上限付き）。公開Jikanが
+          # 落ちている週は素通りし、健全な週に未取得分を少しずつ埋める。
+          # 失敗してもジョブは失敗させない（セルフホスト経路の手動バックフィルも残る）。
+          JIKAN_BASE_URL="https://api.jikan.moe/v4" pnpm enrich:jikan-links -- --limit 600 \
+            || echo "::warning title=Jikan link enrichment failed::Weekly Jikan link enrichment failed (public Jikan is expected to be flaky)"
           # ODbL公開カタログの静的成果物を再生成する（/api/data/anime-catalog が配信）。
           # 上流が失敗していても、既存レコードからの再生成は安全なので常に試みる。
           pnpm export:anime-catalog || { echo "Catalog export failed"; FAILED=1; }

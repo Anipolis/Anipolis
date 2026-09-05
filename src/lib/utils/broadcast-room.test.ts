@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { animeIsScheduledForRoomDate } from "./broadcast-room";
+import { animeIsScheduledForRoomDate, isValidRoomDate } from "./broadcast-room";
 
 describe("animeIsScheduledForRoomDate", () => {
 	it("rejects a weekly room date before the anime starts airing", () => {
@@ -77,5 +77,17 @@ describe("animeIsScheduledForRoomDate", () => {
 				"2026-02-31",
 			),
 		).toBe(false);
+	});
+
+	it.each([
+		["2024-02-29", true],
+		["2026-02-29", false],
+		["2026-02-30", false],
+		["2026-02-31", false],
+		["2026-04-30", true],
+		["2026-04-31", false],
+		["2026-13-01", false],
+	] as const)("validates the calendar date %s", (value, expected) => {
+		expect(isValidRoomDate(value)).toBe(expected);
 	});
 });

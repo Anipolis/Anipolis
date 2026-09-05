@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { ANIME_CATALOG_SEASON_SOURCES, type AnimeCatalogSeasonSource } from "../src/lib/anime-catalog-season.ts";
+import { fetchWithRetry } from "../src/lib/utils/http-retry.ts";
 import { WIKIDATA_SPARQL_ENDPOINT } from "../src/lib/wikidata-anime-titles.ts";
 import {
 	type CanonicalStudioNames,
@@ -184,14 +185,18 @@ async function fetchWikidataStudios(): Promise<WikidataStudioRecord[]> {
 	const url = new URL(WIKIDATA_SPARQL_ENDPOINT);
 	url.searchParams.set("query", query);
 	url.searchParams.set("format", "json");
-	const response = await fetch(url, {
-		headers: {
-			Accept: "application/sparql-results+json",
-			"User-Agent": "Anipolis/1.0 (https://github.com/Anipolis/Anipolis)",
+	const response = await fetchWithRetry(
+		url,
+		{
+			headers: {
+				Accept: "application/sparql-results+json",
+				"User-Agent": "Anipolis/1.0 (https://github.com/Anipolis/Anipolis)",
+			},
 		},
-		// SPARQL エンドポイントが応答を返さない場合に無限待ちしないための打ち切り
-		signal: AbortSignal.timeout(120_000),
-	});
+		{
+			timeoutMs: 120_000,
+		},
+	);
 	if (!response.ok) throw new Error(`Wikidata studio query failed: ${response.status} ${response.statusText}`);
 	const payload = (await response.json()) as { results?: { bindings?: WikidataStudioBinding[] } };
 	return groupWikidataStudios(payload.results?.bindings ?? []);

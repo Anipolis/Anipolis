@@ -7,6 +7,7 @@ import {
 	collectAnimeCatalogSeasonMalIds,
 } from "../src/lib/anime-catalog-season.ts";
 import { translateAnimeSource } from "../src/lib/anime-vocabulary.ts";
+import { fetchWithRetry } from "../src/lib/utils/http-retry.ts";
 import {
 	fetchAniListSeasonMalIds,
 	GENRE_JA_BY_EN,
@@ -272,19 +273,14 @@ async function fetchSeasonMalIds(supabase: ReturnType<typeof getSupabaseClient>,
 // Returns the anime node, or null when MAL reports the ID as gone (404).
 async function fetchMalAnime(malId: number, clientId: string): Promise<MalAnimeNode | null> {
 	const url = `${MAL_API_BASE_URL}/anime/${malId}?fields=${MAL_FIELDS}`;
-	for (let attempt = 1; ; attempt += 1) {
-		const response = await fetch(url, { headers: { "X-MAL-CLIENT-ID": clientId } });
-		if (response.ok) return (await response.json()) as MalAnimeNode;
-		if (response.status === 404) return null;
-		if (attempt >= MAX_RETRIES) {
-			throw new Error(`MAL API failed for anime ${malId}: ${response.status} ${response.statusText}`);
-		}
-		const delaySeconds = Math.min(2 ** attempt, 60);
-		console.warn(
-			`MAL API ${response.status} for anime ${malId}; retrying in ${delaySeconds}s (${attempt}/${MAX_RETRIES})`,
-		);
-		await sleep(delaySeconds * 1000);
-	}
+	const response = await fetchWithRetry(
+		url,
+		{ headers: { "X-MAL-CLIENT-ID": clientId } },
+		{ maxRetries: MAX_RETRIES },
+	);
+	if (response.ok) return (await response.json()) as MalAnimeNode;
+	if (response.status === 404) return null;
+	throw new Error(`MAL API failed for anime ${malId}: ${response.status} ${response.statusText}`);
 }
 
 // MAL spells some names differently from Jikan (e.g. "MADHOUSE" vs

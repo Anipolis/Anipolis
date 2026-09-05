@@ -7,9 +7,11 @@ export default defineConfig({
 		projects: [
 			{
 				extends: "./vite.config.js",
+				// Preserve Vite's client defaults while selecting Svelte's browser export.
+				resolve: { conditions: ["module", "browser", "development|production"] },
 				test: {
 					name: "client",
-					environment: "happydom",
+					environment: "happy-dom",
 					include: ["src/**/*.svelte.test.ts"],
 					exclude: ["src/lib/server/**"],
 				},

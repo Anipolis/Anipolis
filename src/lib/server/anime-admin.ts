@@ -11,7 +11,7 @@ type AnimeWriteResult = { success: true; animeId: string } | ReturnType<typeof f
 // リゾルバ（anime-catalog-resolver）が manual ソースとして参照するキー。
 // 管理画面での編集をこのキーに限って anime_source_records(source='manual') に
 // 差分保存し、週次のカタログ再解決で上書きされないようにする。ここに無い
-// フィールド（broadcast_duration や room 系）はリゾルバが触らないので不要。
+// フィールド（room 系等）はリゾルバが触らないので不要。
 const MANUAL_SOURCE_KEYS = [
 	"title",
 	"title_en",
@@ -30,7 +30,28 @@ const MANUAL_SOURCE_KEYS = [
 	"cover_url",
 	"broadcast_day",
 	"broadcast_time",
+	"broadcast_station",
+	"broadcast_duration_minutes",
 ] as const;
+
+type ManualSourceRecord = {
+	normalized_data?: unknown;
+	source_url?: unknown;
+} | null;
+
+async function readManualSourceRecord(
+	// biome-ignore lint/suspicious/noExplicitAny: generated types may lag behind source-record migrations
+	writer: SupabaseClient<any>,
+	malId: number,
+) {
+	const { data, error } = await writer
+		.from("anime_source_records")
+		.select("normalized_data,source_url")
+		.eq("mal_id", malId)
+		.eq("source", "manual")
+		.maybeSingle();
+	return { data: data as ManualSourceRecord, error };
+}
 
 /**
  * 管理画面の編集内容を manual ソースレコードへ差分マージする。
@@ -47,6 +68,7 @@ export async function upsertManualSourceRecord(
 	malId: number,
 	previous: Record<string, unknown>,
 	payload: Record<string, unknown>,
+	existingRecord?: ManualSourceRecord,
 ) {
 	const changed: Record<string, unknown> = {};
 	for (const key of MANUAL_SOURCE_KEYS) {
@@ -56,12 +78,15 @@ export async function upsertManualSourceRecord(
 	}
 	if (Object.keys(changed).length === 0) return true;
 
-	const { data: existing } = await writer
-		.from("anime_source_records")
-		.select("normalized_data,source_url")
-		.eq("mal_id", malId)
-		.eq("source", "manual")
-		.maybeSingle();
+	let existing = existingRecord;
+	if (existingRecord === undefined) {
+		const result = await readManualSourceRecord(writer, malId);
+		if (result.error) {
+			console.error("manual source record read failed:", result.error.message);
+			return false;
+		}
+		existing = result.data;
+	}
 	const { error } = await writer.from("anime_source_records").upsert(
 		{
 			mal_id: malId,
@@ -274,23 +299,41 @@ export async function updateAnimeAction(
 
 	// biome-ignore lint/suspicious/noExplicitAny: shared writer must tolerate generated type lag after migrations
 	const animeWriter = supabase as SupabaseClient<any>;
-	const { data: previousRow } = await animeWriter
+	const { data: previousRow, error: previousError } = await animeWriter
 		.from("anime")
 		.select(`mal_id,${MANUAL_SOURCE_KEYS.join(",")}`)
 		.eq("id", animeId)
 		.maybeSingle();
+	if (previousError) return fail(500, { message: `更新前のデータ取得に失敗しました: ${previousError.message}` });
+
+	// Read the existing manual record before mutating the anime row. If this
+	// read fails, returning now preserves the original anime values and keeps
+	// the submitted diff available for a later retry.
+	const malId = (previousRow as { mal_id: number | null } | null)?.mal_id;
+	let existingManualRecord: ManualSourceRecord | undefined;
+	if (malId != null) {
+		const result = await readManualSourceRecord(animeWriter, malId);
+		if (result.error) {
+			console.error("manual source record read failed:", result.error.message);
+			return fail(500, {
+				message: "更新前の保護レコードの読み取りに失敗しました。しばらく待ってから再度保存してください",
+			});
+		}
+		existingManualRecord = result.data;
+	}
+
 	const { data, error } = await animeWriter.from("anime").update(payload).eq("id", animeId).select("id").single();
 
 	if (error) return fail(500, { message: `更新エラー: ${error.message}` });
 
 	// 編集差分を manual ソースとして保存し、カタログ再解決での上書きを防ぐ
-	const malId = (previousRow as { mal_id: number | null } | null)?.mal_id;
 	if (malId != null) {
 		const manualSaved = await upsertManualSourceRecord(
 			animeWriter,
 			malId,
 			(previousRow ?? {}) as Record<string, unknown>,
 			payload as Record<string, unknown>,
+			existingManualRecord,
 		);
 		if (!manualSaved) {
 			// anime 行は更新済みだが manual レコードが無いと次回の再解決で戻る。

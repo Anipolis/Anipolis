@@ -11,6 +11,7 @@ import {
 	mergeAnimeOfflineSource,
 	pinLatestGithubReleaseAssetUrl,
 } from "../src/lib/anime-offline-database.ts";
+import { fetchWithRetry } from "../src/lib/utils/http-retry.ts";
 import { getKanaTitleCandidates } from "../src/lib/wikidata-anime-titles.ts";
 
 type AnimeImportRow = AnimeOfflineMappedSourceRow;
@@ -142,7 +143,7 @@ async function resolveStableDatasetUrl(datasetUrl: string): Promise<string> {
 	if (!latestAssetMatch?.[1]) return datasetUrl;
 
 	const latestReleaseUrl = `https://github.com${latestAssetMatch[1]}/releases/latest`;
-	const releaseResponse = await fetch(latestReleaseUrl, {
+	const releaseResponse = await fetchWithRetry(latestReleaseUrl, {
 		method: "HEAD",
 		redirect: "follow",
 		headers: { "User-Agent": "Anipolis anime-offline-database importer" },
@@ -157,7 +158,7 @@ async function resolveStableDatasetUrl(datasetUrl: string): Promise<string> {
 async function fetchDataset(datasetUrl: string) {
 	const stableDatasetUrl = await resolveStableDatasetUrl(datasetUrl);
 	console.log(`Downloading anime-offline-database: ${stableDatasetUrl}`);
-	const response = await fetch(stableDatasetUrl, {
+	const response = await fetchWithRetry(stableDatasetUrl, {
 		headers: {
 			Accept: "application/json",
 			"User-Agent": "Anipolis anime-offline-database importer",
