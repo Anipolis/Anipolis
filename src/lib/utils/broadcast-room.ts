@@ -31,6 +31,11 @@ function dateKeyToDate(value: string) {
 	return date;
 }
 
+/** Return whether a room date is an actual Gregorian calendar date. */
+export function isValidRoomDate(value: string): boolean {
+	return dateKeyToDate(value) !== null;
+}
+
 /**
  * 各話ルーム（開催・ログ閲覧とも）の対象シーズン。サービス開始前の
  * 2026-winter以前の作品は、閉場済みルームであっても生成・表示しない。

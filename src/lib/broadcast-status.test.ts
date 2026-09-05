@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeBroadcastStatus } from "./broadcast-status";
+import { computeBroadcastStatus, isFiniteReleaseType, normalizeAnimeType } from "./broadcast-status";
 
 const TODAY = "2026-07-29";
 
@@ -78,5 +78,14 @@ describe("computeBroadcastStatus", () => {
 		expect(computeBroadcastStatus({ airedFrom: null, airedTo: null, type: "TV", status: null }, TODAY)).toBe(
 			"unknown",
 		);
+	});
+});
+
+describe("shared release type normalization", () => {
+	it("normalizes upstream labels used by both imports and status checks", () => {
+		expect(normalizeAnimeType("TV Special")).toBe("tvspecial");
+		expect(isFiniteReleaseType("TV Special")).toBe(true);
+		expect(isFiniteReleaseType("映画")).toBe(true);
+		expect(isFiniteReleaseType("TV")).toBe(false);
 	});
 });

@@ -103,7 +103,7 @@ const hasInviteAccess = $derived(!data.betaGateEnabled || data.inviteCodeValid);
 					>へ。
 				</p>
 
-				<form method="POST" action="?/applyInvite" class="auth-form">
+				<form method="POST" action="?/applyInvite&mode=register" class="auth-form">
 					<input type="hidden" name="next" value={next}>
 					<div class="field">
 						<label for="invite-code-gate" class="field-label">招待コード</label>

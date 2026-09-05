@@ -22,7 +22,12 @@ import {
 	getActiveRoomExperimentRunForAnime as getActiveExperimentRun,
 } from "$lib/server/room-experiments";
 import type { Anime, BroadcastRoomOverride, BroadcastRoomSession } from "$lib/types";
-import { animeIsScheduledForRoomDate, broadcastTimeMinutes, isEligibleForRoomLog } from "$lib/utils/broadcast-room";
+import {
+	animeIsScheduledForRoomDate,
+	broadcastTimeMinutes,
+	isEligibleForRoomLog,
+	isValidRoomDate,
+} from "$lib/utils/broadcast-room";
 import type { Actions, PageServerLoad } from "./$types";
 
 // 過去ルームの表示専用セッション。かつては閲覧時にフォールバックがセッション行を
@@ -46,7 +51,7 @@ function synthesizeClosedRoomSession(
 	const year = Number(dateMatch[1]);
 	const month = Number(dateMatch[2]);
 	const day = Number(dateMatch[3]);
-	if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+	if (!isValidRoomDate(roomDate)) return null;
 	// JST固定(+9): サーバーTZに依存させない
 	const scheduledMs = Date.UTC(year, month - 1, day, Math.floor(minutes / 60) - 9, minutes % 60);
 	const duration = override?.duration_minutes ?? anime.broadcast_duration_minutes ?? 30;
