@@ -11,6 +11,8 @@
 -- Remove duplicates created by the old trigger before adding the constraint.
 -- Keep the oldest notification for each unread recipient/actor/anime/status
 -- tuple so the original notification timestamp remains meaningful.
+LOCK TABLE public.notifications IN SHARE ROW EXCLUSIVE MODE;
+
 DELETE FROM public.notifications duplicate
 USING public.notifications keeper
 WHERE duplicate.type = 'mylist_status'
@@ -89,7 +91,7 @@ DECLARE
     effective_limit integer := LEAST(GREATEST(COALESCE(p_limit, 100), 1), 100);
     effective_offset integer := GREATEST(COALESCE(p_offset, 0), 0);
 BEGIN
-    IF action_type NOT IN ('like', 'repost') THEN
+    IF action_type IS NULL OR action_type NOT IN ('like', 'repost') THEN
         RAISE EXCEPTION 'invalid reaction type';
     END IF;
 

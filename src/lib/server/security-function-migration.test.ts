@@ -13,6 +13,7 @@ describe("security function follow-up migration", () => {
 	});
 
 	it("deduplicates unread mylist status notifications atomically and allows read repeats", () => {
+		expect(migration).toContain("LOCK TABLE public.notifications IN SHARE ROW EXCLUSIVE MODE;");
 		expect(migration).toContain("DELETE FROM public.notifications duplicate");
 		expect(migration).toContain("CREATE UNIQUE INDEX IF NOT EXISTS notifications_unread_mylist_dedupe_idx");
 		expect(migration).toMatch(/SELECT f\.follower_id,[\s\S]*FROM public\.follows f/);
@@ -22,6 +23,7 @@ describe("security function follow-up migration", () => {
 	});
 
 	it("rejects anon and non-author like-reaction lookups while retaining repost support", () => {
+		expect(migration).toContain("IF action_type IS NULL OR action_type NOT IN ('like', 'repost') THEN");
 		expect(migration).toMatch(/auth\.uid\(\) IS NULL OR post_author_id IS DISTINCT FROM auth\.uid\(\)/);
 		expect(migration).toMatch(/IF action_type = 'like' THEN[\s\S]*FROM public\.likes/);
 		expect(migration).toMatch(/ELSE[\s\S]*FROM public\.reposts/);
