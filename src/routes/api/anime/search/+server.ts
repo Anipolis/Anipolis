@@ -6,14 +6,10 @@ export const GET: RequestHandler = async ({ url, locals: { supabase } }) => {
 	const query = url.searchParams.get("q")?.trim() ?? "";
 	if (query.length < 1) return json([]);
 
-	// PostgREST の .or() フィルター文字列にカンマを含む入力を補間すると
-	// フィルター構文が破壊されるためサニタイズする
-	const sanitizedQuery = query.replace(/[%,]/g, "");
-
 	const { data } = await supabase
 		.from("anime")
 		.select("id, title, title_en, cover_url, official_hashtag")
-		.or(buildTitleSearchFilter(sanitizedQuery))
+		.or(buildTitleSearchFilter(query))
 		.order("title", { ascending: true })
 		.limit(10);
 

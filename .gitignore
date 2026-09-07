@@ -7,6 +7,9 @@ node_modules/
 # SvelteKit artifacts
 .svelte-kit/
 
+# Local agent session state
+.omc/
+
 # Wrangler caches
 .wrangler/
 

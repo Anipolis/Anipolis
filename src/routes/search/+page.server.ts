@@ -3,6 +3,7 @@ import { deletePostAction, toggleBookmarkAction, toggleLikeAction, toggleRepostA
 import { buildPostCardSelect } from "$lib/server/post-selects";
 import { enrichPostsWithCounts, getAnimeRankingTrending, quoteOrFilterValue } from "$lib/server/queries";
 import type { RawPost } from "$lib/types";
+import { buildIlikeContainsPattern } from "$lib/utils/search";
 import type { Actions, PageServerLoad } from "./$types";
 
 const POSTS_SELECT = buildPostCardSelect();
@@ -18,10 +19,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		return { query: "", posts: [], users: [], user, trending: trendingResult.data ?? [], animeTrending };
 	}
 
-	// PostgREST の .or() フィルター文字列にカンマを含む入力を補間すると
-	// フィルター構文が破壊されるためサニタイズする（% はワイルドカード扱いを避けるため除去）
-	const sanitized = query.replace(/[%,]/g, "");
-	const pattern = `%${sanitized}%`;
+	const pattern = buildIlikeContainsPattern(query);
 
 	const [postsResult, usersResult, trendingResult, animeTrending] = await Promise.all([
 		supabase

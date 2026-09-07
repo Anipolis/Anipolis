@@ -28,6 +28,7 @@ import type {
 } from "$lib/types";
 import { toPost } from "$lib/types";
 import { animeIsScheduledForRoomDate } from "$lib/utils/broadcast-room";
+import { escapeIlikePattern } from "$lib/utils/search";
 
 type NotificationActor = {
 	username: string;
@@ -2089,7 +2090,7 @@ export function quoteOrFilterValue(value: string): string {
  * かな入力からカタカナ題・英字題（BEYBLADE X等）を引けるようにする。
  */
 export function buildTitleSearchFilter(searchQuery: string): string {
-	const pattern = quoteOrFilterValue(`%${searchQuery}%`);
+	const pattern = quoteOrFilterValue(`%${escapeIlikePattern(searchQuery)}%`);
 	return `title.ilike.${pattern},title_en.ilike.${pattern},title_yomi.ilike.${pattern},source.ilike.${pattern}`;
 }
 
