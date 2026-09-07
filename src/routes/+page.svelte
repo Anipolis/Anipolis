@@ -262,7 +262,7 @@ $effect(() => {
 					{@const lastPost = posts[posts.length - 1]}
 					{#if lastPost}
 						<a
-							href={loadMoreHref(lastPost.created_at, lastPost.id)}
+							href={loadMoreHref(lastPost.repost_context?.created_at ?? lastPost.created_at, lastPost.id)}
 							class="load-more-btn"
 						>
 							さらに読み込む

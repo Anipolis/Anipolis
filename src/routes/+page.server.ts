@@ -10,10 +10,9 @@ import { buildPostCardSelect } from "$lib/server/post-selects";
 import {
 	getAnimeExchangeShareForUser,
 	getAnimeRankingTrending,
-	getFollowingProfiles,
+	getFollowingTimelinePosts,
 	getHomeTimelinePosts,
 	getOpenBroadcastRoomSessions,
-	getTimelinePostsWithReposts,
 	getUserAnimeList,
 } from "$lib/server/queries";
 import type { AnimeExchangeShare, Post } from "$lib/types";
@@ -36,12 +35,10 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		beforeParam && beforeIdParam && /^\d{4}-\d{2}-\d{2}T/.test(beforeParam)
 			? { createdAt: beforeParam, id: beforeIdParam }
 			: undefined;
-	const followingProfiles = tab === "following" && user ? await getFollowingProfiles(supabase, user.id) : null;
-
 	const fetchPosts = async (): Promise<Post[]> => {
-		if (tab === "following" && followingProfiles !== null) {
+		if (tab === "following" && user) {
 			for (const select of [POSTS_SELECT_WITH_EXCHANGE_AND_CW, POSTS_SELECT_WITH_EXCHANGE, POSTS_SELECT_BASE]) {
-				const result = await getTimelinePostsWithReposts(supabase, followingProfiles, user?.id ?? null, {
+				const result = await getFollowingTimelinePosts(supabase, user.id, {
 					select,
 					limit: 50,
 					...(before ? { before: before.createdAt, beforeId: before.id } : {}),
