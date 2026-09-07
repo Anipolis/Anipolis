@@ -2,7 +2,7 @@
 import type { Session } from "@supabase/supabase-js";
 import { browser } from "$app/environment";
 import { goto, invalidateAll } from "$app/navigation";
-import { page } from "$app/state";
+import { navigating, page } from "$app/state";
 import type { Database } from "$lib/supabase/database.types";
 import type { OpenBroadcastRoomSummary, StoredAccount } from "$lib/types";
 import AnimeIcon from "./AnimeIcon.svelte";
@@ -75,6 +75,7 @@ function closeLiveRoomPicker() {
 const displayName = $derived(profile?.display_name || profile?.username || session?.user?.email?.split("@")[0] || "");
 
 const notificationCount = $derived(unreadNotificationCount);
+const activePath = $derived(navigating?.to?.url.pathname ?? page.url.pathname);
 
 async function handleLogout() {
 	menuOpen = false;
@@ -124,8 +125,8 @@ async function handleSwitch(userId: string) {
 }
 
 function isActive(path: string): boolean {
-	if (path === "/") return page.url.pathname === "/";
-	return page.url.pathname.startsWith(path);
+	if (path === "/") return activePath === "/";
+	return activePath.startsWith(path);
 }
 </script>
 

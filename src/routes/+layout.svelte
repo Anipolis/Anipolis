@@ -1,9 +1,10 @@
 <script lang="ts">
 import { onMount } from "svelte";
 import { invalidate } from "$app/navigation";
-import { page } from "$app/state";
+import { navigating, page } from "$app/state";
 import MobileBottomNav from "$lib/components/MobileBottomNav.svelte";
 import MobileSwipeNavigation from "$lib/components/MobileSwipeNavigation.svelte";
+import RouteNavigationSkeleton from "$lib/components/RouteNavigationSkeleton.svelte";
 import Sidebar from "$lib/components/Sidebar.svelte";
 import { composeOpen } from "$lib/stores/compose";
 import type { LayoutProps } from "./$types";
@@ -15,6 +16,10 @@ let unreadNotificationCount = $state(0);
 let unreadBroadcastNotificationCount = $state(0);
 let pendingReportsCount = $state(0);
 const roomScrollLocked = $derived(page.url.pathname.startsWith("/rooms/anime/"));
+const navigationTargetPath = $derived.by(() => {
+	if (!navigating || navigating.type === "form") return null;
+	return navigating.to?.url.pathname ?? null;
+});
 
 async function refreshNotificationCounts() {
 	if (!data.session) {
@@ -99,7 +104,11 @@ function handleFabClick() {
 		extraAccounts={data.extraAccounts}
 	/>
 	<main class="app-main" id="main-content" tabindex="-1">
-		{@render children()}
+		{#if navigationTargetPath}
+			<RouteNavigationSkeleton pathname={navigationTargetPath} />
+		{:else}
+			{@render children()}
+		{/if}
 	</main>
 </div>
 

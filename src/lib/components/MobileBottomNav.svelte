@@ -1,6 +1,6 @@
 <script lang="ts">
 import type { Session } from "@supabase/supabase-js";
-import { page } from "$app/state";
+import { navigating, page } from "$app/state";
 import AnimeIcon from "./AnimeIcon.svelte";
 
 interface Props {
@@ -9,10 +9,11 @@ interface Props {
 }
 
 let { session, unreadNotificationCount = 0 }: Props = $props();
+const activePath = $derived(navigating?.to?.url.pathname ?? page.url.pathname);
 
 function isActive(path: string): boolean {
-	if (path === "/") return page.url.pathname === "/";
-	return page.url.pathname.startsWith(path);
+	if (path === "/") return activePath === "/";
+	return activePath.startsWith(path);
 }
 </script>
 

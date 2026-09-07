@@ -60,7 +60,9 @@ $effect(() => {
 });
 
 $effect(() => {
-	if ((data.initialAnime || data.initialExchangeShare) && data.profile) {
+	let active = true;
+	void data.pageExtras.then((extras) => {
+		if (!active || !(extras.initialAnime || extras.initialExchangeShare) || !data.profile) return;
 		if (window.matchMedia("(max-width: 960px)").matches) {
 			composeOpen.set(true);
 		}
@@ -69,7 +71,10 @@ $effect(() => {
 		url.searchParams.delete("share_exchange");
 		url.hash = "";
 		goto(url.toString(), { replaceState: true, noScroll: true });
-	}
+	});
+	return () => {
+		active = false;
+	};
 });
 </script>
 
@@ -88,15 +93,23 @@ $effect(() => {
 		<!-- Desktop: composer / landing hero -->
 		<div class="composer-desktop" id="compose">
 			{#if data.profile}
-				<PostComposer
-					username={data.profile.username}
-					avatarUrl={data.profile.avatar_url}
-					initialAnime={data.initialAnime}
-					initialContent={data.initialContent}
-					initialExchangeId={data.initialExchangeId}
-					initialExchangeShare={data.initialExchangeShare}
-					watchingAnime={data.watchingAnime}
-				/>
+				{#await data.pageExtras}
+					<div class="composer-loading" aria-label="投稿フォームを読み込み中"></div>
+				{:then extras}
+					<PostComposer
+						username={data.profile.username}
+						avatarUrl={data.profile.avatar_url}
+						initialAnime={extras.initialAnime}
+						initialContent={extras.initialContent}
+						initialExchangeId={extras.initialExchangeId}
+						initialExchangeShare={extras.initialExchangeShare}
+						watchingAnime={extras.watchingAnime}
+					/>
+				{:catch error}
+					<div class="home-deferred-error" role="alert" data-deferred-error={error ? "true" : "false"}>
+						投稿フォームを読み込めませんでした。<a href="/">再読み込み</a>
+					</div>
+				{/await}
 			{:else if data.session}
 				<div class="auth-gate">
 					<p>ようこそ！<a href="/settings">設定</a>を確認してから投稿できます。</p>
@@ -245,24 +258,41 @@ $effect(() => {
 				{#each posts as post (post.id)}
 					<PostCard {post} currentUserId={data.user?.id ?? null} />
 				{/each}
-				{#if data.hasMore}
+				{#if posts.length >= 50}
 					{@const lastPost = posts[posts.length - 1]}
 					{#if lastPost}
-						<a href={loadMoreHref(lastPost.created_at, lastPost.id)} class="load-more-btn">
+						<a
+							href={loadMoreHref(lastPost.created_at, lastPost.id)}
+							class="load-more-btn"
+						>
 							さらに読み込む
 						</a>
 					{/if}
 				{/if}
 			{/if}
+		{:catch error}
+			<div class="home-deferred-error" role="alert" data-deferred-error={error ? "true" : "false"}>
+				投稿を読み込めませんでした。<a href={data.tab === "following" ? "/?tab=following" : "/"}>再読み込み</a>
+			</div>
 		{/await}
 	</main>
 
 	<aside class="sidebar-column home-sidebar-column" bind:this={homeSidebarSlot}>
 		<div class="home-sidebar-fixed scrollbar-thin-muted" class:home-sidebar-fixed-ready={homeSidebarReady}>
-			{#if data.user}
-				<LiveRoomsPanel rooms={data.liveRooms} />
-			{/if}
-			<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
+			{#await data.pageExtras}
+				<div class="home-sidebar-loading" aria-label="サイド情報を読み込み中">
+					<div class="spinner" aria-hidden="true"></div>
+				</div>
+			{:then extras}
+				{#if data.user}
+					<LiveRoomsPanel rooms={extras.liveRooms} />
+				{/if}
+				<TrendingPanel trending={extras.trending} animeTrending={extras.animeTrending} />
+			{:catch error}
+				<div class="home-deferred-error" role="alert" data-deferred-error={error ? "true" : "false"}>
+					サイド情報を読み込めませんでした。
+				</div>
+			{/await}
 		</div>
 	</aside>
 </div>
@@ -293,17 +323,25 @@ $effect(() => {
 			</button>
 		</div>
 		<div class="compose-modal-body">
-			<PostComposer
-				username={data.profile.username}
-				avatarUrl={data.profile.avatar_url}
-				initialAnime={data.initialAnime}
-				initialContent={data.initialContent}
-				initialExchangeId={data.initialExchangeId}
-				initialExchangeShare={data.initialExchangeShare}
-				watchingAnime={data.watchingAnime}
-				onsubmitsuccess={closeModal}
-				focusOnMount
-			/>
+			{#await data.pageExtras}
+				<div class="composer-loading" aria-label="投稿フォームを読み込み中"></div>
+			{:then extras}
+				<PostComposer
+					username={data.profile.username}
+					avatarUrl={data.profile.avatar_url}
+					initialAnime={extras.initialAnime}
+					initialContent={extras.initialContent}
+					initialExchangeId={extras.initialExchangeId}
+					initialExchangeShare={extras.initialExchangeShare}
+					watchingAnime={extras.watchingAnime}
+					onsubmitsuccess={closeModal}
+					focusOnMount
+				/>
+			{:catch error}
+				<div class="home-deferred-error" role="alert" data-deferred-error={error ? "true" : "false"}>
+					投稿フォームを読み込めませんでした。<a href="/">再読み込み</a>
+				</div>
+			{/await}
 		</div>
 	</div>
 {/if}
@@ -372,6 +410,39 @@ $effect(() => {
 
 .compose-modal-body {
 	overflow-y: auto;
+}
+
+.composer-loading {
+	min-height: 118px;
+	border-bottom: 1px solid var(--color-border);
+	background:
+		linear-gradient(100deg, var(--color-surface) 34%, var(--color-surface-hover) 48%, var(--color-surface) 62%) 0 0
+		/ 220% 100%;
+	animation: home-loading-shimmer 1.2s ease-in-out infinite;
+}
+
+.home-sidebar-loading {
+	display: flex;
+	justify-content: center;
+	padding: 32px 0;
+}
+
+.home-deferred-error {
+	padding: 16px;
+	color: var(--color-text-muted);
+	font-size: 0.9rem;
+	text-align: center;
+}
+
+.home-deferred-error a {
+	margin-left: 8px;
+	color: var(--color-accent);
+}
+
+@keyframes home-loading-shimmer {
+	to {
+		background-position: -120% 0;
+	}
 }
 
 .home-sidebar-column {
