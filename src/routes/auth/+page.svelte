@@ -1,11 +1,26 @@
 <script lang="ts">
+import { page } from "$app/state";
 import type { PageProps } from "./$types";
+import { type InviteCodeState, syncInviteCodeState } from "./invite-code";
 
 let { data, form }: PageProps = $props();
 
 const activeMode = $derived((form?.mode ?? data.mode) as "login" | "register" | "add_account");
 const next = $derived((form && "next" in form && typeof form.next === "string" ? form.next : data.next) ?? "/");
-let inviteCodeValue = $state(data.inviteCode ?? "");
+let inviteCodeState = $state<InviteCodeState>({ value: "", dirty: false, source: null, linkSource: "" });
+
+// Keep a link-provided code in sync when the same page instance receives new
+// data through client-side navigation, without overwriting a code the user
+// has already typed.
+$effect(() => {
+	syncInviteCodeState(inviteCodeState, data.inviteCode, page.url.searchParams.get("invite"));
+});
+
+function handleInviteCodeInput(event: Event): void {
+	inviteCodeState.value = (event.currentTarget as HTMLInputElement).value;
+	inviteCodeState.dirty = true;
+}
+
 // クローズドβが有効かつ、まだ有効な招待コードを確認できていない間は
 // 招待コード入力とDiscordの二択のみを表示し、Google/X/メールは隠す。
 const hasInviteAccess = $derived(!data.betaGateEnabled || data.inviteCodeValid);
@@ -117,7 +132,8 @@ const hasInviteAccess = $derived(!data.betaGateEnabled || data.inviteCodeValid);
 							type="text"
 							class="field-input"
 							autocomplete="off"
-							bind:value={inviteCodeValue}
+							value={inviteCodeState.value}
+							oninput={handleInviteCodeInput}
 							placeholder="招待してくれた方から届いたコードを入力してください"
 							required
 						>
@@ -129,7 +145,7 @@ const hasInviteAccess = $derived(!data.betaGateEnabled || data.inviteCodeValid);
 
 				<form method="POST" action="?/discord" class="auth-oauth-form">
 					<input type="hidden" name="next" value={next}>
-					<input type="hidden" name="invite_code" value={inviteCodeValue}>
+					<input type="hidden" name="invite_code" value={inviteCodeState.value}>
 					<button type="submit" class="btn btn-outline auth-wide-button">
 						Discordサーバーのメンバーとして続ける
 					</button>
@@ -143,7 +159,8 @@ const hasInviteAccess = $derived(!data.betaGateEnabled || data.inviteCodeValid);
 							type="text"
 							class="field-input"
 							autocomplete="off"
-							bind:value={inviteCodeValue}
+							value={inviteCodeState.value}
+							oninput={handleInviteCodeInput}
 							placeholder="招待リンクから来た場合は自動入力されます"
 						>
 						<p class="field-hint">
@@ -154,7 +171,7 @@ const hasInviteAccess = $derived(!data.betaGateEnabled || data.inviteCodeValid);
 
 				<form method="POST" action="?/discord" class="auth-oauth-form">
 					<input type="hidden" name="next" value={next}>
-					<input type="hidden" name="invite_code" value={inviteCodeValue}>
+					<input type="hidden" name="invite_code" value={inviteCodeState.value}>
 					<button type="submit" class="btn btn-primary auth-wide-button">Discordで続ける</button>
 				</form>
 
@@ -162,7 +179,7 @@ const hasInviteAccess = $derived(!data.betaGateEnabled || data.inviteCodeValid);
 
 				<form method="POST" action="?/google" class="auth-oauth-form">
 					<input type="hidden" name="next" value={next}>
-					<input type="hidden" name="invite_code" value={inviteCodeValue}>
+					<input type="hidden" name="invite_code" value={inviteCodeState.value}>
 					<button type="submit" class="btn btn-outline auth-wide-button">Googleで続ける</button>
 				</form>
 
@@ -170,7 +187,7 @@ const hasInviteAccess = $derived(!data.betaGateEnabled || data.inviteCodeValid);
 
 				<form method="POST" action="?/twitter" class="auth-oauth-form">
 					<input type="hidden" name="next" value={next}>
-					<input type="hidden" name="invite_code" value={inviteCodeValue}>
+					<input type="hidden" name="invite_code" value={inviteCodeState.value}>
 					<button type="submit" class="btn btn-outline auth-wide-button">Xで続ける</button>
 				</form>
 
@@ -179,7 +196,7 @@ const hasInviteAccess = $derived(!data.betaGateEnabled || data.inviteCodeValid);
 				{#if activeMode === 'login'}
 					<form method="POST" action="?/login" class="auth-form">
 						<input type="hidden" name="next" value={next}>
-						<input type="hidden" name="invite_code" value={inviteCodeValue}>
+						<input type="hidden" name="invite_code" value={inviteCodeState.value}>
 
 						<div class="field">
 							<label for="login-email" class="field-label">メールアドレス</label>
@@ -211,7 +228,7 @@ const hasInviteAccess = $derived(!data.betaGateEnabled || data.inviteCodeValid);
 				{:else}
 					<form method="POST" action="?/register" class="auth-form">
 						<input type="hidden" name="next" value={next}>
-						<input type="hidden" name="invite_code" value={inviteCodeValue}>
+						<input type="hidden" name="invite_code" value={inviteCodeState.value}>
 
 						<div class="field">
 							<label for="register-email" class="field-label">メールアドレス</label>

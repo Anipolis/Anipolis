@@ -28,6 +28,7 @@ import type {
 } from "$lib/types";
 import { toPost } from "$lib/types";
 import { animeIsScheduledForRoomDate } from "$lib/utils/broadcast-room";
+import { escapeIlikePattern } from "$lib/utils/search";
 
 type NotificationActor = {
 	username: string;
@@ -1398,6 +1399,86 @@ type TimelinePostsWithRepostsResult = {
 	error: unknown | null;
 };
 
+type FollowingTimelineRow = {
+	post_id: string;
+	timeline_created_at: string;
+	repost_user_id: string | null;
+	reposted_at: string | null;
+};
+
+type FollowingTimelineRpc = (
+	name: "get_following_timeline",
+	args: { p_limit: number; p_before?: string; p_before_id?: string },
+) => PromiseLike<{ data: FollowingTimelineRow[] | null; error: { message: string } | null }>;
+
+/**
+ * フォロー中ユーザーの投稿・リポストを時系列で取得する。
+ *
+ * get_following_timeline は follows をDB内で結合するため、フォローIDを全件取得して
+ * PostgRESTの .in() に展開しない。RPCは migration 127 で導入されるため、生成済み
+ * Supabase型が更新されるまで呼び出し部分だけを狭く型付けしている。
+ */
+export async function getFollowingTimelinePosts(
+	supabase: SupabaseClient<Database>,
+	currentUserId: string,
+	options: { limit?: number; select?: string; before?: string; beforeId?: string } = {},
+): Promise<TimelinePostsWithRepostsResult> {
+	const limit = options.limit ?? 50;
+	const select = options.select ?? POST_LIST_SELECT;
+	const { data: timelineRows, error: timelineError } = await (supabase.rpc as unknown as FollowingTimelineRpc)(
+		"get_following_timeline",
+		{
+			p_limit: limit,
+			...(options.before ? { p_before: options.before } : {}),
+			...(options.beforeId ? { p_before_id: options.beforeId } : {}),
+		},
+	);
+	if (timelineError) return { posts: [], error: timelineError };
+	if (!timelineRows || timelineRows.length === 0) return { posts: [], error: null };
+
+	const postIds = timelineRows.map((row) => row.post_id);
+	const [rawPostsResult, repostProfilesResult] = await Promise.all([
+		supabase.from("posts").select(select).in("id", postIds),
+		(() => {
+			const repostUserIds = [
+				...new Set(timelineRows.flatMap((row) => (row.repost_user_id ? [row.repost_user_id] : []))),
+			];
+			return repostUserIds.length > 0
+				? supabase.from("profiles").select("id, username, display_name, avatar_url").in("id", repostUserIds)
+				: Promise.resolve({ data: [] as ProfileRepostContext[], error: null });
+		})(),
+	]);
+	if (rawPostsResult.error) return { posts: [], error: rawPostsResult.error };
+	if (repostProfilesResult.error) return { posts: [], error: repostProfilesResult.error };
+
+	const rawPostsById = new Map(((rawPostsResult.data ?? []) as unknown as RawPost[]).map((post) => [post.id, post]));
+	const repostProfilesById = new Map(
+		(repostProfilesResult.data ?? []).map((profile) => [profile.id, profile as ProfileRepostContext]),
+	);
+	const rawTimelinePosts = timelineRows.flatMap((row) => {
+		const post = rawPostsById.get(row.post_id);
+		if (!post) return [];
+		if (!row.repost_user_id) return [post];
+
+		const repostProfile = repostProfilesById.get(row.repost_user_id);
+		if (!repostProfile || !row.reposted_at) return [];
+		return [
+			{
+				...post,
+				repost_context: {
+					user_id: repostProfile.id,
+					username: repostProfile.username,
+					display_name: repostProfile.display_name,
+					avatar_url: repostProfile.avatar_url,
+					created_at: row.reposted_at,
+				},
+			},
+		];
+	});
+
+	return { posts: await enrichPostsWithCounts(supabase, rawTimelinePosts, currentUserId), error: null };
+}
+
 export async function getTimelinePostsWithReposts(
 	supabase: SupabaseClient<Database>,
 	profiles: ProfileRepostContext[],
@@ -2089,7 +2170,7 @@ export function quoteOrFilterValue(value: string): string {
  * かな入力からカタカナ題・英字題（BEYBLADE X等）を引けるようにする。
  */
 export function buildTitleSearchFilter(searchQuery: string): string {
-	const pattern = quoteOrFilterValue(`%${searchQuery}%`);
+	const pattern = quoteOrFilterValue(`%${escapeIlikePattern(searchQuery)}%`);
 	return `title.ilike.${pattern},title_en.ilike.${pattern},title_yomi.ilike.${pattern},source.ilike.${pattern}`;
 }
 

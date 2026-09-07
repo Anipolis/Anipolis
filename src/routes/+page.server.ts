@@ -10,10 +10,9 @@ import { buildPostCardSelect } from "$lib/server/post-selects";
 import {
 	getAnimeExchangeShareForUser,
 	getAnimeRankingTrending,
-	getFollowingProfiles,
+	getFollowingTimelinePosts,
 	getHomeTimelinePosts,
 	getOpenBroadcastRoomSessions,
-	getTimelinePostsWithReposts,
 	getUserAnimeList,
 } from "$lib/server/queries";
 import type { AnimeExchangeShare, Post } from "$lib/types";
@@ -36,12 +35,10 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		beforeParam && beforeIdParam && /^\d{4}-\d{2}-\d{2}T/.test(beforeParam)
 			? { createdAt: beforeParam, id: beforeIdParam }
 			: undefined;
-	const followingProfiles = tab === "following" && user ? await getFollowingProfiles(supabase, user.id) : null;
-
 	const fetchPosts = async (): Promise<Post[]> => {
-		if (tab === "following" && followingProfiles !== null) {
+		if (tab === "following" && user) {
 			for (const select of [POSTS_SELECT_WITH_EXCHANGE_AND_CW, POSTS_SELECT_WITH_EXCHANGE, POSTS_SELECT_BASE]) {
-				const result = await getTimelinePostsWithReposts(supabase, followingProfiles, user?.id ?? null, {
+				const result = await getFollowingTimelinePosts(supabase, user.id, {
 					select,
 					limit: 50,
 					...(before ? { before: before.createdAt, beforeId: before.id } : {}),
@@ -100,16 +97,14 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 			user ? getOpenBroadcastRoomSessions(supabase, { kind: "episode" }) : Promise.resolve([]),
 		] as const);
 
-	if (tab === "following" && followingProfiles !== null && followingProfiles.length === 0) {
-		const [trendingResult, animeTrending, quoteAnimeResult, exchangeShare, watchingAnime, liveRooms] =
-			await fetchSidebarExtras();
-		return {
-			posts: [],
+	// 遷移の初期レスポンスではページ枠だけを返し、タイムラインと右カラムは
+	// ストリーミングで後から解決する。サイドバーからの遷移で、複数の
+	// Supabase クエリが終わるまで前画面に留まらないための境界である。
+	const pageExtras = fetchSidebarExtras().then(
+		([trendingResult, animeTrending, quoteAnimeResult, exchangeShare, watchingAnime, liveRooms]) => ({
 			trending: trendingResult.data ?? [],
 			animeTrending,
 			liveRooms,
-			profile,
-			tab,
 			initialAnime: quoteAnimeResult.data
 				? { ...quoteAnimeResult.data, id: String(quoteAnimeResult.data.id) }
 				: null,
@@ -122,28 +117,16 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 				title_en: a.title_en ?? null,
 				cover_url: a.cover_url ?? null,
 			})),
-		};
-	}
-
-	const [[trendingResult, animeTrending, quoteAnimeResult, exchangeShare, watchingAnime, liveRooms], posts] =
-		await Promise.all([fetchSidebarExtras(), fetchPosts()]);
+		}),
+	);
 
 	return {
-		posts,
-		trending: trendingResult.data ?? [],
-		animeTrending,
-		liveRooms,
+		posts: fetchPosts(),
+		pageExtras,
 		profile,
+		user,
 		tab,
 		before: before?.createdAt ?? null,
-		hasMore: posts.length >= 50,
-		initialAnime: quoteAnimeResult.data ? { ...quoteAnimeResult.data, id: String(quoteAnimeResult.data.id) } : null,
-		initialExchangeId: exchangeShare ? shareExchangeId : null,
-		initialExchangeShare: exchangeShare,
-		initialContent: exchangeShare ? buildExchangeInitialContent(exchangeShare) : "",
-		watchingAnime: watchingAnime
-			.slice(0, 5)
-			.map((a) => ({ id: a.id, title: a.title, title_en: a.title_en ?? null, cover_url: a.cover_url ?? null })),
 	};
 };
 
