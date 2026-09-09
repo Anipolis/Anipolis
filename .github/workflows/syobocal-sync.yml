@@ -10,10 +10,15 @@ name: Syobocal sync
 #   discovery does not depend on Jikan: import:mal merges the AniList season
 #   listing into its target ids and fetches details from the official MAL API.
 #   Jikan runs against the public API here as a best-effort supplemental
-#   source; persistent 504s can be backfilled manually via the self-hosted
-#   instance (pnpm enrich:jikan-links). A bounded per-ID link
-#   enrichment pass against the public Jikan API also runs weekly so official
-#   site/X links keep filling in whenever Jikan is healthy.
+#   source; persistent 504s are backfilled from a self-hosted instance
+#   (pnpm enrich:jikan-links), run locally.
+#
+# Deliberately NOT run here: per-ID link enrichment and the copyright /
+# official-X / Wayback collectors. Those crawl hundreds to thousands of
+# third-party sites per run, and doing that from CI runners matches the
+# "CI/CD as a scraping springboard" pattern that abuse detection flags. They
+# run from a machine we control (see the script headers). Only calls to a
+# handful of official APIs (MAL, Wikidata SPARQL, Syobocal, Jikan) stay here.
 #
 # Requires repository Actions secrets:
 #   PUBLIC_SUPABASE_URL, SUPABASE_SECRET_KEY, MAL_CLIENT_ID
@@ -42,7 +47,7 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    # 週次はWikidata2本+Jikanリンク補完(--limit 600 ≒ 11分)が加わるため90分
+    # 週次はWikidata2本が加わるため余裕を持って90分
     timeout-minutes: 90
     steps:
       # persist-credentials: false — トークンを.git/configに残さない。
@@ -114,11 +119,9 @@ jobs:
               FAILED=1
             fi
           done
-          # 公式サイト/Xリンクの per-ID 補完（公開Jikan・上限付き）。公開Jikanが
-          # 落ちている週は素通りし、健全な週に未取得分を少しずつ埋める。
-          # 失敗してもジョブは失敗させない（セルフホスト経路の手動バックフィルも残る）。
-          JIKAN_BASE_URL="https://api.jikan.moe/v4" pnpm enrich:jikan-links -- --limit 600 \
-            || echo "::warning title=Jikan link enrichment failed::Weekly Jikan link enrichment failed (public Jikan is expected to be flaky)"
+          # 公式サイト/Xリンクの per-ID 補完（enrich:jikan-links）は CI では回さない。
+          # 外部サイト巡回を CI ランナーから行うと濫用検知の対象になるため、
+          # ローカル/セルフホスト環境で手動実行する（スクリプトのヘッダー参照）。
           # ODbL公開カタログの静的成果物を再生成する（/api/data/anime-catalog が配信）。
           # 上流が失敗していても、既存レコードからの再生成は安全なので常に試みる。
           pnpm export:anime-catalog || { echo "Catalog export failed"; FAILED=1; }
