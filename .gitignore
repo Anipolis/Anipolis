@@ -37,3 +37,6 @@ supabase/.temp/
 
 # Personal references
 refs/
+
+# ローカル同期(scripts/scheduled)のログ
+.sync-logs/

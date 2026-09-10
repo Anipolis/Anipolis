@@ -8,3 +8,6 @@
 *.gif binary
 *.ico binary
 *.webp binary
+
+# Windows PowerShell 5.1 は BOM 無し UTF-8 を cp932 として読むため、.ps1 は BOM 付き CRLF のまま扱う
+*.ps1 text eol=crlf

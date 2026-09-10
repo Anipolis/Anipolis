@@ -11,6 +11,7 @@
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build",
+		"deploy": "vite build && wrangler pages deploy .svelte-kit/cloudflare --project-name anipolis --commit-dirty=true",
 		"preview": "vite preview",
 		"prepare": "simple-git-hooks",
 		"check:biome": "biome check .",
