@@ -6,7 +6,7 @@ export const ANIME_OFFLINE_LICENSE_URL = `${ANIME_OFFLINE_REPOSITORY_URL}/blob/m
 export const ANIME_OFFLINE_ODBL_URL = "https://opendatacommons.org/licenses/odbl/1-0/";
 export const ANIME_OFFLINE_DBCL_URL = "https://opendatacommons.org/licenses/dbcl/1-0/";
 export const ANIPOLIS_TRANSFORMATION_URL =
-	"https://github.com/Anipolis/Anipolis/blob/develop/scripts/import-anime-offline-database.ts";
+	"https://gitlab.com/anipolis-group/Anipolis-project/-/blob/develop/scripts/import-anime-offline-database.ts";
 
 export type AnimeOfflineSeason = "winter" | "spring" | "summer" | "fall";
 
