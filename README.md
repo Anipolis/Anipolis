@@ -37,13 +37,13 @@ pnpm test
 
 ## 共同開発
 
-リポジトリは GitLab の [anipolis-group/Anipolis](https://gitlab.com/anipolis-group/Anipolis) にあります。
+リポジトリは GitLab の [anipolis-group/anipolis](https://gitlab.com/anipolis-group/anipolis) にあります。
 
 ### 初回セットアップ
 
 1. GitLab の Preferences → SSH Keys に自分の公開鍵を登録し、SSH でクローンする
    ```sh
-   git clone git@gitlab.com:anipolis-group/Anipolis.git
+   git clone git@gitlab.com:anipolis-group/anipolis.git
    ```
 2. `.env.example` を `.env` にコピーし、値はメンテナーから別経路（チャット等）で受け取る。`.env` はコミットしない。
 3. 上記の「開発」手順どおり `mise install` → `pnpm install` → `pnpm dev`
