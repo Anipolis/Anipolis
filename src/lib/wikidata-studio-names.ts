@@ -3,7 +3,7 @@ export const WIKIDATA_MAL_COMPANY_PROPERTY = "P11490";
 export const WIKIDATA_ANIMATION_STUDIO_URL = "https://www.wikidata.org/wiki/Q1107679";
 export const WIKIDATA_MAL_COMPANY_PROPERTY_URL = "https://www.wikidata.org/wiki/Property:P11490";
 export const WIKIDATA_STUDIO_TRANSFORMATION_URL =
-	"https://github.com/Anipolis/Anipolis/blob/develop/scripts/import-wikidata-studio-names.ts";
+	"https://gitlab.com/anipolis-group/anipolis/-/blob/develop/scripts/import-wikidata-studio-names.ts";
 
 export type WikidataStudioBinding = {
 	item?: { value?: string };

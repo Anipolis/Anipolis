@@ -6,6 +6,11 @@ import { createClient } from "@supabase/supabase-js";
 // (fetch_failed in earlier passes) from Wayback Machine snapshots taken close
 // to the work's season. --apply behaves like the other collectors: single
 // clean candidates only, guarded writes.
+//
+// LOCAL / SELF-HOSTED ONLY. Intentionally not run from GitHub Actions: it
+// hammers archive.org from CI runners, which abuse detection reads as
+// "CI/CD as a scraping springboard". Run it from a machine we control,
+// after the copyright / official-X passes have populated the caches.
 
 const OUTPUT_DIRECTORY = join(process.cwd(), ".x-cache");
 const REQUEST_INTERVAL_MS = 1500;

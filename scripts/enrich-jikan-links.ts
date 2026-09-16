@@ -6,6 +6,12 @@ import { createClient } from "@supabase/supabase-js";
 // MAL-page external links are fetched here directly: /anime/{id}/full for every
 // catalog entry still lacking an official site or X URL, merged into the jikan
 // source record (created when absent). Run the catalog resolver afterwards.
+//
+// LOCAL / SELF-HOSTED ONLY. Intentionally not run from GitHub Actions: this
+// walks thousands of MAL pages via Jikan, and driving that kind of crawl from
+// CI runners is what abuse detection reads as "CI/CD as a scraping
+// springboard". Run it from a machine we control against the self-hosted
+// Jikan instance (JIKAN_BASE_URL defaults to http://localhost:8080/v4).
 // Usage: pnpm enrich:jikan-links -- [--limit N]
 
 const REQUEST_INTERVAL_MS = 1100;

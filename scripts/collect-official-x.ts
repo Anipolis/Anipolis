@@ -7,6 +7,11 @@ import { createClient } from "@supabase/supabase-js";
 // record (normalized_data.official_x_url) for rows that still have no X URL
 // AND yielded exactly one clean candidate. Ambiguous pages stay manual.
 // Corporate/broadcaster handles are never auto-applied.
+//
+// LOCAL / SELF-HOSTED ONLY. Intentionally not run from GitHub Actions: this
+// fetches hundreds of third-party official sites per run, and doing that
+// from CI runners is what abuse detection reads as "CI/CD as a scraping
+// springboard". Run it from a machine we control.
 
 const OUTPUT_DIRECTORY = join(process.cwd(), ".x-cache");
 const REQUEST_INTERVAL_MS = 1000;

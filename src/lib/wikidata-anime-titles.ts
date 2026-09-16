@@ -3,7 +3,7 @@ export const WIKIDATA_PROPERTY_MAL_ANIME_ID_URL = "https://www.wikidata.org/wiki
 export const WIKIDATA_CC0_URL = "https://www.wikidata.org/wiki/Wikidata:Copyright";
 export const WIKIDATA_SPARQL_ENDPOINT = "https://query.wikidata.org/sparql";
 export const WIKIDATA_TRANSFORMATION_URL =
-	"https://github.com/Anipolis/Anipolis/blob/develop/scripts/import-wikidata-anime-titles.ts";
+	"https://gitlab.com/anipolis-group/anipolis/-/blob/develop/scripts/import-wikidata-anime-titles.ts";
 
 export type WikidataBinding = {
 	mal?: { value?: string };
