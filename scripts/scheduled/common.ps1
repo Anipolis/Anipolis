@@ -77,9 +77,11 @@ function Invoke-Step {
     $pnpm = Resolve-Pnpm
     Write-Host ("--- " + $Label + " : pnpm " + ($PnpmArgs -join " "))
     Set-Location $script:RepoRoot
-    # pnpm の標準出力を Out-Host でホスト(=トランスクリプト)へ流す。そのまま流すと
-    # 関数の戻り値(パイプライン出力)に混ざり、呼び出し側の $code が配列になる。
-    & $pnpm @PnpmArgs | Out-Host
+    # pnpm の標準出力・標準エラーをどちらもホスト(=トランスクリプト)へ流す。そのまま
+    # 流すと関数の戻り値(パイプライン出力)に混ざり、呼び出し側の $code が配列になる。
+    # 標準エラーを合流させないと Node の例外本文がログに残らず、失敗理由が追えない
+    # (PowerShell 5.1 は native の stderr 行を ErrorRecord に包むが、判定は $LASTEXITCODE で行う)。
+    & $pnpm @PnpmArgs 2>&1 | ForEach-Object { if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.ToString() } else { $_ } } | Out-Host
     $code = $LASTEXITCODE
     if ($null -eq $code) { $code = 1 }
     if ($code -ne 0) { Write-Host ("!!! " + $Label + " failed (exit " + $code + ")") }

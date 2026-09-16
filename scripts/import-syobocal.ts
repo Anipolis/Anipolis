@@ -1462,7 +1462,8 @@ async function saveBroadcastRoomSessions(
 	);
 	const byAnimeDate = new Map(existing.map((session) => [`${session.anime_id}:${session.room_key}`, session]));
 	const now = Date.now();
-	const existingRows: Record<string, unknown>[] = [];
+	type PlannedUpdate = { current: BroadcastRoomSessionRow; row: (typeof rows)[number] };
+	const plannedUpdates: PlannedUpdate[] = [];
 	const newRows: Record<string, unknown>[] = [];
 	const usedExistingIds = new Set<string>();
 	for (const row of rows) {
@@ -1472,13 +1473,11 @@ async function saveBroadcastRoomSessions(
 			// used に数える（下の陳腐化削除の対象から外す）。更新はしない。
 			usedExistingIds.add(current.id);
 			if (current.schedule_frozen_at || Date.parse(current.posting_opens_at) <= now) continue;
-			existingRows.push({ id: current.id, ...row });
+			plannedUpdates.push({ current, row });
 		} else {
 			newRows.push(row);
 		}
 	}
-	await upsertBatches(supabase, "broadcast_room_sessions", existingRows, "id");
-	await upsertBatches(supabase, "broadcast_room_sessions", newRows, "anime_id,room_kind,room_key");
 	const staleCandidates = existing.filter(
 		(session) =>
 			session.schedule_source === "syobocal" &&
@@ -1513,6 +1512,8 @@ async function saveBroadcastRoomSessions(
 		.map((session) => session.id);
 	const keptHeldCount = pastCandidates.length - pastStaleIds.length;
 	const staleIds = [...futureStaleIds, ...pastStaleIds];
+	// 陳腐化行の削除は更新より先に行う: 番組が別日へ移動した先に、選定から外れた
+	// 古い行が居座っていると (anime_id, room_date) の一意制約に当たる。
 	for (let start = 0; start < staleIds.length; start += DATABASE_BATCH_SIZE) {
 		const { error } = await supabase
 			.from("broadcast_room_sessions")
@@ -1520,8 +1521,34 @@ async function saveBroadcastRoomSessions(
 			.in("id", staleIds.slice(start, start + DATABASE_BATCH_SIZE));
 		if (error) throw new Error(`Could not remove stale room sessions: ${error.message}`);
 	}
+	// 日付が動かない更新は従来どおり一括。日付が動く更新は「移動先が空く順」に
+	// 1 行ずつ適用する。休止で全話が 1 週後ろへずれると、9/20→9/27 の行を先に
+	// 更新した時点でまだ 9/27 にいる次話の行と衝突する（正反対な君と僕 2 期で発生）。
+	// 後ろへずれる行は遅い日付から、前へずれる行は早い日付から処理すれば、
+	// 各行の移動先はその時点で必ず空いている。
+	const toUpdateRow = (planned: PlannedUpdate) => ({ id: planned.current.id, ...planned.row });
+	const unchangedDate = plannedUpdates.filter((planned) => planned.row.room_key === planned.current.room_key);
+	const movedLater = plannedUpdates
+		.filter((planned) => planned.row.room_key > planned.current.room_key)
+		.sort((left, right) => right.row.room_key.localeCompare(left.row.room_key));
+	const movedEarlier = plannedUpdates
+		.filter((planned) => planned.row.room_key < planned.current.room_key)
+		.sort((left, right) => left.row.room_key.localeCompare(right.row.room_key));
+	await upsertBatches(supabase, "broadcast_room_sessions", unchangedDate.map(toUpdateRow), "id");
+	for (const planned of [...movedLater, ...movedEarlier]) {
+		const { error } = await supabase
+			.from("broadcast_room_sessions")
+			.upsert(toUpdateRow(planned), { onConflict: "id" });
+		if (error) {
+			throw new Error(
+				`Could not move room session for anime ${planned.row.anime_id} from ${planned.current.room_key} to ${planned.row.room_key}: ${error.message}`,
+			);
+		}
+	}
+	await upsertBatches(supabase, "broadcast_room_sessions", newRows, "anime_id,room_kind,room_key");
+	const movedCount = movedLater.length + movedEarlier.length;
 	console.log(
-		`Saved ${existingRows.length + newRows.length} future room snapshots; removed ${futureStaleIds.length} stale future and ${pastStaleIds.length} stale held sessions${keptHeldCount > 0 ? ` (kept ${keptHeldCount} with posts)` : ""}.`,
+		`Saved ${plannedUpdates.length + newRows.length} future room snapshots${movedCount > 0 ? ` (${movedCount} moved to a new date)` : ""}; removed ${futureStaleIds.length} stale future and ${pastStaleIds.length} stale held sessions${keptHeldCount > 0 ? ` (kept ${keptHeldCount} with posts)` : ""}.`,
 	);
 }
 
