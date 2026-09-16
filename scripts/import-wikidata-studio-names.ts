@@ -190,7 +190,7 @@ async function fetchWikidataStudios(): Promise<WikidataStudioRecord[]> {
 		{
 			headers: {
 				Accept: "application/sparql-results+json",
-				"User-Agent": "Anipolis/1.0 (https://gitlab.com/anipolis-group/Anipolis-project)",
+				"User-Agent": "Anipolis/1.0 (https://gitlab.com/anipolis-group/Anipolis)",
 			},
 		},
 		{

@@ -168,7 +168,7 @@ async function fetchWikidataBindings(malIds: number[]): Promise<WikidataBinding[
 		const response = await fetch(url, {
 			headers: {
 				Accept: "application/sparql-results+json",
-				"User-Agent": "Anipolis/1.0 (https://gitlab.com/anipolis-group/Anipolis-project)",
+				"User-Agent": "Anipolis/1.0 (https://gitlab.com/anipolis-group/Anipolis)",
 			},
 		});
 		if (!response.ok) throw new Error(`Wikidata query failed: ${response.status} ${response.statusText}`);
