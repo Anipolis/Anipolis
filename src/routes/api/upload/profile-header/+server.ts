@@ -1,4 +1,5 @@
 import { error, json } from "@sveltejs/kit";
+import { requireAccountCanWrite } from "$lib/server/actions";
 import {
 	MULTIPART_OVERHEAD_BYTES,
 	publicUrlToStoragePath,
@@ -14,6 +15,7 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024;
 export const POST: RequestHandler = async ({ request, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 	if (!user) error(401, "ログインが必要です");
+	await requireAccountCanWrite(supabase, user.id);
 
 	const form = await readFormDataWithLimit(request, MAX_FILE_SIZE + MULTIPART_OVERHEAD_BYTES);
 	if (form === "too_large") error(413, "ファイルサイズが大きすぎます（最大5MB）");

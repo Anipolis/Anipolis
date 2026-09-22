@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { fail } from "@sveltejs/kit";
+import { error, fail } from "@sveltejs/kit";
 import {
 	MAX_EXCHANGE_SUBJECTIVE_TAGS,
 	toExchangeSubjectiveTags,
@@ -146,6 +146,18 @@ export async function ensureAccountCanWrite(supabase: SupabaseClient<Database>, 
 		});
 	}
 	return null;
+}
+
+/**
+ * API ルート（+server.ts）用: 利用制限・BAN中なら error() を投げる。
+ * form action 用の ensureAccountCanWrite と同じ判定を、HTTP エラーとして返す。
+ */
+export async function requireAccountCanWrite(supabase: SupabaseClient<Database>, userId: string) {
+	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
+	if (moderationFailure) {
+		const data = moderationFailure.data as { message?: string };
+		error(moderationFailure.status, data.message ?? "このアカウントは制限されています");
+	}
 }
 
 /**
