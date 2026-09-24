@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# CodeRabbit の設定（リポジトリ直下に置く）。
+# レビューは日本語。作業ブランチ→develop の PR も自動レビュー対象にする。
+
+language: "ja-JP"
+
+reviews:
+  # chill: 明らかな問題に絞ったコメント量。うるさければ quiet、厳しくしたければ assertive
+  profile: "chill"
+  high_level_summary: true
+  poem: false
+  review_status: true
+  auto_review:
+    enabled: true
+    drafts: false
+    # 既定ではデフォルトブランチ(master)宛ての MR しか自動レビューしない。
+    # 日常の MR は develop 宛てなので明示する。
+    base_branches:
+      - "develop"
+      - "master"
+  path_filters:
+    - "!**/pnpm-lock.yaml"
+    - "!src/lib/supabase/database.types.ts"
+
+chat:
+  auto_reply: true
