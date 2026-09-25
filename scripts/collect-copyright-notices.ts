@@ -6,6 +6,11 @@ import { createClient } from "@supabase/supabase-js";
 // Candidates go to a review file; --apply additionally fills anime.copyright,
 // but only where the column is still empty AND exactly one clean candidate
 // was found. Ambiguous pages always stay manual.
+//
+// LOCAL / SELF-HOSTED ONLY. Intentionally not run from GitHub Actions: --all
+// fetches every resolved official site (thousands of third-party domains),
+// and doing that from CI runners is what abuse detection reads as "CI/CD as
+// a scraping springboard". Prefer --season to keep each run small.
 
 const OUTPUT_DIRECTORY = join(process.cwd(), ".copyright-cache");
 const REQUEST_INTERVAL_MS = 1000;
