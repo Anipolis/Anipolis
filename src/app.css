@@ -16,7 +16,7 @@
 	--color-success-bg: rgba(34, 197, 94, 0.1);
 	--color-success-border: rgba(34, 197, 94, 0.3);
 	--color-success-text: #86efac;
-	--anipolis-logo-image: url("/anipolis-logo-sub.png");
+	--anipolis-logo-image: url("/anipolis-logo-dark.png");
 	--nav-height: 0px;
 	--content-max: 960px;
 	--feed-width: 680px;
@@ -70,7 +70,7 @@
 	--color-success-bg: rgba(21, 128, 61, 0.08);
 	--color-success-border: rgba(21, 128, 61, 0.25);
 	--color-success-text: #15803d;
-	--anipolis-logo-image: url("/anipolis-logo.png");
+	--anipolis-logo-image: url("/anipolis-logo-light.png");
 	--status-watching: #15803d;
 	--status-plan: #1d4ed8;
 	--status-completed: #4338ca;
