@@ -80,9 +80,18 @@ function Invoke-Step {
     # pnpm の標準出力・標準エラーをどちらもホスト(=トランスクリプト)へ流す。そのまま
     # 流すと関数の戻り値(パイプライン出力)に混ざり、呼び出し側の $code が配列になる。
     # 標準エラーを合流させないと Node の例外本文がログに残らず、失敗理由が追えない
-    # (PowerShell 5.1 は native の stderr 行を ErrorRecord に包むが、判定は $LASTEXITCODE で行う)。
-    & $pnpm @PnpmArgs 2>&1 | ForEach-Object { if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.ToString() } else { $_ } } | Out-Host
-    $code = $LASTEXITCODE
+    # (PowerShell 5.1 は native の stderr 行を ErrorRecord に包む)。
+    # $ErrorActionPreference が Stop のままだと、その ErrorRecord が終了エラーになって
+    # pnpm の完了前に関数ごと中断し、「警告で継続」のはずの Jikan 失敗が週次全体を
+    # 止めた(2026-09-21)。pnpm の実行中だけ Continue にし、成否は終了コードで判定する。
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        & $pnpm @PnpmArgs 2>&1 | ForEach-Object { if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.ToString() } else { $_ } } | Out-Host
+        $code = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousPreference
+    }
     if ($null -eq $code) { $code = 1 }
     if ($code -ne 0) { Write-Host ("!!! " + $Label + " failed (exit " + $code + ")") }
     return [int]$code

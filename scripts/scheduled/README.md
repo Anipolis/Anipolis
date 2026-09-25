@@ -20,6 +20,8 @@ Get-Content .sync-logs\last-daily-sync.log -Tail 20
 ```
 
 - 認証情報はリポジトリ直下の `.env` から読む（各 pnpm スクリプトの `--env-file-if-exists=.env`）。
+- 時刻は **PC のタイムゾーンが Tokyo Standard Time であること**が前提。トリガーの `-At` はローカル時刻なので、他のタイムゾーンの PC では登録を拒否する。
+- 既定ではログオン中のみ実行される（Interactive）。ログオン前にも走らせたい場合は、**管理者として起動した PowerShell** で `register-tasks.ps1` を実行すると S4U（パスワード保存なしで「ログオンの有無にかかわらず実行」）で登録される。
 - PC が起動していない時刻の実行は、次回起動時に繰り越される（`StartWhenAvailable`）。
 - ログは `.sync-logs/`（gitignore 済み）。60 日で自動削除。`last-*.log` が直近結果。
 
