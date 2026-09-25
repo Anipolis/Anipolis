@@ -24,9 +24,18 @@ if (-not $Unregister -and $timeZone -ne "Tokyo Standard Time") {
 # 登録し、ログオン前実行が必要なら昇格した PowerShell で登録し直すよう案内する。
 $isElevated = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 $userId = "$env:USERDOMAIN\$env:USERNAME"
+# 別の管理者アカウントの資格情報で昇格すると、この PowerShell（= $userId、= S4U の実行
+# アカウント）はその管理者になる。同期は実行アカウントのプロファイルから pnpm を探す
+# (common.ps1 の Resolve-Pnpm)ため、標準ユーザー側にしか pnpm が無い環境では毎回失敗する。
+# 登録時にこのセッションで pnpm が解決できることを確かめ、できなければ S4U 登録は行わない。
+. (Join-Path $here "common.ps1")
+$pnpmForRunAccount = try { Resolve-Pnpm } catch { $null }
+if ($isElevated -and -not $pnpmForRunAccount) {
+    throw "昇格セッションのアカウント '$userId' から pnpm が見つかりません。別の管理者アカウントで昇格した場合、タスクもそのアカウントで動くため同期が失敗します。同期を動かすユーザー自身のアカウントで昇格して（Ctrl+Shift+Enter 等）登録し直してください。"
+}
 if ($isElevated) {
     $principal = New-ScheduledTaskPrincipal -UserId $userId -LogonType S4U -RunLevel Limited
-    $principalNote = "S4U（ログオンの有無にかかわらず実行）"
+    $principalNote = "S4U（ログオンの有無にかかわらず実行、pnpm: " + $pnpmForRunAccount + "）"
 } else {
     $principal = New-ScheduledTaskPrincipal -UserId $userId -LogonType Interactive -RunLevel Limited
     $principalNote = "Interactive（ログオン中のみ実行。ログオン前も走らせるなら管理者として実行して登録し直す）"
