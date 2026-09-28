@@ -164,6 +164,13 @@ export interface Notification {
 	actor_display_name: string | null;
 	actor_avatar_url: string | null;
 	post_content: string;
+	/** 投稿行を取得できたか。削除済み・非表示の投稿は false（post_id は残る） */
+	post_available: boolean;
+	/** 本文なし投稿の文脈表示用: 添付画像数・作品引用・引用リポスト・トレード結果の有無 */
+	post_image_count: number;
+	post_has_anime_quote: boolean;
+	post_has_quoted_post: boolean;
+	post_has_exchange_share: boolean;
 	recommendation_anime_id: string | null;
 	recommendation_anime_title: string | null;
 	recommendation_anime_cover_url: string | null;

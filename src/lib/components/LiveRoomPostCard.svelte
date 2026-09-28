@@ -2,10 +2,13 @@
 import type { SubmitFunction } from "@sveltejs/kit";
 import { enhance } from "$app/forms";
 import { trapFocus } from "$lib/actions/trapFocus";
+import { isReactionFailure } from "$lib/reaction-feedback";
+import { createReactionFeedback } from "$lib/reaction-feedback.svelte";
 import type { Post } from "$lib/types";
 import { formatBroadcastRelativeTime, formatRelativeTime } from "$lib/utils/format";
 import { parseContentParts } from "$lib/utils/hashtag";
 import BroadcastTimestamp from "./BroadcastTimestamp.svelte";
+import ReactionErrorNotice from "./ReactionErrorNotice.svelte";
 import UserAvatar from "./UserAvatar.svelte";
 
 interface Props {
@@ -23,6 +26,8 @@ let likedByMeLocal = $state<boolean | null>(null);
 let repostCountLocal = $state<number | null>(null);
 let repostedByMeLocal = $state<boolean | null>(null);
 let bookmarkedByMeLocal = $state<boolean | null>(null);
+// いいね・リポスト・ブックマーク失敗時のカード内メッセージ
+const reactionFeedback = createReactionFeedback();
 let showKebabMenu = $state(false);
 let showDeleteModal = $state(false);
 let showReportModal = $state(false);
@@ -122,37 +127,50 @@ async function fetchReplies(mode: "recent" | "all", limit: number): Promise<bool
 	}
 }
 
-const handleLike: SubmitFunction = () => {
+// 失敗時は楽観更新を巻き戻し、カード内にメッセージを出す。
+// update() を呼ばないのは、error 結果でエラーページへ遷移して閲覧位置を失うのを防ぐため。
+const handleLike: SubmitFunction = ({ formElement }) => {
 	const wasLiked = likedByMe;
 	likedByMeLocal = !wasLiked;
 	likeCountLocal = wasLiked ? likeCount - 1 : likeCount + 1;
 	return async ({ result, update }) => {
-		if (result.type === "failure" || result.type === "error") {
+		if (isReactionFailure(result)) {
 			likedByMeLocal = null;
 			likeCountLocal = null;
+			reactionFeedback.fail("like", result, formElement);
+			return;
 		}
+		reactionFeedback.clear();
 		await update({ reset: false });
 	};
 };
 
-const handleBookmark: SubmitFunction = () => {
+const handleBookmark: SubmitFunction = ({ formElement }) => {
 	const wasBookmarked = bookmarkedByMe;
 	bookmarkedByMeLocal = !wasBookmarked;
 	return async ({ result, update }) => {
-		if (result.type === "failure" || result.type === "error") bookmarkedByMeLocal = null;
+		if (isReactionFailure(result)) {
+			bookmarkedByMeLocal = null;
+			reactionFeedback.fail("bookmark", result, formElement);
+			return;
+		}
+		reactionFeedback.clear();
 		await update({ reset: false });
 	};
 };
 
-const handleRepost: SubmitFunction = () => {
+const handleRepost: SubmitFunction = ({ formElement }) => {
 	const wasReposted = repostedByMe;
 	repostedByMeLocal = !wasReposted;
 	repostCountLocal = wasReposted ? repostCount - 1 : repostCount + 1;
 	return async ({ result, update }) => {
-		if (result.type === "failure" || result.type === "error") {
+		if (isReactionFailure(result)) {
 			repostedByMeLocal = null;
 			repostCountLocal = null;
+			reactionFeedback.fail("repost", result, formElement);
+			return;
 		}
+		reactionFeedback.clear();
 		await update({ reset: false });
 	};
 };
@@ -308,6 +326,9 @@ async function submitReport(event: MouseEvent) {
 			</form>
 		{/if}
 	</div>
+
+	<!-- 折りたたみ時のいいねでも見えるよう、展開ブロックの外に置く -->
+	<ReactionErrorNotice feedback={reactionFeedback} />
 
 	{#if expanded}
 		<div class="live-detail">

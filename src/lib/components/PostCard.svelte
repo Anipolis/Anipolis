@@ -4,7 +4,10 @@ import { enhance } from "$app/forms";
 import { goto } from "$app/navigation";
 import { trapFocus } from "$lib/actions/trapFocus";
 import AnimeExchangeResult from "$lib/components/AnimeExchangeResult.svelte";
+import ReactionErrorNotice from "$lib/components/ReactionErrorNotice.svelte";
 import ReactionUsersPopover from "$lib/components/ReactionUsersPopover.svelte";
+import { isReactionFailure } from "$lib/reaction-feedback";
+import { createReactionFeedback } from "$lib/reaction-feedback.svelte";
 import { buildAnimeRoomLabel, buildEventRoomLabel, type Post, type ReactionType, type ReactionUser } from "$lib/types";
 import { formatBroadcastRelativeTime, formatRelativeTime } from "$lib/utils/format";
 import { parseContentParts } from "$lib/utils/hashtag";
@@ -159,6 +162,8 @@ let likedByMeLocal = $state<boolean | null>(null);
 let repostCountLocal = $state<number | null>(null);
 let repostedByMeLocal = $state<boolean | null>(null);
 let bookmarkedByMeLocal = $state<boolean | null>(null);
+// いいね・リポスト・ブックマーク失敗時のカード内メッセージ
+const reactionFeedback = createReactionFeedback();
 
 const likeCount = $derived(likeCountLocal ?? post.like_count);
 const likedByMe = $derived(likedByMeLocal ?? post.liked_by_me);
@@ -209,40 +214,51 @@ const handleDelete: SubmitFunction = () => {
 	};
 };
 
-const handleLike: SubmitFunction = () => {
+// 失敗時は楽観更新を巻き戻し、カード内にメッセージを出す。
+// update() を呼ばないのは、error 結果でエラーページへ遷移して閲覧位置を失うのを防ぐため。
+const handleLike: SubmitFunction = ({ formElement }) => {
 	const wasLiked = likedByMe;
 	likedByMeLocal = !wasLiked;
 	likeCountLocal = wasLiked ? likeCount - 1 : likeCount + 1;
 	return async ({ result, update }) => {
-		if (result.type === "failure") {
+		if (isReactionFailure(result)) {
 			likedByMeLocal = null;
 			likeCountLocal = null;
+			reactionFeedback.fail("like", result, formElement);
+			return;
 		}
+		reactionFeedback.clear();
 		await update({ reset: false });
 	};
 };
 
-const handleBookmark: SubmitFunction = () => {
+const handleBookmark: SubmitFunction = ({ formElement }) => {
 	const wasBookmarked = bookmarkedByMe;
 	bookmarkedByMeLocal = !wasBookmarked;
 	return async ({ result, update }) => {
-		if (result.type === "failure") {
+		if (isReactionFailure(result)) {
 			bookmarkedByMeLocal = null;
+			reactionFeedback.fail("bookmark", result, formElement);
+			return;
 		}
+		reactionFeedback.clear();
 		await update({ reset: false });
 	};
 };
 
-const handleRepost: SubmitFunction = () => {
+const handleRepost: SubmitFunction = ({ formElement }) => {
 	showRepostMenu = false;
 	const wasReposted = repostedByMe;
 	repostedByMeLocal = !wasReposted;
 	repostCountLocal = wasReposted ? repostCount - 1 : repostCount + 1;
 	return async ({ result, update }) => {
-		if (result.type === "failure") {
+		if (isReactionFailure(result)) {
 			repostedByMeLocal = null;
 			repostCountLocal = null;
+			reactionFeedback.fail("repost", result, formElement);
+			return;
 		}
+		reactionFeedback.clear();
 		await update({ reset: false });
 	};
 };
@@ -808,6 +824,8 @@ async function submitReport() {
 				</div>
 			</div>
 		{/if}
+
+		<ReactionErrorNotice feedback={reactionFeedback} />
 
 		<div class="post-footer">
 			<div class="post-footer-item">
