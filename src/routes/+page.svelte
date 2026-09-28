@@ -1,5 +1,6 @@
 <script lang="ts">
 import { goto } from "$app/navigation";
+import { trapFocus } from "$lib/actions/trapFocus";
 import LiveRoomsPanel from "$lib/components/LiveRoomsPanel.svelte";
 import PostCard from "$lib/components/PostCard.svelte";
 import PostCardSkeleton from "$lib/components/PostCardSkeleton.svelte";
@@ -28,6 +29,17 @@ function dismissOnboarding() {
 
 function closeModal() {
 	composeOpen.set(false);
+}
+
+/**
+ * Escape でモーダルを閉じる（GitLab #12）。
+ * 内側の作品選択ダイアログやメンション候補は自分で Escape を処理して伝播を止めるので、
+ * ここまで届いた Escape は投稿モーダル自身を閉じてよい。
+ */
+function handleModalKeydown(e: KeyboardEvent) {
+	if (e.key !== "Escape" || e.defaultPrevented) return;
+	e.preventDefault();
+	closeModal();
 }
 
 function loadMoreHref(lastCreatedAt: string, lastPostId: string): string {
@@ -304,9 +316,22 @@ $effect(() => {
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div class="compose-modal-backdrop" onclick={closeModal}></div>
-	<div class="compose-modal">
+	<!--
+		ダイアログとして読み上げられるようにし、フォーカスを内部に閉じ込める（GitLab #12）。
+		trapFocus は開いた時に内部へフォーカスを移し、閉じた時に起点（FAB）へ戻す。
+	-->
+	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+	<div
+		class="compose-modal"
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="compose-modal-title"
+		tabindex="-1"
+		use:trapFocus
+		onkeydown={handleModalKeydown}
+	>
 		<div class="compose-modal-header">
-			<span class="compose-modal-title">投稿する</span>
+			<h2 class="compose-modal-title" id="compose-modal-title">投稿する</h2>
 			<button type="button" class="compose-modal-close" onclick={closeModal} aria-label="閉じる">
 				<svg
 					width="20"
@@ -338,6 +363,7 @@ $effect(() => {
 					watchingAnime={extras.watchingAnime}
 					onsubmitsuccess={closeModal}
 					focusOnMount
+					draftKey={data.profile.id}
 				/>
 			{:catch error}
 				<div class="home-deferred-error" role="alert" data-deferred-error={error ? "true" : "false"}>
@@ -395,6 +421,7 @@ $effect(() => {
 }
 
 .compose-modal-title {
+	margin: 0;
 	font-size: 15px;
 	font-weight: 600;
 }
