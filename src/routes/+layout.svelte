@@ -1,5 +1,5 @@
 <script lang="ts">
-import { onMount } from "svelte";
+import { onMount, untrack } from "svelte";
 import { invalidate } from "$app/navigation";
 import { navigating, page } from "$app/state";
 import MobileBottomNav from "$lib/components/MobileBottomNav.svelte";
@@ -7,6 +7,7 @@ import MobileSwipeNavigation from "$lib/components/MobileSwipeNavigation.svelte"
 import RouteNavigationSkeleton from "$lib/components/RouteNavigationSkeleton.svelte";
 import Sidebar from "$lib/components/Sidebar.svelte";
 import { composeOpen } from "$lib/stores/compose";
+import { notificationCountsRefresh } from "$lib/stores/notifications";
 import type { LayoutProps } from "./$types";
 import "virtual:uno.css";
 import "../app.css";
@@ -52,6 +53,12 @@ $effect(() => {
 	return () => {
 		active = false;
 	};
+});
+
+// 通知ページが既読化した直後にバッジを更新する（30秒ポーリングを待たない）
+$effect(() => {
+	if ($notificationCountsRefresh === 0) return;
+	void untrack(() => refreshNotificationCounts());
 });
 
 $effect.pre(() => {
