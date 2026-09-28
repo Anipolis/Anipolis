@@ -2,7 +2,7 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import type { SubmitFunction } from "@sveltejs/kit";
 import type { Snippet } from "svelte";
-import { onDestroy, onMount, tick } from "svelte";
+import { onDestroy, onMount, tick, untrack } from "svelte";
 import { enhance } from "$app/forms";
 import { goto } from "$app/navigation";
 import ExitSurveyModal from "$lib/components/ExitSurveyModal.svelte";
@@ -15,6 +15,18 @@ import type {
 	RoomExitSurveyNextParticipation,
 	TrendingHashtag,
 } from "$lib/types";
+import {
+	createRoomConnectionState,
+	deriveRoomConnectionPhase,
+	formatRelativeTime,
+	ROOM_CONNECTION_PHASE_LABELS,
+	ROOM_CONNECTION_PHASE_TONES,
+	ROOM_LIVE_FETCH_TIMEOUT_MS,
+	ROOM_LIVE_POLL_INTERVAL_MS,
+	type RoomConnectionEvent,
+	reduceRoomConnection,
+	shouldOfferManualReconnect,
+} from "$lib/utils/room-connection";
 
 /**
  * LiveRoomView が期待するデータ形状。
@@ -139,6 +151,22 @@ const displayedPosts = $derived(
 );
 
 let fetchingLive = false;
+
+// ライブ更新の接続状態(Realtime の購読状態 + 差分APIの成否)を畳み込んで表示に使う
+let connection = $state(createRoomConnectionState());
+// 手動再接続でチャンネルを張り直すためのトリガー。インクリメントすると購読 effect が再実行される
+let realtimeGeneration = $state(0);
+let reconnecting = $state(false);
+const connectionPhase = $derived(deriveRoomConnectionPhase(connection, now));
+const connectionLabel = $derived(ROOM_CONNECTION_PHASE_LABELS[connectionPhase]);
+const connectionTone = $derived(ROOM_CONNECTION_PHASE_TONES[connectionPhase]);
+const connectionNeedsAttention = $derived(shouldOfferManualReconnect(connectionPhase));
+const lastUpdateLabel = $derived(formatRelativeTime(connection.lastSuccessAt, now));
+
+function dispatchConnection(event: RoomConnectionEvent) {
+	// effect 内(購読コールバックや初回取得)から呼ばれても connection を依存に登録しない
+	connection = untrack(() => reduceRoomConnection(connection, event));
+}
 
 function getRoomExperimentClientVisitKey(sessionId: string) {
 	const storageKey = getRoomExperimentVisitStorageKey(sessionId);
@@ -379,26 +407,68 @@ function liveDiffQueryParam() {
 	return data.room.kind === "event" ? "event_id" : "session_id";
 }
 
-/** 最後に受信した投稿以降の差分を取得して extraPosts に追加する */
+/**
+ * 最後に受信した投稿以降の差分を取得して extraPosts に追加する。
+ * 成否は接続状態に反映し、非成功応答・例外・タイムアウトを「更新失敗」として画面に伝える。
+ * since は最後の投稿の created_at より後(gt)を返すため、復旧後も ID の重複チェックと合わせて
+ * 取りこぼし・二重表示なく追いつける。
+ */
 async function fetchNewPosts() {
 	if (fetchingLive) return;
 	fetchingLive = true;
+	dispatchConnection({ type: "fetch_start" });
 	try {
 		const last = allPosts[allPosts.length - 1];
 		const params = new URLSearchParams({ [liveDiffQueryParam()]: data.room.session_id });
 		if (last) params.set("since", last.created_at);
-		const res = await fetch(`/api/rooms/posts?${params}`);
-		if (!res.ok) return;
+		// ハングした fetch が fetchingLive を握り続けてポーリングを塞がないようタイムアウトを付ける
+		const res = await fetch(`/api/rooms/posts?${params}`, {
+			signal: AbortSignal.timeout(ROOM_LIVE_FETCH_TIMEOUT_MS),
+		});
+		if (!res.ok) {
+			dispatchConnection({ type: "fetch_failure", at: Date.now() });
+			return;
+		}
 		const body = (await res.json()) as { posts: Post[] };
+		dispatchConnection({ type: "fetch_success", at: Date.now() });
 		if (body.posts.length === 0) return;
 		const seen = new Set(allPosts.map((p) => p.id));
 		const fresh = body.posts.filter((p) => !seen.has(p.id));
 		if (fresh.length > 0) extraPosts = [...extraPosts, ...fresh];
 	} catch {
-		// ネットワークエラーは次回の受信/ポーリングで回復する
+		// ネットワークエラーは次回の受信/ポーリングで回復する。状態には失敗として残す
+		dispatchConnection({ type: "fetch_failure", at: Date.now() });
 	} finally {
 		fetchingLive = false;
 	}
+}
+
+/** 手動再接続: Realtime チャンネルを張り直し、差分APIを即時に叩いて追いつく */
+async function handleManualReconnect() {
+	if (reconnecting) return;
+	reconnecting = true;
+	try {
+		dispatchConnection({ type: "reconnect" });
+		realtimeGeneration += 1;
+		await fetchNewPosts();
+	} finally {
+		reconnecting = false;
+	}
+}
+
+function handleOnline() {
+	dispatchConnection({ type: "online" });
+	// 回線復帰時は Realtime の再参加を待たずに差分を取りに行く
+	if (status === "open") void fetchNewPosts();
+}
+
+function handleOffline() {
+	dispatchConnection({ type: "offline" });
+}
+
+function handleVisibilityChange() {
+	// バックグラウンドから戻ったとき、止まっていたポーリングを待たずに追いつく
+	if (document.visibilityState === "visible" && status === "open") void fetchNewPosts();
 }
 
 const status = $derived.by<RoomStatus>(() => {
@@ -431,6 +501,10 @@ onMount(() => {
 	window.addEventListener("pointerdown", handleWindowPointerDown, true);
 	window.addEventListener("pagehide", handleRoomExperimentPageHide);
 	window.addEventListener("pageshow", handleRoomExperimentPageShow);
+	window.addEventListener("online", handleOnline);
+	window.addEventListener("offline", handleOffline);
+	document.addEventListener("visibilitychange", handleVisibilityChange);
+	if (!navigator.onLine) dispatchConnection({ type: "offline" });
 	void startRoomExperimentTracking();
 });
 
@@ -448,6 +522,9 @@ onDestroy(() => {
 		window.removeEventListener("pointerdown", handleWindowPointerDown, true);
 		window.removeEventListener("pagehide", handleRoomExperimentPageHide);
 		window.removeEventListener("pageshow", handleRoomExperimentPageShow);
+		window.removeEventListener("online", handleOnline);
+		window.removeEventListener("offline", handleOffline);
+		document.removeEventListener("visibilitychange", handleVisibilityChange);
 	}
 	sendRoomExperimentExit();
 });
@@ -504,14 +581,19 @@ $effect(() => {
 
 // 受付中はライブ更新: Realtime の INSERT を購読し、受信をトリガーに差分APIを叩く。
 // Realtime が無効な環境向けに低頻度ポーリングをフォールバックとして併用する。
+// 購読状態はコールバックで接続状態に反映し、realtimeGeneration の更新で張り直せる。
 $effect(() => {
 	if (!mounted || status !== "open") return;
+	// 手動再接続のトリガーを依存に含める(値自体は使わない)
+	void realtimeGeneration;
 
 	const filter =
 		data.room.kind === "event"
 			? `event_id=eq.${data.room.session_id}`
 			: `broadcast_room_session_id=eq.${data.room.session_id}`;
 
+	// クリーンアップ後に届く旧チャンネルの CLOSED を新しい状態に混ぜないためのフラグ
+	let active = true;
 	const channel = data.supabase
 		.channel(`room-${data.room.session_id}`)
 		.on(
@@ -524,10 +606,17 @@ $effect(() => {
 			},
 			() => void fetchNewPosts(),
 		)
-		.subscribe();
-	const pollId = setInterval(() => void fetchNewPosts(), 15000);
+		.subscribe((subscribeStatus) => {
+			if (!active) return;
+			dispatchConnection({ type: "realtime", status: subscribeStatus });
+		});
+	const pollId = setInterval(() => void fetchNewPosts(), ROOM_LIVE_POLL_INTERVAL_MS);
+	// 入室直後に一度取得して「最終更新」を確定させる(購読完了までの取りこぼしも拾う)。
+	// allPosts 等を effect の依存にしないよう untrack で呼ぶ
+	untrack(() => void fetchNewPosts());
 
 	return () => {
+		active = false;
 		clearInterval(pollId);
 		void data.supabase.removeChannel(channel);
 	};
@@ -696,6 +785,34 @@ function formatCompactDate(iso: string) {
 
 		<div class="event-posts-header">
 			<span class="event-posts-count">{allPosts.length}件の実況</span>
+			{#if status === "open"}
+				<div class="room-connection room-connection--{connectionTone}">
+					<span class="room-connection-status">
+						<span class="room-connection-dot" aria-hidden="true"></span>
+						<!-- 状態変化のみ読み上げる。毎秒変わる「最終更新」は live region に含めない -->
+						<span class="room-connection-label" role="status" aria-live="polite" aria-atomic="true"
+							>{connectionLabel}</span
+						>
+						<span class="room-connection-updated">最終更新 {lastUpdateLabel}</span>
+					</span>
+					<button
+						type="button"
+						class="room-connection-reconnect"
+						class:room-connection-reconnect--attention={connectionNeedsAttention}
+						onclick={handleManualReconnect}
+						disabled={reconnecting}
+						aria-label="再接続して最新の投稿を取得"
+						title="再接続して最新の投稿を取得"
+					>
+						<span
+							class="i-lucide-refresh-cw"
+							class:room-connection-spin={reconnecting}
+							aria-hidden="true"
+						></span>
+						<span>{reconnecting ? "再接続中" : "再接続"}</span>
+					</button>
+				</div>
+			{/if}
 		</div>
 
 		<div class="room-order-toggle" role="group" aria-label="投稿の表示順">
@@ -1019,6 +1136,139 @@ function formatCompactDate(iso: string) {
 	to {
 		opacity: 1;
 		transform: translate(-50%, 0) scale(1);
+	}
+}
+
+/* ── ライブ更新の接続状態 ── */
+.event-posts-header {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 6px 12px;
+}
+
+.room-connection {
+	display: inline-flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px 10px;
+	min-width: 0;
+	font-size: 12px;
+	line-height: 1.2;
+	color: var(--color-text-muted);
+}
+
+.room-connection-status {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+}
+
+.room-connection-dot {
+	width: 8px;
+	height: 8px;
+	flex-shrink: 0;
+	border-radius: 999px;
+	background: var(--color-text-muted);
+}
+
+.room-connection--ok .room-connection-dot {
+	background: #22c55e;
+}
+
+.room-connection--pending .room-connection-dot {
+	background: #f59e0b;
+	animation: room-connection-pulse 1.2s ease-in-out infinite;
+}
+
+.room-connection--warn .room-connection-dot {
+	background: #f59e0b;
+}
+
+.room-connection--error .room-connection-dot {
+	background: #ef4444;
+}
+
+.room-connection--warn .room-connection-label,
+.room-connection--error .room-connection-label {
+	color: var(--color-text);
+	font-weight: 600;
+}
+
+.room-connection-updated {
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.room-connection-reconnect {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	min-height: 28px;
+	padding: 4px 8px;
+	border: 1px solid var(--color-border);
+	border-radius: 999px;
+	background: var(--color-surface);
+	color: var(--color-text-muted);
+	font: inherit;
+	font-size: 12px;
+	font-weight: 600;
+	line-height: 1;
+	cursor: pointer;
+	transition:
+		color 0.2s,
+		border-color 0.2s,
+		background-color 0.2s;
+}
+
+.room-connection-reconnect:hover:not(:disabled) {
+	color: var(--color-accent-hover);
+	border-color: var(--color-accent-hover);
+}
+
+.room-connection-reconnect:disabled {
+	cursor: default;
+	opacity: 0.7;
+}
+
+.room-connection-reconnect--attention {
+	color: var(--color-primary);
+	border-color: color-mix(in srgb, var(--color-primary) 40%, transparent);
+	background: color-mix(in srgb, var(--color-surface) 92%, var(--color-primary));
+}
+
+.room-connection-reconnect .i-lucide-refresh-cw {
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+}
+
+.room-connection-spin {
+	animation: room-connection-rotate 1s linear infinite;
+}
+
+@keyframes room-connection-pulse {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.35;
+	}
+}
+
+@keyframes room-connection-rotate {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.room-connection--pending .room-connection-dot,
+	.room-connection-spin {
+		animation: none;
 	}
 }
 
