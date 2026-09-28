@@ -309,8 +309,8 @@ const grouped = $derived(
 </script>
 
 <svelte:head>
-	<title>{displayName} (@{profile.username}) — Anipolis</title>
-	<meta property="og:title" content="{displayName} (@{profile.username}) — Anipolis">
+	<title>{displayName} (@{profile.username}) - Anipolis</title>
+	<meta property="og:title" content="{displayName} (@{profile.username}) - Anipolis">
 	<meta property="og:description" content={profile.bio ?? `@${profile.username}のAnipolisプロフィール`}>
 	<meta property="og:type" content="website">
 	<meta property="og:url" content={page.url.href}>

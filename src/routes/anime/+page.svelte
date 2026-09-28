@@ -403,7 +403,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 }
 </script>
 
-<svelte:head> <title>アニメ — Anipolis</title> </svelte:head>
+<svelte:head> <title>アニメ - Anipolis</title> </svelte:head>
 
 <div class="anime-page-wrap">
 	<main class="anime-main">

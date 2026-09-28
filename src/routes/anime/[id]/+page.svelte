@@ -393,8 +393,8 @@ $effect(() => {
 </script>
 
 <svelte:head>
-	<title>{data.anime.title} — Anipolis</title>
-	<meta property="og:title" content="{data.anime.title} — Anipolis">
+	<title>{data.anime.title} - Anipolis</title>
+	<meta property="og:title" content="{data.anime.title} - Anipolis">
 	<meta property="og:description" content={ogDescription}>
 	<meta property="og:type" content="website">
 	<meta property="og:url" content={page.url.href}>
