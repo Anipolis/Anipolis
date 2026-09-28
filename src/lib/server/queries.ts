@@ -38,6 +38,10 @@ type NotificationActor = {
 
 type NotificationPost = {
 	content: string;
+	image_urls: string[] | null;
+	anime_id: number | null;
+	quoted_post_id: string | null;
+	exchange_share: unknown | null;
 };
 
 type NotificationRecommendation = {
@@ -426,7 +430,11 @@ export async function getNotifications(
                 avatar_url
             ),
             post:posts!notifications_post_id_fkey (
-                content
+                content,
+                image_urls,
+                anime_id,
+                quoted_post_id,
+                exchange_share
             ),
             recommendation:anime_recommendations!notifications_anime_recommendation_id_fkey (
                 anime_id,
@@ -489,6 +497,12 @@ export async function getNotifications(
 			actor_display_name: actor?.display_name ?? null,
 			actor_avatar_url: actor?.avatar_url ?? null,
 			post_content: post?.content ?? "",
+			// post_id があるのに JOIN 結果が無い = 削除済み（または RLS で見えない）投稿
+			post_available: post != null,
+			post_image_count: post?.image_urls?.length ?? 0,
+			post_has_anime_quote: post?.anime_id != null,
+			post_has_quoted_post: post?.quoted_post_id != null,
+			post_has_exchange_share: post?.exchange_share != null,
 			recommendation_anime_id: recommendation?.anime_id != null ? String(recommendation.anime_id) : null,
 			recommendation_anime_title: recommendation?.anime?.title ?? null,
 			recommendation_anime_cover_url: recommendation?.anime?.cover_url ?? null,
