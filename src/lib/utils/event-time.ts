@@ -1,6 +1,6 @@
-const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
+import { JST_OFFSET_MS, LATE_NIGHT_BOUNDARY_HOUR as LATE_NIGHT_CUTOFF_HOUR } from "./jst";
+
 const MINUTES_PER_DAY = 24 * 60;
-const LATE_NIGHT_CUTOFF_HOUR = 4;
 const MAX_EXTENDED_HOUR = 28;
 
 export type ExtendedClockTime = {

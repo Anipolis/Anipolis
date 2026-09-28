@@ -1,3 +1,5 @@
+import { jstBroadcastDateKey, jstDateKey, LATE_NIGHT_BOUNDARY_HOUR } from "$lib/utils/jst";
+
 export type SyobocalScheduleProgram = {
 	pid: number;
 	tid: number;
@@ -40,16 +42,9 @@ function normalizeChannelName(value: string): string {
 	return value.normalize("NFKC").toLocaleLowerCase().replace(/\s+/g, "");
 }
 
-// Intl.DateTimeFormat construction is expensive; reuse one instance.
-const JST_DATE_FORMATTER = new Intl.DateTimeFormat("en-CA", {
-	timeZone: "Asia/Tokyo",
-	year: "numeric",
-	month: "2-digit",
-	day: "2-digit",
-});
-
+/** 瞬間 → JST の暦日キー（午前0時境界）。実装は $lib/utils/jst に集約 */
 export function jstDate(value: string | Date): string {
-	return JST_DATE_FORMATTER.format(typeof value === "string" ? new Date(value) : value);
+	return jstDateKey(value);
 }
 
 const JST_HOUR_FORMATTER = new Intl.DateTimeFormat("en-GB", {
@@ -59,15 +54,12 @@ const JST_HOUR_FORMATTER = new Intl.DateTimeFormat("en-GB", {
 	hour12: false,
 });
 
-const LATE_NIGHT_BOUNDARY_HOUR = 4;
-
 /**
  * 放送日付（深夜アニメ慣習）: JSTで午前4時より前の枠は前日の放送として扱う。
  * broadcast_room_overrides / ensure_broadcast_room_session の room_date と同じ基準。
  */
 export function jstBroadcastDate(value: string | Date): string {
-	const date = typeof value === "string" ? new Date(value) : value;
-	return jstDate(new Date(date.getTime() - LATE_NIGHT_BOUNDARY_HOUR * 60 * 60 * 1000));
+	return jstBroadcastDateKey(value);
 }
 
 /** 放送時刻表示（深夜アニメ慣習）: 午前4時より前は「25:30」のような24時間超表記 */

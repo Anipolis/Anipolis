@@ -1,4 +1,5 @@
 import type { Anime, BroadcastRoomOverride } from "$lib/types";
+import { dateKeyToUtcMidnight, jstWallClockToDate } from "./jst";
 
 export type BroadcastRoomOverridesByAnimeId = Record<string, BroadcastRoomOverride[]>;
 
@@ -12,23 +13,9 @@ export function roomDateKey(value: string): string {
 	return value.slice(0, 10);
 }
 
+/** room_date を TZ 非依存で暦日検証し、曜日計算用の UTC 00:00 Date に変換する */
 function dateKeyToDate(value: string) {
-	const dateKey = roomDateKey(value);
-	const match = dateKey.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-	if (!match) return null;
-	const year = Number(match[1]);
-	const month = Number(match[2]);
-	const day = Number(match[3]);
-	const date = new Date(year, month - 1, day);
-	if (
-		Number.isNaN(date.getTime()) ||
-		date.getFullYear() !== year ||
-		date.getMonth() !== month - 1 ||
-		date.getDate() !== day
-	) {
-		return null;
-	}
-	return date;
+	return dateKeyToUtcMidnight(roomDateKey(value));
 }
 
 /** Return whether a room date is an actual Gregorian calendar date. */
@@ -56,7 +43,7 @@ export function animeIsScheduledForRoomDate(
 	const roomDate = roomDateKey(dateKey);
 	const date = dateKeyToDate(roomDate);
 	if (!date) return false;
-	if (!hasOverride && (anime.broadcast_day == null || date.getDay() !== anime.broadcast_day)) return false;
+	if (!hasOverride && (anime.broadcast_day == null || date.getUTCDay() !== anime.broadcast_day)) return false;
 
 	const airedFrom = anime.aired_from?.slice(0, 10) ?? null;
 	if (airedFrom && roomDate < airedFrom) return false;
@@ -126,8 +113,10 @@ export function minutesUntilBroadcast(
 	const minutes = broadcastTimeMinutes(broadcastTime);
 	if (minutes == null) return null;
 
-	const scheduledAt = new Date(`${roomDate}T00:00:00`);
-	scheduledAt.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
+	// broadcast_time は JST の壁時計（25:30 のような深夜表記込み）。ブラウザ TZ に
+	// 依存しないよう JST 固定で実時刻に変換する
+	const scheduledAt = jstWallClockToDate(roomDateKey(roomDate), Math.floor(minutes / 60), minutes % 60);
+	if (!scheduledAt) return null;
 	return Math.round((scheduledAt.getTime() - now.getTime()) / 60_000);
 }
 
