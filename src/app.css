@@ -1960,11 +1960,74 @@ textarea {
 /* 縺・＞縺ｭ */
 .post-like-btn:not(:disabled):hover {
 	color: #f43f5e;
-	background: rgba(244, 63, 94, 0.1);
 }
 
 .post-like-btn.active {
 	color: #f43f5e;
+}
+
+.post-like-btn svg {
+	transition: transform 0.1s ease-out;
+}
+
+/* Press in while held; the pop on release starts from this scale. */
+.post-like-btn:not(:disabled):active svg {
+	transform: scale(0.7);
+}
+
+.post-like-btn.popping svg {
+	animation: like-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.post-like-btn.popping::after {
+	content: "";
+	position: absolute;
+	inset: 50% auto auto 50%;
+	width: 28px;
+	height: 28px;
+	margin: -14px 0 0 -14px;
+	border-radius: 50%;
+	border: 2px solid #f43f5e;
+	pointer-events: none;
+	animation: like-ring 0.4s ease-out forwards;
+}
+
+@keyframes like-pop {
+	0% {
+		transform: scale(0.7);
+	}
+	50% {
+		transform: scale(1.3);
+	}
+	100% {
+		transform: scale(1);
+	}
+}
+
+@keyframes like-ring {
+	from {
+		transform: scale(0.3);
+		opacity: 0.8;
+	}
+	to {
+		transform: scale(1.2);
+		opacity: 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.post-like-btn.popping svg,
+	.post-like-btn.popping::after {
+		animation: none;
+	}
+
+	.post-like-btn svg {
+		transition: none;
+	}
+
+	.post-like-btn:not(:disabled):active svg {
+		transform: none;
+	}
 }
 
 .reaction-action-group {
@@ -2010,6 +2073,12 @@ textarea {
 .reaction-count-static.has-count {
 	margin-left: 0;
 	min-width: 28px;
+}
+
+/* Like shows its count on the left of the icon. */
+.post-footer-like .reaction-count-static {
+	margin-left: 0;
+	margin-right: 2px;
 }
 
 .reaction-icon-hitbox {
@@ -2069,10 +2138,6 @@ textarea {
 
 .post-repost-btn.reaction-icon-hitbox:not(:disabled):hover::before {
 	background: rgba(34, 197, 94, 0.1);
-}
-
-.post-like-btn.reaction-icon-hitbox:not(:disabled):hover::before {
-	background: rgba(244, 63, 94, 0.1);
 }
 
 .post-bookmark-btn.reaction-icon-hitbox:not(:disabled):hover::before {

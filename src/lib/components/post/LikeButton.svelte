@@ -12,16 +12,37 @@ interface Props {
 let { controller, detail = false }: Props = $props();
 
 const label = $derived(controller.likedByMe ? "いいね取り消し" : "いいね");
+
+// Play the pop only on a user-initiated like, not for posts already liked on load.
+let popping = $state(false);
 </script>
 
 <div class="post-footer-item post-footer-like">
 	<div class="reaction-action-group">
+		{#if detail && controller.isOwn && controller.likeCount > 0}
+			<button
+				type="button"
+				class="reaction-count-button post-like-count reaction-count-hitbox"
+				aria-label="いいねしたユーザーを表示"
+				aria-expanded={controller.openReactionType === 'like'}
+				onclick={(event) => controller.openReactionPopover(event, 'like')}
+			>
+				{controller.likeCount}
+			</button>
+		{:else}
+			<span class="reaction-count-static" class:has-count={detail && controller.likeCount > 0}
+				>{controller.likeCount > 0 ? controller.likeCount : ''}</span
+			>
+		{/if}
 		<form method="POST" action="?/like" use:enhance={controller.handleLike}>
 			<input type="hidden" name="post_id" value={controller.post.id}>
 			<button
 				type="submit"
 				class="post-action-btn post-like-btn reaction-icon-hitbox"
 				class:active={controller.likedByMe}
+				class:popping
+				onclick={() => (popping = !controller.likedByMe)}
+				onanimationend={() => (popping = false)}
 				aria-pressed={controller.likedByMe}
 				disabled={!controller.isLoggedIn}
 				aria-label={label}
@@ -44,21 +65,6 @@ const label = $derived(controller.likedByMe ? "いいね取り消し" : "いい�
 				</svg>
 			</button>
 		</form>
-		{#if detail && controller.isOwn && controller.likeCount > 0}
-			<button
-				type="button"
-				class="reaction-count-button post-like-count reaction-count-hitbox"
-				aria-label="いいねしたユーザーを表示"
-				aria-expanded={controller.openReactionType === 'like'}
-				onclick={(event) => controller.openReactionPopover(event, 'like')}
-			>
-				{controller.likeCount}
-			</button>
-		{:else}
-			<span class="reaction-count-static" class:has-count={detail && controller.likeCount > 0}
-				>{controller.likeCount > 0 ? controller.likeCount : ''}</span
-			>
-		{/if}
 		{#if controller.openReactionType === 'like'}
 			<ReactionUsersPopover
 				title="いいねしたユーザー"
