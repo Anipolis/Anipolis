@@ -120,6 +120,22 @@ export type TimelineCursor = {
 };
 
 /**
+ * 次ページのカーソルを、ミュート除外の前に DB から受け取った行から作る。
+ * 除外後の件数で「続きあり」を判定すると、ミュートで 1 件でも減ったページは
+ * 続きなし扱いになり、ミュートを使うユーザーほど古い投稿へ進めなくなる（#35）。
+ * カーソルも除外前の最終行から作り、除外された投稿の分を読み飛ばさない。
+ */
+export function buildTimelineNextCursor<T>(
+	rows: readonly T[],
+	limit: number,
+	toCursor: (row: T) => TimelineCursor,
+): TimelineCursor | null {
+	if (rows.length < limit) return null;
+	const last = rows[rows.length - 1];
+	return last ? toCursor(last) : null;
+}
+
+/**
  * リクエストスコープのミュート設定キャッシュ。
  *
  * supabase クライアントは `hooks.server.ts` でリクエストごとに新規生成されるため、
@@ -295,7 +311,7 @@ export async function getHomeTimelinePosts(
 	supabase: SupabaseClient<Database>,
 	userId: string | null,
 	options: { limit?: number; select?: string; cursor?: TimelineCursor } = {},
-): Promise<{ posts: Post[]; error: unknown | null }> {
+): Promise<{ posts: Post[]; error: unknown | null; nextCursor: TimelineCursor | null }> {
 	const limit = options.limit ?? 50;
 	const select = options.select ?? POST_LIST_SELECT;
 	let query = supabase
@@ -312,8 +328,10 @@ export async function getHomeTimelinePosts(
 	}
 
 	const { data, error } = await query;
-	if (error) return { posts: [], error };
-	return { posts: await enrichPostsWithCounts(supabase, (data ?? []) as unknown as RawPost[], userId), error: null };
+	if (error) return { posts: [], error, nextCursor: null };
+	const rawPosts = (data ?? []) as unknown as RawPost[];
+	const nextCursor = buildTimelineNextCursor(rawPosts, limit, (row) => ({ createdAt: row.created_at, id: row.id }));
+	return { posts: await enrichPostsWithCounts(supabase, rawPosts, userId), error: null, nextCursor };
 }
 
 export async function getMutedWords(supabase: SupabaseClient<Database>, userId: string | null): Promise<string[]> {
@@ -1399,6 +1417,8 @@ type TimelinePostsWithRepostsResult = {
 	error: unknown | null;
 };
 
+type FollowingTimelineResult = TimelinePostsWithRepostsResult & { nextCursor: TimelineCursor | null };
+
 type FollowingTimelineRow = {
 	post_id: string;
 	timeline_created_at: string;
@@ -1422,7 +1442,7 @@ export async function getFollowingTimelinePosts(
 	supabase: SupabaseClient<Database>,
 	currentUserId: string,
 	options: { limit?: number; select?: string; before?: string; beforeId?: string } = {},
-): Promise<TimelinePostsWithRepostsResult> {
+): Promise<FollowingTimelineResult> {
 	const limit = options.limit ?? 50;
 	const select = options.select ?? POST_LIST_SELECT;
 	const { data: timelineRows, error: timelineError } = await (supabase.rpc as unknown as FollowingTimelineRpc)(
@@ -1433,8 +1453,14 @@ export async function getFollowingTimelinePosts(
 			...(options.beforeId ? { p_before_id: options.beforeId } : {}),
 		},
 	);
-	if (timelineError) return { posts: [], error: timelineError };
-	if (!timelineRows || timelineRows.length === 0) return { posts: [], error: null };
+	if (timelineError) return { posts: [], error: timelineError, nextCursor: null };
+	if (!timelineRows || timelineRows.length === 0) return { posts: [], error: null, nextCursor: null };
+
+	// RPC の並び順キー（timeline_created_at, post_id）から、ミュート除外前の最終行でカーソルを作る
+	const nextCursor = buildTimelineNextCursor(timelineRows, limit, (row) => ({
+		createdAt: row.timeline_created_at,
+		id: row.post_id,
+	}));
 
 	const postIds = timelineRows.map((row) => row.post_id);
 	const [rawPostsResult, repostProfilesResult] = await Promise.all([
@@ -1448,8 +1474,8 @@ export async function getFollowingTimelinePosts(
 				: Promise.resolve({ data: [] as ProfileRepostContext[], error: null });
 		})(),
 	]);
-	if (rawPostsResult.error) return { posts: [], error: rawPostsResult.error };
-	if (repostProfilesResult.error) return { posts: [], error: repostProfilesResult.error };
+	if (rawPostsResult.error) return { posts: [], error: rawPostsResult.error, nextCursor: null };
+	if (repostProfilesResult.error) return { posts: [], error: repostProfilesResult.error, nextCursor: null };
 
 	const rawPostsById = new Map(((rawPostsResult.data ?? []) as unknown as RawPost[]).map((post) => [post.id, post]));
 	const repostProfilesById = new Map(
@@ -1476,7 +1502,7 @@ export async function getFollowingTimelinePosts(
 		];
 	});
 
-	return { posts: await enrichPostsWithCounts(supabase, rawTimelinePosts, currentUserId), error: null };
+	return { posts: await enrichPostsWithCounts(supabase, rawTimelinePosts, currentUserId), error: null, nextCursor };
 }
 
 export async function getTimelinePostsWithReposts(
