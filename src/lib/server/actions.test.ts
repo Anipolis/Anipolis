@@ -1,7 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
 import type { Database } from "$lib/supabase/database.types";
-import { createInviteErrorStatus, insertPostWithHashtags, requireAccountCanWrite } from "./actions";
+import {
+	createInviteErrorStatus,
+	getAnimeExchangeErrorDetail,
+	insertPostWithHashtags,
+	requireAccountCanWrite,
+} from "./actions";
 
 type TableChain = Record<string, unknown>;
 
@@ -177,6 +182,16 @@ describe("insertPostWithHashtags", () => {
 	});
 });
 
+describe("getAnimeExchangeErrorDetail", () => {
+	it("recognizes the beta and account-status rejections raised by migration 130", () => {
+		expect(getAnimeExchangeErrorDetail({ details: "ANIME_EXCHANGE_FORBIDDEN" })).toBe("ANIME_EXCHANGE_FORBIDDEN");
+		expect(getAnimeExchangeErrorDetail({ details: "ANIME_EXCHANGE_ACCOUNT_RESTRICTED" })).toBe(
+			"ANIME_EXCHANGE_ACCOUNT_RESTRICTED",
+		);
+		expect(getAnimeExchangeErrorDetail({ details: "SOMETHING_ELSE" })).toBeNull();
+	});
+});
+
 describe("requireAccountCanWrite", () => {
 	function moderationClient(row: { status: string; restricted_until: string | null } | null) {
 		return {
@@ -219,6 +234,10 @@ describe("requireAccountCanWrite", () => {
 });
 
 describe("createInviteErrorStatus", () => {
+	it("maps an account-status rejection to HTTP 403", () => {
+		expect(createInviteErrorStatus({ details: "INVITE_ACCOUNT_RESTRICTED" })).toBe(403);
+	});
+
 	it("maps a beta-membership failure to HTTP 403", () => {
 		expect(createInviteErrorStatus({ details: "INVITE_FORBIDDEN" })).toBe(403);
 	});
