@@ -308,8 +308,11 @@ function handleKeydown(event: KeyboardEvent) {
 	height: 100%;
 	object-fit: contain;
 }
+/* Fixed width so a growing like count never squeezes the text column. */
 .post-row-main :global(.post-footer-like) {
 	flex-shrink: 0;
+	justify-content: flex-end;
+	width: 56px;
 }
 .post-row-main :global(.post-footer-like > :first-child) {
 	margin: 0;
@@ -320,6 +323,7 @@ function handleKeydown(event: KeyboardEvent) {
 .post-row-main :global(.reaction-count-static) {
 	min-width: 0;
 	font-size: 11px;
+	font-variant-numeric: tabular-nums;
 }
 /* Square, but centered under the 32px menu button above. */
 .post-row-main :global(.post-like-btn) {
