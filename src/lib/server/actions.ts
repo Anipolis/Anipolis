@@ -115,12 +115,15 @@ export function getAnimeExchangeErrorDetail(error: {
 export async function getCurrentModerationStatus(
 	supabase: SupabaseClient<Database>,
 	userId: string,
-): Promise<ModerationProfile> {
-	const { data } = await supabase
+): Promise<ModerationProfile | null> {
+	const { data, error: lookupError } = await supabase
 		.from("account_moderation")
 		.select("status, restricted_until")
 		.eq("user_id", userId)
 		.maybeSingle();
+	// 照会に失敗したら null を返し、呼び出し側で fail closed にする。
+	// active 扱いにすると、Storage ポリシーで拒否されるまで検証やアップロードが進んでしまう。
+	if (lookupError) return null;
 	const status = (data?.status ?? "active") as ModerationStatus;
 	const until = data?.restricted_until ?? null;
 
@@ -135,6 +138,9 @@ export async function getCurrentModerationStatus(
 
 export async function ensureAccountCanWrite(supabase: SupabaseClient<Database>, userId: string) {
 	const profile = await getCurrentModerationStatus(supabase, userId);
+	if (!profile) {
+		return fail(503, { message: "アカウント状態を確認できません。しばらくしてからお試しください" });
+	}
 	if (profile.moderation_status === "banned") {
 		return fail(403, { message: "このアカウントはBANされています" });
 	}

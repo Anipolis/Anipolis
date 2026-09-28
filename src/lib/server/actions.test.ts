@@ -205,6 +205,13 @@ describe("requireAccountCanWrite", () => {
 		).rejects.toMatchObject({ status: 403, body: { message: "このアカウントはBANされています" } });
 	});
 
+	it("fails closed with 503 when the moderation lookup itself fails", async () => {
+		const client = {
+			from: vi.fn(() => maybeSingleChain({ data: null, error: { message: "connection reset" } })),
+		} as unknown as SupabaseClient<Database>;
+		await expect(requireAccountCanWrite(client, "user-1")).rejects.toMatchObject({ status: 503 });
+	});
+
 	it("throws 403 for accounts restricted into the future", async () => {
 		const client = moderationClient({ status: "restricted", restricted_until: "2999-01-01T00:00:00Z" });
 		await expect(requireAccountCanWrite(client, "user-1")).rejects.toMatchObject({ status: 403 });
