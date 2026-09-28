@@ -2445,15 +2445,6 @@ export type Database = {
 					reposted_by_me: boolean;
 				}[];
 			};
-			get_post_engagement_counts: {
-				Args: { target_post_ids: string[] };
-				Returns: {
-					like_count: number;
-					post_id: string;
-					reply_count: number;
-					repost_count: number;
-				}[];
-			};
 			get_post_reaction_users: {
 				Args: { action_type: string; target_post_id: string };
 				Returns: {
