@@ -3,6 +3,7 @@ import { computeBroadcastStatus } from "$lib/broadcast-status";
 import { toValidExchangeSubjectiveTags } from "$lib/exchange-tags";
 import { buildPostCardSelect } from "$lib/server/post-selects";
 import type { Database } from "$lib/supabase/database.types";
+import { isEpisodeSuppressedSnapshot } from "$lib/syobocal-episodes";
 import type {
 	Anime,
 	AnimeDataAttribution,
@@ -3183,6 +3184,8 @@ export interface ScheduleBroadcastSession {
 	room_date: string;
 	scheduled_at: string;
 	episode_number: number | null;
+	/** 話数異常で番号を外した（source_snapshot.episode_anomaly.applied）。週次補完も抑止する */
+	episode_suppressed: boolean;
 }
 
 /**
@@ -3199,7 +3202,7 @@ export async function getScheduleBroadcastSessionsInRange(
 	const reader = supabase as SupabaseClient<any>;
 	const { data, error } = await reader
 		.from("broadcast_room_sessions")
-		.select("anime_id,room_date,scheduled_at,episode_number")
+		.select("anime_id,room_date,scheduled_at,episode_number,source_snapshot")
 		.eq("room_kind", "episode")
 		.eq("schedule_source", "syobocal")
 		.gte("room_date", startDate)
@@ -3215,6 +3218,8 @@ export async function getScheduleBroadcastSessionsInRange(
 		room_date: String(row["room_date"] ?? "").slice(0, 10),
 		scheduled_at: String(row["scheduled_at"] ?? ""),
 		episode_number: typeof row["episode_number"] === "number" ? row["episode_number"] : null,
+		// 話数異常で番号を外したセッション: カレンダーは週次カウントで補完しない（#246）
+		episode_suppressed: isEpisodeSuppressedSnapshot(row["source_snapshot"]),
 	}));
 }
 

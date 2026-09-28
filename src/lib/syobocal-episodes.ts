@@ -62,8 +62,20 @@ export const EPISODE_OVER_COUNT_TOLERANCE = 2;
  */
 export function parseEpisodeCount(value: string | number | null | undefined): number | null {
 	if (value === null || value === undefined) return null;
-	const parsed = typeof value === "number" ? value : Number.parseInt(value, 10);
-	return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+	if (typeof value === "number") return Number.isInteger(value) && value > 0 ? value : null;
+	// "12abc" を 12 と読まない: 数字だけの文字列に限る
+	const text = value.trim();
+	if (!/^\d+$/.test(text)) return null;
+	const parsed = Number(text);
+	return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+/** セッションの source_snapshot に「話数異常で番号を外した」印があるか（カレンダーの補完抑止に使う） */
+export function isEpisodeSuppressedSnapshot(snapshot: unknown): boolean {
+	if (!snapshot || typeof snapshot !== "object") return false;
+	const anomaly = (snapshot as { episode_anomaly?: unknown }).episode_anomaly;
+	if (!anomaly || typeof anomaly !== "object") return false;
+	return (anomaly as { applied?: unknown }).applied === true;
 }
 
 /**
@@ -82,12 +94,11 @@ export function detectEpisodeAnomalies(
 	const seen = new Map<number, number>(); // episodeNumber -> 最初に出た pid
 	let previous: { pid: number; episodeNumber: number } | null = null;
 
-	// 上限検査の扱いを先に決める（上記ヘッダーの方針）
-	const numbers = ordered.map((program) => program.episodeNumber as number);
-	const placeholderCount = episodeCount === 1 && numbers.length >= 2;
+	// 上限検査の扱い（上記ヘッダーの方針）。総話数 1 で複数話ならプレースホルダーとみなす
+	const placeholderCount = episodeCount === 1 && ordered.length >= 2;
 	const effectiveCount = placeholderCount ? null : episodeCount;
-	const hasInRange = effectiveCount !== null && numbers.some((number) => number <= effectiveCount);
-	const allOverCount = effectiveCount !== null && numbers.length > 0 && !hasInRange;
+	// 判定時点までに上限内の番号を観測したか。未来の番組で判断しない（[15, 1] の 15 は報告のみ）
+	let seenInRange = false;
 
 	for (const program of ordered) {
 		const episodeNumber = program.episodeNumber as number;
@@ -98,10 +109,17 @@ export function detectEpisodeAnomalies(
 		if (firstPid !== undefined) {
 			kind = "duplicate";
 			detail = `same episode already scheduled by pid ${firstPid}`;
-		} else if (effectiveCount !== null && episodeNumber > effectiveCount && hasInRange) {
-			// 上限を少し超えるだけなら総話数の古さが濃厚: 報告のみで番号は活かす
-			kind = episodeNumber - effectiveCount > EPISODE_OVER_COUNT_TOLERANCE ? "over_count" : "count_mismatch";
-			detail = `exceeds the title's ${effectiveCount} episodes`;
+		} else if (effectiveCount !== null && episodeNumber > effectiveCount) {
+			// 上限内の番号を先に観測していて、かつ大きく超えたときだけ番号を外す。
+			// 少し超えるだけなら総話数の古さが濃厚、上限内を一度も見ていなければ通し番号の TID:
+			// どちらも報告のみで番号は活かす
+			kind =
+				seenInRange && episodeNumber - effectiveCount > EPISODE_OVER_COUNT_TOLERANCE
+					? "over_count"
+					: "count_mismatch";
+			detail = seenInRange
+				? `exceeds the title's ${effectiveCount} episodes`
+				: `exceeds the title's ${effectiveCount} episodes before any in-range episode (continuous TID or stale count)`;
 		} else if (previous && episodeNumber < previous.episodeNumber) {
 			kind = "reset";
 			detail = `goes back from episode ${previous.episodeNumber} (pid ${previous.pid})`;
@@ -119,16 +137,9 @@ export function detectEpisodeAnomalies(
 		if (kind) {
 			// 報告のみ: 番号は活かし、順序検査の基準にも使う
 			anomalies.push({ pid: program.pid, kind, episodeNumber, detail });
-		} else if (allOverCount && effectiveCount !== null) {
-			// 番号は活かす（報告のみ）。順序検査の基準にはそのまま使う
-			anomalies.push({
-				pid: program.pid,
-				kind: "count_mismatch",
-				episodeNumber,
-				detail: `all numbers exceed the title's ${effectiveCount} episodes (continuous TID or stale count)`,
-			});
 		}
 
+		if (effectiveCount !== null && episodeNumber <= effectiveCount) seenInRange = true;
 		seen.set(episodeNumber, program.pid);
 		previous = { pid: program.pid, episodeNumber };
 	}
@@ -136,15 +147,21 @@ export function detectEpisodeAnomalies(
 	return anomalies;
 }
 
+/** 作品（グループ）と pid の組で異常を引くキー。共有 TID では同じ pid が複数作品に選ばれ得る */
+export function episodeAnomalyKey(group: number, pid: number): string {
+	return `${group}:${pid}`;
+}
+
 /**
- * 作品ごとにまとめて検査し、pid → 異常 のマップで返す。
- * importer が番組をセッション行に変換するときと、既存セッションの監査で共用する。
+ * 作品ごとにまとめて検査し、"作品:pid" → 異常 のマップで返す。
+ * pid だけをキーにすると、同じ TID を有効期間で分け合う複数の MAL 作品が同じ番組を選んだときに
+ * 一方の判定がもう一方を上書きする。importer の照合も同じキーで行う。
  */
 export function detectEpisodeAnomaliesByGroup<T extends EpisodeCheckProgram>(
 	programs: readonly T[],
 	groupKey: (program: T) => number,
 	episodeCountFor: (key: number) => number | null,
-): Map<number, EpisodeAnomaly & { group: number }> {
+): Map<string, EpisodeAnomaly & { group: number }> {
 	const groups = new Map<number, T[]>();
 	for (const program of programs) {
 		const key = groupKey(program);
@@ -152,10 +169,10 @@ export function detectEpisodeAnomaliesByGroup<T extends EpisodeCheckProgram>(
 		values.push(program);
 		groups.set(key, values);
 	}
-	const result = new Map<number, EpisodeAnomaly & { group: number }>();
+	const result = new Map<string, EpisodeAnomaly & { group: number }>();
 	for (const [key, members] of groups) {
 		for (const anomaly of detectEpisodeAnomalies(members, episodeCountFor(key))) {
-			result.set(anomaly.pid, { ...anomaly, group: key });
+			result.set(episodeAnomalyKey(key, anomaly.pid), { ...anomaly, group: key });
 		}
 	}
 	return result;

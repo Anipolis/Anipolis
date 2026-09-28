@@ -3,6 +3,7 @@ import {
 	detectEpisodeAnomalies,
 	detectEpisodeAnomaliesByGroup,
 	isAppliedEpisodeAnomaly,
+	isEpisodeSuppressedSnapshot,
 	parseEpisodeCount,
 } from "./syobocal-episodes";
 
@@ -18,6 +19,9 @@ describe("parseEpisodeCount", () => {
 		expect(parseEpisodeCount(24)).toBe(24);
 		expect(parseEpisodeCount("Unknown")).toBeNull();
 		expect(parseEpisodeCount("0")).toBeNull();
+		expect(parseEpisodeCount("12abc")).toBeNull();
+		expect(parseEpisodeCount(" 12 ")).toBe(12);
+		expect(parseEpisodeCount(12.5)).toBeNull();
 		expect(parseEpisodeCount(null)).toBeNull();
 	});
 });
@@ -44,6 +48,15 @@ describe("detectEpisodeAnomalies", () => {
 		]);
 		expect(anomalies[0]?.detail).toContain("12 episodes");
 		expect(isAppliedEpisodeAnomaly("over_count")).toBe(true);
+	});
+
+	it("only drops an overshoot after an in-range episode was actually observed first", () => {
+		// 15 話が先に来て、その後に 1 話: 15 は報告のみ（未来の 1 を根拠に外さない）、1 は巻き戻り
+		const programs = [program(1, 0, 15), program(2, 1, 1)];
+		expect(detectEpisodeAnomalies(programs, 12).map((a) => [a.pid, a.kind])).toEqual([
+			[1, "count_mismatch"],
+			[2, "reset"],
+		]);
 	});
 
 	it("skips the count check when the episode count is unknown", () => {
@@ -117,7 +130,33 @@ describe("detectEpisodeAnomaliesByGroup", () => {
 			(p) => p.malId,
 			(malId) => counts[malId] ?? null,
 		);
-		expect([...result.keys()]).toEqual([2]);
-		expect(result.get(2)).toMatchObject({ kind: "over_count", group: 100 });
+		expect([...result.keys()]).toEqual(["100:2"]);
+		expect(result.get("100:2")).toMatchObject({ kind: "over_count", group: 100 });
+	});
+
+	it("keeps verdicts apart when two titles select the same program", () => {
+		// 共有 TID: 同じ pid 9 を 2 作品が選ぶ。片方だけ重複扱い
+		const programs = [
+			{ ...program(9, 0, 5), malId: 100 },
+			{ ...program(8, 1, 5), malId: 100 },
+			{ ...program(9, 0, 5), malId: 200 },
+		];
+		const result = detectEpisodeAnomaliesByGroup(
+			programs,
+			(p) => p.malId,
+			() => null,
+		);
+		expect([...result.keys()]).toEqual(["100:8"]);
+	});
+});
+
+describe("isEpisodeSuppressedSnapshot", () => {
+	it("recognizes only applied anomalies", () => {
+		expect(isEpisodeSuppressedSnapshot({ episode_anomaly: { applied: true, kind: "duplicate" } })).toBe(true);
+		expect(isEpisodeSuppressedSnapshot({ episode_anomaly: { applied: false, kind: "count_mismatch" } })).toBe(
+			false,
+		);
+		expect(isEpisodeSuppressedSnapshot({})).toBe(false);
+		expect(isEpisodeSuppressedSnapshot(null)).toBe(false);
 	});
 });

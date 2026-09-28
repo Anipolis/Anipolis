@@ -422,6 +422,8 @@ function canSubscribe(anime: Anime): boolean {
 	return s === "airing" || s === "upcoming";
 }
 
+const suppressedEpisodeKeys = $derived(new Set(data.suppressedEpisodeKeys ?? []));
+
 function currentEpisodeForSlot(
 	anime: Anime,
 	dateStr: string,
@@ -429,10 +431,13 @@ function currentEpisodeForSlot(
 ): BroadcastEpisodeSlot | null {
 	// 話数はしょぼい番組表由来のセッション値が第一（ルームページと同じ優先順位）。
 	// 週次カウントは休止・特番を補正できず長期作品でずれるため、補完専用。
-	const sessionEpisode = data.sessionEpisodeNumbers[`${anime.id}:${dateStr}`];
+	const sessionKey = `${anime.id}:${dateStr}`;
+	const sessionEpisode = data.sessionEpisodeNumbers[sessionKey];
 	if (sessionEpisode != null) {
 		return { date: dateStr, start: sessionEpisode, end: sessionEpisode, label: null };
 	}
+	// 話数異常で番号を外した枠は補完もしない（誤った回を機械カウントで復活させない、#246）
+	if (suppressedEpisodeKeys.has(sessionKey)) return null;
 	if (!anime.aired_from) return null;
 	return resolveBroadcastEpisodeSlot({
 		date: dateStr,

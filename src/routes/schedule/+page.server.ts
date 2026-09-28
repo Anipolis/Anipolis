@@ -194,9 +194,14 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	// 話数もしょぼい番組表由来の値が第一（長期作品は休止・特番で週次カウントが
 	// ずれるため、曜日からの機械カウントはセッションに番号が無い場合の補完のみ）
 	const sessionEpisodeNumbers: Record<string, number> = {};
+	// 話数異常で番号を外したセッション。週次カウントによる補完も行わず、話数バッジを出さない（#246）
+	const suppressedEpisodeKeys: string[] = [];
 	for (const session of sessions) {
+		const key = `${session.anime_id}:${session.room_date}`;
 		if (session.episode_number != null) {
-			sessionEpisodeNumbers[`${session.anime_id}:${session.room_date}`] = session.episode_number;
+			sessionEpisodeNumbers[key] = session.episode_number;
+		} else if (session.episode_suppressed) {
+			suppressedEpisodeKeys.push(key);
 		}
 	}
 	const animeById = new Map(animeList.map((anime) => [Number(anime.id), anime]));
@@ -278,6 +283,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		days,
 		dayLabels: DAY_LABELS,
 		sessionEpisodeNumbers,
+		suppressedEpisodeKeys,
 		events,
 		user,
 		isAdmin,

@@ -24,6 +24,7 @@ import {
 import {
 	detectEpisodeAnomaliesByGroup,
 	type EpisodeAnomaly,
+	episodeAnomalyKey,
 	isAppliedEpisodeAnomaly,
 	parseEpisodeCount,
 } from "../src/lib/syobocal-episodes.ts";
@@ -1395,7 +1396,7 @@ export type ProgramEpisodeAnomaly = EpisodeAnomaly & {
 function collectEpisodeAnomalies(
 	animeRows: AnimeRoomRow[],
 	primaryPrograms: ReturnType<typeof selectPrimarySyobocalPrograms>,
-): Map<number, ProgramEpisodeAnomaly> {
+): Map<string, ProgramEpisodeAnomaly> {
 	const animeByMal = new Map(animeRows.map((anime) => [anime.mal_id, anime]));
 	const checked = primaryPrograms.filter((program) => animeByMal.has(program.malId));
 	const detected = detectEpisodeAnomaliesByGroup(
@@ -1403,12 +1404,13 @@ function collectEpisodeAnomalies(
 		(program) => program.malId,
 		(malId) => parseEpisodeCount(animeByMal.get(malId)?.episode_count),
 	);
-	const programByPid = new Map(checked.map((program) => [program.pid, program]));
-	const result = new Map<number, ProgramEpisodeAnomaly>();
-	for (const [pid, anomaly] of detected) {
-		const program = programByPid.get(pid);
+	// キーは "malId:pid"。共有 TID では同じ pid を複数の作品が選ぶため pid 単独では衝突する
+	const programByKey = new Map(checked.map((program) => [episodeAnomalyKey(program.malId, program.pid), program]));
+	const result = new Map<string, ProgramEpisodeAnomaly>();
+	for (const [key, anomaly] of detected) {
+		const program = programByKey.get(key);
 		if (!program) continue;
-		result.set(pid, {
+		result.set(key, {
 			pid: anomaly.pid,
 			kind: anomaly.kind,
 			episodeNumber: anomaly.episodeNumber,
@@ -1425,7 +1427,7 @@ function buildBroadcastRoomSessionRows(
 	animeRows: AnimeRoomRow[],
 	primaryPrograms: ReturnType<typeof selectPrimarySyobocalPrograms>,
 	importedAt: string,
-	episodeAnomalies: ReadonlyMap<number, ProgramEpisodeAnomaly> = new Map(),
+	episodeAnomalies: ReadonlyMap<string, ProgramEpisodeAnomaly> = new Map(),
 ) {
 	const animeByMal = new Map(animeRows.map((anime) => [anime.mal_id, anime]));
 	const rows = primaryPrograms.flatMap((program) => {
@@ -1433,7 +1435,7 @@ function buildBroadcastRoomSessionRows(
 		if (!anime || anime.room_type === "global" || !anime.metadata_ready || anime.hidden_by_admin) return [];
 		// 話数が疑わしい枠は番号なしで開く。カレンダーと実況履歴に誤った回を出さないため
 		// count_mismatch は報告のみで番号を活かす
-		const anomaly = episodeAnomalies.get(program.pid);
+		const anomaly = episodeAnomalies.get(episodeAnomalyKey(program.malId, program.pid));
 		const episodeNumber = anomaly && isAppliedEpisodeAnomaly(anomaly.kind) ? null : program.episodeNumber;
 		const startsAt = Date.parse(program.startsAt);
 		const endsAt = Date.parse(program.endsAt);
