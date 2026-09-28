@@ -4,12 +4,20 @@ import { onDestroy, onMount } from "svelte";
 import { browser, dev } from "$app/environment";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
+import {
+	classifySwipe,
+	decideSwipeStart,
+	hasTextSelection,
+	resolveSwipeAxis,
+	type SwipeAxis,
+	type SwipeElementLike,
+	type SwipeResult,
+	type SwipeStartDecision,
+} from "$lib/utils/swipe-gesture";
 
 interface Props {
 	session: Session | null;
 }
-
-type SwipeResult = "WAITING" | "SWIPE_NEXT" | "SWIPE_PREV" | "IGNORE_SHORT" | "IGNORE_VERTICAL" | "IGNORE_ROUTE";
 
 type RouteEntry = {
 	path: string;
@@ -19,18 +27,18 @@ type RouteEntry = {
 let { session }: Props = $props();
 
 const mobileQuery = "(max-width: 960px)";
-const minSwipeDistance = 42;
-const horizontalIntentRatio = 2;
 
 let mainElement: HTMLElement | null = null;
 let startX = 0;
 let startY = 0;
 let tracking = false;
-let startedOnIgnoredArea = false;
+let startDecision: SwipeStartDecision = "TRACK";
+let axis: SwipeAxis = "undecided";
 let horizontalSwipeLocked = $state(false);
 let debugDeltaX = $state(0);
 let debugDeltaY = $state(0);
 let debugResult = $state<SwipeResult>("WAITING");
+let debugStart = $state<SwipeStartDecision>("TRACK");
 
 const signedInTabs: RouteEntry[] = [
 	{ path: "/" },
@@ -64,40 +72,31 @@ function getCurrentTabIndex() {
 	return bottomTabs.findIndex((entry) => isRouteActive(entry, page.url.pathname));
 }
 
-function isHorizontalScroller(element: Element) {
+/** 横スクロール可能な要素か。DOM 計測が必要なので判定ロジックへ注入する */
+function isHorizontalScroller(element: SwipeElementLike) {
 	if (!(element instanceof HTMLElement)) return false;
 	const style = window.getComputedStyle(element);
 	const canScroll = style.overflowX === "auto" || style.overflowX === "scroll";
 	return canScroll && element.scrollWidth > element.clientWidth + 1;
 }
 
-function startsInIgnoredArea(target: EventTarget | null) {
-	if (!(target instanceof Element)) return true;
-	if (target.closest(".mobile-bottom-nav, .mobile-drawer, .mobile-drawer-backdrop, .mobile-header")) return true;
-
-	for (let element: Element | null = target; element && element !== mainElement; element = element.parentElement) {
-		if (isHorizontalScroller(element)) return true;
-	}
-	return false;
-}
-
 function getSwipeResult(deltaX: number, deltaY: number): SwipeResult {
-	const absX = Math.abs(deltaX);
-	const absY = Math.abs(deltaY);
-	if (absX < minSwipeDistance) return "IGNORE_SHORT";
-	if (absX < absY * horizontalIntentRatio) return "IGNORE_VERTICAL";
-
-	const currentIndex = getCurrentTabIndex();
-	if (currentIndex < 0) return "IGNORE_ROUTE";
-	if (deltaX < 0 && currentIndex >= bottomTabs.length - 1) return "IGNORE_ROUTE";
-	if (deltaX > 0 && currentIndex <= 0) return "IGNORE_ROUTE";
-	return deltaX < 0 ? "SWIPE_NEXT" : "SWIPE_PREV";
+	return classifySwipe(deltaX, deltaY, axis, {
+		currentIndex: getCurrentTabIndex(),
+		tabCount: bottomTabs.length,
+	});
 }
 
 function setDebug(deltaX: number, deltaY: number, result: SwipeResult) {
 	debugDeltaX = Math.round(deltaX);
 	debugDeltaY = Math.round(deltaY);
 	debugResult = result;
+}
+
+function resetGesture() {
+	tracking = false;
+	axis = "undecided";
+	horizontalSwipeLocked = false;
 }
 
 async function navigateWithViewTransition(targetIndex: number, direction: "next" | "prev") {
@@ -131,20 +130,40 @@ function handleTouchStart(event: TouchEvent) {
 	if (!touch) return;
 
 	tracking = true;
+	axis = "undecided";
 	horizontalSwipeLocked = false;
 	startX = touch.clientX;
 	startY = touch.clientY;
-	startedOnIgnoredArea = startsInIgnoredArea(event.target);
+	// 入力欄・ダイアログ・横スクローラー・文字選択中・画面端(戻るジェスチャー)・複数指は
+	// スワイプ対象にしない。ここで除外しておけば move/end では一切介入しない。
+	startDecision = decideSwipeStart({
+		target: event.target instanceof Element ? event.target : null,
+		boundary: mainElement,
+		isHorizontalScroller,
+		selection: window.getSelection(),
+		touchCount: event.touches.length,
+		startX: touch.clientX,
+		viewportWidth: window.innerWidth,
+	});
+	debugStart = startDecision;
 	setDebug(0, 0, "WAITING");
 }
 
 function handleTouchMove(event: TouchEvent) {
-	if (!tracking || startedOnIgnoredArea || !isMobileWidth()) return;
+	if (!tracking || startDecision !== "TRACK" || !isMobileWidth()) return;
+	if (event.touches.length > 1) {
+		// 途中でピンチ等に変わったらこのジェスチャーは諦める
+		resetGesture();
+		setDebug(0, 0, "WAITING");
+		return;
+	}
 	const touch = event.touches[0];
 	if (!touch) return;
 
 	const deltaX = touch.clientX - startX;
 	const deltaY = touch.clientY - startY;
+	// 最初に確定した軸を維持する: 縦スクロール中に指が横へ流れてもページ遷移させない
+	axis = resolveSwipeAxis(axis, deltaX, deltaY);
 	const result = getSwipeResult(deltaX, deltaY);
 	setDebug(deltaX, deltaY, result);
 
@@ -155,23 +174,24 @@ function handleTouchMove(event: TouchEvent) {
 }
 
 function handleTouchEnd(event: TouchEvent) {
-	if (!tracking || startedOnIgnoredArea || !isMobileWidth()) {
-		tracking = false;
+	if (!tracking || startDecision !== "TRACK" || !isMobileWidth()) {
+		resetGesture();
 		return;
 	}
 
 	const touch = event.changedTouches[0];
 	if (!touch) {
-		tracking = false;
+		resetGesture();
 		return;
 	}
 
 	const deltaX = touch.clientX - startX;
 	const deltaY = touch.clientY - startY;
-	const result = getSwipeResult(deltaX, deltaY);
+	axis = resolveSwipeAxis(axis, deltaX, deltaY);
+	// 長押し等でジェスチャー中に文字選択が始まった場合も遷移しない
+	const result = hasTextSelection(window.getSelection()) ? "IGNORE_VERTICAL" : getSwipeResult(deltaX, deltaY);
 	const currentIndex = getCurrentTabIndex();
-	tracking = false;
-	horizontalSwipeLocked = false;
+	resetGesture();
 	setDebug(deltaX, deltaY, result);
 
 	if (currentIndex < 0) return;
@@ -180,8 +200,7 @@ function handleTouchEnd(event: TouchEvent) {
 }
 
 function handleTouchCancel() {
-	tracking = false;
-	horizontalSwipeLocked = false;
+	resetGesture();
 	setDebug(0, 0, "WAITING");
 }
 
@@ -209,6 +228,9 @@ onDestroy(() => {
 {#if dev && session}
 	<div class="swipe-debug" aria-live="polite">
 		deltaX: {debugDeltaX} / deltaY: {debugDeltaY} / {debugResult}
+		{#if debugStart !== "TRACK"}
+			/ {debugStart}
+		{/if}
 		{#if horizontalSwipeLocked}
 			/ LOCK
 		{/if}
