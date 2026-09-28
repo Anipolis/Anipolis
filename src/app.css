@@ -105,7 +105,9 @@ body {
 	background: var(--color-bg);
 	color: var(--color-text);
 	font-family:
-		-apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+		"Zen Maru Gothic", -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic",
+		sans-serif;
+	font-weight: 500;
 	font-size: 15px;
 	line-height: 1.6;
 	min-height: 100vh;
