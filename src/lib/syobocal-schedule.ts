@@ -1,4 +1,4 @@
-import { jstBroadcastDateKey, jstDateKey, LATE_NIGHT_BOUNDARY_HOUR } from "$lib/utils/jst";
+import { jstBroadcastDateKey, jstDateKey, LATE_NIGHT_BOUNDARY_HOUR } from "./utils/jst.ts";
 
 export type SyobocalScheduleProgram = {
 	pid: number;
