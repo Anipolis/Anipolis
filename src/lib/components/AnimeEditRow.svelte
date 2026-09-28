@@ -1,6 +1,7 @@
 <script lang="ts">
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
+import type { RowSaveState } from "$lib/mylist/save-queue";
 import type { Anime, AnimeStatus } from "$lib/types";
 
 type EntryState = { status: AnimeStatus; score: string; progress: number };
@@ -10,16 +11,24 @@ let {
 	entry = $bindable<EntryState>(),
 	statusOrder,
 	statusLabel,
+	saveState,
 	onAutoSave,
+	onRetry,
 	onRemove,
 }: {
 	anime: Anime;
 	entry: EntryState;
 	statusOrder: AnimeStatus[];
 	statusLabel: Record<AnimeStatus, string>;
+	/** 自動保存の状態。未編集なら undefined */
+	saveState?: RowSaveState<EntryState> | undefined;
 	onAutoSave: (updatedFields: Partial<EntryState>) => void;
+	/** 失敗した保存を、保持している最新値で再送する */
+	onRetry?: () => void;
 	onRemove: () => void;
 } = $props();
+
+const saveStatus = $derived(saveState?.status ?? "idle");
 
 const episodeMax = $derived.by(() => {
 	const parsed = Number.parseInt(String(anime.episode_count), 10);
@@ -50,7 +59,27 @@ function confirmRemove() {
 	</a>
 
 	<div class="edit-main">
-		<div class="edit-title">{anime.title}</div>
+		<div class="edit-heading">
+			<div class="edit-title">{anime.title}</div>
+
+			<!-- 行ごとの保存状態。失敗時は編集値を保持したまま再試行できる -->
+			<div class="save-status save-status--{saveStatus}" role="status" aria-live="polite">
+				{#if saveStatus === 'pending'}
+					<span class="i-lucide-pencil-line" aria-hidden="true"></span>
+					<span>変更あり（まもなく保存）</span>
+				{:else if saveStatus === 'saving'}
+					<span class="save-spinner" aria-hidden="true"></span>
+					<span>保存中…</span>
+				{:else if saveStatus === 'saved'}
+					<span class="i-lucide-check" aria-hidden="true"></span>
+					<span>保存しました</span>
+				{:else if saveStatus === 'failed'}
+					<span class="i-lucide-triangle-alert" aria-hidden="true"></span>
+					<span>{saveState?.error ?? '保存できませんでした'}</span>
+					<button type="button" class="save-retry-btn" onclick={() => onRetry?.()}>再試行</button>
+				{/if}
+			</div>
+		</div>
 
 		<div class="edit-controls">
 			<select
@@ -203,8 +232,15 @@ function confirmRemove() {
 	gap: 18px;
 }
 
-.edit-title {
+.edit-heading {
+	display: flex;
 	flex: 1;
+	flex-direction: column;
+	min-width: 0;
+	gap: 4px;
+}
+
+.edit-title {
 	min-width: 0;
 	overflow: hidden;
 	color: var(--fg, #e2e8f0);
@@ -212,6 +248,57 @@ function confirmRemove() {
 	font-weight: 600;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+/* 行ごとの保存状態 */
+.save-status {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px 6px;
+	min-height: 1.2em;
+	color: var(--fg-muted, #94a3b8);
+	font-size: 0.74rem;
+	line-height: 1.3;
+}
+
+.save-status--saved {
+	color: var(--status-watching, #34d399);
+}
+
+.save-status--failed {
+	color: var(--color-danger, #f87171);
+}
+
+.save-spinner {
+	width: 10px;
+	height: 10px;
+	flex: 0 0 auto;
+	border: 2px solid currentColor;
+	border-right-color: transparent;
+	border-radius: 50%;
+	animation: save-spin 0.8s linear infinite;
+}
+
+@keyframes save-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+.save-retry-btn {
+	padding: 2px 8px;
+	border: 1px solid currentColor;
+	border-radius: 5px;
+	background: transparent;
+	color: inherit;
+	font-size: 0.72rem;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.save-retry-btn:hover {
+	background: color-mix(in srgb, currentColor 12%, transparent);
 }
 
 .edit-controls,
@@ -426,6 +513,10 @@ function confirmRemove() {
 		-webkit-box-orient: vertical;
 		-webkit-line-clamp: 2;
 		line-clamp: 2;
+	}
+
+	.save-status {
+		font-size: 0.7rem;
 	}
 
 	.edit-controls {
