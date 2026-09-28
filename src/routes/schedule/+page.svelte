@@ -17,6 +17,7 @@ import {
 	roomLiveKey,
 } from "$lib/utils/broadcast-room";
 import { eventBroadcastMinutes, eventBroadcastTimeInputValue } from "$lib/utils/event-time";
+import { dateKeyWeekday, formatDateKeyShort, jstBroadcastDateKey } from "$lib/utils/jst";
 import type { ActionData, PageProps } from "./$types";
 
 let { data, form }: PageProps & { form: ActionData } = $props();
@@ -51,18 +52,13 @@ let notifyingIds = $state(new Set<string>());
 // Which anime rooms are currently live, keyed by anime + room date.
 let liveRoomKeys = $state(new Set<string>());
 
+// 既定タブは「今日の放送日」の曜日。サーバーと同じ JST・午前4時境界（JST 00:00〜03:59 は
+// 前日扱い）で決め、ブラウザ TZ に依存しない
 function getDefaultDayIndex(): number {
-	return getCurrentBroadcastDate().getDay();
+	return dateKeyWeekday(jstBroadcastDateKey(new Date())) ?? 0;
 }
 function getDisplayDayOrder(): number[] {
 	return data.days.map((_, index) => index);
-}
-
-function getCurrentBroadcastDate(now = new Date()): Date {
-	const date = new Date(now);
-	// Late-night broadcasts before 28:00 (04:00 next day) belong to the previous broadcast date.
-	if (date.getHours() < 4) date.setDate(date.getDate() - 1);
-	return date;
 }
 
 function getDisplayDayItems() {
@@ -111,13 +107,9 @@ $effect(() => {
 	eventSubscribedIds = new Set<string>(data.eventNotificationSubscriptions);
 });
 
+/** 日付キー（YYYY-MM-DD）を「M/D」表記にする。Date を経由しないので TZ の影響を受けない */
 function formatDate(value: string) {
-	return new Date(`${value}T00:00:00`).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" });
-}
-
-function formatShortDate(value: string): string {
-	const d = new Date(`${value}T00:00:00`);
-	return `${d.getMonth() + 1}/${d.getDate()}`;
+	return formatDateKeyShort(value);
 }
 
 function formatTime(iso: string) {
@@ -513,7 +505,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 				aria-pressed={selectedDayIndex === item.dayIdx}
 			>
 				<span class="day-tab-label" style="color: {DAY_COLOR[item.dayIdx]}">{item.day.label}</span>
-				<span class="day-tab-date">{formatShortDate(item.date)}</span>
+				<span class="day-tab-date">{formatDate(item.date)}</span>
 			</button>
 		{/each}
 	</div>
