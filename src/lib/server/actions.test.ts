@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
 import type { Database } from "$lib/supabase/database.types";
-import { createInviteErrorStatus, insertPostWithHashtags } from "./actions";
+import { createInviteErrorStatus, insertPostWithHashtags, requireAccountCanWrite } from "./actions";
 
 type TableChain = Record<string, unknown>;
 
@@ -174,6 +174,47 @@ describe("insertPostWithHashtags", () => {
 
 		expect(result).toEqual({ success: true, postId: "post-1" });
 		expect(insertedPosts).toContainEqual(expect.objectContaining({ image_urls: urls }));
+	});
+});
+
+describe("requireAccountCanWrite", () => {
+	function moderationClient(row: { status: string; restricted_until: string | null } | null) {
+		return {
+			from: vi.fn((table: string) => {
+				if (table !== "account_moderation") throw new Error(`unexpected table: ${table}`);
+				return {
+					...maybeSingleChain({ data: row, error: null }),
+					update: vi.fn(() => ({ eq: vi.fn(async () => ({ error: null })) })),
+				};
+			}),
+		} as unknown as SupabaseClient<Database>;
+	}
+
+	it("allows accounts without a moderation row", async () => {
+		await expect(requireAccountCanWrite(moderationClient(null), "user-1")).resolves.toBeUndefined();
+	});
+
+	it("allows restrictions that have already expired", async () => {
+		const client = moderationClient({ status: "restricted", restricted_until: "2000-01-01T00:00:00Z" });
+		await expect(requireAccountCanWrite(client, "user-1")).resolves.toBeUndefined();
+	});
+
+	it("throws 403 for banned accounts", async () => {
+		await expect(
+			requireAccountCanWrite(moderationClient({ status: "banned", restricted_until: null }), "user-1"),
+		).rejects.toMatchObject({ status: 403, body: { message: "このアカウントはBANされています" } });
+	});
+
+	it("fails closed with 503 when the moderation lookup itself fails", async () => {
+		const client = {
+			from: vi.fn(() => maybeSingleChain({ data: null, error: { message: "connection reset" } })),
+		} as unknown as SupabaseClient<Database>;
+		await expect(requireAccountCanWrite(client, "user-1")).rejects.toMatchObject({ status: 503 });
+	});
+
+	it("throws 403 for accounts restricted into the future", async () => {
+		const client = moderationClient({ status: "restricted", restricted_until: "2999-01-01T00:00:00Z" });
+		await expect(requireAccountCanWrite(client, "user-1")).rejects.toMatchObject({ status: 403 });
 	});
 });
 
