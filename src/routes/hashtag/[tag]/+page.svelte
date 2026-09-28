@@ -1,8 +1,8 @@
 <script lang="ts">
 import { browser } from "$app/environment";
 import { goto } from "$app/navigation";
-import PostCard from "$lib/components/PostCard.svelte";
 import PostCardSkeleton from "$lib/components/PostCardSkeleton.svelte";
+import PostRow from "$lib/components/PostRow.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import { createLatestResolved } from "$lib/latest-resolved.svelte";
 import type { PageProps } from "./$types";
@@ -58,7 +58,7 @@ function handleBackClick(event: MouseEvent) {
 				</div>
 			{:else}
 				{#each posts as post (post.id)}
-					<PostCard {post} currentUserId={data.user?.id ?? null} />
+					<PostRow {post} currentUserId={data.user?.id ?? null} />
 				{/each}
 			{/if}
 		{/if}
