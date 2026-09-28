@@ -111,6 +111,22 @@ describe("detectEpisodeAnomalies", () => {
 		]);
 	});
 
+	it("keeps jump and reset checks active inside a continuous-numbering series", () => {
+		// 総話数 12 の通し番号シリーズ: 150 への飛びと 79 への巻き戻りは報告だけで済ませない
+		const jump = [program(1, 0, 80), program(2, 1, 150), program(3, 2, 81)];
+		expect(detectEpisodeAnomalies(jump, 12).map((a) => [a.pid, a.kind])).toEqual([
+			[1, "count_mismatch"],
+			[2, "jump"],
+			[3, "count_mismatch"],
+		]);
+		const reset = [program(1, 0, 80), program(2, 1, 79), program(3, 2, 81)];
+		expect(detectEpisodeAnomalies(reset, 12).map((a) => [a.pid, a.kind])).toEqual([
+			[1, "count_mismatch"],
+			[2, "reset"],
+			[3, "count_mismatch"],
+		]);
+	});
+
 	it("orders by air time regardless of input order", () => {
 		const programs = [program(2, 1, 2), program(1, 0, 1), program(3, 2, 9)];
 		expect(detectEpisodeAnomalies(programs, 12).map((a) => [a.pid, a.kind])).toEqual([[3, "jump"]]);

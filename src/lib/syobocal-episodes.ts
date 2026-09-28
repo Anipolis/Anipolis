@@ -109,6 +109,15 @@ export function detectEpisodeAnomalies(
 		if (firstPid !== undefined) {
 			kind = "duplicate";
 			detail = `same episode already scheduled by pid ${firstPid}`;
+		} else if (previous && episodeNumber < previous.episodeNumber) {
+			// 順序検査（巻き戻り・飛び）は総話数検査より先に行う。通し番号のシリーズでは
+			// 全番号が総話数を超えるため、総話数検査を先にすると 80 → 150 → 81 の飛びや
+			// 80 → 79 の巻き戻りが報告のみの count_mismatch に吸収されてしまう
+			kind = "reset";
+			detail = `goes back from episode ${previous.episodeNumber} (pid ${previous.pid})`;
+		} else if (previous && episodeNumber - previous.episodeNumber > EPISODE_JUMP_TOLERANCE) {
+			kind = "jump";
+			detail = `jumps from episode ${previous.episodeNumber} (pid ${previous.pid})`;
 		} else if (effectiveCount !== null && episodeNumber > effectiveCount) {
 			// 上限内の番号を先に観測していて、かつ大きく超えたときだけ番号を外す。
 			// 少し超えるだけなら総話数の古さが濃厚、上限内を一度も見ていなければ通し番号の TID:
@@ -120,12 +129,6 @@ export function detectEpisodeAnomalies(
 			detail = seenInRange
 				? `exceeds the title's ${effectiveCount} episodes`
 				: `exceeds the title's ${effectiveCount} episodes before any in-range episode (continuous TID or stale count)`;
-		} else if (previous && episodeNumber < previous.episodeNumber) {
-			kind = "reset";
-			detail = `goes back from episode ${previous.episodeNumber} (pid ${previous.pid})`;
-		} else if (previous && episodeNumber - previous.episodeNumber > EPISODE_JUMP_TOLERANCE) {
-			kind = "jump";
-			detail = `jumps from episode ${previous.episodeNumber} (pid ${previous.pid})`;
 		}
 
 		if (kind && isAppliedEpisodeAnomaly(kind)) {
