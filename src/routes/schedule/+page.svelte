@@ -414,6 +414,8 @@ function canSubscribe(anime: Anime): boolean {
 	return s === "airing" || s === "upcoming";
 }
 
+const suppressedEpisodeKeys = $derived(new Set(data.suppressedEpisodeKeys ?? []));
+
 function currentEpisodeForSlot(
 	anime: Anime,
 	dateStr: string,
@@ -421,10 +423,13 @@ function currentEpisodeForSlot(
 ): BroadcastEpisodeSlot | null {
 	// 話数はしょぼい番組表由来のセッション値が第一（ルームページと同じ優先順位）。
 	// 週次カウントは休止・特番を補正できず長期作品でずれるため、補完専用。
-	const sessionEpisode = data.sessionEpisodeNumbers[`${anime.id}:${dateStr}`];
+	const sessionKey = `${anime.id}:${dateStr}`;
+	const sessionEpisode = data.sessionEpisodeNumbers[sessionKey];
 	if (sessionEpisode != null) {
 		return { date: dateStr, start: sessionEpisode, end: sessionEpisode, label: null };
 	}
+	// 話数異常で番号を外した枠は補完もしない（誤った回を機械カウントで復活させない、#246）
+	if (suppressedEpisodeKeys.has(sessionKey)) return null;
 	if (!anime.aired_from) return null;
 	return resolveBroadcastEpisodeSlot({
 		date: dateStr,
@@ -440,6 +445,10 @@ function currentEpisodeForSlot(
 function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): string {
 	if (ep.start == null || ep.end == null) return ep.label ?? "";
 	const value = ep.start === ep.end ? String(ep.start) : `${ep.start}-${ep.end}`;
+	// 総話数を超える番号（通し番号の TID や古い総話数）に「/総話数」を付けると 22/13 のような
+	// 矛盾した表示になる。番号は活かし、分母だけ出さない（#246）
+	const totalCount = total ? Number.parseInt(total, 10) : Number.NaN;
+	if (Number.isInteger(totalCount) && totalCount > 0 && ep.end > totalCount) return value;
 	return total ? `${value}/${total}` : value;
 }
 </script>
