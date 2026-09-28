@@ -167,7 +167,7 @@ export class PostController {
 				return;
 			}
 			this.reactionFeedback.clear();
-			await update({ reset: false });
+			await update({ reset: false, invalidateAll: false });
 		};
 	};
 
