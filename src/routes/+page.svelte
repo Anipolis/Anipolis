@@ -227,12 +227,12 @@ $effect(() => {
 		{/if}
 
 		<!--
-			data.posts は deferred Promise。
+			data.timeline は deferred Promise（{ posts, nextCursor }）。
 			- 待機中: スピナー + スケルトンカードを表示してレイアウトシフトを最小化
 			- 解決後: 実際の投稿カードに差し替え
 			- エラー時: 再読み込みを促すメッセージ
 		-->
-		{#await data.posts}
+		{#await data.timeline}
 			<div class="posts-loading-spinner" aria-label="投稿を読み込み中">
 				<div class="spinner" aria-hidden="true"></div>
 				<span>読み込み中…</span>
@@ -240,13 +240,15 @@ $effect(() => {
 			{#each { length: SKELETON_COUNT } as _, i (i)}
 				<PostCardSkeleton />
 			{/each}
-		{:then posts}
+		{:then timeline}
+			{@const posts = timeline.posts}
+			{@const nextCursor = timeline.nextCursor}
 			{#if data.before}
 				<a href={data.tab === "following" ? "/?tab=following" : "/"} class="timeline-back-link"
 					>← 新しい投稿に戻る</a
 				>
 			{/if}
-			{#if posts.length === 0}
+			{#if posts.length === 0 && !nextCursor}
 				<div class="empty-state">
 					{#if data.tab === 'following'}
 						<p>フォロー中のユーザーの投稿がありません。<br>気になるユーザーをフォローしてみましょう！</p>
@@ -255,19 +257,19 @@ $effect(() => {
 					{/if}
 				</div>
 			{:else}
+				{#if posts.length === 0}
+					<!-- 取得した分がすべてミュートで除外された。空状態ではなく続きの導線を出す（#35） -->
+					<div class="empty-state">
+						<p>このページの投稿はミュート設定によりすべて非表示です。</p>
+					</div>
+				{/if}
 				{#each posts as post (post.id)}
 					<PostCard {post} currentUserId={data.user?.id ?? null} />
 				{/each}
-				{#if posts.length >= 50}
-					{@const lastPost = posts[posts.length - 1]}
-					{#if lastPost}
-						<a
-							href={loadMoreHref(lastPost.repost_context?.created_at ?? lastPost.created_at, lastPost.id)}
-							class="load-more-btn"
-						>
-							さらに読み込む
-						</a>
-					{/if}
+				{#if nextCursor}
+					<a href={loadMoreHref(nextCursor.createdAt, nextCursor.id)} class="load-more-btn">
+						さらに読み込む
+					</a>
 				{/if}
 			{/if}
 		{:catch error}
