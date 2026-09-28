@@ -1,5 +1,5 @@
 import { redirect } from "@sveltejs/kit";
-import { markCategoryNotificationsRead, type NotificationCategory } from "$lib/server/actions";
+import type { NotificationCategory } from "$lib/server/actions";
 import { getAnimeRankingTrending, getNotifications, getUnreadNotificationCountsByCategory } from "$lib/server/queries";
 import type { PageServerLoad } from "./$types";
 
@@ -29,8 +29,9 @@ export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession 
 
 	const tab = resolveTab(url.searchParams.get("tab"));
 
-	// 表示中タブのカテゴリのみ既読にする（他タブの未読バッジは残す）
-	await markCategoryNotificationsRead(supabase, user.id, tab);
+	// 既読化はここでは行わない。load は hover プリロードやブラウザの先読みでも走るため、
+	// ここで書き込むとページを開いていなくても未読が消える（#242）。
+	// 表示中タブの既読化は、描画後にページが POST /api/notifications/read を呼んで行う。
 
 	// タブは通常リンク遷移で毎回 load が走るため、表示するタブの一覧だけ取得する
 	// （非表示タブの分まで毎回50件×2カテゴリを取得しない）。未読バッジはカウント
