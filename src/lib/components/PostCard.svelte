@@ -1,5 +1,6 @@
 <script lang="ts">
 import type { SubmitFunction } from "@sveltejs/kit";
+import { tick } from "svelte";
 import { enhance } from "$app/forms";
 import { goto } from "$app/navigation";
 import { trapFocus } from "$lib/actions/trapFocus";
@@ -246,7 +247,17 @@ const handleBookmark: SubmitFunction = ({ formElement }) => {
 	};
 };
 
-const handleRepost: SubmitFunction = ({ formElement }) => {
+let repostForm = $state<HTMLFormElement | null>(null);
+
+// リポストフォームはメニューを閉じた時点で DOM から消えるため、再試行はメニューを
+// 開き直してから新しいフォームを送信する（破棄済みフォームの requestSubmit は無効）
+async function retryRepost() {
+	showRepostMenu = true;
+	await tick();
+	repostForm?.requestSubmit();
+}
+
+const handleRepost: SubmitFunction = () => {
 	showRepostMenu = false;
 	const wasReposted = repostedByMe;
 	repostedByMeLocal = !wasReposted;
@@ -255,7 +266,7 @@ const handleRepost: SubmitFunction = ({ formElement }) => {
 		if (isReactionFailure(result)) {
 			repostedByMeLocal = null;
 			repostCountLocal = null;
-			reactionFeedback.fail("repost", result, formElement);
+			reactionFeedback.fail("repost", result, () => void retryRepost());
 			return;
 		}
 		reactionFeedback.clear();
@@ -909,7 +920,7 @@ async function submitReport() {
 							onclick={(e) => { e.stopPropagation(); showRepostMenu = false; }}
 						></div>
 						<div class="repost-dropdown">
-							<form method="POST" action="?/repost" use:enhance={handleRepost}>
+							<form method="POST" action="?/repost" use:enhance={handleRepost} bind:this={repostForm}>
 								<input type="hidden" name="post_id" value={post.id}>
 								<button type="submit" class="repost-menu-item">
 									<svg
