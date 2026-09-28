@@ -8,6 +8,7 @@ import { trapFocus } from "$lib/actions/trapFocus";
 import type { AnimeExchangeShare, OpenBroadcastRoomSummary } from "$lib/types";
 import { charCountClass } from "$lib/utils/format";
 import AnimeExchangeResult from "./AnimeExchangeResult.svelte";
+import { classifyComposerSubmitResult } from "./post-composer-submit";
 import UserAvatar from "./UserAvatar.svelte";
 
 interface AnimeResult {
@@ -332,16 +333,23 @@ const handleSubmit: SubmitFunction = () => {
 	errorMessage = "";
 	return async ({ result, update }) => {
 		submitting = false;
-		if (result.type === "failure") {
-			errorMessage = (result.data as { message?: string })?.message ?? "投稿に失敗しました";
-		} else {
-			content = "";
-			imageUrls = [];
-			selectedAnime = null;
-			clearExchangeShare();
-			await update();
-			onsubmitsuccess?.();
+		const outcome = classifyComposerSubmitResult(result);
+		if (outcome.kind === "retry") {
+			// failure / error では本文・画像・引用を消さず、理由を表示して再送できるようにする（GitLab #1）。
+			// update() も呼ばない: error 結果の既定処理はエラーページ描画で、書きかけが失われる。
+			errorMessage = outcome.message;
+			return;
 		}
+		if (outcome.kind === "passthrough") {
+			await update();
+			return;
+		}
+		content = "";
+		imageUrls = [];
+		selectedAnime = null;
+		clearExchangeShare();
+		await update();
+		onsubmitsuccess?.();
 	};
 };
 </script>
