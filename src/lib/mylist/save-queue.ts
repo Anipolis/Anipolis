@@ -61,8 +61,11 @@ export function createSaveQueue<T>(options: SaveQueueOptions<T>) {
 	const savedTtlMs = options.savedTtlMs ?? DEFAULT_SAVED_TTL_MS;
 	const toErrorMessage = options.errorMessage ?? defaultErrorMessage;
 	const rows = new Map<string, RowEntry<T>>();
+	// dispose() 後は UI へ通知しないが、送信中の行の後続編集は送り切る
+	let disposed = false;
 
 	function emit(key: string, entry: RowEntry<T>) {
+		if (disposed) return;
 		options.onChange?.(key, { ...entry.state });
 	}
 
@@ -102,7 +105,7 @@ export function createSaveQueue<T>(options: SaveQueueOptions<T>) {
 
 				if (result.ok) {
 					setState(key, entry, { status: "saved", error: null });
-					if (savedTtlMs > 0) {
+					if (savedTtlMs > 0 && !disposed) {
 						entry.savedTimer = setTimeout(() => {
 							entry.savedTimer = null;
 							if (entry.seq === seq && entry.state.status === "saved") {
@@ -195,10 +198,18 @@ export function createSaveQueue<T>(options: SaveQueueOptions<T>) {
 			return entry ? { ...entry.state } : undefined;
 		},
 
-		/** すべてのタイマーを止める（コンポーネント破棄時に使う） */
+		/**
+		 * コンポーネント破棄時に使う。表示用タイマーを止めて UI 通知をやめるが、行は消さない:
+		 * 保存中の行に後続の編集（dirty）があれば送信ループがそれを送り切り、デバウンス待ちの行は
+		 * 即時送信する。rows を消すと、応答待ちの間に入った最新の編集が一度も送られずに失われる。
+		 */
 		dispose() {
-			for (const entry of rows.values()) clearTimers(entry);
-			rows.clear();
+			disposed = true;
+			for (const [key, entry] of rows) {
+				if (entry.savedTimer) clearTimeout(entry.savedTimer);
+				entry.savedTimer = null;
+				if (entry.debounceTimer) start(key, entry);
+			}
 		},
 	};
 }

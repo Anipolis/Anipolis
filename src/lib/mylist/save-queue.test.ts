@@ -196,6 +196,44 @@ describe("createSaveQueue", () => {
 		expect(save).toHaveBeenCalledTimes(1);
 	});
 
+	it("still sends the edit that arrived during an in-flight save when the page is destroyed", async () => {
+		// schedule(A) → flush → schedule(B) → flush → dispose → A 完了: B も送られること
+		const pending = deferred<SaveResult>();
+		const sent: Entry[] = [];
+		const save = vi.fn(async (_key: string, value: Entry): Promise<SaveResult> => {
+			sent.push(value);
+			return sent.length === 1 ? pending.promise : { ok: true };
+		});
+		const onChange = vi.fn();
+		const queue = createSaveQueue<Entry>({ save, onChange, debounceMs: 500, savedTtlMs: 1000 });
+
+		queue.schedule("1", { progress: 1 });
+		queue.flush();
+		await flushMicrotasks();
+		queue.schedule("1", { progress: 2 });
+		queue.flush();
+		queue.dispose();
+		const changesBeforeResolve = onChange.mock.calls.length;
+
+		pending.resolve({ ok: true });
+		await flushMicrotasks();
+
+		expect(sent).toEqual([{ progress: 1 }, { progress: 2 }]);
+		// 破棄後は UI へ通知しない
+		expect(onChange.mock.calls.length).toBe(changesBeforeResolve);
+	});
+
+	it("dispose sends rows that were still waiting for the debounce", async () => {
+		const save = vi.fn(async (_key: string, _value: Entry): Promise<SaveResult> => ({ ok: true }));
+		const queue = createSaveQueue<Entry>({ save, debounceMs: 500, savedTtlMs: 0 });
+
+		queue.schedule("1", { progress: 3 });
+		queue.dispose();
+		await flushMicrotasks();
+
+		expect(save).toHaveBeenCalledWith("1", { progress: 3 });
+	});
+
 	it("returns to idle after the saved TTL unless a new edit arrived", async () => {
 		const save = vi.fn(async (): Promise<SaveResult> => ({ ok: true }));
 		const queue = createSaveQueue<Entry>({ save, debounceMs: 100, savedTtlMs: 1000 });
