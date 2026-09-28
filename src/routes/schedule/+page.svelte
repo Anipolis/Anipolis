@@ -448,6 +448,10 @@ function currentEpisodeForSlot(
 function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): string {
 	if (ep.start == null || ep.end == null) return ep.label ?? "";
 	const value = ep.start === ep.end ? String(ep.start) : `${ep.start}-${ep.end}`;
+	// 総話数を超える番号（通し番号の TID や古い総話数）に「/総話数」を付けると 22/13 のような
+	// 矛盾した表示になる。番号は活かし、分母だけ出さない（#246）
+	const totalCount = total ? Number.parseInt(total, 10) : Number.NaN;
+	if (Number.isInteger(totalCount) && totalCount > 0 && ep.end > totalCount) return value;
 	return total ? `${value}/${total}` : value;
 }
 </script>
