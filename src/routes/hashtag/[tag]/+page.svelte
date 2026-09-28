@@ -20,7 +20,7 @@ function handleBackClick(event: MouseEvent) {
 }
 </script>
 
-<svelte:head> <title>#{data.tag} — Anipolis</title> </svelte:head>
+<svelte:head> <title>#{data.tag} - Anipolis</title> </svelte:head>
 
 <div class="page-container">
 	<main class="feed-column">

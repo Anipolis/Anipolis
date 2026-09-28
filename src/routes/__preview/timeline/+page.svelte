@@ -91,7 +91,7 @@ $effect(() => {
 </script>
 
 <svelte:head
-	><title>投稿UIの確認 — Anipolis</title>
+	><title>投稿UIの確認 - Anipolis</title>
 	<meta name="robots" content="noindex"></svelte:head
 >
 <div class="preview-controls">

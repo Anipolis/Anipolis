@@ -233,7 +233,7 @@ $effect(() => {
 });
 </script>
 
-<svelte:head> <title>マイリスト — Anipolis</title> </svelte:head>
+<svelte:head> <title>マイリスト - Anipolis</title> </svelte:head>
 
 <div class="page-container">
 	<main class="feed-column mylist-page">
