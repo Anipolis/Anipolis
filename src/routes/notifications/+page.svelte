@@ -1,6 +1,8 @@
 <script lang="ts">
+import { untrack } from "svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
+import { requestNotificationCountsRefresh } from "$lib/stores/notifications";
 import type { AnimeStatus, Notification } from "$lib/types";
 import { formatRelativeTime } from "$lib/utils/format";
 import type { PageProps } from "./$types";
@@ -17,6 +19,36 @@ const tabs: { id: TabId; label: string }[] = [
 
 const activeTab = $derived(data.tab as TabId);
 const activeNotifications = $derived(data.notifications[activeTab] as Notification[]);
+
+// 既読化はページが実際に描画された後にだけ行う。server load で既読化すると、
+// hover プリロードやブラウザの先読みで load が走っただけで未読が消える（#242）。
+let markedReadTab = $state<TabId | null>(null);
+
+async function markTabRead(tab: TabId) {
+	if (data.unreadCounts[tab] === 0) return;
+	try {
+		const response = await fetch("/api/notifications/read", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ category: tab }),
+		});
+		if (!response.ok) return;
+		markedReadTab = tab;
+		requestNotificationCountsRefresh();
+	} catch {
+		// 失敗時は未読のまま残す（次にタブを表示したときに再試行される）
+	}
+}
+
+$effect(() => {
+	const tab = activeTab;
+	markedReadTab = null;
+	void untrack(() => markTabRead(tab));
+});
+
+function unreadBadge(tab: TabId): number {
+	return markedReadTab === tab ? 0 : data.unreadCounts[tab];
+}
 
 function notificationLabel(type: string): string {
 	if (type === "like") return "があなたの投稿にいいねしました";
@@ -81,10 +113,8 @@ function emptyMessage(tab: TabId): string {
 					data-sveltekit-noscroll
 				>
 					<span class="tab-label">{tab.label}</span>
-					{#if data.unreadCounts[tab.id] > 0}
-						<span class="tab-badge"
-							>{data.unreadCounts[tab.id] > 99 ? '99+' : data.unreadCounts[tab.id]}</span
-						>
+					{#if unreadBadge(tab.id) > 0}
+						<span class="tab-badge">{unreadBadge(tab.id) > 99 ? '99+' : unreadBadge(tab.id)}</span>
 					{/if}
 				</a>
 			{/each}

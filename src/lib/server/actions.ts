@@ -421,16 +421,16 @@ export async function markCategoryNotificationsRead(
 	supabase: SupabaseClient<Database>,
 	userId: string,
 	category: NotificationCategory,
-) {
+): Promise<{ error: string | null }> {
 	const query = supabase.from("notifications").update({ read: true }).eq("recipient_id", userId).eq("read", false);
 
-	if (category === "room") {
-		await query.eq("type", "broadcast" as never);
-	} else if (category === "mylist") {
-		await query.eq("type", "mylist_status" as never);
-	} else {
-		await query.not("type", "in", "(broadcast,mylist_status)");
-	}
+	const { error } =
+		category === "room"
+			? await query.eq("type", "broadcast" as never)
+			: category === "mylist"
+				? await query.eq("type", "mylist_status" as never)
+				: await query.not("type", "in", "(broadcast,mylist_status)");
+	return { error: error?.message ?? null };
 }
 
 export async function updateReportStatusAction(request: Request, supabase: SupabaseClient<Database>, adminId: string) {
