@@ -135,10 +135,13 @@ describe("detectEpisodeAnomalies", () => {
 
 describe("detectEpisodeAnomaliesByGroup", () => {
 	it("checks each title independently with its own episode count", () => {
+		// 作品 100 は 10〜12 話の後に 15 話（3 話超過・飛びには当たらない）、作品 200 は 13/24 で正常
 		const programs = [
-			{ ...program(1, 0, 1), malId: 100 },
-			{ ...program(2, 1, 16), malId: 100 },
-			{ ...program(3, 0, 13), malId: 200 },
+			{ ...program(1, 0, 10), malId: 100 },
+			{ ...program(2, 1, 11), malId: 100 },
+			{ ...program(3, 2, 12), malId: 100 },
+			{ ...program(4, 3, 15), malId: 100 },
+			{ ...program(5, 0, 13), malId: 200 },
 		];
 		const counts: Record<number, number | null> = { 100: 12, 200: 24 };
 		const result = detectEpisodeAnomaliesByGroup(
@@ -146,8 +149,8 @@ describe("detectEpisodeAnomaliesByGroup", () => {
 			(p) => p.malId,
 			(malId) => counts[malId] ?? null,
 		);
-		expect([...result.keys()]).toEqual(["100:2"]);
-		expect(result.get("100:2")).toMatchObject({ kind: "over_count", group: 100 });
+		expect([...result.keys()]).toEqual(["100:4"]);
+		expect(result.get("100:4")).toMatchObject({ kind: "over_count", group: 100 });
 	});
 
 	it("keeps verdicts apart when two titles select the same program", () => {
