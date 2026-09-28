@@ -20,8 +20,8 @@
 	--nav-height: 0px;
 	--content-max: 960px;
 	--feed-width: 680px;
-	--sidebar-width: 260px;
-	--icon-bar-width: 240px;
+	--sidebar-width: 240px;
+	--icon-bar-width: 208px;
 	--radius: 12px;
 	--radius-sm: 8px;
 	--color-primary: var(--color-accent);
@@ -53,10 +53,10 @@
 }
 
 [data-theme="light"] {
-	--color-bg: #f8fafc;
+	--color-bg: #ffffff;
 	--color-surface: #ffffff;
 	--color-surface-hover: #f1f5f9;
-	--color-border: #cbd5e1;
+	--color-border: #e4e9f0;
 	--color-border-hover: #94a3b8;
 	--color-text: #0f172a;
 	--color-text-muted: #64748b;
@@ -264,17 +264,19 @@ textarea {
 	display: flex;
 	gap: 20px;
 	align-items: flex-start;
+	justify-content: center;
 }
 
 .page-container:not(.room-page-container):has(> .sidebar-column) {
 	max-width: none;
 	margin: 0;
 	padding-right: max(24px, env(safe-area-inset-right));
-	padding-left: max(16px, calc((100% - (var(--content-max) + 48px)) / 2 + 16px));
+	padding-left: 20px;
 }
 
 .feed-column {
-	flex: 0 0 var(--feed-width);
+	flex: 1 1 var(--feed-width);
+	max-width: var(--feed-width);
 	min-width: 0;
 }
 
@@ -290,7 +292,7 @@ textarea {
 }
 
 .page-container:not(.room-page-container):has(> .sidebar-column) > .sidebar-column {
-	flex: 1 1 var(--sidebar-width);
+	flex: 0 0 var(--sidebar-width);
 }
 
 @media (max-width: 960px) {
@@ -299,6 +301,7 @@ textarea {
 	}
 	.feed-column {
 		flex: 1;
+		max-width: none;
 	}
 }
 
@@ -810,82 +813,9 @@ textarea {
 
 /* --- Post Card --- */
 
-.post-card {
-	display: flex;
-	gap: 10px;
-	border-bottom: 1px solid var(--color-border);
-	border-left: 3px solid var(--color-border);
-	padding: 16px;
-	position: relative;
-	transition: background 0.1s;
-	-webkit-tap-highlight-color: transparent;
-}
-
-.post-card-modal-open {
-	z-index: 1100;
-}
-
-.post-card-hitarea {
-	position: absolute;
-	inset: 0;
-	z-index: 0;
-}
-
-.post-card-hitarea:focus-visible {
-	outline: 2px solid var(--color-accent);
-	outline-offset: -3px;
-}
-
-.post-card > *:not(.post-card-hitarea) {
-	position: relative;
-	z-index: 1;
-}
-
 .post-avatar-link {
 	flex-shrink: 0;
 	align-self: flex-start;
-}
-
-.post-body {
-	flex: 1;
-	min-width: 0;
-}
-
-.post-card--detail {
-	display: grid;
-	grid-template-columns: 40px minmax(0, 1fr);
-	row-gap: 0;
-}
-
-.post-card--detail .post-avatar-link {
-	grid-column: 1;
-	grid-row: 1;
-}
-
-.post-card--detail .post-body {
-	display: contents;
-}
-
-.post-card--detail .post-body > * {
-	grid-column: 1 / -1;
-}
-
-@media (hover: hover) {
-	.post-card:hover {
-		background: var(--color-surface);
-	}
-}
-
-.post-header {
-	display: flex;
-	align-items: flex-start;
-	gap: 10px;
-	margin-bottom: 10px;
-}
-
-.post-card--detail .post-header {
-	grid-column: 2;
-	grid-row: 1;
 }
 
 .post-meta {
@@ -910,13 +840,6 @@ textarea {
 	font-size: 13px;
 	line-height: 1.25;
 	color: var(--color-text-muted);
-}
-
-.post-header-right {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	flex-shrink: 0;
 }
 
 .post-time {
@@ -1002,11 +925,6 @@ textarea {
 	flex-shrink: 0;
 	width: 15px;
 	height: 15px;
-}
-
-.post-card.deleting {
-	opacity: 0.5;
-	pointer-events: none;
 }
 
 .post-content {
@@ -2257,10 +2175,6 @@ textarea {
 	color: #f87171;
 }
 
-.post-card-clickable {
-	cursor: pointer;
-}
-
 /* --- Post detail / thread view --- */
 
 .post-detail-back {
@@ -3369,10 +3283,6 @@ form + .repost-menu-item {
 		padding-bottom: 80px;
 	}
 
-	.post-card {
-		padding: 10px 12px;
-	}
-
 	.profile-display-name {
 		font-size: 18px;
 	}
@@ -3385,10 +3295,6 @@ form + .repost-menu-item {
 		padding-top: 6px;
 		padding-bottom: 80px;
 	}
-
-	.post-card {
-		padding: 8px 10px;
-	}
 }
 
 /* Compact landscape keeps the mobile shell until the desktop breakpoint. */
@@ -3396,4 +3302,29 @@ form + .repost-menu-item {
 	.page-container {
 		padding-bottom: 16px;
 	}
+}
+
+@media (min-width: 961px) and (max-width: 1160px) {
+	.page-container > .sidebar-column {
+		display: none;
+	}
+}
+
+/* Discovery remains a quiet companion to the conversation column. */
+.trending-panel {
+	border: 0;
+	border-radius: 0;
+	box-shadow: none;
+	background: transparent;
+}
+.trending-header {
+	font-size: 14px;
+}
+.trending-item {
+	border: 0;
+	padding-top: 9px;
+	padding-bottom: 9px;
+}
+.trending-subheader {
+	font-size: 12px;
 }
