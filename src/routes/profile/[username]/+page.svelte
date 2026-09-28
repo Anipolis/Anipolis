@@ -5,7 +5,7 @@ import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
 import AnimeStatusSection from "$lib/components/AnimeStatusSection.svelte";
-import PostCard from "$lib/components/PostCard.svelte";
+import PostRow from "$lib/components/PostRow.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
 import type { Anime, AnimeStatus } from "$lib/types";
@@ -707,7 +707,7 @@ const grouped = $derived(
 				</div>
 			{:else}
 				{#each posts as post (post.id)}
-					<PostCard {post} currentUserId={data.user?.id ?? null} />
+					<PostRow {post} currentUserId={data.user?.id ?? null} />
 				{/each}
 			{/if}
 		{/if}
@@ -724,7 +724,7 @@ const grouped = $derived(
 				</div>
 			{:else}
 				{#each imagePosts as post (post.id)}
-					<PostCard {post} currentUserId={data.user?.id ?? null} />
+					<PostRow {post} currentUserId={data.user?.id ?? null} />
 				{/each}
 			{/if}
 		{/if}
@@ -790,7 +790,7 @@ const grouped = $derived(
 				</div>
 			{:else}
 				{#each data.likedPosts as post (post.id)}
-					<PostCard {post} currentUserId={data.user?.id ?? null} />
+					<PostRow {post} currentUserId={data.user?.id ?? null} />
 				{/each}
 			{/if}
 		{/if}
