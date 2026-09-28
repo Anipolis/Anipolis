@@ -23,6 +23,12 @@ const reportStatuses = new Set(["open", "reviewing", "resolved", "rejected"]);
 const moderationStatuses = new Set(["active", "restricted", "banned"]);
 const animeExchangeErrorMessages = {
 	ANIME_EXCHANGE_ANIME_NOT_FOUND: { status: 404, message: "アニメが見つかりません" },
+	// migration 130: RPC 側でβ参加とアカウント状態を検査する（画面の action を迂回された場合の防衛線）
+	ANIME_EXCHANGE_FORBIDDEN: { status: 403, message: "アニメトレードはクローズドβの参加者のみ利用できます" },
+	ANIME_EXCHANGE_ACCOUNT_RESTRICTED: {
+		status: 403,
+		message: "このアカウントは制限中のためアニメトレードを開始できません",
+	},
 	ANIME_EXCHANGE_WAITING_EXISTS: {
 		status: 409,
 		message: "待機中のトレードがあります。マッチングをやめてからもう一度お試しください。",
@@ -1521,6 +1527,7 @@ export async function linkAccounts(
 
 export function createInviteErrorStatus(error: { details?: unknown }): 403 | 429 | 500 {
 	if (error.details === "INVITE_FORBIDDEN") return 403;
+	if (error.details === "INVITE_ACCOUNT_RESTRICTED") return 403;
 	if (error.details === "INVITE_CREATE_LIMIT") return 429;
 	return 500;
 }
@@ -1560,7 +1567,12 @@ export async function createInviteAction(request: Request, supabase: SupabaseCli
 			});
 		}
 		if (status === 403) {
-			return fail(403, { inviteMessage: "招待コードを発行する権限がありません" });
+			return fail(403, {
+				inviteMessage:
+					error.details === "INVITE_ACCOUNT_RESTRICTED"
+						? "このアカウントは制限中のため招待コードを発行できません"
+						: "招待コードを発行する権限がありません",
+			});
 		}
 		return fail(status, { inviteMessage: "招待コードの発行に失敗しました" });
 	}
