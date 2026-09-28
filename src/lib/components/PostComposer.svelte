@@ -1,9 +1,10 @@
-﻿<script lang="ts">
+<script lang="ts">
 import type { SubmitFunction } from "@sveltejs/kit";
 import { onMount } from "svelte";
 import { enhance } from "$app/forms";
 import { replaceState } from "$app/navigation";
 import { page } from "$app/state";
+import { autosize } from "$lib/actions/autosize";
 import { trapFocus } from "$lib/actions/trapFocus";
 import {
 	type ComposeDraft,
@@ -70,6 +71,7 @@ const MAX_LENGTH = 280;
 const MAX_IMAGES = 4;
 
 let content = $state("");
+let showTools = $state(false);
 let submitting = $state(false);
 let errorMessage = $state("");
 let imageUrls = $state<string[]>([]);
@@ -442,7 +444,11 @@ function handleOverlayEscape(e: KeyboardEvent, close: () => void) {
 	close();
 }
 
-const handleSubmit: SubmitFunction = () => {
+const handleSubmit: SubmitFunction = ({ cancel }) => {
+	if (!canSubmit) {
+		cancel();
+		return;
+	}
 	submitting = true;
 	errorMessage = "";
 	return async ({ result, update }) => {
@@ -468,17 +474,18 @@ const handleSubmit: SubmitFunction = () => {
 };
 </script>
 
-<div class="composer">
+<div class="composer compact-composer">
 	<div class="composer-body">
-		<UserAvatar src={avatarUrl} {username} size="md" />
+		<UserAvatar src={avatarUrl} {username} size="sm" />
 		<form method="POST" action="?/createPost" use:enhance={handleSubmit} class="composer-form">
-			<div style="position:relative;">
+			<div class="composer-input">
 				<textarea
 					bind:this={textareaEl}
 					name="content"
 					class="composer-textarea"
-					placeholder="どのアニメ見てる？"
-					rows="3"
+					placeholder="ひとこと…"
+					rows="1"
+					use:autosize={content}
 					bind:value={content}
 					maxlength={MAX_LENGTH + 10}
 					oninput={handleContentInput}
@@ -651,133 +658,147 @@ const handleSubmit: SubmitFunction = () => {
 			{/if}
 
 			<div class="composer-footer">
-				<!-- 画像添付ボタン -->
 				<button
 					type="button"
-					class="composer-image-btn"
-					disabled={imageUrls.length >= MAX_IMAGES || uploading}
-					onclick={() => fileInput?.click()}
-					aria-label="画像を添付"
-					title="画像を添付（最大{MAX_IMAGES}枚）"
+					class="composer-tools-toggle"
+					aria-label="画像・作品などを追加"
+					aria-expanded={showTools}
+					onclick={() => showTools = !showTools}
 				>
-					{#if uploading}
-						<svg
-							width="18"
-							height="18"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							aria-hidden="true"
+					<span class="i-lucide-plus" aria-hidden="true"></span>
+				</button>
+				{#if showTools}
+					<div class="composer-tools" role="group" aria-label="投稿の追加機能">
+						<!-- 画像添付ボタン -->
+						<button
+							type="button"
+							class="composer-image-btn"
+							disabled={imageUrls.length >= MAX_IMAGES || uploading}
+							onclick={() => fileInput?.click()}
+							aria-label="画像を添付"
+							title="画像を添付（最大{MAX_IMAGES}枚）"
 						>
-							<path
-								d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"
-							/>
-						</svg>
-					{:else}
-						<svg
-							width="18"
-							height="18"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							aria-hidden="true"
+							{#if uploading}
+								<svg
+									width="18"
+									height="18"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									aria-hidden="true"
+								>
+									<path
+										d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"
+									/>
+								</svg>
+							{:else}
+								<svg
+									width="18"
+									height="18"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+								>
+									<rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+									<circle cx="8.5" cy="8.5" r="1.5" />
+									<polyline points="21 15 16 10 5 21" />
+								</svg>
+							{/if}
+						</button>
+
+						<input
+							bind:this={fileInput}
+							type="file"
+							accept="image/jpeg,image/png,image/gif,image/webp"
+							multiple
+							style="display:none"
+							onchange={handleFileChange}
 						>
-							<rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-							<circle cx="8.5" cy="8.5" r="1.5" />
-							<polyline points="21 15 16 10 5 21" />
-						</svg>
-					{/if}
-				</button>
 
-				<input
-					bind:this={fileInput}
-					type="file"
-					accept="image/jpeg,image/png,image/gif,image/webp"
-					multiple
-					style="display:none"
-					onchange={handleFileChange}
-				>
+						<!-- アニメ引用ボタン -->
+						<button
+							type="button"
+							class="composer-image-btn"
+							class:active={selectedAnime !== null}
+							disabled={selectedAnime !== null}
+							onclick={openAnimeSearch}
+							aria-label="アニメを引用"
+							title="アニメを引用"
+						>
+							<svg
+								width="18"
+								height="18"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								aria-hidden="true"
+							>
+								<rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18" />
+								<line x1="7" y1="2" x2="7" y2="22" />
+								<line x1="17" y1="2" x2="17" y2="22" />
+								<line x1="2" y1="12" x2="22" y2="12" />
+								<line x1="2" y1="7" x2="7" y2="7" />
+								<line x1="2" y1="17" x2="7" y2="17" />
+								<line x1="17" y1="17" x2="22" y2="17" />
+								<line x1="17" y1="7" x2="22" y2="7" />
+							</svg>
+						</button>
 
-				<!-- アニメ引用ボタン -->
-				<button
-					type="button"
-					class="composer-image-btn"
-					class:active={selectedAnime !== null}
-					disabled={selectedAnime !== null}
-					onclick={openAnimeSearch}
-					aria-label="アニメを引用"
-					title="アニメを引用"
-				>
-					<svg
-						width="18"
-						height="18"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						aria-hidden="true"
-					>
-						<rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18" />
-						<line x1="7" y1="2" x2="7" y2="22" />
-						<line x1="17" y1="2" x2="17" y2="22" />
-						<line x1="2" y1="12" x2="22" y2="12" />
-						<line x1="2" y1="7" x2="7" y2="7" />
-						<line x1="2" y1="17" x2="7" y2="17" />
-						<line x1="17" y1="17" x2="22" y2="17" />
-						<line x1="17" y1="7" x2="22" y2="7" />
-					</svg>
-				</button>
+						<!-- CWボタン -->
+						<button
+							type="button"
+							class="composer-image-btn"
+							class:active={selectedCwAnime !== null}
+							onclick={openCwSearch}
+							aria-label="ネタバレCWを設定"
+							title="ネタバレCW（コンテンツ警告）を設定"
+						>
+							<svg
+								width="18"
+								height="18"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								aria-hidden="true"
+							>
+								<path
+									d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
+								/>
+								<line x1="1" y1="1" x2="23" y2="23" />
+							</svg>
+						</button>
 
-				<!-- CWボタン -->
-				<button
-					type="button"
-					class="composer-image-btn"
-					class:active={selectedCwAnime !== null}
-					onclick={openCwSearch}
-					aria-label="ネタバレCWを設定"
-					title="ネタバレCW（コンテンツ警告）を設定"
-				>
-					<svg
-						width="18"
-						height="18"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						aria-hidden="true"
-					>
-						<path
-							d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
-						/>
-						<line x1="1" y1="1" x2="23" y2="23" />
-					</svg>
-				</button>
-
-				<!-- 実況ルームリンクボタン -->
-				<button
-					type="button"
-					class="composer-image-btn"
-					class:active={selectedRoom !== null}
-					onclick={openRoomSearch}
-					aria-label="実況ルームにリンク"
-					title="実況ルームにリンク"
-				>
-					<span class="i-lucide-door-open" style="width:18px;height:18px;" aria-hidden="true"></span>
-				</button>
-
+						<!-- 実況ルームリンクボタン -->
+						<button
+							type="button"
+							class="composer-image-btn"
+							class:active={selectedRoom !== null}
+							onclick={openRoomSearch}
+							aria-label="実況ルームにリンク"
+							title="実況ルームにリンク"
+						>
+							<span class="i-lucide-door-open" style="width:18px;height:18px;" aria-hidden="true"></span>
+						</button>
+					</div>
+				{/if}
 				{#if draftKey && hasDraft}
 					<!-- 下書きの破棄は明示操作にする（閉じるだけでは消えない）: GitLab #2 -->
 					<button type="button" class="composer-draft-discard" onclick={discardDraft}>下書きを破棄</button>
 				{/if}
-				<span class="char-count {countClass}">{remaining}</span>
+				{#if remaining <= 40}
+					<span class="char-count {countClass}" aria-label="残り文字数">{remaining}</span>
+				{/if}
 				<button type="submit" class="btn btn-primary" disabled={!canSubmit}>
 					{submitting ? '投稿中…' : '投稿'}
 				</button>
@@ -951,6 +972,97 @@ const handleSubmit: SubmitFunction = () => {
 {/if}
 
 <style>
+.compact-composer {
+	padding: 12px;
+	margin: 0 0 8px;
+	border: 0;
+	border-bottom: 1px solid var(--color-border);
+	border-radius: 0;
+	background: transparent;
+}
+.compact-composer .composer-body {
+	align-items: flex-start;
+	gap: 10px;
+}
+.compact-composer .composer-body :global(.avatar) {
+	width: 28px;
+	height: 28px;
+	margin-top: 5px;
+}
+.compact-composer .composer-form {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	column-gap: 8px;
+	align-items: start;
+}
+.compact-composer .composer-form > :not(.composer-input):not(.composer-footer) {
+	grid-column: 1 / -1;
+}
+.composer-input {
+	position: relative;
+	grid-column: 1;
+	grid-row: 1;
+}
+.compact-composer .composer-textarea {
+	display: block;
+	min-height: 36px;
+	max-height: 180px;
+	padding: 6px 0;
+	line-height: 24px;
+	font-size: 15px;
+	overflow-y: auto;
+}
+.compact-composer:focus-within {
+	border-bottom-color: var(--color-accent);
+}
+.compact-composer .composer-footer {
+	grid-column: 2;
+	grid-row: 1;
+	position: relative;
+	border: 0;
+	padding: 0;
+	margin: 0;
+	gap: 6px;
+}
+.compact-composer .composer-footer .btn {
+	min-height: 36px;
+	padding: 6px 14px;
+	border-radius: 6px;
+	font-size: 13px;
+}
+.composer-tools-toggle {
+	display: grid;
+	place-items: center;
+	width: 36px;
+	height: 36px;
+	border: 0;
+	border-radius: 4px;
+	background: transparent;
+	color: var(--color-text-muted);
+	cursor: pointer;
+}
+.composer-tools-toggle:hover {
+	background: var(--accent-muted);
+	color: var(--color-accent);
+}
+.composer-tools {
+	display: flex;
+	position: absolute;
+	top: 42px;
+	right: 0;
+	padding: 6px;
+	gap: 6px;
+	z-index: 10;
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
+	border-radius: 6px;
+}
+.composer-tools .composer-image-btn {
+	min-width: 40px;
+	min-height: 40px;
+	margin: 0;
+}
+
 .mention-dropdown {
 	position: absolute;
 	top: 100%;
