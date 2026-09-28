@@ -1,5 +1,11 @@
 import { fail, redirect } from "@sveltejs/kit";
 import { hasPasswordProvider } from "$lib/server/auth";
+import {
+	isInvalidNonceError,
+	isReauthenticationRequiredError,
+	isSamePasswordError,
+	normalizeNonce,
+} from "$lib/server/password-change";
 import { isRateLimited } from "$lib/server/rate-limit";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -13,6 +19,24 @@ export const load: PageServerLoad = async ({ locals: { safeGetSession } }) => {
 };
 
 export const actions: Actions = {
+	/**
+	 * 再認証用の確認コードをメールで送る（secure_password_change 有効時の nonce 取得、#234）。
+	 * OAuth 利用者の初回設定など、現在のパスワードで再サインインできない場合に使う。
+	 */
+	requestReauth: async ({ locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { message: "ログインが必要です" });
+
+		if (isRateLimited(`reauth-code:${user.id}`, 3, 15 * 60_000)) {
+			return fail(429, { message: "確認コードの送信回数が多すぎます。しばらく待ってからお試しください" });
+		}
+
+		const { error } = await supabase.auth.reauthenticate();
+		if (error) return fail(500, { message: "確認コードの送信に失敗しました" });
+
+		return { reauthSent: true };
+	},
+
 	setPassword: async ({ request, locals: { supabase, safeGetSession } }) => {
 		const { session, user } = await safeGetSession();
 		if (!user) return fail(401, { message: "ログインが必要です" });
@@ -23,6 +47,7 @@ export const actions: Actions = {
 		const currentPassword = (form.get("current_password") as string | null) ?? "";
 		const password = (form.get("password") as string | null) ?? "";
 		const confirm = (form.get("confirm") as string | null) ?? "";
+		const nonce = normalizeNonce(form.get("nonce"));
 
 		if (userHasEmailProvider) {
 			if (!user.email) return fail(400, { message: "メールアドレスを確認できませんでした" });
@@ -74,17 +99,34 @@ export const actions: Actions = {
 			});
 		}
 
-		// admin.updateUserById はセッションを無効化するが、updateUser はセッションを維持したまま更新できる
+		// admin.updateUserById はセッションを無効化するが、updateUser はセッションを維持したまま更新できる。
+		// secure_password_change 有効時、Auth は「24 時間以内に作られたセッション」か nonce を要求する。
+		// メール/パスワード利用者は上の signInWithPassword で新しいセッションになっているので通る。
+		// それ以外（OAuth の初回設定など）でセッションが古い場合は nonce が要る。
 		const { error } = await supabase.auth.updateUser({
 			password,
+			...(nonce ? { nonce } : {}),
 			data: { ...user.user_metadata, has_password: true },
 		});
 		if (error) {
-			const message = error.message.toLowerCase();
-			if ((message.includes("same") || message.includes("different")) && message.includes("password")) {
+			if (isSamePasswordError(error)) {
 				return fail(400, {
 					field: "password",
 					message: "現在のパスワードと同じパスワードは設定できません",
+				});
+			}
+			if (isInvalidNonceError(error)) {
+				return fail(400, {
+					field: "nonce",
+					reauthRequired: true,
+					message: "確認コードが正しくないか期限切れです。もう一度送信してください",
+				});
+			}
+			if (isReauthenticationRequiredError(error)) {
+				return fail(400, {
+					field: "nonce",
+					reauthRequired: true,
+					message: "本人確認のため、メールで届く確認コードを入力してください",
 				});
 			}
 			return fail(500, {
