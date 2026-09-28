@@ -1,10 +1,17 @@
 <script lang="ts">
-import { untrack } from "svelte";
-import { enhance } from "$app/forms";
-import { invalidateAll } from "$app/navigation";
+import type { ActionResult, SubmitFunction } from "@sveltejs/kit";
+import { onDestroy, untrack } from "svelte";
+import { applyAction, deserialize, enhance } from "$app/forms";
+import { beforeNavigate, invalidateAll } from "$app/navigation";
 import AnimeEditRow from "$lib/components/AnimeEditRow.svelte";
 import AnimeStatusSection from "$lib/components/AnimeStatusSection.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
+import {
+	createSaveQueue,
+	DEFAULT_SAVE_ERROR_MESSAGE,
+	type RowSaveState,
+	type SaveResult,
+} from "$lib/mylist/save-queue";
 import type { Anime, AnimeStatus } from "$lib/types";
 import type { PageProps } from "./$types";
 
@@ -49,6 +56,48 @@ $effect(() => {
 	}
 });
 
+// 公開切替の送信状態。切替中は重複送信を防ぎ、失敗時は現在の状態と再試行を案内する
+let visibilityState = $state<"idle" | "saving" | "failed">("idle");
+let visibilityError = $state<string | null>(null);
+let visibilityForm: HTMLFormElement | undefined = $state();
+const VISIBILITY_ERROR_MESSAGE = "公開設定を切り替えられませんでした";
+
+const enhanceVisibility: SubmitFunction = ({ cancel }) => {
+	if (visibilityState === "saving") {
+		cancel();
+		return;
+	}
+	visibilityState = "saving";
+	visibilityError = null;
+
+	return async ({ result }) => {
+		if (result.type === "success") {
+			if (result.data && "list_is_public" in result.data) {
+				isPublic = Boolean(result.data["list_is_public"]);
+			}
+			visibilityState = "idle";
+			return;
+		}
+		if (result.type === "failure") {
+			visibilityState = "failed";
+			visibilityError = (result.data as { message?: string } | undefined)?.message ?? VISIBILITY_ERROR_MESSAGE;
+			return;
+		}
+		if (result.type === "error") {
+			visibilityState = "failed";
+			visibilityError = VISIBILITY_ERROR_MESSAGE;
+			return;
+		}
+		// redirect（未ログインなど）は SvelteKit 標準の遷移に任せる
+		visibilityState = "idle";
+		await applyAction(result);
+	};
+};
+
+function retryVisibility() {
+	visibilityForm?.requestSubmit();
+}
+
 const grouped = $derived(
 	statusOrder.reduce<Record<AnimeStatus, Anime[]>>(
 		(acc, status) => {
@@ -67,23 +116,59 @@ let selectedStatus = $state<AnimeStatus>("watching");
 type EntryState = { status: AnimeStatus; score: string; progress: number };
 type EditRow = { entry: EntryState };
 let editRows = $state<Record<string, EditRow>>({});
-const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-async function saveEditRow(animeId: string, entry: EntryState) {
+// 行ごとの保存状態（保存待ち・保存中・保存済み・失敗）。表示と再試行に使う
+let saveStates = $state<Record<string, RowSaveState<EntryState>>>({});
+const unsavedCount = $derived(
+	Object.values(saveStates).filter(
+		(state) => state.status === "pending" || state.status === "saving" || state.status === "failed",
+	).length,
+);
+
+async function saveEditRow(animeId: string, entry: EntryState): Promise<SaveResult> {
 	const formData = new FormData();
 	formData.set("anime_id", animeId);
 	formData.set("status", entry.status);
 	formData.set("score", entry.score);
 	formData.set("progress", entry.progress.toString());
 
-	const response = await fetch("?/upsertWatchlist", { method: "POST", body: formData });
-	if (!response.ok) {
-		console.error(`Failed to auto-save anime ${animeId}`);
-		return;
+	// keepalive: 画面移動やタブを閉じた直後でも送信を完了させる
+	const response = await fetch("?/upsertWatchlist", {
+		method: "POST",
+		body: formData,
+		headers: { accept: "application/json", "x-sveltekit-action": "true" },
+		keepalive: true,
+	});
+
+	// HTTP エラーだけでなく、アクションが返す failure / error も失敗として扱う
+	let result: ActionResult;
+	try {
+		result = deserialize(await response.text());
+	} catch {
+		return { ok: false, message: `${DEFAULT_SAVE_ERROR_MESSAGE}（HTTP ${response.status}）` };
 	}
 
-	await invalidateAll();
+	if (result.type === "success") {
+		await invalidateAll().catch(() => undefined);
+		return { ok: true };
+	}
+	if (result.type === "failure") {
+		const message = (result.data as { message?: string } | undefined)?.message;
+		return { ok: false, message: message ?? DEFAULT_SAVE_ERROR_MESSAGE };
+	}
+	if (result.type === "error") {
+		return { ok: false, message: DEFAULT_SAVE_ERROR_MESSAGE };
+	}
+	return { ok: false, message: "ログインが必要です。ページを再読み込みしてください" };
 }
+
+// 同じ作品の保存は直列に送り、送信中に入った編集は完了後に最新値で送り直す
+const saveQueue = createSaveQueue<EntryState>({
+	save: saveEditRow,
+	onChange: (animeId, state) => {
+		saveStates[animeId] = state;
+	},
+});
 
 function handleAutoSave(animeId: string, updatedFields: Partial<EntryState>) {
 	const editRow = editRows[animeId];
@@ -91,24 +176,42 @@ function handleAutoSave(animeId: string, updatedFields: Partial<EntryState>) {
 
 	const latestEntry = { ...editRow.entry, ...updatedFields };
 	editRow.entry = latestEntry;
+	saveQueue.schedule(animeId, latestEntry);
+}
 
-	const existingTimer = debounceTimers.get(animeId);
-	if (existingTimer) clearTimeout(existingTimer);
-
-	debounceTimers.set(
-		animeId,
-		setTimeout(() => {
-			debounceTimers.delete(animeId);
-			void saveEditRow(animeId, latestEntry);
-		}, 500),
-	);
+function retryAutoSave(animeId: string) {
+	saveQueue.retry(animeId);
 }
 
 function cancelAutoSave(animeId: string) {
-	const timer = debounceTimers.get(animeId);
-	if (timer) clearTimeout(timer);
-	debounceTimers.delete(animeId);
+	saveQueue.cancel(animeId);
+	delete saveStates[animeId];
 }
+
+// 未保存のまま画面移動する場合の扱い:
+// - 保存待ち（デバウンス中）の行は即時送信する。keepalive 付きなので移動後も送信は完了する。
+// - 保存に失敗したままの行がある場合は、移動前に確認して意図しない消失を防ぐ。
+// - タブを閉じる・リロードの場合は、失敗行があればブラウザ標準の離脱確認を出す。
+beforeNavigate(({ cancel, willUnload }) => {
+	const unsaved = saveQueue.unsavedKeys();
+	if (unsaved.length === 0) return;
+
+	saveQueue.flush();
+
+	const failedCount = unsaved.filter((animeId) => saveStates[animeId]?.status === "failed").length;
+	if (failedCount === 0) return;
+
+	if (willUnload) {
+		cancel();
+		return;
+	}
+	const proceed = window.confirm(
+		`保存に失敗した変更が${failedCount}件あります。このまま移動すると失われますが、よろしいですか？`,
+	);
+	if (!proceed) cancel();
+});
+
+onDestroy(() => saveQueue.dispose());
 
 $effect(() => {
 	const currentRows = untrack(() => editRows);
@@ -192,23 +295,26 @@ $effect(() => {
 
 						<!-- 公開/非公開切り替え -->
 						<form
+							bind:this={visibilityForm}
 							method="POST"
 							action="?/toggleVisibility"
-							use:enhance={() => {
-                            return ({ result }) => {
-                                if (result.type === 'success' && result.data) {
-                                    isPublic = (result.data as { list_is_public: boolean }).list_is_public;
-                                }
-                            };
-                        }}
+							use:enhance={enhanceVisibility}
 						>
 							<button
 								type="submit"
 								class="visibility-btn"
 								class:public={isPublic}
 								class:private={!isPublic}
+								class:saving={visibilityState === 'saving'}
+								disabled={visibilityState === 'saving'}
+								aria-busy={visibilityState === 'saving'}
+								aria-describedby="visibility-help"
+								title={isPublic ? '非公開にする' : '公開する'}
 							>
-								{#if isPublic}
+								{#if visibilityState === 'saving'}
+									<span class="visibility-spinner" aria-hidden="true"></span>
+									切替中…
+								{:else if isPublic}
 									<svg
 										width="14"
 										height="14"
@@ -252,23 +358,20 @@ $effect(() => {
 					<div class="mobile-header-controls">
 						<form
 							class="mobile-visibility-form"
+							class:saving={visibilityState === 'saving'}
 							method="POST"
 							action="?/toggleVisibility"
-							use:enhance={() => {
-								return ({ result }) => {
-									if (result.type === 'success' && result.data) {
-										isPublic = (result.data as { list_is_public: boolean }).list_is_public;
-									}
-								};
-							}}
+							use:enhance={enhanceVisibility}
+							aria-busy={visibilityState === 'saving'}
 						>
 							<button
 								type="submit"
 								class="mobile-visibility-btn"
 								class:active={isPublic}
-								disabled={isPublic}
+								disabled={isPublic || visibilityState === 'saving'}
 								aria-label="マイリストを公開する"
 								aria-pressed={isPublic}
+								aria-describedby="visibility-help"
 							>
 								公開
 							</button>
@@ -276,9 +379,10 @@ $effect(() => {
 								type="submit"
 								class="mobile-visibility-btn"
 								class:active={!isPublic}
-								disabled={!isPublic}
+								disabled={!isPublic || visibilityState === 'saving'}
 								aria-label="マイリストを非公開にする"
 								aria-pressed={!isPublic}
+								aria-describedby="visibility-help"
 							>
 								非公開
 							</button>
@@ -309,6 +413,35 @@ $effect(() => {
 							</button>
 						</div>
 					</div>
+				</div>
+
+				<!-- 公開範囲の説明・切替の結果・未保存の案内 -->
+				<div class="mylist-notices">
+					<p id="visibility-help" class="visibility-help">
+						{#if visibilityState === 'saving'}
+							公開設定を切り替えています…
+						{:else if isPublic}
+							<strong>公開中:</strong>
+							プロフィールの「マイリスト」タブで他のユーザーも閲覧できます（非公開アカウントの場合はフォロワーのみ）。
+						{:else}
+							<strong>非公開:</strong>
+							マイリストは自分だけが閲覧できます。プロフィールのタブにはロック表示が付きます。
+						{/if}
+					</p>
+					{#if visibilityState === 'failed'}
+						<p class="visibility-error" role="alert">
+							<span class="i-lucide-triangle-alert" aria-hidden="true"></span>
+							<span>
+								{visibilityError ?? VISIBILITY_ERROR_MESSAGE}。現在は「{isPublic ? '公開中' : '非公開'}」のままです。
+							</span>
+							<button type="button" class="retry-btn" onclick={retryVisibility}>再試行</button>
+						</p>
+					{/if}
+					{#if unsavedCount > 0}
+						<p class="unsaved-note" role="status" aria-live="polite">
+							未保存の変更が{unsavedCount}件あります。画面を移動すると保存待ちの変更は自動で送信されますが、失敗した変更は再試行するまで保存されません。
+						</p>
+					{/if}
 				</div>
 			</header>
 
@@ -360,7 +493,9 @@ $effect(() => {
 													bind:entry={editRow.entry}
 													{statusOrder}
 													{statusLabel}
+													saveState={saveStates[anime.id]}
 													onAutoSave={(updatedFields) => handleAutoSave(anime.id, updatedFields)}
+													onRetry={() => retryAutoSave(anime.id)}
 													onRemove={() => cancelAutoSave(anime.id)}
 												/>
 											{/if}
@@ -475,8 +610,83 @@ $effect(() => {
 	color: var(--color-text-muted);
 }
 
-.visibility-btn:hover {
+.visibility-btn:hover:not(:disabled) {
 	filter: brightness(1.1);
+}
+
+.visibility-btn:disabled {
+	cursor: progress;
+	opacity: 0.75;
+}
+
+.visibility-spinner {
+	width: 12px;
+	height: 12px;
+	border: 2px solid currentColor;
+	border-right-color: transparent;
+	border-radius: 50%;
+	animation: visibility-spin 0.8s linear infinite;
+}
+
+@keyframes visibility-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+/* 公開範囲の説明・切替結果・未保存の案内 */
+.mylist-notices {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.visibility-help,
+.visibility-error,
+.unsaved-note {
+	margin: 0;
+	font-size: 0.78rem;
+	line-height: 1.5;
+}
+
+.visibility-help {
+	color: var(--color-text-muted);
+}
+
+.visibility-help strong {
+	color: var(--color-text);
+	font-weight: 600;
+}
+
+.visibility-error {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px 8px;
+	padding: 8px 10px;
+	border: 1px solid color-mix(in srgb, var(--color-danger, #f87171) 40%, transparent);
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--color-danger, #f87171) 12%, transparent);
+	color: var(--color-danger, #f87171);
+}
+
+.unsaved-note {
+	color: var(--color-text-muted);
+}
+
+.retry-btn {
+	padding: 3px 10px;
+	border: 1px solid currentColor;
+	border-radius: 6px;
+	background: transparent;
+	color: inherit;
+	font-size: 0.75rem;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.retry-btn:hover {
+	background: color-mix(in srgb, currentColor 12%, transparent);
 }
 
 .mylist-empty {
@@ -677,6 +887,15 @@ $effect(() => {
 		color: var(--color-accent);
 		cursor: default;
 		opacity: 1;
+	}
+
+	.mobile-visibility-form.saving {
+		opacity: 0.6;
+		cursor: progress;
+	}
+
+	.mylist-notices {
+		padding-bottom: 8px;
 	}
 
 	.mobile-view-toggle {
