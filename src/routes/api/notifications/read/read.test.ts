@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { POST, parseNotificationCategory } from "./+server";
+import { parseNotificationCategory } from "$lib/server/notification-category";
+import { POST } from "./+server";
 
 type Call = { method: string; args: unknown[] };
 

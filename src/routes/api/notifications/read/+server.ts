@@ -1,13 +1,7 @@
 import { error, json } from "@sveltejs/kit";
-import { markCategoryNotificationsRead, type NotificationCategory } from "$lib/server/actions";
+import { markCategoryNotificationsRead } from "$lib/server/actions";
+import { parseNotificationCategory } from "$lib/server/notification-category";
 import type { RequestHandler } from "./$types";
-
-const CATEGORIES: readonly NotificationCategory[] = ["normal", "room", "mylist"];
-
-export function parseNotificationCategory(value: unknown): NotificationCategory | null {
-	if (typeof value !== "string") return null;
-	return (CATEGORIES as readonly string[]).includes(value) ? (value as NotificationCategory) : null;
-}
 
 /**
  * 表示中カテゴリの通知を既読にする。
