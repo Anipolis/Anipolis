@@ -321,11 +321,14 @@ function handleKeydown(event: KeyboardEvent) {
 	min-width: 0;
 	font-size: 11px;
 }
+/* Square, but centered under the 32px menu button above. */
 .post-row-main :global(.post-like-btn) {
-	width: 32px;
+	width: 24px;
 	height: 24px;
 	min-height: 0;
-	margin: 0;
+	margin: 0 4px 0 0;
+	padding: 4.5px;
+	justify-content: center;
 }
 
 .post-row-indent {
@@ -426,6 +429,11 @@ function handleKeydown(event: KeyboardEvent) {
 	.post-row-menu {
 		height: 40px;
 		margin: -6px 0;
+	}
+	.post-row-main :global(.post-like-btn) {
+		width: 40px;
+		margin-right: -4px;
+		padding: 6.5px;
 	}
 }
 @media (max-width: 640px) {
