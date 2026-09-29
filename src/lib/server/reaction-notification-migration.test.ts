@@ -24,7 +24,13 @@ describe("like / repost notification dedupe migration (#286)", () => {
 	});
 
 	it("blocks reaction writes before cleanup, in the same lock order as the insert path", () => {
+		// supabase db push は自動コミットで文を流すので、LOCK を有効にするには明示的なトランザクションが要る
+		const begin = migration.indexOf("\nBEGIN;\n");
+		const commit = migration.lastIndexOf("\nCOMMIT;\n");
 		const likes = migration.indexOf("LOCK TABLE public.likes IN SHARE ROW EXCLUSIVE MODE;");
+		expect(begin).toBeGreaterThan(-1);
+		expect(begin).toBeLessThan(likes);
+		expect(commit).toBeGreaterThan(migration.indexOf("CREATE TRIGGER on_repost_deleted"));
 		const reposts = migration.indexOf("LOCK TABLE public.reposts IN SHARE ROW EXCLUSIVE MODE;");
 		const notifications = migration.indexOf("LOCK TABLE public.notifications IN SHARE ROW EXCLUSIVE MODE;");
 		const cleanup = migration.indexOf("DELETE FROM public.notifications n");
