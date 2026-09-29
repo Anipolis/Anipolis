@@ -442,11 +442,14 @@ $effect(() => {
 
 .compose-modal-body {
 	overflow-y: auto;
+	padding: 12px 12px 0;
 }
 
 .composer-loading {
-	min-height: 61px;
-	border-bottom: 1px solid var(--color-border);
+	min-height: 166px;
+	margin-bottom: 12px;
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius);
 	background:
 		linear-gradient(100deg, var(--color-surface) 34%, var(--color-surface-hover) 48%, var(--color-surface) 62%) 0 0
 		/ 220% 100%;
