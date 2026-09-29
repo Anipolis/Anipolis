@@ -1970,6 +1970,11 @@ textarea {
 	transition: transform 0.1s ease-out;
 }
 
+/* Icon is a size bigger than the other action icons; trim its hitbox padding to match. */
+.post-like-btn.reaction-icon-hitbox {
+	padding: 5.5px;
+}
+
 /* Press in while held; the pop on release starts from this scale. */
 .post-like-btn:not(:disabled):active svg {
 	transform: scale(0.7);

@@ -327,8 +327,8 @@ function handleKeydown(event: KeyboardEvent) {
 }
 /* Square, but centered under the 32px menu button above. */
 .post-row-main :global(.post-like-btn) {
-	width: 24px;
-	height: 24px;
+	width: 26px;
+	height: 26px;
 	min-height: 0;
 	margin: 0 4px 0 0;
 	padding: 4.5px;
