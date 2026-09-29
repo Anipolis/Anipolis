@@ -20,14 +20,20 @@ let { data }: PageProps = $props();
 // タブや「さらに読み込む」のカーソルが変わったときは別の一覧なので保持しない
 const timeline = createLatestResolved(
 	() => data.timeline,
-	() => `${data.tab}:${data.before ?? ""}`,
+	// アカウント切替（invalidateAll でページは作り直されない）でも前のアカウントの一覧を見せない
+	() => `${data.user?.id ?? ""}:${data.tab}:${data.before ?? ""}`,
 );
 
 // data.pageExtras（投稿フォームの初期値・サイド情報）も deferred Promise。
 // {#await} で包むと load の再実行で Promise が差し替わるたびに待機表示へ戻り、投稿フォームが
 // 作り直されて、アニメ詳細からの引用やトレード共有の初期値が消える（#294）。
 // 最後に解決した値を保持し、フォームは初回の解決後ずっと同じインスタンスを使う
-const pageExtras = createLatestResolved(() => data.pageExtras);
+// ユーザーが変わったら（アカウント切替）保持値を捨てて待機表示に戻し、投稿フォームも作り直す。
+// 前のアカウントの視聴中作品や打ちかけの本文を別アカウントに持ち越さないため
+const pageExtras = createLatestResolved(
+	() => data.pageExtras,
+	() => data.user?.id ?? "",
+);
 
 let onboardingDismissed = $state(true);
 let homeSidebarSlot = $state<HTMLElement | null>(null);
@@ -138,7 +144,7 @@ $effect(() => {
 						投稿フォームを読み込めませんでした。<a href="/">再読み込み</a>
 					</div>
 				{:else}
-					<div class="composer-loading" aria-label="投稿フォームを読み込み中"></div>
+					<div class="composer-loading" role="status" aria-label="投稿フォームを読み込み中"></div>
 				{/if}
 			{:else if data.session}
 				<div class="auth-gate">
@@ -322,7 +328,7 @@ $effect(() => {
 					サイド情報を読み込めませんでした。
 				</div>
 			{:else}
-				<div class="home-sidebar-loading" aria-label="サイド情報を読み込み中">
+				<div class="home-sidebar-loading" role="status" aria-label="サイド情報を読み込み中">
 					<div class="spinner" aria-hidden="true"></div>
 				</div>
 			{/if}
@@ -388,7 +394,7 @@ $effect(() => {
 					投稿フォームを読み込めませんでした。<a href="/">再読み込み</a>
 				</div>
 			{:else}
-				<div class="composer-loading" aria-label="投稿フォームを読み込み中"></div>
+				<div class="composer-loading" role="status" aria-label="投稿フォームを読み込み中"></div>
 			{/if}
 		</div>
 	</div>

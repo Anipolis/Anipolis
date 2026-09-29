@@ -41,11 +41,11 @@ function extras(initialAnime: typeof QUOTED_ANIME | null) {
 	};
 }
 
-function pageData(initialAnime: typeof QUOTED_ANIME | null, delayMs = 0) {
+function pageData(initialAnime: typeof QUOTED_ANIME | null, delayMs = 0, userId = "me") {
 	return {
-		profile: { id: "me", username: "me", avatar_url: null },
+		profile: { id: userId, username: userId, avatar_url: null },
 		session: { access_token: "t" },
-		user: { id: "me" },
+		user: { id: userId },
 		tab: "all",
 		before: null,
 		timeline: Promise.resolve({ posts: [], nextCursor: null }),
@@ -142,6 +142,29 @@ describe("home page quote flow (#294)", () => {
 		target.remove();
 		const { composeOpen } = await import("$lib/stores/compose");
 		composeOpen.set(false);
+	});
+
+	it("drops the held composer when the account switches, so nothing carries over", async () => {
+		const props = $state({ data: pageData(QUOTED_ANIME) });
+		const target = document.createElement("div");
+		document.body.appendChild(target);
+		const component = mount(HomePage, { target, props: props as never });
+		await settle();
+		expect(desktopComposer(target).textContent).toContain("ぼっちざろっく");
+
+		// アカウント切替: 同じページのまま別ユーザーのデータで再読み込みされる
+		props.data = pageData(null, 30, "other");
+		await settle();
+		expect(desktopComposer(target).querySelector("[role=status]")).not.toBeNull();
+		expect(desktopComposer(target).textContent).not.toContain("ぼっちざろっく");
+
+		await new Promise((resolve) => setTimeout(resolve, 60));
+		await settle();
+		expect(desktopComposer(target).querySelector("[role=status]")).toBeNull();
+		expect(desktopComposer(target).textContent).not.toContain("ぼっちざろっく");
+
+		await unmount(component);
+		target.remove();
 	});
 
 	it("cleans the quote params from the URL without re-running the page load", async () => {
