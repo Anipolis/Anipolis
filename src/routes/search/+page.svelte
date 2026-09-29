@@ -53,6 +53,40 @@ let { data }: PageProps = $props();
 		{:else}
 			<h2 class="search-result-title">「{data.query}」の検索結果</h2>
 
+			{#if data.animeMatches.items.length > 0}
+				<!-- 検索語に一致した作品。投稿検索ではこれらの作品の引用投稿も拾っている -->
+				<div class="search-section">
+					<h3>作品</h3>
+					<div class="anime-match-list">
+						{#each data.animeMatches.items as anime (anime.id)}
+							<a href="/anime/{anime.id}" class="anime-match-card">
+								{#if anime.cover_url}
+									<img src={anime.cover_url} alt="" loading="lazy" class="anime-match-cover">
+								{:else}
+									<div class="anime-match-cover anime-match-cover--empty" aria-hidden="true"></div>
+								{/if}
+								<div class="anime-match-info">
+									<div class="anime-match-title">{anime.title}</div>
+									{#if anime.title_en}
+										<div class="anime-match-sub">{anime.title_en}</div>
+									{/if}
+								</div>
+							</a>
+						{/each}
+					</div>
+					{#if data.animeMatches.tooMany || data.animeMatches.total > data.animeMatches.items.length}
+						<a href="/anime?search={encodeURIComponent(data.query)}" class="anime-match-more">
+							{data.animeMatches.tooMany ? "アニメ一覧で続きを見る" : `アニメ一覧で全${data.animeMatches.total}件を見る`}
+						</a>
+					{/if}
+					{#if data.animeMatches.tooMany}
+						<p class="anime-match-note">
+							一致する作品が多いため、投稿は本文のみで検索しました。作品名を詳しく入力すると、その作品の引用投稿も検索できます。
+						</p>
+					{/if}
+				</div>
+			{/if}
+
 			{#if data.users.length > 0}
 				<div class="search-section">
 					<h3>ユーザー</h3>
@@ -89,6 +123,77 @@ let { data }: PageProps = $props();
 </div>
 
 <style>
+.anime-match-list {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+	gap: 8px;
+}
+
+.anime-match-card {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	min-width: 0;
+	padding: 10px 12px;
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius);
+	color: inherit;
+	text-decoration: none;
+	transition: border-color 0.15s;
+}
+
+.anime-match-card:hover {
+	border-color: var(--color-border-hover);
+	text-decoration: none;
+}
+
+.anime-match-cover {
+	flex-shrink: 0;
+	width: 40px;
+	height: 56px;
+	border-radius: 4px;
+	object-fit: cover;
+	background: var(--color-border);
+}
+
+.anime-match-info {
+	min-width: 0;
+}
+
+.anime-match-title {
+	font-size: 14px;
+	font-weight: 600;
+	overflow-wrap: anywhere;
+}
+
+.anime-match-sub {
+	margin-top: 2px;
+	font-size: 12px;
+	color: var(--color-text-muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.anime-match-more {
+	display: inline-block;
+	margin-top: 10px;
+	font-size: 13px;
+}
+
+.anime-match-note {
+	margin-top: 8px;
+	font-size: 12px;
+	color: var(--color-text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.anime-match-card {
+		transition: none;
+	}
+}
+
 .mobile-search-trending {
 	display: none;
 }
