@@ -7,25 +7,14 @@
  * - 一致した作品が多すぎる場合も作品一致を使わず本文一致だけにする（IN 句の肥大化を避ける）
  * - 作品一致で拾うのは「引用投稿」だけ。実況ルーム・イベントルームの投稿は投稿時に作品が自動で
  *   付くので除外し、従来どおり本文一致（公式ハッシュタグ）でのみ拾う
- * - ネタバレ指定（CW）付きの投稿も作品一致では拾わない。検索設定で選べるようにするかは今後の検討事項
+ * - ネタバレ指定（CW）付きの投稿も作品一致では拾わない。検索設定で選べるようにするかは #300 で検討
  */
 import { escapeIlikePattern } from "$lib/utils/search";
 
-/** 作品一致を使う検索語の最小文字数（書記素ではなくコードポイント単位で数える） */
+/** 作品一致を使う検索語の最小文字数（コードポイント単位で数える） */
 export const MIN_ANIME_MATCH_QUERY_LENGTH = 2;
 /** これを超えて作品が一致したら、作品一致は使わない */
 export const MAX_ANIME_MATCHES = 50;
-/** 検索結果の上部に出す作品の件数 */
-export const ANIME_SECTION_LIMIT = 6;
-
-export type AnimeSearchHit = {
-	id: number;
-	title: string;
-	title_en: string | null;
-	cover_url: string | null;
-	/** しょぼい由来のひらがな読み（無い作品も多い）。並び順の判定に使う */
-	title_yomi?: string | null;
-};
 
 export function shouldMatchQuotedAnime(query: string): boolean {
 	return [...query.trim()].length >= MIN_ANIME_MATCH_QUERY_LENGTH;
@@ -48,42 +37,8 @@ export function buildPostSearchFilter(query: string, animeIds: readonly number[]
 	return `${content},and(anime_id.in.(${ids.join(",")}),broadcast_room_session_id.is.null,event_id.is.null,cw_anime_id.is.null)`;
 }
 
-/**
- * 題名・英題・読みの前方一致フィルター。一致が多すぎて部分一致の先頭だけでは上位を決められない
- * とき、完全一致・前方一致の作品を別に取得して作品一覧の上位に入れるために使う。
- */
-export function buildTitlePrefixFilter(query: string): string {
-	const pattern = quoteFilterValue(`${escapeIlikePattern(query.trim())}%`);
-	return `title.ilike.${pattern},title_en.ilike.${pattern},title_yomi.ilike.${pattern}`;
-}
-
 /** 一致した作品のうち、投稿検索に使う ID（多すぎるときは使わない） */
-export function quotedAnimeIdsForSearch(hits: readonly AnimeSearchHit[]): number[] {
-	if (hits.length > MAX_ANIME_MATCHES) return [];
-	return hits.map((hit) => hit.id);
-}
-
-/**
- * 検索結果の上部に出す作品の並び: 題名の完全一致 → 前方一致 → それ以外、同順位は短い題名を先に。
- * 「レイアース」なら「魔法騎士レイアース」より「レイアース」そのものがあれば先に出す。
- */
-export function rankAnimeMatches(query: string, hits: readonly AnimeSearchHit[]): AnimeSearchHit[] {
-	const needle = query.trim().toLowerCase();
-	const score = (hit: AnimeSearchHit) => {
-		// 読みでの一致も題名と同じ重みで扱う（「れいあーす」で読みが完全一致した作品を先に出す）
-		const titles = [hit.title, hit.title_en ?? "", hit.title_yomi ?? ""]
-			.filter(Boolean)
-			.map((title) => title.toLowerCase());
-		if (titles.some((title) => title === needle)) return 0;
-		if (titles.some((title) => title.startsWith(needle))) return 1;
-		return 2;
-	};
-	return [...hits].sort((a, b) => score(a) - score(b) || a.title.length - b.title.length || a.id - b.id);
-}
-
-/** 複数の取得結果を重複なく合わせて並べ替える（前方一致の別取得と部分一致の先頭を合わせるとき） */
-export function mergeRankedAnimeMatches(query: string, ...groups: readonly AnimeSearchHit[][]): AnimeSearchHit[] {
-	const byId = new Map<number, AnimeSearchHit>();
-	for (const group of groups) for (const hit of group) if (!byId.has(hit.id)) byId.set(hit.id, hit);
-	return rankAnimeMatches(query, [...byId.values()]);
+export function quotedAnimeIdsForSearch(animeIds: readonly number[]): number[] {
+	if (animeIds.length > MAX_ANIME_MATCHES) return [];
+	return [...animeIds];
 }
