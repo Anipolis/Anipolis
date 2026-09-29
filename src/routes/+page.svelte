@@ -6,6 +6,7 @@ import PostCard from "$lib/components/PostCard.svelte";
 import PostCardSkeleton from "$lib/components/PostCardSkeleton.svelte";
 import PostComposer from "$lib/components/PostComposer.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
+import { createLatestResolved } from "$lib/latest-resolved.svelte";
 import { composeOpen } from "$lib/stores/compose";
 import type { PageProps } from "./$types";
 
@@ -13,6 +14,14 @@ import type { PageProps } from "./$types";
 const SKELETON_COUNT = 5;
 
 let { data }: PageProps = $props();
+
+// data.timeline は deferred Promise。load が再実行されて新しい Promise になっても、
+// 解決するまでは前回の一覧を表示し続ける（スケルトンは初回だけ、#100）。
+// タブや「さらに読み込む」のカーソルが変わったときは別の一覧なので保持しない
+const timeline = createLatestResolved(
+	() => data.timeline,
+	() => `${data.tab}:${data.before ?? ""}`,
+);
 
 let onboardingDismissed = $state(true);
 let homeSidebarSlot = $state<HTMLElement | null>(null);
@@ -240,11 +249,15 @@ $effect(() => {
 
 		<!--
 			data.timeline は deferred Promise（{ posts, nextCursor }）。
-			- 待機中: スピナー + スケルトンカードを表示してレイアウトシフトを最小化
-			- 解決後: 実際の投稿カードに差し替え
+			- 初回の待機中: スピナー + スケルトンカードを表示してレイアウトシフトを最小化
+			- 解決後: 実際の投稿カードに差し替え。再取得中は前回の一覧を保持する
 			- エラー時: 再読み込みを促すメッセージ
 		-->
-		{#await data.timeline}
+		{#if timeline.error}
+			<div class="home-deferred-error" role="alert" data-deferred-error="true">
+				投稿を読み込めませんでした。<a href={data.tab === "following" ? "/?tab=following" : "/"}>再読み込み</a>
+			</div>
+		{:else if timeline.value === null}
 			<div class="posts-loading-spinner" aria-label="投稿を読み込み中">
 				<div class="spinner" aria-hidden="true"></div>
 				<span>読み込み中…</span>
@@ -252,9 +265,9 @@ $effect(() => {
 			{#each { length: SKELETON_COUNT } as _, i (i)}
 				<PostCardSkeleton />
 			{/each}
-		{:then timeline}
-			{@const posts = timeline.posts}
-			{@const nextCursor = timeline.nextCursor}
+		{:else}
+			{@const posts = timeline.value.posts}
+			{@const nextCursor = timeline.value.nextCursor}
 			{#if data.before}
 				<a href={data.tab === "following" ? "/?tab=following" : "/"} class="timeline-back-link"
 					>← 新しい投稿に戻る</a
@@ -284,11 +297,7 @@ $effect(() => {
 					</a>
 				{/if}
 			{/if}
-		{:catch error}
-			<div class="home-deferred-error" role="alert" data-deferred-error={error ? "true" : "false"}>
-				投稿を読み込めませんでした。<a href={data.tab === "following" ? "/?tab=following" : "/"}>再読み込み</a>
-			</div>
-		{/await}
+		{/if}
 	</main>
 
 	<aside class="sidebar-column home-sidebar-column" bind:this={homeSidebarSlot}>
