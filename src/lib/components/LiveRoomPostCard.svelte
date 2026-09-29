@@ -2,6 +2,7 @@
 import type { SubmitFunction } from "@sveltejs/kit";
 import { enhance } from "$app/forms";
 import { trapFocus } from "$lib/actions/trapFocus";
+import { confirmReaction } from "$lib/reaction-confirm";
 import { isReactionFailure } from "$lib/reaction-feedback";
 import { createReactionFeedback } from "$lib/reaction-feedback.svelte";
 import type { Post } from "$lib/types";
@@ -128,50 +129,57 @@ async function fetchReplies(mode: "recent" | "all", limit: number): Promise<bool
 }
 
 // 失敗時は楽観更新を巻き戻し、カード内にメッセージを出す。
-// update() を呼ばないのは、error 結果でエラーページへ遷移して閲覧位置を失うのを防ぐため。
+// 成功時も update()（= 全 load の再取得）は呼ばず、サーバーの結果で楽観更新を確定させるだけにする。
+// 再取得はルームのポーリングが担い、ページ全体の作り直しで閲覧位置を失わないため（#100）。
 const handleLike: SubmitFunction = ({ formElement }) => {
 	const wasLiked = likedByMe;
+	const countBefore = likeCount;
 	likedByMeLocal = !wasLiked;
-	likeCountLocal = wasLiked ? likeCount - 1 : likeCount + 1;
-	return async ({ result, update }) => {
+	likeCountLocal = wasLiked ? countBefore - 1 : countBefore + 1;
+	return async ({ result }) => {
 		if (isReactionFailure(result)) {
 			likedByMeLocal = null;
 			likeCountLocal = null;
 			reactionFeedback.fail("like", result, formElement);
 			return;
 		}
+		const confirmed = confirmReaction("like", result, { wasActive: wasLiked, countBefore });
+		likedByMeLocal = confirmed.active;
+		likeCountLocal = confirmed.count;
 		reactionFeedback.clear();
-		await update({ reset: false });
 	};
 };
 
 const handleBookmark: SubmitFunction = ({ formElement }) => {
 	const wasBookmarked = bookmarkedByMe;
 	bookmarkedByMeLocal = !wasBookmarked;
-	return async ({ result, update }) => {
+	return async ({ result }) => {
 		if (isReactionFailure(result)) {
 			bookmarkedByMeLocal = null;
 			reactionFeedback.fail("bookmark", result, formElement);
 			return;
 		}
+		bookmarkedByMeLocal = confirmReaction("bookmark", result, { wasActive: wasBookmarked, countBefore: 0 }).active;
 		reactionFeedback.clear();
-		await update({ reset: false });
 	};
 };
 
 const handleRepost: SubmitFunction = ({ formElement }) => {
 	const wasReposted = repostedByMe;
+	const countBefore = repostCount;
 	repostedByMeLocal = !wasReposted;
-	repostCountLocal = wasReposted ? repostCount - 1 : repostCount + 1;
-	return async ({ result, update }) => {
+	repostCountLocal = wasReposted ? countBefore - 1 : countBefore + 1;
+	return async ({ result }) => {
 		if (isReactionFailure(result)) {
 			repostedByMeLocal = null;
 			repostCountLocal = null;
 			reactionFeedback.fail("repost", result, formElement);
 			return;
 		}
+		const confirmed = confirmReaction("repost", result, { wasActive: wasReposted, countBefore });
+		repostedByMeLocal = confirmed.active;
+		repostCountLocal = confirmed.count;
 		reactionFeedback.clear();
-		await update({ reset: false });
 	};
 };
 

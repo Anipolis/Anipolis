@@ -7,6 +7,7 @@ import { trapFocus } from "$lib/actions/trapFocus";
 import AnimeExchangeResult from "$lib/components/AnimeExchangeResult.svelte";
 import ReactionErrorNotice from "$lib/components/ReactionErrorNotice.svelte";
 import ReactionUsersPopover from "$lib/components/ReactionUsersPopover.svelte";
+import { confirmReaction } from "$lib/reaction-confirm";
 import { isReactionFailure } from "$lib/reaction-feedback";
 import { createReactionFeedback } from "$lib/reaction-feedback.svelte";
 import { buildAnimeRoomLabel, buildEventRoomLabel, type Post, type ReactionType, type ReactionUser } from "$lib/types";
@@ -217,33 +218,39 @@ const handleDelete: SubmitFunction = () => {
 
 // 失敗時は楽観更新を巻き戻し、カード内にメッセージを出す。
 // update() を呼ばないのは、error 結果でエラーページへ遷移して閲覧位置を失うのを防ぐため。
+// 成功時に update()（= 全 load の再取得）は呼ばない。ストリーミング配信のタイムラインでは
+// 再取得のたびにスケルトンへ切り替わり、スクロール位置や展開状態も失われる（#100）。
+// 楽観更新をサーバーの結果で確定させるだけにする。
 const handleLike: SubmitFunction = ({ formElement }) => {
 	const wasLiked = likedByMe;
+	const countBefore = likeCount;
 	likedByMeLocal = !wasLiked;
-	likeCountLocal = wasLiked ? likeCount - 1 : likeCount + 1;
-	return async ({ result, update }) => {
+	likeCountLocal = wasLiked ? countBefore - 1 : countBefore + 1;
+	return async ({ result }) => {
 		if (isReactionFailure(result)) {
 			likedByMeLocal = null;
 			likeCountLocal = null;
 			reactionFeedback.fail("like", result, formElement);
 			return;
 		}
+		const confirmed = confirmReaction("like", result, { wasActive: wasLiked, countBefore });
+		likedByMeLocal = confirmed.active;
+		likeCountLocal = confirmed.count;
 		reactionFeedback.clear();
-		await update({ reset: false });
 	};
 };
 
 const handleBookmark: SubmitFunction = ({ formElement }) => {
 	const wasBookmarked = bookmarkedByMe;
 	bookmarkedByMeLocal = !wasBookmarked;
-	return async ({ result, update }) => {
+	return async ({ result }) => {
 		if (isReactionFailure(result)) {
 			bookmarkedByMeLocal = null;
 			reactionFeedback.fail("bookmark", result, formElement);
 			return;
 		}
+		bookmarkedByMeLocal = confirmReaction("bookmark", result, { wasActive: wasBookmarked, countBefore: 0 }).active;
 		reactionFeedback.clear();
-		await update({ reset: false });
 	};
 };
 
@@ -260,17 +267,20 @@ async function retryRepost() {
 const handleRepost: SubmitFunction = () => {
 	showRepostMenu = false;
 	const wasReposted = repostedByMe;
+	const countBefore = repostCount;
 	repostedByMeLocal = !wasReposted;
-	repostCountLocal = wasReposted ? repostCount - 1 : repostCount + 1;
-	return async ({ result, update }) => {
+	repostCountLocal = wasReposted ? countBefore - 1 : countBefore + 1;
+	return async ({ result }) => {
 		if (isReactionFailure(result)) {
 			repostedByMeLocal = null;
 			repostCountLocal = null;
 			reactionFeedback.fail("repost", result, () => void retryRepost());
 			return;
 		}
+		const confirmed = confirmReaction("repost", result, { wasActive: wasReposted, countBefore });
+		repostedByMeLocal = confirmed.active;
+		repostCountLocal = confirmed.count;
 		reactionFeedback.clear();
-		await update({ reset: false });
 	};
 };
 
