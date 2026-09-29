@@ -253,7 +253,7 @@ const activeLabel = $derived(sections.find((s) => s.id === activeSection)?.label
 
 	.settings-nav-item {
 		padding: 8px 14px;
-		border-radius: 20px;
+		border-radius: 28px;
 		white-space: nowrap;
 		font-size: 0.88rem;
 	}

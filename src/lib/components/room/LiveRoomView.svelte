@@ -1047,6 +1047,7 @@ function formatCompactDate(iso: string) {
 	padding: 8px 12px;
 	border: 1px solid color-mix(in srgb, var(--color-primary) 28%, transparent);
 	border-radius: 999px;
+	corner-shape: round;
 	background: color-mix(in srgb, var(--color-surface) 92%, var(--color-primary));
 	box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
 	color: var(--color-primary);
@@ -1068,6 +1069,7 @@ function formatCompactDate(iso: string) {
 	place-items: center;
 	padding: 0 6px;
 	border-radius: 999px;
+	corner-shape: round;
 	background: var(--color-primary);
 	color: white;
 	font-size: 12px;
@@ -1123,6 +1125,7 @@ function formatCompactDate(iso: string) {
 	height: 8px;
 	flex-shrink: 0;
 	border-radius: 999px;
+	corner-shape: round;
 	background: var(--color-text-muted);
 }
 
@@ -1162,6 +1165,7 @@ function formatCompactDate(iso: string) {
 	padding: 4px 8px;
 	border: 1px solid var(--color-border);
 	border-radius: 999px;
+	corner-shape: round;
 	background: var(--color-surface);
 	color: var(--color-text-muted);
 	font: inherit;

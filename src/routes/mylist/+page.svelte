@@ -553,7 +553,7 @@ $effect(() => {
 .view-toggle {
 	display: flex;
 	background: color-mix(in srgb, var(--color-text) 8%, transparent);
-	border-radius: 8px;
+	border-radius: 12px;
 	padding: 3px;
 	gap: 2px;
 }
@@ -590,7 +590,7 @@ $effect(() => {
 	align-items: center;
 	gap: 6px;
 	padding: 6px 14px;
-	border-radius: 20px;
+	border-radius: 28px;
 	font-size: 0.8rem;
 	font-weight: 600;
 	cursor: pointer;
@@ -625,6 +625,7 @@ $effect(() => {
 	border: 2px solid currentColor;
 	border-right-color: transparent;
 	border-radius: 50%;
+	corner-shape: round;
 	animation: visibility-spin 0.8s linear infinite;
 }
 
@@ -665,7 +666,7 @@ $effect(() => {
 	gap: 6px 8px;
 	padding: 8px 10px;
 	border: 1px solid color-mix(in srgb, var(--color-danger, #f87171) 40%, transparent);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: color-mix(in srgb, var(--color-danger, #f87171) 12%, transparent);
 	color: var(--color-danger, #f87171);
 }
@@ -774,7 +775,7 @@ $effect(() => {
 	align-items: center;
 	gap: 5px;
 	padding: 8px 14px;
-	border-radius: 20px;
+	border-radius: 28px;
 	border: none;
 	cursor: pointer;
 	font-size: 0.82rem;

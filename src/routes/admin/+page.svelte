@@ -163,7 +163,7 @@ const dashboard = $derived(data.dashboard);
 	min-height: 84px;
 	padding: 14px;
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-surface);
 }
 
@@ -185,7 +185,7 @@ const dashboard = $derived(data.dashboard);
 .admin-section {
 	margin-top: 16px;
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-surface);
 	overflow: hidden;
 }
@@ -239,7 +239,7 @@ const dashboard = $derived(data.dashboard);
 	gap: 12px;
 	padding: 20px;
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-surface);
 	text-decoration: none;
 	color: inherit;

@@ -327,7 +327,7 @@ const hasInviteAccess = $derived(!data.betaGateEnabled || data.inviteCodeValid);
 	padding: 4px;
 	margin: 18px 0;
 	border: 1px solid var(--border);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: color-mix(in srgb, var(--surface) 75%, transparent);
 }
 

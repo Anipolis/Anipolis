@@ -146,7 +146,7 @@ let cwRevealed = $state(false);
 	margin: 4px 0;
 	border: 1px solid var(--color-warning, #f59e0b);
 	background: color-mix(in srgb, var(--color-warning, #f59e0b) 8%, transparent);
-	border-radius: var(--radius-md, 8px);
+	border-radius: var(--radius-md, 12px);
 	cursor: pointer;
 	font-size: 14px;
 	text-align: center;

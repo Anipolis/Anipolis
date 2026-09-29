@@ -406,7 +406,7 @@ $effect(() => {
 	right: 0;
 	background: var(--color-bg);
 	border-bottom: 1px solid var(--color-border);
-	border-radius: 0 0 16px 16px;
+	border-radius: 0 0 22px 22px;
 	z-index: 201;
 	max-height: 90dvh;
 	display: flex;

@@ -130,6 +130,7 @@ function inviteStatus(invite: (typeof data.invites)[number]): { label: string; a
 	height: 26px;
 	padding: 0 8px;
 	border-radius: 999px;
+	corner-shape: round;
 	background: color-mix(in srgb, var(--color-accent) 16%, transparent);
 	color: var(--color-accent);
 	font-size: 14px;
@@ -144,7 +145,7 @@ function inviteStatus(invite: (typeof data.invites)[number]): { label: string; a
 .invite-table-wrap {
 	overflow-x: auto;
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-surface);
 }
 
@@ -180,6 +181,7 @@ function inviteStatus(invite: (typeof data.invites)[number]): { label: string; a
 	align-items: center;
 	padding: 2px 8px;
 	border-radius: 999px;
+	corner-shape: round;
 	font-size: 11px;
 	font-weight: 800;
 	background: var(--color-border);

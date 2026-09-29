@@ -190,7 +190,7 @@ const kind = $derived(resolveKind(pathname));
 
 .route-navigation-anime-card {
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	overflow: hidden;
 }
 

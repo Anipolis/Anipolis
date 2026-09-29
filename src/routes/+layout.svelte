@@ -179,6 +179,7 @@ function handleFabClick() {
 	width: 56px;
 	height: 56px;
 	border-radius: 50%;
+	corner-shape: round;
 	background: var(--color-accent);
 	color: white;
 	border: none;

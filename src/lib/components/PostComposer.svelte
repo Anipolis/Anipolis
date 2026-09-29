@@ -1000,7 +1000,7 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 	right: 0;
 	background: var(--color-surface);
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 	z-index: 50;
 	max-height: 200px;
@@ -1049,7 +1049,7 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 	margin-top: 10px;
 	padding: 10px;
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-bg);
 }
 .composer-exchange-preview .composer-anime-remove {

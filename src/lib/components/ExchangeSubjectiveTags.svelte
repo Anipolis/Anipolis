@@ -32,6 +32,7 @@ const visibleTags = $derived((tags ?? []).map((tag) => tag.trim()).filter(Boolea
 	padding: 2px 7px;
 	border: 1px solid color-mix(in srgb, var(--color-accent) 38%, var(--color-border));
 	border-radius: 999px;
+	corner-shape: round;
 	background: color-mix(in srgb, var(--color-accent) 10%, transparent);
 	color: var(--color-accent);
 	font-size: 0.72rem;

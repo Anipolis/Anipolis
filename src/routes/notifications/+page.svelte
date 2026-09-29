@@ -303,7 +303,7 @@ function emptyMessage(tab: TabId): string {
 	align-items: center;
 	gap: 6px;
 	padding: 8px 16px;
-	border-radius: 20px;
+	border-radius: 28px;
 	font-size: 0.85rem;
 	font-weight: 600;
 	text-decoration: none;
@@ -328,6 +328,7 @@ function emptyMessage(tab: TabId): string {
 	height: 18px;
 	padding: 0 5px;
 	border-radius: 9999px;
+	corner-shape: round;
 	background: var(--color-accent, #6366f1);
 	color: #fff;
 	font-size: 11px;
@@ -369,6 +370,7 @@ function emptyMessage(tab: TabId): string {
 	width: 40px;
 	height: 40px;
 	border-radius: 9999px;
+	corner-shape: round;
 	background: color-mix(in srgb, var(--accent, #6366f1) 16%, transparent);
 	color: var(--accent, #6366f1);
 	font-size: 20px;
@@ -438,7 +440,7 @@ function emptyMessage(tab: TabId): string {
 	margin-top: 4px;
 	padding: 8px 10px;
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	color: inherit;
 	text-decoration: none;
 	background: var(--color-surface);
