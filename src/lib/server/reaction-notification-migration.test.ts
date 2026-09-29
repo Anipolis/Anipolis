@@ -23,6 +23,17 @@ describe("like / repost notification dedupe migration (#286)", () => {
 		expect(migration).toMatch(/n\.type = 'repost'[\s\S]*FROM public\.reposts r[\s\S]*r\.user_id = n\.actor_id/);
 	});
 
+	it("blocks reaction writes before cleanup, in the same lock order as the insert path", () => {
+		const likes = migration.indexOf("LOCK TABLE public.likes IN SHARE ROW EXCLUSIVE MODE;");
+		const reposts = migration.indexOf("LOCK TABLE public.reposts IN SHARE ROW EXCLUSIVE MODE;");
+		const notifications = migration.indexOf("LOCK TABLE public.notifications IN SHARE ROW EXCLUSIVE MODE;");
+		const cleanup = migration.indexOf("DELETE FROM public.notifications n");
+		expect(likes).toBeGreaterThan(-1);
+		expect(likes).toBeLessThan(reposts);
+		expect(reposts).toBeLessThan(notifications);
+		expect(notifications).toBeLessThan(cleanup);
+	});
+
 	it("keeps the oldest unread duplicate and locks the table while cleaning", () => {
 		expect(migration).toContain("LOCK TABLE public.notifications IN SHARE ROW EXCLUSIVE MODE;");
 		expect(migration).toMatch(/duplicate\.type IN \('like', 'repost'\)[\s\S]*NOT duplicate\.read/);
