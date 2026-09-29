@@ -1138,6 +1138,64 @@ textarea {
 	font-size: 15px;
 }
 
+/* --- Loading placeholders --- */
+
+/* ライトテーマでは surface と背景が同じ白なので、下地は surface-hover にする */
+.skeleton {
+	background:
+		linear-gradient(100deg, var(--color-surface-hover) 30%, var(--color-border) 50%, var(--color-surface-hover) 70%)
+		0 0 / 220% 100%;
+	border-radius: 6px;
+	animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+.skeleton-circle {
+	border-radius: 50%;
+	corner-shape: round;
+}
+
+.spinner {
+	width: 18px;
+	height: 18px;
+	border: 2px solid color-mix(in srgb, var(--color-accent) 25%, transparent);
+	border-top-color: var(--color-accent);
+	border-radius: 50%;
+	corner-shape: round;
+	animation: spinner-rotate 0.7s linear infinite;
+}
+
+.posts-loading-spinner {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	padding: 12px;
+	color: var(--color-text-muted);
+	font-size: 13px;
+}
+
+@keyframes skeleton-shimmer {
+	from {
+		background-position: 100% 0;
+	}
+	to {
+		background-position: -120% 0;
+	}
+}
+
+@keyframes spinner-rotate {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.skeleton,
+	.spinner {
+		animation: none;
+	}
+}
+
 /* --- Auth page --- */
 
 .auth-gate {
