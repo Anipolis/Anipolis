@@ -9,8 +9,11 @@ import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();
 
-// 再取得中も前回の一覧を保持する（スケルトンは初回だけ、#100）
-const timeline = createLatestResolved(() => data.posts);
+// 再取得中も前回の一覧を保持する（スケルトンは初回だけ、#100）。別のタグに移ったら保持しない
+const timeline = createLatestResolved(
+	() => data.posts,
+	() => data.tag,
+);
 
 function handleBackClick(event: MouseEvent) {
 	event.preventDefault();

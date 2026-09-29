@@ -16,8 +16,12 @@ const SKELETON_COUNT = 5;
 let { data }: PageProps = $props();
 
 // data.timeline は deferred Promise。load が再実行されて新しい Promise になっても、
-// 解決するまでは前回の一覧を表示し続ける（スケルトンは初回だけ、#100）
-const timeline = createLatestResolved(() => data.timeline);
+// 解決するまでは前回の一覧を表示し続ける（スケルトンは初回だけ、#100）。
+// タブや「さらに読み込む」のカーソルが変わったときは別の一覧なので保持しない
+const timeline = createLatestResolved(
+	() => data.timeline,
+	() => `${data.tab}:${data.before ?? ""}`,
+);
 
 let onboardingDismissed = $state(true);
 let homeSidebarSlot = $state<HTMLElement | null>(null);

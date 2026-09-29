@@ -66,6 +66,51 @@ describe("createLatestResolved", () => {
 		stop();
 	});
 
+	it("drops the held value when the list identity changes", async () => {
+		let source = $state<Promise<string[]>>(Promise.resolve(["all-1"]));
+		let key = $state("all");
+		let latest!: ReturnType<typeof createLatestResolved<string[]>>;
+		const stop = $effect.root(() => {
+			latest = createLatestResolved(
+				() => source,
+				() => key,
+			);
+		});
+		flushSync();
+		await settle();
+		expect(latest.value).toEqual(["all-1"]);
+
+		// 同じ一覧の再取得: 保持する
+		const refetch = deferred<string[]>();
+		source = refetch.promise;
+		flushSync();
+		expect(latest.value).toEqual(["all-1"]);
+		refetch.resolve(["all-2"]);
+		await settle();
+
+		// タブ切替: 前の一覧を捨てて待機表示に戻す
+		const other = deferred<string[]>();
+		key = "following";
+		source = other.promise;
+		flushSync();
+		expect(latest.value).toBeNull();
+		expect(latest.pending).toBe(true);
+		other.resolve(["following-1"]);
+		await settle();
+		expect(latest.value).toEqual(["following-1"]);
+		stop();
+	});
+
+	it("takes a non-promise value synchronously so server rendering can show it", () => {
+		let latest!: ReturnType<typeof createLatestResolved<number[]>>;
+		const stop = $effect.root(() => {
+			latest = createLatestResolved(() => [1, 2]);
+		});
+		expect(latest.value).toEqual([1, 2]);
+		expect(latest.pending).toBe(false);
+		stop();
+	});
+
 	it("exposes a rejection and clears it on the next success", async () => {
 		let source = $state<Promise<number>>(Promise.reject(new Error("boom")));
 		let latest!: ReturnType<typeof createLatestResolved<number>>;

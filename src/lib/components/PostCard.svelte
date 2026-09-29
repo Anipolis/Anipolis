@@ -221,15 +221,29 @@ const handleDelete: SubmitFunction = () => {
 // 成功時に update()（= 全 load の再取得）は呼ばない。ストリーミング配信のタイムラインでは
 // 再取得のたびにスケルトンへ切り替わり、スクロール位置や展開状態も失われる（#100）。
 // 楽観更新をサーバーの結果で確定させるだけにする。
-const handleLike: SubmitFunction = ({ formElement }) => {
+// 同じ種類のリアクションは 1 件ずつ送る。送信中の連打は取り消し、応答順の逆転で
+// 古い応答が最新の状態を上書きしないようにする。
+// 失敗時は null（= props の post に戻る）ではなく、操作前の確定値へ戻す。
+// 成功後はページを再取得しないので props の post は古く、null に戻すと成功前の表示に巻き戻る。
+let likeInFlight = $state(false);
+let bookmarkInFlight = $state(false);
+let repostInFlight = $state(false);
+
+const handleLike: SubmitFunction = ({ formElement, cancel }) => {
+	if (likeInFlight) {
+		cancel();
+		return;
+	}
+	likeInFlight = true;
 	const wasLiked = likedByMe;
 	const countBefore = likeCount;
 	likedByMeLocal = !wasLiked;
 	likeCountLocal = wasLiked ? countBefore - 1 : countBefore + 1;
 	return async ({ result }) => {
+		likeInFlight = false;
 		if (isReactionFailure(result)) {
-			likedByMeLocal = null;
-			likeCountLocal = null;
+			likedByMeLocal = wasLiked;
+			likeCountLocal = countBefore;
 			reactionFeedback.fail("like", result, formElement);
 			return;
 		}
@@ -240,12 +254,18 @@ const handleLike: SubmitFunction = ({ formElement }) => {
 	};
 };
 
-const handleBookmark: SubmitFunction = ({ formElement }) => {
+const handleBookmark: SubmitFunction = ({ formElement, cancel }) => {
+	if (bookmarkInFlight) {
+		cancel();
+		return;
+	}
+	bookmarkInFlight = true;
 	const wasBookmarked = bookmarkedByMe;
 	bookmarkedByMeLocal = !wasBookmarked;
 	return async ({ result }) => {
+		bookmarkInFlight = false;
 		if (isReactionFailure(result)) {
-			bookmarkedByMeLocal = null;
+			bookmarkedByMeLocal = wasBookmarked;
 			reactionFeedback.fail("bookmark", result, formElement);
 			return;
 		}
@@ -264,16 +284,22 @@ async function retryRepost() {
 	repostForm?.requestSubmit();
 }
 
-const handleRepost: SubmitFunction = () => {
+const handleRepost: SubmitFunction = ({ cancel }) => {
 	showRepostMenu = false;
+	if (repostInFlight) {
+		cancel();
+		return;
+	}
+	repostInFlight = true;
 	const wasReposted = repostedByMe;
 	const countBefore = repostCount;
 	repostedByMeLocal = !wasReposted;
 	repostCountLocal = wasReposted ? countBefore - 1 : countBefore + 1;
 	return async ({ result }) => {
+		repostInFlight = false;
 		if (isReactionFailure(result)) {
-			repostedByMeLocal = null;
-			repostCountLocal = null;
+			repostedByMeLocal = wasReposted;
+			repostCountLocal = countBefore;
 			reactionFeedback.fail("repost", result, () => void retryRepost());
 			return;
 		}
