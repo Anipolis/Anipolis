@@ -2030,6 +2030,81 @@ textarea {
 	}
 }
 
+/* Like count rolls between its old and new value instead of snapping. */
+.reaction-count-roll {
+	display: inline-grid;
+	overflow: hidden;
+	height: 1em;
+	line-height: 1;
+	vertical-align: middle;
+}
+
+.reaction-count-roll-old,
+.reaction-count-roll-new {
+	grid-area: 1 / 1;
+}
+
+.reaction-count-roll.roll-up .reaction-count-roll-old {
+	animation: like-count-out-up 0.2s ease-in forwards;
+}
+
+.reaction-count-roll.roll-up .reaction-count-roll-new {
+	animation: like-count-in-up 0.2s ease-out forwards;
+}
+
+.reaction-count-roll.roll-down .reaction-count-roll-old {
+	animation: like-count-out-down 0.2s ease-in forwards;
+}
+
+.reaction-count-roll.roll-down .reaction-count-roll-new {
+	animation: like-count-in-down 0.2s ease-out forwards;
+}
+
+@keyframes like-count-out-up {
+	to {
+		transform: translateY(-100%);
+		opacity: 0;
+	}
+}
+
+@keyframes like-count-in-up {
+	from {
+		transform: translateY(100%);
+		opacity: 0;
+	}
+	to {
+		transform: translateY(0);
+		opacity: 1;
+	}
+}
+
+@keyframes like-count-out-down {
+	to {
+		transform: translateY(100%);
+		opacity: 0;
+	}
+}
+
+@keyframes like-count-in-down {
+	from {
+		transform: translateY(-100%);
+		opacity: 0;
+	}
+	to {
+		transform: translateY(0);
+		opacity: 1;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.reaction-count-roll.roll-up .reaction-count-roll-old,
+	.reaction-count-roll.roll-up .reaction-count-roll-new,
+	.reaction-count-roll.roll-down .reaction-count-roll-old,
+	.reaction-count-roll.roll-down .reaction-count-roll-new {
+		animation: none;
+	}
+}
+
 .reaction-action-group {
 	position: relative;
 	display: inline-flex;

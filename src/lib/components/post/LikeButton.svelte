@@ -1,4 +1,5 @@
 <script lang="ts">
+import { untrack } from "svelte";
 import { enhance } from "$app/forms";
 import ReactionUsersPopover from "$lib/components/ReactionUsersPopover.svelte";
 import type { PostController } from "./post-controller.svelte";
@@ -15,6 +16,22 @@ const label = $derived(controller.likedByMe ? "いいね取り消し" : "いい�
 
 // Play the pop only on a user-initiated like, not for posts already liked on load.
 let popping = $state(false);
+
+// Roll the count between old/new values instead of snapping.
+let displayedCount = $state(untrack(() => controller.likeCount));
+let previousCount = $state(untrack(() => controller.likeCount));
+let rollUp = $state(true);
+let rolling = $state(false);
+
+$effect(() => {
+	const next = controller.likeCount;
+	if (next !== displayedCount) {
+		previousCount = displayedCount;
+		rollUp = next > displayedCount;
+		displayedCount = next;
+		rolling = true;
+	}
+});
 </script>
 
 <div class="post-footer-item post-footer-like">
@@ -27,12 +44,34 @@ let popping = $state(false);
 				aria-expanded={controller.openReactionType === 'like'}
 				onclick={(event) => controller.openReactionPopover(event, 'like')}
 			>
-				{controller.likeCount}
+				<span
+					class="reaction-count-roll"
+					class:roll-up={rolling && rollUp}
+					class:roll-down={rolling && !rollUp}
+					onanimationend={() => (rolling = false)}
+				>
+					{#if rolling}
+						<span class="reaction-count-roll-old">{previousCount}</span>
+					{/if}
+					<span class="reaction-count-roll-new">{displayedCount}</span>
+				</span>
 			</button>
 		{:else}
-			<span class="reaction-count-static" class:has-count={detail && controller.likeCount > 0}
-				>{controller.likeCount > 0 ? controller.likeCount : ''}</span
-			>
+			<span class="reaction-count-static" class:has-count={detail && displayedCount > 0}>
+				{#if displayedCount > 0 || rolling}
+					<span
+						class="reaction-count-roll"
+						class:roll-up={rolling && rollUp}
+						class:roll-down={rolling && !rollUp}
+						onanimationend={() => (rolling = false)}
+					>
+						{#if rolling}
+							<span class="reaction-count-roll-old">{previousCount > 0 ? previousCount : ''}</span>
+						{/if}
+						<span class="reaction-count-roll-new">{displayedCount > 0 ? displayedCount : ''}</span>
+					</span>
+				{/if}
+			</span>
 		{/if}
 		<form method="POST" action="?/like" use:enhance={controller.handleLike}>
 			<input type="hidden" name="post_id" value={controller.post.id}>
