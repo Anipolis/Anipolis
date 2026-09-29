@@ -16,15 +16,19 @@ type Call = { table: string; method: string; args: unknown[] };
 
 const RAYEARTH = { id: 42, title: "魔法騎士レイアース", title_en: "Magic Knight Rayearth", cover_url: null };
 
-function fakeSupabase(animeRows: Record<string, unknown>[]) {
+function fakeSupabase(animeRows: Record<string, unknown>[], prefixRows: Record<string, unknown>[] = []) {
 	const calls: Call[] = [];
+	// anime は 1 回目が部分一致、2 回目（一致が多すぎたときだけ）が前方一致の取得
+	const animeResults = [
+		{ data: animeRows, error: null },
+		{ data: prefixRows, error: null },
+	];
 	const results: Record<string, { data: unknown; error: null }> = {
-		anime: { data: animeRows, error: null },
 		posts: { data: [{ id: "p1", content: "最終話よかった", anime_id: 42 }], error: null },
 		profiles: { data: [], error: null },
 	};
 	const from = vi.fn((table: string) => {
-		const result = results[table];
+		const result = table === "anime" ? animeResults.shift() : results[table];
 		if (!result) throw new Error(`unexpected table: ${table}`);
 		const chain = Object.assign(Promise.resolve(result), {}) as Promise<unknown> & Record<string, unknown>;
 		for (const method of ["select", "or", "ilike", "eq", "order", "limit"]) {
@@ -39,8 +43,8 @@ function fakeSupabase(animeRows: Record<string, unknown>[]) {
 	return { client: { from, rpc }, calls };
 }
 
-async function runLoad(q: string, animeRows: Record<string, unknown>[]) {
-	const { client, calls } = fakeSupabase(animeRows);
+async function runLoad(q: string, animeRows: Record<string, unknown>[], prefixRows: Record<string, unknown>[] = []) {
+	const { client, calls } = fakeSupabase(animeRows, prefixRows);
 	const url = new URL(`http://localhost/search?q=${encodeURIComponent(q)}`);
 	const event = {
 		url,
@@ -92,6 +96,48 @@ describe("search page load: posts quoting the matched anime", () => {
 		expect(postsFilter).toBe('content.ilike."%ぼっち%"');
 		expect(data.animeMatches.tooMany).toBe(true);
 		expect(data.animeMatches.items).toHaveLength(6);
+	});
+
+	it("lists an exact match found by the prefix lookup even when it is outside the first batch", async () => {
+		const many = Array.from({ length: 51 }, (_, i) => ({
+			id: i + 1,
+			title: `あ作品ガンダム${i}`,
+			title_en: null,
+			title_yomi: null,
+			cover_url: null,
+			metadata_ready: true,
+			hidden_by_admin: false,
+		}));
+		const exact = {
+			id: 500,
+			title: "ガンダム",
+			title_en: null,
+			title_yomi: null,
+			cover_url: null,
+			metadata_ready: true,
+			hidden_by_admin: false,
+		};
+		const { data, postsFilter } = await runLoad("ガンダム", many, [exact]);
+
+		expect(postsFilter).toBe('content.ilike."%ガンダム%"');
+		expect(data.animeMatches.tooMany).toBe(true);
+		expect(data.animeMatches.items[0]?.id).toBe(500);
+	});
+
+	it("keeps the too-many flag even when none of the matches can be listed", async () => {
+		const hidden = Array.from({ length: 51 }, (_, i) => ({
+			id: i + 1,
+			title: `非公開${i}`,
+			title_en: null,
+			title_yomi: null,
+			cover_url: null,
+			metadata_ready: false,
+			hidden_by_admin: false,
+		}));
+		const { data } = await runLoad("非公開", hidden, []);
+
+		expect(data.animeMatches.items).toEqual([]);
+		expect(data.animeMatches.tooMany).toBe(true);
 	});
 
 	it("still matches quotes of hidden anime but does not list them", async () => {

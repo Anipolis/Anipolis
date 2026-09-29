@@ -53,27 +53,32 @@ let { data }: PageProps = $props();
 		{:else}
 			<h2 class="search-result-title">「{data.query}」の検索結果</h2>
 
-			{#if data.animeMatches.items.length > 0}
+			{#if data.animeMatches.items.length > 0 || data.animeMatches.tooMany}
 				<!-- 検索語に一致した作品。投稿検索ではこれらの作品の引用投稿も拾っている -->
 				<div class="search-section">
 					<h3>作品</h3>
-					<div class="anime-match-list">
-						{#each data.animeMatches.items as anime (anime.id)}
-							<a href="/anime/{anime.id}" class="anime-match-card">
-								{#if anime.cover_url}
-									<img src={anime.cover_url} alt="" loading="lazy" class="anime-match-cover">
-								{:else}
-									<div class="anime-match-cover anime-match-cover--empty" aria-hidden="true"></div>
-								{/if}
-								<div class="anime-match-info">
-									<div class="anime-match-title">{anime.title}</div>
-									{#if anime.title_en}
-										<div class="anime-match-sub">{anime.title_en}</div>
+					{#if data.animeMatches.items.length > 0}
+						<div class="anime-match-list">
+							{#each data.animeMatches.items as anime (anime.id)}
+								<a href="/anime/{anime.id}" class="anime-match-card">
+									{#if anime.cover_url}
+										<img src={anime.cover_url} alt="" loading="lazy" class="anime-match-cover">
+									{:else}
+										<div
+											class="anime-match-cover anime-match-cover--empty"
+											aria-hidden="true"
+										></div>
 									{/if}
-								</div>
-							</a>
-						{/each}
-					</div>
+									<div class="anime-match-info">
+										<div class="anime-match-title">{anime.title}</div>
+										{#if anime.title_en}
+											<div class="anime-match-sub">{anime.title_en}</div>
+										{/if}
+									</div>
+								</a>
+							{/each}
+						</div>
+					{/if}
 					{#if data.animeMatches.tooMany || data.animeMatches.total > data.animeMatches.items.length}
 						<a href="/anime?search={encodeURIComponent(data.query)}" class="anime-match-more">
 							{data.animeMatches.tooMany ? "アニメ一覧で続きを見る" : `アニメ一覧で全${data.animeMatches.total}件を見る`}

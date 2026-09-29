@@ -2,16 +2,24 @@ import { describe, expect, it } from "vitest";
 import {
 	type AnimeSearchHit,
 	buildPostSearchFilter,
+	buildTitlePrefixFilter,
 	MAX_ANIME_MATCHES,
+	mergeRankedAnimeMatches,
 	quotedAnimeIdsForSearch,
 	rankAnimeMatches,
 	shouldMatchQuotedAnime,
 } from "./post-search";
 
-const hit = (id: number, title: string, title_en: string | null = null): AnimeSearchHit => ({
+const hit = (
+	id: number,
+	title: string,
+	title_en: string | null = null,
+	title_yomi: string | null = null,
+): AnimeSearchHit => ({
 	id,
 	title,
 	title_en,
+	title_yomi,
 	cover_url: null,
 });
 
@@ -56,7 +64,36 @@ describe("quotedAnimeIdsForSearch", () => {
 	});
 });
 
+describe("buildTitlePrefixFilter", () => {
+	it("matches the start of the title, English title or reading", () => {
+		expect(buildTitlePrefixFilter(" れいあーす ")).toBe(
+			'title.ilike."れいあーす%",title_en.ilike."れいあーす%",title_yomi.ilike."れいあーす%"',
+		);
+	});
+});
+
+describe("mergeRankedAnimeMatches", () => {
+	it("dedupes across groups and ranks the union", () => {
+		const merged = mergeRankedAnimeMatches(
+			"レイアース",
+			[hit(3, "レイアース")],
+			[hit(1, "魔法騎士レイアース"), hit(3, "レイアース")],
+		);
+		expect(merged.map((a) => a.id)).toEqual([3, 1]);
+	});
+});
+
 describe("rankAnimeMatches", () => {
+	it("treats a reading match like a title match", () => {
+		// 読みで完全一致した作品を、題名の部分一致より先に出す
+		const ranked = rankAnimeMatches("れいあーす", [
+			hit(1, "れいあーすのうた"),
+			hit(2, "魔法騎士レイアース", null, "まじっくないとれいあーす"),
+			hit(3, "レイアース", null, "れいあーす"),
+		]);
+		expect(ranked.map((a) => a.id)).toEqual([3, 1, 2]);
+	});
+
 	it("puts exact and prefix title matches before partial ones", () => {
 		const ranked = rankAnimeMatches("レイアース", [
 			hit(1, "魔法騎士レイアース"),

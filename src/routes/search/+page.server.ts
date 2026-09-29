@@ -1,12 +1,14 @@
-﻿import { fail } from "@sveltejs/kit";
+﻿import type { SupabaseClient } from "@supabase/supabase-js";
+import { fail } from "@sveltejs/kit";
 import { deletePostAction, toggleBookmarkAction, toggleLikeAction, toggleRepostAction } from "$lib/server/actions";
 import {
 	ANIME_SECTION_LIMIT,
 	type AnimeSearchHit,
 	buildPostSearchFilter,
+	buildTitlePrefixFilter,
 	MAX_ANIME_MATCHES,
+	mergeRankedAnimeMatches,
 	quotedAnimeIdsForSearch,
-	rankAnimeMatches,
 	shouldMatchQuotedAnime,
 } from "$lib/server/post-search";
 import { buildPostCardSelect } from "$lib/server/post-selects";
@@ -47,17 +49,12 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 
 	// 検索語に一致する作品。投稿検索で「その作品の引用投稿」も拾うのと、結果上部の作品一覧に使う。
 	// 多すぎる判定のため上限 + 1 件まで取る
-	const animeHitsPromise = shouldMatchQuotedAnime(query)
-		? supabase
-				.from("anime")
-				.select("id, title, title_en, cover_url, metadata_ready, hidden_by_admin")
-				.or(buildTitleSearchFilter(query))
-				.order("title", { ascending: true })
-				.limit(MAX_ANIME_HITS_FETCH)
-		: Promise.resolve({ data: [], error: null });
+	const animeHitsPromise: Promise<AnimeRow[]> = shouldMatchQuotedAnime(query)
+		? fetchAnimeRows(supabase, buildTitleSearchFilter(query), false)
+		: Promise.resolve([]);
 
-	const postsPromise = animeHitsPromise.then(({ data: animeRows }) => {
-		const animeIds = quotedAnimeIdsForSearch((animeRows ?? []) as AnimeSearchHit[]);
+	const postsPromise = animeHitsPromise.then((animeRows) => {
+		const animeIds = quotedAnimeIdsForSearch(animeRows);
 		return supabase
 			.from("posts")
 			.select(POSTS_SELECT)
@@ -66,8 +63,15 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 			.limit(30);
 	});
 
-	const [animeHitsResult, postsResult, usersResult, trendingResult, animeTrending] = await Promise.all([
+	// 一致が多すぎると部分一致の取得は題名順の先頭で打ち切られ、完全一致・前方一致の作品が
+	// 漏れ得る。その場合だけ前方一致の作品を公開中に絞って別に取得し、一覧の上位を決める
+	const prefixHitsPromise: Promise<AnimeRow[]> = animeHitsPromise.then((animeRows) =>
+		animeRows.length > MAX_ANIME_MATCHES ? fetchAnimeRows(supabase, buildTitlePrefixFilter(query), true) : [],
+	);
+
+	const [animeRows, prefixRows, postsResult, usersResult, trendingResult, animeTrending] = await Promise.all([
 		animeHitsPromise,
+		prefixHitsPromise,
 		postsPromise,
 
 		accountPattern
@@ -93,7 +97,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		query,
 		posts,
 		users: usersResult.data ?? [],
-		animeMatches: summarizeAnimeMatches(query, (animeHitsResult.data ?? []) as AnimeRow[]),
+		animeMatches: summarizeAnimeMatches(query, animeRows, prefixRows),
 		user,
 		trending: trendingResult.data ?? [],
 		animeTrending,
@@ -102,7 +106,25 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 
 type AnimeRow = AnimeSearchHit & { metadata_ready: boolean; hidden_by_admin: boolean };
 
+const ANIME_MATCH_SELECT = "id, title, title_en, title_yomi, cover_url, metadata_ready, hidden_by_admin";
 const MAX_ANIME_HITS_FETCH = MAX_ANIME_MATCHES + 1;
+
+/**
+ * 検索語に一致する作品を最大 MAX_ANIME_HITS_FETCH 件取る（多すぎる判定のため上限 + 1）。
+ * 取得に失敗したら空（= 本文一致だけで検索する）。visibleOnly は一覧用に公開中の作品に絞る。
+ */
+async function fetchAnimeRows(supabase: SupabaseClient, filter: string, visibleOnly: boolean): Promise<AnimeRow[]> {
+	// biome-ignore lint/suspicious/noExplicitAny: anime.title_yomi (migration 125) is not in the generated types yet (#216)
+	const reader = supabase as SupabaseClient<any>;
+	let query = reader.from("anime").select(ANIME_MATCH_SELECT).or(filter);
+	if (visibleOnly) query = query.eq("metadata_ready", true).eq("hidden_by_admin", false);
+	const { data, error } = await query.order("title", { ascending: true }).limit(MAX_ANIME_HITS_FETCH);
+	if (error) {
+		console.error("anime lookup for post search failed:", error.message);
+		return [];
+	}
+	return (data ?? []) as AnimeRow[];
+}
 
 type AnimeMatches = {
 	/** 結果上部に出す作品（公開中のものだけ、並べ替え済み） */
@@ -117,13 +139,31 @@ function emptyAnimeMatches(): AnimeMatches {
 	return { items: [], total: 0, tooMany: false };
 }
 
-function summarizeAnimeMatches(query: string, rows: AnimeRow[]): AnimeMatches {
+function toVisibleHits(rows: AnimeRow[]): AnimeSearchHit[] {
 	// 投稿との照合には非公開・未整備の作品も含めるが、一覧には出さない
-	const visible = rows
+	return rows
 		.filter((row) => row.metadata_ready && !row.hidden_by_admin)
-		.map(({ id, title, title_en, cover_url }) => ({ id, title, title_en, cover_url }));
+		.map(({ id, title, title_en, title_yomi, cover_url }) => ({
+			id,
+			title,
+			title_en,
+			title_yomi: title_yomi ?? null,
+			cover_url,
+		}));
+}
+
+function summarizeAnimeMatches(query: string, rows: AnimeRow[], prefixRows: AnimeRow[]): AnimeMatches {
+	const visible = toVisibleHits(rows);
+	// 前方一致の別取得（一致が多すぎたときだけ）を先に、部分一致の先頭で埋める
+	const ranked = mergeRankedAnimeMatches(query, toVisibleHits(prefixRows), visible);
 	return {
-		items: rankAnimeMatches(query, visible).slice(0, ANIME_SECTION_LIMIT),
+		// 読みは並べ替えにだけ使い、ページには渡さない
+		items: ranked.slice(0, ANIME_SECTION_LIMIT).map(({ id, title, title_en, cover_url }) => ({
+			id,
+			title,
+			title_en,
+			cover_url,
+		})),
 		total: visible.length,
 		tooMany: rows.length > MAX_ANIME_MATCHES,
 	};
