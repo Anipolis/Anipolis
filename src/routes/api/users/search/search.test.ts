@@ -39,7 +39,7 @@ describe("GET /api/users/search", () => {
 		await GET(event);
 		const pattern = calls.find((c) => c.method === "ilike")?.args[1] as string;
 		// エスケープ済みの先頭: %\_a
-		expect(pattern.slice(0, 4)).toBe("%" + String.fromCharCode(92) + "_a");
+		expect(pattern.slice(0, 4)).toBe(String.raw`%\_a`);
 		expect(pattern).not.toContain("a%%");
 		expect(pattern.length).toBeLessThanOrEqual(50 + 4);
 	});
