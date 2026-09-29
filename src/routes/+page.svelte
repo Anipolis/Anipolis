@@ -1,5 +1,5 @@
 <script lang="ts">
-import { goto } from "$app/navigation";
+import { replaceState } from "$app/navigation";
 import { trapFocus } from "$lib/actions/trapFocus";
 import LiveRoomsPanel from "$lib/components/LiveRoomsPanel.svelte";
 import PostCard from "$lib/components/PostCard.svelte";
@@ -20,7 +20,19 @@ let { data }: PageProps = $props();
 // タブや「さらに読み込む」のカーソルが変わったときは別の一覧なので保持しない
 const timeline = createLatestResolved(
 	() => data.timeline,
-	() => `${data.tab}:${data.before ?? ""}`,
+	// アカウント切替（invalidateAll でページは作り直されない）でも前のアカウントの一覧を見せない
+	() => `${data.user?.id ?? ""}:${data.tab}:${data.before ?? ""}`,
+);
+
+// data.pageExtras（投稿フォームの初期値・サイド情報）も deferred Promise。
+// {#await} で包むと load の再実行で Promise が差し替わるたびに待機表示へ戻り、投稿フォームが
+// 作り直されて、アニメ詳細からの引用やトレード共有の初期値が消える（#294）。
+// 最後に解決した値を保持し、フォームは初回の解決後ずっと同じインスタンスを使う
+// ユーザーが変わったら（アカウント切替）保持値を捨てて待機表示に戻し、投稿フォームも作り直す。
+// 前のアカウントの視聴中作品や打ちかけの本文を別アカウントに持ち越さないため
+const pageExtras = createLatestResolved(
+	() => data.pageExtras,
+	() => data.user?.id ?? "",
 );
 
 let onboardingDismissed = $state(true);
@@ -87,11 +99,13 @@ $effect(() => {
 		if (window.matchMedia("(max-width: 960px)").matches) {
 			composeOpen.set(true);
 		}
+		// 引用パラメータを URL から消す（再読み込みや「戻る→進む」で二重に付かないように）。
+		// goto だと同じページの load が再実行されるので、URL だけを書き換える
 		const url = new URL(window.location.href);
 		url.searchParams.delete("quote_anime");
 		url.searchParams.delete("share_exchange");
 		url.hash = "";
-		goto(url.toString(), { replaceState: true, noScroll: true });
+		replaceState(url.toString(), {});
 	});
 	return () => {
 		active = false;
@@ -114,9 +128,8 @@ $effect(() => {
 		<!-- Desktop: composer / landing hero -->
 		<div class="composer-desktop" id="compose">
 			{#if data.profile}
-				{#await data.pageExtras}
-					<div class="composer-loading" aria-label="投稿フォームを読み込み中"></div>
-				{:then extras}
+				{#if pageExtras.value}
+					{@const extras = pageExtras.value}
 					<PostComposer
 						username={data.profile.username}
 						avatarUrl={data.profile.avatar_url}
@@ -126,11 +139,13 @@ $effect(() => {
 						initialExchangeShare={extras.initialExchangeShare}
 						watchingAnime={extras.watchingAnime}
 					/>
-				{:catch error}
-					<div class="home-deferred-error" role="alert" data-deferred-error={error ? "true" : "false"}>
+				{:else if pageExtras.error}
+					<div class="home-deferred-error" role="alert" data-deferred-error="true">
 						投稿フォームを読み込めませんでした。<a href="/">再読み込み</a>
 					</div>
-				{/await}
+				{:else}
+					<div class="composer-loading" role="status" aria-label="投稿フォームを読み込み中"></div>
+				{/if}
 			{:else if data.session}
 				<div class="auth-gate">
 					<p>ようこそ！<a href="/settings">設定</a>を確認してから投稿できます。</p>
@@ -302,20 +317,21 @@ $effect(() => {
 
 	<aside class="sidebar-column home-sidebar-column" bind:this={homeSidebarSlot}>
 		<div class="home-sidebar-fixed scrollbar-thin-muted" class:home-sidebar-fixed-ready={homeSidebarReady}>
-			{#await data.pageExtras}
-				<div class="home-sidebar-loading" aria-label="サイド情報を読み込み中">
-					<div class="spinner" aria-hidden="true"></div>
-				</div>
-			{:then extras}
+			{#if pageExtras.value}
+				{@const extras = pageExtras.value}
 				{#if data.user}
 					<LiveRoomsPanel rooms={extras.liveRooms} />
 				{/if}
 				<TrendingPanel trending={extras.trending} animeTrending={extras.animeTrending} />
-			{:catch error}
-				<div class="home-deferred-error" role="alert" data-deferred-error={error ? "true" : "false"}>
+			{:else if pageExtras.error}
+				<div class="home-deferred-error" role="alert" data-deferred-error="true">
 					サイド情報を読み込めませんでした。
 				</div>
-			{/await}
+			{:else}
+				<div class="home-sidebar-loading" role="status" aria-label="サイド情報を読み込み中">
+					<div class="spinner" aria-hidden="true"></div>
+				</div>
+			{/if}
 		</div>
 	</aside>
 </div>
@@ -359,9 +375,8 @@ $effect(() => {
 			</button>
 		</div>
 		<div class="compose-modal-body">
-			{#await data.pageExtras}
-				<div class="composer-loading" aria-label="投稿フォームを読み込み中"></div>
-			{:then extras}
+			{#if pageExtras.value}
+				{@const extras = pageExtras.value}
 				<PostComposer
 					username={data.profile.username}
 					avatarUrl={data.profile.avatar_url}
@@ -374,11 +389,13 @@ $effect(() => {
 					focusOnMount
 					draftKey={data.profile.id}
 				/>
-			{:catch error}
-				<div class="home-deferred-error" role="alert" data-deferred-error={error ? "true" : "false"}>
+			{:else if pageExtras.error}
+				<div class="home-deferred-error" role="alert" data-deferred-error="true">
 					投稿フォームを読み込めませんでした。<a href="/">再読み込み</a>
 				</div>
-			{/await}
+			{:else}
+				<div class="composer-loading" role="status" aria-label="投稿フォームを読み込み中"></div>
+			{/if}
 		</div>
 	</div>
 {/if}
