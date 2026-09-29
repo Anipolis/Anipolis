@@ -2,6 +2,7 @@
 import { onMount, untrack } from "svelte";
 import { invalidate } from "$app/navigation";
 import { navigating, page } from "$app/state";
+import AccountBoundary from "$lib/components/AccountBoundary.svelte";
 import MobileBottomNav from "$lib/components/MobileBottomNav.svelte";
 import MobileSwipeNavigation from "$lib/components/MobileSwipeNavigation.svelte";
 import RouteNavigationSkeleton from "$lib/components/RouteNavigationSkeleton.svelte";
@@ -115,7 +116,8 @@ function handleFabClick() {
 		{#if navigationTargetPath}
 			<RouteNavigationSkeleton pathname={navigationTargetPath} />
 		{:else}
-			{@render children()}
+			<!-- アカウント切替（ユーザーが変わる再読み込み）ではページを作り直し、前のアカウントの状態を持ち越さない（#298） -->
+			<AccountBoundary userId={data.user?.id}> {@render children()} </AccountBoundary>
 		{/if}
 	</main>
 </div>
