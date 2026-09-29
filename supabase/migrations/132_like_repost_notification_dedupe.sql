@@ -16,6 +16,10 @@
 --   3. 既存データの整理: 取り消し済み（対応する likes / reposts 行が無い）通知と、
 --      未読の重複通知（最古を残す）を削除してからインデックスを作る。
 
+-- supabase db push は各文を自動コミットで実行するため、LOCK TABLE と cleanup・トリガー設置を
+-- 1 つのトランザクションにまとめるには明示的に BEGIN/COMMIT が必要（LOCK はトランザクション内限定）。
+BEGIN;
+
 -- 移行中のリアクション操作を止める。likes / reposts を先にロックしないと、cleanup の後・
 -- 削除トリガー設置の前に取り消しが commit され、その通知が残る（旧スキーマの取り消しは
 -- notifications に触れないので notifications のロックでは遮れない）。
@@ -124,3 +128,5 @@ DROP TRIGGER IF EXISTS on_repost_deleted ON public.reposts;
 CREATE TRIGGER on_repost_deleted
     AFTER DELETE ON public.reposts
     FOR EACH ROW EXECUTE FUNCTION public.handle_unrepost_delete_notification();
+
+COMMIT;
