@@ -1,9 +1,11 @@
 <script lang="ts">
-import { goto } from "$app/navigation";
+import { onDestroy } from "svelte";
+import { beforeNavigate, goto } from "$app/navigation";
 import { navigating } from "$app/state";
 import { ANIME_GENRES, ANIME_SOURCE_OPTIONS } from "$lib/anime-vocabulary";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
+import { createDebouncedCommit } from "$lib/debounced-commit";
 import { isSamePageRefresh } from "$lib/navigation-skeleton";
 import type { ActiveAnimeSeasonChip, AnimeListItem, AnimeStatus } from "$lib/types";
 import type { PageProps } from "./$types";
@@ -166,35 +168,29 @@ function buildAnimeDetailUrl(animeId: string | number) {
 const TEXT_FILTER_DELAY_MS = 400;
 const CHOICE_FILTER_DELAY_MS = 250;
 
-let filterDebounceTimer: ReturnType<typeof setTimeout> | undefined;
-let replaceHistoryOnSync = false;
-// URL へ未反映のローカル編集があるか。ある間は、遅れて届いた読み込み結果で入力欄を巻き戻さない
-let hasPendingFilterEdit = false;
-
 function syncFiltersToUrl(filters: AnimeFilterState, replaceState = false) {
 	goto(buildAnimeFilterUrl(filters), { keepFocus: true, noScroll: true, replaceState });
 }
 
+// URL へ未反映のローカル編集。保留中（pending）の間は、遅れて届いた読み込み結果で入力欄を巻き戻さない。
+// 文字入力を含む編集は履歴を 1 件にまとめる（1 文字ごとに「戻る」が必要にならないように）
+const filterSync = createDebouncedCommit<AnimeFilterState>((filters, replace) => syncFiltersToUrl(filters, replace));
+
 function cancelPendingFilterSync() {
-	clearTimeout(filterDebounceTimer);
-	filterDebounceTimer = undefined;
-	hasPendingFilterEdit = false;
-	replaceHistoryOnSync = false;
+	filterSync.cancel();
 }
+
+// 保留中の編集があるまま別の遷移（作品詳細・別ページ・タブのリンク、戻るなど）が始まったら取り消す。
+// 取り消さないと、遷移中や離脱後にタイマーが発火して一覧へ引き戻してしまう。
+// 自分の反映による遷移では、commit 直前に保留が解除されているので取り消されない
+beforeNavigate(() => {
+	if (filterSync.pending) cancelPendingFilterSync();
+});
+onDestroy(cancelPendingFilterSync);
 
 function scheduleFilterSync(patch: Partial<AnimeFilterState>, delayMs: number, replaceState: boolean) {
 	filterState = { ...filterState, ...patch };
-	hasPendingFilterEdit = true;
-	// 文字入力を含む編集は履歴を 1 件にまとめる（1 文字ごとに「戻る」が必要にならないように）
-	replaceHistoryOnSync = replaceHistoryOnSync || replaceState;
-	clearTimeout(filterDebounceTimer);
-	filterDebounceTimer = setTimeout(() => {
-		const replace = replaceHistoryOnSync;
-		filterDebounceTimer = undefined;
-		hasPendingFilterEdit = false;
-		replaceHistoryOnSync = false;
-		syncFiltersToUrl(filterState, replace);
-	}, delayMs);
+	filterSync.schedule(filterState, delayMs, replaceState);
 }
 
 /** チップ・セレクト・ボタンの操作（連続操作をまとめて反映） */
@@ -243,7 +239,7 @@ $effect(() => {
 		next.source,
 	].join("\u0000");
 	// まだ URL に反映していない編集がある間は上書きしない（打っている途中の入力欄が巻き戻るため）
-	if (hasPendingFilterEdit) return;
+	if (filterSync.pending) return;
 	if (previousDataFilterKey !== nextKey) {
 		previousDataFilterKey = nextKey;
 		filterState = next;
