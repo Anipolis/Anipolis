@@ -306,6 +306,17 @@ const hasInviteAccess = $derived(!data.betaGateEnabled || data.inviteCodeValid);
 					</form>
 				{/if}
 			{/if}
+
+			{#if activeMode !== 'add_account'}
+				<p class="auth-consent">
+					続行すると、<a href="/terms" target="_blank" rel="noopener">利用規約</a>と<a
+						href="/privacy-policy"
+						target="_blank"
+						rel="noopener"
+						>プライバシーポリシー</a
+					>に同意したものとみなされます。
+				</p>
+			{/if}
 		</div>
 	</main>
 </div>
@@ -381,6 +392,18 @@ const hasInviteAccess = $derived(!data.betaGateEnabled || data.inviteCodeValid);
 	color: var(--fg-muted);
 	font-size: 0.88rem;
 	margin: 12px 0 18px;
+}
+
+.auth-consent {
+	margin: 20px 0 0;
+	color: var(--fg-muted);
+	font-size: 0.8rem;
+	line-height: 1.6;
+	text-align: center;
+}
+
+.auth-consent a {
+	color: var(--accent);
 }
 
 .auth-forgot-link {
