@@ -105,7 +105,7 @@ function handleKeydown(event: KeyboardEvent) {
 		{#if post.repost_context}
 			<a href="/profile/{post.repost_context.username}" class="post-row-repost">
 				<span class="i-lucide-repeat-2" aria-hidden="true"></span>
-				<span>{post.repost_context.display_name || post.repost_context.username}さんがリポスト</span>
+				<span>{post.repost_context.display_name || post.repost_context.username}がリポスト</span>
 			</a>
 		{/if}
 		<button
