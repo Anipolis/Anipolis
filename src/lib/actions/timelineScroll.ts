@@ -23,6 +23,8 @@ export function timelineScroll(node: HTMLElement, options: Options) {
 		remember();
 	}
 	const observer = new ResizeObserver(restore);
+	// The viewport can shrink without the content changing, e.g. when the room composer grows.
+	observer.observe(node);
 	if (node.firstElementChild) observer.observe(node.firstElementChild);
 	node.addEventListener("scroll", remember);
 	remember();

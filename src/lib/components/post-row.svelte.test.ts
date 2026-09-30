@@ -89,6 +89,29 @@ describe("shared reaction rows", () => {
 		await tick();
 		expect(target.querySelector(".post-content")?.textContent).toContain("音楽も最高");
 	});
+	it("closes the quote modal on a backdrop click without opening the post", async () => {
+		const { goto } = await import("$app/navigation");
+		vi.mocked(goto).mockClear();
+		const target = document.body.appendChild(document.createElement("div"));
+		const component = mount(PostRow, {
+			target,
+			props: { post: fixturePost(0), currentUserId: "preview-user-0" },
+		});
+		cleanup.push(() => unmount(component));
+		await tick();
+		target.querySelector<HTMLButtonElement>('[aria-label="投稿の操作"]')?.click();
+		await tick();
+		target.querySelector<HTMLButtonElement>('[aria-label="リポスト"]')?.click();
+		await tick();
+		target.querySelector<HTMLButtonElement>(".repost-menu-item-quote")?.click();
+		await tick();
+		const overlay = target.querySelector<HTMLElement>(".quote-modal-overlay");
+		if (!overlay) throw new Error("Missing quote modal");
+		overlay.click();
+		await tick();
+		expect(target.querySelector(".quote-modal-overlay")).toBeNull();
+		expect(goto).not.toHaveBeenCalled();
+	});
 	it("starts the composer on one line with its tools visible and a counter near the limit", async () => {
 		const target = document.body.appendChild(document.createElement("div"));
 		const component = mount(PostComposer, { target, props: { username: "viewer", avatarUrl: null } });

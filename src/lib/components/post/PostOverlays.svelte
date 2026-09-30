@@ -40,7 +40,10 @@ function handleKeydown(event: KeyboardEvent) {
 	<div
 		class="quote-modal-overlay"
 		role="presentation"
-		onclick={({ target, currentTarget }) => { if (target === currentTarget) controller.closeQuoteModal(); }}
+		onclick={(e) => {
+			e.stopPropagation();
+			if (e.target === e.currentTarget) controller.closeQuoteModal();
+		}}
 	>
 		<div
 			class="quote-modal-card"
