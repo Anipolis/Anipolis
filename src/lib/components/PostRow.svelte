@@ -108,9 +108,28 @@ function handleKeydown(event: KeyboardEvent) {
 				<span>{post.repost_context.display_name || post.repost_context.username}がリポスト</span>
 			</a>
 		{/if}
+		{#if actionsOpen}
+			<div class="post-row-inline-actions">
+				<PostActionBar {controller} id="post-actions-{post.id}" />
+				{#if controller.isOwn}
+					<button
+						type="button"
+						class="post-kebab-item post-kebab-item--danger"
+						onclick={() => (controller.deleteModalOpen = true)}
+					>
+						削除
+					</button>
+				{:else if controller.isLoggedIn}
+					<button type="button" class="post-kebab-item" onclick={() => (controller.reportModalOpen = true)}>
+						通報
+					</button>
+				{/if}
+			</div>
+		{/if}
 		<button
 			type="button"
 			class="post-row-menu"
+			class:post-row-menu--open={actionsOpen}
 			aria-label="投稿の操作"
 			aria-expanded={actionsOpen}
 			aria-controls="post-actions-{post.id}"
@@ -152,26 +171,12 @@ function handleKeydown(event: KeyboardEvent) {
 
 	{#if actionsOpen}
 		<div class="post-row-indent">
-			<PostActionBar {controller} id="post-actions-{post.id}" />
 			<div class="post-row-details">
 				<a href="/posts/{post.id}" class="post-time"
 					><time datetime={post.created_at}>{new Date(post.created_at).toLocaleString("ja-JP")}</time></a
 				>
 				{#if broadcastRelativeTime}
 					<span class="post-time">放送開始から {broadcastRelativeTime}</span>
-				{/if}
-				{#if controller.isOwn}
-					<button
-						type="button"
-						class="post-kebab-item post-kebab-item--danger"
-						onclick={() => (controller.deleteModalOpen = true)}
-					>
-						削除
-					</button>
-				{:else if controller.isLoggedIn}
-					<button type="button" class="post-kebab-item" onclick={() => (controller.reportModalOpen = true)}>
-						通報
-					</button>
 				{/if}
 			</div>
 		</div>
@@ -270,6 +275,28 @@ function handleKeydown(event: KeyboardEvent) {
 	background: none;
 	color: var(--color-text-muted);
 	cursor: pointer;
+}
+.post-row-menu--open {
+	margin-left: 0;
+}
+.post-row-inline-actions {
+	display: flex;
+	align-items: center;
+	flex-shrink: 0;
+	gap: 4px;
+	margin-left: auto;
+}
+.post-row-inline-actions :global(.post-footer) {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin-top: 0;
+}
+.post-row-inline-actions .post-kebab-item {
+	width: auto;
+	min-height: 0;
+	padding: 4px 8px;
+	white-space: nowrap;
 }
 .post-row-menu:hover {
 	color: var(--color-accent);
