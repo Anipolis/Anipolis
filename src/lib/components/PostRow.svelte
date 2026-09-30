@@ -102,6 +102,12 @@ function handleKeydown(event: KeyboardEvent) {
 			<UserAvatar src={post.avatar_url} username={post.username} size="sm" />
 		</a>
 		<a href="/profile/{post.username}" class="post-row-name" title={displayName}>{displayName}</a>
+		{#if post.repost_context}
+			<a href="/profile/{post.repost_context.username}" class="post-row-repost">
+				<span class="i-lucide-repeat-2" aria-hidden="true"></span>
+				<span>{post.repost_context.display_name || post.repost_context.username}さんがリポスト</span>
+			</a>
+		{/if}
 		<button
 			type="button"
 			class="post-row-menu"
@@ -142,13 +148,6 @@ function handleKeydown(event: KeyboardEvent) {
 	<!-- 操作行を閉じたままのいいねでも見えるよう、展開ブロックの外に置く -->
 	{#if controller.reactionFeedback.message}
 		<div class="post-row-indent"><ReactionErrorNotice feedback={controller.reactionFeedback} /></div>
-	{/if}
-
-	{#if post.repost_context}
-		<a href="/profile/{post.repost_context.username}" class="post-row-indent post-row-repost">
-			<span class="i-lucide-repeat-2" aria-hidden="true"></span>
-			<span>{post.repost_context.display_name || post.repost_context.username}さんがリポスト</span>
-		</a>
 	{/if}
 
 	{#if actionsOpen}
@@ -245,7 +244,7 @@ function handleKeydown(event: KeyboardEvent) {
 	font-size: 12px;
 }
 .post-row-name {
-	flex: 1;
+	flex: 0 1 auto;
 	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -261,6 +260,7 @@ function handleKeydown(event: KeyboardEvent) {
 }
 .post-row-menu {
 	flex-shrink: 0;
+	margin-left: auto;
 	display: grid;
 	place-items: center;
 	width: 32px;
@@ -342,8 +342,8 @@ function handleKeydown(event: KeyboardEvent) {
 	display: inline-flex;
 	align-items: center;
 	gap: 5px;
-	align-self: flex-start;
-	max-width: 100%;
+	flex: 0 100 auto;
+	min-width: 0;
 	color: var(--color-text-muted);
 	font-size: 11px;
 	font-weight: 700;
