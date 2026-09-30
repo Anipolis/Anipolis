@@ -89,7 +89,7 @@ describe("shared reaction rows", () => {
 		await tick();
 		expect(target.querySelector(".post-content")?.textContent).toContain("音楽も最高");
 	});
-	it("starts the composer on one line with optional tools and a counter near the limit", async () => {
+	it("starts the composer on one line with its tools visible and a counter near the limit", async () => {
 		const target = document.body.appendChild(document.createElement("div"));
 		const component = mount(PostComposer, { target, props: { username: "viewer", avatarUrl: null } });
 		cleanup.push(() => unmount(component));
@@ -98,10 +98,9 @@ describe("shared reaction rows", () => {
 		if (!textarea) throw new Error("Missing composer textarea");
 		expect(textarea.getAttribute("rows")).toBe("1");
 		expect(target.querySelector(".char-count")).toBeNull();
-		expect(target.querySelector('[aria-label="画像を添付"]')).toBeNull();
-		target.querySelector<HTMLButtonElement>('[aria-label="画像・作品などを追加"]')?.click();
-		await tick();
+		// d42d1e2 で添付・引用・CW・ルームの道具は「+」メニューをやめて常時表示になった
 		expect(target.querySelector('[aria-label="画像を添付"]')).not.toBeNull();
+		expect(target.querySelector('[aria-label="画像・作品などを追加"]')).toBeNull();
 		textarea.value = "あ".repeat(250);
 		textarea.dispatchEvent(new Event("input", { bubbles: true }));
 		await tick();
