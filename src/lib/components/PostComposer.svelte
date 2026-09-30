@@ -71,7 +71,6 @@ const MAX_LENGTH = 280;
 const MAX_IMAGES = 4;
 
 let content = $state("");
-let showTools = $state(false);
 let submitting = $state(false);
 let errorMessage = $state("");
 let imageUrls = $state<string[]>([]);
