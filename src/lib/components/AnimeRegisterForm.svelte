@@ -527,7 +527,7 @@ async function handleFileChange(e: Event) {
 }
 .form-success {
 	padding: 12px 16px;
-	border-radius: 8px;
+	border-radius: 12px;
 	background: color-mix(in srgb, var(--color-success) 10%, transparent);
 	color: var(--color-success);
 	margin-bottom: 16px;
@@ -539,7 +539,7 @@ async function handleFileChange(e: Event) {
 }
 .form-error {
 	padding: 12px 16px;
-	border-radius: 8px;
+	border-radius: 12px;
 	background: color-mix(in srgb, var(--color-danger) 10%, transparent);
 	color: var(--color-danger);
 	margin-bottom: 16px;
@@ -592,7 +592,7 @@ async function handleFileChange(e: Event) {
 .rf-textarea,
 .rf-select {
 	padding: 8px 10px;
-	border-radius: 8px;
+	border-radius: 12px;
 	border: 1px solid var(--color-border);
 	background: var(--color-surface);
 	color: var(--color-text);
@@ -624,7 +624,7 @@ async function handleFileChange(e: Event) {
 }
 .tag-btn {
 	padding: 4px 10px;
-	border-radius: 14px;
+	border-radius: 20px;
 	border: 1px solid var(--color-border);
 	background: transparent;
 	color: var(--color-text-muted);
@@ -651,7 +651,7 @@ async function handleFileChange(e: Event) {
 }
 .tag-add-btn {
 	padding: 8px 14px;
-	border-radius: 8px;
+	border-radius: 12px;
 	border: 1px solid var(--color-border);
 	background: var(--color-surface-hover);
 	color: var(--color-text);
@@ -676,7 +676,7 @@ async function handleFileChange(e: Event) {
 	align-items: center;
 	gap: 4px;
 	padding: 3px 10px;
-	border-radius: 14px;
+	border-radius: 20px;
 	background: var(--color-accent);
 	color: #fff;
 	font-size: 0.8rem;
@@ -703,7 +703,7 @@ async function handleFileChange(e: Event) {
 }
 .submit-btn {
 	padding: 10px 28px;
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-accent);
 	color: #fff;
 	border: none;
@@ -733,7 +733,7 @@ async function handleFileChange(e: Event) {
 	width: 100%;
 	height: 110px;
 	border: 2px dashed var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	cursor: pointer;
 	transition:
 		border-color 0.15s,

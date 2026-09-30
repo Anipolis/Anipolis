@@ -403,7 +403,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 }
 </script>
 
-<svelte:head> <title>アニメ — Anipolis</title> </svelte:head>
+<svelte:head> <title>アニメ - Anipolis</title> </svelte:head>
 
 <div class="anime-page-wrap">
 	<main class="anime-main">
@@ -1039,7 +1039,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	flex: 0 0 auto;
 	min-height: 38px;
 	padding: 0 14px;
-	border-radius: 8px;
+	border-radius: 12px;
 	border: 1px solid var(--border);
 	background: var(--card-bg);
 	color: var(--text);
@@ -1090,7 +1090,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	--filter-drawer-control-height: 46px;
 	padding: 16px;
 	border: 1px solid var(--border);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--card-bg);
 	box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
 	box-sizing: border-box;
@@ -1135,7 +1135,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 .filter-drawer-clear {
 	width: 100%;
 	padding: 8px 13px;
-	border-radius: 8px;
+	border-radius: 12px;
 	border: 1px solid var(--border);
 	background: transparent;
 	color: var(--text-muted);
@@ -1197,7 +1197,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 .search-input {
 	width: 100%;
 	padding: 9px 12px 9px 34px;
-	border-radius: 8px;
+	border-radius: 12px;
 	border: 1px solid var(--color-border);
 	background: var(--color-surface);
 	color: var(--color-text);
@@ -1218,7 +1218,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 }
 .search-btn {
 	padding: 9px 18px;
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-accent);
 	color: #fff;
 	border: none;
@@ -1233,7 +1233,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 }
 .search-clear {
 	padding: 7px 11px;
-	border-radius: 8px;
+	border-radius: 12px;
 	border: 1px solid var(--color-border);
 	color: var(--color-text-muted);
 	text-decoration: none;
@@ -1256,7 +1256,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	padding: 10px 12px;
 	background: var(--color-surface);
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 }
 .filter-group {
 	display: flex;
@@ -1276,7 +1276,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 }
 .filter-year-today-btn {
 	padding: 7px 8px;
-	border-radius: 8px;
+	border-radius: 12px;
 	border: 1px solid var(--color-border);
 	background: var(--color-surface-hover);
 	color: var(--color-text-muted);
@@ -1297,7 +1297,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 }
 .filter-reset-btn {
 	padding: 7px 12px;
-	border-radius: 8px;
+	border-radius: 12px;
 	border: 1px solid var(--color-border);
 	color: var(--color-text-muted);
 	text-decoration: none;
@@ -1317,7 +1317,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 .filter-select,
 .filter-input {
 	padding: 7px 10px;
-	border-radius: 8px;
+	border-radius: 12px;
 	border: 1px solid var(--color-border);
 	background: var(--color-bg);
 	color: var(--color-text);
@@ -1370,7 +1370,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 }
 .tab-btn {
 	padding: 6px 14px;
-	border-radius: 20px;
+	border-radius: 28px;
 	font-size: 0.85rem;
 	color: var(--text-secondary);
 	text-decoration: none;
@@ -1420,6 +1420,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	overflow-x: auto;
 	border: 1px solid var(--border);
 	border-radius: 999px;
+	corner-shape: round;
 	background: color-mix(in srgb, var(--card-bg) 86%, var(--hover-bg));
 	box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
 	vertical-align: top;
@@ -1559,7 +1560,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	flex-direction: column;
 	text-decoration: none;
 	color: var(--color-text);
-	border-radius: 8px;
+	border-radius: 12px;
 	overflow: hidden;
 	border: 1px solid var(--color-border);
 	transition:
@@ -1750,6 +1751,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	width: 28px;
 	height: 28px;
 	border-radius: 50%;
+	corner-shape: round;
 	background: rgba(0, 0, 0, 0.6);
 	color: #fff;
 	border: 1.5px solid rgba(255, 255, 255, 0.4);
@@ -1783,7 +1785,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	display: none;
 	position: relative;
 	padding: 8px 10px;
-	border-radius: 8px;
+	border-radius: 12px;
 	border: 1px solid var(--border);
 	background: var(--card-bg);
 	color: var(--text);
@@ -1810,6 +1812,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	width: 7px;
 	height: 7px;
 	border-radius: 50%;
+	corner-shape: round;
 	background: var(--accent);
 }
 
@@ -1835,7 +1838,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 .filter-sheet {
 	background: var(--card-bg);
 	border-top: 1px solid var(--border);
-	border-radius: 16px 16px 0 0;
+	border-radius: 22px 22px 0 0;
 	width: 100%;
 	max-height: 85dvh;
 	display: flex;
@@ -1913,6 +1916,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 .genre-chip {
 	padding: 5px 12px;
 	border-radius: 999px;
+	corner-shape: round;
 	border: 1.5px solid var(--border);
 	background: transparent;
 	color: var(--text);
@@ -1943,7 +1947,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 }
 .season-chip {
 	padding: 9px 0;
-	border-radius: 8px;
+	border-radius: 12px;
 	border: 1.5px solid var(--border);
 	background: transparent;
 	color: var(--text);
@@ -1999,7 +2003,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 }
 .filter-sheet-input {
 	padding: 9px 12px;
-	border-radius: 8px;
+	border-radius: 12px;
 	border: 1px solid var(--border);
 	background: var(--bg);
 	color: var(--text);
@@ -2026,7 +2030,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 .filter-sheet-clear {
 	align-self: flex-start;
 	padding: 6px 14px;
-	border-radius: 8px;
+	border-radius: 12px;
 	border: 1px solid var(--color-border);
 	background: transparent;
 	color: var(--text-muted);
@@ -2048,7 +2052,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 .filter-sheet-apply {
 	width: 100%;
 	padding: 13px;
-	border-radius: 10px;
+	border-radius: 14px;
 	border: none;
 	background: var(--accent);
 	color: #fff;

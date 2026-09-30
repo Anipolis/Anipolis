@@ -212,6 +212,7 @@ function toggleRow(id: string) {
 	height: 26px;
 	padding: 0 8px;
 	border-radius: 999px;
+	corner-shape: round;
 	background: color-mix(in srgb, var(--color-accent) 16%, transparent);
 	color: var(--color-accent);
 	font-size: 14px;
@@ -225,7 +226,7 @@ function toggleRow(id: string) {
 
 .report-list {
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-surface);
 	overflow: hidden;
 }
@@ -350,7 +351,7 @@ function toggleRow(id: string) {
 	gap: 8px;
 	padding: 14px;
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-bg);
 	align-self: start;
 }
@@ -424,6 +425,7 @@ function toggleRow(id: string) {
 	min-height: 22px;
 	padding: 2px 8px;
 	border-radius: 999px;
+	corner-shape: round;
 	font-size: 12px;
 	font-weight: 800;
 	flex-shrink: 0;
@@ -455,6 +457,7 @@ function toggleRow(id: string) {
 	min-height: 20px;
 	padding: 2px 8px;
 	border-radius: 999px;
+	corner-shape: round;
 	font-size: 11px;
 	font-weight: 800;
 	text-transform: uppercase;

@@ -236,7 +236,7 @@ $effect(() => {
 	max-height: min(760px, calc(100dvh - 32px));
 	overflow-y: auto;
 	border: 1px solid var(--color-border);
-	border-radius: 18px;
+	border-radius: 24px;
 	background: var(--color-bg);
 	color: var(--color-text);
 	box-shadow: 0 24px 80px rgb(0 0 0 / 48%);
@@ -302,7 +302,7 @@ form {
 	width: 38px;
 	height: 38px;
 	border: 1px solid var(--color-border);
-	border-radius: 10px;
+	border-radius: 14px;
 	background: var(--color-surface);
 	color: var(--color-text-muted);
 	cursor: pointer;
@@ -367,7 +367,7 @@ form {
 	width: 44px;
 	height: 44px;
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: 18px;
 	background: var(--color-surface);
 	color: var(--color-text);
 	cursor: pointer;
@@ -388,7 +388,7 @@ form {
 	width: 66px;
 	height: 44px;
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: 18px;
 	outline: none;
 	background: var(--color-bg);
 	color: var(--color-text);
@@ -418,7 +418,7 @@ form {
 	grid-column: span 2;
 	min-height: 44px;
 	border: 1px solid var(--color-border);
-	border-radius: 11px;
+	border-radius: 16px;
 	background: var(--color-surface);
 	color: var(--color-text-muted);
 	cursor: pointer;
@@ -448,7 +448,7 @@ form {
 }
 .modal-footer button {
 	min-height: 44px;
-	border-radius: 11px;
+	border-radius: 16px;
 	padding: 0 18px;
 	cursor: pointer;
 	font-weight: 750;
@@ -495,7 +495,7 @@ form {
 	.modal-card {
 		width: 100%;
 		max-height: calc(100dvh - 24px);
-		border-radius: 20px 20px 0 0;
+		border-radius: 28px 28px 0 0;
 	}
 	.modal-header {
 		padding: 20px 18px 16px;

@@ -1,5 +1,5 @@
 <script lang="ts">
-import PostCard from "$lib/components/PostCard.svelte";
+import PostRow from "$lib/components/PostRow.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
 import type { PageProps } from "./$types";
@@ -76,7 +76,7 @@ let { data }: PageProps = $props();
 					</div>
 				{:else}
 					{#each data.posts as post (post.id)}
-						<PostCard {post} currentUserId={data.user?.id ?? null} />
+						<PostRow {post} currentUserId={data.user?.id ?? null} />
 					{/each}
 				{/if}
 			</div>

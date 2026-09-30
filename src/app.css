@@ -16,14 +16,14 @@
 	--color-success-bg: rgba(34, 197, 94, 0.1);
 	--color-success-border: rgba(34, 197, 94, 0.3);
 	--color-success-text: #86efac;
-	--anipolis-logo-image: url("/anipolis-logo-sub.png");
+	--anipolis-logo-image: url("/anipolis-logo-dark.png");
 	--nav-height: 0px;
 	--content-max: 960px;
 	--feed-width: 680px;
-	--sidebar-width: 260px;
-	--icon-bar-width: 240px;
-	--radius: 12px;
-	--radius-sm: 8px;
+	--sidebar-width: 240px;
+	--icon-bar-width: 208px;
+	--radius: 18px;
+	--radius-sm: 12px;
 	--color-primary: var(--color-accent);
 	--color-hover: var(--color-surface-hover);
 	--color-bg-card: var(--color-surface);
@@ -52,11 +52,22 @@
 	--status-score: #f59e0b;
 }
 
+/* 角丸は全てスクワークル。円とピルだけは round に戻す */
+*,
+::before,
+::after {
+	corner-shape: squircle;
+}
+
+.rounded-full {
+	corner-shape: round;
+}
+
 [data-theme="light"] {
-	--color-bg: #f8fafc;
+	--color-bg: #ffffff;
 	--color-surface: #ffffff;
 	--color-surface-hover: #f1f5f9;
-	--color-border: #cbd5e1;
+	--color-border: #e4e9f0;
 	--color-border-hover: #94a3b8;
 	--color-text: #0f172a;
 	--color-text-muted: #64748b;
@@ -70,7 +81,7 @@
 	--color-success-bg: rgba(21, 128, 61, 0.08);
 	--color-success-border: rgba(21, 128, 61, 0.25);
 	--color-success-text: #15803d;
-	--anipolis-logo-image: url("/anipolis-logo.png");
+	--anipolis-logo-image: url("/anipolis-logo-light.png");
 	--status-watching: #15803d;
 	--status-plan: #1d4ed8;
 	--status-completed: #4338ca;
@@ -105,7 +116,9 @@ body {
 	background: var(--color-bg);
 	color: var(--color-text);
 	font-family:
-		-apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+		"Zen Maru Gothic", -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic",
+		sans-serif;
+	font-weight: 500;
 	font-size: 15px;
 	line-height: 1.6;
 	min-height: 100vh;
@@ -150,6 +163,7 @@ body {
 
 .scrollbar-thin-muted::-webkit-scrollbar-thumb {
 	border-radius: 999px;
+	corner-shape: round;
 	background: color-mix(in srgb, var(--color-text-muted) 24%, transparent);
 }
 
@@ -262,17 +276,19 @@ textarea {
 	display: flex;
 	gap: 20px;
 	align-items: flex-start;
+	justify-content: center;
 }
 
 .page-container:not(.room-page-container):has(> .sidebar-column) {
 	max-width: none;
 	margin: 0;
 	padding-right: max(24px, env(safe-area-inset-right));
-	padding-left: max(16px, calc((100% - (var(--content-max) + 48px)) / 2 + 16px));
+	padding-left: 20px;
 }
 
 .feed-column {
-	flex: 0 0 var(--feed-width);
+	flex: 1 1 var(--feed-width);
+	max-width: var(--feed-width);
 	min-width: 0;
 }
 
@@ -288,7 +304,7 @@ textarea {
 }
 
 .page-container:not(.room-page-container):has(> .sidebar-column) > .sidebar-column {
-	flex: 1 1 var(--sidebar-width);
+	flex: 0 0 var(--sidebar-width);
 }
 
 @media (max-width: 960px) {
@@ -297,6 +313,7 @@ textarea {
 	}
 	.feed-column {
 		flex: 1;
+		max-width: none;
 	}
 }
 
@@ -338,7 +355,7 @@ textarea {
 	width: 100%;
 	height: 44px;
 	padding: 0 12px;
-	border-radius: 12px;
+	border-radius: 18px;
 	color: var(--color-accent);
 	text-decoration: none;
 	margin-bottom: 8px;
@@ -390,7 +407,7 @@ textarea {
 	padding: 0 12px;
 	width: 100%;
 	height: 44px;
-	border-radius: 12px;
+	border-radius: 18px;
 	color: var(--color-text-muted);
 	text-decoration: none;
 	transition:
@@ -460,6 +477,7 @@ textarea {
 	height: 16px;
 	padding: 0 3px;
 	border-radius: 9999px;
+	corner-shape: round;
 	background: var(--color-accent);
 	color: #fff;
 	font-size: 10px;
@@ -477,6 +495,7 @@ textarea {
 	height: 9px;
 	border: 2px solid var(--color-bg);
 	border-radius: 9999px;
+	corner-shape: round;
 	background: var(--color-accent);
 	pointer-events: none;
 }
@@ -502,6 +521,7 @@ textarea {
 	gap: 6px;
 	padding: 7px 16px;
 	border-radius: 9999px;
+	corner-shape: round;
 	font-size: 14px;
 	font-weight: 600;
 	transition: all 0.15s;
@@ -619,6 +639,7 @@ textarea {
 	color: var(--color-accent);
 	padding: 6px;
 	border-radius: 50%;
+	corner-shape: round;
 	margin-right: auto;
 	transition: background 0.15s;
 }
@@ -641,7 +662,7 @@ textarea {
 	position: relative;
 	width: 100px;
 	height: 100px;
-	border-radius: 8px;
+	border-radius: 12px;
 	overflow: hidden;
 	border: 1px solid var(--color-border);
 }
@@ -658,6 +679,7 @@ textarea {
 	color: #fff;
 	border: none;
 	border-radius: 50%;
+	corner-shape: round;
 	width: 22px;
 	height: 22px;
 	font-size: 11px;
@@ -677,7 +699,7 @@ textarea {
 	grid-template-columns: repeat(2, 1fr);
 	gap: 4px;
 	margin-top: 10px;
-	border-radius: 12px;
+	border-radius: 18px;
 	overflow: hidden;
 }
 .post-images-single {
@@ -749,6 +771,7 @@ textarea {
 	width: 36px;
 	height: 36px;
 	border-radius: 50%;
+	corner-shape: round;
 	cursor: pointer;
 	display: flex;
 	align-items: center;
@@ -808,82 +831,9 @@ textarea {
 
 /* --- Post Card --- */
 
-.post-card {
-	display: flex;
-	gap: 10px;
-	border-bottom: 1px solid var(--color-border);
-	border-left: 3px solid var(--color-border);
-	padding: 16px;
-	position: relative;
-	transition: background 0.1s;
-	-webkit-tap-highlight-color: transparent;
-}
-
-.post-card-modal-open {
-	z-index: 1100;
-}
-
-.post-card-hitarea {
-	position: absolute;
-	inset: 0;
-	z-index: 0;
-}
-
-.post-card-hitarea:focus-visible {
-	outline: 2px solid var(--color-accent);
-	outline-offset: -3px;
-}
-
-.post-card > *:not(.post-card-hitarea) {
-	position: relative;
-	z-index: 1;
-}
-
 .post-avatar-link {
 	flex-shrink: 0;
 	align-self: flex-start;
-}
-
-.post-body {
-	flex: 1;
-	min-width: 0;
-}
-
-.post-card--detail {
-	display: grid;
-	grid-template-columns: 40px minmax(0, 1fr);
-	row-gap: 0;
-}
-
-.post-card--detail .post-avatar-link {
-	grid-column: 1;
-	grid-row: 1;
-}
-
-.post-card--detail .post-body {
-	display: contents;
-}
-
-.post-card--detail .post-body > * {
-	grid-column: 1 / -1;
-}
-
-@media (hover: hover) {
-	.post-card:hover {
-		background: var(--color-surface);
-	}
-}
-
-.post-header {
-	display: flex;
-	align-items: flex-start;
-	gap: 10px;
-	margin-bottom: 10px;
-}
-
-.post-card--detail .post-header {
-	grid-column: 2;
-	grid-row: 1;
 }
 
 .post-meta {
@@ -910,13 +860,6 @@ textarea {
 	color: var(--color-text-muted);
 }
 
-.post-header-right {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	flex-shrink: 0;
-}
-
 .post-time {
 	font-size: 13px;
 	color: var(--color-text-muted);
@@ -932,6 +875,7 @@ textarea {
 	width: 28px;
 	height: 28px;
 	border-radius: 50%;
+	corner-shape: round;
 	color: var(--color-text-muted);
 	background: none;
 	border: none;
@@ -962,7 +906,7 @@ textarea {
 	z-index: 201;
 	min-width: 140px;
 	border: 1px solid var(--color-border);
-	border-radius: 10px;
+	border-radius: 14px;
 	background: var(--color-bg-card);
 	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
 	overflow: hidden;
@@ -1002,11 +946,6 @@ textarea {
 	height: 15px;
 }
 
-.post-card.deleting {
-	opacity: 0.5;
-	pointer-events: none;
-}
-
 .post-content {
 	font-size: 15px;
 	line-height: 1.7;
@@ -1028,6 +967,7 @@ textarea {
 
 .avatar {
 	border-radius: 50%;
+	corner-shape: round;
 	object-fit: cover;
 	flex-shrink: 0;
 	background: var(--color-border);
@@ -1059,6 +999,7 @@ textarea {
 	aspect-ratio: 1;
 	object-fit: cover;
 	border-radius: 50%;
+	corner-shape: round;
 }
 
 .avatar-sm {
@@ -1218,6 +1159,64 @@ textarea {
 	font-size: 15px;
 }
 
+/* --- Loading placeholders --- */
+
+/* ライトテーマでは surface と背景が同じ白なので、下地は surface-hover にする */
+.skeleton {
+	background:
+		linear-gradient(100deg, var(--color-surface-hover) 30%, var(--color-border) 50%, var(--color-surface-hover) 70%)
+		0 0 / 220% 100%;
+	border-radius: 6px;
+	animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+.skeleton-circle {
+	border-radius: 50%;
+	corner-shape: round;
+}
+
+.spinner {
+	width: 18px;
+	height: 18px;
+	border: 2px solid color-mix(in srgb, var(--color-accent) 25%, transparent);
+	border-top-color: var(--color-accent);
+	border-radius: 50%;
+	corner-shape: round;
+	animation: spinner-rotate 0.7s linear infinite;
+}
+
+.posts-loading-spinner {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	padding: 12px;
+	color: var(--color-text-muted);
+	font-size: 13px;
+}
+
+@keyframes skeleton-shimmer {
+	from {
+		background-position: 100% 0;
+	}
+	to {
+		background-position: -120% 0;
+	}
+}
+
+@keyframes spinner-rotate {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.skeleton,
+	.spinner {
+		animation: none;
+	}
+}
+
 /* --- Auth page --- */
 
 .auth-gate {
@@ -1265,6 +1264,7 @@ textarea {
 	background: var(--color-surface);
 	border: 1px solid var(--color-border);
 	border-radius: 9999px;
+	corner-shape: round;
 	padding: 0 16px 0 42px;
 	color: var(--color-text);
 	font-size: 15px;
@@ -1289,6 +1289,7 @@ textarea {
 	height: 44px;
 	padding: 0 18px;
 	border-radius: 9999px;
+	corner-shape: round;
 	background: var(--color-accent);
 	color: #fff;
 	font-size: 14px;
@@ -1467,6 +1468,7 @@ textarea {
 	gap: 8px;
 	padding: 4px 8px;
 	border-radius: 9999px;
+	corner-shape: round;
 	cursor: pointer;
 	transition: background 0.15s;
 }
@@ -1539,6 +1541,7 @@ textarea {
 	height: 36px;
 	padding: 0 10px;
 	border-radius: 9999px;
+	corner-shape: round;
 	color: var(--color-text-muted);
 	font-size: 13px;
 	font-weight: 700;
@@ -1628,6 +1631,7 @@ textarea {
 	padding: 0;
 	cursor: pointer;
 	border-radius: 50%;
+	corner-shape: round;
 	flex-shrink: 0;
 }
 
@@ -1639,6 +1643,7 @@ textarea {
 	position: absolute;
 	inset: 0;
 	border-radius: 50%;
+	corner-shape: round;
 	background: rgba(0, 0, 0, 0.45);
 	display: flex;
 	align-items: center;
@@ -2040,11 +2045,155 @@ textarea {
 /* 縺・＞縺ｭ */
 .post-like-btn:not(:disabled):hover {
 	color: #f43f5e;
-	background: rgba(244, 63, 94, 0.1);
 }
 
 .post-like-btn.active {
 	color: #f43f5e;
+}
+
+.post-like-btn svg {
+	transition: transform 0.1s ease-out;
+}
+
+/* Icon is a size bigger than the other action icons; trim its hitbox padding to match. */
+.post-like-btn.reaction-icon-hitbox {
+	padding: 5.5px;
+}
+
+/* Press in while held; the pop on release starts from this scale. */
+.post-like-btn:not(:disabled):active svg {
+	transform: scale(0.7);
+}
+
+.post-like-btn.popping svg {
+	animation: like-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.post-like-btn.popping::after {
+	content: "";
+	position: absolute;
+	inset: 50% auto auto 50%;
+	width: 28px;
+	height: 28px;
+	margin: -14px 0 0 -14px;
+	border-radius: 50%;
+	corner-shape: round;
+	border: 2px solid #f43f5e;
+	pointer-events: none;
+	animation: like-ring 0.4s ease-out forwards;
+}
+
+@keyframes like-pop {
+	0% {
+		transform: scale(0.7);
+	}
+	50% {
+		transform: scale(1.3);
+	}
+	100% {
+		transform: scale(1);
+	}
+}
+
+@keyframes like-ring {
+	from {
+		transform: scale(0.3);
+		opacity: 0.8;
+	}
+	to {
+		transform: scale(1.2);
+		opacity: 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.post-like-btn.popping svg,
+	.post-like-btn.popping::after {
+		animation: none;
+	}
+
+	.post-like-btn svg {
+		transition: none;
+	}
+
+	.post-like-btn:not(:disabled):active svg {
+		transform: none;
+	}
+}
+
+/* Like count rolls between its old and new value instead of snapping. */
+.reaction-count-roll {
+	display: inline-grid;
+	overflow: hidden;
+	height: 1em;
+	line-height: 1;
+	vertical-align: middle;
+}
+
+.reaction-count-roll-old,
+.reaction-count-roll-new {
+	grid-area: 1 / 1;
+}
+
+.reaction-count-roll.roll-up .reaction-count-roll-old {
+	animation: like-count-out-up 0.2s ease-in forwards;
+}
+
+.reaction-count-roll.roll-up .reaction-count-roll-new {
+	animation: like-count-in-up 0.2s ease-out forwards;
+}
+
+.reaction-count-roll.roll-down .reaction-count-roll-old {
+	animation: like-count-out-down 0.2s ease-in forwards;
+}
+
+.reaction-count-roll.roll-down .reaction-count-roll-new {
+	animation: like-count-in-down 0.2s ease-out forwards;
+}
+
+@keyframes like-count-out-up {
+	to {
+		transform: translateY(-100%);
+		opacity: 0;
+	}
+}
+
+@keyframes like-count-in-up {
+	from {
+		transform: translateY(100%);
+		opacity: 0;
+	}
+	to {
+		transform: translateY(0);
+		opacity: 1;
+	}
+}
+
+@keyframes like-count-out-down {
+	to {
+		transform: translateY(100%);
+		opacity: 0;
+	}
+}
+
+@keyframes like-count-in-down {
+	from {
+		transform: translateY(-100%);
+		opacity: 0;
+	}
+	to {
+		transform: translateY(0);
+		opacity: 1;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.reaction-count-roll.roll-up .reaction-count-roll-old,
+	.reaction-count-roll.roll-up .reaction-count-roll-new,
+	.reaction-count-roll.roll-down .reaction-count-roll-old,
+	.reaction-count-roll.roll-down .reaction-count-roll-new {
+		animation: none;
+	}
 }
 
 .reaction-action-group {
@@ -2090,6 +2239,12 @@ textarea {
 .reaction-count-static.has-count {
 	margin-left: 0;
 	min-width: 28px;
+}
+
+/* Like shows its count on the left of the icon. */
+.post-footer-like .reaction-count-static {
+	margin-left: 0;
+	margin-right: 2px;
 }
 
 .reaction-icon-hitbox {
@@ -2151,10 +2306,6 @@ textarea {
 	background: rgba(34, 197, 94, 0.1);
 }
 
-.post-like-btn.reaction-icon-hitbox:not(:disabled):hover::before {
-	background: rgba(244, 63, 94, 0.1);
-}
-
 .post-bookmark-btn.reaction-icon-hitbox:not(:disabled):hover::before {
 	background: color-mix(in srgb, var(--color-accent) 10%, transparent);
 }
@@ -2175,7 +2326,7 @@ textarea {
 	width: min(300px, calc(100vw - 32px));
 	overflow: hidden;
 	border: 1px solid var(--color-border, #313244);
-	border-radius: 12px;
+	border-radius: 18px;
 	background: var(--color-bg-card, #1e1e2e);
 	box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
 }
@@ -2255,10 +2406,6 @@ textarea {
 	color: #f87171;
 }
 
-.post-card-clickable {
-	cursor: pointer;
-}
-
 /* --- Post detail / thread view --- */
 
 .post-detail-back {
@@ -2269,6 +2416,7 @@ textarea {
 	height: 40px;
 	margin-bottom: 8px;
 	border-radius: 50%;
+	corner-shape: round;
 	color: var(--color-text-secondary);
 	transition:
 		background 0.15s,
@@ -2336,6 +2484,7 @@ textarea {
 	width: 36px;
 	height: 36px;
 	border-radius: 50%;
+	corner-shape: round;
 	color: var(--color-text-muted);
 	transition:
 		background 0.15s,
@@ -2405,6 +2554,7 @@ textarea {
 	height: 32px;
 	padding: 0;
 	border-radius: 50%;
+	corner-shape: round;
 }
 .calendar-weekdays {
 	display: grid;
@@ -2450,6 +2600,7 @@ textarea {
 	background: var(--color-primary);
 	color: #fff;
 	border-radius: 50%;
+	corner-shape: round;
 	width: 24px;
 	height: 24px;
 	display: flex;
@@ -2733,7 +2884,7 @@ textarea {
 	margin: 8px 0 4px;
 	padding: 8px;
 	border: 1px solid color-mix(in srgb, var(--color-border) 48%, transparent);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: color-mix(in srgb, var(--color-surface) 38%, transparent);
 	cursor: pointer;
 	transition:
@@ -2768,6 +2919,7 @@ textarea {
 	padding: 7px 12px;
 	border: 1px solid color-mix(in srgb, var(--color-accent) 50%, transparent);
 	border-radius: 999px;
+	corner-shape: round;
 	background: color-mix(in srgb, var(--color-accent) 12%, transparent);
 	color: var(--color-accent);
 	font-size: 12px;
@@ -2801,7 +2953,7 @@ textarea {
 	max-height: calc(100vh - 32px);
 	overflow: hidden;
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: 18px;
 	background: var(--color-bg-card);
 	box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
 }
@@ -2826,7 +2978,7 @@ textarea {
 	place-items: center;
 	width: 32px;
 	height: 32px;
-	border-radius: 8px;
+	border-radius: 12px;
 	color: var(--color-text-muted);
 	transition:
 		background 0.15s,
@@ -3051,7 +3203,7 @@ textarea {
 	align-items: center;
 	gap: 6px;
 	padding: 7px 14px;
-	border-radius: 20px;
+	border-radius: 28px;
 	border: 1px solid var(--color-accent);
 	background: transparent;
 	color: var(--color-accent);
@@ -3088,7 +3240,7 @@ textarea {
 	min-width: 180px;
 	background: var(--color-bg-card, #1e1e2e);
 	border: 1px solid var(--color-border, #313244);
-	border-radius: 12px;
+	border-radius: 18px;
 	box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 	overflow: hidden;
 }
@@ -3139,7 +3291,7 @@ form + .repost-menu-item {
 	max-width: 520px;
 	background: var(--color-bg-card, #1e1e2e);
 	border: 1px solid var(--color-border, #313244);
-	border-radius: 16px;
+	border-radius: 22px;
 	box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 	overflow: hidden;
 }
@@ -3185,7 +3337,7 @@ form + .repost-menu-item {
 	resize: none;
 	background: var(--color-bg, #181825);
 	border: 1px solid var(--color-border, #313244);
-	border-radius: 8px;
+	border-radius: 12px;
 	padding: 10px 12px;
 	font-size: 14px;
 	font-family: inherit;
@@ -3206,7 +3358,7 @@ form + .repost-menu-item {
 
 .quote-preview {
 	border: 1px solid var(--color-border, #313244);
-	border-radius: 10px;
+	border-radius: 14px;
 	padding: 10px 12px;
 }
 
@@ -3254,7 +3406,7 @@ form + .repost-menu-item {
 	margin-top: 10px;
 	padding: 10px 12px;
 	border: 1px solid var(--color-border, #313244);
-	border-radius: 12px;
+	border-radius: 18px;
 	text-decoration: none;
 	color: inherit;
 	transition: background-color 0.15s;
@@ -3367,10 +3519,6 @@ form + .repost-menu-item {
 		padding-bottom: 80px;
 	}
 
-	.post-card {
-		padding: 10px 12px;
-	}
-
 	.profile-display-name {
 		font-size: 18px;
 	}
@@ -3383,10 +3531,6 @@ form + .repost-menu-item {
 		padding-top: 6px;
 		padding-bottom: 80px;
 	}
-
-	.post-card {
-		padding: 8px 10px;
-	}
 }
 
 /* Compact landscape keeps the mobile shell until the desktop breakpoint. */
@@ -3394,4 +3538,29 @@ form + .repost-menu-item {
 	.page-container {
 		padding-bottom: 16px;
 	}
+}
+
+@media (min-width: 961px) and (max-width: 1160px) {
+	.page-container > .sidebar-column {
+		display: none;
+	}
+}
+
+/* Discovery remains a quiet companion to the conversation column. */
+.trending-panel {
+	border: 0;
+	border-radius: 0;
+	box-shadow: none;
+	background: transparent;
+}
+.trending-header {
+	font-size: 14px;
+}
+.trending-item {
+	border: 0;
+	padding-top: 9px;
+	padding-bottom: 9px;
+}
+.trending-subheader {
+	font-size: 12px;
 }

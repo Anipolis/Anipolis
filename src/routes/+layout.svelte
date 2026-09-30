@@ -12,6 +12,10 @@ import { composeOpen } from "$lib/stores/compose";
 import { notificationCountsRefresh } from "$lib/stores/notifications";
 import type { LayoutProps } from "./$types";
 import "virtual:uno.css";
+import "@fontsource/zen-maru-gothic/400.css";
+import "@fontsource/zen-maru-gothic/500.css";
+import "@fontsource/zen-maru-gothic/700.css";
+import "@fontsource/zen-maru-gothic/900.css";
 import "../app.css";
 
 let { data, children }: LayoutProps = $props();
@@ -23,6 +27,27 @@ const roomScrollLocked = $derived(page.url.pathname.startsWith("/rooms/anime/"))
 // （検索語・フィルター・タブ・ページ番号）でページをアンマウントすると入力欄やドロワーの
 // 状態が失われ、1 文字ずつしか入力できなくなる（#292）
 const navigationTargetPath = $derived(navigationSkeletonPath(navigating));
+// すぐ終わる遷移でスケルトンが一瞬だけ挟まるとチラつくので、少し待ってから差し替える。
+// 待つ間は元のページを残す（サイドバーの選択状態は遷移先へ先に切り替わる）
+const NAVIGATION_SKELETON_DELAY_MS = 200;
+let navigationSkeletonDelayElapsed = $state(false);
+const showNavigationSkeleton = $derived(navigationTargetPath !== null && navigationSkeletonDelayElapsed);
+
+$effect(() => {
+	if (!navigationTargetPath) {
+		navigationSkeletonDelayElapsed = false;
+		return;
+	}
+	const timer = setTimeout(() => {
+		navigationSkeletonDelayElapsed = true;
+	}, NAVIGATION_SKELETON_DELAY_MS);
+	return () => clearTimeout(timer);
+});
+
+// 下までスクロールした状態でスケルトンに差し替えると、短いスケルトンの末尾だけが見えてしまう
+$effect(() => {
+	if (showNavigationSkeleton) window.scrollTo({ top: 0 });
+});
 
 async function refreshNotificationCounts() {
 	if (!data.session) {
@@ -113,7 +138,7 @@ function handleFabClick() {
 		extraAccounts={data.extraAccounts}
 	/>
 	<main class="app-main" id="main-content" tabindex="-1">
-		{#if navigationTargetPath}
+		{#if showNavigationSkeleton && navigationTargetPath}
 			<RouteNavigationSkeleton pathname={navigationTargetPath} />
 		{:else}
 			<!-- アカウント切替（ユーザーが変わる再読み込み）ではページを作り直し、前のアカウントの状態を持ち越さない（#298） -->
@@ -154,6 +179,7 @@ function handleFabClick() {
 	width: 56px;
 	height: 56px;
 	border-radius: 50%;
+	corner-shape: round;
 	background: var(--color-accent);
 	color: white;
 	border: none;

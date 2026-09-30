@@ -2,16 +2,17 @@
 import { replaceState } from "$app/navigation";
 import { trapFocus } from "$lib/actions/trapFocus";
 import LiveRoomsPanel from "$lib/components/LiveRoomsPanel.svelte";
-import PostCard from "$lib/components/PostCard.svelte";
 import PostCardSkeleton from "$lib/components/PostCardSkeleton.svelte";
 import PostComposer from "$lib/components/PostComposer.svelte";
+import PostRow from "$lib/components/PostRow.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import { createLatestResolved } from "$lib/latest-resolved.svelte";
 import { composeOpen } from "$lib/stores/compose";
+import { isPostContinuation } from "$lib/utils/post-presentation";
 import type { PageProps } from "./$types";
 
 /** スケルトンの枚数（タイムラインの典型的な表示密度に合わせた仮枠） */
-const SKELETON_COUNT = 5;
+const SKELETON_COUNT = 12;
 
 let { data }: PageProps = $props();
 
@@ -114,7 +115,7 @@ $effect(() => {
 </script>
 
 <svelte:head>
-	<title>Anipolis — タイムライン</title>
+	<title>Anipolis - タイムライン</title>
 	<meta property="og:title" content="Anipolis">
 	<meta
 		property="og:description"
@@ -151,60 +152,12 @@ $effect(() => {
 					<p>ようこそ！<a href="/settings">設定</a>を確認してから投稿できます。</p>
 				</div>
 			{:else}
-				<div class="landing-hero">
-					<div class="landing-logo">Anipolis</div>
-					<p class="landing-tagline">アニメファンのためのSNS</p>
-					<a href="/auth" class="landing-cta">ログイン / 新規登録</a>
-					<ul class="landing-features">
-						<li>
-							<svg
-								width="16"
-								height="16"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2.5"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								aria-hidden="true"
-							>
-								<polyline points="20 6 9 17 4 12" />
-							</svg>
-							視聴中のアニメを記録・管理
-						</li>
-						<li>
-							<svg
-								width="16"
-								height="16"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2.5"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								aria-hidden="true"
-							>
-								<polyline points="20 6 9 17 4 12" />
-							</svg>
-							アニメの感想を投稿・共有
-						</li>
-						<li>
-							<svg
-								width="16"
-								height="16"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2.5"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								aria-hidden="true"
-							>
-								<polyline points="20 6 9 17 4 12" />
-							</svg>
-							放送に合わせてリアルタイム実況
-						</li>
-					</ul>
+				<div class="home-welcome">
+					<div>
+						<strong>いま観ている、そのひとこと。</strong>
+						<p>同じアニメを観ている人と、感想を気軽に。</p>
+					</div>
+					<a href="/auth" class="btn btn-primary">ログイン / 登録</a>
 				</div>
 			{/if}
 		</div>
@@ -303,8 +256,12 @@ $effect(() => {
 						<p>このページの投稿はミュート設定によりすべて非表示です。</p>
 					</div>
 				{/if}
-				{#each posts as post (post.id)}
-					<PostCard {post} currentUserId={data.user?.id ?? null} />
+				{#each posts as post, index (post.id)}
+					<PostRow
+						{post}
+						currentUserId={data.user?.id ?? null}
+						continuation={isPostContinuation(post, posts[index - 1])}
+					/>
 				{/each}
 				{#if nextCursor}
 					<a href={loadMoreHref(nextCursor.createdAt, nextCursor.id)} class="load-more-btn">
@@ -401,17 +358,37 @@ $effect(() => {
 {/if}
 
 <style>
-/* Desktop: always show */
-.composer-desktop {
-	display: block;
+.home-welcome {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	padding: 20px 12px;
+	border-bottom: 1px solid var(--color-border);
+}
+.home-welcome strong {
+	font-size: 17px;
+}
+.home-welcome p {
+	font-size: 12px;
+	color: var(--color-text-muted);
+	margin-top: 4px;
+}
+.home-welcome .btn {
+	font-size: 12px;
+	white-space: nowrap;
+}
+@media (max-width: 640px) {
+	.home-welcome {
+		align-items: flex-start;
+		flex-direction: column;
+		gap: 8px;
+	}
 }
 
-/* Mobile: hide inline composer, show only via modal.
-   Exception: landing hero inside .composer-desktop is always shown. */
-@media (max-width: 960px) {
-	.composer-desktop:not(:has(.landing-hero)) {
-		display: none;
-	}
+/* The inline composer is available on every viewport. */
+.composer-desktop {
+	display: block;
 }
 
 /* Compose modal */
@@ -429,7 +406,7 @@ $effect(() => {
 	right: 0;
 	background: var(--color-bg);
 	border-bottom: 1px solid var(--color-border);
-	border-radius: 0 0 16px 16px;
+	border-radius: 0 0 22px 22px;
 	z-index: 201;
 	max-height: 90dvh;
 	display: flex;
@@ -465,11 +442,14 @@ $effect(() => {
 
 .compose-modal-body {
 	overflow-y: auto;
+	padding: 12px 12px 0;
 }
 
 .composer-loading {
-	min-height: 118px;
-	border-bottom: 1px solid var(--color-border);
+	min-height: 166px;
+	margin-bottom: 12px;
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius);
 	background:
 		linear-gradient(100deg, var(--color-surface) 34%, var(--color-surface-hover) 48%, var(--color-surface) 62%) 0 0
 		/ 220% 100%;
@@ -521,70 +501,6 @@ $effect(() => {
 }
 
 /* Landing hero (unauthenticated) */
-.landing-hero {
-	display: flex;
-	flex-direction: column;
-	align-items: flex-start;
-	gap: 16px;
-	padding: 32px 24px;
-	border-bottom: 1px solid var(--color-border);
-}
-
-.landing-logo {
-	font-size: 28px;
-	font-weight: 800;
-	color: var(--color-accent);
-	letter-spacing: -0.5px;
-}
-
-.landing-tagline {
-	font-size: 16px;
-	color: var(--color-text-muted);
-	margin: 0;
-}
-
-.landing-cta {
-	display: inline-flex;
-	align-items: center;
-	padding: 10px 24px;
-	background: var(--color-accent);
-	color: white;
-	border-radius: 999px;
-	font-size: 15px;
-	font-weight: 600;
-	text-decoration: none;
-	transition: background 0.15s;
-}
-
-.landing-cta:hover {
-	background: var(--color-accent-hover);
-	text-decoration: none;
-	color: white;
-}
-
-.landing-features {
-	list-style: none;
-	padding: 0;
-	margin: 0;
-	display: flex;
-	flex-direction: column;
-	gap: 10px;
-}
-
-.landing-features li {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	font-size: 14px;
-	color: var(--color-text-secondary);
-}
-
-.landing-features svg {
-	color: var(--color-accent);
-	flex-shrink: 0;
-}
-
-/* Onboarding banner */
 .onboarding-banner {
 	display: flex;
 	align-items: flex-start;
@@ -665,14 +581,6 @@ $effect(() => {
 
 .onboarding-btn-close:hover {
 	color: var(--color-text);
-}
-
-/* Landing hero: also show on mobile (override .composer-desktop hide) */
-@media (max-width: 960px) {
-	.landing-hero {
-		display: flex;
-		padding: 24px 16px;
-	}
 }
 
 .timeline-back-link {

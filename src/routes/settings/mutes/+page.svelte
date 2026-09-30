@@ -384,7 +384,7 @@ const activeTab = $derived.by((): "word" | "anime" => {
 }
 .mute-item {
 	border: 1px solid var(--color-border);
-	border-radius: 10px;
+	border-radius: 14px;
 	background: var(--color-surface);
 	overflow: hidden;
 }

@@ -1,20 +1,17 @@
 <script lang="ts">
-import type { SupabaseClient, User } from "@supabase/supabase-js";
 import type { SubmitFunction } from "@sveltejs/kit";
 import type { Snippet } from "svelte";
 import { onDestroy, onMount, tick, untrack } from "svelte";
 import { enhance } from "$app/forms";
 import { goto } from "$app/navigation";
+import { autosize } from "$lib/actions/autosize";
+import { timelineScroll } from "$lib/actions/timelineScroll";
 import ExitSurveyModal from "$lib/components/ExitSurveyModal.svelte";
 import LiveRoomPostCard from "$lib/components/LiveRoomPostCard.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
-import type {
-	Anime,
-	Post,
-	RoomExitSurveyComparisonWithX,
-	RoomExitSurveyNextParticipation,
-	TrendingHashtag,
-} from "$lib/types";
+import type { Post, RoomExitSurveyComparisonWithX, RoomExitSurveyNextParticipation } from "$lib/types";
+import type { LiveRoomActionData, LiveRoomData } from "$lib/types/live-room";
+import { isPostContinuation } from "$lib/utils/post-presentation";
 import {
 	createRoomConnectionState,
 	deriveRoomConnectionPhase,
@@ -27,57 +24,6 @@ import {
 	reduceRoomConnection,
 	shouldOfferManualReconnect,
 } from "$lib/utils/room-connection";
-
-/**
- * LiveRoomView が期待するデータ形状。
- * 放送ルーム（/rooms/anime/[id]/[date], lobby）とイベントルーム（/events/[id]）の
- * どちらのローダーもこの形状に合わせて返す。
- * anime はイベントにアニメが紐づいていない場合 null になりうる。
- */
-type RoomRealtimeClient = Pick<SupabaseClient, "channel" | "removeChannel">;
-
-export type LiveRoomData = {
-	supabase: RoomRealtimeClient;
-	anime: Anime | null;
-	room: {
-		session_id: string;
-		date: string;
-		kind: "episode" | "global" | "event";
-		hashtag: string;
-		scheduled_at: string;
-		posting_opens_at: string;
-		posting_closes_at: string;
-		duration_minutes: number | null;
-		title: string;
-	};
-	posts: Post[];
-	trending: TrendingHashtag[];
-	animeTrending: Anime[];
-	user: User | null;
-	roomExperiment: {
-		enabled: boolean;
-		sessionId?: string | undefined;
-	};
-	roomExitSurvey: {
-		experimentRunId: string | null;
-		alreadyAnswered: boolean;
-		postCount: number;
-		surveyVersion: string;
-	};
-};
-
-export type LiveRoomActionData =
-	| {
-			message?: string;
-			success?: boolean;
-			postId?: string;
-			deleted?: boolean;
-			liked?: boolean;
-			bookmarked?: boolean;
-			reposted?: boolean;
-	  }
-	| null
-	| undefined;
 
 let { data, form, headerActions }: { data: LiveRoomData; form: LiveRoomActionData; headerActions?: Snippet } = $props();
 
@@ -95,7 +41,7 @@ let postListEl: HTMLDivElement | null = $state(null);
 let mounted = $state(false);
 let isMobileViewport = $state(false);
 let postOrder = $state<PostOrder>("oldest");
-let lastPostCount = $state(0);
+let knownPostIds = new Set<string>();
 let isFollowingLatest = $state(true);
 let unreadNewPostCount = $state(0);
 let enteredAt = Date.now();
@@ -104,7 +50,7 @@ let surveyOpen = $state(false);
 let surveyHandled = $state(false);
 let surveySubmitting = $state(false);
 let surveyErrorMessage: string | null = $state(null);
-let programmaticScrollTimer: ReturnType<typeof setTimeout> | undefined;
+
 let previousVirtualKeyboardOverlaysContent: boolean | undefined;
 let removeRoomKeyboardListeners: (() => void) | undefined;
 
@@ -489,7 +435,7 @@ onMount(() => {
 	}
 	removeRoomKeyboardListeners = installRoomKeyboardOffsetTracking();
 	mounted = true;
-	lastPostCount = data.posts.length;
+	knownPostIds = new Set(allPosts.map((post) => post.id));
 	intervalId = setInterval(() => {
 		now = Date.now();
 	}, 1000);
@@ -516,7 +462,7 @@ onDestroy(() => {
 		virtualKeyboard.overlaysContent = previousVirtualKeyboardOverlaysContent;
 	}
 	clearInterval(intervalId);
-	if (programmaticScrollTimer) clearTimeout(programmaticScrollTimer);
+
 	clearRoomExperimentHeartbeatTimer();
 	if (typeof window !== "undefined") {
 		window.removeEventListener("pointerdown", handleWindowPointerDown, true);
@@ -564,18 +510,14 @@ $effect(() => {
 
 $effect(() => {
 	if (!mounted || status !== "open") return;
-	if (allPosts.length === lastPostCount) return;
-	const newPostCount = allPosts.length - lastPostCount;
-	const shouldFollow = isFollowingLatest || isNearLatestEdge();
-	lastPostCount = allPosts.length;
-	if (allPosts.length === 0) return;
-	if (shouldFollow) {
-		isFollowingLatest = true;
+	const freshCount = allPosts.filter((post) => !knownPostIds.has(post.id)).length;
+	knownPostIds = new Set(allPosts.map((post) => post.id));
+	if (freshCount === 0) return;
+	if (isFollowingLatest) {
 		unreadNewPostCount = 0;
-		void focusLatestPost(postOrder, "smooth").then(() => focusComposerTextarea({ preventScroll: true }));
+		void focusLatestPost();
 	} else {
-		unreadNewPostCount += Math.max(1, newPostCount);
-		void focusComposerTextarea({ preventScroll: true });
+		unreadNewPostCount += freshCount;
 	}
 });
 
@@ -631,26 +573,15 @@ function isNearLatestEdge(order: PostOrder = postOrder) {
 
 function handlePostListScroll() {
 	if (!mounted || status !== "open") return;
-	if (programmaticScrollTimer) return;
 	const nearLatest = isNearLatestEdge();
 	isFollowingLatest = nearLatest;
 	if (nearLatest) unreadNewPostCount = 0;
 }
 
-async function focusLatestPost(order: PostOrder = postOrder, behavior: ScrollBehavior = "auto") {
+async function focusLatestPost(order: PostOrder = postOrder) {
 	await tick();
-	requestAnimationFrame(() => {
-		if (!postListEl) return;
-		if (programmaticScrollTimer) clearTimeout(programmaticScrollTimer);
-		programmaticScrollTimer = setTimeout(() => {
-			programmaticScrollTimer = undefined;
-			isFollowingLatest = true;
-		}, 450);
-		postListEl.scrollTo({
-			top: order === "oldest" ? postListEl.scrollHeight : 0,
-			behavior,
-		});
-	});
+	if (!postListEl || !isFollowingLatest) return;
+	postListEl.scrollTo({ top: order === "oldest" ? postListEl.scrollHeight : 0, behavior: "instant" });
 }
 
 function setPostOrder(order: PostOrder) {
@@ -663,7 +594,7 @@ function setPostOrder(order: PostOrder) {
 function resumeLatestFollow() {
 	isFollowingLatest = true;
 	unreadNewPostCount = 0;
-	if (allPosts.length > 0) void focusLatestPost(postOrder, "smooth");
+	if (allPosts.length > 0) void focusLatestPost(postOrder);
 }
 
 function formatHMS(ms: number) {
@@ -739,7 +670,9 @@ function formatCompactDate(iso: string) {
 							class="composer-textarea room-composer-textarea"
 							name="content"
 							placeholder={isMobileViewport ? "いまの感想を投稿..." : "いまの感想を投稿... (Shift+Enterで改行)"}
-							rows={isMobileViewport ? 1 : 3}
+							rows="1"
+							aria-label="実況の投稿内容"
+							use:autosize={postContent}
 							enterkeyhint="send"
 							bind:value={postContent}
 							maxlength={maxLen}
@@ -747,7 +680,7 @@ function formatCompactDate(iso: string) {
 								keepComposerFocused = true;
 							}}
 							onkeydown={(e) => {
-								if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+								if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
 									e.preventDefault();
 									if (!isPosting && !overLimit && postContent.trim()) {
 										e.currentTarget.closest('form')?.requestSubmit();
@@ -756,7 +689,11 @@ function formatCompactDate(iso: string) {
 							}}
 						></textarea>
 						<div class="composer-footer">
-							<span class="char-count {overLimit ? 'char-count--over' : ''}">{charCount}/{maxLen}</span>
+							{#if charCount >= maxLen - 40}
+								<span class="char-count {overLimit ? 'char-count--over' : ''}"
+									>{charCount}/{maxLen}</span
+								>
+							{/if}
 							<button
 								type="submit"
 								class="btn btn-primary btn-sm"
@@ -835,21 +772,33 @@ function formatCompactDate(iso: string) {
 		</div>
 
 		<div class="room-post-list-shell">
-			<div class="room-post-list scrollbar-thin-muted" bind:this={postListEl} onscroll={handlePostListScroll}>
-				{#if allPosts.length === 0}
-					<div class="card anime-room-empty">まだ投稿はありません。最初の感想を残しましょう。</div>
-				{:else}
-					{#each displayedPosts as post (post.id)}
-						<div class="anime-room-post">
-							<LiveRoomPostCard
-								{post}
-								currentUserId={data.user?.id ?? null}
-								broadcastStartAt={data.room.scheduled_at}
-								timelineTimeMode={isGlobalLobby}
-							/>
-						</div>
-					{/each}
-				{/if}
+			<!-- svelte-ignore a11y_no_noninteractive_tabindex (The scroll region supports keyboard scrolling.) -->
+			<div
+				class="room-post-list scrollbar-thin-muted"
+				role="region"
+				aria-label="実況タイムライン"
+				tabindex="0"
+				bind:this={postListEl}
+				onscroll={handlePostListScroll}
+				use:timelineScroll={{ following: isFollowingLatest, newestFirst: postOrder === "newest" }}
+			>
+				<div class="room-post-list-content">
+					{#if allPosts.length === 0}
+						<div class="card anime-room-empty">まだ投稿はありません。最初の感想を残しましょう。</div>
+					{:else}
+						{#each displayedPosts as post, index (post.id)}
+							<div class="anime-room-post" data-post-id={post.id}>
+								<LiveRoomPostCard
+									{post}
+									continuation={isPostContinuation(post, displayedPosts[index - 1])}
+									currentUserId={data.user?.id ?? null}
+									broadcastStartAt={data.room.scheduled_at}
+									timelineTimeMode={isGlobalLobby}
+								/>
+							</div>
+						{/each}
+					{/if}
+				</div>
 			</div>
 
 			{#if showLatestJumpButton}
@@ -865,7 +814,9 @@ function formatCompactDate(iso: string) {
 						<span class="i-lucide-arrow-up latest-jump-icon" aria-hidden="true"></span>
 					{/if}
 					{#if unreadNewPostCount > 0}
-						<span class="new-posts-count">{unreadNewPostCount}</span>
+						<span class="new-posts-count">新着 {unreadNewPostCount}件</span>
+					{:else}
+						<span>最新へ</span>
 					{/if}
 				</button>
 			{/if}
@@ -873,7 +824,7 @@ function formatCompactDate(iso: string) {
 	</div>
 
 	<aside class="sidebar-column scrollbar-thin-muted">
-		<div class="room-summary-card mb-4 rounded-xl border p-4 shadow-sm">
+		<div class="room-summary-card mb-4 p-4">
 			<div class="flex items-start">
 				{#if data.anime}
 					<a href="/anime/{data.anime.id}" class="shrink-0" aria-label="アニメ詳細を開く">
@@ -1035,12 +986,12 @@ function formatCompactDate(iso: string) {
 	overflow: hidden;
 	padding-right: max(24px, env(safe-area-inset-right));
 	padding-bottom: 24px;
-	padding-left: max(16px, calc((100% - (var(--content-max) + 48px)) / 2 + 16px));
+	padding-left: 20px;
 }
 
 .room-page-container > .feed-column {
 	display: flex;
-	flex: 0 0 var(--feed-width);
+	flex: 1 1 var(--feed-width);
 	height: 100%;
 	min-height: 0;
 	overflow: hidden;
@@ -1048,7 +999,7 @@ function formatCompactDate(iso: string) {
 }
 
 .room-page-container > .sidebar-column {
-	flex: 1 1 var(--sidebar-width);
+	flex: 0 0 var(--sidebar-width);
 	max-height: 100%;
 	overflow-x: hidden;
 	overflow-y: auto;
@@ -1078,6 +1029,7 @@ function formatCompactDate(iso: string) {
 	overflow-x: hidden;
 	overflow-y: auto;
 	overscroll-behavior: contain;
+	overflow-anchor: none;
 }
 
 .new-posts-badge {
@@ -1095,6 +1047,7 @@ function formatCompactDate(iso: string) {
 	padding: 8px 12px;
 	border: 1px solid color-mix(in srgb, var(--color-primary) 28%, transparent);
 	border-radius: 999px;
+	corner-shape: round;
 	background: color-mix(in srgb, var(--color-surface) 92%, var(--color-primary));
 	box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
 	color: var(--color-primary);
@@ -1116,6 +1069,7 @@ function formatCompactDate(iso: string) {
 	place-items: center;
 	padding: 0 6px;
 	border-radius: 999px;
+	corner-shape: round;
 	background: var(--color-primary);
 	color: white;
 	font-size: 12px;
@@ -1171,6 +1125,7 @@ function formatCompactDate(iso: string) {
 	height: 8px;
 	flex-shrink: 0;
 	border-radius: 999px;
+	corner-shape: round;
 	background: var(--color-text-muted);
 }
 
@@ -1210,6 +1165,7 @@ function formatCompactDate(iso: string) {
 	padding: 4px 8px;
 	border: 1px solid var(--color-border);
 	border-radius: 999px;
+	corner-shape: round;
 	background: var(--color-surface);
 	color: var(--color-text-muted);
 	font: inherit;
@@ -1298,16 +1254,17 @@ function formatCompactDate(iso: string) {
 	color: white;
 }
 
-/* ── モバイル用コンパクトバー (サイドバー非表示時のみ表示) ── */
+/* Shared room context remains above the reaction log at every viewport. */
 .room-mobile-bar {
-	display: none;
+	display: flex;
 	flex-direction: column;
 	gap: 6px;
 	padding: 10px 12px;
 	margin-bottom: 12px;
-	background: var(--color-surface);
-	border: 1px solid var(--color-border);
-	border-radius: var(--radius);
+	background: transparent;
+	border: 0;
+	border-bottom: 1px solid var(--color-border);
+	border-radius: 0;
 	overflow: hidden;
 }
 .header-top-row,
@@ -1414,7 +1371,7 @@ function formatCompactDate(iso: string) {
 		margin-top: 8px;
 		margin-bottom: 0;
 		padding: 8px 10px;
-		border-radius: 14px;
+		border-radius: 6px;
 		transform: translateY(calc(0px - max(env(keyboard-inset-height, 0px), var(--room-keyboard-offset, 0px))));
 		transition: transform 160ms ease;
 		will-change: transform;
@@ -1489,6 +1446,51 @@ function formatCompactDate(iso: string) {
 	.room-page-container {
 		padding-right: 6px;
 		padding-left: 6px;
+	}
+}
+
+.room-page-container .composer {
+	padding: 10px 12px;
+	border: 0;
+	border-top: 1px solid var(--color-border);
+	border-radius: 0;
+	background: var(--color-bg);
+	margin: 0;
+}
+.room-page-container .composer-body {
+	align-items: flex-end;
+	gap: 8px;
+}
+.room-page-container .composer-textarea {
+	min-height: 36px;
+	max-height: 144px;
+	padding: 6px 0;
+	height: auto;
+	font-size: 15px;
+	line-height: 24px;
+}
+.room-page-container .composer-footer {
+	margin: 0;
+	padding: 0;
+	border: 0;
+	gap: 8px;
+}
+.room-page-container .composer-footer .btn {
+	min-height: 36px;
+}
+.room-mobile-bar {
+	display: flex;
+	padding: 12px;
+	border-bottom: 1px solid var(--color-border);
+}
+.room-summary-card {
+	box-shadow: none;
+	border: 0;
+	border-radius: 0;
+}
+@media (min-width: 961px) and (max-width: 1160px) {
+	.room-page-container > .sidebar-column {
+		display: none;
 	}
 }
 </style>
