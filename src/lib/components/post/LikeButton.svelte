@@ -17,6 +17,29 @@ const label = $derived(controller.likedByMe ? "いいね取り消し" : "いい�
 // Play the pop only on a user-initiated like, not for posts already liked on load.
 let popping = $state(false);
 
+// A trackpad tap presses and releases almost at once, so :active never shows the press-in.
+// Hold the pressed look for a minimum time before the pop so tap and mouse look the same.
+const MIN_PRESS_MS = 80;
+let pressed = $state(false);
+let pressStartedAt = 0;
+let popTimer: ReturnType<typeof setTimeout> | undefined;
+
+function onPointerDown() {
+	pressStartedAt = performance.now();
+	pressed = true;
+}
+
+function onLikeClick() {
+	const shouldPop = !controller.likedByMe;
+	clearTimeout(popTimer);
+	// Keyboard activation has no pointerdown, so there is nothing to hold.
+	const wait = pressed ? Math.max(0, MIN_PRESS_MS - (performance.now() - pressStartedAt)) : 0;
+	popTimer = setTimeout(() => {
+		pressed = false;
+		popping = shouldPop;
+	}, wait);
+}
+
 // Roll the count between old/new values instead of snapping.
 let displayedCount = $state(untrack(() => controller.likeCount));
 let previousCount = $state(untrack(() => controller.likeCount));
@@ -80,7 +103,10 @@ $effect(() => {
 				class="post-action-btn post-like-btn reaction-icon-hitbox"
 				class:active={controller.likedByMe}
 				class:popping
-				onclick={() => (popping = !controller.likedByMe)}
+				class:pressed
+				onpointerdown={onPointerDown}
+				onpointercancel={() => (pressed = false)}
+				onclick={onLikeClick}
 				onanimationend={() => (popping = false)}
 				aria-pressed={controller.likedByMe}
 				disabled={!controller.isLoggedIn}
