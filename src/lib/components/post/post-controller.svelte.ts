@@ -21,8 +21,12 @@ export class PostController {
 
 	// 同じ種類のリアクションは 1 件ずつ送る。送信中の連打は取り消し、応答順の逆転で
 	// 古い応答が最新の状態を上書きしないようにする（#287）
+	// 送信中に押された分は捨てず、表示だけ先に反転して「奇数回押されたか」を覚えておく。
+	// 応答が返ったら、サーバーの確定値と押した結果がズレている場合に限り 1 回だけ再送する
 	likeInFlight = $state(false);
+	likeQueued = false;
 	bookmarkInFlight = $state(false);
+	bookmarkQueued = false;
 	repostInFlight = $state(false);
 
 	repostMenuOpen = $state(false);
@@ -167,15 +171,22 @@ export class PostController {
 	handleLike: SubmitFunction = ({ formElement, cancel }) => {
 		if (this.likeInFlight) {
 			cancel();
+			this.likeQueued = !this.likeQueued;
+			const liked = this.likedByMe;
+			this.likeCountLocal = Math.max(0, this.likeCount + (liked ? -1 : 1));
+			this.likedByMeLocal = !liked;
 			return;
 		}
 		this.likeInFlight = true;
+		this.likeQueued = false;
 		const wasLiked = this.likedByMe;
 		const countBefore = this.likeCount;
 		this.likedByMeLocal = !wasLiked;
 		this.likeCountLocal = wasLiked ? countBefore - 1 : countBefore + 1;
 		return async ({ result }) => {
 			this.likeInFlight = false;
+			const queued = this.likeQueued;
+			this.likeQueued = false;
 			if (isReactionFailure(result)) {
 				this.likedByMeLocal = wasLiked;
 				this.likeCountLocal = countBefore;
@@ -186,19 +197,25 @@ export class PostController {
 			this.likedByMeLocal = confirmed.active;
 			this.likeCountLocal = confirmed.count;
 			this.reactionFeedback.clear();
+			if (queued) formElement.requestSubmit();
 		};
 	};
 
 	handleBookmark: SubmitFunction = ({ formElement, cancel }) => {
 		if (this.bookmarkInFlight) {
 			cancel();
+			this.bookmarkQueued = !this.bookmarkQueued;
+			this.bookmarkedByMeLocal = !this.bookmarkedByMe;
 			return;
 		}
 		this.bookmarkInFlight = true;
+		this.bookmarkQueued = false;
 		const wasBookmarked = this.bookmarkedByMe;
 		this.bookmarkedByMeLocal = !wasBookmarked;
 		return async ({ result }) => {
 			this.bookmarkInFlight = false;
+			const queued = this.bookmarkQueued;
+			this.bookmarkQueued = false;
 			if (isReactionFailure(result)) {
 				this.bookmarkedByMeLocal = wasBookmarked;
 				this.reactionFeedback.fail("bookmark", result, formElement);
@@ -209,6 +226,7 @@ export class PostController {
 				countBefore: 0,
 			}).active;
 			this.reactionFeedback.clear();
+			if (queued) formElement.requestSubmit();
 		};
 	};
 
