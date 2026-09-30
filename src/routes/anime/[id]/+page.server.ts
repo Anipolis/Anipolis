@@ -4,8 +4,8 @@ import { addBroadcastOverrideAction, deleteBroadcastOverrideAction, updateAnimeA
 import { buildBroadcastEpisodeLog } from "$lib/server/broadcast-episode-log";
 import {
 	getAnime,
-	getAnimeDataAttributions,
 	getAnimeRelations,
+	getAnimeSyobocalUrl,
 	getBroadcastRoomOverridesForAnime,
 	getBroadcastRoomScheduleSnapshotsForAnime,
 	getEventsForAnime,
@@ -25,9 +25,9 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 
 	if (!anime) throw error(404, "アニメが見つかりません");
 
-	const [relations, dataAttributions, broadcastOverrides, events, scheduleSnapshots] = await Promise.all([
+	const [relations, syobocalUrl, broadcastOverrides, events, scheduleSnapshots] = await Promise.all([
 		getAnimeRelations(supabase, anime.mal_id),
-		getAnimeDataAttributions(supabase, anime.mal_id),
+		getAnimeSyobocalUrl(supabase, anime.mal_id),
 		getBroadcastRoomOverridesForAnime(supabase, params.id),
 		getEventsForAnime(supabase, Number(anime.id)),
 		getBroadcastRoomScheduleSnapshotsForAnime(supabase, Number(anime.id)),
@@ -40,7 +40,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 		.filter((slot) => slot.opened)
 		.sort((left, right) => right.date.localeCompare(left.date));
 
-	return { anime, user, isAdmin, listedUsers, relations, dataAttributions, episodes, broadcastOverrides, events };
+	return { anime, user, isAdmin, listedUsers, relations, syobocalUrl, episodes, broadcastOverrides, events };
 };
 
 export const actions: Actions = {

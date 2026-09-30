@@ -40,6 +40,7 @@ const displayResources = $derived(
 	buildDisplayResources(
 		data.anime.resources,
 		data.anime.mal_id,
+		data.syobocalUrl,
 		data.anime.official_site_url,
 		data.anime.official_x_url,
 	),
@@ -116,12 +117,15 @@ function buildDisplayOfficialLinks(officialSiteUrl: string | null, officialXUrl:
 function buildDisplayResources(
 	resources: { name: string; url: string }[],
 	malId: number | null,
+	syobocalUrl: string | null,
 	officialSiteUrl: string | null,
 	officialXUrl: string | null,
 ) {
 	const links: { name: string; url: string }[] = [];
 
+	// 作品の外部ページは MAL・しょぼいカレンダー・Wikipedia の順に同列で並べる
 	if (malId) links.push({ name: "MAL", url: `https://myanimelist.net/anime/${malId}` });
+	if (isHttpUrl(syobocalUrl)) links.push({ name: "しょぼいカレンダー", url: syobocalUrl });
 	links.push(
 		...resources
 			.filter((resource) => resource.name && isHttpUrl(resource.url))
@@ -670,7 +674,6 @@ $effect(() => {
 									href={resource.url}
 									target="_blank"
 									rel="noopener noreferrer"
-									class:resource-link--muted={resource.name === 'MAL'}
 									class="official-link resource-link"
 									>{resource.name}</a
 								>
@@ -1430,27 +1433,6 @@ $effect(() => {
 			{/if}
 		</div>
 	</div>
-
-	{#if data.dataAttributions.length > 0}
-		<footer class="anime-data-source">
-			<span class="anime-data-source-title">データ出典</span>
-			{#each data.dataAttributions as attribution, index (attribution.source)}
-				{#if index > 0}
-					<span aria-hidden="true">・</span>
-				{/if}
-				<a href={attribution.source_url} target="_blank" rel="noopener noreferrer">{attribution.label}</a>
-				{#if attribution.license_label && attribution.license_url}
-					<span
-						>（<a href={attribution.license_url} target="_blank" rel="noopener noreferrer"
-							>{attribution.license_label}</a
-						>）</span
-					>
-				{/if}
-			{/each}
-			<span aria-hidden="true">・</span>
-			<a href="/data-sources">利用データと変換手順</a>
-		</footer>
-	{/if}
 </div>
 
 <svelte:window onkeydown={handleModalKeydown} />
@@ -1815,11 +1797,11 @@ $effect(() => {
 	background: var(--accent);
 	color: #fff;
 }
-.resource-link--muted {
+.resource-link {
 	border-color: var(--border);
 	color: var(--text-muted);
 }
-.resource-link--muted:hover {
+.resource-link:hover {
 	background: var(--hover-bg);
 	border-color: var(--border);
 	color: var(--text);
@@ -1836,29 +1818,6 @@ $effect(() => {
 	font-weight: 600;
 	letter-spacing: 0.04em;
 	text-transform: uppercase;
-}
-.anime-data-source {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: baseline;
-	gap: 4px 6px;
-	margin-top: 36px;
-	padding-top: 16px;
-	border-top: 1px solid var(--border);
-	color: var(--text-muted);
-	font-size: 0.72rem;
-	line-height: 1.5;
-}
-.anime-data-source-title {
-	margin-right: 4px;
-	font-weight: 600;
-}
-.anime-data-source a {
-	color: var(--accent);
-	text-decoration: none;
-}
-.anime-data-source a:hover {
-	text-decoration: underline;
 }
 .copyright {
 	font-size: 0.72rem;
