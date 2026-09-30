@@ -169,18 +169,14 @@ function handleKeydown(event: KeyboardEvent) {
 		<div class="post-row-indent"><ReactionErrorNotice feedback={controller.reactionFeedback} /></div>
 	{/if}
 
-	{#if actionsOpen}
-		<div class="post-row-indent">
-			<div class="post-row-details">
-				<a href="/posts/{post.id}" class="post-time"
-					><time datetime={post.created_at}>{new Date(post.created_at).toLocaleString("ja-JP")}</time></a
-				>
-				{#if broadcastRelativeTime}
-					<span class="post-time">放送開始から {broadcastRelativeTime}</span>
-				{/if}
-			</div>
-		</div>
-	{/if}
+	<div class="post-row-details">
+		<a href="/posts/{post.id}" class="post-time"
+			><time datetime={post.created_at}>{new Date(post.created_at).toLocaleString("ja-JP")}</time></a
+		>
+		{#if broadcastRelativeTime}
+			<span class="post-time">放送開始から {broadcastRelativeTime}</span>
+		{/if}
+	</div>
 
 	{#if expanded && children}
 		<div class="post-row-indent">{@render children()}</div>
@@ -396,20 +392,27 @@ function handleKeydown(event: KeyboardEvent) {
 	gap: 20px;
 	padding-top: 6px;
 }
-.post-row-details {
-	display: flex;
+/* Not an action: always available on hover, independent of the actions toggle. */
+.post-row > .post-row-details {
+	position: absolute;
+	right: var(--post-row-pad-x);
+	bottom: 4px;
+	z-index: 2;
+	display: none;
 	align-items: center;
 	flex-wrap: wrap;
 	gap: 12px;
-	padding-bottom: 6px;
+	padding: 2px 8px;
+	border: 1px solid var(--color-border);
+	border-radius: 4px;
+	background: var(--color-surface-hover);
+	pointer-events: none;
+}
+.post-row:hover > .post-row-details {
+	display: flex;
 }
 .post-row-details .post-time {
 	font-size: 11px;
-}
-.post-row-details .post-kebab-item {
-	width: auto;
-	min-height: 36px;
-	padding: 4px 8px;
 }
 
 .post-inline-context {
