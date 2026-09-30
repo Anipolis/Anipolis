@@ -2125,16 +2125,27 @@ textarea {
 
 /* Like count rolls between its old and new value instead of snapping. */
 .reaction-count-roll {
+	position: relative;
 	display: inline-grid;
 	overflow: hidden;
 	height: 1em;
 	line-height: 1;
 	vertical-align: middle;
+	/* Width follows the digit count, not the glyphs: proportional digits differ by up to 1px,
+	 * and the box is right-anchored to the icon, so a glyph-sized width shifts the number. */
+	width: calc(var(--digits, 1) * 1ch);
+	text-align: center;
+	font-variant-numeric: tabular-nums;
 }
 
-.reaction-count-roll-old,
 .reaction-count-roll-new {
 	grid-area: 1 / 1;
+}
+
+/* The outgoing value leaves the layout so it never affects the box width. */
+.reaction-count-roll-old {
+	position: absolute;
+	inset: 0;
 }
 
 .reaction-count-roll.roll-up .reaction-count-roll-old {

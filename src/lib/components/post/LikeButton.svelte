@@ -46,6 +46,8 @@ let previousCount = $state(untrack(() => controller.likeCount));
 let rollUp = $state(true);
 let rolling = $state(false);
 
+const digits = $derived(displayedCount > 0 ? String(displayedCount).length : 0);
+
 $effect(() => {
 	const next = controller.likeCount;
 	if (next !== displayedCount) {
@@ -69,6 +71,7 @@ $effect(() => {
 			>
 				<span
 					class="reaction-count-roll"
+					style:--digits={digits}
 					class:roll-up={rolling && rollUp}
 					class:roll-down={rolling && !rollUp}
 					onanimationend={() => (rolling = false)}
@@ -84,6 +87,7 @@ $effect(() => {
 				{#if displayedCount > 0 || rolling}
 					<span
 						class="reaction-count-roll"
+						style:--digits={digits}
 						class:roll-up={rolling && rollUp}
 						class:roll-down={rolling && !rollUp}
 						onanimationend={() => (rolling = false)}
