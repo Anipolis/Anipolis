@@ -1,11 +1,12 @@
 <script lang="ts">
-import { goto } from "$app/navigation";
+import { replaceState } from "$app/navigation";
 import { trapFocus } from "$lib/actions/trapFocus";
 import LiveRoomsPanel from "$lib/components/LiveRoomsPanel.svelte";
 import PostCardSkeleton from "$lib/components/PostCardSkeleton.svelte";
 import PostComposer from "$lib/components/PostComposer.svelte";
 import PostRow from "$lib/components/PostRow.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
+import { createLatestResolved } from "$lib/latest-resolved.svelte";
 import { composeOpen } from "$lib/stores/compose";
 import { isPostContinuation } from "$lib/utils/post-presentation";
 import type { PageProps } from "./$types";
@@ -14,6 +15,26 @@ import type { PageProps } from "./$types";
 const SKELETON_COUNT = 12;
 
 let { data }: PageProps = $props();
+
+// data.timeline は deferred Promise。load が再実行されて新しい Promise になっても、
+// 解決するまでは前回の一覧を表示し続ける（スケルトンは初回だけ、#100）。
+// タブや「さらに読み込む」のカーソルが変わったときは別の一覧なので保持しない
+const timeline = createLatestResolved(
+	() => data.timeline,
+	// アカウント切替（invalidateAll でページは作り直されない）でも前のアカウントの一覧を見せない
+	() => `${data.user?.id ?? ""}:${data.tab}:${data.before ?? ""}`,
+);
+
+// data.pageExtras（投稿フォームの初期値・サイド情報）も deferred Promise。
+// {#await} で包むと load の再実行で Promise が差し替わるたびに待機表示へ戻り、投稿フォームが
+// 作り直されて、アニメ詳細からの引用やトレード共有の初期値が消える（#294）。
+// 最後に解決した値を保持し、フォームは初回の解決後ずっと同じインスタンスを使う
+// ユーザーが変わったら（アカウント切替）保持値を捨てて待機表示に戻し、投稿フォームも作り直す。
+// 前のアカウントの視聴中作品や打ちかけの本文を別アカウントに持ち越さないため
+const pageExtras = createLatestResolved(
+	() => data.pageExtras,
+	() => data.user?.id ?? "",
+);
 
 let onboardingDismissed = $state(true);
 let homeSidebarSlot = $state<HTMLElement | null>(null);
@@ -79,11 +100,13 @@ $effect(() => {
 		if (window.matchMedia("(max-width: 960px)").matches) {
 			composeOpen.set(true);
 		}
+		// 引用パラメータを URL から消す（再読み込みや「戻る→進む」で二重に付かないように）。
+		// goto だと同じページの load が再実行されるので、URL だけを書き換える
 		const url = new URL(window.location.href);
 		url.searchParams.delete("quote_anime");
 		url.searchParams.delete("share_exchange");
 		url.hash = "";
-		goto(url.toString(), { replaceState: true, noScroll: true });
+		replaceState(url.toString(), {});
 	});
 	return () => {
 		active = false;
@@ -106,9 +129,8 @@ $effect(() => {
 		<!-- Desktop: composer / landing hero -->
 		<div class="composer-desktop" id="compose">
 			{#if data.profile}
-				{#await data.pageExtras}
-					<div class="composer-loading" aria-label="投稿フォームを読み込み中"></div>
-				{:then extras}
+				{#if pageExtras.value}
+					{@const extras = pageExtras.value}
 					<PostComposer
 						username={data.profile.username}
 						avatarUrl={data.profile.avatar_url}
@@ -118,11 +140,13 @@ $effect(() => {
 						initialExchangeShare={extras.initialExchangeShare}
 						watchingAnime={extras.watchingAnime}
 					/>
-				{:catch error}
-					<div class="home-deferred-error" role="alert" data-deferred-error={error ? "true" : "false"}>
+				{:else if pageExtras.error}
+					<div class="home-deferred-error" role="alert" data-deferred-error="true">
 						投稿フォームを読み込めませんでした。<a href="/">再読み込み</a>
 					</div>
-				{/await}
+				{:else}
+					<div class="composer-loading" role="status" aria-label="投稿フォームを読み込み中"></div>
+				{/if}
 			{:else if data.session}
 				<div class="auth-gate">
 					<p>ようこそ！<a href="/settings">設定</a>を確認してから投稿できます。</p>
@@ -193,11 +217,15 @@ $effect(() => {
 
 		<!--
 			data.timeline は deferred Promise（{ posts, nextCursor }）。
-			- 待機中: スピナー + スケルトンカードを表示してレイアウトシフトを最小化
-			- 解決後: 実際の投稿カードに差し替え
+			- 初回の待機中: スピナー + スケルトンカードを表示してレイアウトシフトを最小化
+			- 解決後: 実際の投稿カードに差し替え。再取得中は前回の一覧を保持する
 			- エラー時: 再読み込みを促すメッセージ
 		-->
-		{#await data.timeline}
+		{#if timeline.error}
+			<div class="home-deferred-error" role="alert" data-deferred-error="true">
+				投稿を読み込めませんでした。<a href={data.tab === "following" ? "/?tab=following" : "/"}>再読み込み</a>
+			</div>
+		{:else if timeline.value === null}
 			<div class="posts-loading-spinner" aria-label="投稿を読み込み中">
 				<div class="spinner" aria-hidden="true"></div>
 				<span>読み込み中…</span>
@@ -205,9 +233,9 @@ $effect(() => {
 			{#each { length: SKELETON_COUNT } as _, i (i)}
 				<PostCardSkeleton />
 			{/each}
-		{:then timeline}
-			{@const posts = timeline.posts}
-			{@const nextCursor = timeline.nextCursor}
+		{:else}
+			{@const posts = timeline.value.posts}
+			{@const nextCursor = timeline.value.nextCursor}
 			{#if data.before}
 				<a href={data.tab === "following" ? "/?tab=following" : "/"} class="timeline-back-link"
 					>← 新しい投稿に戻る</a
@@ -241,29 +269,26 @@ $effect(() => {
 					</a>
 				{/if}
 			{/if}
-		{:catch error}
-			<div class="home-deferred-error" role="alert" data-deferred-error={error ? "true" : "false"}>
-				投稿を読み込めませんでした。<a href={data.tab === "following" ? "/?tab=following" : "/"}>再読み込み</a>
-			</div>
-		{/await}
+		{/if}
 	</main>
 
 	<aside class="sidebar-column home-sidebar-column" bind:this={homeSidebarSlot}>
 		<div class="home-sidebar-fixed scrollbar-thin-muted" class:home-sidebar-fixed-ready={homeSidebarReady}>
-			{#await data.pageExtras}
-				<div class="home-sidebar-loading" aria-label="サイド情報を読み込み中">
-					<div class="spinner" aria-hidden="true"></div>
-				</div>
-			{:then extras}
+			{#if pageExtras.value}
+				{@const extras = pageExtras.value}
 				{#if data.user}
 					<LiveRoomsPanel rooms={extras.liveRooms} />
 				{/if}
 				<TrendingPanel trending={extras.trending} animeTrending={extras.animeTrending} />
-			{:catch error}
-				<div class="home-deferred-error" role="alert" data-deferred-error={error ? "true" : "false"}>
+			{:else if pageExtras.error}
+				<div class="home-deferred-error" role="alert" data-deferred-error="true">
 					サイド情報を読み込めませんでした。
 				</div>
-			{/await}
+			{:else}
+				<div class="home-sidebar-loading" role="status" aria-label="サイド情報を読み込み中">
+					<div class="spinner" aria-hidden="true"></div>
+				</div>
+			{/if}
 		</div>
 	</aside>
 </div>
@@ -307,9 +332,8 @@ $effect(() => {
 			</button>
 		</div>
 		<div class="compose-modal-body">
-			{#await data.pageExtras}
-				<div class="composer-loading" aria-label="投稿フォームを読み込み中"></div>
-			{:then extras}
+			{#if pageExtras.value}
+				{@const extras = pageExtras.value}
 				<PostComposer
 					username={data.profile.username}
 					avatarUrl={data.profile.avatar_url}
@@ -322,11 +346,13 @@ $effect(() => {
 					focusOnMount
 					draftKey={data.profile.id}
 				/>
-			{:catch error}
-				<div class="home-deferred-error" role="alert" data-deferred-error={error ? "true" : "false"}>
+			{:else if pageExtras.error}
+				<div class="home-deferred-error" role="alert" data-deferred-error="true">
 					投稿フォームを読み込めませんでした。<a href="/">再読み込み</a>
 				</div>
-			{/await}
+			{:else}
+				<div class="composer-loading" role="status" aria-label="投稿フォームを読み込み中"></div>
+			{/if}
 		</div>
 	</div>
 {/if}
@@ -380,7 +406,7 @@ $effect(() => {
 	right: 0;
 	background: var(--color-bg);
 	border-bottom: 1px solid var(--color-border);
-	border-radius: 0 0 16px 16px;
+	border-radius: 0 0 22px 22px;
 	z-index: 201;
 	max-height: 90dvh;
 	display: flex;
@@ -416,11 +442,14 @@ $effect(() => {
 
 .compose-modal-body {
 	overflow-y: auto;
+	padding: 12px 12px 0;
 }
 
 .composer-loading {
-	min-height: 61px;
-	border-bottom: 1px solid var(--color-border);
+	min-height: 166px;
+	margin-bottom: 12px;
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius);
 	background:
 		linear-gradient(100deg, var(--color-surface) 34%, var(--color-surface-hover) 48%, var(--color-surface) 62%) 0 0
 		/ 220% 100%;

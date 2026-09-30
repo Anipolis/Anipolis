@@ -288,7 +288,7 @@ function handleKeydown(event: KeyboardEvent) {
 .report-modal-card {
 	width: min(360px, 100%);
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: 18px;
 	background: var(--color-bg-card);
 	box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
 }
@@ -347,7 +347,7 @@ function handleKeydown(event: KeyboardEvent) {
 	place-items: center;
 	width: 32px;
 	height: 32px;
-	border-radius: 8px;
+	border-radius: 12px;
 	color: var(--color-text-muted);
 }
 
@@ -376,7 +376,7 @@ function handleKeydown(event: KeyboardEvent) {
 .report-field textarea {
 	width: 100%;
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-bg);
 	color: var(--color-text);
 	padding: 9px 10px;

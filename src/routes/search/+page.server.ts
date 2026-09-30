@@ -3,7 +3,7 @@ import { deletePostAction, toggleBookmarkAction, toggleLikeAction, toggleRepostA
 import { buildPostCardSelect } from "$lib/server/post-selects";
 import { enrichPostsWithCounts, getAnimeRankingTrending, quoteOrFilterValue } from "$lib/server/queries";
 import type { RawPost } from "$lib/types";
-import { buildIlikeContainsPattern } from "$lib/utils/search";
+import { buildIlikeContainsPattern, normalizeAccountQuery } from "$lib/utils/search";
 import type { Actions, PageServerLoad } from "./$types";
 
 const POSTS_SELECT = buildPostCardSelect();
@@ -20,6 +20,9 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	}
 
 	const pattern = buildIlikeContainsPattern(query);
+	// ユーザー検索は "@name" の @ を外して照合する（投稿検索は入力どおり: メンションを含む本文が引ける）
+	const accountQuery = normalizeAccountQuery(query);
+	const accountPattern = accountQuery ? buildIlikeContainsPattern(accountQuery) : null;
 
 	const [postsResult, usersResult, trendingResult, animeTrending] = await Promise.all([
 		supabase
@@ -29,11 +32,15 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 			.order("created_at", { ascending: false })
 			.limit(30),
 
-		supabase
-			.from("profiles")
-			.select("id, username, display_name, avatar_url")
-			.or(`username.ilike.${quoteOrFilterValue(pattern)},display_name.ilike.${quoteOrFilterValue(pattern)}`)
-			.limit(10),
+		accountPattern
+			? supabase
+					.from("profiles")
+					.select("id, username, display_name, avatar_url")
+					.or(
+						`username.ilike.${quoteOrFilterValue(accountPattern)},display_name.ilike.${quoteOrFilterValue(accountPattern)}`,
+					)
+					.limit(10)
+			: Promise.resolve({ data: [], error: null }),
 		trendingPromise,
 		animeTrendingPromise,
 	]);

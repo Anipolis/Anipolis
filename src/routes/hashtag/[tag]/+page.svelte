@@ -4,9 +4,16 @@ import { goto } from "$app/navigation";
 import PostCardSkeleton from "$lib/components/PostCardSkeleton.svelte";
 import PostRow from "$lib/components/PostRow.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
+import { createLatestResolved } from "$lib/latest-resolved.svelte";
 import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();
+
+// 再取得中も前回の一覧を保持する（スケルトンは初回だけ、#100）。別のタグに移ったら保持しない
+const timeline = createLatestResolved(
+	() => data.posts,
+	() => data.tag,
+);
 
 function handleBackClick(event: MouseEvent) {
 	event.preventDefault();
@@ -35,7 +42,7 @@ function handleBackClick(event: MouseEvent) {
 			</div>
 		</div>
 
-		{#await data.posts}
+		{#if timeline.value === null}
 			<div class="posts-loading-spinner" aria-label="投稿を読み込み中">
 				<div class="spinner" aria-hidden="true"></div>
 				<span>読み込み中…</span>
@@ -43,7 +50,8 @@ function handleBackClick(event: MouseEvent) {
 			{#each { length: 5 } as _, i (i)}
 				<PostCardSkeleton />
 			{/each}
-		{:then posts}
+		{:else}
+			{@const posts = timeline.value}
 			{#if posts.length === 0}
 				<div class="empty-state">
 					<p>#{data.tag} の投稿はまだありません</p>
@@ -53,7 +61,7 @@ function handleBackClick(event: MouseEvent) {
 					<PostRow {post} currentUserId={data.user?.id ?? null} />
 				{/each}
 			{/if}
-		{/await}
+		{/if}
 	</main>
 
 	<aside class="sidebar-column">

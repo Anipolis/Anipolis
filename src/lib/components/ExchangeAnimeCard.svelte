@@ -106,7 +106,7 @@ const posterOnly = $derived(variant === "poster-only");
 	margin-inline: auto;
 	padding: var(--eac-card-padding);
 	border: 1px solid rgba(255, 255, 255, 0.16);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: rgba(18, 24, 38, 0.54);
 	color: var(--color-text);
 	text-decoration: none;
@@ -142,7 +142,7 @@ const posterOnly = $derived(variant === "poster-only");
 	width: 100%;
 	aspect-ratio: 1 / 1.414;
 	overflow: hidden;
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-border);
 	box-shadow: 0 10px 26px rgba(0, 0, 0, 0.26);
 }
@@ -181,7 +181,7 @@ const posterOnly = $derived(variant === "poster-only");
 }
 
 .eac--poster-only .eac-cover {
-	border-radius: 8px;
+	border-radius: 12px;
 	box-shadow: 0 10px 26px rgba(0, 0, 0, 0.28);
 	transition:
 		filter 0.18s ease,
@@ -272,6 +272,7 @@ const posterOnly = $derived(variant === "poster-only");
 	z-index: 2;
 	padding: 4px 8px;
 	border-radius: 999px;
+	corner-shape: round;
 	background: linear-gradient(135deg, #fef08a, #34d399 65%, #60a5fa);
 	color: #08111f;
 	font-size: 0.72rem;

@@ -1242,7 +1242,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	cursor: default;
 }
 .create-event-btn {
-	border-radius: 8px;
+	border-radius: 12px;
 	white-space: nowrap;
 }
 .schedule-grid {
@@ -1598,7 +1598,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	width: 240px;
 	padding: 12px;
 	border: 1px solid var(--border);
-	border-radius: 12px;
+	border-radius: 18px;
 	background: var(--card-bg);
 	box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
 	display: flex;
@@ -1620,7 +1620,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	gap: 8px;
 	padding: 8px 10px;
 	border: 1px solid var(--border);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--hover-bg);
 	color: var(--text-muted);
 	font-size: 0.78rem;
@@ -1644,6 +1644,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	width: 28px;
 	height: 15px;
 	border-radius: 999px;
+	corner-shape: round;
 	background: var(--border);
 	position: relative;
 	flex-shrink: 0;
@@ -1659,6 +1660,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	width: 11px;
 	height: 11px;
 	border-radius: 50%;
+	corner-shape: round;
 	background: white;
 	transition: transform 0.15s;
 }
@@ -1690,6 +1692,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	padding: 4px 10px;
 	border: 1px solid var(--border);
 	border-radius: 999px;
+	corner-shape: round;
 	background: transparent;
 	color: var(--text-muted);
 	font-size: 0.73rem;
@@ -1753,7 +1756,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	max-height: min(720px, calc(100vh - 2rem));
 	overflow-y: auto;
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-surface);
 	padding: 16px;
 	box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);

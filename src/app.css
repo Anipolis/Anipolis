@@ -22,8 +22,8 @@
 	--feed-width: 680px;
 	--sidebar-width: 240px;
 	--icon-bar-width: 208px;
-	--radius: 12px;
-	--radius-sm: 8px;
+	--radius: 18px;
+	--radius-sm: 12px;
 	--color-primary: var(--color-accent);
 	--color-hover: var(--color-surface-hover);
 	--color-bg-card: var(--color-surface);
@@ -50,6 +50,17 @@
 	--status-on-hold: #fbbf24;
 	--status-dropped: #f87171;
 	--status-score: #f59e0b;
+}
+
+/* 角丸は全てスクワークル。円とピルだけは round に戻す */
+*,
+::before,
+::after {
+	corner-shape: squircle;
+}
+
+.rounded-full {
+	corner-shape: round;
 }
 
 [data-theme="light"] {
@@ -152,6 +163,7 @@ body {
 
 .scrollbar-thin-muted::-webkit-scrollbar-thumb {
 	border-radius: 999px;
+	corner-shape: round;
 	background: color-mix(in srgb, var(--color-text-muted) 24%, transparent);
 }
 
@@ -343,7 +355,7 @@ textarea {
 	width: 100%;
 	height: 44px;
 	padding: 0 12px;
-	border-radius: 12px;
+	border-radius: 18px;
 	color: var(--color-accent);
 	text-decoration: none;
 	margin-bottom: 8px;
@@ -395,7 +407,7 @@ textarea {
 	padding: 0 12px;
 	width: 100%;
 	height: 44px;
-	border-radius: 12px;
+	border-radius: 18px;
 	color: var(--color-text-muted);
 	text-decoration: none;
 	transition:
@@ -465,6 +477,7 @@ textarea {
 	height: 16px;
 	padding: 0 3px;
 	border-radius: 9999px;
+	corner-shape: round;
 	background: var(--color-accent);
 	color: #fff;
 	font-size: 10px;
@@ -482,6 +495,7 @@ textarea {
 	height: 9px;
 	border: 2px solid var(--color-bg);
 	border-radius: 9999px;
+	corner-shape: round;
 	background: var(--color-accent);
 	pointer-events: none;
 }
@@ -507,6 +521,7 @@ textarea {
 	gap: 6px;
 	padding: 7px 16px;
 	border-radius: 9999px;
+	corner-shape: round;
 	font-size: 14px;
 	font-weight: 600;
 	transition: all 0.15s;
@@ -624,6 +639,7 @@ textarea {
 	color: var(--color-accent);
 	padding: 6px;
 	border-radius: 50%;
+	corner-shape: round;
 	margin-right: auto;
 	transition: background 0.15s;
 }
@@ -646,7 +662,7 @@ textarea {
 	position: relative;
 	width: 100px;
 	height: 100px;
-	border-radius: 8px;
+	border-radius: 12px;
 	overflow: hidden;
 	border: 1px solid var(--color-border);
 }
@@ -663,6 +679,7 @@ textarea {
 	color: #fff;
 	border: none;
 	border-radius: 50%;
+	corner-shape: round;
 	width: 22px;
 	height: 22px;
 	font-size: 11px;
@@ -682,7 +699,7 @@ textarea {
 	grid-template-columns: repeat(2, 1fr);
 	gap: 4px;
 	margin-top: 10px;
-	border-radius: 12px;
+	border-radius: 18px;
 	overflow: hidden;
 }
 .post-images-single {
@@ -754,6 +771,7 @@ textarea {
 	width: 36px;
 	height: 36px;
 	border-radius: 50%;
+	corner-shape: round;
 	cursor: pointer;
 	display: flex;
 	align-items: center;
@@ -857,6 +875,7 @@ textarea {
 	width: 28px;
 	height: 28px;
 	border-radius: 50%;
+	corner-shape: round;
 	color: var(--color-text-muted);
 	background: none;
 	border: none;
@@ -887,7 +906,7 @@ textarea {
 	z-index: 201;
 	min-width: 140px;
 	border: 1px solid var(--color-border);
-	border-radius: 10px;
+	border-radius: 14px;
 	background: var(--color-bg-card);
 	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
 	overflow: hidden;
@@ -948,6 +967,7 @@ textarea {
 
 .avatar {
 	border-radius: 50%;
+	corner-shape: round;
 	object-fit: cover;
 	flex-shrink: 0;
 	background: var(--color-border);
@@ -979,6 +999,7 @@ textarea {
 	aspect-ratio: 1;
 	object-fit: cover;
 	border-radius: 50%;
+	corner-shape: round;
 }
 
 .avatar-sm {
@@ -1138,6 +1159,64 @@ textarea {
 	font-size: 15px;
 }
 
+/* --- Loading placeholders --- */
+
+/* ライトテーマでは surface と背景が同じ白なので、下地は surface-hover にする */
+.skeleton {
+	background:
+		linear-gradient(100deg, var(--color-surface-hover) 30%, var(--color-border) 50%, var(--color-surface-hover) 70%)
+		0 0 / 220% 100%;
+	border-radius: 6px;
+	animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+.skeleton-circle {
+	border-radius: 50%;
+	corner-shape: round;
+}
+
+.spinner {
+	width: 18px;
+	height: 18px;
+	border: 2px solid color-mix(in srgb, var(--color-accent) 25%, transparent);
+	border-top-color: var(--color-accent);
+	border-radius: 50%;
+	corner-shape: round;
+	animation: spinner-rotate 0.7s linear infinite;
+}
+
+.posts-loading-spinner {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	padding: 12px;
+	color: var(--color-text-muted);
+	font-size: 13px;
+}
+
+@keyframes skeleton-shimmer {
+	from {
+		background-position: 100% 0;
+	}
+	to {
+		background-position: -120% 0;
+	}
+}
+
+@keyframes spinner-rotate {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.skeleton,
+	.spinner {
+		animation: none;
+	}
+}
+
 /* --- Auth page --- */
 
 .auth-gate {
@@ -1185,6 +1264,7 @@ textarea {
 	background: var(--color-surface);
 	border: 1px solid var(--color-border);
 	border-radius: 9999px;
+	corner-shape: round;
 	padding: 0 16px 0 42px;
 	color: var(--color-text);
 	font-size: 15px;
@@ -1209,6 +1289,7 @@ textarea {
 	height: 44px;
 	padding: 0 18px;
 	border-radius: 9999px;
+	corner-shape: round;
 	background: var(--color-accent);
 	color: #fff;
 	font-size: 14px;
@@ -1387,6 +1468,7 @@ textarea {
 	gap: 8px;
 	padding: 4px 8px;
 	border-radius: 9999px;
+	corner-shape: round;
 	cursor: pointer;
 	transition: background 0.15s;
 }
@@ -1459,6 +1541,7 @@ textarea {
 	height: 36px;
 	padding: 0 10px;
 	border-radius: 9999px;
+	corner-shape: round;
 	color: var(--color-text-muted);
 	font-size: 13px;
 	font-weight: 700;
@@ -1548,6 +1631,7 @@ textarea {
 	padding: 0;
 	cursor: pointer;
 	border-radius: 50%;
+	corner-shape: round;
 	flex-shrink: 0;
 }
 
@@ -1559,6 +1643,7 @@ textarea {
 	position: absolute;
 	inset: 0;
 	border-radius: 50%;
+	corner-shape: round;
 	background: rgba(0, 0, 0, 0.45);
 	display: flex;
 	align-items: center;
@@ -1992,6 +2077,7 @@ textarea {
 	height: 28px;
 	margin: -14px 0 0 -14px;
 	border-radius: 50%;
+	corner-shape: round;
 	border: 2px solid #f43f5e;
 	pointer-events: none;
 	animation: like-ring 0.4s ease-out forwards;
@@ -2240,7 +2326,7 @@ textarea {
 	width: min(300px, calc(100vw - 32px));
 	overflow: hidden;
 	border: 1px solid var(--color-border, #313244);
-	border-radius: 12px;
+	border-radius: 18px;
 	background: var(--color-bg-card, #1e1e2e);
 	box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
 }
@@ -2330,6 +2416,7 @@ textarea {
 	height: 40px;
 	margin-bottom: 8px;
 	border-radius: 50%;
+	corner-shape: round;
 	color: var(--color-text-secondary);
 	transition:
 		background 0.15s,
@@ -2397,6 +2484,7 @@ textarea {
 	width: 36px;
 	height: 36px;
 	border-radius: 50%;
+	corner-shape: round;
 	color: var(--color-text-muted);
 	transition:
 		background 0.15s,
@@ -2466,6 +2554,7 @@ textarea {
 	height: 32px;
 	padding: 0;
 	border-radius: 50%;
+	corner-shape: round;
 }
 .calendar-weekdays {
 	display: grid;
@@ -2511,6 +2600,7 @@ textarea {
 	background: var(--color-primary);
 	color: #fff;
 	border-radius: 50%;
+	corner-shape: round;
 	width: 24px;
 	height: 24px;
 	display: flex;
@@ -2794,7 +2884,7 @@ textarea {
 	margin: 8px 0 4px;
 	padding: 8px;
 	border: 1px solid color-mix(in srgb, var(--color-border) 48%, transparent);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: color-mix(in srgb, var(--color-surface) 38%, transparent);
 	cursor: pointer;
 	transition:
@@ -2829,6 +2919,7 @@ textarea {
 	padding: 7px 12px;
 	border: 1px solid color-mix(in srgb, var(--color-accent) 50%, transparent);
 	border-radius: 999px;
+	corner-shape: round;
 	background: color-mix(in srgb, var(--color-accent) 12%, transparent);
 	color: var(--color-accent);
 	font-size: 12px;
@@ -2862,7 +2953,7 @@ textarea {
 	max-height: calc(100vh - 32px);
 	overflow: hidden;
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: 18px;
 	background: var(--color-bg-card);
 	box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
 }
@@ -2887,7 +2978,7 @@ textarea {
 	place-items: center;
 	width: 32px;
 	height: 32px;
-	border-radius: 8px;
+	border-radius: 12px;
 	color: var(--color-text-muted);
 	transition:
 		background 0.15s,
@@ -3112,7 +3203,7 @@ textarea {
 	align-items: center;
 	gap: 6px;
 	padding: 7px 14px;
-	border-radius: 20px;
+	border-radius: 28px;
 	border: 1px solid var(--color-accent);
 	background: transparent;
 	color: var(--color-accent);
@@ -3149,7 +3240,7 @@ textarea {
 	min-width: 180px;
 	background: var(--color-bg-card, #1e1e2e);
 	border: 1px solid var(--color-border, #313244);
-	border-radius: 12px;
+	border-radius: 18px;
 	box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 	overflow: hidden;
 }
@@ -3200,7 +3291,7 @@ form + .repost-menu-item {
 	max-width: 520px;
 	background: var(--color-bg-card, #1e1e2e);
 	border: 1px solid var(--color-border, #313244);
-	border-radius: 16px;
+	border-radius: 22px;
 	box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 	overflow: hidden;
 }
@@ -3246,7 +3337,7 @@ form + .repost-menu-item {
 	resize: none;
 	background: var(--color-bg, #181825);
 	border: 1px solid var(--color-border, #313244);
-	border-radius: 8px;
+	border-radius: 12px;
 	padding: 10px 12px;
 	font-size: 14px;
 	font-family: inherit;
@@ -3267,7 +3358,7 @@ form + .repost-menu-item {
 
 .quote-preview {
 	border: 1px solid var(--color-border, #313244);
-	border-radius: 10px;
+	border-radius: 14px;
 	padding: 10px 12px;
 }
 
@@ -3315,7 +3406,7 @@ form + .repost-menu-item {
 	margin-top: 10px;
 	padding: 10px 12px;
 	border: 1px solid var(--color-border, #313244);
-	border-radius: 12px;
+	border-radius: 18px;
 	text-decoration: none;
 	color: inherit;
 	transition: background-color 0.15s;

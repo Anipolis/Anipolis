@@ -1,5 +1,6 @@
 import type { SubmitFunction } from "@sveltejs/kit";
 import { tick } from "svelte";
+import { confirmReaction } from "$lib/reaction-confirm";
 import { isReactionFailure } from "$lib/reaction-feedback";
 import { createReactionFeedback } from "$lib/reaction-feedback.svelte";
 import type { Post, ReactionType, ReactionUser } from "$lib/types";
@@ -17,6 +18,12 @@ export class PostController {
 
 	// いいね・リポスト・ブックマーク失敗時のカード内メッセージ
 	readonly reactionFeedback = createReactionFeedback();
+
+	// 同じ種類のリアクションは 1 件ずつ送る。送信中の連打は取り消し、応答順の逆転で
+	// 古い応答が最新の状態を上書きしないようにする（#287）
+	likeInFlight = $state(false);
+	bookmarkInFlight = $state(false);
+	repostInFlight = $state(false);
 
 	repostMenuOpen = $state(false);
 	repostForm = $state<HTMLFormElement | null>(null);
@@ -152,35 +159,56 @@ export class PostController {
 		};
 	};
 
-	// 失敗時は楽観更新を巻き戻し、カード内にメッセージを出す。
-	// update() を呼ばないのは、error 結果でエラーページへ遷移して閲覧位置を失うのを防ぐため。
-	handleLike: SubmitFunction = ({ formElement }) => {
+	// 成功時も update() は呼ばない。update() は load 全体の再実行（invalidateAll）で、
+	// ストリーミング配信のタイムラインではスケルトンに戻り閲覧位置を失う（#100）。
+	// サーバーの結果（liked / bookmarked / reposted）で楽観更新を確定させるだけにする（#287）。
+	// 失敗時は null（= props の post に戻る）ではなく操作前の確定値へ戻す。再取得しないので
+	// props の post は古くなり得て、null に戻すと成功済みの操作まで巻き戻るため。
+	handleLike: SubmitFunction = ({ formElement, cancel }) => {
+		if (this.likeInFlight) {
+			cancel();
+			return;
+		}
+		this.likeInFlight = true;
 		const wasLiked = this.likedByMe;
-		const count = this.likeCount;
+		const countBefore = this.likeCount;
 		this.likedByMeLocal = !wasLiked;
-		this.likeCountLocal = wasLiked ? count - 1 : count + 1;
-		return async ({ result, update }) => {
+		this.likeCountLocal = wasLiked ? countBefore - 1 : countBefore + 1;
+		return async ({ result }) => {
+			this.likeInFlight = false;
 			if (isReactionFailure(result)) {
-				this.likedByMeLocal = null;
-				this.likeCountLocal = null;
+				this.likedByMeLocal = wasLiked;
+				this.likeCountLocal = countBefore;
 				this.reactionFeedback.fail("like", result, formElement);
 				return;
 			}
+			const confirmed = confirmReaction("like", result, { wasActive: wasLiked, countBefore });
+			this.likedByMeLocal = confirmed.active;
+			this.likeCountLocal = confirmed.count;
 			this.reactionFeedback.clear();
-			await update({ reset: false, invalidateAll: false });
 		};
 	};
 
-	handleBookmark: SubmitFunction = ({ formElement }) => {
-		this.bookmarkedByMeLocal = !this.bookmarkedByMe;
-		return async ({ result, update }) => {
+	handleBookmark: SubmitFunction = ({ formElement, cancel }) => {
+		if (this.bookmarkInFlight) {
+			cancel();
+			return;
+		}
+		this.bookmarkInFlight = true;
+		const wasBookmarked = this.bookmarkedByMe;
+		this.bookmarkedByMeLocal = !wasBookmarked;
+		return async ({ result }) => {
+			this.bookmarkInFlight = false;
 			if (isReactionFailure(result)) {
-				this.bookmarkedByMeLocal = null;
+				this.bookmarkedByMeLocal = wasBookmarked;
 				this.reactionFeedback.fail("bookmark", result, formElement);
 				return;
 			}
+			this.bookmarkedByMeLocal = confirmReaction("bookmark", result, {
+				wasActive: wasBookmarked,
+				countBefore: 0,
+			}).active;
 			this.reactionFeedback.clear();
-			await update({ reset: false });
 		};
 	};
 
@@ -192,21 +220,29 @@ export class PostController {
 		this.repostForm?.requestSubmit();
 	}
 
-	handleRepost: SubmitFunction = () => {
+	handleRepost: SubmitFunction = ({ cancel }) => {
 		this.repostMenuOpen = false;
+		if (this.repostInFlight) {
+			cancel();
+			return;
+		}
+		this.repostInFlight = true;
 		const wasReposted = this.repostedByMe;
-		const count = this.repostCount;
+		const countBefore = this.repostCount;
 		this.repostedByMeLocal = !wasReposted;
-		this.repostCountLocal = wasReposted ? count - 1 : count + 1;
-		return async ({ result, update }) => {
+		this.repostCountLocal = wasReposted ? countBefore - 1 : countBefore + 1;
+		return async ({ result }) => {
+			this.repostInFlight = false;
 			if (isReactionFailure(result)) {
-				this.repostedByMeLocal = null;
-				this.repostCountLocal = null;
+				this.repostedByMeLocal = wasReposted;
+				this.repostCountLocal = countBefore;
 				this.reactionFeedback.fail("repost", result, () => void this.retryRepost());
 				return;
 			}
+			const confirmed = confirmReaction("repost", result, { wasActive: wasReposted, countBefore });
+			this.repostedByMeLocal = confirmed.active;
+			this.repostCountLocal = confirmed.count;
 			this.reactionFeedback.clear();
-			await update({ reset: false });
 		};
 	};
 
