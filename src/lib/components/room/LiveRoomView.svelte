@@ -9,6 +9,7 @@ import { timelineScroll } from "$lib/actions/timelineScroll";
 import ExitSurveyModal from "$lib/components/ExitSurveyModal.svelte";
 import LiveRoomPostCard from "$lib/components/LiveRoomPostCard.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
+import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import type { Post, RoomExitSurveyComparisonWithX, RoomExitSurveyNextParticipation } from "$lib/types";
 import type { LiveRoomActionData, LiveRoomData } from "$lib/types/live-room";
 import { isPostContinuation } from "$lib/utils/post-presentation";
@@ -830,7 +831,8 @@ function formatCompactDate(iso: string) {
 					<a href="/anime/{data.anime.id}" class="shrink-0" aria-label="アニメ詳細を開く">
 						{#if data.anime.cover_url}
 							<img
-								src={data.anime.cover_url}
+								src={coverThumbSrc(data.anime.cover_url)}
+								{@attach coverThumbFallback(data.anime.cover_url)}
 								alt={data.anime.title}
 								class="block w-16 rounded-lg shadow-md"
 							>

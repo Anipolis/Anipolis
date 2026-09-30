@@ -1,6 +1,7 @@
 <script lang="ts">
 import AnimeExchangeResult from "$lib/components/AnimeExchangeResult.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
+import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import type { PostController } from "./post-controller.svelte";
 
 interface Props {
@@ -65,7 +66,12 @@ function openLightbox(event: MouseEvent, url: string) {
 {:else if post.anime_quote && animeCard}
 	<a href="/anime/{post.anime_quote.id}" class="anime-quote-card" onclick={(e) => e.stopPropagation()}>
 		{#if post.anime_quote.cover_url}
-			<img src={post.anime_quote.cover_url} alt={post.anime_quote.title} class="anime-quote-cover">
+			<img
+				src={coverThumbSrc(post.anime_quote.cover_url)}
+				{@attach coverThumbFallback(post.anime_quote.cover_url)}
+				alt={post.anime_quote.title}
+				class="anime-quote-cover"
+			>
 		{:else}
 			<div class="anime-quote-cover anime-quote-cover-empty"></div>
 		{/if}

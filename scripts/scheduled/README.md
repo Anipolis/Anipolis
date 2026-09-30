@@ -7,7 +7,7 @@ GitHub の Additional Product Terms は Actions を「リポジトリのビル�
 | ファイル | 役割 |
 |---|---|
 | `common.ps1` | JST でのシーズン判定、ログ、pnpm 解決の共通部 |
-| `daily-sync.ps1` | 毎日 05:15 JST: `sync:syobocal-programs`（番組表・放送ルーム） |
+| `daily-sync.ps1` | 毎日 05:15 JST: `sync:syobocal-programs`（番組表・放送ルーム）→ `generate:cover-thumbnails`（カバーのサムネイル） |
 | `weekly-sync.ps1` | 毎週月曜 04:15 JST: 当季+次季の Jikan/MAL/Wikidata/しょぼい取り込み → resolve → export |
 | `register-tasks.ps1` | タスクスケジューラへの登録・解除 |
 

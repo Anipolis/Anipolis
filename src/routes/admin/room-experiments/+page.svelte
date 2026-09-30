@@ -4,6 +4,7 @@ import { onMount } from "svelte";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
 import { trapFocus } from "$lib/actions/trapFocus";
+import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import type { RoomExitSurveyComparisonWithX, RoomExitSurveyNextParticipation } from "$lib/types";
 import type { PageProps } from "./$types";
 
@@ -182,7 +183,12 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 					<div class="search-row">
 						<div class="anime-summary">
 							{#if anime.cover_url}
-								<img src={anime.cover_url} alt="" class="anime-cover">
+								<img
+									src={coverThumbSrc(anime.cover_url)}
+									{@attach coverThumbFallback(anime.cover_url)}
+									alt=""
+									class="anime-cover"
+								>
 							{:else}
 								<div class="anime-cover anime-cover--empty"></div>
 							{/if}
@@ -237,7 +243,12 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 									</div>
 								{:else}
 									{#if run.anime_cover_url}
-										<img src={run.anime_cover_url} alt="" class="anime-cover">
+										<img
+											src={coverThumbSrc(run.anime_cover_url)}
+											{@attach coverThumbFallback(run.anime_cover_url)}
+											alt=""
+											class="anime-cover"
+										>
 									{:else}
 										<div class="anime-cover anime-cover--empty"></div>
 									{/if}
