@@ -7,6 +7,7 @@ import { page } from "$app/state";
 import { trapFocus } from "$lib/actions/trapFocus";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
+import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import type { BroadcastRoomOverride } from "$lib/types";
 import {
 	type BroadcastOverrideKind,
@@ -425,7 +426,12 @@ $effect(() => {
 								{#if relation.anime}
 									<a href="/anime/{relation.anime.id}" class="relation-card">
 										{#if relation.anime.cover_url}
-											<img class="relation-card-thumb" src={relation.anime.cover_url} alt="">
+											<img
+												class="relation-card-thumb"
+												src={coverThumbSrc(relation.anime.cover_url)}
+												{@attach coverThumbFallback(relation.anime.cover_url)}
+												alt=""
+											>
 										{:else}
 											<span
 												class="relation-card-thumb relation-card-thumb--placeholder"

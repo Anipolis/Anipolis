@@ -221,6 +221,9 @@ importers:
       happy-dom:
         specifier: ^20.9.0
         version: 20.9.0
+      sharp:
+        specifier: ^0.34.5
+        version: 0.34.5
       simple-git-hooks:
         specifier: ^2.13.1
         version: 2.13.1

@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { error, json } from "@sveltejs/kit";
 import { env } from "$env/dynamic/private";
 import { PUBLIC_SUPABASE_URL } from "$env/static/public";
+import { ANIME_COVER_BUCKET, coverThumbObjectName } from "$lib/anime-cover";
 import { upsertManualSourceRecord } from "$lib/server/anime-admin";
 import { isAdminUser } from "$lib/server/queries";
 import { MULTIPART_OVERHEAD_BYTES, readFormDataWithLimit, validateImageBuffer } from "$lib/server/upload";
@@ -83,6 +84,15 @@ export const POST: RequestHandler = async ({ request, locals: { supabase, safeGe
 			// 部分更新を成功として返さず、再アップロードを促す。
 			error(500, "カバーは保存されましたが保護レコードの保存に失敗しました。もう一度アップロードしてください");
 		}
+	}
+
+	// サムネイルは同じ作品 ID の名前で作られるため、差し替え前の画像のまま残さない。
+	// 次回の generate:cover-thumbnails で作り直すまでは表示側が原寸へフォールバックする。
+	const { error: thumbDeleteError } = await adminClient.storage
+		.from(ANIME_COVER_BUCKET)
+		.remove([coverThumbObjectName(path)]);
+	if (thumbDeleteError) {
+		console.error("anime cover thumbnail cleanup error (path=%s):", path, thumbDeleteError);
 	}
 
 	return json({ url: publicUrl });
