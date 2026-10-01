@@ -13,17 +13,14 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import sharp from "sharp";
 import {
 	ANIME_COVER_BUCKET,
 	COVER_THUMB_PREFIX,
-	COVER_THUMB_WIDTH,
 	coverThumbObjectName,
 	isCoverSourceObject,
 } from "../src/lib/anime-cover.ts";
+import { renderCoverThumbnail } from "./cover-encoding.ts";
 
-const AVIF_QUALITY = 50;
-const AVIF_EFFORT = 4;
 const LIST_PAGE_SIZE = 1000;
 const CONCURRENCY = 4;
 
@@ -60,14 +57,6 @@ async function listObjects(supabase: SupabaseClient, folder: string): Promise<St
 		}
 		if (data.length < LIST_PAGE_SIZE) return objects;
 	}
-}
-
-async function renderThumbnail(source: Buffer): Promise<Buffer> {
-	return sharp(source)
-		.rotate()
-		.resize({ width: COVER_THUMB_WIDTH, withoutEnlargement: true })
-		.avif({ quality: AVIF_QUALITY, effort: AVIF_EFFORT })
-		.toBuffer();
 }
 
 async function runPool<T>(items: T[], worker: (item: T) => Promise<void>) {
@@ -136,7 +125,7 @@ async function main() {
 			const { data, error } = await supabase.storage.from(ANIME_COVER_BUCKET).download(source.name);
 			if (error || !data) throw new Error(error?.message ?? "empty download");
 			const sourceBuffer = Buffer.from(await data.arrayBuffer());
-			const thumb = await renderThumbnail(sourceBuffer);
+			const thumb = await renderCoverThumbnail(sourceBuffer);
 			if (outDir) await writeFile(join(outDir, thumbName.slice(COVER_THUMB_PREFIX.length)), thumb);
 			if (!dryRun) {
 				const { error: uploadError } = await supabase.storage
