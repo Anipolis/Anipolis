@@ -2,6 +2,7 @@
 import type { SubmitFunction } from "@sveltejs/kit";
 import { untrack } from "svelte";
 import { enhance } from "$app/forms";
+import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import type { Anime, BroadcastRoomOverride } from "$lib/types";
 import {
 	type BroadcastEpisodeSlot,
@@ -545,7 +546,12 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 								>
 									<div class="slot-cover-wrap">
 										{#if event.anime?.cover_url}
-											<img src={event.anime.cover_url} alt={event.anime.title} class="slot-cover">
+											<img
+												src={coverThumbSrc(event.anime.cover_url)}
+												{@attach coverThumbFallback(event.anime.cover_url)}
+												alt={event.anime.title}
+												class="slot-cover"
+											>
 										{:else}
 											<div class="slot-cover slot-cover--event-placeholder">
 												<span class="i-lucide-calendar-days" aria-hidden="true"></span>
@@ -793,7 +799,12 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 											<a href="/rooms/anime/{anime.id}/{displayDate}" class="anime-slot">
 												<div class="slot-cover-wrap">
 													{#if anime.cover_url}
-														<img src={anime.cover_url} alt={anime.title} class="slot-cover">
+														<img
+															src={coverThumbSrc(anime.cover_url)}
+															{@attach coverThumbFallback(anime.cover_url)}
+															alt={anime.title}
+															class="slot-cover"
+														>
 													{:else}
 														<div class="slot-cover slot-cover--placeholder"></div>
 													{/if}
@@ -1107,7 +1118,11 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 						<input type="hidden" name="anime_id" value={selectedEventAnime.id}>
 						<div class="event-anime-selected">
 							{#if selectedEventAnime.cover_url}
-								<img src={selectedEventAnime.cover_url} alt={selectedEventAnime.title}>
+								<img
+									src={coverThumbSrc(selectedEventAnime.cover_url)}
+									{@attach coverThumbFallback(selectedEventAnime.cover_url)}
+									alt={selectedEventAnime.title}
+								>
 							{:else}
 								<div class="event-anime-thumb-empty"></div>
 							{/if}
@@ -1150,7 +1165,11 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 											onclick={() => selectEventAnime(anime)}
 										>
 											{#if anime.cover_url}
-												<img src={anime.cover_url} alt={anime.title}>
+												<img
+													src={coverThumbSrc(anime.cover_url)}
+													{@attach coverThumbFallback(anime.cover_url)}
+													alt={anime.title}
+												>
 											{:else}
 												<div class="event-anime-thumb-empty"></div>
 											{/if}

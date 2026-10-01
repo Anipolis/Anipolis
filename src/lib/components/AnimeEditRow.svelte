@@ -1,6 +1,7 @@
 <script lang="ts">
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
+import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import type { RowSaveState } from "$lib/mylist/save-queue";
 import type { Anime, AnimeStatus } from "$lib/types";
 
@@ -52,7 +53,13 @@ function confirmRemove() {
 <div class="anime-row-edit">
 	<a href="/anime/{anime.id}" class="edit-cover" tabindex="-1">
 		{#if anime.cover_url}
-			<img src={anime.cover_url} alt={anime.title} loading="lazy" decoding="async">
+			<img
+				src={coverThumbSrc(anime.cover_url)}
+				{@attach coverThumbFallback(anime.cover_url)}
+				alt={anime.title}
+				loading="lazy"
+				decoding="async"
+			>
 		{:else}
 			<div class="anime-cover-placeholder">?</div>
 		{/if}

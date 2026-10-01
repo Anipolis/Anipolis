@@ -14,6 +14,7 @@ import {
 	loadComposeDraft,
 	saveComposeDraft,
 } from "$lib/compose-draft";
+import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import type { AnimeExchangeShare, OpenBroadcastRoomSummary } from "$lib/types";
 import { animeQuoteChipLabel, cwChipLabel } from "$lib/utils/composer-chips";
 import { charCountClass } from "$lib/utils/format";
@@ -768,7 +769,8 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 						<button type="button" class="anime-search-item" onclick={() => selectAnime(anime)}>
 							{#if anime.cover_url}
 								<img
-									src={anime.cover_url}
+									src={coverThumbSrc(anime.cover_url)}
+									{@attach coverThumbFallback(anime.cover_url)}
 									alt={anime.title}
 									class="anime-search-thumb"
 									loading="lazy"
@@ -827,7 +829,12 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 					{#each (cwQuery.trim() ? cwResults : watchingAnime) as anime}
 						<button type="button" class="anime-search-item" onclick={() => selectCwAnime(anime)}>
 							{#if anime.cover_url}
-								<img src={anime.cover_url} alt={anime.title} class="anime-search-thumb">
+								<img
+									src={coverThumbSrc(anime.cover_url)}
+									{@attach coverThumbFallback(anime.cover_url)}
+									alt={anime.title}
+									class="anime-search-thumb"
+								>
 							{:else}
 								<div class="anime-search-thumb anime-search-thumb-empty"></div>
 							{/if}
@@ -873,7 +880,12 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 					{#each openRooms as room (room.id)}
 						<button type="button" class="anime-search-item" onclick={() => selectRoom(room)}>
 							{#if room.anime?.cover_url}
-								<img src={room.anime.cover_url} alt={room.anime.title} class="anime-search-thumb">
+								<img
+									src={coverThumbSrc(room.anime.cover_url)}
+									{@attach coverThumbFallback(room.anime.cover_url)}
+									alt={room.anime.title}
+									class="anime-search-thumb"
+								>
 							{:else}
 								<div class="anime-search-thumb anime-search-thumb-empty"></div>
 							{/if}

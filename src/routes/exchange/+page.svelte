@@ -6,6 +6,7 @@ import AnimeExchangeResult from "$lib/components/AnimeExchangeResult.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import WaitingStatus from "$lib/components/WaitingStatus.svelte";
+import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import { EXCHANGE_SUBJECTIVE_TAG_OPTIONS, MAX_EXCHANGE_SUBJECTIVE_TAGS } from "$lib/exchange-tags";
 import type { UserAnimeEntry } from "$lib/types";
 import type { PageProps } from "./$types";
@@ -352,7 +353,11 @@ const handleCancelExchangeSubmit: SubmitFunction = () => {
 									{#each animeResults as anime (anime.id)}
 										<button type="button" class="anime-result" onclick={() => selectAnime(anime)}>
 											{#if anime.cover_url}
-												<img src={anime.cover_url} alt={anime.title}>
+												<img
+													src={coverThumbSrc(anime.cover_url)}
+													{@attach coverThumbFallback(anime.cover_url)}
+													alt={anime.title}
+												>
 											{:else}
 												<span class="anime-result-cover"></span>
 											{/if}
@@ -371,7 +376,11 @@ const handleCancelExchangeSubmit: SubmitFunction = () => {
 							{#if selectedAnime}
 								<div class="selected-anime">
 									{#if selectedAnime.cover_url}
-										<img src={selectedAnime.cover_url} alt={selectedAnime.title}>
+										<img
+											src={coverThumbSrc(selectedAnime.cover_url)}
+											{@attach coverThumbFallback(selectedAnime.cover_url)}
+											alt={selectedAnime.title}
+										>
 									{/if}
 									<span>{selectedAnime.title}</span>
 									<button type="button" onclick={clearAnime} aria-label="選択を解除">×</button>
