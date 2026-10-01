@@ -6,7 +6,6 @@ import type { Database } from "$lib/supabase/database.types";
 import { isEpisodeSuppressedSnapshot } from "$lib/syobocal-episodes";
 import type {
 	Anime,
-	AnimeDataAttribution,
 	AnimeExchangeItem,
 	AnimeExchangeShare,
 	AnimeMute,
@@ -2416,20 +2415,22 @@ export async function getAnime(
 	return anime;
 }
 
-export async function getAnimeDataAttributions(
+/** 作品詳細のリソース欄に並べる、しょぼいカレンダーの作品ページURL */
+export async function getAnimeSyobocalUrl(
 	supabase: SupabaseClient<Database>,
 	malId: number | null,
-): Promise<AnimeDataAttribution[]> {
-	if (malId == null) return [];
+): Promise<string | null> {
+	if (malId == null) return null;
 
 	const { data, error } = await supabase
 		.from("anime_data_attributions" as never)
-		.select("anime_mal_id, source, label, source_url, license_label, license_url")
+		.select("source_url")
 		.eq("anime_mal_id", malId)
-		.order("source", { ascending: true });
+		.eq("source", "syobocal")
+		.maybeSingle();
 
-	if (error || !data) return [];
-	return data as unknown as AnimeDataAttribution[];
+	if (error || !data) return null;
+	return (data as unknown as { source_url: string }).source_url;
 }
 
 export async function getAnimeRelations(

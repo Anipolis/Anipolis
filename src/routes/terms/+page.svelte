@@ -5,4 +5,4 @@ import type { PageProps } from "./$types";
 let { data }: PageProps = $props();
 </script>
 
-<LegalDocument title="プライバシーポリシー" html={data.html} />
+<LegalDocument title="利用規約" html={data.html} />

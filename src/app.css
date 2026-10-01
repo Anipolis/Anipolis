@@ -1122,6 +1122,7 @@ textarea {
 .trending-panel-footer-links {
 	display: flex;
 	align-items: center;
+	flex-wrap: wrap;
 	gap: 6px;
 	margin-top: 12px;
 	padding: 0 4px;
