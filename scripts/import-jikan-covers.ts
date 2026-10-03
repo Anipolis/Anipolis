@@ -4,6 +4,7 @@
 //   pnpm import:jikan-covers -- --dry-run --limit 20 --out tmp/covers   # 取得と変換だけ試す
 //   pnpm import:jikan-covers -- --season 2024-winter                     # 保存と記録（未公開）
 //   pnpm import:jikan-covers -- --publish                                # 保存・記録・公開
+//   pnpm import:jikan-covers -- --anime-id 714 --anime-id 715 --publish  # 作品を指定（種別・シーズンは問わない）
 //
 // 対象: mal_id があり、カバーが無く、非表示でない作品（既定は TV と Movie）。
 // 管理者が登録・編集した作品で manual レコードに cover_url があるもの（null を含む）は、
@@ -215,7 +216,13 @@ async function fetchAll<T>(query: (from: number, to: number) => PromiseLike<{ da
 	}
 }
 
-async function loadCandidates(supabase: SupabaseClient, types: string[], seasons: string[], dryRun: boolean) {
+async function loadCandidates(
+	supabase: SupabaseClient,
+	types: string[],
+	seasons: string[],
+	animeIds: number[],
+	dryRun: boolean,
+) {
 	const animeRows = await fetchAll<{ id: number; mal_id: number; type: string | null; season: string | null }>(
 		(from, to) => {
 			let query = supabase
@@ -224,9 +231,10 @@ async function loadCandidates(supabase: SupabaseClient, types: string[], seasons
 				.is("cover_url", null)
 				.not("mal_id", "is", null)
 				.eq("hidden_by_admin", false)
-				.in("type", types)
 				.order("id")
 				.range(from, to);
+			// 作品指定のときは種別で絞らない
+			query = animeIds.length > 0 ? query.in("id", animeIds) : query.in("type", types);
 			if (seasons.length > 0) query = query.in("season", seasons);
 			return query;
 		},
@@ -330,6 +338,7 @@ async function main() {
 		args: process.argv.slice(2).filter((arg) => arg !== "--"),
 		options: {
 			season: { type: "string", multiple: true },
+			"anime-id": { type: "string", multiple: true },
 			types: { type: "string" },
 			limit: { type: "string" },
 			"dry-run": { type: "boolean", default: false },
@@ -343,6 +352,8 @@ async function main() {
 	for (const season of seasons) {
 		if (!SEASON_PATTERN.test(season)) throw new Error(`--season must look like 2024-winter: ${season}`);
 	}
+	const animeIds = (values["anime-id"] ?? []).map((id) => Number.parseInt(id, 10));
+	if (animeIds.some((id) => !(id > 0))) throw new Error("--anime-id must be a positive integer");
 	const limit = values.limit ? Number.parseInt(values.limit, 10) : undefined;
 	if (limit !== undefined && !(limit > 0)) throw new Error("--limit must be a positive integer");
 
@@ -351,7 +362,7 @@ async function main() {
 		candidates: allCandidates,
 		skippedManual,
 		skippedImported,
-	} = await loadCandidates(supabase, types, seasons, dryRun);
+	} = await loadCandidates(supabase, types, seasons, animeIds, dryRun);
 	const candidates = limit ? allCandidates.slice(0, limit) : allCandidates;
 	console.log(
 		`${allCandidates.length} candidates (${types.join("/")}), processing ${candidates.length}${dryRun ? " (dry run)" : ""}. ` +
@@ -361,7 +372,7 @@ async function main() {
 	const cache = await loadImageCache();
 	const seeded = await seedFromSeasonCheckpoints(cache);
 	if (seeded > 0) console.log(`Seeded ${seeded} image URLs from import:jikan checkpoints.`);
-	await resolveImageUrls(candidates, cache, types);
+	await resolveImageUrls(candidates, cache, animeIds.length > 0 ? [] : types);
 
 	if (values.out) await mkdir(values.out, { recursive: true });
 	const stats = { approved: 0, needsReview: 0, noImage: 0, failed: 0, bytes: 0 };
