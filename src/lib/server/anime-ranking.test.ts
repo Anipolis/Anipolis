@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { type AnimeCandidate, rankAnimeCandidateIds } from "./queries";
+import {
+	type AnimeCandidate,
+	moveBroadcastDayFirst,
+	rankAnimeCandidateIds,
+	seasonSortKey,
+	sortIdsByNewestSeason,
+} from "./queries";
 
 // created_at DESC 済みで DB から来る前提（配列インデックス = 新着順）
 const candidates: AnimeCandidate[] = [
@@ -61,5 +67,43 @@ describe("rankAnimeCandidateIds", () => {
 			"2",
 			"4",
 		]);
+	});
+});
+
+describe("moveBroadcastDayFirst", () => {
+	const dayCandidates: AnimeCandidate[] = [
+		{ id: 1, created_at: "2026-01-05T00:00:00Z", genre: null, genre_en: null, broadcast_day: 2 },
+		{ id: 2, created_at: "2026-01-04T00:00:00Z", genre: null, genre_en: null, broadcast_day: 6 },
+		{ id: 3, created_at: "2026-01-03T00:00:00Z", genre: null, genre_en: null, broadcast_day: null },
+		{ id: 4, created_at: "2026-01-02T00:00:00Z", genre: null, genre_en: null, broadcast_day: 6 },
+	];
+
+	it("指定曜日の作品を相対順を保ったまま先頭へ寄せる", () => {
+		expect(moveBroadcastDayFirst(["1", "2", "3", "4"], dayCandidates, 6)).toEqual(["2", "4", "1", "3"]);
+	});
+
+	it("該当作品が無ければ並びを変えない", () => {
+		expect(moveBroadcastDayFirst(["4", "3", "2", "1"], dayCandidates, 0)).toEqual(["4", "3", "2", "1"]);
+	});
+});
+
+describe("seasonSortKey / sortIdsByNewestSeason", () => {
+	it("年と季節（英語・漢字）を新旧比較できる数値にする", () => {
+		expect(seasonSortKey("2026-fall")).toBeGreaterThan(seasonSortKey("2026-summer") ?? 0);
+		expect(seasonSortKey("2026-winter")).toBeGreaterThan(seasonSortKey("2025-fall") ?? 0);
+		expect(seasonSortKey("2026年秋")).toBe(seasonSortKey("2026-fall"));
+		expect(seasonSortKey(null)).toBeNull();
+		expect(seasonSortKey("不明")).toBeNull();
+	});
+
+	it("新しいシーズン順に並べ、同シーズン内の順とシーズン不明（最後）を保つ", () => {
+		const seasonCandidates: AnimeCandidate[] = [
+			{ id: 1, created_at: "", genre: null, genre_en: null, season: "1969-fall" },
+			{ id: 2, created_at: "", genre: null, genre_en: null, season: "2026-fall" },
+			{ id: 3, created_at: "", genre: null, genre_en: null, season: null },
+			{ id: 4, created_at: "", genre: null, genre_en: null, season: "2026-spring" },
+			{ id: 5, created_at: "", genre: null, genre_en: null, season: "2026-fall" },
+		];
+		expect(sortIdsByNewestSeason(["5", "1", "3", "2", "4"], seasonCandidates)).toEqual(["5", "2", "4", "1", "3"]);
 	});
 });
