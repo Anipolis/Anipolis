@@ -25,7 +25,7 @@ function start(handler: Submit) {
 	const cancel = vi.fn();
 	const form = document.createElement("form");
 	const callback = handler({ formElement: form, cancel } as never);
-	return { cancel, callback };
+	return { cancel, callback, form };
 }
 
 async function finish(callback: ReturnType<Submit>, result: ActionResult): Promise<ReturnType<typeof vi.fn>> {
@@ -55,21 +55,47 @@ describe("PostController reactions", () => {
 		expect(controller.likeCount).toBe(6);
 	});
 
-	it("cancels a second like while the first is still in flight", async () => {
+	// 送信中の連打は送らずに表示だけ反転し、応答後に押した結果とズレていれば 1 回だけ再送する（fdbb076）
+	it("shows a like toggled while the first is in flight and resubmits once after the response", async () => {
 		const controller = new PostController(
 			() => makePost(),
 			() => "viewer",
 		);
 		const first = start(controller.handleLike as Submit);
+		const resubmit = vi.spyOn(first.form, "requestSubmit").mockImplementation(() => {});
 		const second = start(controller.handleLike as Submit);
 
 		expect(second.cancel).toHaveBeenCalledTimes(1);
 		expect(second.callback).toBeUndefined();
+		expect(controller.likedByMe).toBe(false);
+		expect(controller.likeCount).toBe(5);
+
+		await finish(first.callback, success({ liked: true }));
+		expect(resubmit).toHaveBeenCalledTimes(1);
+
+		// 再送は新しい送信として扱われる（送信中のまま取り残されない）
+		const third = start(controller.handleLike as Submit);
+		expect(third.cancel).not.toHaveBeenCalled();
+		expect(controller.likedByMe).toBe(false);
+		expect(controller.likeCount).toBe(5);
+	});
+
+	it("does not resubmit when clicks during the request cancel each other out", async () => {
+		const controller = new PostController(
+			() => makePost(),
+			() => "viewer",
+		);
+		const first = start(controller.handleLike as Submit);
+		const resubmit = vi.spyOn(first.form, "requestSubmit").mockImplementation(() => {});
+		start(controller.handleLike as Submit);
+		start(controller.handleLike as Submit);
+		expect(controller.likedByMe).toBe(true);
 		expect(controller.likeCount).toBe(6);
 
 		await finish(first.callback, success({ liked: true }));
-		const third = start(controller.handleLike as Submit);
-		expect(third.cancel).not.toHaveBeenCalled();
+		expect(resubmit).not.toHaveBeenCalled();
+		expect(controller.likedByMe).toBe(true);
+		expect(controller.likeCount).toBe(6);
 	});
 
 	it("restores the last confirmed state on failure instead of the stale post prop", async () => {
