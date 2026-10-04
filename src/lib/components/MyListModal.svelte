@@ -40,7 +40,7 @@ let score = $state<number | null>(null);
 let progress = $state(0);
 let submitting = $state(false);
 let errorMessage = $state("");
-let initializedFor = $state<string | null>(null);
+let initializedFor: string | null = null;
 let totalEpisodes = $derived(parseEpisodeCount(episodeCount));
 let statusOnly = $derived(variant === "status-only");
 
@@ -82,18 +82,29 @@ const handleSubmit: SubmitFunction = () => {
 	};
 };
 
-$effect(() => {
-	if (!open) {
-		initializedFor = null;
-		return;
-	}
-	const key = `${animeId}:${entry?.updated_at ?? "new"}`;
-	if (initializedFor === key) return;
+function resetFromEntry(key: string) {
 	initializedFor = key;
 	selectedStatus = entry?.status ?? "plan_to_watch";
 	score = entry?.score != null && entry.score > 0 ? Math.round(entry.score) : null;
 	progress = clampProgress(entry?.progress ?? 0);
 	errorMessage = "";
+}
+
+function entryKey(): string {
+	return `${animeId}:${entry?.updated_at ?? "new"}`;
+}
+
+// 最初のフレームから登録済みの値で描画する。effect で入れると初回描画が「視聴予定」になり、
+// ボタンの background トランジションで一瞬見えてしまう。
+resetFromEntry(entryKey());
+
+// 開いている間は登録内容が更新されたときだけ同期し、編集中の値を上書きしない。
+// 閉じたら登録内容に戻しておき、次に開いた最初のフレームも正しい値で出す。
+// initializedFor は $state にしない(effect 内で読み書きすると自己無効化になる)。
+$effect(() => {
+	const key = entryKey();
+	if (open && initializedFor === key) return;
+	resetFromEntry(key);
 });
 
 $effect(() => {
