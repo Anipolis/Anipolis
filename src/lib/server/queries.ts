@@ -1977,23 +1977,13 @@ export function rankAnimeCandidateIds(
 	return withIndex.map(({ c }) => String(c.id));
 }
 
-const SEASON_SORT_INDEX: Record<string, number> = {
-	winter: 0,
-	冬: 0,
-	spring: 1,
-	春: 1,
-	summer: 2,
-	夏: 2,
-	fall: 3,
-	autumn: 3,
-	秋: 3,
-};
+const SEASON_SORT_INDEX: Record<string, number> = { winter: 0, spring: 1, summer: 2, fall: 3 };
 
-/** "2026-fall" のようなシーズンを新旧比較用の数値にする。解釈できなければ null（並びの最後へ） */
+/** "2026-fall" 形式のシーズンを新旧比較用の数値にする。形式どおりでなければ null（並びの最後へ） */
 export function seasonSortKey(season: string | null | undefined): number | null {
-	const match = season?.trim().match(/^(\d{4})(?:\D*?(winter|spring|summer|fall|autumn|冬|春|夏|秋))?/i);
+	const match = season?.match(/^(\d{4})-(winter|spring|summer|fall)$/);
 	if (!match) return null;
-	return Number(match[1]) * 4 + (SEASON_SORT_INDEX[match[2]?.toLowerCase() ?? ""] ?? 0);
+	return Number(match[1]) * 4 + (SEASON_SORT_INDEX[match[2] ?? ""] ?? 0);
 }
 
 /** 並び済みの ID 配列を新しいシーズン順に並べ直す純関数。同じシーズン内は元の相対順を保つ */

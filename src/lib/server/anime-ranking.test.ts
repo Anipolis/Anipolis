@@ -88,12 +88,16 @@ describe("moveBroadcastDayFirst", () => {
 });
 
 describe("seasonSortKey / sortIdsByNewestSeason", () => {
-	it("年と季節（英語・漢字）を新旧比較できる数値にする", () => {
+	it("YYYY-季節 を新旧比較できる数値にする", () => {
 		expect(seasonSortKey("2026-fall")).toBeGreaterThan(seasonSortKey("2026-summer") ?? 0);
 		expect(seasonSortKey("2026-winter")).toBeGreaterThan(seasonSortKey("2025-fall") ?? 0);
-		expect(seasonSortKey("2026年秋")).toBe(seasonSortKey("2026-fall"));
+	});
+
+	it("形式どおりでない値は null（年だけ一致しても冬扱いにしない）", () => {
+		expect(seasonSortKey("2026-不明")).toBeNull();
+		expect(seasonSortKey("2026")).toBeNull();
+		expect(seasonSortKey("2026-fall-extra")).toBeNull();
 		expect(seasonSortKey(null)).toBeNull();
-		expect(seasonSortKey("不明")).toBeNull();
 	});
 
 	it("新しいシーズン順に並べ、同シーズン内の順とシーズン不明（最後）を保つ", () => {
