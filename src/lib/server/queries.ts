@@ -1743,6 +1743,10 @@ export interface AnimeListOptions {
 	limit?: number;
 	userId?: string | null;
 	query?: string;
+	/** この曜日（0=日曜 … 6=土曜）に放送する作品を並び順を保ったまま先頭へ寄せる（放送中タブの「本日放送」用） */
+	prioritizeBroadcastDay?: number | null;
+	/** 新しいシーズン（例: 2026-fall）から順に並べる。同じシーズン内は sortBy の並びを保つ */
+	newestSeasonFirst?: boolean;
 }
 
 /**
@@ -1928,6 +1932,8 @@ export type AnimeCandidate = {
 	created_at: string;
 	genre: string[] | null;
 	genre_en: string[] | null;
+	broadcast_day?: number | null;
+	season?: string | null;
 };
 
 /**
@@ -1971,7 +1977,35 @@ export function rankAnimeCandidateIds(
 	return withIndex.map(({ c }) => String(c.id));
 }
 
-const ANIME_CANDIDATE_COLUMNS = "id, created_at, genre, genre_en";
+const SEASON_SORT_INDEX: Record<string, number> = { winter: 0, spring: 1, summer: 2, fall: 3 };
+
+/** "2026-fall" 形式のシーズンを新旧比較用の数値にする。形式どおりでなければ null（並びの最後へ） */
+export function seasonSortKey(season: string | null | undefined): number | null {
+	const match = season?.match(/^(\d{4})-(winter|spring|summer|fall)$/);
+	if (!match) return null;
+	return Number(match[1]) * 4 + (SEASON_SORT_INDEX[match[2] ?? ""] ?? 0);
+}
+
+/** 並び済みの ID 配列を新しいシーズン順に並べ直す純関数。同じシーズン内は元の相対順を保つ */
+export function sortIdsByNewestSeason(orderedIds: string[], candidates: AnimeCandidate[]): string[] {
+	const keys = new Map(candidates.map((c) => [String(c.id), seasonSortKey(c.season)]));
+	const rank = (id: string) => keys.get(id) ?? Number.NEGATIVE_INFINITY;
+	// -Infinity 同士の差は NaN になるので 0（同順位）に倒す
+	return [...orderedIds].sort((a, b) => rank(b) - rank(a) || 0);
+}
+
+/** 並び済みの ID 配列のうち、指定曜日に放送する作品を相対順を保ったまま先頭へ寄せる純関数 */
+export function moveBroadcastDayFirst(
+	orderedIds: string[],
+	candidates: AnimeCandidate[],
+	broadcastDay: number,
+): string[] {
+	const dayIds = new Set(candidates.filter((c) => c.broadcast_day === broadcastDay).map((c) => String(c.id)));
+	if (dayIds.size === 0) return orderedIds;
+	return [...orderedIds.filter((id) => dayIds.has(id)), ...orderedIds.filter((id) => !dayIds.has(id))];
+}
+
+const ANIME_CANDIDATE_COLUMNS = "id, created_at, genre, genre_en, broadcast_day, season";
 
 /** フィルター済みの候補行（軽量列）を created_at DESC で取得する。ビュー失敗時はベーステーブルへ */
 async function fetchAnimeCandidates(
@@ -2049,7 +2083,12 @@ export async function getAnimeListPage(
 					sortBy,
 				);
 
-	const orderedIds = rankAnimeCandidateIds(candidates, metrics, sortBy, selectedGenres);
+	// 優先順位: 本日放送 → 新しいシーズン → sortBy の並び（いずれも安定な並べ替えを重ねる）
+	let orderedIds = rankAnimeCandidateIds(candidates, metrics, sortBy, selectedGenres);
+	if (options.newestSeasonFirst) orderedIds = sortIdsByNewestSeason(orderedIds, candidates);
+	if (options.prioritizeBroadcastDay != null) {
+		orderedIds = moveBroadcastDayFirst(orderedIds, candidates, options.prioritizeBroadcastDay);
+	}
 	const start = Math.max(0, (page - 1) * pageSize);
 	const pageIds = orderedIds.slice(start, start + pageSize);
 	if (pageIds.length === 0) return { items: [], total };

@@ -131,7 +131,10 @@ export function buildAnimeListOptions(
 		sortBy: sortByForTab(filters.tab),
 	};
 
-	if (filters.tab === "airing") options.broadcastStatus = "airing";
+	if (filters.tab === "airing") {
+		options.broadcastStatus = "airing";
+		options.newestSeasonFirst = true;
+	}
 	if (filters.tab === "upcoming") options.broadcastStatus = "upcoming";
 	if (filters.tab === "mylist") options.listedByUserId = userId;
 	if (filters.search) options.query = filters.search;

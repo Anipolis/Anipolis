@@ -8,6 +8,7 @@ import MyListModal from "$lib/components/MyListModal.svelte";
 import { createDebouncedCommit } from "$lib/debounced-commit";
 import { isSamePageRefresh } from "$lib/navigation-skeleton";
 import type { ActiveAnimeSeasonChip, AnimeListItem, AnimeStatus } from "$lib/types";
+import { dateKeyWeekday, jstBroadcastDateKey } from "$lib/utils/jst";
 import type { PageProps } from "./$types";
 
 let { data, form }: PageProps = $props();
@@ -158,8 +159,9 @@ function buildCurrentAnimeListUrl() {
 	return qs ? `/anime?${qs}` : "/anime";
 }
 
+// 詳細ページの「← アニメ一覧」で同じページ番号へ戻れるよう、page=N も from に含める
 function buildAnimeDetailUrl(animeId: string | number) {
-	const listUrl = buildCurrentAnimeListUrl();
+	const listUrl = buildAnimePageUrl(currentAnimeSectionIndex);
 	return listUrl === "/anime" ? `/anime/${animeId}` : `/anime/${animeId}?from=${encodeURIComponent(listUrl)}`;
 }
 
@@ -396,10 +398,8 @@ $effect(() => {
 
 function isAiringToday(anime: AnimeListItem): boolean {
 	if (anime.broadcast_day == null || anime.computed_broadcast_status !== "airing") return false;
-	const now = new Date(Date.now() + 9 * 60 * 60 * 1000); // JST
-	// Before 4 AM is still part of the previous broadcast night (26時制)
-	const broadcastDay = now.getUTCHours() < 4 ? (now.getUTCDay() + 6) % 7 : now.getUTCDay();
-	return anime.broadcast_day === broadcastDay;
+	// 放送日は午前4時境界（26時制）。放送中タブで先頭に寄せる基準（+page.server.ts）と同じ
+	return anime.broadcast_day === dateKeyWeekday(jstBroadcastDateKey(Date.now()));
 }
 </script>
 
