@@ -99,6 +99,19 @@ describe("resolveAnimeCatalog", () => {
 		expect(resolved.resolutionStatus).toBe("unverified");
 	});
 
+	it("translates genres that an older importer stored in English", () => {
+		const jikan = source("jikan", {
+			title_ja: "炎炎ノ消防隊",
+			genre: ["アクション", "Urban Fantasy", "少年向け"],
+			genre_en: ["Action", "Urban Fantasy", "Shounen"],
+		});
+
+		const resolved = resolveAnimeCatalog([jikan]);
+
+		expect(resolved.canonical.genre).toEqual(["アクション", "現代ファンタジー", "少年向け"]);
+		expect(resolved.canonical.genre_en).toEqual(["Action", "Urban Fantasy", "Shounen"]);
+	});
+
 	it("deduplicates unresolved studio spelling variants by normalized alias", () => {
 		const resolved = resolveAnimeCatalog([
 			source("anime_offline_database", {

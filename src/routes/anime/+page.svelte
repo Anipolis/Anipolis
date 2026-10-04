@@ -2,7 +2,7 @@
 import { onDestroy } from "svelte";
 import { beforeNavigate, goto } from "$app/navigation";
 import { navigating } from "$app/state";
-import { ANIME_GENRES, ANIME_SOURCE_OPTIONS } from "$lib/anime-vocabulary";
+import { ANIME_GENRE_FILTER_HELP, ANIME_GENRE_GROUPS, ANIME_GENRES, ANIME_SOURCE_OPTIONS } from "$lib/anime-vocabulary";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
 import { createDebouncedCommit } from "$lib/debounced-commit";
@@ -71,8 +71,8 @@ let filterState = $state<AnimeFilterState>({
 let filterSheetOpen = $state(false);
 let filterDrawerOpen = $state(false);
 function buildGenreMap(selected: string[]): Record<string, boolean> {
-	const set = new Set(selected);
-	return Object.fromEntries(GENRES.map((g) => [g, set.has(g)]));
+	// 語彙にないタグ(詳細ページのタグや URL から来たもの)も、適用時に黙って外さないよう保持する
+	return Object.fromEntries([...new Set([...GENRES, ...selected])].map((g) => [g, selected.includes(g)]));
 }
 // svelte-ignore state_referenced_locally
 let pendingGenreMap = $state<Record<string, boolean>>(
@@ -467,22 +467,33 @@ function isAiringToday(anime: AnimeListItem): boolean {
 			>
 				<div class="filter-drawer-inner">
 					<div class="filter-drawer-grid">
-						<section class="filter-drawer-column filter-drawer-column--genres">
-							<h2 class="filter-drawer-heading">ジャンル</h2>
-							<div class="drawer-genre-grid">
-								{#each GENRES as g}
-									<button
-										type="button"
-										class="genre-chip drawer-genre-chip"
-										class:genre-chip--active={filterState.genres.includes(g)}
-										aria-pressed={filterState.genres.includes(g)}
-										onclick={() => toggleSidebarGenre(g)}
-									>
-										{g}
-									</button>
-								{/each}
-							</div>
-						</section>
+						<!-- ⓘ で見える説明に置き換えるまで、読み上げだけで絞り込みの仕様を伝える -->
+						<p id="genre-filter-help-desktop" class="sr-only">{ANIME_GENRE_FILTER_HELP}</p>
+						{#each ANIME_GENRE_GROUPS as group (group.key)}
+							<section class="filter-drawer-column filter-drawer-column--genres">
+								<h2 id="genre-filter-desktop-{group.key}" class="filter-drawer-heading">
+									{group.label}
+								</h2>
+								<div
+									class="drawer-genre-grid"
+									role="group"
+									aria-labelledby="genre-filter-desktop-{group.key}"
+									aria-describedby="genre-filter-help-desktop"
+								>
+									{#each group.tags as tag (tag.ja)}
+										<button
+											type="button"
+											class="genre-chip drawer-genre-chip"
+											class:genre-chip--active={filterState.genres.includes(tag.ja)}
+											aria-pressed={filterState.genres.includes(tag.ja)}
+											onclick={() => toggleSidebarGenre(tag.ja)}
+										>
+											{tag.ja}
+										</button>
+									{/each}
+								</div>
+							</section>
+						{/each}
 
 						<section class="filter-drawer-column">
 							<h2 class="filter-drawer-heading">放送年</h2>
@@ -913,22 +924,32 @@ function isAiringToday(anime: AnimeListItem): boolean {
 				</div>
 
 				<div class="filter-sheet-body">
-					<section class="filter-sheet-section">
-						<h3 class="filter-sheet-section-label">ジャンル</h3>
-						<div class="genre-chips">
-							{#each GENRES as g}
-								<button
-									type="button"
-									class="genre-chip"
-									class:genre-chip--active={pendingGenreMap[g]}
-									aria-pressed={pendingGenreMap[g]}
-									onclick={() => togglePendingGenre(g)}
-								>
-									{g}
-								</button>
-							{/each}
-						</div>
-					</section>
+					<p id="genre-filter-help-mobile" class="sr-only">{ANIME_GENRE_FILTER_HELP}</p>
+					{#each ANIME_GENRE_GROUPS as group (group.key)}
+						<section class="filter-sheet-section">
+							<h3 id="genre-filter-mobile-{group.key}" class="filter-sheet-section-label">
+								{group.label}
+							</h3>
+							<div
+								class="genre-chips"
+								role="group"
+								aria-labelledby="genre-filter-mobile-{group.key}"
+								aria-describedby="genre-filter-help-mobile"
+							>
+								{#each group.tags as tag (tag.ja)}
+									<button
+										type="button"
+										class="genre-chip"
+										class:genre-chip--active={pendingGenreMap[tag.ja]}
+										aria-pressed={pendingGenreMap[tag.ja]}
+										onclick={() => togglePendingGenre(tag.ja)}
+									>
+										{tag.ja}
+									</button>
+								{/each}
+							</div>
+						</section>
+					{/each}
 
 					<section class="filter-sheet-section">
 						<h3 class="filter-sheet-section-label">放送年</h3>

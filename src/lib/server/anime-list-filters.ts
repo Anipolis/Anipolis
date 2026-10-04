@@ -1,3 +1,4 @@
+import { translateAnimeGenres } from "$lib/anime-vocabulary";
 import type { AnimeListOptions } from "$lib/server/queries";
 import type { ActiveAnimeSeasonChip, AnimeSeasonChip } from "$lib/types";
 
@@ -33,15 +34,14 @@ type AnimeCountOptions = Pick<
 	| "query"
 >;
 
+// 旧表記や英語名で来た URL も、現在の表記に揃えてから絞り込みと選択状態の表示に使う
 function parseGenres(value: string | null): string[] {
-	return [
-		...new Set(
-			(value ?? "")
-				.split(",")
-				.map((genre) => genre.trim())
-				.filter(Boolean),
-		),
-	];
+	return translateAnimeGenres(
+		(value ?? "")
+			.split(",")
+			.map((genre) => genre.trim())
+			.filter(Boolean),
+	);
 }
 
 function normalizeSeasonChip(value: string | null): AnimeSeasonChip {

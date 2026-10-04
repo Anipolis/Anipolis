@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { groupGenreFilters, translateAnimeGenres } from "$lib/anime-vocabulary";
 import { computeBroadcastStatus } from "$lib/broadcast-status";
 import { toValidExchangeSubjectiveTags } from "$lib/exchange-tags";
 import { buildPostCardSelect } from "$lib/server/post-selects";
@@ -1835,7 +1836,7 @@ function applyAnimeListFilters<T extends AnimeFilterQuery<T>>(
 			.or(`aired_from.is.null,aired_from.lte.${filters.scheduleRange.end}`)
 			.or(`aired_to.is.null,aired_to.gte.${filters.scheduleRange.start}`);
 	}
-	if (selectedGenres.length) q = q.or(buildGenreFilter(selectedGenres));
+	q = applyGenreFilters(q, selectedGenres);
 	if (filters.studio) q = q.or(arrayContainsAny(["studio", "studio_en"], filters.studio));
 	if (filters.producer) q = q.contains("producer", [filters.producer]);
 	if (filters.source) q = q.eq("source", filters.source);
@@ -2149,7 +2150,7 @@ export async function getAnimeCount(
 		broadcastSeasons?.length ? broadcastSeasons : broadcastSeason,
 	);
 	if (seasonFilter) q = q.or(seasonFilter);
-	if (selectedGenres.length) q = q.or(buildGenreFilter(selectedGenres));
+	q = applyGenreFilters(q, selectedGenres);
 	if (studio) q = q.or(arrayContainsAny(["studio", "studio_en"], studio));
 	if (producer) q = q.contains("producer", [producer]);
 	if (source) q = q.eq("source", source);
@@ -2160,7 +2161,7 @@ export async function getAnimeCount(
 	if (error || count === null) {
 		let fallback = supabase.from("anime").select("id", { count: "exact", head: true }).eq("metadata_ready", true);
 		if (seasonFilter) fallback = fallback.or(seasonFilter);
-		if (selectedGenres.length) fallback = fallback.or(buildGenreFilter(selectedGenres));
+		fallback = applyGenreFilters(fallback, selectedGenres);
 		if (studio) fallback = fallback.or(arrayContainsAny(["studio", "studio_en"], studio));
 		if (producer) fallback = fallback.contains("producer", [producer]);
 		if (source) fallback = fallback.eq("source", source);
@@ -2197,7 +2198,7 @@ async function getAnimeListRowsFromBaseTable(
 			.or(`aired_from.is.null,aired_from.lte.${scheduleRange.end}`)
 			.or(`aired_to.is.null,aired_to.gte.${scheduleRange.start}`);
 	}
-	if (selectedGenres.length) query = query.or(buildGenreFilter(selectedGenres));
+	query = applyGenreFilters(query, selectedGenres);
 	if (studio) query = query.or(arrayContainsAny(["studio", "studio_en"], studio));
 	if (producer) query = query.contains("producer", [producer]);
 	if (source) query = query.eq("source", source);
@@ -2266,9 +2267,15 @@ function buildGenreFilter(genres: string[]): string {
 		.join(",");
 }
 
+// 同じ種類(ジャンル/テーマ/対象層)のタグは OR、種類をまたぐと AND。
+// PostgREST では or フィルターを重ねると AND になるので、種類ごとに or を 1 つ足す。
+function applyGenreFilters<T extends { or(filters: string): T }>(query: T, genres: string[]): T {
+	return groupGenreFilters(genres).reduce((q, group) => q.or(buildGenreFilter(group)), query);
+}
+
 function normalizeGenreFilters(value: string | string[] | undefined): string[] {
 	const rawGenres = Array.isArray(value) ? value : (value ?? "").split(",");
-	return [...new Set(rawGenres.map((genre) => genre.trim()).filter(Boolean))];
+	return translateAnimeGenres(rawGenres.map((genre) => genre.trim()).filter(Boolean));
 }
 
 function countGenreMatches(anime: Anime, selectedGenres: string[]): number {
