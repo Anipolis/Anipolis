@@ -55,4 +55,17 @@ describe("アニメ一覧のタグ絞り込み", () => {
 
 		expect(filters.genres).toEqual(["超常現象", "アクション"]);
 	});
+
+	it("組み込みのプロパティ名と同じタグの URL でも例外にならず、そのタグで絞り込む", async () => {
+		const filters = parseAnimeListFilters(new URLSearchParams({ genres: "constructor,toString" }));
+		const { supabase, orFilters } = fakeSupabase();
+
+		await getAnimeCount(supabase, { genres: filters.genres });
+
+		expect(filters.genres).toEqual(["constructor", "toString"]);
+		expect(orFilters).toEqual([
+			'genre.cs.{"constructor"},genre_en.cs.{"constructor"}',
+			'genre.cs.{"toString"},genre_en.cs.{"toString"}',
+		]);
+	});
 });

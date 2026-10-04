@@ -158,13 +158,18 @@ export const LEGACY_GENRE_JA: Record<string, string> = {
 };
 
 const GENRE_JA_BY_LOWER_EN = new Map(Object.entries(GENRE_JA_BY_EN).map(([en, ja]) => [en.toLowerCase(), ja]));
+// URL など外部から来た名前で引くので、constructor などの継承プロパティに当たらないよう Map で持つ
+const LEGACY_GENRE_JA_BY_NAME = new Map(Object.entries(LEGACY_GENRE_JA));
 
 // MAL と Jikan で表記揺れがあるため大文字小文字を区別しない。旧表記は現在の表記に直し、訳の無い名前はそのまま残す。
 export function translateAnimeGenres(names: readonly string[]): string[] {
 	return [
 		...new Set(
 			names.map(
-				(name) => GENRE_JA_BY_LOWER_EN.get(name.trim().toLowerCase()) ?? LEGACY_GENRE_JA[name.trim()] ?? name,
+				(name) =>
+					GENRE_JA_BY_LOWER_EN.get(name.trim().toLowerCase()) ??
+					LEGACY_GENRE_JA_BY_NAME.get(name.trim()) ??
+					name,
 			),
 		),
 	];

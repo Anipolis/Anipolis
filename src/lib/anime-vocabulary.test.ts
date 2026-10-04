@@ -38,6 +38,16 @@ describe("アニメのジャンル語彙", () => {
 		]);
 	});
 
+	it("組み込みのプロパティ名と同じタグも、未知のタグとして文字列のまま残す", () => {
+		expect(translateAnimeGenres(["constructor", "toString", "__proto__", "hasOwnProperty"])).toEqual([
+			"constructor",
+			"toString",
+			"__proto__",
+			"hasOwnProperty",
+		]);
+		expect(groupGenreFilters(["constructor", "__proto__"])).toEqual([["constructor"], ["__proto__"]]);
+	});
+
 	it("旧表記はどれも現在の語彙に無く、読み替え先は現在の語彙にある", () => {
 		for (const [legacy, current] of Object.entries(LEGACY_GENRE_JA)) {
 			expect(ANIME_GENRES, legacy).not.toContain(legacy);
