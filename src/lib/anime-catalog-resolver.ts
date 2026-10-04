@@ -1,3 +1,4 @@
+import { translateAnimeGenres } from "./anime-vocabulary.ts";
 import { normalizeStudioAlias, type StudioNameMapping } from "./wikidata-studio-names.ts";
 
 export type CatalogSourceName =
@@ -472,7 +473,9 @@ export function resolveAnimeCatalog(
 			: undefined,
 		rawStudioNames,
 	]);
-	const genre = resolveArray("genre", "genre", "genres");
+	// 取り込み時に訳が無く英語のまま保存されたソース行も、解決時に現在の語彙で訳し直す
+	const rawGenre = resolveArray("genre", "genre", "genres");
+	const genre = { ...rawGenre, value: rawGenre.value && translateAnimeGenres(rawGenre.value) };
 	const genreEnglish = resolveArray("genre_en", "genre_en", "genres");
 	const broadcastDay = firstDefined<number | null>([
 		candidate(numberValue(manual, "broadcast_day"), "manual", "verified"),
