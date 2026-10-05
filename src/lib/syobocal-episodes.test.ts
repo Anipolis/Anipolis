@@ -230,6 +230,26 @@ describe("confirmedFinalEpisodeCount", () => {
 		expect(confirmedFinalEpisodeCount([], endedInDecember, now)).toBeNull();
 	});
 
+	it("does not drop an unnumbered broadcast after the last numbered episode", () => {
+		const now = new Date("2027-01-05T00:00:00Z");
+		// 最終回だけ Count 未登録／異常で番号を外した → 1..11 が揃っていても「全11話」にしない
+		expect(
+			confirmedFinalEpisodeCount(
+				weekly(12, (episode) => (episode === 12 ? null : episode)),
+				endedInDecember,
+				now,
+			),
+		).toBeNull();
+		// 途中の番号無し放送（総集編）は総話数に含めずに確定する
+		expect(
+			confirmedFinalEpisodeCount(
+				weekly(13, (episode) => (episode === 7 ? null : episode > 7 ? episode - 1 : episode)),
+				endedInDecember,
+				now,
+			),
+		).toBe(12);
+	});
+
 	it("uses the mapping's valid_to when a shared TID is split between titles", () => {
 		const firstCour = { endYear: null, endMonth: null, validTo: "2026-12-31" };
 		expect(confirmedFinalEpisodeCount(weekly(12), firstCour, new Date("2027-01-02T00:00:00Z"))).toBe(12);

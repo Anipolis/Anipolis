@@ -227,14 +227,20 @@ export function confirmedFinalEpisodeCount(
 	}
 	if (!ended) return null;
 
-	const numbers = new Set(
-		sessions.flatMap((session) =>
-			session.episodeNumber !== null && Number.isInteger(session.episodeNumber) && session.episodeNumber > 0
-				? [session.episodeNumber]
-				: [],
-		),
+	const numbered = sessions.filter(
+		(session) =>
+			session.episodeNumber !== null && Number.isInteger(session.episodeNumber) && session.episodeNumber > 0,
 	);
-	if (numbers.size === 0) return null;
+	if (numbered.length === 0) return null;
+	// 最後の番号付き放送より後に番号の無い放送が残っていれば確定しない。最終回の Count
+	// 未登録や、異常検出で番号を外した回（over_count 等）を総話数から黙って落とすと
+	// 「全11話」のような過少な値を MAL より優先して保存してしまう。途中の番号無し
+	// （総集編・特番）は 1..max の連続性で判定できるので許容する。
+	const lastNumberedMs = Math.max(...numbered.map((session) => Date.parse(session.scheduledAt)));
+	if (sessions.some((session) => !numbered.includes(session) && Date.parse(session.scheduledAt) > lastNumberedMs)) {
+		return null;
+	}
+	const numbers = new Set(numbered.map((session) => session.episodeNumber as number));
 	const max = Math.max(...numbers);
 	return numbers.size === max ? max : null;
 }
