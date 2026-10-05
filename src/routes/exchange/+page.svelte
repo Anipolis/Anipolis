@@ -3,6 +3,7 @@ import type { SubmitFunction } from "@sveltejs/kit";
 import { onDestroy } from "svelte";
 import { enhance } from "$app/forms";
 import AnimeExchangeResult from "$lib/components/AnimeExchangeResult.svelte";
+import InfoTip from "$lib/components/InfoTip.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import WaitingStatus from "$lib/components/WaitingStatus.svelte";
@@ -309,7 +310,18 @@ const handleCancelExchangeSubmit: SubmitFunction = () => {
 
 			<section class="exchange-panel" class:exchange-panel--status={tradeStatus !== "IDLE"}>
 				<div class="exchange-copy">
-					<h2>1作品を渡して、1作品を受け取る</h2>
+					<h2 class="with-info-tip">
+						1作品を渡して、1作品を受け取る
+						<InfoTip label="アニメトレード">
+							<p>
+								渡す作品を送ると、先に待っている人の作品と先着順で交換されます。待っている人がいなければ、次に誰かが送るまで待機します（待機中はやめられます）。
+							</p>
+							<p>
+								交換相手のユーザー名は表示されません。コメントと主観タグは、作品を受け取った人に表示されます。
+							</p>
+							<p>受け取った作品は、自動ではマイリストに追加されません。</p>
+						</InfoTip>
+					</h2>
 				</div>
 
 				{#if exchangeError || (!enhancedActionHandled && form?.exchangeMessage)}
@@ -390,7 +402,7 @@ const handleCancelExchangeSubmit: SubmitFunction = () => {
 							{#if showRepeatAnimeWarning}
 								<p class="exchange-repeat-warning" role="status">
 									<span class="i-lucide-megaphone" aria-hidden="true"></span>
-									この作品はトレードが集中しています。別のアニメを贈ってみませんか？
+									前回のトレードで贈った作品と同じです。別のアニメを贈ってみませんか？
 								</p>
 							{/if}
 						</div>

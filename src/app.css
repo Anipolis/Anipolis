@@ -1609,6 +1609,21 @@ textarea {
 	margin-bottom: 0;
 }
 
+/* 見出しやラベルの横に ⓘ(InfoTip)を並べる */
+.with-info-tip {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.with-info-tip:has(> .field-label) {
+	margin-bottom: 6px;
+}
+
+.with-info-tip > .field-label {
+	margin-bottom: 0;
+}
+
 .settings-avatar-row {
 	display: flex;
 	align-items: center;

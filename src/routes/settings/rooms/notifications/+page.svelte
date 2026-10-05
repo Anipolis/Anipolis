@@ -2,6 +2,7 @@
 import type { SubmitFunction } from "@sveltejs/kit";
 import { untrack } from "svelte";
 import { enhance } from "$app/forms";
+import InfoTip from "$lib/components/InfoTip.svelte";
 import SettingsBackLink from "$lib/components/SettingsBackLink.svelte";
 import ToggleSwitch from "$lib/components/ToggleSwitch.svelte";
 import type { PageProps } from "./$types";
@@ -61,7 +62,20 @@ const settingsSubmit: SubmitFunction = () => {
 
 			<section class="settings-section">
 				<div class="section-heading-row">
-					<h2 class="settings-section-title">放送前通知のタイミング</h2>
+					<h2 class="settings-section-title with-info-tip">
+						放送前通知のタイミング
+						<InfoTip label="放送前通知">
+							<p>
+								スケジュールページでベル登録したアニメの放送やイベントの開始が近づくと、アプリ内通知をお届けし、カレンダーのアイコンに未読マークを表示します。
+							</p>
+							<p>
+								複数選択した場合はそれぞれのタイミングで通知します。同じルームの通知は1件にまとめて更新されます。
+							</p>
+							<p>
+								通知は通知一覧の「ルーム」タブに届きます。アプリを開いている間は定期的に更新され、「ルーム」タブを開くと既読になります。
+							</p>
+						</InfoTip>
+					</h2>
 					<span class="autosave-status" class:visible={saving || justSaved} aria-live="polite">
 						{#if saving}
 							保存中…
@@ -70,12 +84,6 @@ const settingsSubmit: SubmitFunction = () => {
 						{/if}
 					</span>
 				</div>
-				<p class="settings-section-desc">
-					スケジュールページでベル登録したアニメの放送やイベントの開始が近づくと、アプリ内通知をお届けし、
-					カレンダーのアイコンに未読マークを表示します。
-					複数選択した場合はそれぞれのタイミングで通知します。同じルームの通知は1件にまとめて更新されます。
-				</p>
-
 				<form
 					method="POST"
 					action="?/updateNotificationSettings"
@@ -123,14 +131,6 @@ const settingsSubmit: SubmitFunction = () => {
 					</div>
 				</form>
 			</section>
-
-			<section class="settings-section">
-				<h2 class="settings-section-title">通知の確認</h2>
-				<p class="settings-section-desc">
-					放送通知は通知一覧に届きます。アプリを開いている間は定期的に更新され、
-					通知一覧を開くと既読になります。
-				</p>
-			</section>
 		</div>
 	</main>
 </div>
@@ -151,12 +151,6 @@ const settingsSubmit: SubmitFunction = () => {
 	margin: 0 0 8px;
 	font-size: 1rem;
 	color: var(--fg, #e2e8f0);
-}
-.settings-section-desc {
-	margin: 0 0 16px;
-	color: var(--text-muted, #94a3b8);
-	font-size: 0.82rem;
-	line-height: 1.6;
 }
 .autosave-status {
 	color: var(--color-text-muted);

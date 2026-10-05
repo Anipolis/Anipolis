@@ -150,7 +150,9 @@ const handleCancelSubmit: SubmitFunction = () => {
 									maxlength="50"
 									value={event.hashtag}
 								>
-								<span class="field-hint">トレンド集計に使われるタグ名です</span>
+								<span class="field-hint"
+									>このルームの投稿に付くハッシュタグです（トレンド集計にも使われます）</span
+								>
 							</label>
 							<label>
 								<span>説明</span>

@@ -4,6 +4,7 @@ import { untrack } from "svelte";
 import { enhance } from "$app/forms";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
+import InfoTip from "$lib/components/InfoTip.svelte";
 import SettingsBackLink from "$lib/components/SettingsBackLink.svelte";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import type { AnimeMute, EventMute } from "$lib/types";
@@ -179,7 +180,17 @@ const activeTab = $derived.by((): "word" | "anime" => {
 
 				<form method="POST" action="?/addMute" use:enhance={muteSubmit} class="mute-add-form">
 					<div class="field" style="margin-bottom: 0;">
-						<label for="word" class="field-label">ミュートするワード</label>
+						<div class="with-info-tip">
+							<label for="word" class="field-label">ミュートするワード</label>
+							<InfoTip label="ワードミュート">
+								<p>
+									投稿の本文・引用元の投稿・作品名・ハッシュタグのいずれかにこの語を含む投稿を非表示にします。
+								</p>
+								<p>
+									大文字と小文字は区別しません。正規表現は使えません。作品名に含まれる語を登録すると、その作品の実況ルームの投稿も非表示になります。
+								</p>
+							</InfoTip>
+						</div>
 						<input
 							id="word"
 							name="word"
@@ -192,10 +203,6 @@ const activeTab = $derived.by((): "word" | "anime" => {
 						>
 						{#if form && "field" in form && form["field"] === "word"}
 							<p class="field-error-msg">{form.message}</p>
-						{:else}
-							<p class="field-hint">
-								英数本文、正規表現、作品名、ハッシュタグに含まれる語を非表示にします。
-							</p>
 						{/if}
 					</div>
 					<button type="submit" class="btn btn-primary" disabled={adding}>
@@ -233,6 +240,14 @@ const activeTab = $derived.by((): "word" | "anime" => {
 				<section class="settings-section">
 					<p class="settings-section-desc">
 						ネタバレ防止のため、ミュートしたルーム（リアタイ・イベント）の投稿をタイムラインで非表示にします。
+						<InfoTip label="ルームミュート">
+							<p>
+								期間指定は、この画面で設定した場合は設定した時点から、スケジュールから設定した場合はその放送日から数えます。「毎週繰り返す」は、放送曜日から指定した日数のあいだ毎週ミュートします。
+							</p>
+							<p>
+								ルームの中や投稿の詳細ページでは、ミュート中でも投稿が表示されます。通知は止まりません。
+							</p>
+						</InfoTip>
 					</p>
 
 					{#if data.virtualAnime}
