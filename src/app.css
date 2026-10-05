@@ -1616,14 +1616,6 @@ textarea {
 	gap: 4px;
 }
 
-.with-info-tip:has(> .field-label) {
-	margin-bottom: 6px;
-}
-
-.with-info-tip > .field-label {
-	margin-bottom: 0;
-}
-
 .settings-avatar-row {
 	display: flex;
 	align-items: center;
@@ -1765,6 +1757,14 @@ textarea {
 	font-weight: 600;
 	margin-bottom: 6px;
 	color: var(--color-text);
+}
+
+.with-info-tip:has(> .field-label) {
+	margin-bottom: 6px;
+}
+
+.with-info-tip > .field-label {
+	margin-bottom: 0;
 }
 
 .field-required {
