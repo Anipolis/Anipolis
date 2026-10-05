@@ -4,6 +4,7 @@ import {
 	findSyobocalOfficialXUrl,
 	findSyobocalWikipediaArticleLinks,
 	findSyobocalWikipediaKeywordLinks,
+	inferSyobocalOfficialSiteUrl,
 	japaneseWikipediaArticleTitle,
 	kanaFoldTitle,
 	latinFoldTitle,
@@ -30,6 +31,50 @@ describe("Syoboi Calendar title helpers", () => {
 		expect(links).toHaveLength(3);
 		expect(findSyobocalOfficialSiteUrl(links)).toBe("https://example.com/anime");
 		expect(findSyobocalOfficialXUrl(links)).toBe("https://x.com/example");
+	});
+
+	it("accepts anime-specific official labels but not source-work or franchise sites", () => {
+		const links = parseSyobocalLinks(`*リンク
+-[[原作公式 https://publisher.example/work]]
+-[[北斗の拳公式 https://franchise.example/]]
+-[[アニメ公式 https://anime.example/]]`);
+		expect(findSyobocalOfficialSiteUrl(links)).toBe("https://anime.example/");
+		expect(
+			findSyobocalOfficialSiteUrl(parseSyobocalLinks("-[[原作公式 https://publisher.example/work]]")),
+		).toBeNull();
+	});
+
+	it("infers the work page behind a company-name label in the link section", () => {
+		// Battle Spirits [Re] 絶界の空（TID 8046）
+		expect(
+			inferSyobocalOfficialSiteUrl(`*リンク
+-[[バンダイナムコピクチャーズ https://www.bn-pictures.co.jp/battlespirits/]]
+-[[X https://x.com/bs_animation]]
+
+*スタッフ
+:監督:工藤昌史`),
+		).toBe("https://www.bn-pictures.co.jp/battlespirits/");
+		// 報道・配信・原作サイトは飛ばす
+		expect(
+			inferSyobocalOfficialSiteUrl(`*リンク
+-[[原作公式 https://publisher.example/lp/work]]
+-[[プレスリリース https://www.atpress.ne.jp/news/1]]
+-[[TVer https://tver.jp/series/abc]]
+-[[テレビ東京 https://www.tv-tokyo.co.jp/anime/work/]]`),
+		).toBe("https://www.tv-tokyo.co.jp/anime/work/");
+		// 作品専用サブドメインのトップは採るが、会社サイトのトップは採らない
+		expect(inferSyobocalOfficialSiteUrl("*リンク\n-[[アスミック・エース https://arne.asmik-ace.co.jp/]]")).toBe(
+			"https://arne.asmik-ace.co.jp/",
+		);
+		expect(
+			inferSyobocalOfficialSiteUrl("*リンク\n-[[東映アニメーション https://www.toei-anim.co.jp/]]"),
+		).toBeNull();
+		expect(inferSyobocalOfficialSiteUrl("*リンク\n-[[制作会社 https://studio.example/]]")).toBeNull();
+		// リンク節以外（スタッフ欄の言及など）は対象外
+		expect(
+			inferSyobocalOfficialSiteUrl(`*スタッフ
+-[[制作会社 https://studio.example/works/anime]]`),
+		).toBeNull();
 	});
 
 	it("extracts Japanese Wikipedia articles from any linked comment position", () => {

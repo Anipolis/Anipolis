@@ -180,3 +180,65 @@ export function detectEpisodeAnomaliesByGroup<T extends EpisodeCheckProgram>(
 	}
 	return result;
 }
+
+/** 終了月と同じ月のうちは、最後の放送からこの日数が過ぎるまで「完結」とみなさない（未登録の最終回対策） */
+export const FINAL_EPISODE_SETTLE_DAYS = 8;
+
+export type FinalEpisodeSession = {
+	scheduledAt: string;
+	episodeNumber: number | null;
+};
+
+export type FinalEpisodeEnd = {
+	/** しょぼいの FirstEndYear / FirstEndMonth（放送終了月）。未登録なら null */
+	endYear: number | null;
+	endMonth: number | null;
+	/** マッピングの有効期間の終わり（共有 TID を分割した作品）。YYYY-MM-DD */
+	validTo: string | null;
+};
+
+/**
+ * しょぼい由来の放送セッションから「確定した総話数」を導く。確定できなければ null。
+ *
+ * しょぼいの Count は登録済みの放送分しか分からず、長期作品は1クール分だけ先に
+ * 登録されることもあるため、放送中・放送前の最大話数を総話数としては使わない。
+ * 次をすべて満たすときだけ最大話数を確定値とする:
+ *   - 放送終了月（またはマッピングの有効期間の終わり）が登録済みで、既に過ぎている
+ *   - 未来のセッションが残っていない
+ *   - 第1話から最大話数まで欠けなく揃っている（通期 TID の続き番号・異常で番号を外した回を除外）
+ */
+export function confirmedFinalEpisodeCount(
+	sessions: readonly FinalEpisodeSession[],
+	end: FinalEpisodeEnd,
+	now: Date,
+): number | null {
+	if (sessions.length === 0) return null;
+	const nowMs = now.getTime();
+	if (sessions.some((session) => Date.parse(session.scheduledAt) > nowMs)) return null;
+	const lastAiredMs = Math.max(...sessions.map((session) => Date.parse(session.scheduledAt)));
+
+	const today = jstDayKey(now);
+	const settled = nowMs - lastAiredMs >= FINAL_EPISODE_SETTLE_DAYS * 86_400_000;
+	let ended = end.validTo !== null && end.validTo < today;
+	if (!ended && end.endYear !== null && end.endMonth !== null) {
+		const endIndex = end.endYear * 12 + end.endMonth;
+		const currentIndex = Number(today.slice(0, 4)) * 12 + Number(today.slice(5, 7));
+		ended = endIndex < currentIndex || (endIndex === currentIndex && settled);
+	}
+	if (!ended) return null;
+
+	const numbers = new Set(
+		sessions.flatMap((session) =>
+			session.episodeNumber !== null && Number.isInteger(session.episodeNumber) && session.episodeNumber > 0
+				? [session.episodeNumber]
+				: [],
+		),
+	);
+	if (numbers.size === 0) return null;
+	const max = Math.max(...numbers);
+	return numbers.size === max ? max : null;
+}
+
+function jstDayKey(value: Date): string {
+	return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo" }).format(value);
+}

@@ -158,6 +158,131 @@ describe("resolveAnimeCatalog", () => {
 		expect(finished.canonical.episode_count).toBe("128");
 	});
 
+	it("does not trust the offline-database placeholder total before a show airs", () => {
+		// Battle Spirits [Re] 絶界の空パターン: AODB=1（暫定）、MAL=未定（num_episodes 0 → 取り込まれない）
+		const resolved = resolveAnimeCatalog(
+			[
+				source("anime_offline_database", {
+					title: "Example",
+					episode_count: "1",
+					status: "upcoming",
+					type: "TV",
+				}),
+				source("mal", { title_ja: "例の作品", status: "upcoming", aired_from: "2999-10-06" }),
+			],
+			{ ...legacy([]), status: "upcoming", episode_count: "1" },
+		);
+		expect(resolved.canonical.episode_count).toBeNull();
+		// MALが総話数を出していれば採用する
+		const announced = resolveAnimeCatalog([
+			source("anime_offline_database", { title: "Example", episode_count: "1", status: "upcoming", type: "TV" }),
+			source("mal", { title_ja: "例の作品", status: "upcoming", aired_from: "2999-10-06", episode_count: "12" }),
+		]);
+		expect(announced.canonical.episode_count).toBe("12");
+		// 放送前でも告知済みの話数（12）や OVA の「1」は正当なので残す
+		const preannounced = resolveAnimeCatalog([
+			source("anime_offline_database", { title: "Example", episode_count: "12", status: "upcoming", type: "TV" }),
+			source("mal", { title_ja: "例の作品", status: "upcoming", aired_from: "2999-10-06" }),
+		]);
+		expect(preannounced.canonical.episode_count).toBe("12");
+		const ova = resolveAnimeCatalog([
+			source("anime_offline_database", { title: "Example", episode_count: "1", status: "upcoming", type: "OVA" }),
+			source("mal", { title_ja: "例の作品", status: "upcoming", aired_from: "2999-10-06" }),
+		]);
+		expect(ova.canonical.episode_count).toBe("1");
+	});
+
+	it("replaces a stale pre-air placeholder with MAL's total after the show ends", () => {
+		// 天幕のジャードゥーガル パターン: 放送前に取り込んだ AODB=1 が終了後も残り、MAL=12
+		const resolved = resolveAnimeCatalog([
+			source("anime_offline_database", { title: "Example", episode_count: "1", status: "upcoming", type: "TV" }),
+			source("mal", {
+				title_ja: "例の作品",
+				status: "finished",
+				aired_from: "2020-07-04",
+				aired_to: "2020-09-12",
+				episode_count: "12",
+			}),
+		]);
+		expect(resolved.canonical.episode_count).toBe("12");
+		expect(resolved.fieldSources["episode_count"]?.source).toBe("mal");
+	});
+
+	it("prefers Syobocal's confirmed final episode total over other sources but not manual edits", () => {
+		const offline = source("anime_offline_database", { title: "Example", episode_count: "13", status: "finished" });
+		const records = [
+			offline,
+			source("mal", { title_ja: "例の作品", status: "finished", episode_count: "13" }),
+			source("syobocal", { title_ja: "例の作品", episode_count: "12", episode_count_basis: "final" }),
+		];
+		const resolved = resolveAnimeCatalog(records);
+		expect(resolved.canonical.episode_count).toBe("12");
+		expect(resolved.fieldSources["episode_count"]).toEqual({ source: "syobocal", confidence: "verified" });
+		// basis の無い値（放送中の登録済み最大話数等）は使わない
+		const unconfirmed = resolveAnimeCatalog([
+			offline,
+			source("syobocal", { title_ja: "例の作品", episode_count: "12" }),
+		]);
+		expect(unconfirmed.canonical.episode_count).toBe("13");
+		const manual = resolveAnimeCatalog([...records, source("manual", { episode_count: "14" })]);
+		expect(manual.canonical.episode_count).toBe("14");
+	});
+
+	it("fills a missing official site from the inferred Syobocal work page, below existing values", () => {
+		const syobocalInferred = source("syobocal", {
+			official_site_url: null,
+			official_site_url_inferred: "https://www.bn-pictures.co.jp/battlespirits/",
+		});
+		const inferred = resolveAnimeCatalog([source("mal", { title_ja: "例の作品" }), syobocalInferred], legacy([]));
+		expect(inferred.canonical.official_site_url).toBe("https://www.bn-pictures.co.jp/battlespirits/");
+		expect(inferred.fieldSources["official_site_url"]).toEqual({ source: "syobocal", confidence: "source" });
+		// 既に入っている値（前回値）は推定で置き換えない
+		const kept = resolveAnimeCatalog([source("mal", { title_ja: "例の作品" }), syobocalInferred], {
+			...legacy([]),
+			official_site_url: "https://dedicated.example/",
+		});
+		expect(kept.canonical.official_site_url).toBe("https://dedicated.example/");
+		// Jikan の作品専用ドメインは推定（局・配給サイト内ページ）より優先する
+		const jikan = resolveAnimeCatalog([
+			source("mal", { title_ja: "例の作品" }),
+			source("jikan", { official_site_url: "https://anime-sentai-daishikkaku.com/" }),
+			source("syobocal", {
+				official_site_url: null,
+				official_site_url_inferred: "https://sh-anime.shochiku.co.jp/anime-sentai-daishikkaku/",
+			}),
+		]);
+		expect(jikan.canonical.official_site_url).toBe("https://anime-sentai-daishikkaku.com/");
+		const labeled = resolveAnimeCatalog([
+			source("mal", { title_ja: "例の作品" }),
+			source("jikan", { official_site_url: "https://jikan.example/" }),
+			source("syobocal", {
+				official_site_url: "https://labeled.example/",
+				official_site_url_inferred: "https://inferred.example/",
+			}),
+		]);
+		expect(labeled.canonical.official_site_url).toBe("https://labeled.example/");
+	});
+
+	it("prefers MAL's total over an offline snapshot taken before the show finished", () => {
+		// 転スラ第4期パターン: AODB は放送中スナップショットの 12、MAL は終了後の 24
+		const resolved = resolveAnimeCatalog([
+			source("anime_offline_database", { title: "Example", episode_count: "12", status: "airing" }),
+			source("mal", {
+				title_ja: "例の作品",
+				aired_from: "2020-04-03",
+				aired_to: "2020-09-25",
+				episode_count: "24",
+			}),
+		]);
+		expect(resolved.canonical.episode_count).toBe("24");
+		// AODB 自身が終了を見た値はこれまでどおり優先する
+		const settled = resolveAnimeCatalog([
+			source("anime_offline_database", { title: "Example", episode_count: "10", status: "finished" }),
+			source("mal", { title_ja: "例の作品", episode_count: "11" }),
+		]);
+		expect(settled.canonical.episode_count).toBe("10");
+	});
+
 	it("rejects native-language titles smuggled into MAL's Japanese-title field", () => {
 		// 韓国作品: MALのja欄にハングル題
 		const korean = resolveAnimeCatalog([
