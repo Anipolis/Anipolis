@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createClient } from "@supabase/supabase-js";
+import { dedupeCopyrightCandidates } from "../src/lib/annict.ts";
 import { enqueueCopyrightReviews, fetchCopyrightClearedAnimeIds } from "./copyright-review-queue.ts";
 
 // Collect anime copyright notices (© lines) from resolved official sites.
@@ -230,7 +231,8 @@ async function main() {
 		const url = anime.official_site_url as string;
 		console.log(`[${index + 1}/${targets.length}] ${anime.title} — ${url}`);
 		const { html, status } = await fetchOfficialPage(url);
-		const candidates = html ? extractCandidates(html) : [];
+		// 年・区切り記号・会社の接尾語だけ違う候補は1つにまとめる（年が新しい表記を残す）
+		const candidates = html ? dedupeCopyrightCandidates(extractCandidates(html)) : [];
 		const result: CollectionResult = {
 			anime_id: anime.id,
 			mal_id: anime.mal_id,

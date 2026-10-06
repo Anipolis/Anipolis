@@ -10,6 +10,7 @@ import { buildAnimeDataAttributions } from "../src/lib/anime-data-attributions.t
 import {
 	annictTwitterUrl,
 	copyrightComparisonKey,
+	looseCopyrightKey,
 	normalizeAnnictCopyright,
 	normalizeAnnictOfficialSiteUrl,
 } from "../src/lib/annict.ts";
@@ -389,7 +390,8 @@ async function main() {
 			}
 			const key = copyrightComparisonKey(record.copyright);
 			if (anime.copyright) {
-				if (copyrightComparisonKey(anime.copyright) !== key) {
+				// 年・区切り記号・会社の接尾語だけの違いは食い違いとして扱わない
+				if (looseCopyrightKey(anime.copyright) !== looseCopyrightKey(record.copyright)) {
 					decisions.push({ ...base, annict_copyright: record.copyright, result: "mismatch", note: null });
 				}
 				continue;
