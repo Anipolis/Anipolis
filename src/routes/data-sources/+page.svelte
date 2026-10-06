@@ -71,6 +71,10 @@ import { WIKIDATA_STUDIO_TRANSFORMATION_URL } from "$lib/wikidata-studio-names";
 						</td>
 						<td>—</td>
 					</tr>
+					<tr>
+						<td><a href="https://annict.com/" target="_blank" rel="noopener noreferrer">Annict</a></td>
+						<td>—</td>
+					</tr>
 				</tbody>
 			</table>
 		</div>
