@@ -233,8 +233,9 @@ async function loadCandidates(
 				.eq("hidden_by_admin", false)
 				.order("id")
 				.range(from, to);
-			// 作品指定のときは種別で絞らない
-			query = animeIds.length > 0 ? query.in("id", animeIds) : query.in("type", types);
+			// 作品指定のときは種別・シーズンで絞らない
+			if (animeIds.length > 0) return query.in("id", animeIds);
+			query = query.in("type", types);
 			if (seasons.length > 0) query = query.in("season", seasons);
 			return query;
 		},
@@ -278,16 +279,18 @@ async function loadCandidates(
 }
 
 /** 承認済みで未公開のものを anime.cover_url に載せる。既にカバーがある作品は上書きしない */
-async function publishApproved(supabase: SupabaseClient) {
-	const assets = await fetchAll<{ id: number; anime_id: number; object_name: string }>((from, to) =>
-		supabase
+async function publishApproved(supabase: SupabaseClient, animeIds: number[]) {
+	const assets = await fetchAll<{ id: number; anime_id: number; object_name: string }>((from, to) => {
+		const query = supabase
 			.from("anime_cover_assets")
 			.select("id,anime_id,object_name")
 			.eq("review_status", "approved")
 			.is("published_at", null)
 			.order("id")
-			.range(from, to),
-	);
+			.range(from, to);
+		// 作品指定のときは指定した作品の分だけ公開する
+		return animeIds.length > 0 ? query.in("anime_id", animeIds) : query;
+	});
 	let published = 0;
 	let alreadyCovered = 0;
 	for (const asset of assets) {
@@ -332,6 +335,12 @@ async function uploadObject(supabase: SupabaseClient, name: string, data: Buffer
 	if (error) throw new Error(`Could not upload ${name}: ${error.message}`);
 }
 
+function parsePositiveInteger(value: string, option: string) {
+	const parsed = /^\d+$/.test(value) ? Number(value) : Number.NaN;
+	if (!Number.isSafeInteger(parsed) || parsed <= 0) throw new Error(`${option} must be a positive integer: ${value}`);
+	return parsed;
+}
+
 async function main() {
 	const { values } = parseArgs({
 		// pnpm は `pnpm <script> -- --flag` の区切りの `--` もそのまま渡してくる
@@ -352,10 +361,8 @@ async function main() {
 	for (const season of seasons) {
 		if (!SEASON_PATTERN.test(season)) throw new Error(`--season must look like 2024-winter: ${season}`);
 	}
-	const animeIds = (values["anime-id"] ?? []).map((id) => Number.parseInt(id, 10));
-	if (animeIds.some((id) => !(id > 0))) throw new Error("--anime-id must be a positive integer");
-	const limit = values.limit ? Number.parseInt(values.limit, 10) : undefined;
-	if (limit !== undefined && !(limit > 0)) throw new Error("--limit must be a positive integer");
+	const animeIds = (values["anime-id"] ?? []).map((id) => parsePositiveInteger(id, "--anime-id"));
+	const limit = values.limit ? parsePositiveInteger(values.limit, "--limit") : undefined;
 
 	const supabase = getSupabaseClient();
 	const {
@@ -365,7 +372,7 @@ async function main() {
 	} = await loadCandidates(supabase, types, seasons, animeIds, dryRun);
 	const candidates = limit ? allCandidates.slice(0, limit) : allCandidates;
 	console.log(
-		`${allCandidates.length} candidates (${types.join("/")}), processing ${candidates.length}${dryRun ? " (dry run)" : ""}. ` +
+		`${allCandidates.length} candidates (${animeIds.length > 0 ? `anime ${animeIds.join("/")}` : types.join("/")}), processing ${candidates.length}${dryRun ? " (dry run)" : ""}. ` +
 			`Skipped: ${skippedImported} already imported, ${skippedManual} with a manual cover_url.`,
 	);
 
@@ -444,7 +451,7 @@ async function main() {
 			`(${(stats.bytes / 1024 / 1024).toFixed(1)} MiB incl. thumbnails); ${stats.noImage} without an image, ${stats.failed} failed.`,
 	);
 
-	if (values.publish && !dryRun) await publishApproved(supabase);
+	if (values.publish && !dryRun) await publishApproved(supabase, animeIds);
 	if (stats.failed > 0) process.exitCode = 1;
 }
 
