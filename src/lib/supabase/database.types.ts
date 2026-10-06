@@ -6,31 +6,6 @@ export type Database = {
 	__InternalSupabase: {
 		PostgrestVersion: "14.5";
 	};
-	graphql_public: {
-		Tables: {
-			[_ in never]: never;
-		};
-		Views: {
-			[_ in never]: never;
-		};
-		Functions: {
-			graphql: {
-				Args: {
-					extensions?: Json;
-					operationName?: string;
-					query?: string;
-					variables?: Json;
-				};
-				Returns: Json;
-			};
-		};
-		Enums: {
-			[_ in never]: never;
-		};
-		CompositeTypes: {
-			[_ in never]: never;
-		};
-	};
 	public: {
 		Tables: {
 			account_moderation: {
@@ -127,21 +102,23 @@ export type Database = {
 					broadcast_station: string[] | null;
 					broadcast_time: string | null;
 					copyright: string | null;
+					cover_source_url: string | null;
 					cover_url: string | null;
 					created_at: string | null;
 					episode_count: string | null;
 					genre: string[] | null;
 					genre_en: string[] | null;
 					hidden_by_admin: boolean;
-					metadata_ready: boolean;
 					id: number;
 					mal_id: number | null;
+					metadata_ready: boolean;
 					official_hashtag: string[] | null;
 					official_site_url: string | null;
 					official_x_url: string | null;
 					producer: string[] | null;
 					resources: Json;
 					room_type: string;
+					room_type_source: string;
 					season: string | null;
 					source: string | null;
 					status: string;
@@ -151,6 +128,7 @@ export type Database = {
 					title: string;
 					title_en: string | null;
 					title_romaji: string | null;
+					title_yomi: string | null;
 					type: string | null;
 				};
 				Insert: {
@@ -163,21 +141,23 @@ export type Database = {
 					broadcast_station?: string[] | null;
 					broadcast_time?: string | null;
 					copyright?: string | null;
+					cover_source_url?: string | null;
 					cover_url?: string | null;
 					created_at?: string | null;
 					episode_count?: string | null;
 					genre?: string[] | null;
 					genre_en?: string[] | null;
 					hidden_by_admin?: boolean;
-					metadata_ready?: boolean;
 					id?: never;
 					mal_id?: number | null;
+					metadata_ready?: boolean;
 					official_hashtag?: string[] | null;
 					official_site_url?: string | null;
 					official_x_url?: string | null;
 					producer?: string[] | null;
 					resources?: Json;
 					room_type?: string;
+					room_type_source?: string;
 					season?: string | null;
 					source?: string | null;
 					status?: string;
@@ -187,6 +167,7 @@ export type Database = {
 					title: string;
 					title_en?: string | null;
 					title_romaji?: string | null;
+					title_yomi?: string | null;
 					type?: string | null;
 				};
 				Update: {
@@ -199,21 +180,23 @@ export type Database = {
 					broadcast_station?: string[] | null;
 					broadcast_time?: string | null;
 					copyright?: string | null;
+					cover_source_url?: string | null;
 					cover_url?: string | null;
 					created_at?: string | null;
 					episode_count?: string | null;
 					genre?: string[] | null;
 					genre_en?: string[] | null;
 					hidden_by_admin?: boolean;
-					metadata_ready?: boolean;
 					id?: never;
 					mal_id?: number | null;
+					metadata_ready?: boolean;
 					official_hashtag?: string[] | null;
 					official_site_url?: string | null;
 					official_x_url?: string | null;
 					producer?: string[] | null;
 					resources?: Json;
 					room_type?: string;
+					room_type_source?: string;
 					season?: string | null;
 					source?: string | null;
 					status?: string;
@@ -223,148 +206,229 @@ export type Database = {
 					title?: string;
 					title_en?: string | null;
 					title_romaji?: string | null;
+					title_yomi?: string | null;
 					type?: string | null;
 				};
 				Relationships: [];
 			};
-			anime_resolution_records: {
+			anime_copyright_reviews: {
 				Row: {
-					field_sources: Json;
-					mal_id: number;
-					resolution_reasons: Json;
-					resolution_status: string;
-					resolved_at: string;
-					resolved_data: Json;
+					anime_id: number;
+					candidates: Json;
+					created_at: string;
+					id: number;
+					kind: string;
+					note: string | null;
+					resolution: string | null;
+					resolved_at: string | null;
+					resolved_by: string | null;
+					resolved_copyright: string | null;
+					status: string;
 				};
 				Insert: {
-					field_sources: Json;
-					mal_id: number;
-					resolution_reasons?: Json;
-					resolution_status: string;
-					resolved_at?: string;
-					resolved_data: Json;
+					anime_id: number;
+					candidates?: Json;
+					created_at?: string;
+					id?: never;
+					kind: string;
+					note?: string | null;
+					resolution?: string | null;
+					resolved_at?: string | null;
+					resolved_by?: string | null;
+					resolved_copyright?: string | null;
+					status?: string;
 				};
 				Update: {
-					field_sources?: Json;
-					mal_id?: number;
-					resolution_reasons?: Json;
-					resolution_status?: string;
-					resolved_at?: string;
-					resolved_data?: Json;
+					anime_id?: number;
+					candidates?: Json;
+					created_at?: string;
+					id?: never;
+					kind?: string;
+					note?: string | null;
+					resolution?: string | null;
+					resolved_at?: string | null;
+					resolved_by?: string | null;
+					resolved_copyright?: string | null;
+					status?: string;
 				};
 				Relationships: [
 					{
-						foreignKeyName: "anime_resolution_records_mal_id_fkey";
-						columns: ["mal_id"];
-						isOneToOne: true;
+						foreignKeyName: "anime_copyright_reviews_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "anime_copyright_reviews_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_popularity";
+						referencedColumns: ["anime_id"];
+					},
+					{
+						foreignKeyName: "anime_copyright_reviews_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_top_rated";
+						referencedColumns: ["anime_id"];
+					},
+					{
+						foreignKeyName: "anime_copyright_reviews_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_trending";
+						referencedColumns: ["anime_id"];
+					},
+					{
+						foreignKeyName: "anime_copyright_reviews_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_with_computed_broadcast_status";
+						referencedColumns: ["id"];
+					},
+				];
+			};
+			anime_cover_assets: {
+				Row: {
+					anime_id: number;
+					bytes: number;
+					fetched_at: string;
+					height: number;
+					id: number;
+					mal_id: number | null;
+					object_name: string;
+					published_at: string | null;
+					review_reason: string | null;
+					review_status: string;
+					sha256: string;
+					source: string;
+					source_api_url: string;
+					source_height: number;
+					source_image_url: string;
+					source_width: number;
+					updated_at: string;
+					width: number;
+				};
+				Insert: {
+					anime_id: number;
+					bytes: number;
+					fetched_at?: string;
+					height: number;
+					id?: number;
+					mal_id?: number | null;
+					object_name: string;
+					published_at?: string | null;
+					review_reason?: string | null;
+					review_status?: string;
+					sha256: string;
+					source: string;
+					source_api_url: string;
+					source_height: number;
+					source_image_url: string;
+					source_width: number;
+					updated_at?: string;
+					width: number;
+				};
+				Update: {
+					anime_id?: number;
+					bytes?: number;
+					fetched_at?: string;
+					height?: number;
+					id?: number;
+					mal_id?: number | null;
+					object_name?: string;
+					published_at?: string | null;
+					review_reason?: string | null;
+					review_status?: string;
+					sha256?: string;
+					source?: string;
+					source_api_url?: string;
+					source_height?: number;
+					source_image_url?: string;
+					source_width?: number;
+					updated_at?: string;
+					width?: number;
+				};
+				Relationships: [
+					{
+						foreignKeyName: "anime_cover_assets_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "anime_cover_assets_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_popularity";
+						referencedColumns: ["anime_id"];
+					},
+					{
+						foreignKeyName: "anime_cover_assets_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_top_rated";
+						referencedColumns: ["anime_id"];
+					},
+					{
+						foreignKeyName: "anime_cover_assets_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_trending";
+						referencedColumns: ["anime_id"];
+					},
+					{
+						foreignKeyName: "anime_cover_assets_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_with_computed_broadcast_status";
+						referencedColumns: ["id"];
+					},
+				];
+			};
+			anime_data_attributions: {
+				Row: {
+					anime_mal_id: number;
+					label: string;
+					license_label: string | null;
+					license_url: string | null;
+					source: string;
+					source_url: string;
+				};
+				Insert: {
+					anime_mal_id: number;
+					label: string;
+					license_label?: string | null;
+					license_url?: string | null;
+					source: string;
+					source_url: string;
+				};
+				Update: {
+					anime_mal_id?: number;
+					label?: string;
+					license_label?: string | null;
+					license_url?: string | null;
+					source?: string;
+					source_url?: string;
+				};
+				Relationships: [
+					{
+						foreignKeyName: "anime_data_attributions_anime_mal_id_fkey";
+						columns: ["anime_mal_id"];
+						isOneToOne: false;
 						referencedRelation: "anime";
 						referencedColumns: ["mal_id"];
 					},
-				];
-			};
-			anime_source_records: {
-				Row: {
-					id: number;
-					imported_at: string;
-					mal_id: number;
-					normalized_data: Json;
-					source: string;
-					source_updated_at: string | null;
-					source_url: string;
-					source_version: string;
-				};
-				Insert: {
-					id?: number;
-					imported_at?: string;
-					mal_id: number;
-					normalized_data: Json;
-					source: string;
-					source_updated_at?: string | null;
-					source_url: string;
-					source_version: string;
-				};
-				Update: {
-					id?: number;
-					imported_at?: string;
-					mal_id?: number;
-					normalized_data?: Json;
-					source?: string;
-					source_updated_at?: string | null;
-					source_url?: string;
-					source_version?: string;
-				};
-				Relationships: [];
-			};
-			studio_name_aliases: {
-				Row: {
-					alias: string;
-					alias_key: string;
-					imported_at: string;
-					match_method: string;
-					source: string;
-					source_key: string;
-				};
-				Insert: {
-					alias: string;
-					alias_key: string;
-					imported_at?: string;
-					match_method: string;
-					source: string;
-					source_key: string;
-				};
-				Update: {
-					alias?: string;
-					alias_key?: string;
-					imported_at?: string;
-					match_method?: string;
-					source?: string;
-					source_key?: string;
-				};
-				Relationships: [
 					{
-						foreignKeyName: "studio_name_aliases_source_source_key_fkey";
-						columns: ["source", "source_key"];
+						foreignKeyName: "anime_data_attributions_anime_mal_id_fkey";
+						columns: ["anime_mal_id"];
 						isOneToOne: false;
-						referencedRelation: "studio_source_records";
-						referencedColumns: ["source", "source_key"];
+						referencedRelation: "anime_with_computed_broadcast_status";
+						referencedColumns: ["mal_id"];
 					},
 				];
-			};
-			studio_source_records: {
-				Row: {
-					aliases: Json;
-					imported_at: string;
-					mal_company_id: number | null;
-					name_en: string;
-					name_ja: string | null;
-					source: string;
-					source_key: string;
-					source_url: string;
-					source_version: string;
-				};
-				Insert: {
-					aliases?: Json;
-					imported_at?: string;
-					mal_company_id?: number | null;
-					name_en: string;
-					name_ja?: string | null;
-					source: string;
-					source_key: string;
-					source_url: string;
-					source_version: string;
-				};
-				Update: {
-					aliases?: Json;
-					imported_at?: string;
-					mal_company_id?: number | null;
-					name_en?: string;
-					name_ja?: string | null;
-					source?: string;
-					source_key?: string;
-					source_url?: string;
-					source_version?: string;
-				};
-				Relationships: [];
 			};
 			anime_exchange_entries: {
 				Row: {
@@ -451,6 +515,57 @@ export type Database = {
 						referencedColumns: ["id"];
 					},
 				];
+			};
+			anime_external_mappings: {
+				Row: {
+					evidence: Json;
+					external_key: string;
+					external_source: string;
+					imported_at: string;
+					is_primary: boolean;
+					mal_id: number;
+					match_method: string;
+					match_status: string;
+					reviewed_at: string | null;
+					source_url: string;
+					source_version: string | null;
+					use_for_title: boolean;
+					valid_from: string | null;
+					valid_to: string | null;
+				};
+				Insert: {
+					evidence?: Json;
+					external_key: string;
+					external_source: string;
+					imported_at?: string;
+					is_primary?: boolean;
+					mal_id: number;
+					match_method: string;
+					match_status: string;
+					reviewed_at?: string | null;
+					source_url: string;
+					source_version?: string | null;
+					use_for_title?: boolean;
+					valid_from?: string | null;
+					valid_to?: string | null;
+				};
+				Update: {
+					evidence?: Json;
+					external_key?: string;
+					external_source?: string;
+					imported_at?: string;
+					is_primary?: boolean;
+					mal_id?: number;
+					match_method?: string;
+					match_status?: string;
+					reviewed_at?: string | null;
+					source_url?: string;
+					source_version?: string | null;
+					use_for_title?: boolean;
+					valid_from?: string | null;
+					valid_to?: string | null;
+				};
+				Relationships: [];
 			};
 			anime_mutes: {
 				Row: {
@@ -639,6 +754,96 @@ export type Database = {
 						referencedColumns: ["mal_id"];
 					},
 				];
+			};
+			anime_resolution_records: {
+				Row: {
+					field_sources: Json;
+					mal_id: number;
+					resolution_reasons: Json;
+					resolution_status: string;
+					resolved_at: string;
+					resolved_data: Json;
+				};
+				Insert: {
+					field_sources: Json;
+					mal_id: number;
+					resolution_reasons?: Json;
+					resolution_status: string;
+					resolved_at?: string;
+					resolved_data: Json;
+				};
+				Update: {
+					field_sources?: Json;
+					mal_id?: number;
+					resolution_reasons?: Json;
+					resolution_status?: string;
+					resolved_at?: string;
+					resolved_data?: Json;
+				};
+				Relationships: [
+					{
+						foreignKeyName: "anime_resolution_records_mal_id_fkey";
+						columns: ["mal_id"];
+						isOneToOne: true;
+						referencedRelation: "anime";
+						referencedColumns: ["mal_id"];
+					},
+					{
+						foreignKeyName: "anime_resolution_records_mal_id_fkey";
+						columns: ["mal_id"];
+						isOneToOne: true;
+						referencedRelation: "anime_with_computed_broadcast_status";
+						referencedColumns: ["mal_id"];
+					},
+				];
+			};
+			anime_source_records: {
+				Row: {
+					id: number;
+					imported_at: string;
+					mal_id: number;
+					normalized_data: Json;
+					source: string;
+					source_updated_at: string | null;
+					source_url: string;
+					source_version: string;
+				};
+				Insert: {
+					id?: number;
+					imported_at?: string;
+					mal_id: number;
+					normalized_data: Json;
+					source: string;
+					source_updated_at?: string | null;
+					source_url: string;
+					source_version: string;
+				};
+				Update: {
+					id?: number;
+					imported_at?: string;
+					mal_id?: number;
+					normalized_data?: Json;
+					source?: string;
+					source_updated_at?: string | null;
+					source_url?: string;
+					source_version?: string;
+				};
+				Relationships: [];
+			};
+			app_config: {
+				Row: {
+					key: string;
+					value: Json;
+				};
+				Insert: {
+					key: string;
+					value: Json;
+				};
+				Update: {
+					key?: string;
+					value?: Json;
+				};
+				Relationships: [];
 			};
 			bookmarks: {
 				Row: {
@@ -953,37 +1158,67 @@ export type Database = {
 					anime_id: number;
 					created_at: string;
 					duration_minutes: number;
+					episode_number: number | null;
+					episode_title: string | null;
 					id: string;
 					posting_closes_at: string;
 					posting_opens_at: string;
 					room_date: string;
 					room_key: string;
 					room_kind: string;
+					schedule_correction_note: string | null;
+					schedule_frozen_at: string | null;
+					schedule_source: string | null;
 					scheduled_at: string;
+					source_channel_id: number | null;
+					source_channel_name: string | null;
+					source_program_id: number | null;
+					source_snapshot: Json | null;
+					source_title_id: number | null;
 				};
 				Insert: {
 					anime_id: number;
 					created_at?: string;
 					duration_minutes: number;
+					episode_number?: number | null;
+					episode_title?: string | null;
 					id?: string;
 					posting_closes_at: string;
 					posting_opens_at: string;
 					room_date: string;
 					room_key?: string;
 					room_kind?: string;
+					schedule_correction_note?: string | null;
+					schedule_frozen_at?: string | null;
+					schedule_source?: string | null;
 					scheduled_at: string;
+					source_channel_id?: number | null;
+					source_channel_name?: string | null;
+					source_program_id?: number | null;
+					source_snapshot?: Json | null;
+					source_title_id?: number | null;
 				};
 				Update: {
 					anime_id?: number;
 					created_at?: string;
 					duration_minutes?: number;
+					episode_number?: number | null;
+					episode_title?: string | null;
 					id?: string;
 					posting_closes_at?: string;
 					posting_opens_at?: string;
 					room_date?: string;
 					room_key?: string;
 					room_kind?: string;
+					schedule_correction_note?: string | null;
+					schedule_frozen_at?: string | null;
+					schedule_source?: string | null;
 					scheduled_at?: string;
+					source_channel_id?: number | null;
+					source_channel_name?: string | null;
+					source_program_id?: number | null;
+					source_snapshot?: Json | null;
+					source_title_id?: number | null;
 				};
 				Relationships: [
 					{
@@ -1057,9 +1292,6 @@ export type Database = {
 					created_at: string;
 					event_id: string;
 					id: string;
-					notify_1min: boolean;
-					notify_30min: boolean;
-					notify_5min: boolean;
 					updated_at: string;
 					user_id: string;
 				};
@@ -1067,9 +1299,6 @@ export type Database = {
 					created_at?: string;
 					event_id: string;
 					id?: string;
-					notify_1min?: boolean;
-					notify_30min?: boolean;
-					notify_5min?: boolean;
 					updated_at?: string;
 					user_id: string;
 				};
@@ -1077,9 +1306,6 @@ export type Database = {
 					created_at?: string;
 					event_id?: string;
 					id?: string;
-					notify_1min?: boolean;
-					notify_30min?: boolean;
-					notify_5min?: boolean;
 					updated_at?: string;
 					user_id?: string;
 				};
@@ -1262,6 +1488,76 @@ export type Database = {
 				};
 				Relationships: [];
 			};
+			invite_redemptions: {
+				Row: {
+					id: string;
+					invite_id: string;
+					redeemed_at: string;
+					user_id: string;
+				};
+				Insert: {
+					id?: string;
+					invite_id: string;
+					redeemed_at?: string;
+					user_id: string;
+				};
+				Update: {
+					id?: string;
+					invite_id?: string;
+					redeemed_at?: string;
+					user_id?: string;
+				};
+				Relationships: [
+					{
+						foreignKeyName: "invite_redemptions_invite_id_fkey";
+						columns: ["invite_id"];
+						isOneToOne: false;
+						referencedRelation: "invites";
+						referencedColumns: ["id"];
+					},
+				];
+			};
+			invites: {
+				Row: {
+					code: string;
+					created_at: string;
+					created_by: string;
+					expires_at: string | null;
+					id: string;
+					max_uses: number;
+					revoked_at: string | null;
+					use_count: number;
+				};
+				Insert: {
+					code: string;
+					created_at?: string;
+					created_by: string;
+					expires_at?: string | null;
+					id?: string;
+					max_uses?: number;
+					revoked_at?: string | null;
+					use_count?: number;
+				};
+				Update: {
+					code?: string;
+					created_at?: string;
+					created_by?: string;
+					expires_at?: string | null;
+					id?: string;
+					max_uses?: number;
+					revoked_at?: string | null;
+					use_count?: number;
+				};
+				Relationships: [
+					{
+						foreignKeyName: "invites_created_by_fkey";
+						columns: ["created_by"];
+						isOneToOne: false;
+						referencedRelation: "profiles";
+						referencedColumns: ["id"];
+					},
+				];
+			};
 			likes: {
 				Row: {
 					created_at: string;
@@ -1369,7 +1665,11 @@ export type Database = {
 					broadcast_room_date: string | null;
 					broadcast_scheduled_at: string | null;
 					created_at: string;
+					event_id: string | null;
+					exchange_anime_id: number | null;
 					id: string;
+					mylist_anime_id: number | null;
+					mylist_status: string | null;
 					post_id: string | null;
 					read: boolean;
 					recipient_id: string;
@@ -1383,7 +1683,11 @@ export type Database = {
 					broadcast_room_date?: string | null;
 					broadcast_scheduled_at?: string | null;
 					created_at?: string;
+					event_id?: string | null;
+					exchange_anime_id?: number | null;
 					id?: string;
+					mylist_anime_id?: number | null;
+					mylist_status?: string | null;
 					post_id?: string | null;
 					read?: boolean;
 					recipient_id: string;
@@ -1397,7 +1701,11 @@ export type Database = {
 					broadcast_room_date?: string | null;
 					broadcast_scheduled_at?: string | null;
 					created_at?: string;
+					event_id?: string | null;
+					exchange_anime_id?: number | null;
 					id?: string;
+					mylist_anime_id?: number | null;
+					mylist_status?: string | null;
 					post_id?: string | null;
 					read?: boolean;
 					recipient_id?: string;
@@ -1449,6 +1757,83 @@ export type Database = {
 					{
 						foreignKeyName: "notifications_broadcast_anime_id_fkey";
 						columns: ["broadcast_anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_with_computed_broadcast_status";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "notifications_event_id_fkey";
+						columns: ["event_id"];
+						isOneToOne: false;
+						referencedRelation: "events";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "notifications_exchange_anime_id_fkey";
+						columns: ["exchange_anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "notifications_exchange_anime_id_fkey";
+						columns: ["exchange_anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_popularity";
+						referencedColumns: ["anime_id"];
+					},
+					{
+						foreignKeyName: "notifications_exchange_anime_id_fkey";
+						columns: ["exchange_anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_top_rated";
+						referencedColumns: ["anime_id"];
+					},
+					{
+						foreignKeyName: "notifications_exchange_anime_id_fkey";
+						columns: ["exchange_anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_trending";
+						referencedColumns: ["anime_id"];
+					},
+					{
+						foreignKeyName: "notifications_exchange_anime_id_fkey";
+						columns: ["exchange_anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_with_computed_broadcast_status";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "notifications_mylist_anime_id_fkey";
+						columns: ["mylist_anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "notifications_mylist_anime_id_fkey";
+						columns: ["mylist_anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_popularity";
+						referencedColumns: ["anime_id"];
+					},
+					{
+						foreignKeyName: "notifications_mylist_anime_id_fkey";
+						columns: ["mylist_anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_top_rated";
+						referencedColumns: ["anime_id"];
+					},
+					{
+						foreignKeyName: "notifications_mylist_anime_id_fkey";
+						columns: ["mylist_anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_trending";
+						referencedColumns: ["anime_id"];
+					},
+					{
+						foreignKeyName: "notifications_mylist_anime_id_fkey";
+						columns: ["mylist_anime_id"];
 						isOneToOne: false;
 						referencedRelation: "anime_with_computed_broadcast_status";
 						referencedColumns: ["id"];
@@ -2148,6 +2533,251 @@ export type Database = {
 					},
 				];
 			};
+			studio_name_aliases: {
+				Row: {
+					alias: string;
+					alias_key: string;
+					imported_at: string;
+					match_method: string;
+					source: string;
+					source_key: string;
+				};
+				Insert: {
+					alias: string;
+					alias_key: string;
+					imported_at?: string;
+					match_method: string;
+					source: string;
+					source_key: string;
+				};
+				Update: {
+					alias?: string;
+					alias_key?: string;
+					imported_at?: string;
+					match_method?: string;
+					source?: string;
+					source_key?: string;
+				};
+				Relationships: [
+					{
+						foreignKeyName: "studio_name_aliases_source_source_key_fkey";
+						columns: ["source", "source_key"];
+						isOneToOne: false;
+						referencedRelation: "studio_source_records";
+						referencedColumns: ["source", "source_key"];
+					},
+				];
+			};
+			studio_source_records: {
+				Row: {
+					aliases: Json;
+					canonical_name_en: string;
+					canonical_name_ja: string | null;
+					canonical_name_source: string;
+					imported_at: string;
+					mal_company_id: number | null;
+					name_en: string;
+					name_ja: string | null;
+					source: string;
+					source_key: string;
+					source_url: string;
+					source_version: string;
+				};
+				Insert: {
+					aliases?: Json;
+					canonical_name_en: string;
+					canonical_name_ja?: string | null;
+					canonical_name_source: string;
+					imported_at?: string;
+					mal_company_id?: number | null;
+					name_en: string;
+					name_ja?: string | null;
+					source: string;
+					source_key: string;
+					source_url: string;
+					source_version: string;
+				};
+				Update: {
+					aliases?: Json;
+					canonical_name_en?: string;
+					canonical_name_ja?: string | null;
+					canonical_name_source?: string;
+					imported_at?: string;
+					mal_company_id?: number | null;
+					name_en?: string;
+					name_ja?: string | null;
+					source?: string;
+					source_key?: string;
+					source_url?: string;
+					source_version?: string;
+				};
+				Relationships: [];
+			};
+			syobocal_channels: {
+				Row: {
+					channel_group_id: number | null;
+					channel_number: number | null;
+					chid: number;
+					epg_name: string | null;
+					epg_url: string | null;
+					imported_at: string;
+					name: string;
+					raw_data: Json;
+					site_url: string | null;
+					source_updated_at: string | null;
+				};
+				Insert: {
+					channel_group_id?: number | null;
+					channel_number?: number | null;
+					chid: number;
+					epg_name?: string | null;
+					epg_url?: string | null;
+					imported_at?: string;
+					name: string;
+					raw_data: Json;
+					site_url?: string | null;
+					source_updated_at?: string | null;
+				};
+				Update: {
+					channel_group_id?: number | null;
+					channel_number?: number | null;
+					chid?: number;
+					epg_name?: string | null;
+					epg_url?: string | null;
+					imported_at?: string;
+					name?: string;
+					raw_data?: Json;
+					site_url?: string | null;
+					source_updated_at?: string | null;
+				};
+				Relationships: [];
+			};
+			syobocal_programs: {
+				Row: {
+					chid: number;
+					deleted: boolean;
+					ends_at: string;
+					episode_number: number | null;
+					flags: number;
+					imported_at: string;
+					pid: number;
+					program_comment: string | null;
+					raw_data: Json;
+					revision: number;
+					source_updated_at: string | null;
+					start_offset_seconds: number;
+					starts_at: string;
+					subtitle: string | null;
+					tid: number;
+					warning: boolean;
+				};
+				Insert: {
+					chid: number;
+					deleted?: boolean;
+					ends_at: string;
+					episode_number?: number | null;
+					flags?: number;
+					imported_at?: string;
+					pid: number;
+					program_comment?: string | null;
+					raw_data: Json;
+					revision?: number;
+					source_updated_at?: string | null;
+					start_offset_seconds?: number;
+					starts_at: string;
+					subtitle?: string | null;
+					tid: number;
+					warning?: boolean;
+				};
+				Update: {
+					chid?: number;
+					deleted?: boolean;
+					ends_at?: string;
+					episode_number?: number | null;
+					flags?: number;
+					imported_at?: string;
+					pid?: number;
+					program_comment?: string | null;
+					raw_data?: Json;
+					revision?: number;
+					source_updated_at?: string | null;
+					start_offset_seconds?: number;
+					starts_at?: string;
+					subtitle?: string | null;
+					tid?: number;
+					warning?: boolean;
+				};
+				Relationships: [
+					{
+						foreignKeyName: "syobocal_programs_chid_fkey";
+						columns: ["chid"];
+						isOneToOne: false;
+						referencedRelation: "syobocal_channels";
+						referencedColumns: ["chid"];
+					},
+					{
+						foreignKeyName: "syobocal_programs_tid_fkey";
+						columns: ["tid"];
+						isOneToOne: false;
+						referencedRelation: "syobocal_titles";
+						referencedColumns: ["tid"];
+					},
+				];
+			};
+			syobocal_titles: {
+				Row: {
+					category: number | null;
+					first_channel: string | null;
+					first_month: number | null;
+					first_year: number | null;
+					imported_at: string;
+					links: Json;
+					official_site_url: string | null;
+					official_x_url: string | null;
+					raw_data: Json;
+					short_title: string | null;
+					source_updated_at: string | null;
+					source_url: string;
+					tid: number;
+					title: string;
+					title_yomi: string | null;
+				};
+				Insert: {
+					category?: number | null;
+					first_channel?: string | null;
+					first_month?: number | null;
+					first_year?: number | null;
+					imported_at?: string;
+					links?: Json;
+					official_site_url?: string | null;
+					official_x_url?: string | null;
+					raw_data: Json;
+					short_title?: string | null;
+					source_updated_at?: string | null;
+					source_url: string;
+					tid: number;
+					title: string;
+					title_yomi?: string | null;
+				};
+				Update: {
+					category?: number | null;
+					first_channel?: string | null;
+					first_month?: number | null;
+					first_year?: number | null;
+					imported_at?: string;
+					links?: Json;
+					official_site_url?: string | null;
+					official_x_url?: string | null;
+					raw_data?: Json;
+					short_title?: string | null;
+					source_updated_at?: string | null;
+					source_url?: string;
+					tid?: number;
+					title?: string;
+					title_yomi?: string | null;
+				};
+				Relationships: [];
+			};
 			user_anime_list: {
 				Row: {
 					anime_id: number;
@@ -2254,21 +2884,23 @@ export type Database = {
 					broadcast_time: string | null;
 					computed_broadcast_status: string | null;
 					copyright: string | null;
+					cover_source_url: string | null;
 					cover_url: string | null;
 					created_at: string | null;
 					episode_count: string | null;
 					genre: string[] | null;
 					genre_en: string[] | null;
 					hidden_by_admin: boolean | null;
-					metadata_ready: boolean | null;
 					id: number | null;
 					mal_id: number | null;
+					metadata_ready: boolean | null;
 					official_hashtag: string[] | null;
 					official_site_url: string | null;
 					official_x_url: string | null;
 					producer: string[] | null;
 					resources: Json | null;
 					room_type: string | null;
+					room_type_source: string | null;
 					season: string | null;
 					source: string | null;
 					status: string | null;
@@ -2278,6 +2910,7 @@ export type Database = {
 					title: string | null;
 					title_en: string | null;
 					title_romaji: string | null;
+					title_yomi: string | null;
 					type: string | null;
 				};
 				Insert: {
@@ -2291,21 +2924,23 @@ export type Database = {
 					broadcast_time?: string | null;
 					computed_broadcast_status?: never;
 					copyright?: string | null;
+					cover_source_url?: string | null;
 					cover_url?: string | null;
 					created_at?: string | null;
 					episode_count?: string | null;
 					genre?: string[] | null;
 					genre_en?: string[] | null;
 					hidden_by_admin?: boolean | null;
-					metadata_ready?: boolean | null;
 					id?: number | null;
 					mal_id?: number | null;
+					metadata_ready?: boolean | null;
 					official_hashtag?: string[] | null;
 					official_site_url?: string | null;
 					official_x_url?: string | null;
 					producer?: string[] | null;
 					resources?: Json | null;
 					room_type?: string | null;
+					room_type_source?: string | null;
 					season?: string | null;
 					source?: string | null;
 					status?: string | null;
@@ -2315,6 +2950,7 @@ export type Database = {
 					title?: string | null;
 					title_en?: string | null;
 					title_romaji?: string | null;
+					title_yomi?: string | null;
 					type?: string | null;
 				};
 				Update: {
@@ -2328,21 +2964,23 @@ export type Database = {
 					broadcast_time?: string | null;
 					computed_broadcast_status?: never;
 					copyright?: string | null;
+					cover_source_url?: string | null;
 					cover_url?: string | null;
 					created_at?: string | null;
 					episode_count?: string | null;
 					genre?: string[] | null;
 					genre_en?: string[] | null;
 					hidden_by_admin?: boolean | null;
-					metadata_ready?: boolean | null;
 					id?: number | null;
 					mal_id?: number | null;
+					metadata_ready?: boolean | null;
 					official_hashtag?: string[] | null;
 					official_site_url?: string | null;
 					official_x_url?: string | null;
 					producer?: string[] | null;
 					resources?: Json | null;
 					room_type?: string | null;
+					room_type_source?: string | null;
 					season?: string | null;
 					source?: string | null;
 					status?: string | null;
@@ -2352,6 +2990,7 @@ export type Database = {
 					title?: string | null;
 					title_en?: string | null;
 					title_romaji?: string | null;
+					title_yomi?: string | null;
 					type?: string | null;
 				};
 				Relationships: [];
@@ -2373,6 +3012,15 @@ export type Database = {
 					cancelled_count: number;
 				}[];
 			};
+			check_invite_code: { Args: { p_code: string }; Returns: boolean };
+			correct_broadcast_room_session_episode: {
+				Args: {
+					p_anomaly?: Json;
+					p_episode_number: number;
+					p_session_id: string;
+				};
+				Returns: boolean;
+			};
 			create_anime_exchange: {
 				Args: {
 					p_anime_id: number;
@@ -2385,6 +3033,10 @@ export type Database = {
 					received_entry_id: string;
 				}[];
 			};
+			create_invite: {
+				Args: { p_expires_at?: string; p_max_uses?: number };
+				Returns: string;
+			};
 			dispatch_due_broadcast_notifications: { Args: never; Returns: undefined };
 			enqueue_due_broadcast_notifications: {
 				Args: { target_user_id?: string };
@@ -2396,13 +3048,23 @@ export type Database = {
 					anime_id: number;
 					created_at: string;
 					duration_minutes: number;
+					episode_number: number | null;
+					episode_title: string | null;
 					id: string;
 					posting_closes_at: string;
 					posting_opens_at: string;
 					room_date: string;
 					room_key: string;
 					room_kind: string;
+					schedule_correction_note: string | null;
+					schedule_frozen_at: string | null;
+					schedule_source: string | null;
 					scheduled_at: string;
+					source_channel_id: number | null;
+					source_channel_name: string | null;
+					source_program_id: number | null;
+					source_snapshot: Json | null;
+					source_title_id: number | null;
 				}[];
 				SetofOptions: {
 					from: "*";
@@ -2417,13 +3079,23 @@ export type Database = {
 					anime_id: number;
 					created_at: string;
 					duration_minutes: number;
+					episode_number: number | null;
+					episode_title: string | null;
 					id: string;
 					posting_closes_at: string;
 					posting_opens_at: string;
 					room_date: string;
 					room_key: string;
 					room_kind: string;
+					schedule_correction_note: string | null;
+					schedule_frozen_at: string | null;
+					schedule_source: string | null;
 					scheduled_at: string;
+					source_channel_id: number | null;
+					source_channel_name: string | null;
+					source_program_id: number | null;
+					source_snapshot: Json | null;
+					source_title_id: number | null;
 				}[];
 				SetofOptions: {
 					from: "*";
@@ -2433,6 +3105,15 @@ export type Database = {
 				};
 			};
 			generate_due_broadcast_notifications: { Args: never; Returns: undefined };
+			get_following_timeline: {
+				Args: { p_before?: string; p_before_id?: string; p_limit?: number };
+				Returns: {
+					post_id: string;
+					repost_user_id: string;
+					reposted_at: string;
+					timeline_created_at: string;
+				}[];
+			};
 			get_post_counts: {
 				Args: { p_post_ids: string[]; p_user_id?: string };
 				Returns: {
@@ -2446,7 +3127,12 @@ export type Database = {
 				}[];
 			};
 			get_post_reaction_users: {
-				Args: { action_type: string; target_post_id: string };
+				Args: {
+					action_type: string;
+					p_limit?: number;
+					p_offset?: number;
+					target_post_id: string;
+				};
 				Returns: {
 					avatar_url: string;
 					display_name: string;
@@ -2462,11 +3148,14 @@ export type Database = {
 					post_count: number;
 				}[];
 			};
+			has_beta_write_access: { Args: never; Returns: boolean };
 			is_current_user_admin: { Args: never; Returns: boolean };
 			is_profile_active_for_writes: {
 				Args: { profile_id: string };
 				Returns: boolean;
 			};
+			redeem_invite: { Args: { p_code: string }; Returns: undefined };
+			revoke_invite: { Args: { p_invite_id: string }; Returns: undefined };
 			show_limit: { Args: never; Returns: number };
 			show_trgm: { Args: { "": string }; Returns: string[] };
 		};
@@ -2589,9 +3278,6 @@ export type CompositeTypes<
 		: never;
 
 export const Constants = {
-	graphql_public: {
-		Enums: {},
-	},
 	public: {
 		Enums: {},
 	},

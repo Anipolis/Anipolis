@@ -1,11 +1,14 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createClient } from "@supabase/supabase-js";
+import { enqueueCopyrightReviews, fetchCopyrightClearedAnimeIds } from "./copyright-review-queue.ts";
 
 // Collect anime copyright notices (© lines) from resolved official sites.
 // Candidates go to a review file; --apply additionally fills anime.copyright,
 // but only where the column is still empty AND exactly one clean candidate
-// was found. Ambiguous pages always stay manual.
+// was found. Pages with several candidates are queued for the admin
+// "©確認" page (anime_copyright_reviews) when --apply is given. Titles an
+// admin confirmed as having no copyright notice are never refilled.
 //
 // LOCAL / SELF-HOSTED ONLY. Intentionally not run from GitHub Actions: --all
 // fetches every resolved official site (thousands of third-party domains),
@@ -215,6 +218,7 @@ async function main() {
 	const options = parseArgs(process.argv.slice(2));
 	const supabase = getSupabaseClient();
 	const targets = await fetchTargets(supabase, options);
+	const clearedAnimeIds = await fetchCopyrightClearedAnimeIds(supabase);
 	const scope = options.season ?? "all";
 	console.log(
 		`Targets with an official site${options.includeFilled ? "" : " and no copyright yet"}: ${targets.length}`,
@@ -239,7 +243,7 @@ async function main() {
 			applied: null,
 		};
 
-		if (options.apply && anime.copyright === null && candidates.length === 1) {
+		if (options.apply && anime.copyright === null && candidates.length === 1 && !clearedAnimeIds.has(anime.id)) {
 			const value = candidates[0] as string;
 			if (await applyCopyright(supabase, anime.id, value)) {
 				result.applied = value;
@@ -249,6 +253,20 @@ async function main() {
 		}
 		results.push(result);
 		await sleep(REQUEST_INTERVAL_MS);
+	}
+
+	if (options.apply) {
+		await enqueueCopyrightReviews(
+			supabase,
+			results
+				.filter((r) => r.candidates.length > 1 && !clearedAnimeIds.has(r.anime_id))
+				.map((r) => ({
+					anime_id: r.anime_id,
+					kind: "collector_multiple" as const,
+					candidates: r.candidates.map((text) => ({ text, source: "official_site" as const })),
+					note: r.official_site_url,
+				})),
+		);
 	}
 
 	await mkdir(OUTPUT_DIRECTORY, { recursive: true });

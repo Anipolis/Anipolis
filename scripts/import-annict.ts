@@ -14,6 +14,11 @@ import {
 	normalizeAnnictOfficialSiteUrl,
 } from "../src/lib/annict.ts";
 import { fetchWithRetry } from "../src/lib/utils/http-retry.ts";
+import {
+	type CopyrightReviewInput,
+	enqueueCopyrightReviews,
+	fetchCopyrightClearedAnimeIds,
+} from "./copyright-review-queue.ts";
 
 // Annict (api.annict.com GraphQL) から作品の公式サイト・X・画像の著作権表記を
 // 取り込む。Annict はユーザー編集のデータベースなので、ほかのソースを置き換えない:
@@ -24,7 +29,9 @@ import { fetchWithRetry } from "../src/lib/utils/http-retry.ts";
 // - © は anime.copyright が空の作品だけ直接埋める。ただし同じ © がすでに別作品に
 //   入っている場合（続編で Annict が1期の © のままになっている等）は保留にする。
 //   シーズンは古い順に処理するので、シリーズ内では最初の作品に © が付く。
-// - 既存 © と食い違う作品は見直し候補としてレビューファイルに出す（DBは変えない）。
+// - 既存 © と食い違う作品・シリーズ共通として入れた作品・候補が割れた作品は、
+//   管理画面の「©確認」キュー（anime_copyright_reviews）に積む（既存 © は変えない）。
+// - 管理者が「© なし」に確定した作品には © を入れない。
 //
 // LOCAL ONLY. 外部サイト巡回系と同じく GitHub Actions からは実行しない。
 
@@ -209,7 +216,7 @@ async function fetchExistingCopyrights(supabase: ReturnType<typeof getSupabaseCl
 }
 
 const LEGACY_COLUMNS =
-	"id,mal_id,title,title_en,title_romaji,episode_count,type,status,aired_from,aired_to,season,source,studio,studio_en,genre,genre_en,broadcast_day,broadcast_time,broadcast_station,broadcast_duration_minutes,title_yomi,official_site_url,official_x_url,resources,cover_url,metadata_ready,room_type,room_type_source";
+	"id,mal_id,title,title_en,title_romaji,episode_count,type,status,aired_from,aired_to,season,source,studio,studio_en,genre,genre_en,broadcast_day,broadcast_time,broadcast_station,broadcast_duration_minutes,title_yomi,official_site_url,official_x_url,resources,cover_url:cover_source_url,metadata_ready,room_type,room_type_source";
 const LINK_FIELDS = ["official_site_url", "official_x_url"] as const;
 
 /**
@@ -266,6 +273,21 @@ async function applyAnnictLinks(
 	return counts;
 }
 
+function toReviewInput(decision: CopyrightDecision): CopyrightReviewInput[] {
+	const candidates = decision.annict_copyright.split(" ⏐ ").map((text) => ({ text, source: "annict" as const }));
+	switch (decision.result) {
+		case "mismatch":
+			return [{ anime_id: decision.anime_id, kind: "annict_mismatch", candidates, note: decision.note }];
+		case "applied_shared":
+		case "held_shared":
+			return [{ anime_id: decision.anime_id, kind: "annict_shared", candidates, note: decision.note }];
+		case "held_ambiguous":
+			return [{ anime_id: decision.anime_id, kind: "annict_ambiguous", candidates, note: decision.note }];
+		default:
+			return [];
+	}
+}
+
 function firstValue<T>(values: (T | null)[]): T | null {
 	return values.find((value) => value !== null) ?? null;
 }
@@ -275,6 +297,7 @@ async function main() {
 	const token = getAnnictToken();
 	const supabase = getSupabaseClient();
 	const existingCopyrights = await fetchExistingCopyrights(supabase);
+	const clearedAnimeIds = await fetchCopyrightClearedAnimeIds(supabase);
 	const today = new Date().toISOString().slice(0, 10);
 	const decisions: CopyrightDecision[] = [];
 	let savedRecords = 0;
@@ -342,9 +365,11 @@ async function main() {
 		linkTotals.x += links.x;
 
 		const recordByMalId = new Map(records.map((record) => [record.mal_id, record.normalized_data]));
+		const seasonDecisionStart = decisions.length;
 		for (const anime of animeRows) {
 			const record = recordByMalId.get(anime.mal_id);
 			if (!record || record.copyright_candidates.length === 0) continue;
+			if (!anime.copyright && clearedAnimeIds.has(anime.id)) continue;
 			const base = {
 				anime_id: anime.id,
 				mal_id: anime.mal_id,
@@ -403,7 +428,8 @@ async function main() {
 			});
 		}
 
-		const seasonDecisions = decisions.filter((decision) => recordByMalId.has(decision.mal_id));
+		const seasonDecisions = decisions.slice(seasonDecisionStart);
+		if (!options.dryRun) await enqueueCopyrightReviews(supabase, seasonDecisions.flatMap(toReviewInput));
 		const count = (result: CopyrightDecision["result"]) =>
 			seasonDecisions.filter((decision) => decision.result === result).length;
 		console.log(
