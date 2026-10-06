@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createClient } from "@supabase/supabase-js";
 import { dedupeCopyrightCandidates } from "../src/lib/annict.ts";
+import { isPlatformCopyright, isPlatformPageUrl } from "../src/lib/copyright-platform.ts";
 import { decodeHtmlEntities } from "../src/lib/html-entities.ts";
 import { enqueueCopyrightReviews, fetchCopyrightClearedAnimeIds } from "./copyright-review-queue.ts";
 
@@ -125,7 +126,11 @@ async function fetchTargets(supabase: ReturnType<typeof getSupabaseClient>, opti
 		rows.push(...((data ?? []) as AnimeRow[]));
 		if (!data || data.length < DATABASE_BATCH_SIZE) break;
 	}
-	return options.limit ? rows.slice(0, options.limit) : rows;
+	// 公式サイト欄が X・YouTube などのプラットフォームのページだと、そのフッターの
+	// 「© X Corp.」「© Google LLC」を作品の © として拾ってしまうので対象外にする
+	// （こうした作品の © は import:annict で補う）
+	const sites = rows.filter((row) => !isPlatformPageUrl(row.official_site_url));
+	return options.limit ? sites.slice(0, options.limit) : sites;
 }
 
 function sniffCharset(bytes: Uint8Array, contentType: string | null): string {
@@ -227,7 +232,9 @@ async function main() {
 		console.log(`[${index + 1}/${targets.length}] ${anime.title} — ${url}`);
 		const { html, status } = await fetchOfficialPage(url);
 		// 年・区切り記号・会社の接尾語だけ違う候補は1つにまとめる（年が新しい表記を残す）
-		const candidates = html ? dedupeCopyrightCandidates(extractCandidates(html)) : [];
+		const candidates = html
+			? dedupeCopyrightCandidates(extractCandidates(html).filter((candidate) => !isPlatformCopyright(candidate)))
+			: [];
 		const result: CollectionResult = {
 			anime_id: anime.id,
 			mal_id: anime.mal_id,

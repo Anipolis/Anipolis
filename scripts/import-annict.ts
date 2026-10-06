@@ -14,6 +14,7 @@ import {
 	normalizeAnnictCopyright,
 	normalizeAnnictOfficialSiteUrl,
 } from "../src/lib/annict.ts";
+import { isPlatformCopyright } from "../src/lib/copyright-platform.ts";
 import { fetchWithRetry } from "../src/lib/utils/http-retry.ts";
 import {
 	type CopyrightReviewInput,
@@ -389,7 +390,10 @@ async function main() {
 				continue;
 			}
 			const key = copyrightComparisonKey(record.copyright);
-			if (anime.copyright) {
+			// 「© X Corp.」などプラットフォーム自体の © は作品の © ではないので、空欄と同じく
+			// Annict の © で置き換える（公式サイト欄が X・YouTube だった作品で拾っていた）
+			const replacesPlatform = isPlatformCopyright(anime.copyright);
+			if (anime.copyright && !replacesPlatform) {
 				// 年・区切り記号・会社の接尾語だけの違いは食い違いとして扱わない
 				if (looseCopyrightKey(anime.copyright) !== looseCopyrightKey(record.copyright)) {
 					decisions.push({ ...base, annict_copyright: record.copyright, result: "mismatch", note: null });
@@ -411,13 +415,12 @@ async function main() {
 				continue;
 			}
 			if (!options.dryRun) {
-				// 空欄のときだけ埋める（並行して誰かが入れた値は上書きしない）
-				const { data, error } = await supabase
-					.from("anime")
-					.update({ copyright: record.copyright })
-					.eq("id", anime.id)
-					.is("copyright", null)
-					.select("id");
+				// 空欄（またはプラットフォームの ©）のときだけ埋める（並行して誰かが入れた値は上書きしない）
+				const query = supabase.from("anime").update({ copyright: record.copyright }).eq("id", anime.id);
+				const { data, error } = await (anime.copyright
+					? query.eq("copyright", anime.copyright)
+					: query.is("copyright", null)
+				).select("id");
 				if (error) throw new Error(`Could not update anime ${anime.id}: ${error.message}`);
 				if ((data ?? []).length === 0) continue;
 			}
@@ -426,7 +429,7 @@ async function main() {
 				...base,
 				annict_copyright: record.copyright,
 				result: sharedNote ? "applied_shared" : "applied",
-				note: sharedNote,
+				note: replacesPlatform ? `プラットフォームの © を置換: ${anime.copyright}` : sharedNote,
 			});
 		}
 

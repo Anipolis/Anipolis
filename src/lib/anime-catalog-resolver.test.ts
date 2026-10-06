@@ -293,6 +293,26 @@ describe("resolveAnimeCatalog", () => {
 		expect(overInferred.canonical.official_site_url).toBe("https://annict-site.example/");
 	});
 
+	it("never uses an X post or profile as the official site", () => {
+		const jikanX = source("jikan", {
+			official_site_url: "https://twitter.com/khara_inc2/status/1577133971422400515",
+			official_x_url: "https://twitter.com/khara_inc2",
+		});
+		const resolved = resolveAnimeCatalog([source("mal", { title_ja: "例の作品" }), jikanX], {
+			...legacy([]),
+			official_site_url: "https://twitter.com/khara_inc2/status/1577133971422400515",
+		});
+		expect(resolved.canonical.official_site_url).toBeNull();
+		expect(resolved.canonical.official_x_url).toBe("https://twitter.com/khara_inc2");
+		// 下位のソースに本物のサイトがあればそちらを使う
+		const withAnnict = resolveAnimeCatalog([
+			source("mal", { title_ja: "例の作品" }),
+			jikanX,
+			source("annict", { official_site_url: "https://www.khara.co.jp/" }),
+		]);
+		expect(withAnnict.canonical.official_site_url).toBe("https://www.khara.co.jp/");
+	});
+
 	it("prefers MAL's total over an offline snapshot taken before the show finished", () => {
 		// 転スラ第4期パターン: AODB は放送中スナップショットの 12、MAL は終了後の 24
 		const resolved = resolveAnimeCatalog([
