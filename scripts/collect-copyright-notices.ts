@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { createClient } from "@supabase/supabase-js";
 import { dedupeCopyrightCandidates } from "../src/lib/annict.ts";
 import { isPlatformCopyright, isPlatformPageUrl } from "../src/lib/copyright-platform.ts";
+import { joinWrappedCopyrightLines } from "../src/lib/copyright-text.ts";
 import { decodeHtmlEntities } from "../src/lib/html-entities.ts";
 import { enqueueCopyrightReviews, fetchCopyrightClearedAnimeIds } from "./copyright-review-queue.ts";
 
@@ -168,7 +169,8 @@ function extractCandidates(html: string): string[] {
 			.replace(/<[^>]+>/g, " "),
 	);
 	const candidates = new Set<string>();
-	for (const rawLine of text.split(/\n+/)) {
+	// 区切り記号の直後で改行された © は1行に戻してから拾う
+	for (const rawLine of joinWrappedCopyrightLines(text.split(/\n+/))) {
 		const line = rawLine.replace(/\s+/g, " ").trim();
 		if (!line || !COPYRIGHT_MARKER.test(line)) continue;
 		// Trim leading noise before the marker, keep from the marker onward.
