@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createClient } from "@supabase/supabase-js";
+import { decodeHtmlEntities } from "../src/lib/html-entities.ts";
 
 // Recover copyright notices and official X links for dead official sites
 // (fetch_failed in earlier passes) from Wayback Machine snapshots taken close
@@ -100,13 +101,7 @@ function extractHandles(html: string): { handles: string[]; corporate: string[] 
 const COPYRIGHT_MARKER = /©|Ⓒ|\(C\)|（C）/;
 
 function decodeEntities(value: string): string {
-	return value
-		.replaceAll("&copy;", "©")
-		.replaceAll("&amp;", "&")
-		.replaceAll("&nbsp;", " ")
-		.replaceAll("&quot;", '"')
-		.replaceAll("&#169;", "©")
-		.replaceAll("&#xa9;", "©");
+	return decodeHtmlEntities(value);
 }
 
 function extractCopyrightCandidates(html: string): string[] {

@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createClient } from "@supabase/supabase-js";
 import { dedupeCopyrightCandidates } from "../src/lib/annict.ts";
+import { decodeHtmlEntities } from "../src/lib/html-entities.ts";
 import { enqueueCopyrightReviews, fetchCopyrightClearedAnimeIds } from "./copyright-review-queue.ts";
 
 // Collect anime copyright notices (© lines) from resolved official sites.
@@ -146,13 +147,7 @@ function decodeHtml(bytes: Uint8Array, contentType: string | null): string {
 }
 
 function decodeEntities(value: string): string {
-	return value
-		.replaceAll("&copy;", "©")
-		.replaceAll("&amp;", "&")
-		.replaceAll("&nbsp;", " ")
-		.replaceAll("&quot;", '"')
-		.replaceAll("&#169;", "©")
-		.replaceAll("&#xa9;", "©");
+	return decodeHtmlEntities(value);
 }
 
 const COPYRIGHT_MARKER = /©|Ⓒ|\(C\)|（C）/;
