@@ -135,7 +135,9 @@ const LEGACY_COLUMNS = [
 	"official_site_url",
 	"official_x_url",
 	"resources",
-	"cover_url",
+	// cover_url は © の無い作品で隠れる表示用の列（migration 136）。前回値は画像の
+	// 実体を読む（隠れた作品を「カバー無し」と誤解して差分を出さないため）
+	"cover_url:cover_source_url",
 	"metadata_ready",
 	// applyShortAnimeLobbyRuleが全canonical行に注入するため、changedFieldsの
 	// 差分比較でノイズにならないよう既存値も読み込む

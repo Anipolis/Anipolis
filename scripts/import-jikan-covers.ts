@@ -228,7 +228,8 @@ async function loadCandidates(
 			let query = supabase
 				.from("anime")
 				.select("id,mal_id,type,season")
-				.is("cover_url", null)
+				// 表示用の cover_url は © の無い作品で隠れるので、画像の実体で判定する
+				.is("cover_source_url", null)
 				.not("mal_id", "is", null)
 				.eq("hidden_by_admin", false)
 				.order("id")
@@ -299,7 +300,7 @@ async function publishApproved(supabase: SupabaseClient, animeIds: number[]) {
 			.from("anime")
 			.update({ cover_url: publicUrl })
 			.eq("id", asset.anime_id)
-			.is("cover_url", null)
+			.is("cover_source_url", null)
 			.select("id");
 		if (error) throw new Error(`Could not publish anime ${asset.anime_id}: ${error.message}`);
 		if (!data || data.length === 0) {
