@@ -42,7 +42,7 @@ const SEARCH_WORKS_QUERY = `query($seasons: [String!], $after: String) {
 	}
 }`;
 
-type Options = { seasons: string[]; dryRun: boolean };
+type Options = { seasons: string[]; dryRun: boolean; allowShared: boolean };
 
 type AnnictWork = {
 	annictId: number;
@@ -64,19 +64,24 @@ type CopyrightDecision = {
 	annict_ids: number[];
 	annict_copyright: string;
 	existing_copyright: string | null;
-	result: "applied" | "held_shared" | "held_ambiguous" | "mismatch";
+	result: "applied" | "applied_shared" | "held_shared" | "held_ambiguous" | "mismatch";
 	note: string | null;
 };
 
 function parseArgs(argv: string[]): Options {
 	const seasons: string[] = [];
 	let dryRun = false;
+	let allowShared = false;
 	for (let index = 0; index < argv.length; index += 1) {
 		const arg = argv[index];
 		const next = argv[index + 1];
 		if (arg === "--") continue;
 		if (arg === "--dry-run") {
 			dryRun = true;
+			continue;
+		}
+		if (arg === "--allow-shared") {
+			allowShared = true;
 			continue;
 		}
 		if (arg === "--season" && next) {
@@ -97,10 +102,12 @@ function parseArgs(argv: string[]): Options {
 		throw new Error(`Unknown argument: ${arg}`);
 	}
 	if (seasons.length === 0) {
-		throw new Error("Usage: pnpm import:annict -- (--season 2015-spring ... | --years 2010-2019) [--dry-run]");
+		throw new Error(
+			"Usage: pnpm import:annict -- (--season 2015-spring ... | --years 2010-2019) [--allow-shared] [--dry-run]",
+		);
 	}
 	// 古い順に処理する（シリーズ内で最初の作品に © を付け、続編を保留にするため）
-	return { seasons: [...new Set(seasons)].sort(compareSeasons), dryRun };
+	return { seasons: [...new Set(seasons)].sort(compareSeasons), dryRun, allowShared };
 }
 
 function compareSeasons(left: string, right: string): number {
@@ -355,12 +362,16 @@ async function main() {
 				continue;
 			}
 			const shared = existingCopyrights.get(key);
-			if (shared && shared.id !== anime.id) {
+			const sharedNote =
+				shared && shared.id !== anime.id ? `同じ © が既に入っている: ${shared.title} (id=${shared.id})` : null;
+			// --allow-shared: シリーズ共通の © は入れてよい（運用判断 2026-10-06）。ただし続編で
+			// Annict が1期の © のままのケースも混ざるので、applied_shared としてレビューに残す。
+			if (sharedNote && !options.allowShared) {
 				decisions.push({
 					...base,
 					annict_copyright: record.copyright,
 					result: "held_shared",
-					note: `同じ © が既に入っている: ${shared.title} (id=${shared.id})`,
+					note: sharedNote,
 				});
 				continue;
 			}
@@ -375,15 +386,20 @@ async function main() {
 				if (error) throw new Error(`Could not update anime ${anime.id}: ${error.message}`);
 				if ((data ?? []).length === 0) continue;
 			}
-			existingCopyrights.set(key, { id: anime.id, title: anime.title });
-			decisions.push({ ...base, annict_copyright: record.copyright, result: "applied", note: null });
+			if (!sharedNote) existingCopyrights.set(key, { id: anime.id, title: anime.title });
+			decisions.push({
+				...base,
+				annict_copyright: record.copyright,
+				result: sharedNote ? "applied_shared" : "applied",
+				note: sharedNote,
+			});
 		}
 
 		const seasonDecisions = decisions.filter((decision) => recordByMalId.has(decision.mal_id));
 		const count = (result: CopyrightDecision["result"]) =>
 			seasonDecisions.filter((decision) => decision.result === result).length;
 		console.log(
-			`${season}: Annict ${works.length} works, matched ${records.length}, © applied ${count("applied")}, held ${count("held_shared") + count("held_ambiguous")}, mismatch ${count("mismatch")}, site ${links.site}, X ${links.x}`,
+			`${season}: Annict ${works.length} works, matched ${records.length}, © applied ${count("applied")}+${count("applied_shared")} shared, held ${count("held_shared") + count("held_ambiguous")}, mismatch ${count("mismatch")}, site ${links.site}, X ${links.x}`,
 		);
 	}
 
@@ -412,7 +428,7 @@ async function main() {
 	const total = (result: CopyrightDecision["result"]) =>
 		decisions.filter((decision) => decision.result === result).length;
 	console.log(
-		`\nDone${options.dryRun ? " (dry run, nothing written)" : ""}. source records: ${savedRecords}, © applied: ${total("applied")}, held (shared): ${total("held_shared")}, held (ambiguous): ${total("held_ambiguous")}, mismatch: ${total("mismatch")}, official site: ${linkTotals.site}, X: ${linkTotals.x}`,
+		`\nDone${options.dryRun ? " (dry run, nothing written)" : ""}. source records: ${savedRecords}, © applied: ${total("applied")}, applied (shared): ${total("applied_shared")}, held (shared): ${total("held_shared")}, held (ambiguous): ${total("held_ambiguous")}, mismatch: ${total("mismatch")}, official site: ${linkTotals.site}, X: ${linkTotals.x}`,
 	);
 	console.log(`review files: ${jsonPath} / ${tsvPath}`);
 }
