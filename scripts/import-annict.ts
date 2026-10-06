@@ -141,6 +141,11 @@ function sleep(ms: number) {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Annict のシーズン表記は秋が "autumn"（"fall" を渡すと HTTP 500 になる）
+function toAnnictSeason(season: string): string {
+	return season.replace(/-fall$/, "-autumn");
+}
+
 async function fetchSeasonWorks(token: string, season: string): Promise<AnnictWork[]> {
 	const works: AnnictWork[] = [];
 	let after: string | null = null;
@@ -148,7 +153,10 @@ async function fetchSeasonWorks(token: string, season: string): Promise<AnnictWo
 		const response = await fetchWithRetry(ANNICT_GRAPHQL_URL, {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-			body: JSON.stringify({ query: SEARCH_WORKS_QUERY, variables: { seasons: [season], after } }),
+			body: JSON.stringify({
+				query: SEARCH_WORKS_QUERY,
+				variables: { seasons: [toAnnictSeason(season)], after },
+			}),
 		});
 		if (!response.ok) throw new Error(`Annict ${season} request failed: HTTP ${response.status}`);
 		const body = (await response.json()) as {
