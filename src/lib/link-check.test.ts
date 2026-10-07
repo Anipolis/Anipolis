@@ -1,0 +1,74 @@
+import { describe, expect, it } from "vitest";
+import { classifyLink, type LinkCheckInput, mentionsAnime, registrableDomain } from "./link-check";
+
+function input(partial: Partial<LinkCheckInput>): LinkCheckInput {
+	return {
+		url: "https://example-anime.jp/",
+		finalUrl: "https://example-anime.jp/",
+		httpStatus: 200,
+		errorCode: null,
+		pageTitle: "",
+		bodyText: "",
+		animeTitles: ["例のアニメ"],
+		...partial,
+	};
+}
+
+describe("registrableDomain", () => {
+	it("groups subdomains by organization", () => {
+		expect(registrableDomain("https://www.tv-tokyo.co.jp/anime/x/")).toBe("tv-tokyo.co.jp");
+		expect(registrableDomain("https://anime.example.com/")).toBe("example.com");
+		expect(registrableDomain("not a url")).toBeNull();
+	});
+});
+
+describe("classifyLink", () => {
+	it("treats missing domains, 404/410 and soft-404 pages as dead", () => {
+		expect(classifyLink(input({ errorCode: "ENOTFOUND", httpStatus: null })).status).toBe("dead");
+		expect(classifyLink(input({ httpStatus: 410 })).status).toBe("dead");
+		expect(classifyLink(input({ pageTitle: "お探しのページは見つかりませんでした：テレビ東京" })).status).toBe(
+			"dead",
+		);
+	});
+
+	it("keeps bot-blocked responses and retries timeouts and 5xx", () => {
+		expect(classifyLink(input({ httpStatus: 403 })).status).toBe("blocked");
+		expect(classifyLink(input({ errorCode: "TIMEOUT", httpStatus: null })).status).toBe("retry");
+		expect(classifyLink(input({ httpStatus: 503 })).status).toBe("retry");
+	});
+
+	it("flags parked and spam takeovers (タテアニメのドメインの例)", () => {
+		expect(
+			classifyLink(
+				input({
+					pageTitle: "ゲームだけではなくアニメも制作された人気のあるアダルトゲーム",
+					animeTitles: ["バイト先は「悪の組織」!?"],
+				}),
+			).status,
+		).toBe("suspicious");
+		expect(classifyLink(input({ pageTitle: "This domain is for sale" })).status).toBe("suspicious");
+		expect(classifyLink(input({ pageTitle: "オンラインカジノ比較サイト" })).status).toBe("suspicious");
+	});
+
+	it("does not flag adult anime official sites that name the work", () => {
+		expect(
+			classifyLink(input({ pageTitle: "アダルトアニメ「例のアニメ」公式サイト", animeTitles: ["例のアニメ"] }))
+				.status,
+		).toBe("ok");
+	});
+
+	it("flags redirects to another organization's top page unless the page names the work", () => {
+		expect(classifyLink(input({ finalUrl: "https://unrelated.com/" })).status).toBe("suspicious");
+		expect(classifyLink(input({ finalUrl: "https://unrelated.com/", pageTitle: "例のアニメ 公式" })).status).toBe(
+			"ok",
+		);
+		expect(classifyLink(input({ finalUrl: "https://www.example-anime.jp/top" })).status).toBe("ok");
+	});
+});
+
+describe("mentionsAnime", () => {
+	it("matches by bigram overlap regardless of punctuation and width", () => {
+		expect(mentionsAnime("TVアニメ『ロウきゅーぶ！SS』公式サイト", ["ロウきゅーぶ！"])).toBe(true);
+		expect(mentionsAnime("株式会社サンプル", ["ロウきゅーぶ！"])).toBe(false);
+	});
+});
