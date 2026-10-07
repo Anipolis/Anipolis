@@ -12,7 +12,7 @@ export type BroadcastEpisodeLogSlot = BroadcastEpisodeSlot & { opened: boolean }
 
 type BroadcastEpisodeLogAnime = Pick<
 	Anime,
-	"season" | "room_type" | "aired_from" | "aired_to" | "broadcast_day" | "broadcast_time"
+	"season" | "room_type" | "aired_from" | "aired_to" | "broadcast_day" | "broadcast_time" | "episode_count"
 >;
 
 /**
@@ -62,6 +62,22 @@ export function buildBroadcastEpisodeLog(
 		.filter((slot) => slot.start != null)
 		.sort((left, right) => left.date.localeCompare(right.date))[0];
 	const effectiveBroadcastDay = anchorSlot ? new Date(`${anchorSlot.date}T00:00:00`).getDay() : anime.broadcast_day;
+	// 最終話（話数が episode_count に達した日）より後は合成補完しない。MALの
+	// 放送終了日の反映が遅れて aired_to が null のままだと、今日まで存在しない
+	// 週の枠を作り続け、逆算の起点も無いので番号なしの「最新」枠になってしまう
+	// （MAO: 第26話 9/26 で終了したのに 10/3 の空枠が Latest に出ていた）。
+	const totalEpisodes = anime.episode_count ? Number.parseInt(anime.episode_count, 10) : Number.NaN;
+	const finalEpisodeDate =
+		totalEpisodes > 0
+			? [
+					...[...slotByDate.values()]
+						.filter((slot) => slot.end != null && slot.end >= totalEpisodes)
+						.map((slot) => slot.date),
+					...overrides
+						.filter((override) => !override.is_cancelled && (override.episode_end ?? 0) >= totalEpisodes)
+						.map((override) => roomDateKey(override.room_date)),
+				].sort()[0]
+			: undefined;
 	if (
 		isEligibleForRoomLog(anime.season) &&
 		anime.room_type === "episode" &&
@@ -81,6 +97,7 @@ export function buildBroadcastEpisodeLog(
 		for (let guard = 0; guard < 400; guard += 1, cursor.setDate(cursor.getDate() + 7)) {
 			const date = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`;
 			if (date >= todayKey || (airedToKey && date > airedToKey)) break;
+			if (finalEpisodeDate && date > finalEpisodeDate) break;
 			if (slotByDate.has(date)) continue;
 			const override = overrideByDate.get(date);
 			if (override?.is_cancelled) continue;
