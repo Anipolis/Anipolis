@@ -12,6 +12,7 @@ import {
 	getUsersWhoListedAnime,
 	isAdminUser,
 } from "$lib/server/queries";
+import { createServiceRoleClient } from "$lib/server/supabase-admin";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
@@ -70,7 +71,15 @@ export const actions: Actions = {
 		const anime = await getAnime(supabase, params.id, user.id);
 		if (!anime) return fail(404, { message: "アニメが見つかりません" });
 
-		return updateAnimeAction(supabase, request, params.id, anime.cover_url);
+		// manual ソースレコードは管理者ユーザーでは書き込めない（RLS）ので service role で保存する。
+		// 管理キーが未設定なら従来どおり（保存失敗を警告として返す）
+		let sourceWriter: ReturnType<typeof createServiceRoleClient> | undefined;
+		try {
+			sourceWriter = createServiceRoleClient();
+		} catch (serviceError) {
+			console.error("service role client unavailable for manual source records:", serviceError);
+		}
+		return updateAnimeAction(supabase, request, params.id, anime.cover_url, sourceWriter);
 	},
 
 	addBroadcastOverride: async ({ request, params, locals: { supabase, safeGetSession } }) => {

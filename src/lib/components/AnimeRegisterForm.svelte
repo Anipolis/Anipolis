@@ -1,5 +1,6 @@
 <script lang="ts">
 import { enhance } from "$app/forms";
+import { invalidateAll } from "$app/navigation";
 import { ANIME_GENRES, ANIME_SOURCE_OPTIONS } from "$lib/anime-vocabulary";
 import type { Anime } from "$lib/types";
 
@@ -18,6 +19,23 @@ let {
 
 const GENRES = [...ANIME_GENRES];
 const SOURCE_OPTIONS = [...ANIME_SOURCE_OPTIONS];
+// 値はカタログ（MAL 由来）と同じ英語表記。日本語の値にすると、編集を保存しただけで
+// 映画・特別の作品のタイプが「未設定」に変わっていた
+const TYPE_OPTIONS = [
+	{ value: "TV", label: "TV" },
+	{ value: "Movie", label: "映画" },
+	{ value: "OVA", label: "OVA" },
+	{ value: "ONA", label: "ONA" },
+	{ value: "Special", label: "特別" },
+];
+// 今の値が選択肢に無い（旧表記・取り込み元の表記）ときは、そのまま残る選択肢を足す。
+// 足さないと select が「未設定」になり、保存で値が消える
+const extraTypeOption = $derived(
+	anime?.type && !TYPE_OPTIONS.some((option) => option.value === anime.type) ? anime.type : null,
+);
+const extraSourceOption = $derived(
+	anime?.source && !SOURCE_OPTIONS.some((source) => source === anime.source) ? anime.source : null,
+);
 
 // svelte-ignore state_referenced_locally
 let selectedGenres = $state<string[]>(anime?.genre ?? []);
@@ -126,7 +144,13 @@ async function handleFileChange(e: Event) {
 		{action}
 		use:enhance={async ({ formData }) => {
         if (resizedBlob) formData.set('image_file', resizedBlob, `cover_${Date.now()}.jpg`);
-        return async ({ update }) => { await update(); };
+        return async ({ result, update }) => {
+            await update();
+            // 失敗でも作品データは更新済みのことがある（保護レコードだけ失敗など）。
+            // 再読み込みしないと画面が古い値のままになり、そのフォームで再保存すると
+            // 古い値で上書きしてしまう
+            if (result.type === "failure") await invalidateAll();
+        };
     }}
 		class="register-form"
 		class:register-form--edit={isEditMode}
@@ -193,11 +217,12 @@ async function handleFileChange(e: Event) {
 					<label for="rf-type">タイプ</label>
 					<select id="rf-type" name="type" class="rf-select">
 						<option value="">未設定</option>
-						<option value="TV" selected={anime?.type === "TV"}>TV</option>
-						<option value="映画" selected={anime?.type === "映画"}>映画</option>
-						<option value="OVA" selected={anime?.type === "OVA"}>OVA</option>
-						<option value="ONA" selected={anime?.type === "ONA"}>ONA</option>
-						<option value="特別" selected={anime?.type === "特別"}>特別</option>
+						{#each TYPE_OPTIONS as option}
+							<option value={option.value} selected={anime?.type === option.value}>{option.label}</option>
+						{/each}
+						{#if extraTypeOption}
+							<option value={extraTypeOption} selected>{extraTypeOption}</option>
+						{/if}
 					</select>
 				</div>
 				<div class="form-group">
@@ -207,6 +232,9 @@ async function handleFileChange(e: Event) {
 						{#each SOURCE_OPTIONS as source}
 							<option value={source} selected={anime?.source === source}>{source}</option>
 						{/each}
+						{#if extraSourceOption}
+							<option value={extraSourceOption} selected>{extraSourceOption}</option>
+						{/if}
 					</select>
 				</div>
 				<div class="form-group">
