@@ -11,12 +11,14 @@ import { classifyLink } from "../src/lib/link-check.ts";
 // --keep-url / --keep-host は、点検で疑いになったが問題ないと確認したもの（誤検出）。
 // archive.org へは1秒に1回まで。LOCAL ONLY。
 
-const WAYBACK_API = "https://archive.org/wayback/available";
+// 可用性 API（archive.org/wayback/available）は利用制限が厳しく、4秒間隔でも 429 になったので
+// CDX API を使う（遅いが制限は緩い）
+const WAYBACK_CDX_API = "https://web.archive.org/cdx/search/cdx";
 // archive.org は短時間に多く呼ぶと 429 を返す（2026-10 に 1 秒間隔で制限された）ので控えめにする
-const REQUEST_INTERVAL_MS = 4000;
+const REQUEST_INTERVAL_MS = 2000;
 const RATE_LIMIT_WAIT_MS = 120_000;
 const MAX_CONSECUTIVE_RATE_LIMITS = 5;
-const SNAPSHOT_TIMEOUT_MS = 30000;
+const SNAPSHOT_TIMEOUT_MS = 90000;
 // 放送からこれより後のアーカイブは、閉鎖・乗っ取りの後に撮られたかもしれないので中身を確かめる
 const TRUSTED_SNAPSHOT_YEARS = 2;
 
@@ -121,7 +123,16 @@ class WaybackUnavailableError extends Error {
 async function findSnapshot(url: string, timestamp: string): Promise<{ url: string; timestamp: string } | null> {
 	let response: Response;
 	try {
-		response = await fetch(`${WAYBACK_API}?url=${encodeURIComponent(url)}&timestamp=${timestamp}`, {
+		const query = new URLSearchParams({
+			url,
+			output: "json",
+			fl: "timestamp,original",
+			filter: "statuscode:200",
+			closest: timestamp,
+			sort: "closest",
+			limit: "1",
+		});
+		response = await fetch(`${WAYBACK_CDX_API}?${query}`, {
 			headers: { "User-Agent": "Mozilla/5.0 (compatible; AnipolisLinkCheck/1.0)" },
 			signal: AbortSignal.timeout(SNAPSHOT_TIMEOUT_MS),
 		});
@@ -130,12 +141,12 @@ async function findSnapshot(url: string, timestamp: string): Promise<{ url: stri
 	}
 	if (response.status === 429) throw new WaybackUnavailableError("HTTP 429", true);
 	if (!response.ok) throw new WaybackUnavailableError(`HTTP ${response.status}`, false);
-	const body = (await response.json()) as {
-		archived_snapshots?: { closest?: { available?: boolean; url?: string; timestamp?: string; status?: string } };
-	};
-	const closest = body.archived_snapshots?.closest;
-	if (!closest?.available || !closest.url || !closest.timestamp || closest.status !== "200") return null;
-	return { url: closest.url.replace(/^http:\/\//, "https://"), timestamp: closest.timestamp };
+	// 1行目は見出し（["timestamp","original"]）、2行目が最も近いアーカイブ
+	const text = (await response.text()).trim();
+	const rows = text ? (JSON.parse(text) as string[][]) : [];
+	const closest = rows[1];
+	if (!closest?.[0] || !closest[1]) return null;
+	return { url: `https://web.archive.org/web/${closest[0]}/${closest[1]}`, timestamp: closest[0] };
 }
 
 /**
