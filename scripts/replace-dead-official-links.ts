@@ -104,12 +104,12 @@ function hostOf(url: string): string {
 	}
 }
 
+// --experimental-strip-types はコンストラクタ引数のプロパティ宣言に対応しないので、通常のフィールドで持つ
 class WaybackUnavailableError extends Error {
-	constructor(
-		message: string,
-		readonly rateLimited: boolean,
-	) {
+	rateLimited: boolean;
+	constructor(message: string, rateLimited: boolean) {
 		super(message);
+		this.rateLimited = rateLimited;
 	}
 }
 
