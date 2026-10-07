@@ -37,6 +37,18 @@ describe("pickCopyrightForSeason", () => {
 		expect(pickCopyrightForSeason(2, [tsurune1, tsurune2])).toBe(tsurune2);
 	});
 
+	it("does not decide when another pending candidate names a different rights holder", () => {
+		// 作品単位で全確認待ちの候補を集めると、権利者違いの候補が混ざる。期の違いだけでは
+		// ないので自動で決めず、人の確認に残す（Codex レビューの再現ケース）
+		expect(
+			pickCopyrightForSeason(2, [
+				"©作者／作品製作委員会",
+				"©作者／作品2製作委員会",
+				"©別権利者／別作品製作委員会",
+			]),
+		).toBeNull();
+	});
+
 	it("leaves it to people when no candidate matches or the difference is not the season", () => {
 		expect(pickCopyrightForSeason(3, [tsurune1, tsurune2])).toBeNull();
 		expect(

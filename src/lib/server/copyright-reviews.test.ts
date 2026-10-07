@@ -110,6 +110,31 @@ describe("cover visibility migration (136)", () => {
 	});
 });
 
+describe("cover visibility on upsert migration (139)", () => {
+	const migration = readFileSync(
+		new URL("../../../supabase/migrations/139_fix_cover_visibility_on_upsert.sql", import.meta.url),
+		"utf8",
+	);
+
+	it("does not mask the cover while inserting, so ON CONFLICT updates never receive a hidden NULL", () => {
+		const fn = migration.slice(
+			migration.indexOf("CREATE OR REPLACE FUNCTION public.apply_anime_cover_visibility()"),
+			migration.indexOf("CREATE OR REPLACE FUNCTION public.mask_inserted_anime_cover()"),
+		);
+		const insertBranch = fn.slice(
+			fn.indexOf("IF TG_OP = 'INSERT' THEN"),
+			fn.indexOf("END IF;", fn.indexOf("IF TG_OP = 'INSERT' THEN")),
+		);
+		expect(insertBranch).toContain("RETURN NEW;");
+		expect(insertBranch).not.toContain("NEW.cover_url :=");
+	});
+
+	it("re-masks genuinely inserted rows after insert (AFTER INSERT does not fire on ON CONFLICT updates)", () => {
+		expect(migration).toMatch(/CREATE TRIGGER anime_mask_inserted_cover\s+AFTER INSERT ON public\.anime/);
+		expect(migration).toContain("SET cover_url = cover_url WHERE id = $1");
+	});
+});
+
 describe("blank copyright normalization migration (138)", () => {
 	const migration = readFileSync(
 		new URL("../../../supabase/migrations/138_normalize_blank_copyright.sql", import.meta.url),

@@ -12,7 +12,6 @@ import { pickCopyrightForSeason, titleSeasonNumber } from "../src/lib/copyright-
 // import:annict / collect:copyright の後に流す想定（LOCAL ONLY）。
 
 const PAGE_SIZE = 1000;
-const REVIEW_KINDS = ["annict_mismatch", "collector_multiple", "annict_ambiguous"];
 
 type RelationRow = { anime_mal_id: number; related_anime_mal_id: number; relation_type: string };
 type ReviewRow = {
@@ -101,37 +100,45 @@ async function main() {
 			.from("anime_copyright_reviews")
 			.select("anime_id,candidates,anime:anime!anime_copyright_reviews_anime_id_fkey(title,mal_id,copyright)")
 			.eq("status", "pending")
-			.in("kind", REVIEW_KINDS)
 			.order("id")
 			.range(from, to),
 	);
+	// 作品を決めるとその作品の確認待ちを全部閉じるので、判定も作品単位で、確認待ちの全種類
+	// （annict_shared を含む）の候補を集めて行う。1件の候補だけで判定すると、別の種類に
+	// ある権利者違いの候補まで人の確認から消してしまう
+	const reviewsByAnime = new Map<number, ReviewRow[]>();
+	for (const review of reviews) {
+		reviewsByAnime.set(animeId, [...(reviewsByAnime.get(animeId) ?? []), review]);
+	}
 
 	let kept = 0;
 	let replaced = 0;
-	const decidedAnimeIds = new Set<number>();
-	for (const review of reviews) {
-		if (!review.anime || decidedAnimeIds.has(review.anime_id)) continue;
-		const current = review.anime.copyright;
-		const season =
-			titleSeasonNumber(review.anime.title) ??
-			(review.anime.mal_id !== null ? prequelOrdinal(review.anime.mal_id) : null);
+	let animeCount = 0;
+	for (const [animeId, animeReviews] of reviewsByAnime) {
+		animeCount += 1;
+		const anime = animeReviews[0]?.anime;
+		if (!anime) continue;
+		const current = anime.copyright;
+		const season = titleSeasonNumber(anime.title) ?? (anime.mal_id !== null ? prequelOrdinal(anime.mal_id) : null);
 		if (season === null) continue;
-		const texts = [...(current ? [current] : []), ...review.candidates.map((candidate) => candidate.text)];
+		const texts = [
+			...(current ? [current] : []),
+			...animeReviews.flatMap((review) => review.candidates.map((candidate) => candidate.text)),
+		];
 		const pick = pickCopyrightForSeason(season, texts);
 		if (!pick) continue;
 
 		const keep = current !== null && looseCopyrightKey(pick) === looseCopyrightKey(current);
 		console.log(
-			`${keep ? "keep   " : "replace"} [${season}期] ${review.anime.title} | ${current ?? "(空)"}${keep ? "" : ` → ${pick}`}`,
+			`${keep ? "keep   " : "replace"} [${season}期] ${anime.title} | ${current ?? "(空)"}${keep ? "" : ` → ${pick}`}`,
 		);
-		decidedAnimeIds.add(review.anime_id);
 		if (keep) kept += 1;
 		else replaced += 1;
 		if (dryRun) continue;
 
 		if (!keep) {
-			const { error } = await supabase.from("anime").update({ copyright: pick }).eq("id", review.anime_id);
-			if (error) throw new Error(`Could not update anime ${review.anime_id}: ${error.message}`);
+			const { error } = await supabase.from("anime").update({ copyright: pick }).eq("id", animeId);
+			if (error) throw new Error(`Could not update anime ${animeId}: ${error.message}`);
 		}
 		// 1作品の © を決めたら、その作品の確認待ちをまとめて閉じる（管理画面と同じ）
 		const { error } = await supabase
@@ -142,12 +149,12 @@ async function main() {
 				resolved_copyright: pick,
 				resolved_at: new Date().toISOString(),
 			})
-			.eq("anime_id", review.anime_id)
+			.eq("anime_id", animeId)
 			.eq("status", "pending");
-		if (error) throw new Error(`Could not close reviews for anime ${review.anime_id}: ${error.message}`);
+		if (error) throw new Error(`Could not close reviews for anime ${animeId}: ${error.message}`);
 	}
 	console.log(
-		`${dryRun ? "[dry-run] " : ""}pending ${reviews.length}: kept ${kept}, replaced ${replaced}, left for review ${reviews.length - kept - replaced}`,
+		`${dryRun ? "[dry-run] " : ""}anime with pending reviews ${animeCount}: kept ${kept}, replaced ${replaced}, left for review ${animeCount - kept - replaced}`,
 	);
 }
 

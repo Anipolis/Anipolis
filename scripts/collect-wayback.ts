@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { createClient } from "@supabase/supabase-js";
 import { joinWrappedCopyrightLines } from "../src/lib/copyright-text.ts";
 import { decodeHtmlEntities } from "../src/lib/html-entities.ts";
+import { fetchCopyrightClearedAnimeIds } from "./copyright-review-queue.ts";
 
 // Recover copyright notices and official X links for dead official sites
 // (fetch_failed in earlier passes) from Wayback Machine snapshots taken close
@@ -199,6 +200,8 @@ async function main() {
 	} catch {}
 
 	const malIds = [...failedIds];
+	// 管理者が「©なし」に確定した作品には、アーカイブからも © を入れない
+	const clearedAnimeIds = await fetchCopyrightClearedAnimeIds(supabase);
 	const targets: {
 		anime_id: number;
 		mal_id: number;
@@ -217,7 +220,7 @@ async function main() {
 		for (const row of data ?? []) {
 			if (!row.official_site_url || row.official_site_url.includes("web.archive.org")) continue;
 			const needX = !row.official_x_url;
-			const needCopyright = !row.copyright;
+			const needCopyright = !row.copyright && !clearedAnimeIds.has(row.id);
 			if (!needX && !needCopyright) continue;
 			targets.push({
 				anime_id: row.id,
