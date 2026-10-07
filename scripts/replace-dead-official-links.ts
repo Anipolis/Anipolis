@@ -1,7 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { createClient } from "@supabase/supabase-js";
 import { classifyLink } from "../src/lib/link-check.ts";
-import { fetchWithRetry } from "../src/lib/utils/http-retry.ts";
 
 // check:official-links の結果のうち、閉鎖・乗っ取りの公式サイトを Wayback Machine の
 // 放送当時のアーカイブに差し替える。アーカイブが無い（または当時の時点で既に売却・
@@ -13,7 +12,10 @@ import { fetchWithRetry } from "../src/lib/utils/http-retry.ts";
 // archive.org へは1秒に1回まで。LOCAL ONLY。
 
 const WAYBACK_API = "https://archive.org/wayback/available";
-const REQUEST_INTERVAL_MS = 1000;
+// archive.org は短時間に多く呼ぶと 429 を返す（2026-10 に 1 秒間隔で制限された）ので控えめにする
+const REQUEST_INTERVAL_MS = 4000;
+const RATE_LIMIT_WAIT_MS = 120_000;
+const MAX_CONSECUTIVE_RATE_LIMITS = 5;
 const SNAPSHOT_TIMEOUT_MS = 30000;
 // 放送からこれより後のアーカイブは、閉鎖・乗っ取りの後に撮られたかもしれないので中身を確かめる
 const TRUSTED_SNAPSHOT_YEARS = 2;
@@ -102,13 +104,32 @@ function hostOf(url: string): string {
 	}
 }
 
+class WaybackUnavailableError extends Error {
+	constructor(
+		message: string,
+		readonly rateLimited: boolean,
+	) {
+		super(message);
+	}
+}
+
+/**
+ * 放送時期に最も近いアーカイブを探す。アーカイブが無いときだけ null を返し、
+ * 429（利用制限）・5xx・通信エラーは WaybackUnavailableError を投げる — 取得の失敗を
+ * 「アーカイブなし」と取り違えてリンクを外さないため。
+ */
 async function findSnapshot(url: string, timestamp: string): Promise<{ url: string; timestamp: string } | null> {
-	const response = await fetchWithRetry(
-		`${WAYBACK_API}?url=${encodeURIComponent(url)}&timestamp=${timestamp}`,
-		{ headers: { "User-Agent": "Mozilla/5.0 (compatible; AnipolisLinkCheck/1.0)" } },
-		{ timeoutMs: SNAPSHOT_TIMEOUT_MS },
-	);
-	if (!response.ok) return null;
+	let response: Response;
+	try {
+		response = await fetch(`${WAYBACK_API}?url=${encodeURIComponent(url)}&timestamp=${timestamp}`, {
+			headers: { "User-Agent": "Mozilla/5.0 (compatible; AnipolisLinkCheck/1.0)" },
+			signal: AbortSignal.timeout(SNAPSHOT_TIMEOUT_MS),
+		});
+	} catch (error) {
+		throw new WaybackUnavailableError(`request failed: ${(error as Error).message}`, false);
+	}
+	if (response.status === 429) throw new WaybackUnavailableError("HTTP 429", true);
+	if (!response.ok) throw new WaybackUnavailableError(`HTTP ${response.status}`, false);
 	const body = (await response.json()) as {
 		archived_snapshots?: { closest?: { available?: boolean; url?: string; timestamp?: string; status?: string } };
 	};
@@ -117,10 +138,14 @@ async function findSnapshot(url: string, timestamp: string): Promise<{ url: stri
 	return { url: closest.url.replace(/^http:\/\//, "https://"), timestamp: closest.timestamp };
 }
 
-/** アーカイブの中身が売却・スパム・「見つかりません」ページでないか */
-async function snapshotLooksValid(snapshotUrl: string, titles: string[]): Promise<boolean> {
+/**
+ * アーカイブの中身が売却・スパム・「見つかりません」ページでないか。取得に失敗したら
+ * null（判定しない）を返す — 失敗を「不採用」と取り違えてリンクを外さないため。
+ */
+async function snapshotLooksValid(snapshotUrl: string, titles: string[]): Promise<boolean | null> {
 	try {
 		const response = await fetch(snapshotUrl, { signal: AbortSignal.timeout(SNAPSHOT_TIMEOUT_MS) });
+		if (!response.ok) return null;
 		const html = await response.text();
 		const pageTitle = (html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "").replace(/\s+/g, " ").trim();
 		const bodyText = html
@@ -140,7 +165,7 @@ async function snapshotLooksValid(snapshotUrl: string, titles: string[]): Promis
 		});
 		return verdict.status === "ok";
 	} catch {
-		return false;
+		return null;
 	}
 }
 
@@ -156,27 +181,71 @@ async function main() {
 	);
 	console.log(`Targets: ${targets.length} URLs (${targets.reduce((sum, row) => sum + row.anime.length, 0)} anime)`);
 
+	// 途中で止まっても続きから再開できるよう、判定結果をキャッシュに書き足していく
+	const cachePath = options.review.replace(/\.json$/, "-wayback-cache.json");
+	const cache = new Map<string, Decision>(
+		(JSON.parse(await readFile(cachePath, "utf8").catch(() => "[]")) as Decision[]).map((decision) => [
+			decision.url,
+			decision,
+		]),
+	);
+	const saveCache = () => writeFile(cachePath, `${JSON.stringify([...cache.values()], null, 2)}\n`, "utf8");
+
 	const decisions: Decision[] = [];
+	let consecutiveRateLimits = 0;
 	for (const [index, row] of targets.entries()) {
+		const cached = cache.get(row.url);
+		if (cached) {
+			decisions.push(cached);
+			continue;
+		}
 		const seasons = row.anime.map((anime) => anime.season).filter((season): season is string => Boolean(season));
 		const earliest = seasons.sort()[0] ?? null;
 		const titles = row.anime.map((anime) => anime.title);
 		const wanted = seasonTimestamp(earliest);
 		let replacement: string | null = null;
 		let note = "アーカイブなし";
-		const snapshot = await findSnapshot(row.url, wanted).catch(() => null);
+		let snapshot: { url: string; timestamp: string } | null = null;
+		try {
+			snapshot = await findSnapshot(row.url, wanted);
+			consecutiveRateLimits = 0;
+		} catch (error) {
+			const unavailable = error as WaybackUnavailableError;
+			if (unavailable.rateLimited) {
+				consecutiveRateLimits += 1;
+				if (consecutiveRateLimits >= MAX_CONSECUTIVE_RATE_LIMITS) {
+					await saveCache();
+					throw new Error(
+						`archive.org の利用制限（429）が${MAX_CONSECUTIVE_RATE_LIMITS}回続いたため中断しました。時間を置いて再実行すると続きから再開します。`,
+					);
+				}
+				console.log(`  429 (rate limited); waiting ${RATE_LIMIT_WAIT_MS / 1000}s before retrying ${row.url}`);
+				await sleep(RATE_LIMIT_WAIT_MS);
+				targets.splice(index + 1, 0, row);
+				continue;
+			}
+			// 取得に失敗した URL は判定しない（リンクも変えない）
+			console.log(`  skipped (${unavailable.message}): ${row.url}`);
+			await sleep(REQUEST_INTERVAL_MS);
+			continue;
+		}
 		await sleep(REQUEST_INTERVAL_MS);
 		if (snapshot) {
 			const yearsAfter = Number(snapshot.timestamp.slice(0, 4)) - Number(wanted.slice(0, 4));
 			// 乗っ取り・転送の疑いがあったもの、放送から遠いアーカイブは中身を確かめる
 			const needsCheck = row.status === "suspicious" || yearsAfter > TRUSTED_SNAPSHOT_YEARS || yearsAfter < -1;
-			if (!needsCheck || (await snapshotLooksValid(snapshot.url, titles))) {
+			const valid = needsCheck ? await snapshotLooksValid(snapshot.url, titles) : true;
+			if (needsCheck) await sleep(REQUEST_INTERVAL_MS);
+			if (valid === null) {
+				console.log(`  skipped (snapshot unavailable): ${row.url}`);
+				continue;
+			}
+			if (valid) {
 				replacement = snapshot.url;
 				note = `アーカイブ ${snapshot.timestamp.slice(0, 8)}`;
 			} else {
 				note = `アーカイブ ${snapshot.timestamp.slice(0, 8)} は売却・スパム等のため不採用`;
 			}
-			if (needsCheck) await sleep(REQUEST_INTERVAL_MS);
 		}
 		decisions.push({
 			url: row.url,
@@ -186,8 +255,14 @@ async function main() {
 			replacement,
 			note,
 		});
+		cache.set(row.url, decisions.at(-1) as Decision);
+		if (cache.size % 25 === 0) await saveCache();
 		if ((index + 1) % 50 === 0) console.log(`  ${index + 1}/${targets.length}`);
 	}
+
+	await saveCache();
+	const skipped = targets.filter((row) => !cache.has(row.url)).length;
+	if (skipped > 0) console.log(`Undetermined (lookup failed, left unchanged): ${skipped}`);
 
 	let updatedAnime = 0;
 	if (!options.dryRun) {
