@@ -66,6 +66,43 @@ describe("classifyLink", () => {
 	});
 });
 
+describe("false positives found in the first full run", () => {
+	it("does not treat a domain ending in 'dan.com' as a domain marketplace (konodan.com)", () => {
+		expect(
+			classifyLink(
+				input({
+					url: "http://www.konodan.com/news/alien_news",
+					finalUrl: "http://www.konodan.com/news/alien_news",
+					pageTitle: "この男子、宇宙人と戦えます。",
+					bodyText: "ギャラリーページ https://www.konodan.com/gallery",
+					animeTitles: ["この男子、宇宙人と戦えます。"],
+				}),
+			).status,
+		).toBe("ok");
+	});
+
+	it("does not flag adult label product pages whose title is empty", () => {
+		expect(
+			classifyLink(
+				input({ pageTitle: "", bodyText: "アダルトアニメ 新作 発売日", animeTitles: ["恋乳オーダー"] }),
+			).status,
+		).toBe("ok");
+	});
+
+	it("recognizes a redirect to the work's page when a title word appears verbatim", () => {
+		expect(
+			classifyLink(
+				input({
+					url: "http://www.toei-anim.co.jp/tv/dai/",
+					finalUrl: "https://dai-anime.com/",
+					pageTitle: "ドラゴンクエスト ダイの大冒険 アニメ公式サイト",
+					animeTitles: ["DRAGON QUEST -ダイの大冒険-"],
+				}),
+			).status,
+		).toBe("ok");
+	});
+});
+
 describe("mentionsAnime", () => {
 	it("matches by bigram overlap regardless of punctuation and width", () => {
 		expect(mentionsAnime("TVアニメ『ロウきゅーぶ！SS』公式サイト", ["ロウきゅーぶ！"])).toBe(true);

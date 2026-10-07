@@ -17,7 +17,8 @@ export type LinkCheckVerdict = { status: LinkCheckStatus; reason: string };
 
 // ドメインの売却・駐車ページ（乗っ取りの前段階や、失効後に業者が取得したもの）
 const PARKED_PATTERN =
-	/このドメイン|ドメイン(?:は|を)?(?:販売|売却|購入|取得)|domain (?:is |may be )?for sale|buy this domain|this domain (?:has expired|is parked)|お名前\.com|ムームードメイン|sedoparking|dan\.com|hugedomains|afternic|parkingcrew|bodis\.com/i;
+	// 売買サイトのドメイン名は、別ドメインの末尾（konodan.com の「dan.com」）に一致しないよう単独で探す
+	/このドメイン|ドメイン(?:は|を)?(?:販売|売却|購入|取得)|domain (?:is |may be )?for sale|buy this domain|this domain (?:has expired|is parked)|お名前\.com|ムームードメイン|(?<![\w.-])(?:sedoparking|dan|hugedomains|afternic|parkingcrew|bodis)\.com/i;
 // ギャンブル・金融スパム（乗っ取られたドメインの典型）
 const SPAM_PATTERN =
 	/オンラインカジノ|カジノ|casino|バカラ|ポーカー|poker|スロット|ギャンブル|ブックメーカー|キャッシング|闇金|即日融資|出会い系|bitcoin|仮想通貨/i;
@@ -59,10 +60,28 @@ function bigrams(value: string): Set<string> {
 	return grams;
 }
 
-/** ページのタイトル・本文の冒頭に、作品名の手がかりがあるか（2文字単位の一致率で判定） */
+function compact(value: string): string {
+	return value
+		.normalize("NFKC")
+		.toLowerCase()
+		.replace(/[\s\p{P}\p{S}]/gu, "");
+}
+
+/**
+ * ページのタイトル・本文の冒頭に、作品名の手がかりがあるか。2文字単位の一致率に加え、
+ * タイトルの語（3文字以上）がそのまま含まれていれば関連ありとする（英字と日本語が混ざる
+ * 「DRAGON QUEST -ダイの大冒険-」と「ドラゴンクエスト ダイの大冒険」など）。
+ */
 export function mentionsAnime(pageText: string, animeTitles: readonly string[]): boolean {
 	const page = bigrams(pageText);
+	const pageCompact = compact(pageText);
 	return animeTitles.some((title) => {
+		const words = title
+			.normalize("NFKC")
+			.split(/[\s\p{P}\p{S}]+/u)
+			.map(compact)
+			.filter((word) => word.length >= 3);
+		if (words.some((word) => pageCompact.includes(word))) return true;
 		const grams = bigrams(title);
 		if (grams.size === 0) return false;
 		let hit = 0;
@@ -93,7 +112,10 @@ export function classifyLink(input: LinkCheckInput): LinkCheckVerdict {
 	const related = mentionsAnime(`${input.pageTitle}\n${input.bodyText.slice(0, 20000)}`, input.animeTitles);
 	if (PARKED_PATTERN.test(head)) return { status: "suspicious", reason: "ドメイン売却・駐車ページ" };
 	if (SPAM_PATTERN.test(head) && !related) return { status: "suspicious", reason: "ギャンブル・金融系の内容" };
-	if (ADULT_PATTERN.test(head) && !related) return { status: "suspicious", reason: "作品と無関係な成人向けの内容" };
+	// タイトルが空のページ（成人向けレーベルの商品ページなど）は作品との関連を判断できないので疑わない
+	if (input.pageTitle && ADULT_PATTERN.test(head) && !related) {
+		return { status: "suspicious", reason: "作品と無関係な成人向けの内容" };
+	}
 	if (SOFT_404_PATTERN.test(input.pageTitle) || (SOFT_404_PATTERN.test(head) && !related)) {
 		return { status: "dead", reason: "「見つかりません」「公開終了」ページ" };
 	}

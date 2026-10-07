@@ -216,7 +216,8 @@ async function main() {
 	for (const row of targetRows) {
 		rowsByUrl.set(row.official_site_url, [...(rowsByUrl.get(row.official_site_url) ?? []), row]);
 	}
-	let urls = [...rowsByUrl.keys()];
+	// Wayback のアーカイブに差し替え済みの URL は変わらないので点検しない
+	let urls = [...rowsByUrl.keys()].filter((url) => !/^https?:\/\/web\.archive\.org\//i.test(url));
 	if (options.limit) urls = urls.slice(0, options.limit);
 	console.log(
 		`Checking ${urls.length} URLs (${targetRows.length} anime) across ${new Set(urls.map(hostOf)).size} hosts`,
