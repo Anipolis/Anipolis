@@ -30,6 +30,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	}
 
 	event.locals.supabase = createServerClient(supabaseUrl, supabaseKey, {
+		auth: { experimental: { passkey: true } },
 		cookies: {
 			getAll() {
 				return event.cookies.getAll();

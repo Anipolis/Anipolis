@@ -54,6 +54,13 @@ const items = $derived.by((): Item[] => {
 				: "メールアドレスとパスワードでもログインできるようになります",
 			href: "/settings/account/password",
 		});
+		if (data.passkeyEnabled) {
+			list.push({
+				label: "パスキー",
+				description: "指紋・顔認証や画面ロックでログインできるようにします",
+				href: "/settings/passkeys",
+			});
+		}
 		list.push({
 			label: "招待",
 			description: "招待コードを発行して他のユーザーを招待します",

@@ -1,5 +1,7 @@
 <script lang="ts">
+import { goto } from "$app/navigation";
 import { page } from "$app/state";
+import { passkeyErrorMessage } from "$lib/passkey";
 import type { PageProps } from "./$types";
 import { type InviteCodeState, syncInviteCodeState } from "./invite-code";
 
@@ -24,6 +26,28 @@ function handleInviteCodeInput(event: Event): void {
 // クローズドβが有効かつ、まだ有効な招待コードを確認できていない間は
 // 招待コード入力とDiscordの二択のみを表示し、Google/X/メールは隠す。
 const hasInviteAccess = $derived(!data.betaGateEnabled || data.inviteCodeValid);
+
+// パスキーは登録済みの既存アカウント専用（新規作成はできない）なので、招待コードの有無に関係なく出す
+let passkeyPending = $state(false);
+let passkeyError = $state("");
+
+async function signInWithPasskey(): Promise<void> {
+	passkeyPending = true;
+	passkeyError = "";
+	try {
+		const { error } = await data.supabase.auth.signInWithPasskey();
+		if (error) {
+			passkeyError = passkeyErrorMessage(error, "login");
+			return;
+		}
+		// セッション Cookie はブラウザクライアントが書き込み済み。β資格の確認は hooks のゲートに任せる
+		await goto(next, { invalidateAll: true });
+	} catch {
+		passkeyError = passkeyErrorMessage({}, "login");
+	} finally {
+		passkeyPending = false;
+	}
+}
 </script>
 
 <svelte:head>
@@ -151,6 +175,23 @@ const hasInviteAccess = $derived(!data.betaGateEnabled || data.inviteCodeValid);
 					</button>
 				</form>
 			{:else}
+				{#if activeMode === 'login' && data.passkeyEnabled}
+					{#if passkeyError}
+						<div class="flash-error" role="alert">{passkeyError}</div>
+					{/if}
+					<button
+						type="button"
+						class="btn btn-outline auth-wide-button"
+						onclick={signInWithPasskey}
+						disabled={passkeyPending}
+					>
+						<span class="i-lucide-key-round" aria-hidden="true"></span>
+						{passkeyPending ? '確認中...' : 'パスキーでログイン'}
+					</button>
+
+					<div class="auth-divider"><span>または</span></div>
+				{/if}
+
 				{#if data.betaGateEnabled && (activeMode !== 'login' || (form && 'needInvite' in form && form.needInvite) || ['not_member', 'invite_required', 'invalid_invite', 'invite_exhausted'].includes(data.error ?? ''))}
 					<div class="field">
 						<label for="invite-code" class="field-label">招待コード</label>
