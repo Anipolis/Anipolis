@@ -119,4 +119,30 @@ describe("upsertManualSourceRecord", () => {
 			{ onConflict: "mal_id,source" },
 		);
 	});
+
+	it("writes the manual record with the source writer, not the admin's session client", async () => {
+		// anime_source_records には管理者ユーザーの書き込みポリシーが無いため、
+		// manual レコードはサーバーの service role クライアントで保存する
+		const session = createUpdateWriter();
+		const service = createSourceWriter({ data: null, error: null });
+
+		const result = await updateAnimeAction(
+			session.writer,
+			updateRequest("新タイトル"),
+			"123",
+			null,
+			service.writer,
+		);
+
+		expect(result).toEqual({ success: true, animeId: "123" });
+		expect(session.animeUpdate).toHaveBeenCalledTimes(1);
+		expect(session.manualUpsert).not.toHaveBeenCalled();
+		expect(service.upsert).toHaveBeenCalledWith(
+			expect.objectContaining({
+				source: "manual",
+				normalized_data: expect.objectContaining({ title: "新タイトル" }),
+			}),
+			{ onConflict: "mal_id,source" },
+		);
+	});
 });

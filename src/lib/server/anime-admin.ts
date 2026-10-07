@@ -292,6 +292,10 @@ export async function updateAnimeAction(
 	request: Request,
 	animeId: string,
 	currentCoverUrl: string | null,
+	// manual ソースレコードの読み書きに使うクライアント。anime_source_records には
+	// 管理者ユーザーの書き込みポリシーが無い（RLS で拒否される）ため、呼び出し側で
+	// 管理者を確認したうえで service role のクライアントを渡す。
+	sourceWriter: SupabaseClient<Database> = supabase,
 ): Promise<AnimeWriteResult> {
 	const fd = await request.formData();
 	const payload = await buildAnimePayload(supabase, fd, currentCoverUrl);
@@ -299,6 +303,8 @@ export async function updateAnimeAction(
 
 	// biome-ignore lint/suspicious/noExplicitAny: shared writer must tolerate generated type lag after migrations
 	const animeWriter = supabase as SupabaseClient<any>;
+	// biome-ignore lint/suspicious/noExplicitAny: generated types may lag behind source-record migrations
+	const manualWriter = sourceWriter as SupabaseClient<any>;
 	const { data: previousRow, error: previousError } = await animeWriter
 		.from("anime")
 		.select(`mal_id,${MANUAL_SOURCE_KEYS.join(",")}`)
@@ -312,7 +318,7 @@ export async function updateAnimeAction(
 	const malId = (previousRow as { mal_id: number | null } | null)?.mal_id;
 	let existingManualRecord: ManualSourceRecord | undefined;
 	if (malId != null) {
-		const result = await readManualSourceRecord(animeWriter, malId);
+		const result = await readManualSourceRecord(manualWriter, malId);
 		if (result.error) {
 			console.error("manual source record read failed:", result.error.message);
 			return fail(500, {
@@ -329,7 +335,7 @@ export async function updateAnimeAction(
 	// 編集差分を manual ソースとして保存し、カタログ再解決での上書きを防ぐ
 	if (malId != null) {
 		const manualSaved = await upsertManualSourceRecord(
-			animeWriter,
+			manualWriter,
 			malId,
 			(previousRow ?? {}) as Record<string, unknown>,
 			payload as Record<string, unknown>,
