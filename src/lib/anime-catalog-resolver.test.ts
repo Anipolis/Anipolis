@@ -263,6 +263,56 @@ describe("resolveAnimeCatalog", () => {
 		expect(labeled.canonical.official_site_url).toBe("https://labeled.example/");
 	});
 
+	it("fills empty official URLs from Annict without replacing other sources or existing values", () => {
+		const annict = source("annict", {
+			official_site_url: "https://annict-site.example/",
+			official_x_url: "https://x.com/annict_example",
+		});
+		// 他ソースに公式URLが無い（2019年以前の作品の典型）ときだけ Annict で埋める
+		const filled = resolveAnimeCatalog([source("mal", { title_ja: "例の作品" }), annict], legacy([]));
+		expect(filled.canonical.official_site_url).toBe("https://annict-site.example/");
+		expect(filled.canonical.official_x_url).toBe("https://x.com/annict_example");
+		expect(filled.fieldSources["official_x_url"]).toEqual({ source: "annict", confidence: "source" });
+		// 前回値・Jikan は置き換えない
+		const kept = resolveAnimeCatalog(
+			[
+				source("mal", { title_ja: "例の作品" }),
+				source("jikan", { official_x_url: "https://x.com/jikan" }),
+				annict,
+			],
+			{ ...legacy([]), official_site_url: "https://dedicated.example/" },
+		);
+		expect(kept.canonical.official_site_url).toBe("https://dedicated.example/");
+		expect(kept.canonical.official_x_url).toBe("https://x.com/jikan");
+		// しょぼいの推定URL（局・配給サイト内ページ）よりは Annict の作品URLを優先する
+		const overInferred = resolveAnimeCatalog([
+			source("mal", { title_ja: "例の作品" }),
+			source("syobocal", { official_site_url: null, official_site_url_inferred: "https://inferred.example/" }),
+			annict,
+		]);
+		expect(overInferred.canonical.official_site_url).toBe("https://annict-site.example/");
+	});
+
+	it("never uses an X post or profile as the official site", () => {
+		const jikanX = source("jikan", {
+			official_site_url: "https://twitter.com/khara_inc2/status/1577133971422400515",
+			official_x_url: "https://twitter.com/khara_inc2",
+		});
+		const resolved = resolveAnimeCatalog([source("mal", { title_ja: "例の作品" }), jikanX], {
+			...legacy([]),
+			official_site_url: "https://twitter.com/khara_inc2/status/1577133971422400515",
+		});
+		expect(resolved.canonical.official_site_url).toBeNull();
+		expect(resolved.canonical.official_x_url).toBe("https://twitter.com/khara_inc2");
+		// 下位のソースに本物のサイトがあればそちらを使う
+		const withAnnict = resolveAnimeCatalog([
+			source("mal", { title_ja: "例の作品" }),
+			jikanX,
+			source("annict", { official_site_url: "https://www.khara.co.jp/" }),
+		]);
+		expect(withAnnict.canonical.official_site_url).toBe("https://www.khara.co.jp/");
+	});
+
 	it("prefers MAL's total over an offline snapshot taken before the show finished", () => {
 		// 転スラ第4期パターン: AODB は放送中スナップショットの 12、MAL は終了後の 24
 		const resolved = resolveAnimeCatalog([

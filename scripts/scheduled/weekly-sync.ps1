@@ -3,7 +3,9 @@
 #   - Jikan / Wikidata の失敗は警告のみ（公開 Jikan は慢性的に 504。Wikidata は翌週に自然回復）
 #   - MAL / しょぼい / resolve / export の失敗は同期不全なので終了コードを非 0 にする
 #   - シーズン単位で失敗を隔離し、1 シーズン目が落ちても 2 シーズン目を実行する
-# 外部サイト巡回系（enrich:jikan-links / collect:*）はここに含めない。必要時に手動で実行する。
+#   - 権利表記（©）は前期・今期・次期だけ collect:copyright → import:annict → resolve:copyright-seasons
+#     （失敗は警告のみ）
+# それ以外の外部サイト巡回系（enrich:jikan-links / collect:official-x / collect:wayback）は含めない。必要時に手動で実行する。
 . (Join-Path $PSScriptRoot "common.ps1")
 
 Start-SyncLog -Name "weekly-sync"
@@ -45,6 +47,26 @@ try {
             $failed = 1
         }
     }
+    # 権利表記（©）: 前期・今期・次期の空欄を埋め、決めきれないものは管理画面の「©確認」に積む。
+    # 公式サイトの巡回は「公式サイトあり・© 空欄」の作品だけなので、埋まった作品は次週以降対象外。
+    # 外部サイト・Annict は不安定なことがあるため、失敗は警告のみ（翌週に再試行される）。
+    foreach ($tag in (Get-CopyrightSeasonTargets)) {
+        Write-Host ("=== copyright " + $tag + " ===")
+        $code = Invoke-Step -Label ("collect:copyright " + $tag) -PnpmArgs @("collect:copyright", "--", "--season", $tag, "--apply")
+        if ($code -ne 0) {
+            Write-Host ("warning: copyright collection for " + $tag + " failed")
+        }
+        $code = Invoke-Step -Label ("import:annict " + $tag) -PnpmArgs @("import:annict", "--", "--season", $tag, "--allow-shared")
+        if ($code -ne 0) {
+            Write-Host ("warning: Annict import for " + $tag + " failed (check ANNICT_ACCESS_TOKEN)")
+        }
+    }
+    # 期の違いだけの © 候補は作品の期に合う表記で自動決定し、残りだけを人の確認に回す
+    $code = Invoke-Step -Label "resolve:copyright-seasons" -PnpmArgs @("resolve:copyright-seasons")
+    if ($code -ne 0) {
+        Write-Host "warning: season-based copyright resolution failed"
+    }
+
     # ODbL 公開カタログの静的成果物。上流が失敗していても既存レコードからの再生成は安全なので常に試みる
     $code = Invoke-Step -Label "export:anime-catalog" -PnpmArgs @("export:anime-catalog")
     if ($code -ne 0) {

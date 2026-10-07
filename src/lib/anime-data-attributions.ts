@@ -34,6 +34,12 @@ const ATTRIBUTION_DEFINITIONS: Record<AnimeDataAttributionSource, AttributionDef
 		license_label: null,
 		license_url: null,
 	},
+	annict: {
+		source: "annict",
+		label: "Annict",
+		license_label: null,
+		license_url: null,
+	},
 };
 
 function isHttpUrl(value: string): boolean {

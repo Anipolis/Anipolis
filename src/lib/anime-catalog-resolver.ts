@@ -1,4 +1,5 @@
 import { translateAnimeGenres } from "./anime-vocabulary.ts";
+import { isXUrl } from "./copyright-platform.ts";
 import { normalizeStudioAlias, type StudioNameMapping } from "./wikidata-studio-names.ts";
 
 export type CatalogSourceName =
@@ -8,6 +9,7 @@ export type CatalogSourceName =
 	| "mal"
 	| "jikan"
 	| "anime_offline_database"
+	| "annict"
 	| "legacy";
 export type ResolutionConfidence = "verified" | "source" | "fallback";
 
@@ -269,6 +271,7 @@ export function resolveAnimeCatalog(
 	const mal = bySource.get("mal") ?? {};
 	const jikan = bySource.get("jikan") ?? {};
 	const manual = bySource.get("manual") ?? {};
+	const annict = bySource.get("annict") ?? {};
 	const malId = sourceRecords[0]?.mal_id ?? legacyRow?.mal_id;
 	if (!malId) throw new Error("A MAL ID is required to resolve an anime catalog row.");
 
@@ -387,24 +390,31 @@ export function resolveAnimeCatalog(
 		candidate(legacyRow?.broadcast_time, "legacy", "fallback"),
 		{ value: null, source: "legacy", confidence: "fallback" },
 	]);
-	const resolveOfficialUrl = (key: "official_site_url" | "official_x_url") =>
-		firstDefined<string | null>([
+	const resolveOfficialUrl = (key: "official_site_url" | "official_x_url") => {
+		// X（旧 Twitter）のページは公式X欄に入るので、公式サイト欄には採用しない
+		// （Jikan が公式サイトとして X の投稿URLを返す作品がある。そのページの
+		// 「© X Corp.」を © 収集が作品の © として拾っていた）
+		const usable = <T extends string | null | undefined>(value: T): T | undefined =>
+			key === "official_site_url" && isXUrl(value) ? undefined : value;
+		return firstDefined<string | null>([
 			candidate(nullableStringValue(manual, key), "manual", "verified"),
-			candidate(stringValue(syobocal, key), "syobocal", "verified"),
-			candidate(stringValue(jikan, key), "jikan", "source"),
+			candidate(usable(stringValue(syobocal, key)), "syobocal", "verified"),
+			candidate(usable(stringValue(jikan, key)), "jikan", "source"),
+			candidate(usable(legacyRow?.[key] ?? undefined), "legacy", "fallback"),
+			// Annict はユーザー編集のデータベースなので、既存値（前回値）より下に置き
+			// 空欄の補完にだけ使う。2019年以前の作品はほかのソースに公式URLがほぼ無く、
+			// ここが主な供給源になる。
+			candidate(usable(stringValue(annict, key)), "annict", "source"),
 			// 「公式」ラベルの無い会社名ラベルの作品ページ（推定）。局・配給サイト内の
 			// ページなので、作品専用ドメインを持つことが多い既存値（Jikan・前回値）より
 			// 下に置き、公式サイトが無い作品の補完にだけ使う（戦隊大失格: 既存=専用ドメイン /
-			// 推定=松竹サイト内）。
+			// 推定=松竹サイト内）。Annict の作品URLがあればそちらを優先する。
 			...(key === "official_site_url"
-				? [
-						candidate(legacyRow?.[key] ?? undefined, "legacy", "fallback"),
-						candidate(stringValue(syobocal, "official_site_url_inferred"), "syobocal", "source"),
-					]
+				? [candidate(stringValue(syobocal, "official_site_url_inferred"), "syobocal", "source")]
 				: []),
-			candidate(legacyRow?.[key], "legacy", "fallback"),
 			{ value: null, source: "legacy", confidence: "fallback" },
 		]);
+	};
 	const officialSiteUrl = resolveOfficialUrl("official_site_url");
 	const officialXUrl = resolveOfficialUrl("official_x_url");
 	const coverUrl = resolveNullableString("cover_url", false);

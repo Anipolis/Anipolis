@@ -13,6 +13,9 @@ const reasonLabels: Record<string, string> = {
 };
 
 const dashboard = $derived(data.dashboard);
+const copyrightReviewSub = $derived(
+	`取り込みで決めきれなかった権利表記の確認（確認待ち ${data.pendingCopyrightReviews.toLocaleString()} 件）`,
+);
 </script>
 
 <svelte:head> <title>Admin - Anipolis</title> </svelte:head>
@@ -107,6 +110,13 @@ const dashboard = $derived(data.dashboard);
 			<div class="nav-link-body">
 				<span class="nav-link-label">放送回ルーム検証</span>
 				<span class="nav-link-sub">対象作品の入室・滞在・投稿KPIを確認</span>
+			</div>
+			<span class="nav-link-arrow">→</span>
+		</a>
+		<a href="/admin/copyright-reviews" class="nav-link">
+			<div class="nav-link-body">
+				<span class="nav-link-label">©確認</span>
+				<span class="nav-link-sub">{copyrightReviewSub}</span>
 			</div>
 			<span class="nav-link-arrow">→</span>
 		</a>
