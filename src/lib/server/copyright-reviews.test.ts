@@ -109,3 +109,19 @@ describe("cover visibility migration (136)", () => {
 		);
 	});
 });
+
+describe("blank copyright normalization migration (138)", () => {
+	const migration = readFileSync(
+		new URL("../../../supabase/migrations/138_normalize_blank_copyright.sql", import.meta.url),
+		"utf8",
+	);
+
+	it("stores blank notices as NULL so importers and the cover check agree on 'no copyright'", () => {
+		expect(migration).toContain("WHERE copyright IS NOT NULL AND btrim(copyright) = '';");
+		const normalize = migration.indexOf("NEW.copyright := NULL;");
+		expect(normalize).toBeGreaterThan(-1);
+		// 正規化してから表示判定する（順序が逆だと空白の © で画像が出てしまう）
+		expect(normalize).toBeLessThan(migration.indexOf("NEW.cover_url := CASE"));
+		expect(migration).toMatch(/WHEN NEW\.copyright IS NOT NULL THEN NEW\.cover_source_url/);
+	});
+});
