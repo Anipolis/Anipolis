@@ -165,45 +165,27 @@ export function takeChallengeCookie(
 // passkey_credentials テーブル
 // ----------------------------------------------------------------
 
-type PasskeyCredentialRow = {
-	id: string;
-	user_id: string;
-	credential_id: string;
-	public_key: string;
-	counter: number;
-	transports: string[];
-	aaguid: string | null;
-	device_type: "singleDevice" | "multiDevice";
-	backed_up: boolean;
-	created_at: string;
-	last_used_at: string | null;
-};
+type PasskeyCredentialRow = Database["public"]["Tables"]["passkey_credentials"]["Row"];
 
 export type PasskeySummary = Pick<
 	PasskeyCredentialRow,
 	"id" | "device_type" | "backed_up" | "created_at" | "last_used_at"
 >;
 
-// biome-ignore lint/suspicious/noExplicitAny: passkey_credentials not yet in auto-generated DB types
-type UntypedTableClient = { from(table: "passkey_credentials"): any };
-
-function passkeyCredentials(client: Supabase) {
-	return (client as unknown as UntypedTableClient).from("passkey_credentials");
-}
-
 export async function listPasskeys(
 	supabase: Supabase,
 	userId: string,
 ): Promise<{ passkeys: PasskeySummary[]; failed: boolean }> {
-	const { data, error } = await passkeyCredentials(supabase)
+	const { data, error } = await supabase
+		.from("passkey_credentials")
 		.select("id, device_type, backed_up, created_at, last_used_at")
 		.eq("user_id", userId)
 		.order("created_at", { ascending: true });
-	return { passkeys: (data ?? []) as PasskeySummary[], failed: Boolean(error) };
+	return { passkeys: data ?? [], failed: Boolean(error) };
 }
 
 export async function deletePasskey(supabase: Supabase, userId: string, passkeyId: string): Promise<boolean> {
-	const { error } = await passkeyCredentials(supabase).delete().eq("id", passkeyId).eq("user_id", userId);
+	const { error } = await supabase.from("passkey_credentials").delete().eq("id", passkeyId).eq("user_id", userId);
 	return !error;
 }
 
@@ -231,11 +213,12 @@ export async function startPasskeyRegistration({
 }: RegistrationContext): Promise<PasskeyResult<PublicKeyCredentialCreationOptionsJSON>> {
 	if (!isRecentlyAuthenticated(session)) return reauthRequired();
 
-	const { data: existing, error } = await passkeyCredentials(supabase)
+	const { data: existing, error } = await supabase
+		.from("passkey_credentials")
 		.select("credential_id, transports")
 		.eq("user_id", user.id);
 	if (error) return failure(500, "パスキーの登録を開始できませんでした");
-	const credentials = (existing ?? []) as Pick<PasskeyCredentialRow, "credential_id" | "transports">[];
+	const credentials = existing ?? [];
 	if (credentials.length >= MAX_PASSKEYS_PER_USER) {
 		return failure(400, `パスキーは${MAX_PASSKEYS_PER_USER}個まで登録できます`);
 	}
@@ -299,16 +282,18 @@ export async function finishPasskeyRegistration({
 	if (!verification.verified) return failure(400, "パスキーを確認できませんでした");
 
 	const { credential, credentialDeviceType, credentialBackedUp, aaguid } = verification.registrationInfo;
-	const { error } = await passkeyCredentials(createServiceRoleClient()).insert({
-		user_id: user.id,
-		credential_id: credential.id,
-		public_key: isoBase64URL.fromBuffer(credential.publicKey),
-		counter: credential.counter,
-		transports: credential.transports ?? [],
-		aaguid,
-		device_type: credentialDeviceType,
-		backed_up: credentialBackedUp,
-	});
+	const { error } = await createServiceRoleClient()
+		.from("passkey_credentials")
+		.insert({
+			user_id: user.id,
+			credential_id: credential.id,
+			public_key: isoBase64URL.fromBuffer(credential.publicKey),
+			counter: credential.counter,
+			transports: credential.transports ?? [],
+			aaguid,
+			device_type: credentialDeviceType,
+			backed_up: credentialBackedUp,
+		});
 	if (error) {
 		return error.code === "23505"
 			? failure(409, "このパスキーはすでに登録されています")
@@ -381,15 +366,12 @@ export async function finishPasskeyLogin({
 	if (!response) return failure(400, "パスキーを確認できませんでした");
 
 	const admin = createServiceRoleClient();
-	const { data, error } = await passkeyCredentials(admin)
+	const { data: stored, error } = await admin
+		.from("passkey_credentials")
 		.select("id, user_id, credential_id, public_key, counter, transports")
 		.eq("credential_id", response.id)
 		.maybeSingle();
 	if (error) return failure(500, "パスキーでログインできませんでした");
-	const stored = data as Pick<
-		PasskeyCredentialRow,
-		"id" | "user_id" | "credential_id" | "public_key" | "counter" | "transports"
-	> | null;
 	if (!stored) return failure(400, "このパスキーは登録されていません。削除済みの可能性があります");
 
 	const { rpID, origin } = getRelyingParty(url);
@@ -413,7 +395,8 @@ export async function finishPasskeyLogin({
 	}
 	if (!verification.verified) return failure(400, "パスキーを確認できませんでした");
 
-	const { error: updateError } = await passkeyCredentials(admin)
+	const { error: updateError } = await admin
+		.from("passkey_credentials")
 		.update({ counter: verification.authenticationInfo.newCounter, last_used_at: new Date(now).toISOString() })
 		.eq("id", stored.id);
 	if (updateError) return failure(500, "パスキーでログインできませんでした");
