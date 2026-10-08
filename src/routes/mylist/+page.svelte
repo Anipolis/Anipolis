@@ -3,6 +3,7 @@ import type { ActionResult, SubmitFunction } from "@sveltejs/kit";
 import { onDestroy, untrack } from "svelte";
 import { applyAction, deserialize, enhance } from "$app/forms";
 import { beforeNavigate, invalidateAll } from "$app/navigation";
+import { page } from "$app/state";
 import AnimeEditRow from "$lib/components/AnimeEditRow.svelte";
 import AnimeStatusSection from "$lib/components/AnimeStatusSection.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
@@ -125,15 +126,27 @@ const unsavedCount = $derived(
 	).length,
 );
 
+// 保存キューは画面を離れたあとも送信中の行の後続編集を送り切る（save-queue の dispose）。
+// そのため送信先は送る時点の URL に依存させず固定し、編集したユーザーにも紐付ける。
+// 相対 URL のままだと移動先（/settings など）へ送られて編集が消え、アカウント切り替え後は
+// 切り替え先のセッションで送られて別のユーザーのマイリストに保存される
+const UPSERT_WATCHLIST_ACTION = "/mylist?/upsertWatchlist";
+const saveOwnerId = untrack(() => data.user?.id ?? null);
+
 async function saveEditRow(animeId: string, entry: EntryState): Promise<SaveResult> {
+	if (!saveOwnerId || page.data.user?.id !== saveOwnerId) {
+		return { ok: false, message: "アカウントが切り替わったため保存しませんでした" };
+	}
+
 	const formData = new FormData();
 	formData.set("anime_id", animeId);
 	formData.set("status", entry.status);
 	formData.set("score", entry.score);
 	formData.set("progress", entry.progress.toString());
+	formData.set("expected_user_id", saveOwnerId);
 
 	// keepalive: 画面移動やタブを閉じた直後でも送信を完了させる
-	const response = await fetch("?/upsertWatchlist", {
+	const response = await fetch(UPSERT_WATCHLIST_ACTION, {
 		method: "POST",
 		body: formData,
 		headers: { accept: "application/json", "x-sveltekit-action": "true" },
