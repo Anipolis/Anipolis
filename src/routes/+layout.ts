@@ -10,7 +10,7 @@ export const load: LayoutLoad = async ({ data, depends, fetch }) => {
 	if (!supabaseUrl || !supabaseKey) throw new Error("Supabase public environment variables are not configured");
 
 	const supabase = isBrowser()
-		? createBrowserClient<Database>(supabaseUrl, supabaseKey, { auth: { experimental: { passkey: true } } })
+		? createBrowserClient<Database>(supabaseUrl, supabaseKey)
 		: createServerClient<Database>(supabaseUrl, supabaseKey, {
 				global: { fetch },
 				cookies: {

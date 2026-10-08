@@ -3,7 +3,7 @@ import type { SubmitFunction } from "@sveltejs/kit";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
 import SettingsBackLink from "$lib/components/SettingsBackLink.svelte";
-import { passkeyErrorMessage } from "$lib/passkey";
+import { registerPasskey } from "$lib/passkey";
 import { formatRelativeTime } from "$lib/utils/format";
 import type { PageProps } from "./$types";
 
@@ -13,24 +13,19 @@ let registering = $state(false);
 let registerError = $state("");
 let registered = $state(false);
 
-// 登録の WebAuthn 儀式はブラウザでしか行えないため、ブラウザ側クライアントから直接呼ぶ
-async function registerPasskey(): Promise<void> {
+async function handleRegister(): Promise<void> {
 	registering = true;
 	registerError = "";
 	registered = false;
-	try {
-		const { error } = await data.supabase.auth.registerPasskey();
-		if (error) {
-			registerError = passkeyErrorMessage(error, "register");
-			return;
-		}
+	const result = await registerPasskey();
+	if (result.ok) {
 		registered = true;
-		await invalidateAll();
-	} catch {
-		registerError = passkeyErrorMessage({}, "register");
-	} finally {
-		registering = false;
+	} else {
+		registerError = result.message;
 	}
+	// 一覧の更新、または再ログインが必要になったことを画面に反映する
+	if (result.ok || result.reauthRequired) await invalidateAll();
+	registering = false;
 }
 
 const confirmDelete: SubmitFunction = ({ cancel }) => {
@@ -54,7 +49,8 @@ const confirmDelete: SubmitFunction = ({ cancel }) => {
 			</div>
 
 			<p class="passkey-info-text">
-				パスキーを登録すると、この端末の指紋・顔認証や画面ロックを使って、パスワードなしでログインできます。
+				パスキーを登録すると、この端末の指紋・顔認証や画面ロックを使って、Discord
+				などを経由せずにログインできます。
 			</p>
 
 			{#if registered}
@@ -73,15 +69,49 @@ const confirmDelete: SubmitFunction = ({ cancel }) => {
 				<div class="flash-error" role="alert">{form.message}</div>
 			{/if}
 
-			<button
-				type="button"
-				class="btn btn-primary passkey-wide-button"
-				onclick={registerPasskey}
-				disabled={registering}
-			>
-				<span class="i-lucide-key-round" aria-hidden="true"></span>
-				{registering ? '登録中…' : 'パスキーを追加'}
-			</button>
+			{#if data.recentlyAuthenticated}
+				<button
+					type="button"
+					class="btn btn-primary passkey-wide-button"
+					onclick={handleRegister}
+					disabled={registering}
+				>
+					<span class="i-lucide-key-round" aria-hidden="true"></span>
+					{registering ? '登録中…' : 'パスキーを追加'}
+				</button>
+			{:else}
+				<div class="passkey-reauth">
+					<p class="passkey-reauth-text">
+						セキュリティのため、パスキーを追加するにはログインし直してください。ログインし直してから{data.reauthWindowMinutes}分間追加できます。
+					</p>
+
+					{#each data.reauthProviders as provider (provider.action)}
+						<form method="POST" action="/auth?/{provider.action}">
+							<input type="hidden" name="next" value="/settings/passkeys">
+							<button type="submit" class="btn btn-outline passkey-wide-button">
+								{provider.label}でログインし直す
+							</button>
+						</form>
+					{/each}
+
+					{#if data.hasEmailProvider}
+						<form method="POST" action="?/reauth" class="passkey-reauth-form" use:enhance>
+							<div class="field">
+								<label for="passkey-reauth-password" class="field-label">パスワードで確認</label>
+								<input
+									id="passkey-reauth-password"
+									name="password"
+									type="password"
+									class="field-input"
+									autocomplete="current-password"
+									required
+								>
+							</div>
+							<button type="submit" class="btn btn-outline passkey-wide-button">確認する</button>
+						</form>
+					{/if}
+				</div>
+			{/if}
 
 			<h2 class="passkey-list-title">登録済みのパスキー</h2>
 
@@ -94,7 +124,9 @@ const confirmDelete: SubmitFunction = ({ cancel }) => {
 					{#each data.passkeys as passkey (passkey.id)}
 						<li class="passkey-item">
 							<div class="passkey-main">
-								<strong>{passkey.friendly_name || 'パスキー'}</strong>
+								<strong>
+									{passkey.device_type === 'multiDevice' ? '同期されるパスキー' : 'この端末だけのパスキー'}
+								</strong>
 								<div class="passkey-meta">
 									<span>{formatRelativeTime(passkey.created_at)}に登録</span>
 									<span>
@@ -126,6 +158,26 @@ const confirmDelete: SubmitFunction = ({ cancel }) => {
 .passkey-wide-button {
 	width: 100%;
 	justify-content: center;
+}
+
+.passkey-reauth {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 14px;
+	border: 1px solid var(--border);
+	border-radius: 12px;
+}
+
+.passkey-reauth-text {
+	margin: 0;
+	font-size: 0.88rem;
+}
+
+.passkey-reauth-form {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
 }
 
 .passkey-list-title {

@@ -1,7 +1,7 @@
 <script lang="ts">
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
-import { passkeyErrorMessage } from "$lib/passkey";
+import { signInWithPasskey } from "$lib/passkey";
 import type { PageProps } from "./$types";
 import { type InviteCodeState, syncInviteCodeState } from "./invite-code";
 
@@ -31,22 +31,17 @@ const hasInviteAccess = $derived(!data.betaGateEnabled || data.inviteCodeValid);
 let passkeyPending = $state(false);
 let passkeyError = $state("");
 
-async function signInWithPasskey(): Promise<void> {
+async function handlePasskeyLogin(): Promise<void> {
 	passkeyPending = true;
 	passkeyError = "";
-	try {
-		const { error } = await data.supabase.auth.signInWithPasskey();
-		if (error) {
-			passkeyError = passkeyErrorMessage(error, "login");
-			return;
-		}
-		// セッション Cookie はブラウザクライアントが書き込み済み。β資格の確認は hooks のゲートに任せる
-		await goto(next, { invalidateAll: true });
-	} catch {
-		passkeyError = passkeyErrorMessage({}, "login");
-	} finally {
-		passkeyPending = false;
+	const result = await signInWithPasskey(next);
+	if (result.ok) {
+		// セッション Cookie はサーバーが設定済み
+		await goto(result.redirectTo ?? "/", { invalidateAll: true });
+		return;
 	}
+	passkeyError = result.message;
+	passkeyPending = false;
 }
 </script>
 
@@ -182,7 +177,7 @@ async function signInWithPasskey(): Promise<void> {
 					<button
 						type="button"
 						class="btn btn-outline auth-wide-button"
-						onclick={signInWithPasskey}
+						onclick={handlePasskeyLogin}
 						disabled={passkeyPending}
 					>
 						<span class="i-lucide-key-round" aria-hidden="true"></span>

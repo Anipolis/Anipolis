@@ -1,27 +1,42 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { actions } from "./+page.server";
 
-vi.mock("$lib/server/passkey", () => ({ isPasskeyEnabled: () => true }));
-
-const { actions } = await import("./+page.server");
+type Action = NonNullable<(typeof actions)["delete"]>;
 
 const deletePasskey = actions["delete"];
-if (!deletePasskey) throw new Error("passkey delete action is not exported");
+const reauth = actions["reauth"];
+if (!deletePasskey || !reauth) throw new Error("passkey actions are not exported");
 
 const PASSKEY_ID = "0b6f1f2e-4a7c-4d2b-9a51-3f0e8c1d2b47";
 
-function makeEvent(passkeyId: string, deleteResult: { error: unknown } = { error: null }, loggedIn = true) {
+function makeEvent(
+	action: "delete" | "reauth",
+	fields: Record<string, string>,
+	options: { deleteError?: unknown; signInError?: unknown; loggedIn?: boolean } = {},
+) {
 	const form = new FormData();
-	form.set("passkey_id", passkeyId);
-	const request = new Request("http://localhost/settings/passkeys?/delete", { method: "POST", body: form });
-	const supabase = { auth: { passkey: { delete: vi.fn(async () => deleteResult) } } };
+	for (const [key, value] of Object.entries(fields)) form.set(key, value);
+	const request = new Request(`http://localhost/settings/passkeys?/${action}`, { method: "POST", body: form });
+
+	const eqUser = vi.fn(async () => ({ error: options.deleteError ?? null }));
+	const eqId = vi.fn(() => ({ eq: eqUser }));
+	const del = vi.fn(() => ({ eq: eqId }));
+	const supabase = {
+		from: vi.fn(() => ({ delete: del })),
+		auth: { signInWithPassword: vi.fn(async () => ({ error: options.signInError ?? null })) },
+	};
+	const loggedIn = options.loggedIn ?? true;
 	const event = {
 		request,
 		locals: {
 			supabase,
-			safeGetSession: async () => ({ session: null, user: loggedIn ? { id: "user-1" } : null }),
+			safeGetSession: async () => ({
+				session: null,
+				user: loggedIn ? { id: `user-${action}-${Math.random()}`, email: "u@example.com" } : null,
+			}),
 		},
-	} as unknown as Parameters<typeof deletePasskey>[0];
-	return { event, supabase };
+	} as unknown as Parameters<Action>[0];
+	return { event, supabase, eqId, eqUser };
 }
 
 afterEach(() => {
@@ -30,29 +45,46 @@ afterEach(() => {
 
 describe("settings/passkeys delete", () => {
 	it("ログインしていなければ削除しない", async () => {
-		const { event, supabase } = makeEvent(PASSKEY_ID, { error: null }, false);
-		const result = await deletePasskey(event);
-		expect(result).toMatchObject({ status: 401 });
-		expect(supabase.auth.passkey.delete).not.toHaveBeenCalled();
+		const { event, supabase } = makeEvent("delete", { passkey_id: PASSKEY_ID }, { loggedIn: false });
+		expect(await deletePasskey(event)).toMatchObject({ status: 401 });
+		expect(supabase.from).not.toHaveBeenCalled();
 	});
 
-	it("UUID でない ID は Auth API に渡さない", async () => {
-		const { event, supabase } = makeEvent("../user");
-		const result = await deletePasskey(event);
-		expect(result).toMatchObject({ status: 400 });
-		expect(supabase.auth.passkey.delete).not.toHaveBeenCalled();
+	it("UUID でない ID は弾く", async () => {
+		const { event, supabase } = makeEvent("delete", { passkey_id: "../user" });
+		expect(await deletePasskey(event)).toMatchObject({ status: 400 });
+		expect(supabase.from).not.toHaveBeenCalled();
 	});
 
-	it("指定したパスキーを削除する", async () => {
-		const { event, supabase } = makeEvent(PASSKEY_ID);
-		const result = await deletePasskey(event);
-		expect(result).toEqual({ deleted: true });
-		expect(supabase.auth.passkey.delete).toHaveBeenCalledWith({ passkeyId: PASSKEY_ID });
+	it("自分のパスキーに絞って削除する", async () => {
+		const { event, supabase, eqId, eqUser } = makeEvent("delete", { passkey_id: PASSKEY_ID });
+		expect(await deletePasskey(event)).toEqual({ deleted: true });
+		expect(supabase.from).toHaveBeenCalledWith("passkey_credentials");
+		expect(eqId).toHaveBeenCalledWith("id", PASSKEY_ID);
+		expect(eqUser).toHaveBeenCalledWith("user_id", expect.stringMatching(/^user-delete-/));
 	});
 
-	it("Auth API が失敗したらエラーを返す", async () => {
-		const { event } = makeEvent(PASSKEY_ID, { error: { message: "boom" } });
-		const result = await deletePasskey(event);
-		expect(result).toMatchObject({ status: 500 });
+	it("削除に失敗したらエラーを返す", async () => {
+		const { event } = makeEvent("delete", { passkey_id: PASSKEY_ID }, { deleteError: { message: "boom" } });
+		expect(await deletePasskey(event)).toMatchObject({ status: 500 });
+	});
+});
+
+describe("settings/passkeys reauth", () => {
+	it("自分のメールアドレスでパスワードを確認し直す", async () => {
+		const { event, supabase } = makeEvent("reauth", { password: "secret" });
+		expect(await reauth(event)).toEqual({ reauthenticated: true });
+		expect(supabase.auth.signInWithPassword).toHaveBeenCalledWith({ email: "u@example.com", password: "secret" });
+	});
+
+	it("パスワードが違えばエラーを返す", async () => {
+		const { event } = makeEvent("reauth", { password: "wrong" }, { signInError: { message: "invalid" } });
+		expect(await reauth(event)).toMatchObject({ status: 400 });
+	});
+
+	it("パスワードが空なら確認しない", async () => {
+		const { event, supabase } = makeEvent("reauth", { password: "" });
+		expect(await reauth(event)).toMatchObject({ status: 400 });
+		expect(supabase.auth.signInWithPassword).not.toHaveBeenCalled();
 	});
 });
