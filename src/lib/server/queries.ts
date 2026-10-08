@@ -2950,6 +2950,7 @@ function toAnime(raw: Record<string, unknown>): Anime {
 		title_romaji: (raw["title_romaji"] as string | null) ?? null,
 		synopsis: (raw["synopsis"] as string | null) ?? null,
 		cover_url: (raw["cover_url"] as string | null) ?? null,
+		cover_source_url: (raw["cover_source_url"] as string | null) ?? null,
 		season: (raw["season"] as string | null) ?? null,
 		episode_count: (raw["episode_count"] as string | null) || null,
 		type: (raw["type"] as string | null) ?? null,

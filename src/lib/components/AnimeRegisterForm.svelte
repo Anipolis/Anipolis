@@ -1,10 +1,14 @@
 <script lang="ts">
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
+import { isCoverHiddenWithoutCopyright } from "$lib/anime-cover";
 import { ANIME_GENRES, ANIME_SOURCE_OPTIONS } from "$lib/anime-vocabulary";
 import type { Anime } from "$lib/types";
 
-type FormResult = { success?: boolean; animeId?: string | number; message?: string } | null | undefined;
+type FormResult =
+	| { success?: boolean; animeId?: string | number; message?: string; coverHidden?: boolean }
+	| null
+	| undefined;
 let {
 	form,
 	mode = "create",
@@ -49,6 +53,9 @@ let studioInput = $state("");
 let producerInput = $state("");
 let hashtagInput = $state("");
 const isEditMode = $derived(mode === "edit");
+// cover_url は © が無いと隠れて空になる（migration 136）ので、編集欄には画像の実体を出す
+const currentCoverUrl = $derived(anime?.cover_source_url ?? anime?.cover_url ?? "");
+const coverHiddenNow = $derived(anime ? isCoverHiddenWithoutCopyright(anime) : false);
 const broadcastStationValue = $derived((anime?.broadcast_station ?? []).join(", "));
 
 function dateValue(value: string | null | undefined) {
@@ -133,6 +140,9 @@ async function handleFileChange(e: Event) {
 	{#if form?.success}
 		<div class="form-success" aria-live="polite">
 			{isEditMode ? "更新しました！" : "登録しました！"} <a href="/anime/{form.animeId}">詳細を見る →</a>
+			{#if form.coverHidden}
+				<p class="form-note">権利表記（©）が未設定のため、カバー画像は表示されません。</p>
+			{/if}
 		</div>
 	{/if}
 	{#if form?.message}
@@ -526,9 +536,18 @@ async function handleFileChange(e: Event) {
 							class="rf-input"
 							style="margin-top:6px"
 							placeholder="または画像 URL を直接入力..."
-							value={anime?.cover_url ?? ""}
+							value={currentCoverUrl}
 						>
 					{/if}
+					<p class="cover-note">
+						{#if coverHiddenNow}
+							権利表記（©）が未設定のため、今のカバー画像は表示されていません。
+						{/if}
+						カバー画像は権利表記（©）のある作品だけに表示されます。
+						{#if isEditMode}
+							URL 欄を空にして保存するとカバーを外します。
+						{/if}
+					</p>
 				</div>
 			</div>
 		</div>
@@ -564,6 +583,17 @@ async function handleFileChange(e: Event) {
 .form-success a {
 	color: var(--color-success);
 	font-weight: 600;
+}
+.form-note {
+	margin: 6px 0 0;
+	font-size: 0.8rem;
+	color: var(--color-text-muted);
+}
+.cover-note {
+	margin: 6px 0 0;
+	font-size: 0.75rem;
+	line-height: 1.5;
+	color: var(--color-text-muted);
 }
 .form-error {
 	padding: 12px 16px;

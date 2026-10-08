@@ -5,12 +5,12 @@ import {
 	isPlausibleEmail,
 	normalizeEmail,
 	PASSWORD_RESET_REQUESTED_MESSAGE,
-	withMinimumDuration,
+	withFixedDuration,
 } from "$lib/utils/password-reset";
 import type { Actions } from "./$types";
 
-/** 未登録メールの即時応答と登録済みメールの送信待ちの時間差を埋める下限 */
-const MIN_RESPONSE_MS = 800;
+/** 登録の有無で応答時間が変わらないよう、申請の応答はいつもこの時間で返す */
+const RESPONSE_MS = 800;
 
 export const actions: Actions = {
 	/**
@@ -24,6 +24,7 @@ export const actions: Actions = {
 		const {
 			request,
 			url,
+			platform,
 			locals: { supabase },
 		} = event;
 		const form = await request.formData();
@@ -38,13 +39,24 @@ export const actions: Actions = {
 			return fail(429, { email, message: "申請回数が多すぎます。しばらく待ってからお試しください" });
 		}
 
-		await withMinimumDuration(async () => {
-			const { error } = await supabase.auth.resetPasswordForEmail(email, {
-				redirectTo: getPasswordResetRedirectTo(url.origin),
-			});
-			// メールアドレスは記録しない（ログからの列挙防止）
-			if (error) console.error("resetPasswordForEmail failed:", { status: error.status, code: error.code });
-		}, MIN_RESPONSE_MS);
+		// PKCE の code_verifier Cookie は送信リクエストの前に書かれるので、送信が応答に
+		// 間に合わなくても再設定リンクは申請したブラウザで開ける
+		await withFixedDuration(
+			async () => {
+				try {
+					const { error } = await supabase.auth.resetPasswordForEmail(email, {
+						redirectTo: getPasswordResetRedirectTo(url.origin),
+					});
+					// メールアドレスは記録しない（ログからの列挙防止）
+					if (error)
+						console.error("resetPasswordForEmail failed:", { status: error.status, code: error.code });
+				} catch (error) {
+					console.error("resetPasswordForEmail threw:", error instanceof Error ? error.name : "unknown");
+				}
+			},
+			RESPONSE_MS,
+			(promise) => platform?.ctx?.waitUntil(promise),
+		);
 
 		return { success: true, email: "", message: PASSWORD_RESET_REQUESTED_MESSAGE };
 	},

@@ -6,7 +6,7 @@ import {
 	normalizeEmail,
 	parseRecoveryLink,
 	validateNewPassword,
-	withMinimumDuration,
+	withFixedDuration,
 } from "./password-reset";
 
 describe("normalizeEmail / isPlausibleEmail", () => {
@@ -99,17 +99,32 @@ describe("listSignInProviderLabels", () => {
 	});
 });
 
-describe("withMinimumDuration", () => {
-	it("returns the task result no earlier than the minimum duration", async () => {
+describe("withFixedDuration", () => {
+	it("waits for the full duration even when the task finishes immediately", async () => {
 		const startedAt = Date.now();
-		const result = await withMinimumDuration(async () => "done", 40);
-		expect(result).toBe("done");
+		await withFixedDuration(async () => {}, 40);
 		expect(Date.now() - startedAt).toBeGreaterThanOrEqual(35);
 	});
 
-	it("does not add delay when the task already took long enough", async () => {
+	it("returns on time without waiting for a slow task, handing it to keepAlive", async () => {
+		let finished = false;
+		const kept: Promise<unknown>[] = [];
 		const startedAt = Date.now();
-		await withMinimumDuration(() => new Promise<void>((resolve) => setTimeout(resolve, 30)), 10);
+		await withFixedDuration(
+			() =>
+				new Promise<void>((resolve) =>
+					setTimeout(() => {
+						finished = true;
+						resolve();
+					}, 300),
+				),
+			20,
+			(promise) => kept.push(promise),
+		);
 		expect(Date.now() - startedAt).toBeLessThan(200);
+		expect(finished).toBe(false);
+		expect(kept).toHaveLength(1);
+		await kept[0];
+		expect(finished).toBe(true);
 	});
 });

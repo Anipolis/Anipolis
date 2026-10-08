@@ -18,8 +18,8 @@ const config = {
 				// blob: は画像プレビュー、data: はアイコン類、
 				// supabase.co はストレージ画像、googleusercontent は OAuth アバター
 				"img-src": ["self", "data:", "blob:", "https://*.supabase.co", "https://lh3.googleusercontent.com"],
-				// Zen Maru Gothic（UnoCSS presetWebFonts → Google Fonts）
-				"font-src": ["self", "data:", "https://fonts.gstatic.com"],
+				// Zen Maru Gothic は @fontsource でセルフホスト
+				"font-src": ["self", "data:"],
 				// Supabase REST / Auth / Storage と Realtime WebSocket
 				"connect-src": ["self", "https://*.supabase.co", "wss://*.supabase.co"],
 				"object-src": ["none"],

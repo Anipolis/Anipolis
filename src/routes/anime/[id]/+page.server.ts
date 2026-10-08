@@ -79,7 +79,7 @@ export const actions: Actions = {
 		} catch (serviceError) {
 			console.error("service role client unavailable for manual source records:", serviceError);
 		}
-		return updateAnimeAction(supabase, request, params.id, anime.cover_url, sourceWriter);
+		return updateAnimeAction(supabase, request, params.id, anime.cover_source_url ?? anime.cover_url, sourceWriter);
 	},
 
 	addBroadcastOverride: async ({ request, params, locals: { supabase, safeGetSession } }) => {
