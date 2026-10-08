@@ -6,7 +6,14 @@ import type { BroadcastOverrideKind } from "$lib/utils/broadcast-episodes";
 
 const ALLOWED_INLINE_COVER_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];
 
-type AnimeWriteResult = { success: true; animeId: string } | ReturnType<typeof fail<{ message: string }>>;
+type AnimeWriteResult =
+	| {
+			success: true;
+			animeId: string;
+			/** 画像はあるが © が無いためカバーが表示されない（migration 136） */
+			coverHidden?: true;
+	  }
+	| ReturnType<typeof fail<{ message: string }>>;
 
 // リゾルバ（anime-catalog-resolver）が manual ソースとして参照するキー。
 // 管理画面での編集をこのキーに限って anime_source_records(source='manual') に
@@ -204,8 +211,19 @@ function parseRoomType(fd: FormData) {
 	return fd.get("room_type") === "global" ? "global" : "episode";
 }
 
+function hasInlineCoverFile(fd: FormData) {
+	const imageFile = fd.get("image_file");
+	return imageFile instanceof File && imageFile.size > 0;
+}
+
+/** URL 欄を空にして保存した（画像ファイルも選んでいない）= カバーを外す */
+function isCoverCleared(fd: FormData) {
+	return fd.has("cover_url") && nullableText(fd, "cover_url") === null && !hasInlineCoverFile(fd);
+}
+
 async function uploadInlineCover(supabase: SupabaseClient<Database>, fd: FormData, fallbackCoverUrl: string | null) {
-	let coverUrl = nullableText(fd, "cover_url") ?? fallbackCoverUrl;
+	// URL 欄は画像ファイルを選ぶと送られない。そのときだけ今のカバーを引き継ぐ
+	let coverUrl = fd.has("cover_url") ? nullableText(fd, "cover_url") : fallbackCoverUrl;
 	const imageFile = fd.get("image_file");
 	if (imageFile instanceof File && imageFile.size > 0) {
 		const arrayBuffer = await imageFile.arrayBuffer();
@@ -298,19 +316,30 @@ export async function updateAnimeAction(
 	sourceWriter: SupabaseClient<Database> = supabase,
 ): Promise<AnimeWriteResult> {
 	const fd = await request.formData();
-	const payload = await buildAnimePayload(supabase, fd, currentCoverUrl);
-	if ("status" in payload) return payload;
+	const built = await buildAnimePayload(supabase, fd, currentCoverUrl);
+	if ("status" in built) return built;
+	// © の無い作品は cover_url に NULL を書いても画像の実体が残る（migration 136）ので、
+	// 欄を空にして保存したときは実体ごと外す
+	const payload = isCoverCleared(fd) ? { ...built, cover_source_url: null } : built;
 
 	// biome-ignore lint/suspicious/noExplicitAny: shared writer must tolerate generated type lag after migrations
 	const animeWriter = supabase as SupabaseClient<any>;
 	// biome-ignore lint/suspicious/noExplicitAny: generated types may lag behind source-record migrations
 	const manualWriter = sourceWriter as SupabaseClient<any>;
-	const { data: previousRow, error: previousError } = await animeWriter
+	const { data: previousData, error: previousError } = await animeWriter
 		.from("anime")
-		.select(`mal_id,${MANUAL_SOURCE_KEYS.join(",")}`)
+		.select(`mal_id,cover_source_url,${MANUAL_SOURCE_KEYS.join(",")}`)
 		.eq("id", animeId)
 		.maybeSingle();
 	if (previousError) return fail(500, { message: `更新前のデータ取得に失敗しました: ${previousError.message}` });
+	// 差分は画像の実体で比べる。© の無い作品は cover_url が隠れて NULL なので、そのまま
+	// 比べると画像を変えていない保存でもカバーが編集されたことになる
+	const previous = previousData as
+		| (Record<string, unknown> & { cover_url?: string | null; cover_source_url?: string | null })
+		| null;
+	const previousRow = previous
+		? { ...previous, cover_url: previous.cover_source_url ?? previous.cover_url ?? null }
+		: null;
 
 	// Read the existing manual record before mutating the anime row. If this
 	// read fails, returning now preserves the original anime values and keeps
@@ -328,9 +357,15 @@ export async function updateAnimeAction(
 		existingManualRecord = result.data;
 	}
 
-	const { data, error } = await animeWriter.from("anime").update(payload).eq("id", animeId).select("id").single();
+	const { data, error } = await animeWriter
+		.from("anime")
+		.update(payload)
+		.eq("id", animeId)
+		.select("id,cover_url,cover_source_url")
+		.single();
 
 	if (error) return fail(500, { message: `更新エラー: ${error.message}` });
+	const updated = data as { id: number; cover_url?: string | null; cover_source_url?: string | null };
 
 	// 編集差分を manual ソースとして保存し、カタログ再解決での上書きを防ぐ
 	if (malId != null) {
@@ -349,7 +384,8 @@ export async function updateAnimeAction(
 			});
 		}
 	}
-	return { success: true, animeId: String((data as { id: number }).id) };
+	const coverHidden = !updated.cover_url && !!updated.cover_source_url;
+	return { success: true, animeId: String(updated.id), ...(coverHidden ? { coverHidden: true as const } : {}) };
 }
 
 type BroadcastOverrideWriteResult = { success: true } | ReturnType<typeof fail<{ message: string }>>;

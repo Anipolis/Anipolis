@@ -45,3 +45,14 @@ export function coverThumbUrl(url: string | null | undefined): string | null {
 	const base = url.slice(0, index + PUBLIC_OBJECT_MARKER.length);
 	return base + coverThumbObjectName(name).split("/").map(encodeURIComponent).join("/");
 }
+
+/**
+ * © の無い作品は cover_url が隠れる（migration 136）。画像の実体はあるのに © が無いため
+ * 表示されていない状態か。管理画面で「保存したのに出ない」理由を示すのに使う
+ */
+export function isCoverHiddenWithoutCopyright(anime: {
+	copyright: string | null;
+	cover_source_url: string | null;
+}): boolean {
+	return !anime.copyright?.trim() && !!anime.cover_source_url;
+}

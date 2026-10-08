@@ -61,7 +61,7 @@ export const POST: RequestHandler = async ({ request, locals: { supabase, safeGe
 		.from("anime")
 		.update({ cover_url: publicUrl })
 		.eq("id", animeId)
-		.select("id,mal_id")
+		.select("id,mal_id,cover_url")
 		.single();
 
 	if (updateError || !updatedRow) {
@@ -95,5 +95,6 @@ export const POST: RequestHandler = async ({ request, locals: { supabase, safeGe
 		console.error("anime cover thumbnail cleanup error (path=%s):", path, thumbDeleteError);
 	}
 
-	return json({ url: publicUrl });
+	// © の無い作品は保存しても cover_url が隠れる（migration 136）。表示されない理由を画面で示す
+	return json({ url: publicUrl, visible: (updatedRow as { cover_url: string | null }).cover_url !== null });
 };
