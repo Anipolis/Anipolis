@@ -7,7 +7,7 @@ import { classifyLink } from "../src/lib/link-check.ts";
 // スパムだった）ものはリンクを外す。どちらも manual ソースに記録し、週次のカタログ
 // 再解決で古い URL に戻らないようにする。
 //   pnpm replace:dead-official-links -- --review .link-check-cache/official-links-2026-10-07.json
-//     [--keep-url <url>]... [--keep-host <host>]... [--dry-run]
+//     [--keep-url <url>]... [--keep-host <host>]... [--cached-only] [--dry-run]
 // --keep-url / --keep-host は、点検で疑いになったが問題ないと確認したもの（誤検出）。
 // archive.org へは1秒に1回まで。LOCAL ONLY。
 
@@ -29,7 +29,14 @@ type ReviewRow = {
 	anime: { id: number; title: string; season: string | null }[];
 };
 
-type Options = { review: string; keepUrls: Set<string>; keepHosts: Set<string>; dryRun: boolean };
+type Options = {
+	review: string;
+	keepUrls: Set<string>;
+	keepHosts: Set<string>;
+	dryRun: boolean;
+	// 試し実行で確認した判定（キャッシュ）だけを反映し、未判定の URL は問い合わせない
+	cachedOnly: boolean;
+};
 
 type Decision = {
 	url: string;
@@ -41,11 +48,21 @@ type Decision = {
 };
 
 function parseArgs(argv: string[]): Options {
-	const options: Options = { review: "", keepUrls: new Set(), keepHosts: new Set(), dryRun: false };
+	const options: Options = {
+		review: "",
+		keepUrls: new Set(),
+		keepHosts: new Set(),
+		dryRun: false,
+		cachedOnly: false,
+	};
 	for (let index = 0; index < argv.length; index += 1) {
 		const arg = argv[index];
 		const next = argv[index + 1];
 		if (arg === "--") continue;
+		if (arg === "--cached-only") {
+			options.cachedOnly = true;
+			continue;
+		}
 		if (arg === "--dry-run") {
 			options.dryRun = true;
 			continue;
@@ -69,7 +86,7 @@ function parseArgs(argv: string[]): Options {
 	}
 	if (!options.review) {
 		throw new Error(
-			"Usage: pnpm replace:dead-official-links -- --review <official-links-*.json> [--keep-url <url>] [--keep-host <host>] [--dry-run]",
+			"Usage: pnpm replace:dead-official-links -- --review <official-links-*.json> [--keep-url <url>] [--keep-host <host>] [--cached-only] [--dry-run]",
 		);
 	}
 	return options;
@@ -210,6 +227,7 @@ async function main() {
 			decisions.push(cached);
 			continue;
 		}
+		if (options.cachedOnly) continue;
 		const seasons = row.anime.map((anime) => anime.season).filter((season): season is string => Boolean(season));
 		const earliest = seasons.sort()[0] ?? null;
 		const titles = row.anime.map((anime) => anime.title);
