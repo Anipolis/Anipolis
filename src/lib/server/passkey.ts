@@ -397,11 +397,15 @@ export async function finishPasskeyLogin({
 	}
 	if (!verification.verified) return failure(400, "パスキーを確認できませんでした");
 
-	const { error: updateError } = await admin
+	const { data: updated, error: updateError } = await admin
 		.from("passkey_credentials")
 		.update({ counter: verification.authenticationInfo.newCounter, last_used_at: new Date(now).toISOString() })
-		.eq("id", stored.id);
+		.eq("id", stored.id)
+		.eq("counter", stored.counter)
+		.select("id")
+		.maybeSingle();
 	if (updateError) return failure(500, "パスキーでログインできませんでした");
+	if (!updated) return failure(409, "別のログイン処理でパスキーが更新されました。もう一度お試しください");
 
 	if (!(await signInAsUser(supabase, admin, stored.user_id, now))) {
 		return failure(500, "パスキーでログインできませんでした");

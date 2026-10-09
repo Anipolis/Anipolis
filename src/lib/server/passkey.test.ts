@@ -386,8 +386,33 @@ describe("finishPasskeyLogin", () => {
 			}),
 		);
 		expect(table["update"]).toHaveBeenCalledWith({ counter: 4, last_used_at: new Date(NOW).toISOString() });
+		expect(table["eq"]).toHaveBeenCalledWith("counter", storedCredential.counter);
 		expect(generateLink).toHaveBeenCalledWith({ type: "magiclink", email: "u@example.com" });
 		expect(supabase.auth.verifyOtp).toHaveBeenCalledWith({ type: "email", token_hash: "hashed" });
+	});
+
+	it("読み取り後にカウンターが変わり更新対象が0件ならセッションを発行しない", async () => {
+		const { table, generateLink, getUserById } = setupAdmin();
+		table["maybeSingle"]
+			?.mockResolvedValueOnce({ data: storedCredential, error: null })
+			.mockResolvedValueOnce({ data: null, error: null });
+		webauthn.verifyAuthenticationResponse.mockResolvedValue({
+			verified: true,
+			authenticationInfo: { newCounter: 4 },
+		});
+		const supabase = makeSupabase();
+		const result = await finishPasskeyLogin({
+			supabase: supabase as never,
+			url,
+			cookies: loginCookies(),
+			body: { response: credentialResponse },
+		});
+		expect(result).toMatchObject({ ok: false, status: 409 });
+		expect(table["eq"]).toHaveBeenCalledWith("id", storedCredential.id);
+		expect(table["eq"]).toHaveBeenCalledWith("counter", storedCredential.counter);
+		expect(getUserById).not.toHaveBeenCalled();
+		expect(generateLink).not.toHaveBeenCalled();
+		expect(supabase.auth.verifyOtp).not.toHaveBeenCalled();
 	});
 
 	it("停止中のユーザーにはセッションを発行しない", async () => {
