@@ -122,10 +122,30 @@ describe("isRecentlyAuthenticated", () => {
 });
 
 describe("startPasskeyRegistration", () => {
+	it.each([undefined, ""])("メールが %s のユーザーにはオプションを発行しない", async (email) => {
+		const supabase = { from: vi.fn() };
+		const cookies = makeCookies();
+		const result = await startPasskeyRegistration({
+			supabase: supabase as never,
+			user: { id: "user-1", email } as never,
+			session: sessionSignedInAt(NOW - 60_000),
+			url,
+			cookies,
+		});
+		expect(result).toMatchObject({
+			ok: false,
+			status: 400,
+			message: "メールアドレスが登録されていないため、パスキーを登録できません",
+		});
+		expect(supabase.from).not.toHaveBeenCalled();
+		expect(webauthn.generateRegistrationOptions).not.toHaveBeenCalled();
+		expect(cookies.store.size).toBe(0);
+	});
+
 	it("ログインし直していなければオプションを発行しない", async () => {
 		const result = await startPasskeyRegistration({
 			supabase: { from: vi.fn() } as never,
-			user: { id: "user-1" } as never,
+			user: { id: "user-1", email: "u@example.com" } as never,
 			session: sessionSignedInAt(NOW - 60 * 60_000),
 			url,
 			cookies: makeCookies(),
@@ -147,7 +167,7 @@ describe("startPasskeyRegistration", () => {
 
 		const result = await startPasskeyRegistration({
 			supabase: supabase as never,
-			user: { id: "user-1" } as never,
+			user: { id: "user-1", email: "u@example.com" } as never,
 			session: sessionSignedInAt(NOW - 60_000),
 			url,
 			cookies,
@@ -172,13 +192,32 @@ describe("finishPasskeyRegistration", () => {
 	function registrationContext(cookies: Cookies, userId = "user-1") {
 		return {
 			supabase: {} as never,
-			user: { id: userId } as never,
+			user: { id: userId, email: "u@example.com" } as never,
 			session: sessionSignedInAt(NOW - 60_000),
 			url,
 			cookies,
 			body: { response: credentialResponse },
 		};
 	}
+
+	it("登録開始後にメールがなくなった場合も保存しない", async () => {
+		const cookies = makeCookies();
+		setChallengeCookie(cookies, { purpose: "register", challenge: "abc", userId: "user-1" });
+		const from = vi.fn();
+		admin.client = { from };
+		const result = await finishPasskeyRegistration({
+			...registrationContext(cookies),
+			user: { id: "user-1" } as never,
+		});
+		expect(result).toMatchObject({
+			ok: false,
+			status: 400,
+			message: "メールアドレスが登録されていないため、パスキーを登録できません",
+		});
+		expect(webauthn.verifyRegistrationResponse).not.toHaveBeenCalled();
+		expect(from).not.toHaveBeenCalled();
+		expect(cookies.store.size).toBe(0);
+	});
 
 	it("別のユーザーが発行したチャレンジでは登録しない", async () => {
 		const cookies = makeCookies();

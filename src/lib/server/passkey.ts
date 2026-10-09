@@ -212,6 +212,7 @@ export async function startPasskeyRegistration({
 	cookies,
 }: RegistrationContext): Promise<PasskeyResult<PublicKeyCredentialCreationOptionsJSON>> {
 	if (!isRecentlyAuthenticated(session)) return reauthRequired();
+	if (!user.email) return failure(400, "メールアドレスが登録されていないため、パスキーを登録できません");
 
 	const { data: existing, error } = await supabase
 		.from("passkey_credentials")
@@ -232,7 +233,7 @@ export async function startPasskeyRegistration({
 	const options = await generateRegistrationOptions({
 		rpName: RP_NAME,
 		rpID: getRelyingParty(url).rpID,
-		userName: profile?.username ?? user.email ?? user.id,
+		userName: profile?.username ?? user.email,
 		userDisplayName: profile?.display_name ?? profile?.username ?? "",
 		// 同じユーザーには毎回同じ user handle を渡す（認証器側で上書き扱いになる）
 		userID: new TextEncoder().encode(user.id),
@@ -259,6 +260,7 @@ export async function finishPasskeyRegistration({
 }: RegistrationContext & { body: unknown }): Promise<PasskeyResult<{ registered: true }>> {
 	const state = takeChallengeCookie(cookies, "register");
 	if (!isRecentlyAuthenticated(session)) return reauthRequired();
+	if (!user.email) return failure(400, "メールアドレスが登録されていないため、パスキーを登録できません");
 	if (!state || state.userId !== user.id) {
 		return failure(400, "登録の有効期限が切れました。もう一度お試しください");
 	}
