@@ -82,6 +82,14 @@ export const API_RATE_RULES: RateRule[] = [
 	},
 	{ name: "room-exit-survey", pattern: /^\/api\/room-exit-surveys$/, methods: ["POST"], limit: 20, windowMs: 60_000 },
 	{ name: "account-switch", pattern: /^\/api\/account-switch$/, methods: ["POST"], limit: 10, windowMs: 60_000 },
+	// 通知ページの表示ごとに 1 回呼ばれる。タブ切替の連打を許容しつつ自動化は抑える
+	{
+		name: "notification-read",
+		pattern: /^\/api\/notifications\/read$/,
+		methods: ["POST"],
+		limit: 30,
+		windowMs: 60_000,
+	},
 ];
 
 /** マッチしたルールに対して制限超過なら true を返す */

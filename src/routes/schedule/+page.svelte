@@ -17,6 +17,7 @@ import {
 	roomLiveKey,
 } from "$lib/utils/broadcast-room";
 import { eventBroadcastMinutes, eventBroadcastTimeInputValue } from "$lib/utils/event-time";
+import { dateKeyWeekday, formatDateKeyShort, jstBroadcastDateKey } from "$lib/utils/jst";
 import type { ActionData, PageProps } from "./$types";
 
 let { data, form }: PageProps & { form: ActionData } = $props();
@@ -51,18 +52,13 @@ let notifyingIds = $state(new Set<string>());
 // Which anime rooms are currently live, keyed by anime + room date.
 let liveRoomKeys = $state(new Set<string>());
 
+// 既定タブは「今日の放送日」の曜日。サーバーと同じ JST・午前4時境界（JST 00:00〜03:59 は
+// 前日扱い）で決め、ブラウザ TZ に依存しない
 function getDefaultDayIndex(): number {
-	return getCurrentBroadcastDate().getDay();
+	return dateKeyWeekday(jstBroadcastDateKey(new Date())) ?? 0;
 }
 function getDisplayDayOrder(): number[] {
 	return data.days.map((_, index) => index);
-}
-
-function getCurrentBroadcastDate(now = new Date()): Date {
-	const date = new Date(now);
-	// Late-night broadcasts before 28:00 (04:00 next day) belong to the previous broadcast date.
-	if (date.getHours() < 4) date.setDate(date.getDate() - 1);
-	return date;
 }
 
 function getDisplayDayItems() {
@@ -111,13 +107,9 @@ $effect(() => {
 	eventSubscribedIds = new Set<string>(data.eventNotificationSubscriptions);
 });
 
+/** 日付キー（YYYY-MM-DD）を「M/D」表記にする。Date を経由しないので TZ の影響を受けない */
 function formatDate(value: string) {
-	return new Date(`${value}T00:00:00`).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" });
-}
-
-function formatShortDate(value: string): string {
-	const d = new Date(`${value}T00:00:00`);
-	return `${d.getMonth() + 1}/${d.getDate()}`;
+	return formatDateKeyShort(value);
 }
 
 function formatTime(iso: string) {
@@ -422,6 +414,8 @@ function canSubscribe(anime: Anime): boolean {
 	return s === "airing" || s === "upcoming";
 }
 
+const suppressedEpisodeKeys = $derived(new Set(data.suppressedEpisodeKeys ?? []));
+
 function currentEpisodeForSlot(
 	anime: Anime,
 	dateStr: string,
@@ -429,10 +423,13 @@ function currentEpisodeForSlot(
 ): BroadcastEpisodeSlot | null {
 	// 話数はしょぼい番組表由来のセッション値が第一（ルームページと同じ優先順位）。
 	// 週次カウントは休止・特番を補正できず長期作品でずれるため、補完専用。
-	const sessionEpisode = data.sessionEpisodeNumbers[`${anime.id}:${dateStr}`];
+	const sessionKey = `${anime.id}:${dateStr}`;
+	const sessionEpisode = data.sessionEpisodeNumbers[sessionKey];
 	if (sessionEpisode != null) {
 		return { date: dateStr, start: sessionEpisode, end: sessionEpisode, label: null };
 	}
+	// 話数異常で番号を外した枠は補完もしない（誤った回を機械カウントで復活させない、#246）
+	if (suppressedEpisodeKeys.has(sessionKey)) return null;
 	if (!anime.aired_from) return null;
 	return resolveBroadcastEpisodeSlot({
 		date: dateStr,
@@ -448,6 +445,10 @@ function currentEpisodeForSlot(
 function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): string {
 	if (ep.start == null || ep.end == null) return ep.label ?? "";
 	const value = ep.start === ep.end ? String(ep.start) : `${ep.start}-${ep.end}`;
+	// 総話数を超える番号（通し番号の TID や古い総話数）に「/総話数」を付けると 22/13 のような
+	// 矛盾した表示になる。番号は活かし、分母だけ出さない（#246）
+	const totalCount = total ? Number.parseInt(total, 10) : Number.NaN;
+	if (Number.isInteger(totalCount) && totalCount > 0 && ep.end > totalCount) return value;
 	return total ? `${value}/${total}` : value;
 }
 </script>
@@ -513,7 +514,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 				aria-pressed={selectedDayIndex === item.dayIdx}
 			>
 				<span class="day-tab-label" style="color: {DAY_COLOR[item.dayIdx]}">{item.day.label}</span>
-				<span class="day-tab-date">{formatShortDate(item.date)}</span>
+				<span class="day-tab-date">{formatDate(item.date)}</span>
 			</button>
 		{/each}
 	</div>

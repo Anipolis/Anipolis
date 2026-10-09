@@ -2,10 +2,14 @@
 import type { SubmitFunction } from "@sveltejs/kit";
 import { enhance } from "$app/forms";
 import { trapFocus } from "$lib/actions/trapFocus";
+import { confirmReaction } from "$lib/reaction-confirm";
+import { isReactionFailure } from "$lib/reaction-feedback";
+import { createReactionFeedback } from "$lib/reaction-feedback.svelte";
 import type { Post } from "$lib/types";
 import { formatBroadcastRelativeTime, formatRelativeTime } from "$lib/utils/format";
 import { parseContentParts } from "$lib/utils/hashtag";
 import BroadcastTimestamp from "./BroadcastTimestamp.svelte";
+import ReactionErrorNotice from "./ReactionErrorNotice.svelte";
 import UserAvatar from "./UserAvatar.svelte";
 
 interface Props {
@@ -23,6 +27,8 @@ let likedByMeLocal = $state<boolean | null>(null);
 let repostCountLocal = $state<number | null>(null);
 let repostedByMeLocal = $state<boolean | null>(null);
 let bookmarkedByMeLocal = $state<boolean | null>(null);
+// いいね・リポスト・ブックマーク失敗時のカード内メッセージ
+const reactionFeedback = createReactionFeedback();
 let showKebabMenu = $state(false);
 let showDeleteModal = $state(false);
 let showReportModal = $state(false);
@@ -122,38 +128,84 @@ async function fetchReplies(mode: "recent" | "all", limit: number): Promise<bool
 	}
 }
 
-const handleLike: SubmitFunction = () => {
+// 失敗時は楽観更新を巻き戻し、カード内にメッセージを出す。
+// 成功時も update()（= 全 load の再取得）は呼ばず、サーバーの結果で楽観更新を確定させるだけにする。
+// 再取得はルームのポーリングが担い、ページ全体の作り直しで閲覧位置を失わないため（#100）。
+// 同じ種類のリアクションは 1 件ずつ送る。送信中の連打は取り消し、応答順の逆転で
+// 古い応答が最新の状態を上書きしないようにする。
+// 失敗時は null（= props の post に戻る）ではなく、操作前の確定値へ戻す。
+// 成功後はページを再取得しないので props の post は古く、null に戻すと成功前の表示に巻き戻る。
+let likeInFlight = $state(false);
+let bookmarkInFlight = $state(false);
+let repostInFlight = $state(false);
+
+const handleLike: SubmitFunction = ({ formElement, cancel }) => {
+	if (likeInFlight) {
+		cancel();
+		return;
+	}
+	likeInFlight = true;
 	const wasLiked = likedByMe;
+	const countBefore = likeCount;
 	likedByMeLocal = !wasLiked;
-	likeCountLocal = wasLiked ? likeCount - 1 : likeCount + 1;
-	return async ({ result, update }) => {
-		if (result.type === "failure" || result.type === "error") {
-			likedByMeLocal = null;
-			likeCountLocal = null;
+	likeCountLocal = wasLiked ? countBefore - 1 : countBefore + 1;
+	return async ({ result }) => {
+		likeInFlight = false;
+		if (isReactionFailure(result)) {
+			likedByMeLocal = wasLiked;
+			likeCountLocal = countBefore;
+			reactionFeedback.fail("like", result, formElement);
+			return;
 		}
-		await update({ reset: false });
+		const confirmed = confirmReaction("like", result, { wasActive: wasLiked, countBefore });
+		likedByMeLocal = confirmed.active;
+		likeCountLocal = confirmed.count;
+		reactionFeedback.clear();
 	};
 };
 
-const handleBookmark: SubmitFunction = () => {
+const handleBookmark: SubmitFunction = ({ formElement, cancel }) => {
+	if (bookmarkInFlight) {
+		cancel();
+		return;
+	}
+	bookmarkInFlight = true;
 	const wasBookmarked = bookmarkedByMe;
 	bookmarkedByMeLocal = !wasBookmarked;
-	return async ({ result, update }) => {
-		if (result.type === "failure" || result.type === "error") bookmarkedByMeLocal = null;
-		await update({ reset: false });
+	return async ({ result }) => {
+		bookmarkInFlight = false;
+		if (isReactionFailure(result)) {
+			bookmarkedByMeLocal = wasBookmarked;
+			reactionFeedback.fail("bookmark", result, formElement);
+			return;
+		}
+		bookmarkedByMeLocal = confirmReaction("bookmark", result, { wasActive: wasBookmarked, countBefore: 0 }).active;
+		reactionFeedback.clear();
 	};
 };
 
-const handleRepost: SubmitFunction = () => {
+const handleRepost: SubmitFunction = ({ formElement, cancel }) => {
+	if (repostInFlight) {
+		cancel();
+		return;
+	}
+	repostInFlight = true;
 	const wasReposted = repostedByMe;
+	const countBefore = repostCount;
 	repostedByMeLocal = !wasReposted;
-	repostCountLocal = wasReposted ? repostCount - 1 : repostCount + 1;
-	return async ({ result, update }) => {
-		if (result.type === "failure" || result.type === "error") {
-			repostedByMeLocal = null;
-			repostCountLocal = null;
+	repostCountLocal = wasReposted ? countBefore - 1 : countBefore + 1;
+	return async ({ result }) => {
+		repostInFlight = false;
+		if (isReactionFailure(result)) {
+			repostedByMeLocal = wasReposted;
+			repostCountLocal = countBefore;
+			reactionFeedback.fail("repost", result, formElement);
+			return;
 		}
-		await update({ reset: false });
+		const confirmed = confirmReaction("repost", result, { wasActive: wasReposted, countBefore });
+		repostedByMeLocal = confirmed.active;
+		repostCountLocal = confirmed.count;
+		reactionFeedback.clear();
 	};
 };
 
@@ -308,6 +360,9 @@ async function submitReport(event: MouseEvent) {
 			</form>
 		{/if}
 	</div>
+
+	<!-- 折りたたみ時のいいねでも見えるよう、展開ブロックの外に置く -->
+	<ReactionErrorNotice feedback={reactionFeedback} />
 
 	{#if expanded}
 		<div class="live-detail">

@@ -221,6 +221,9 @@ const hasInviteAccess = $derived(!data.betaGateEnabled || data.inviteCodeValid);
 								autocomplete="current-password"
 								required
 							>
+							<p class="field-hint auth-forgot-link">
+								<a href="/auth/forgot-password">パスワードをお忘れですか？</a>
+							</p>
 						</div>
 
 						<button type="submit" class="btn btn-primary auth-wide-button">ログイン</button>
@@ -378,5 +381,14 @@ const hasInviteAccess = $derived(!data.betaGateEnabled || data.inviteCodeValid);
 	color: var(--fg-muted);
 	font-size: 0.88rem;
 	margin: 12px 0 18px;
+}
+
+.auth-forgot-link {
+	text-align: right;
+}
+
+.auth-forgot-link a {
+	color: var(--fg-muted);
+	text-decoration: underline;
 }
 </style>

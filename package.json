@@ -34,6 +34,7 @@
 		"import:wikidata-studios": "node --env-file-if-exists=.env --experimental-strip-types scripts/import-wikidata-studio-names.ts",
 		"import:syobocal": "node --env-file-if-exists=.env --experimental-strip-types scripts/import-syobocal.ts",
 		"sync:syobocal-programs": "node --env-file-if-exists=.env --experimental-strip-types scripts/import-syobocal.ts --sync-programs",
+		"audit:episode-numbers": "node --env-file-if-exists=.env --experimental-strip-types scripts/audit-episode-numbers.ts",
 		"resolve:anime-catalog": "node --env-file-if-exists=.env --experimental-strip-types scripts/resolve-anime-catalog.ts",
 		"export:anime-catalog": "node --env-file-if-exists=.env --experimental-strip-types scripts/export-anime-catalog.ts",
 		"enrich:jikan-links": "node --env-file-if-exists=.env --experimental-strip-types scripts/enrich-jikan-links.ts",

@@ -1,8 +1,12 @@
 <script lang="ts">
-import { goto } from "$app/navigation";
+import { onDestroy } from "svelte";
+import { beforeNavigate, goto } from "$app/navigation";
+import { navigating } from "$app/state";
 import { ANIME_GENRES, ANIME_SOURCE_OPTIONS } from "$lib/anime-vocabulary";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
+import { createDebouncedCommit } from "$lib/debounced-commit";
+import { isSamePageRefresh } from "$lib/navigation-skeleton";
 import type { ActiveAnimeSeasonChip, AnimeListItem, AnimeStatus } from "$lib/types";
 import type { PageProps } from "./$types";
 
@@ -159,21 +163,44 @@ function buildAnimeDetailUrl(animeId: string | number) {
 	return listUrl === "/anime" ? `/anime/${animeId}` : `/anime/${animeId}?from=${encodeURIComponent(listUrl)}`;
 }
 
-function syncFiltersToUrl(filters: AnimeFilterState) {
-	goto(buildAnimeFilterUrl(filters), { keepFocus: true, noScroll: true });
+// 入力のたびに遷移すると 1 文字ごとに一覧を読み直すので、編集をまとめてから URL へ反映する（#292）。
+// 文字入力は打ち終わりを待ち、チップやセレクトは連続操作を短い間隔でまとめて 1 回の遷移にする。
+const TEXT_FILTER_DELAY_MS = 400;
+const CHOICE_FILTER_DELAY_MS = 250;
+
+function syncFiltersToUrl(filters: AnimeFilterState, replaceState = false) {
+	goto(buildAnimeFilterUrl(filters), { keepFocus: true, noScroll: true, replaceState });
 }
 
-function updateFilterState(patch: Partial<AnimeFilterState>) {
-	const next = { ...filterState, ...patch };
-	filterState = next;
-	syncFiltersToUrl(next);
+// URL へ未反映のローカル編集。保留中（pending）の間は、遅れて届いた読み込み結果で入力欄を巻き戻さない。
+// 文字入力を含む編集は履歴を 1 件にまとめる（1 文字ごとに「戻る」が必要にならないように）
+const filterSync = createDebouncedCommit<AnimeFilterState>((filters, replace) => syncFiltersToUrl(filters, replace));
+
+function cancelPendingFilterSync() {
+	filterSync.cancel();
 }
 
-let filterDebounceTimer: ReturnType<typeof setTimeout> | undefined;
-function updateFilterStateDebounced(patch: Partial<AnimeFilterState>) {
+// 保留中の編集があるまま別の遷移（作品詳細・別ページ・タブのリンク、戻るなど）が始まったら取り消す。
+// 取り消さないと、遷移中や離脱後にタイマーが発火して一覧へ引き戻してしまう。
+// 自分の反映による遷移では、commit 直前に保留が解除されているので取り消されない
+beforeNavigate(() => {
+	if (filterSync.pending) cancelPendingFilterSync();
+});
+onDestroy(cancelPendingFilterSync);
+
+function scheduleFilterSync(patch: Partial<AnimeFilterState>, delayMs: number, replaceState: boolean) {
 	filterState = { ...filterState, ...patch };
-	clearTimeout(filterDebounceTimer);
-	filterDebounceTimer = setTimeout(() => syncFiltersToUrl(filterState), 400);
+	filterSync.schedule(filterState, delayMs, replaceState);
+}
+
+/** チップ・セレクト・ボタンの操作（連続操作をまとめて反映） */
+function updateFilterState(patch: Partial<AnimeFilterState>) {
+	scheduleFilterSync(patch, CHOICE_FILTER_DELAY_MS, false);
+}
+
+/** 検索語・年・スタジオの文字入力（打ち終わりを待って反映） */
+function updateFilterStateDebounced(patch: Partial<AnimeFilterState>) {
+	scheduleFilterSync(patch, TEXT_FILTER_DELAY_MS, true);
 }
 
 function toggleSidebarGenre(genre: string) {
@@ -192,9 +219,13 @@ function toggleSidebarSeason(season: ActiveSeasonChip) {
 }
 
 function clearSidebarFilters() {
+	cancelPendingFilterSync();
 	filterState = { search: "", genres: [], year: "", seasons: [], studio: "", producer: "", source: "" };
 	goto("/anime", { keepFocus: true, noScroll: true });
 }
+
+// 同じページのままクエリを変えて再取得している最中は、一覧を残したまま薄く表示する
+const listRefreshing = $derived(isSamePageRefresh(navigating, "/anime"));
 
 $effect(() => {
 	const next = toFilterState();
@@ -207,6 +238,8 @@ $effect(() => {
 		next.producer,
 		next.source,
 	].join("\u0000");
+	// まだ URL に反映していない編集がある間は上書きしない（打っている途中の入力欄が巻き戻るため）
+	if (filterSync.pending) return;
 	if (previousDataFilterKey !== nextKey) {
 		previousDataFilterKey = nextKey;
 		filterState = next;
@@ -397,7 +430,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 						class="search-input"
 						placeholder="タイトルで検索..."
 						value={filterState.search}
-						oninput={(e) => updateFilterState({ search: e.currentTarget.value })}
+						oninput={(e) => updateFilterStateDebounced({ search: e.currentTarget.value })}
 					>
 				</div>
 				<button
@@ -463,7 +496,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 									class="filter-input"
 									placeholder="例: 2025"
 									value={filterState.year}
-									oninput={(e) => updateFilterState({ year: e.currentTarget.value })}
+									oninput={(e) => updateFilterStateDebounced({ year: e.currentTarget.value })}
 								>
 								<button
 									type="button"
@@ -665,7 +698,11 @@ function isAiringToday(anime: AnimeListItem): boolean {
 				</div>
 			</div>
 		{:else}
-			<div class="anime-list-surface">
+			<div
+				class="anime-list-surface"
+				class:anime-list-surface--refreshing={listRefreshing}
+				aria-busy={listRefreshing}
+			>
 				<div class="anime-grid">
 					{#each data.animes as anime, sectionItemIndex}
 						{@const rankIndex = pageStartRank + sectionItemIndex}
@@ -1362,6 +1399,18 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	align-items: center;
 	width: 100%;
 	min-width: 0;
+	transition: opacity 0.15s ease;
+}
+
+/* 絞り込み・ページ切替の再取得中: 一覧を残したまま薄くする（ページ全体のスケルトンにはしない） */
+.anime-list-surface--refreshing {
+	opacity: 0.55;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.anime-list-surface {
+		transition: none;
+	}
 }
 
 .anime-section-bar {

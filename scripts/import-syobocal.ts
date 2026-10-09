@@ -22,6 +22,13 @@ import {
 	type SyobocalWikipediaArticleLink,
 } from "../src/lib/syobocal.ts";
 import {
+	detectEpisodeAnomaliesByGroup,
+	type EpisodeAnomaly,
+	episodeAnomalyKey,
+	isAppliedEpisodeAnomaly,
+	parseEpisodeCount,
+} from "../src/lib/syobocal-episodes.ts";
+import {
 	jstBroadcastDate,
 	jstBroadcastTimeLabel,
 	jstDate,
@@ -1179,6 +1186,7 @@ async function writeReviewReport(
 	selected: MappingProposal[],
 	review: string[],
 	programCount: number,
+	episodeAnomalies: readonly ProgramEpisodeAnomaly[] = [],
 ) {
 	const selectedMalIds = new Set(selected.map((mapping) => mapping.malId));
 	const candidatesByMal = new Map<number, CatalogCandidate[]>();
@@ -1199,6 +1207,7 @@ async function writeReviewReport(
 			confirmed_mappings: selected.length,
 			unresolved_mappings_with_title_candidates: unresolvedMalIds.length,
 			program_slots: programCount,
+			episode_anomalies: episodeAnomalies.length,
 		},
 		confirmed: selected
 			.map((mapping) => ({
@@ -1226,6 +1235,20 @@ async function writeReviewReport(
 			}))
 			.sort((left, right) => left.mal_id - right.mal_id),
 		conflicts: review,
+		// 話数が疑わしい枠（番号なしでセッション化済み）。TID の有効期間や手動マッピングで直す
+		episode_anomalies: [...episodeAnomalies]
+			.sort((left, right) => left.malId - right.malId || Date.parse(left.startsAt) - Date.parse(right.startsAt))
+			.map((anomaly) => ({
+				mal_id: anomaly.malId,
+				tid: anomaly.tid,
+				pid: anomaly.pid,
+				starts_at: anomaly.startsAt,
+				syobocal_count: anomaly.episodeNumber,
+				kind: anomaly.kind,
+				applied: isAppliedEpisodeAnomaly(anomaly.kind),
+				detail: anomaly.detail,
+				source_url: `https://cal.syoboi.jp/tid/${anomaly.tid}`,
+			})),
 	};
 	const reportPath = join(CACHE_DIR, "reviews", `${season}.json`);
 	await mkdir(dirname(reportPath), { recursive: true });
@@ -1292,6 +1315,8 @@ type AnimeRoomRow = {
 	hidden_by_admin: boolean;
 	broadcast_room_pre_open_minutes: number | null;
 	broadcast_room_post_close_minutes: number | null;
+	/** MAL 由来の総話数（"12" / "Unknown" / null）。話数の上限検査に使う */
+	episode_count: string | null;
 };
 
 type BroadcastRoomSessionRow = {
@@ -1311,7 +1336,7 @@ async function fetchAnimeRoomRows(supabase: ReturnType<typeof getSupabaseClient>
 		const { data, error } = await supabase
 			.from("anime")
 			.select(
-				"id,mal_id,room_type,metadata_ready,hidden_by_admin,broadcast_room_pre_open_minutes,broadcast_room_post_close_minutes",
+				"id,mal_id,room_type,metadata_ready,hidden_by_admin,broadcast_room_pre_open_minutes,broadcast_room_post_close_minutes,episode_count",
 			)
 			.in("mal_id", malIds.slice(start, start + DATABASE_BATCH_SIZE));
 		if (error) throw new Error(`Could not read anime room settings: ${error.message}`);
@@ -1357,15 +1382,61 @@ function deriveBroadcastFieldsByMal(primaryPrograms: ReturnType<typeof selectPri
 	return byMal;
 }
 
+export type ProgramEpisodeAnomaly = EpisodeAnomaly & {
+	malId: number;
+	tid: number;
+	startsAt: string;
+};
+
+/**
+ * 主局番組の話数（Count）を作品ごとに検査する（#246）。
+ * 総話数超過・急な飛び・重複・巻き戻りは、番号を付けずにセッションを作り（ルームは開く）、
+ * レビュー報告に載せる。単純な clamp で隠さない。
+ */
+function collectEpisodeAnomalies(
+	animeRows: AnimeRoomRow[],
+	primaryPrograms: ReturnType<typeof selectPrimarySyobocalPrograms>,
+): Map<string, ProgramEpisodeAnomaly> {
+	const animeByMal = new Map(animeRows.map((anime) => [anime.mal_id, anime]));
+	const checked = primaryPrograms.filter((program) => animeByMal.has(program.malId));
+	const detected = detectEpisodeAnomaliesByGroup(
+		checked,
+		(program) => program.malId,
+		(malId) => parseEpisodeCount(animeByMal.get(malId)?.episode_count),
+	);
+	// キーは "malId:pid"。共有 TID では同じ pid を複数の作品が選ぶため pid 単独では衝突する
+	const programByKey = new Map(checked.map((program) => [episodeAnomalyKey(program.malId, program.pid), program]));
+	const result = new Map<string, ProgramEpisodeAnomaly>();
+	for (const [key, anomaly] of detected) {
+		const program = programByKey.get(key);
+		if (!program) continue;
+		result.set(key, {
+			pid: anomaly.pid,
+			kind: anomaly.kind,
+			episodeNumber: anomaly.episodeNumber,
+			detail: anomaly.detail,
+			malId: program.malId,
+			tid: program.tid,
+			startsAt: program.startsAt,
+		});
+	}
+	return result;
+}
+
 function buildBroadcastRoomSessionRows(
 	animeRows: AnimeRoomRow[],
 	primaryPrograms: ReturnType<typeof selectPrimarySyobocalPrograms>,
 	importedAt: string,
+	episodeAnomalies: ReadonlyMap<string, ProgramEpisodeAnomaly> = new Map(),
 ) {
 	const animeByMal = new Map(animeRows.map((anime) => [anime.mal_id, anime]));
 	const rows = primaryPrograms.flatMap((program) => {
 		const anime = animeByMal.get(program.malId);
 		if (!anime || anime.room_type === "global" || !anime.metadata_ready || anime.hidden_by_admin) return [];
+		// 話数が疑わしい枠は番号なしで開く。カレンダーと実況履歴に誤った回を出さないため
+		// count_mismatch は報告のみで番号を活かす
+		const anomaly = episodeAnomalies.get(episodeAnomalyKey(program.malId, program.pid));
+		const episodeNumber = anomaly && isAppliedEpisodeAnomaly(anomaly.kind) ? null : program.episodeNumber;
 		const startsAt = Date.parse(program.startsAt);
 		const endsAt = Date.parse(program.endsAt);
 		const durationMinutes = Math.round((endsAt - startsAt) / 60_000);
@@ -1397,19 +1468,30 @@ function buildBroadcastRoomSessionRows(
 				source_title_id: program.tid,
 				source_channel_id: program.chid,
 				source_channel_name: program.channelName,
-				episode_number: program.episodeNumber,
+				episode_number: episodeNumber,
 				episode_title: program.subtitle,
 				source_snapshot: {
 					syobocal_pid: program.pid,
 					syobocal_tid: program.tid,
 					syobocal_chid: program.chid,
 					channel_name: program.channelName,
-					episode_number: program.episodeNumber,
+					episode_number: episodeNumber,
 					episode_title: program.subtitle,
 					scheduled_at: program.startsAt,
 					ends_at: program.endsAt,
 					source_url: `https://cal.syoboi.jp/tid/${program.tid}`,
 					captured_at: importedAt,
+					// 元の Count と却下理由を残す（人がレビューして手動マッピングで直すための手がかり）
+					...(anomaly
+						? {
+								episode_anomaly: {
+									kind: anomaly.kind,
+									applied: isAppliedEpisodeAnomaly(anomaly.kind),
+									syobocal_count: anomaly.episodeNumber,
+									detail: anomaly.detail,
+								},
+							}
+						: {}),
 				},
 			},
 		];
@@ -1734,7 +1816,8 @@ async function main() {
 		channels,
 		programs,
 	);
-	const roomSessionRows = buildBroadcastRoomSessionRows(animeRoomRows, primaryPrograms, importedAt);
+	const episodeAnomalies = collectEpisodeAnomalies(animeRoomRows, primaryPrograms);
+	const roomSessionRows = buildBroadcastRoomSessionRows(animeRoomRows, primaryPrograms, importedAt, episodeAnomalies);
 	const broadcastFieldsByMal = deriveBroadcastFieldsByMal(primaryPrograms);
 
 	const selectedMalIdsForReview = new Set(mapping.selected.map((row) => row.malId));
@@ -1752,7 +1835,29 @@ async function main() {
 			console.log(`  ... ${unresolvedMalIds.length - 25} more; see the review report.`);
 		}
 	}
-	await writeReviewReport(season, malIds, candidates, titles, mapping.selected, mapping.review, programs.length);
+	if (episodeAnomalies.size > 0) {
+		const byKind = new Map<string, number>();
+		for (const anomaly of episodeAnomalies.values()) byKind.set(anomaly.kind, (byKind.get(anomaly.kind) ?? 0) + 1);
+		const applied = [...episodeAnomalies.values()].filter((anomaly) =>
+			isAppliedEpisodeAnomaly(anomaly.kind),
+		).length;
+		console.log(
+			`Episode anomalies: ${episodeAnomalies.size} programs flagged for review, ${applied} left unnumbered (${[
+				...byKind,
+			]
+				.map(([kind, count]) => `${kind} ${count}`)
+				.join(", ")}).`,
+		);
+		for (const anomaly of [...episodeAnomalies.values()].slice(0, 15)) {
+			console.log(
+				`  mal ${anomaly.malId}\ttid ${anomaly.tid}\tpid ${anomaly.pid}\t${jstDate(anomaly.startsAt)}\tCount ${anomaly.episodeNumber}\t${anomaly.kind}: ${anomaly.detail}`,
+			);
+		}
+		if (episodeAnomalies.size > 15) console.log(`  ... ${episodeAnomalies.size - 15} more; see the review report.`);
+	}
+	await writeReviewReport(season, malIds, candidates, titles, mapping.selected, mapping.review, programs.length, [
+		...episodeAnomalies.values(),
+	]);
 	if (options.dryRun) {
 		console.log("Dry run: no database rows were written.");
 		return;

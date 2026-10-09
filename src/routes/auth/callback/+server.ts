@@ -2,6 +2,7 @@ import { redirect } from "@sveltejs/kit";
 import { env } from "$env/dynamic/private";
 import { grantBetaAccess, isBetaGateEnabled, isBetaMember, verifyGuildMembership } from "$lib/server/discord";
 import { clearInviteCodeCookie, getInviteCodeCookie, redeemInviteCode } from "$lib/server/invites";
+import { PASSWORD_RESET_PATH } from "$lib/utils/password-reset";
 import { sanitizeInternalRedirect } from "$lib/utils/url";
 import type { RequestHandler } from "./$types";
 
@@ -17,6 +18,13 @@ import type { RequestHandler } from "./$types";
  * 「ログインできてしまう」状態になるため、明示的に signOut する。
  */
 export const GET: RequestHandler = async ({ url, cookies, locals: { supabase } }) => {
+	// パスワード再設定リンク（type=recovery）は専用ページで検証する。
+	// ここで交換すると β ゲート未通過ユーザーの signOut が挟まり再設定できなくなるため、
+	// code / token_hash / error のクエリをそのまま引き継いで /auth/reset-password に渡す。
+	if (url.searchParams.get("type") === "recovery") {
+		redirect(303, `${PASSWORD_RESET_PATH}${url.search}`);
+	}
+
 	const code = url.searchParams.get("code");
 	const safeNext = sanitizeInternalRedirect(url.searchParams.get("next"));
 

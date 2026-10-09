@@ -302,7 +302,7 @@ Notes:
 - Because Biome writes fixes, expect formatting changes if files violate formatter rules.
 - There is no separate format script in `package.json`; formatting is currently folded into `check:biome`.
 - First-time setup requires `pnpm exec supabase login` and `pnpm exec supabase link --project-ref <project-ref>`.
-- Migration application during remote push and local DB reset is intentionally disabled in `supabase/config.toml`, and destructive commands are not exposed as package scripts yet. Inspect `pnpm supabase:migrations` and baseline the historical manually applied migrations first. Do not enable migrations, run `db push` or `db reset`, repair history, or rename applied migrations without confirming the remote state.
+- Migrations are applied with the Supabase CLI (`pnpm exec supabase db push --dry-run`, then `db push`); Dashboard SQL Editor application is no longer used. See the "Supabase / Migrations" section of CLAUDE.md for the rules (unique numbers, no `--include-all`, avoiding `CREATE INDEX CONCURRENTLY`, verifying real remote state before `migration repair`, and `supabase/migrations_archive/`).
 
 ## Safety Rules
 

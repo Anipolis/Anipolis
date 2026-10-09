@@ -1,10 +1,15 @@
 <script lang="ts">
 import type { SubmitFunction } from "@sveltejs/kit";
+import { tick } from "svelte";
 import { enhance } from "$app/forms";
 import { goto } from "$app/navigation";
 import { trapFocus } from "$lib/actions/trapFocus";
 import AnimeExchangeResult from "$lib/components/AnimeExchangeResult.svelte";
+import ReactionErrorNotice from "$lib/components/ReactionErrorNotice.svelte";
 import ReactionUsersPopover from "$lib/components/ReactionUsersPopover.svelte";
+import { confirmReaction } from "$lib/reaction-confirm";
+import { isReactionFailure } from "$lib/reaction-feedback";
+import { createReactionFeedback } from "$lib/reaction-feedback.svelte";
 import { buildAnimeRoomLabel, buildEventRoomLabel, type Post, type ReactionType, type ReactionUser } from "$lib/types";
 import { formatBroadcastRelativeTime, formatRelativeTime } from "$lib/utils/format";
 import { parseContentParts } from "$lib/utils/hashtag";
@@ -159,6 +164,8 @@ let likedByMeLocal = $state<boolean | null>(null);
 let repostCountLocal = $state<number | null>(null);
 let repostedByMeLocal = $state<boolean | null>(null);
 let bookmarkedByMeLocal = $state<boolean | null>(null);
+// いいね・リポスト・ブックマーク失敗時のカード内メッセージ
+const reactionFeedback = createReactionFeedback();
 
 const likeCount = $derived(likeCountLocal ?? post.like_count);
 const likedByMe = $derived(likedByMeLocal ?? post.liked_by_me);
@@ -209,41 +216,97 @@ const handleDelete: SubmitFunction = () => {
 	};
 };
 
-const handleLike: SubmitFunction = () => {
+// 失敗時は楽観更新を巻き戻し、カード内にメッセージを出す。
+// update() を呼ばないのは、error 結果でエラーページへ遷移して閲覧位置を失うのを防ぐため。
+// 成功時に update()（= 全 load の再取得）は呼ばない。ストリーミング配信のタイムラインでは
+// 再取得のたびにスケルトンへ切り替わり、スクロール位置や展開状態も失われる（#100）。
+// 楽観更新をサーバーの結果で確定させるだけにする。
+// 同じ種類のリアクションは 1 件ずつ送る。送信中の連打は取り消し、応答順の逆転で
+// 古い応答が最新の状態を上書きしないようにする。
+// 失敗時は null（= props の post に戻る）ではなく、操作前の確定値へ戻す。
+// 成功後はページを再取得しないので props の post は古く、null に戻すと成功前の表示に巻き戻る。
+let likeInFlight = $state(false);
+let bookmarkInFlight = $state(false);
+let repostInFlight = $state(false);
+
+const handleLike: SubmitFunction = ({ formElement, cancel }) => {
+	if (likeInFlight) {
+		cancel();
+		return;
+	}
+	likeInFlight = true;
 	const wasLiked = likedByMe;
+	const countBefore = likeCount;
 	likedByMeLocal = !wasLiked;
-	likeCountLocal = wasLiked ? likeCount - 1 : likeCount + 1;
-	return async ({ result, update }) => {
-		if (result.type === "failure") {
-			likedByMeLocal = null;
-			likeCountLocal = null;
+	likeCountLocal = wasLiked ? countBefore - 1 : countBefore + 1;
+	return async ({ result }) => {
+		likeInFlight = false;
+		if (isReactionFailure(result)) {
+			likedByMeLocal = wasLiked;
+			likeCountLocal = countBefore;
+			reactionFeedback.fail("like", result, formElement);
+			return;
 		}
-		await update({ reset: false });
+		const confirmed = confirmReaction("like", result, { wasActive: wasLiked, countBefore });
+		likedByMeLocal = confirmed.active;
+		likeCountLocal = confirmed.count;
+		reactionFeedback.clear();
 	};
 };
 
-const handleBookmark: SubmitFunction = () => {
+const handleBookmark: SubmitFunction = ({ formElement, cancel }) => {
+	if (bookmarkInFlight) {
+		cancel();
+		return;
+	}
+	bookmarkInFlight = true;
 	const wasBookmarked = bookmarkedByMe;
 	bookmarkedByMeLocal = !wasBookmarked;
-	return async ({ result, update }) => {
-		if (result.type === "failure") {
-			bookmarkedByMeLocal = null;
+	return async ({ result }) => {
+		bookmarkInFlight = false;
+		if (isReactionFailure(result)) {
+			bookmarkedByMeLocal = wasBookmarked;
+			reactionFeedback.fail("bookmark", result, formElement);
+			return;
 		}
-		await update({ reset: false });
+		bookmarkedByMeLocal = confirmReaction("bookmark", result, { wasActive: wasBookmarked, countBefore: 0 }).active;
+		reactionFeedback.clear();
 	};
 };
 
-const handleRepost: SubmitFunction = () => {
+let repostForm = $state<HTMLFormElement | null>(null);
+
+// リポストフォームはメニューを閉じた時点で DOM から消えるため、再試行はメニューを
+// 開き直してから新しいフォームを送信する（破棄済みフォームの requestSubmit は無効）
+async function retryRepost() {
+	showRepostMenu = true;
+	await tick();
+	repostForm?.requestSubmit();
+}
+
+const handleRepost: SubmitFunction = ({ cancel }) => {
 	showRepostMenu = false;
+	if (repostInFlight) {
+		cancel();
+		return;
+	}
+	repostInFlight = true;
 	const wasReposted = repostedByMe;
+	const countBefore = repostCount;
 	repostedByMeLocal = !wasReposted;
-	repostCountLocal = wasReposted ? repostCount - 1 : repostCount + 1;
-	return async ({ result, update }) => {
-		if (result.type === "failure") {
-			repostedByMeLocal = null;
-			repostCountLocal = null;
+	repostCountLocal = wasReposted ? countBefore - 1 : countBefore + 1;
+	return async ({ result }) => {
+		repostInFlight = false;
+		if (isReactionFailure(result)) {
+			repostedByMeLocal = wasReposted;
+			repostCountLocal = countBefore;
+			reactionFeedback.fail("repost", result, () => void retryRepost());
+			return;
 		}
-		await update({ reset: false });
+		const confirmed = confirmReaction("repost", result, { wasActive: wasReposted, countBefore });
+		repostedByMeLocal = confirmed.active;
+		repostCountLocal = confirmed.count;
+		reactionFeedback.clear();
 	};
 };
 
@@ -809,6 +872,8 @@ async function submitReport() {
 			</div>
 		{/if}
 
+		<ReactionErrorNotice feedback={reactionFeedback} />
+
 		<div class="post-footer">
 			<div class="post-footer-item">
 				<div class="reaction-action-group">
@@ -891,7 +956,7 @@ async function submitReport() {
 							onclick={(e) => { e.stopPropagation(); showRepostMenu = false; }}
 						></div>
 						<div class="repost-dropdown">
-							<form method="POST" action="?/repost" use:enhance={handleRepost}>
+							<form method="POST" action="?/repost" use:enhance={handleRepost} bind:this={repostForm}>
 								<input type="hidden" name="post_id" value={post.id}>
 								<button type="submit" class="repost-menu-item">
 									<svg

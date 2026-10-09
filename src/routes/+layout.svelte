@@ -1,12 +1,15 @@
 <script lang="ts">
-import { onMount } from "svelte";
+import { onMount, untrack } from "svelte";
 import { invalidate } from "$app/navigation";
 import { navigating, page } from "$app/state";
+import AccountBoundary from "$lib/components/AccountBoundary.svelte";
 import MobileBottomNav from "$lib/components/MobileBottomNav.svelte";
 import MobileSwipeNavigation from "$lib/components/MobileSwipeNavigation.svelte";
 import RouteNavigationSkeleton from "$lib/components/RouteNavigationSkeleton.svelte";
 import Sidebar from "$lib/components/Sidebar.svelte";
+import { navigationSkeletonPath } from "$lib/navigation-skeleton";
 import { composeOpen } from "$lib/stores/compose";
+import { notificationCountsRefresh } from "$lib/stores/notifications";
 import type { LayoutProps } from "./$types";
 import "virtual:uno.css";
 import "../app.css";
@@ -16,10 +19,10 @@ let unreadNotificationCount = $state(0);
 let unreadBroadcastNotificationCount = $state(0);
 let pendingReportsCount = $state(0);
 const roomScrollLocked = $derived(page.url.pathname.startsWith("/rooms/anime/"));
-const navigationTargetPath = $derived.by(() => {
-	if (!navigating || navigating.type === "form") return null;
-	return navigating.to?.url.pathname ?? null;
-});
+// 別ページへ移る遷移だけ遷移先のスケルトンに差し替える。クエリだけが変わる遷移
+// （検索語・フィルター・タブ・ページ番号）でページをアンマウントすると入力欄やドロワーの
+// 状態が失われ、1 文字ずつしか入力できなくなる（#292）
+const navigationTargetPath = $derived(navigationSkeletonPath(navigating));
 
 async function refreshNotificationCounts() {
 	if (!data.session) {
@@ -52,6 +55,12 @@ $effect(() => {
 	return () => {
 		active = false;
 	};
+});
+
+// 通知ページが既読化した直後にバッジを更新する（30秒ポーリングを待たない）
+$effect(() => {
+	if ($notificationCountsRefresh === 0) return;
+	void untrack(() => refreshNotificationCounts());
 });
 
 $effect.pre(() => {
@@ -107,7 +116,8 @@ function handleFabClick() {
 		{#if navigationTargetPath}
 			<RouteNavigationSkeleton pathname={navigationTargetPath} />
 		{:else}
-			{@render children()}
+			<!-- アカウント切替（ユーザーが変わる再読み込み）ではページを作り直し、前のアカウントの状態を持ち越さない（#298） -->
+			<AccountBoundary userId={data.user?.id}> {@render children()} </AccountBoundary>
 		{/if}
 	</main>
 </div>

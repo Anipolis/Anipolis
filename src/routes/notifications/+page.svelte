@@ -1,6 +1,9 @@
 <script lang="ts">
+import { untrack } from "svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
+import { notificationPostPreview } from "$lib/notification-post-preview";
+import { requestNotificationCountsRefresh } from "$lib/stores/notifications";
 import type { AnimeStatus, Notification } from "$lib/types";
 import { formatRelativeTime } from "$lib/utils/format";
 import type { PageProps } from "./$types";
@@ -17,6 +20,36 @@ const tabs: { id: TabId; label: string }[] = [
 
 const activeTab = $derived(data.tab as TabId);
 const activeNotifications = $derived(data.notifications[activeTab] as Notification[]);
+
+// 既読化はページが実際に描画された後にだけ行う。server load で既読化すると、
+// hover プリロードやブラウザの先読みで load が走っただけで未読が消える（#242）。
+let markedReadTab = $state<TabId | null>(null);
+
+async function markTabRead(tab: TabId) {
+	if (data.unreadCounts[tab] === 0) return;
+	try {
+		const response = await fetch("/api/notifications/read", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ category: tab }),
+		});
+		if (!response.ok) return;
+		markedReadTab = tab;
+		requestNotificationCountsRefresh();
+	} catch {
+		// 失敗時は未読のまま残す（次にタブを表示したときに再試行される）
+	}
+}
+
+$effect(() => {
+	const tab = activeTab;
+	markedReadTab = null;
+	void untrack(() => markTabRead(tab));
+});
+
+function unreadBadge(tab: TabId): number {
+	return markedReadTab === tab ? 0 : data.unreadCounts[tab];
+}
 
 function notificationLabel(type: string): string {
 	if (type === "like") return "があなたの投稿にいいねしました";
@@ -81,10 +114,8 @@ function emptyMessage(tab: TabId): string {
 					data-sveltekit-noscroll
 				>
 					<span class="tab-label">{tab.label}</span>
-					{#if data.unreadCounts[tab.id] > 0}
-						<span class="tab-badge"
-							>{data.unreadCounts[tab.id] > 99 ? '99+' : data.unreadCounts[tab.id]}</span
-						>
+					{#if unreadBadge(tab.id) > 0}
+						<span class="tab-badge">{unreadBadge(tab.id) > 99 ? '99+' : unreadBadge(tab.id)}</span>
 					{/if}
 				</a>
 			{/each}
@@ -185,6 +216,7 @@ function emptyMessage(tab: TabId): string {
 								<span class="notification-time">{formatRelativeTime(notif.created_at)}</span>
 							</div>
 						{:else}
+							{@const postPreview = notificationPostPreview(notif)}
 							<a href="/profile/{notif.actor_username}" class="notification-avatar">
 								<UserAvatar src={notif.actor_avatar_url} username={notif.actor_username} size="md" />
 							</a>
@@ -195,12 +227,19 @@ function emptyMessage(tab: TabId): string {
 									</a>
 									{notificationLabel(notif.type)}
 								</p>
-								{#if notif.post_content && notif.post_id}
-									<a href="/posts/{notif.post_id}" class="notification-post-preview">
-										{notif.post_content.length > 80
-											? `${notif.post_content.slice(0, 80)}…`
-											: notif.post_content}
+								{#if postPreview?.kind === 'link'}
+									<!-- 本文なし（画像・作品引用のみ等）でも post_id があれば投稿へ移動できるようにする -->
+									<a
+										href={postPreview.href}
+										class="notification-post-preview"
+										class:notification-post-preview--placeholder={postPreview.placeholder}
+									>
+										{postPreview.text}
 									</a>
+								{:else if postPreview?.kind === 'deleted'}
+									<span class="notification-post-preview notification-post-preview--deleted">
+										{postPreview.text}
+									</span>
 								{/if}
 								{#if notif.type === 'anime_recommendation' && notif.recommendation_anime_id}
 									<a href="/anime/{notif.recommendation_anime_id}" class="notification-anime-preview">
@@ -372,6 +411,22 @@ function emptyMessage(tab: TabId): string {
 
 .notification-post-preview:hover {
 	text-decoration: underline;
+}
+
+/* 本文なし投稿の文脈ラベル（「画像の投稿」等）は本文抜粋と区別して斜体にする */
+.notification-post-preview--placeholder {
+	font-style: italic;
+}
+
+/* 削除済み投稿はリンクにせず、薄く表示する */
+.notification-post-preview--deleted {
+	font-style: italic;
+	opacity: 0.7;
+	cursor: default;
+}
+
+.notification-post-preview--deleted:hover {
+	text-decoration: none;
 }
 
 .notification-anime-preview {

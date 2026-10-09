@@ -49,7 +49,16 @@ pnpm supabase:types
 
 Demo seeds are disabled by default.
 
-Migration application during remote push and local database reset is intentionally disabled in `supabase/config.toml`, and destructive commands are not exposed as package scripts yet. The existing migrations were applied manually and include duplicate/non-timestamp versions, so the remote history must be inspected and baselined first. Do not enable migrations, run `db push` or `db reset`, repair history, or rename applied migrations without confirming the remote state.
+Migrations are applied with the Supabase CLI (`[db.migrations] enabled = true`). This replaced manual Dashboard application on 2026-09-22, after the remote history was reconciled with the real schema.
+
+- New migration: `supabase/migrations/<NNN>_<name>.sql` using the next free number. Numbers must be unique.
+- Apply: `pnpm exec supabase db push --dry-run`, review the list, then `pnpm exec supabase db push`.
+- Do not apply migrations from the Dashboard SQL Editor. It leaves the history out of sync, and a batch run there silently skipped 082.
+- Never use `--include-all`; it re-runs files that are already applied.
+- Avoid `CREATE INDEX CONCURRENTLY`; a plain `CREATE INDEX` is fine at current data volumes. The CLI runs each migration file in a transaction, where CONCURRENTLY fails. If it is truly needed, put it in its own file, run it by hand one statement at a time outside a transaction, then record it with `pnpm exec supabase migration repair --status applied <NNN>`.
+- Before running `migration repair`, check the real remote state (function bodies, policy conditions, indexes), not just the presence of one object or a history row.
+- `supabase/migrations_archive/` holds files whose version duplicated an applied migration or had no version, which blocked `db push`. Their contents are already in production; keep them for history and do not re-apply them.
+- `db reset` targets the local database only; never run it against the linked project.
 
 RLS is enforced for all tables. The `posts` select policy uses `USING (true)` — all posts are publicly readable.
 

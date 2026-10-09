@@ -3,6 +3,7 @@ import { computeBroadcastStatus } from "$lib/broadcast-status";
 import { toValidExchangeSubjectiveTags } from "$lib/exchange-tags";
 import { buildPostCardSelect } from "$lib/server/post-selects";
 import type { Database } from "$lib/supabase/database.types";
+import { isEpisodeSuppressedSnapshot } from "$lib/syobocal-episodes";
 import type {
 	Anime,
 	AnimeDataAttribution,
@@ -38,6 +39,10 @@ type NotificationActor = {
 
 type NotificationPost = {
 	content: string;
+	image_urls: string[] | null;
+	anime_id: number | null;
+	quoted_post_id: string | null;
+	exchange_share: unknown | null;
 };
 
 type NotificationRecommendation = {
@@ -118,6 +123,22 @@ export type TimelineCursor = {
 	createdAt: string;
 	id: string;
 };
+
+/**
+ * 次ページのカーソルを、ミュート除外の前に DB から受け取った行から作る。
+ * 除外後の件数で「続きあり」を判定すると、ミュートで 1 件でも減ったページは
+ * 続きなし扱いになり、ミュートを使うユーザーほど古い投稿へ進めなくなる（#35）。
+ * カーソルも除外前の最終行から作り、除外された投稿の分を読み飛ばさない。
+ */
+export function buildTimelineNextCursor<T>(
+	rows: readonly T[],
+	limit: number,
+	toCursor: (row: T) => TimelineCursor,
+): TimelineCursor | null {
+	if (rows.length < limit) return null;
+	const last = rows[rows.length - 1];
+	return last ? toCursor(last) : null;
+}
 
 /**
  * リクエストスコープのミュート設定キャッシュ。
@@ -295,7 +316,7 @@ export async function getHomeTimelinePosts(
 	supabase: SupabaseClient<Database>,
 	userId: string | null,
 	options: { limit?: number; select?: string; cursor?: TimelineCursor } = {},
-): Promise<{ posts: Post[]; error: unknown | null }> {
+): Promise<{ posts: Post[]; error: unknown | null; nextCursor: TimelineCursor | null }> {
 	const limit = options.limit ?? 50;
 	const select = options.select ?? POST_LIST_SELECT;
 	let query = supabase
@@ -312,8 +333,10 @@ export async function getHomeTimelinePosts(
 	}
 
 	const { data, error } = await query;
-	if (error) return { posts: [], error };
-	return { posts: await enrichPostsWithCounts(supabase, (data ?? []) as unknown as RawPost[], userId), error: null };
+	if (error) return { posts: [], error, nextCursor: null };
+	const rawPosts = (data ?? []) as unknown as RawPost[];
+	const nextCursor = buildTimelineNextCursor(rawPosts, limit, (row) => ({ createdAt: row.created_at, id: row.id }));
+	return { posts: await enrichPostsWithCounts(supabase, rawPosts, userId), error: null, nextCursor };
 }
 
 export async function getMutedWords(supabase: SupabaseClient<Database>, userId: string | null): Promise<string[]> {
@@ -426,7 +449,11 @@ export async function getNotifications(
                 avatar_url
             ),
             post:posts!notifications_post_id_fkey (
-                content
+                content,
+                image_urls,
+                anime_id,
+                quoted_post_id,
+                exchange_share
             ),
             recommendation:anime_recommendations!notifications_anime_recommendation_id_fkey (
                 anime_id,
@@ -489,6 +516,12 @@ export async function getNotifications(
 			actor_display_name: actor?.display_name ?? null,
 			actor_avatar_url: actor?.avatar_url ?? null,
 			post_content: post?.content ?? "",
+			// post_id があるのに JOIN 結果が無い = 削除済み（または RLS で見えない）投稿
+			post_available: post != null,
+			post_image_count: post?.image_urls?.length ?? 0,
+			post_has_anime_quote: post?.anime_id != null,
+			post_has_quoted_post: post?.quoted_post_id != null,
+			post_has_exchange_share: post?.exchange_share != null,
 			recommendation_anime_id: recommendation?.anime_id != null ? String(recommendation.anime_id) : null,
 			recommendation_anime_title: recommendation?.anime?.title ?? null,
 			recommendation_anime_cover_url: recommendation?.anime?.cover_url ?? null,
@@ -1399,6 +1432,8 @@ type TimelinePostsWithRepostsResult = {
 	error: unknown | null;
 };
 
+type FollowingTimelineResult = TimelinePostsWithRepostsResult & { nextCursor: TimelineCursor | null };
+
 type FollowingTimelineRow = {
 	post_id: string;
 	timeline_created_at: string;
@@ -1422,7 +1457,7 @@ export async function getFollowingTimelinePosts(
 	supabase: SupabaseClient<Database>,
 	currentUserId: string,
 	options: { limit?: number; select?: string; before?: string; beforeId?: string } = {},
-): Promise<TimelinePostsWithRepostsResult> {
+): Promise<FollowingTimelineResult> {
 	const limit = options.limit ?? 50;
 	const select = options.select ?? POST_LIST_SELECT;
 	const { data: timelineRows, error: timelineError } = await (supabase.rpc as unknown as FollowingTimelineRpc)(
@@ -1433,8 +1468,14 @@ export async function getFollowingTimelinePosts(
 			...(options.beforeId ? { p_before_id: options.beforeId } : {}),
 		},
 	);
-	if (timelineError) return { posts: [], error: timelineError };
-	if (!timelineRows || timelineRows.length === 0) return { posts: [], error: null };
+	if (timelineError) return { posts: [], error: timelineError, nextCursor: null };
+	if (!timelineRows || timelineRows.length === 0) return { posts: [], error: null, nextCursor: null };
+
+	// RPC の並び順キー（timeline_created_at, post_id）から、ミュート除外前の最終行でカーソルを作る
+	const nextCursor = buildTimelineNextCursor(timelineRows, limit, (row) => ({
+		createdAt: row.timeline_created_at,
+		id: row.post_id,
+	}));
 
 	const postIds = timelineRows.map((row) => row.post_id);
 	const [rawPostsResult, repostProfilesResult] = await Promise.all([
@@ -1448,8 +1489,8 @@ export async function getFollowingTimelinePosts(
 				: Promise.resolve({ data: [] as ProfileRepostContext[], error: null });
 		})(),
 	]);
-	if (rawPostsResult.error) return { posts: [], error: rawPostsResult.error };
-	if (repostProfilesResult.error) return { posts: [], error: repostProfilesResult.error };
+	if (rawPostsResult.error) return { posts: [], error: rawPostsResult.error, nextCursor: null };
+	if (repostProfilesResult.error) return { posts: [], error: repostProfilesResult.error, nextCursor: null };
 
 	const rawPostsById = new Map(((rawPostsResult.data ?? []) as unknown as RawPost[]).map((post) => [post.id, post]));
 	const repostProfilesById = new Map(
@@ -1476,7 +1517,7 @@ export async function getFollowingTimelinePosts(
 		];
 	});
 
-	return { posts: await enrichPostsWithCounts(supabase, rawTimelinePosts, currentUserId), error: null };
+	return { posts: await enrichPostsWithCounts(supabase, rawTimelinePosts, currentUserId), error: null, nextCursor };
 }
 
 export async function getTimelinePostsWithReposts(
@@ -3183,6 +3224,8 @@ export interface ScheduleBroadcastSession {
 	room_date: string;
 	scheduled_at: string;
 	episode_number: number | null;
+	/** 話数異常で番号を外した（source_snapshot.episode_anomaly.applied）。週次補完も抑止する */
+	episode_suppressed: boolean;
 }
 
 /**
@@ -3199,7 +3242,7 @@ export async function getScheduleBroadcastSessionsInRange(
 	const reader = supabase as SupabaseClient<any>;
 	const { data, error } = await reader
 		.from("broadcast_room_sessions")
-		.select("anime_id,room_date,scheduled_at,episode_number")
+		.select("anime_id,room_date,scheduled_at,episode_number,source_snapshot")
 		.eq("room_kind", "episode")
 		.eq("schedule_source", "syobocal")
 		.gte("room_date", startDate)
@@ -3215,6 +3258,8 @@ export async function getScheduleBroadcastSessionsInRange(
 		room_date: String(row["room_date"] ?? "").slice(0, 10),
 		scheduled_at: String(row["scheduled_at"] ?? ""),
 		episode_number: typeof row["episode_number"] === "number" ? row["episode_number"] : null,
+		// 話数異常で番号を外したセッション: カレンダーは週次カウントで補完しない（#246）
+		episode_suppressed: isEpisodeSuppressedSnapshot(row["source_snapshot"]),
 	}));
 }
 

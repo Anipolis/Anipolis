@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { fail } from "@sveltejs/kit";
+import { error, fail } from "@sveltejs/kit";
 import {
 	MAX_EXCHANGE_SUBJECTIVE_TAGS,
 	toExchangeSubjectiveTags,
@@ -23,6 +23,12 @@ const reportStatuses = new Set(["open", "reviewing", "resolved", "rejected"]);
 const moderationStatuses = new Set(["active", "restricted", "banned"]);
 const animeExchangeErrorMessages = {
 	ANIME_EXCHANGE_ANIME_NOT_FOUND: { status: 404, message: "アニメが見つかりません" },
+	// migration 130: RPC 側でβ参加とアカウント状態を検査する（画面の action を迂回された場合の防衛線）
+	ANIME_EXCHANGE_FORBIDDEN: { status: 403, message: "アニメトレードはクローズドβの参加者のみ利用できます" },
+	ANIME_EXCHANGE_ACCOUNT_RESTRICTED: {
+		status: 403,
+		message: "このアカウントは制限中のためアニメトレードを開始できません",
+	},
 	ANIME_EXCHANGE_WAITING_EXISTS: {
 		status: 409,
 		message: "待機中のトレードがあります。マッチングをやめてからもう一度お試しください。",
@@ -115,12 +121,15 @@ export function getAnimeExchangeErrorDetail(error: {
 export async function getCurrentModerationStatus(
 	supabase: SupabaseClient<Database>,
 	userId: string,
-): Promise<ModerationProfile> {
-	const { data } = await supabase
+): Promise<ModerationProfile | null> {
+	const { data, error: lookupError } = await supabase
 		.from("account_moderation")
 		.select("status, restricted_until")
 		.eq("user_id", userId)
 		.maybeSingle();
+	// 照会に失敗したら null を返し、呼び出し側で fail closed にする。
+	// active 扱いにすると、Storage ポリシーで拒否されるまで検証やアップロードが進んでしまう。
+	if (lookupError) return null;
 	const status = (data?.status ?? "active") as ModerationStatus;
 	const until = data?.restricted_until ?? null;
 
@@ -135,6 +144,9 @@ export async function getCurrentModerationStatus(
 
 export async function ensureAccountCanWrite(supabase: SupabaseClient<Database>, userId: string) {
 	const profile = await getCurrentModerationStatus(supabase, userId);
+	if (!profile) {
+		return fail(503, { message: "アカウント状態を確認できません。しばらくしてからお試しください" });
+	}
 	if (profile.moderation_status === "banned") {
 		return fail(403, { message: "このアカウントはBANされています" });
 	}
@@ -146,6 +158,18 @@ export async function ensureAccountCanWrite(supabase: SupabaseClient<Database>, 
 		});
 	}
 	return null;
+}
+
+/**
+ * API ルート（+server.ts）用: 利用制限・BAN中なら error() を投げる。
+ * form action 用の ensureAccountCanWrite と同じ判定を、HTTP エラーとして返す。
+ */
+export async function requireAccountCanWrite(supabase: SupabaseClient<Database>, userId: string) {
+	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
+	if (moderationFailure) {
+		const data = moderationFailure.data as { message?: string };
+		error(moderationFailure.status, data.message ?? "このアカウントは制限されています");
+	}
 }
 
 /**
@@ -397,16 +421,16 @@ export async function markCategoryNotificationsRead(
 	supabase: SupabaseClient<Database>,
 	userId: string,
 	category: NotificationCategory,
-) {
+): Promise<{ error: string | null }> {
 	const query = supabase.from("notifications").update({ read: true }).eq("recipient_id", userId).eq("read", false);
 
-	if (category === "room") {
-		await query.eq("type", "broadcast" as never);
-	} else if (category === "mylist") {
-		await query.eq("type", "mylist_status" as never);
-	} else {
-		await query.not("type", "in", "(broadcast,mylist_status)");
-	}
+	const { error } =
+		category === "room"
+			? await query.eq("type", "broadcast" as never)
+			: category === "mylist"
+				? await query.eq("type", "mylist_status" as never)
+				: await query.not("type", "in", "(broadcast,mylist_status)");
+	return { error: error?.message ?? null };
 }
 
 export async function updateReportStatusAction(request: Request, supabase: SupabaseClient<Database>, adminId: string) {
@@ -1521,6 +1545,7 @@ export async function linkAccounts(
 
 export function createInviteErrorStatus(error: { details?: unknown }): 403 | 429 | 500 {
 	if (error.details === "INVITE_FORBIDDEN") return 403;
+	if (error.details === "INVITE_ACCOUNT_RESTRICTED") return 403;
 	if (error.details === "INVITE_CREATE_LIMIT") return 429;
 	return 500;
 }
@@ -1560,7 +1585,12 @@ export async function createInviteAction(request: Request, supabase: SupabaseCli
 			});
 		}
 		if (status === 403) {
-			return fail(403, { inviteMessage: "招待コードを発行する権限がありません" });
+			return fail(403, {
+				inviteMessage:
+					error.details === "INVITE_ACCOUNT_RESTRICTED"
+						? "このアカウントは制限中のため招待コードを発行できません"
+						: "招待コードを発行する権限がありません",
+			});
 		}
 		return fail(status, { inviteMessage: "招待コードの発行に失敗しました" });
 	}

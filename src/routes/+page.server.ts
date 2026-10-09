@@ -14,6 +14,7 @@ import {
 	getHomeTimelinePosts,
 	getOpenBroadcastRoomSessions,
 	getUserAnimeList,
+	type TimelineCursor,
 } from "$lib/server/queries";
 import type { AnimeExchangeShare, Post } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
@@ -35,7 +36,10 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		beforeParam && beforeIdParam && /^\d{4}-\d{2}-\d{2}T/.test(beforeParam)
 			? { createdAt: beforeParam, id: beforeIdParam }
 			: undefined;
-	const fetchPosts = async (): Promise<Post[]> => {
+	// 続きの有無（nextCursor）はミュート除外前の取得行から決める。除外後の件数で判定すると
+	// ミュートで減ったページが「続きなし」になり、古い投稿へ進めなくなる（#35）。
+	type TimelinePage = { posts: Post[]; nextCursor: TimelineCursor | null };
+	const fetchTimeline = async (): Promise<TimelinePage> => {
 		if (tab === "following" && user) {
 			for (const select of [POSTS_SELECT_WITH_EXCHANGE_AND_CW, POSTS_SELECT_WITH_EXCHANGE, POSTS_SELECT_BASE]) {
 				const result = await getFollowingTimelinePosts(supabase, user.id, {
@@ -43,10 +47,10 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 					limit: 50,
 					...(before ? { before: before.createdAt, beforeId: before.id } : {}),
 				});
-				if (!result.error) return result.posts;
+				if (!result.error) return { posts: result.posts, nextCursor: result.nextCursor };
 			}
 			console.error("following timeline posts query failed for all select fallbacks");
-			return [];
+			return { posts: [], nextCursor: null };
 		}
 
 		const result = await getHomeTimelinePosts(supabase, user?.id ?? null, {
@@ -55,7 +59,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 			...(before ? { cursor: before } : {}),
 		});
 		if (!result.error) {
-			return result.posts;
+			return { posts: result.posts, nextCursor: result.nextCursor };
 		}
 
 		const exchangeFallback = await getHomeTimelinePosts(supabase, user?.id ?? null, {
@@ -64,7 +68,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 			...(before ? { cursor: before } : {}),
 		});
 		if (!exchangeFallback.error) {
-			return exchangeFallback.posts;
+			return { posts: exchangeFallback.posts, nextCursor: exchangeFallback.nextCursor };
 		}
 
 		const baseFallback = await getHomeTimelinePosts(supabase, user?.id ?? null, {
@@ -73,7 +77,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 			...(before ? { cursor: before } : {}),
 		});
 		if (baseFallback.error) console.error("home posts query failed:", baseFallback.error);
-		return baseFallback.posts;
+		return { posts: baseFallback.posts, nextCursor: baseFallback.nextCursor };
 	};
 
 	const buildExchangeInitialContent = (_exchangeShare: AnimeExchangeShare | null) =>
@@ -121,7 +125,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	);
 
 	return {
-		posts: fetchPosts(),
+		timeline: fetchTimeline(),
 		pageExtras,
 		profile,
 		user,

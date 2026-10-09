@@ -59,6 +59,15 @@ describe("isApiRateLimited", () => {
 		expect(isApiRateLimited("/api/upload", "POST", ip)).toBe(true);
 	});
 
+	it("limits notification read marking to 30 POSTs per minute", () => {
+		const ip = `ip-notification-read-${Math.random()}`;
+		for (let i = 0; i < 30; i += 1) {
+			expect(isApiRateLimited("/api/notifications/read", "POST", ip)).toBe(false);
+		}
+		expect(isApiRateLimited("/api/notifications/read", "POST", ip)).toBe(true);
+		expect(isApiRateLimited("/api/notifications/read", "GET", ip)).toBe(false);
+	});
+
 	it("keeps search limits isolated by IP", () => {
 		const ipA = `ip-a-${Math.random()}`;
 		const ipB = `ip-b-${Math.random()}`;

@@ -22,7 +22,7 @@ import {
 	getScheduleBroadcastSessionsInRange,
 	isAdminUser,
 } from "$lib/server/queries";
-import { jstBroadcastDate, jstBroadcastTimeLabel } from "$lib/syobocal-schedule";
+import { jstBroadcastTimeLabel } from "$lib/syobocal-schedule";
 import type { Anime, BroadcastNotificationSettings, BroadcastRoomOverride, Event } from "$lib/types";
 import { formatBroadcastOverrideAnnouncement } from "$lib/utils/broadcast-episodes";
 import {
@@ -34,6 +34,15 @@ import {
 	roomDateKey,
 } from "$lib/utils/broadcast-room";
 import { eventBroadcastDateKey } from "$lib/utils/event-time";
+import {
+	addDaysToDateKey,
+	dateKeyWeekday,
+	isDateKey,
+	jstBroadcastDateKey,
+	jstDateKey,
+	jstWeekRange,
+	startOfWeekDateKey,
+} from "$lib/utils/jst";
 import type { Actions, PageServerLoad } from "./$types";
 
 interface BroadcastAnnouncement {
@@ -47,31 +56,16 @@ interface BroadcastAnnouncement {
 
 const DAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"] as const;
 
-function startOfWeek(date: Date) {
-	const start = new Date(date);
-	start.setHours(0, 0, 0, 0);
-	start.setDate(start.getDate() - start.getDay());
-	return start;
-}
+/** 週ナビゲーションで遡れる/進める範囲（今週の日曜から前後 5 週） */
+const WEEK_NAV_RANGE_DAYS = 35;
 
-function addDays(date: Date, days: number) {
-	const next = new Date(date);
-	next.setDate(next.getDate() + days);
-	return next;
-}
-
-function parseWeekStart(value: string | null) {
-	if (!value) return startOfWeek(new Date());
-	const parsed = new Date(`${value}T00:00:00`);
-	if (Number.isNaN(parsed.getTime())) return startOfWeek(new Date());
-	return startOfWeek(parsed);
-}
-
-function toDateInputValue(date: Date) {
-	const y = date.getFullYear();
-	const m = String(date.getMonth() + 1).padStart(2, "0");
-	const d = String(date.getDate()).padStart(2, "0");
-	return `${y}-${m}-${d}`;
+/**
+ * week クエリを TZ 非依存の YYYY-MM-DD として検証し、その週の日曜キーへ丸める。
+ * 書式不正・実在しない日付は「今週」にフォールバックする。
+ */
+function parseWeekStart(value: string | null, currentWeekStart: string): string {
+	if (!isDateKey(value)) return currentWeekStart;
+	return startOfWeekDateKey(value);
 }
 
 function announcementMessage(override: BroadcastRoomOverride): string {
@@ -99,26 +93,26 @@ function pushAnnouncement(
 export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 
-	const today = startOfWeek(new Date());
-	const minWeek = addDays(today, -35);
-	const maxWeek = addDays(today, 35);
-	const rawWeek = parseWeekStart(url.searchParams.get("week"));
+	// 週間スケジュールの時間基準は JST 固定・放送日は午前4時境界（$lib/utils/jst 参照）。
+	// Cloudflare Workers のサーバー TZ は UTC なので Date のローカル getter は使わず、
+	// 「今日」「今週」「日付キー」「イベント取得範囲」をすべて同じ基準から導出する。
+	// 「今週」は今日の放送日を含む週: JST 日曜 00:00〜03:59 はまだ土曜の放送日なので
+	// 前週を表示し、クライアント側の既定タブ（土曜）と食い違わないようにする。
+	const now = new Date();
+	const todayKey = jstBroadcastDateKey(now);
+	const currentWeekStart = startOfWeekDateKey(todayKey);
+	const minWeek = addDaysToDateKey(currentWeekStart, -WEEK_NAV_RANGE_DAYS);
+	const maxWeek = addDaysToDateKey(currentWeekStart, WEEK_NAV_RANGE_DAYS);
+	const rawWeek = parseWeekStart(url.searchParams.get("week"), currentWeekStart);
 	const weekStart = rawWeek < minWeek ? minWeek : rawWeek > maxWeek ? maxWeek : rawWeek;
-	const weekEnd = addDays(weekStart, 7);
-	weekEnd.setMilliseconds(-1);
-	const eventRangeEnd = new Date(weekEnd);
-	eventRangeEnd.setHours(eventRangeEnd.getHours() + 4);
-	const scheduleRange = {
-		start: toDateInputValue(weekStart),
-		end: toDateInputValue(addDays(weekStart, 6)),
-	};
+	// room_date の範囲 [start, end] とイベント取得範囲 [startsAt, endsAt) は同じ 7 放送日を指す
+	const week = jstWeekRange(weekStart);
+	const scheduleRange = { start: week.start, end: week.end };
 
 	// しょぼい絶対: 今日以降の掲載対象は「同期済みセッションがある」か「オーバーライド
 	// がある」作品のみ。過去日はしょぼい番組データが残らないため、ルームページの
 	// 合成表示と同じルール（対象シーズン+曜日・放送期間）で履歴として掲載する。
-	// 「今日」はサーバーTZのUTC日付ではなく、broadcast-episode-log と同じ
-	// JST・午前4時境界で判定する（JST 04:00〜09:00 はUTC日付が前日になるため）
-	const todayKey = jstBroadcastDate(new Date());
+	// 「今日」は上の todayKey（JST・午前4時境界、broadcast-episode-log と同じ基準）
 	const hasPastDays = scheduleRange.start < todayKey;
 	const [sessions, overrideAnimeIdsInRange, pastFillList] = await Promise.all([
 		getScheduleBroadcastSessionsInRange(supabase, scheduleRange.start, scheduleRange.end),
@@ -146,7 +140,8 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		scheduleAnimeIds.length
 			? getAnimeList(supabase, { ids: scheduleAnimeIds, limit: 1000, userId: user?.id ?? null })
 			: Promise.resolve([] as Anime[]),
-		getEventsByRange(supabase, weekStart.toISOString(), eventRangeEnd.toISOString()),
+		// endsAt は開区間なので lte に渡す前に 1ms 戻す
+		getEventsByRange(supabase, week.startsAt.toISOString(), new Date(week.endsAt.getTime() - 1).toISOString()),
 		user ? getBroadcastSubscriptions(supabase, user.id) : Promise.resolve([] as string[]),
 		user
 			? getBroadcastNotificationSettings(supabase, user.id)
@@ -183,7 +178,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		events: Event[];
 		announcements: BroadcastAnnouncement[];
 	}[] = DAY_LABELS.map((label, index) => ({
-		date: toDateInputValue(addDays(weekStart, index)),
+		date: addDaysToDateKey(weekStart, index),
 		label,
 		anime: [],
 		events: [],
@@ -194,9 +189,14 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	// 話数もしょぼい番組表由来の値が第一（長期作品は休止・特番で週次カウントが
 	// ずれるため、曜日からの機械カウントはセッションに番号が無い場合の補完のみ）
 	const sessionEpisodeNumbers: Record<string, number> = {};
+	// 話数異常で番号を外したセッション。週次カウントによる補完も行わず、話数バッジを出さない（#246）
+	const suppressedEpisodeKeys: string[] = [];
 	for (const session of sessions) {
+		const key = `${session.anime_id}:${session.room_date}`;
 		if (session.episode_number != null) {
-			sessionEpisodeNumbers[`${session.anime_id}:${session.room_date}`] = session.episode_number;
+			sessionEpisodeNumbers[key] = session.episode_number;
+		} else if (session.episode_suppressed) {
+			suppressedEpisodeKeys.push(key);
 		}
 	}
 	const animeById = new Map(animeList.map((anime) => [Number(anime.id), anime]));
@@ -214,7 +214,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		// 掲載時刻はしょぼいの実枠（深夜は25:30のような24時間超表記で前日枠に載る）
 		day.anime.push({
 			...anime,
-			broadcast_day: new Date(`${session.room_date}T00:00:00`).getDay(),
+			broadcast_day: dateKeyWeekday(session.room_date) ?? anime.broadcast_day,
 			broadcast_time: jstBroadcastTimeLabel(session.scheduled_at) ?? anime.broadcast_time,
 		});
 	}
@@ -278,6 +278,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		days,
 		dayLabels: DAY_LABELS,
 		sessionEpisodeNumbers,
+		suppressedEpisodeKeys,
 		events,
 		user,
 		isAdmin,
@@ -288,13 +289,13 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		notificationSettings,
 		mutedEventIds: [...mutedEventIds],
 		eventNotificationSubscriptions,
-		weekStart: toDateInputValue(weekStart),
-		prevWeek: toDateInputValue(addDays(weekStart, -7)),
-		nextWeek: toDateInputValue(addDays(weekStart, 7)),
+		weekStart,
+		prevWeek: addDaysToDateKey(weekStart, -7),
+		nextWeek: addDaysToDateKey(weekStart, 7),
 		canGoPrev: weekStart > minWeek,
 		canGoNext: weekStart < maxWeek,
-		defaultScheduledAt: `${toDateInputValue(new Date())}T20:00`,
-		defaultEventDate: eventBroadcastDateKey(new Date().toISOString()) ?? toDateInputValue(new Date()),
+		defaultScheduledAt: `${jstDateKey(now)}T20:00`,
+		defaultEventDate: eventBroadcastDateKey(now.toISOString()) ?? todayKey,
 		defaultEventTime: "20:00",
 	};
 };

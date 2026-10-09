@@ -5,9 +5,20 @@ import { enhance } from "$app/forms";
 import { replaceState } from "$app/navigation";
 import { page } from "$app/state";
 import { trapFocus } from "$lib/actions/trapFocus";
+import {
+	type ComposeDraft,
+	clearComposeDraft,
+	getBrowserDraftStorage,
+	isDraftEmpty,
+	loadComposeDraft,
+	saveComposeDraft,
+} from "$lib/compose-draft";
 import type { AnimeExchangeShare, OpenBroadcastRoomSummary } from "$lib/types";
+import { animeQuoteChipLabel, cwChipLabel } from "$lib/utils/composer-chips";
 import { charCountClass } from "$lib/utils/format";
+import { applyMention, findMentionQuery, mentionOptionId, resolveMentionKey } from "$lib/utils/mention-suggest";
 import AnimeExchangeResult from "./AnimeExchangeResult.svelte";
+import { classifyComposerSubmitResult } from "./post-composer-submit";
 import UserAvatar from "./UserAvatar.svelte";
 
 interface AnimeResult {
@@ -35,6 +46,11 @@ interface Props {
 	watchingAnime?: AnimeResult[];
 	onsubmitsuccess?: () => void;
 	focusOnMount?: boolean;
+	/**
+	 * 下書き保存キー（通常はユーザー ID）。指定すると書きかけを localStorage に退避し、
+	 * 次回マウント時に復元する（GitLab #2）。未指定なら従来どおり保存しない。
+	 */
+	draftKey?: string | null;
 }
 
 let {
@@ -47,6 +63,7 @@ let {
 	watchingAnime = [],
 	onsubmitsuccess,
 	focusOnMount = false,
+	draftKey = null,
 }: Props = $props();
 
 const MAX_LENGTH = 280;
@@ -89,6 +106,19 @@ let textareaEl = $state<HTMLTextAreaElement | null>(null);
 let mentionResults = $state<UserResult[]>([]);
 let mentionDropdownOpen = $state(false);
 let mentionDebounce = $state<ReturnType<typeof setTimeout> | null>(null);
+/** キーボードで選択中の候補 index。-1 は未選択 */
+let mentionActiveIndex = $state(-1);
+// 同じページに複数の PostComposer が乗る（デスクトップ用とモバイルモーダル）ので id は個別に振る
+const uid = $props.id();
+const mentionListId = `${uid}-mention-list`;
+const mentionActiveId = $derived(
+	mentionDropdownOpen && mentionActiveIndex >= 0 ? mentionOptionId(mentionListId, mentionActiveIndex) : undefined,
+);
+const mentionAnnouncement = $derived(
+	mentionDropdownOpen && mentionResults.length > 0
+		? `メンション候補 ${mentionResults.length}件。上下キーで選択、Enterで確定、Escapeで閉じます`
+		: "",
+);
 let appliedInitialValuesKey = $state<string | null>(null);
 
 const initialValuesKey = $derived(
@@ -123,15 +153,6 @@ const canSubmit = $derived(
 		!submitting &&
 		!uploading,
 );
-
-function normalizeHashtagLabel(tag: string) {
-	const normalized = tag.trim().replace(/^#+/, "");
-	return normalized ? `#${normalized}` : "";
-}
-
-function animeQuoteChipLabel(anime: AnimeResult) {
-	return anime.official_hashtag?.map(normalizeHashtagLabel).find(Boolean) ?? normalizeHashtagLabel(anime.title);
-}
 
 async function handleFileChange(e: Event) {
 	const input = e.target as HTMLInputElement;
@@ -200,7 +221,53 @@ $effect(() => {
 	if (cwSearchOpen && cwInputEl) setTimeout(() => cwInputEl?.focus(), 50);
 });
 
+// ---- 下書き保存（GitLab #2） ----
+// モバイルモーダルは閉じるとこのコンポーネントごと破棄されるため、draftKey が指定されたときは
+// 入力内容を localStorage に退避し、次回マウント時に復元する。保存形式・期限は compose-draft.ts を参照。
+let draftRestored = $state(false);
+
+function currentDraft(): ComposeDraft {
+	return { content, imageUrls, anime: selectedAnime, cwAnime: selectedCwAnime, room: selectedRoom };
+}
+
+const hasDraft = $derived(!isDraftEmpty(currentDraft()));
+
+function restoreDraft(key: string) {
+	const draft = loadComposeDraft(getBrowserDraftStorage(), key);
+	if (draft) {
+		// 本文は利用者が書いたものを最優先する（共有リンク由来の定型文より価値が高い）。
+		// 添付は引用リンク等で既に入っている値を優先し、空の項目だけ下書きで埋める。
+		if (draft.content.trim()) content = draft.content;
+		if (imageUrls.length === 0) imageUrls = draft.imageUrls;
+		if (!selectedAnime) selectedAnime = draft.anime;
+		if (!selectedCwAnime) selectedCwAnime = draft.cwAnime;
+		if (!selectedRoom) selectedRoom = draft.room;
+	}
+	draftRestored = true;
+}
+
+/** 明示的な破棄操作。フォームを空にして保存済みの下書きも消す。 */
+function discardDraft() {
+	content = "";
+	imageUrls = [];
+	selectedAnime = null;
+	selectedCwAnime = null;
+	selectedRoom = null;
+	clearExchangeShare();
+	if (draftKey) clearComposeDraft(getBrowserDraftStorage(), draftKey);
+	textareaEl?.focus();
+}
+
+// 復元が終わってから入力の変化を追って保存する（復元前に空の状態で上書きしないため）。
+// 投稿成功でフォームが空になると saveComposeDraft が保存を消すので、投稿後に下書きは残らない。
+$effect(() => {
+	if (!draftKey || !draftRestored) return;
+	saveComposeDraft(getBrowserDraftStorage(), draftKey, currentDraft());
+});
+
 onMount(() => {
+	// 初期値の反映（上の $effect）より後に走る宣言順なので、引用リンクの値が先に入る
+	if (draftKey) restoreDraft(draftKey);
 	if (focusOnMount) textareaEl?.focus();
 });
 function closeCwSearch() {
@@ -284,47 +351,95 @@ function handleAnimeQueryInput() {
 	}, 300);
 }
 
+function closeMentionDropdown() {
+	mentionDropdownOpen = false;
+	mentionActiveIndex = -1;
+}
+
 function handleContentInput() {
 	if (!textareaEl) return;
 	const val = textareaEl.value;
 	const cursor = textareaEl.selectionStart ?? val.length;
-	const textBeforeCursor = val.slice(0, cursor);
-	const mentionMatch = textBeforeCursor.match(/@([a-zA-Z0-9_]*)$/);
+	const q = findMentionQuery(val, cursor);
 
-	if (mentionMatch) {
+	if (q !== null) {
 		if (mentionDebounce) clearTimeout(mentionDebounce);
-		const q = mentionMatch[1] ?? "";
 		mentionDebounce = setTimeout(async () => {
 			if (q.length === 0) {
-				mentionDropdownOpen = false;
+				closeMentionDropdown();
 				return;
 			}
 			try {
 				const res = await fetch(`/api/users/search?q=${encodeURIComponent(q)}`);
 				mentionResults = res.ok ? await res.json() : [];
 				mentionDropdownOpen = mentionResults.length > 0;
+				// 候補が入れ替わったら先頭を選択状態にして、Enter/Tab ですぐ確定できるようにする
+				mentionActiveIndex = mentionDropdownOpen ? 0 : -1;
 			} catch {
 				mentionResults = [];
-				mentionDropdownOpen = false;
+				closeMentionDropdown();
 			}
 		}, 200);
 	} else {
-		mentionDropdownOpen = false;
+		closeMentionDropdown();
 	}
 }
+
+/**
+ * textarea 上のキー操作で候補を選ぶ（GitLab #4）。フォーカスは textarea に置いたまま
+ * aria-activedescendant で選択中の候補を支援技術へ伝える。IME 変換中は何もしない。
+ */
+function handleContentKeydown(e: KeyboardEvent) {
+	const action = resolveMentionKey(e.key, {
+		open: mentionDropdownOpen,
+		count: mentionResults.length,
+		activeIndex: mentionActiveIndex,
+		// keyCode 229 は一部ブラウザーで isComposing が立たない IME 確定 Enter の互換判定
+		composing: e.isComposing || e.keyCode === 229,
+	});
+	if (action.type === "none") return;
+	e.preventDefault();
+	if (action.type === "close") {
+		// 外側のモーダルの Escape（閉じる）まで届かせない
+		e.stopPropagation();
+		closeMentionDropdown();
+		return;
+	}
+	if (action.type === "move") {
+		mentionActiveIndex = action.index;
+		return;
+	}
+	const user = mentionResults[action.index];
+	if (user) selectMention(user);
+}
+
+// 選択中の候補がリストのスクロール範囲外に出たら見える位置まで送る
+$effect(() => {
+	if (!mentionActiveId) return;
+	const el = document.getElementById(mentionActiveId);
+	if (el && typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "nearest" });
+});
 
 function selectMention(user: UserResult) {
 	if (!textareaEl) return;
 	const val = textareaEl.value;
 	const cursor = textareaEl.selectionStart ?? val.length;
-	const before = val.slice(0, cursor).replace(/@([a-zA-Z0-9_]*)$/, `@${user.username} `);
-	content = before + val.slice(cursor);
-	mentionDropdownOpen = false;
+	const applied = applyMention(val, cursor, user.username);
+	content = applied.text;
+	closeMentionDropdown();
 	mentionResults = [];
 	setTimeout(() => {
 		textareaEl?.focus();
-		textareaEl?.setSelectionRange(before.length, before.length);
+		textareaEl?.setSelectionRange(applied.cursor, applied.cursor);
 	}, 0);
+}
+
+/** ネストしたダイアログの Escape。外側の投稿モーダルまで伝播させずに自分だけ閉じる。 */
+function handleOverlayEscape(e: KeyboardEvent, close: () => void) {
+	if (e.key !== "Escape") return;
+	e.preventDefault();
+	e.stopPropagation();
+	close();
 }
 
 const handleSubmit: SubmitFunction = () => {
@@ -332,16 +447,23 @@ const handleSubmit: SubmitFunction = () => {
 	errorMessage = "";
 	return async ({ result, update }) => {
 		submitting = false;
-		if (result.type === "failure") {
-			errorMessage = (result.data as { message?: string })?.message ?? "投稿に失敗しました";
-		} else {
-			content = "";
-			imageUrls = [];
-			selectedAnime = null;
-			clearExchangeShare();
-			await update();
-			onsubmitsuccess?.();
+		const outcome = classifyComposerSubmitResult(result);
+		if (outcome.kind === "retry") {
+			// failure / error では本文・画像・引用を消さず、理由を表示して再送できるようにする（GitLab #1）。
+			// update() も呼ばない: error 結果の既定処理はエラーページ描画で、書きかけが失われる。
+			errorMessage = outcome.message;
+			return;
 		}
+		if (outcome.kind === "passthrough") {
+			await update();
+			return;
+		}
+		content = "";
+		imageUrls = [];
+		selectedAnime = null;
+		clearExchangeShare();
+		await update();
+		onsubmitsuccess?.();
 	};
 };
 </script>
@@ -360,16 +482,35 @@ const handleSubmit: SubmitFunction = () => {
 					bind:value={content}
 					maxlength={MAX_LENGTH + 10}
 					oninput={handleContentInput}
+					onkeydown={handleContentKeydown}
 					aria-label="投稿内容"
+					aria-autocomplete="list"
+					aria-haspopup="listbox"
+					aria-controls={mentionDropdownOpen && mentionResults.length > 0 ? mentionListId : undefined}
+					aria-activedescendant={mentionActiveId}
 				></textarea>
+				<!-- 候補の出現と操作方法を読み上げ用に通知する（表示はしない） -->
+				<span class="sr-only" aria-live="polite">{mentionAnnouncement}</span>
 
 				{#if mentionDropdownOpen && mentionResults.length > 0}
-					<div class="mention-dropdown">
-						{#each mentionResults as user}
+					<div class="mention-dropdown" id={mentionListId} role="listbox" aria-label="メンション候補">
+						{#each mentionResults as user, i (user.id)}
+							<!--
+								textarea にフォーカスを残したまま選べるよう mousedown は既定動作（フォーカス移動）だけ
+								止め、確定は click に任せる。button 要素なので支援技術からの Enter/Space でも click が発火する。
+							-->
 							<button
 								type="button"
 								class="mention-dropdown-item"
-								onmousedown={(e) => { e.preventDefault(); selectMention(user); }}
+								id={mentionOptionId(mentionListId, i)}
+								role="option"
+								aria-selected={i === mentionActiveIndex}
+								tabindex="-1"
+								onmousedown={(e) => e.preventDefault()}
+								onclick={() => selectMention(user)}
+								onmouseenter={() => {
+									mentionActiveIndex = i;
+								}}
 							>
 								<span class="mention-dropdown-username">@{user.username}</span>
 								{#if user.display_name}
@@ -388,7 +529,10 @@ const handleSubmit: SubmitFunction = () => {
 							class="inline-flex items-center gap-1.5 max-w-full rounded-full border border-blue-500/50 bg-blue-950/40 px-3 py-1 text-sm font-semibold leading-tight text-blue-300"
 						>
 							<span class="i-lucide-clapperboard shrink-0" aria-hidden="true"></span>
-							<span class="min-w-0 max-w-[18ch] truncate">{animeQuoteChipLabel(selectedAnime)}</span>
+							<span class="sr-only">引用作品:</span>
+							<span class="min-w-0 max-w-[18ch] truncate" title={selectedAnime.title}
+								>{animeQuoteChipLabel(selectedAnime)}</span
+							>
 							<button
 								type="button"
 								class="-mr-1 inline-flex h-5 w-5 items-center justify-center rounded-full border-0 bg-transparent p-0 text-current opacity-70 hover:bg-white/15 hover:opacity-100"
@@ -405,7 +549,10 @@ const handleSubmit: SubmitFunction = () => {
 							class="inline-flex items-center gap-1.5 max-w-full rounded-full border border-amber-500/50 bg-amber-950/40 px-3 py-1 text-sm font-semibold leading-tight text-amber-300"
 						>
 							<span class="i-lucide-triangle-alert shrink-0" aria-hidden="true"></span>
-							<span class="min-w-0 max-w-[34ch] truncate">ネタバレ</span>
+							<!-- 対象作品名を省略せずに表示する（狭い画面では折り返す）: GitLab #9 -->
+							<span class="min-w-0 whitespace-normal [overflow-wrap:anywhere]"
+								>{cwChipLabel(selectedCwAnime)}</span
+							>
 							<button
 								type="button"
 								class="-mr-1 inline-flex h-5 w-5 items-center justify-center rounded-full border-0 bg-transparent p-0 text-current opacity-70 hover:bg-white/15 hover:opacity-100"
@@ -626,6 +773,10 @@ const handleSubmit: SubmitFunction = () => {
 					<span class="i-lucide-door-open" style="width:18px;height:18px;" aria-hidden="true"></span>
 				</button>
 
+				{#if draftKey && hasDraft}
+					<!-- 下書きの破棄は明示操作にする（閉じるだけでは消えない）: GitLab #2 -->
+					<button type="button" class="composer-draft-discard" onclick={discardDraft}>下書きを破棄</button>
+				{/if}
 				<span class="char-count {countClass}">{remaining}</span>
 				<button type="submit" class="btn btn-primary" disabled={!canSubmit}>
 					{submitting ? '投稿中…' : '投稿'}
@@ -642,6 +793,7 @@ const handleSubmit: SubmitFunction = () => {
 	<div
 		class="anime-search-overlay"
 		onclick={(e) => { if (e.target === e.currentTarget) closeAnimeSearch(); }}
+		onkeydown={(e) => handleOverlayEscape(e, closeAnimeSearch)}
 		role="dialog"
 		aria-modal="true"
 		aria-label="アニメ検索"
@@ -703,6 +855,7 @@ const handleSubmit: SubmitFunction = () => {
 	<div
 		class="anime-search-overlay"
 		onclick={(e) => { if (e.target === e.currentTarget) closeCwSearch(); }}
+		onkeydown={(e) => handleOverlayEscape(e, closeCwSearch)}
 		role="dialog"
 		aria-modal="true"
 		aria-label="ネタバレ作品を選択"
@@ -756,6 +909,7 @@ const handleSubmit: SubmitFunction = () => {
 	<div
 		class="anime-search-overlay"
 		onclick={(e) => { if (e.target === e.currentTarget) closeRoomModal(); }}
+		onkeydown={(e) => handleOverlayEscape(e, closeRoomModal)}
 		role="dialog"
 		aria-modal="true"
 		aria-label="実況ルームを選択"
@@ -822,7 +976,21 @@ const handleSubmit: SubmitFunction = () => {
 	text-align: left;
 	color: inherit;
 }
-.mention-dropdown-item:hover {
+.mention-dropdown-item:hover,
+.mention-dropdown-item[aria-selected="true"] {
+	background: var(--color-surface-hover);
+}
+.composer-draft-discard {
+	background: none;
+	border: none;
+	padding: 4px 6px;
+	font-size: 0.8rem;
+	color: var(--color-text-muted);
+	cursor: pointer;
+	border-radius: var(--radius-sm);
+}
+.composer-draft-discard:hover {
+	color: var(--color-text);
 	background: var(--color-surface-hover);
 }
 .mention-dropdown-username {
