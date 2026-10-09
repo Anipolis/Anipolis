@@ -28,6 +28,12 @@ export const actions: Actions = {
 	upsertWatchlist: async ({ request, locals: { supabase, safeGetSession } }) => {
 		const { user } = await safeGetSession();
 		if (!user) return fail(401, { message: "ログインが必要です" });
+		// 自動保存は画面の破棄後にも送られるため、送信までにアカウントが切り替わると別の
+		// ユーザーのセッションで届く。編集したユーザーと違えば書き込まない
+		const expectedUserId = (await request.clone().formData()).get("expected_user_id");
+		if (typeof expectedUserId === "string" && expectedUserId !== user.id) {
+			return fail(409, { message: "アカウントが切り替わったため保存しませんでした" });
+		}
 		return upsertUserAnimeEntry(supabase, request, user.id);
 	},
 
