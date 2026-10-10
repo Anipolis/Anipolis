@@ -104,14 +104,18 @@ export function listSignInProviderLabels(providers: readonly string[]): string[]
 }
 
 /**
- * 処理時間の下限を揃える。
+ * 処理の所要時間にかかわらず、ちょうど durationMs 待ってから返す。
  * 登録済みメールにはメール送信が走り、未登録なら即応答という時間差から
- * アカウントの有無を推測されないよう、最低でも minMs は待ってから返す。
+ * アカウントの有無を推測されないようにする。下限まで待つだけだと、送信が
+ * durationMs を超えたときに登録済みだけ遅くなるので、処理の完了は待たない。
+ * 時間内に終わらなかった処理は keepAlive（Workers の waitUntil）で応答後も続けさせる。
  */
-export async function withMinimumDuration<T>(task: () => Promise<T>, minMs: number): Promise<T> {
-	const startedAt = Date.now();
-	const result = await task();
-	const remaining = minMs - (Date.now() - startedAt);
-	if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
-	return result;
+export async function withFixedDuration(
+	task: () => Promise<void>,
+	durationMs: number,
+	keepAlive?: (promise: Promise<unknown>) => void,
+): Promise<void> {
+	const pending = task();
+	keepAlive?.(pending);
+	await new Promise((resolve) => setTimeout(resolve, durationMs));
 }

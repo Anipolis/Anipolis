@@ -60,6 +60,8 @@ export const API_RATE_RULES: RateRule[] = [
 	// 実況中の連投を考慮して 20回/分（3秒に1回ペース）まで許容
 	{ name: "post-create", pattern: /^\/api\/posts$/, methods: ["POST"], limit: 20, windowMs: 60_000 },
 	{ name: "report", pattern: /^\/api\/reports$/, methods: ["POST"], limit: 5, windowMs: 60_000 },
+	// パスキーは1回の登録・ログインで options と verify の2回叩く
+	{ name: "passkey", pattern: /^\/api\/auth\/passkey\//, methods: ["POST"], limit: 20, windowMs: 60_000 },
 	{ name: "reaction", pattern: /^\/api\/posts\/[^/]+\/reactions$/, limit: 60, windowMs: 60_000 },
 	{ name: "search", pattern: /^\/api\/(anime|users)\/search/, limit: 30, windowMs: 10_000 },
 	{ name: "anime-count", pattern: /^\/api\/anime\/count$/, limit: 30, windowMs: 10_000 },

@@ -1854,6 +1854,48 @@ export type Database = {
 					},
 				];
 			};
+			passkey_credentials: {
+				Row: {
+					aaguid: string | null;
+					backed_up: boolean;
+					counter: number;
+					created_at: string;
+					credential_id: string;
+					device_type: string;
+					id: string;
+					last_used_at: string | null;
+					public_key: string;
+					transports: string[];
+					user_id: string;
+				};
+				Insert: {
+					aaguid?: string | null;
+					backed_up?: boolean;
+					counter?: number;
+					created_at?: string;
+					credential_id: string;
+					device_type: string;
+					id?: string;
+					last_used_at?: string | null;
+					public_key: string;
+					transports?: string[];
+					user_id: string;
+				};
+				Update: {
+					aaguid?: string | null;
+					backed_up?: boolean;
+					counter?: number;
+					created_at?: string;
+					credential_id?: string;
+					device_type?: string;
+					id?: string;
+					last_used_at?: string | null;
+					public_key?: string;
+					transports?: string[];
+					user_id?: string;
+				};
+				Relationships: [];
+			};
 			post_hashtags: {
 				Row: {
 					hashtag_id: number;
