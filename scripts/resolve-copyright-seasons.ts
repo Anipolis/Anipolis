@@ -108,6 +108,7 @@ async function main() {
 	// ある権利者違いの候補まで人の確認から消してしまう
 	const reviewsByAnime = new Map<number, ReviewRow[]>();
 	for (const review of reviews) {
+		const animeId = review.anime_id;
 		reviewsByAnime.set(animeId, [...(reviewsByAnime.get(animeId) ?? []), review]);
 	}
 
