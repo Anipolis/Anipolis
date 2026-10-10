@@ -5,12 +5,13 @@ import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();
 
-type SectionId = "account" | "privacy" | "rooms";
+type SectionId = "account" | "privacy" | "rooms" | "about";
 
 const sections: { id: SectionId; label: string }[] = [
 	{ id: "account", label: "アカウント" },
 	{ id: "privacy", label: "プライバシーと安全" },
 	{ id: "rooms", label: "ルーム" },
+	{ id: "about", label: "Anipolisについて" },
 ];
 
 const activeSection = $derived(
@@ -20,6 +21,26 @@ const activeSection = $derived(
 );
 
 type Item = { label: string; description: string; href: string };
+
+// 規約・ポリシー・出典と問い合わせ先。未ログイン時はトレンド欄下にも同じリンクを出す
+const aboutItems: Item[] = [
+	{ label: "利用規約", description: "本サービスの利用条件を確認できます", href: "/terms" },
+	{
+		label: "プライバシーポリシー",
+		description: "個人情報の取扱いについて確認できます",
+		href: "/privacy-policy",
+	},
+	{
+		label: "出典・権利",
+		description: "作品情報の出典・ライセンスと、権利者の方への窓口を確認できます",
+		href: "/data-sources",
+	},
+	{
+		label: "お問い合わせ",
+		description: "運営への連絡先（一般・権利者の方・個人情報）を確認できます",
+		href: "/contact",
+	},
+];
 
 const items = $derived.by((): Item[] => {
 	if (activeSection === "account") {
@@ -33,6 +54,13 @@ const items = $derived.by((): Item[] => {
 				: "メールアドレスとパスワードでもログインできるようになります",
 			href: "/settings/account/password",
 		});
+		if (data.passkeyEnabled) {
+			list.push({
+				label: "パスキー",
+				description: "指紋・顔認証や画面ロックでログインできるようにします",
+				href: "/settings/passkeys",
+			});
+		}
 		list.push({
 			label: "招待",
 			description: "招待コードを発行して他のユーザーを招待します",
@@ -60,13 +88,9 @@ const items = $derived.by((): Item[] => {
 				href: "/settings/follow-requests",
 			});
 		}
-		list.push({
-			label: "プライバシーポリシー",
-			description: "個人情報の取扱いについて確認できます",
-			href: "/privacy-policy",
-		});
 		return list;
 	}
+	if (activeSection === "about") return aboutItems;
 	return [
 		{
 			label: "通知",
@@ -253,7 +277,7 @@ const activeLabel = $derived(sections.find((s) => s.id === activeSection)?.label
 
 	.settings-nav-item {
 		padding: 8px 14px;
-		border-radius: 20px;
+		border-radius: 28px;
 		white-space: nowrap;
 		font-size: 0.88rem;
 	}

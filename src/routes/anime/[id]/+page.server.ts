@@ -4,14 +4,15 @@ import { addBroadcastOverrideAction, deleteBroadcastOverrideAction, updateAnimeA
 import { buildBroadcastEpisodeLog } from "$lib/server/broadcast-episode-log";
 import {
 	getAnime,
-	getAnimeDataAttributions,
 	getAnimeRelations,
+	getAnimeSyobocalUrl,
 	getBroadcastRoomOverridesForAnime,
 	getBroadcastRoomScheduleSnapshotsForAnime,
 	getEventsForAnime,
 	getUsersWhoListedAnime,
 	isAdminUser,
 } from "$lib/server/queries";
+import { createServiceRoleClient } from "$lib/server/supabase-admin";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
@@ -25,9 +26,9 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 
 	if (!anime) throw error(404, "アニメが見つかりません");
 
-	const [relations, dataAttributions, broadcastOverrides, events, scheduleSnapshots] = await Promise.all([
+	const [relations, syobocalUrl, broadcastOverrides, events, scheduleSnapshots] = await Promise.all([
 		getAnimeRelations(supabase, anime.mal_id),
-		getAnimeDataAttributions(supabase, anime.mal_id),
+		getAnimeSyobocalUrl(supabase, anime.mal_id),
 		getBroadcastRoomOverridesForAnime(supabase, params.id),
 		getEventsForAnime(supabase, Number(anime.id)),
 		getBroadcastRoomScheduleSnapshotsForAnime(supabase, Number(anime.id)),
@@ -40,7 +41,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 		.filter((slot) => slot.opened)
 		.sort((left, right) => right.date.localeCompare(left.date));
 
-	return { anime, user, isAdmin, listedUsers, relations, dataAttributions, episodes, broadcastOverrides, events };
+	return { anime, user, isAdmin, listedUsers, relations, syobocalUrl, episodes, broadcastOverrides, events };
 };
 
 export const actions: Actions = {
@@ -70,7 +71,15 @@ export const actions: Actions = {
 		const anime = await getAnime(supabase, params.id, user.id);
 		if (!anime) return fail(404, { message: "アニメが見つかりません" });
 
-		return updateAnimeAction(supabase, request, params.id, anime.cover_url);
+		// manual ソースレコードは管理者ユーザーでは書き込めない（RLS）ので service role で保存する。
+		// 管理キーが未設定なら従来どおり（保存失敗を警告として返す）
+		let sourceWriter: ReturnType<typeof createServiceRoleClient> | undefined;
+		try {
+			sourceWriter = createServiceRoleClient();
+		} catch (serviceError) {
+			console.error("service role client unavailable for manual source records:", serviceError);
+		}
+		return updateAnimeAction(supabase, request, params.id, anime.cover_url, sourceWriter);
 	},
 
 	addBroadcastOverride: async ({ request, params, locals: { supabase, safeGetSession } }) => {

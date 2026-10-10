@@ -7,6 +7,7 @@ import { page } from "$app/state";
 import { trapFocus } from "$lib/actions/trapFocus";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
+import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import type { BroadcastRoomOverride } from "$lib/types";
 import {
 	type BroadcastOverrideKind,
@@ -40,6 +41,7 @@ const displayResources = $derived(
 	buildDisplayResources(
 		data.anime.resources,
 		data.anime.mal_id,
+		data.syobocalUrl,
 		data.anime.official_site_url,
 		data.anime.official_x_url,
 	),
@@ -116,12 +118,15 @@ function buildDisplayOfficialLinks(officialSiteUrl: string | null, officialXUrl:
 function buildDisplayResources(
 	resources: { name: string; url: string }[],
 	malId: number | null,
+	syobocalUrl: string | null,
 	officialSiteUrl: string | null,
 	officialXUrl: string | null,
 ) {
 	const links: { name: string; url: string }[] = [];
 
+	// 作品の外部ページは MAL・しょぼいカレンダー・Wikipedia の順に同列で並べる
 	if (malId) links.push({ name: "MAL", url: `https://myanimelist.net/anime/${malId}` });
+	if (isHttpUrl(syobocalUrl)) links.push({ name: "しょぼいカレンダー", url: syobocalUrl });
 	links.push(
 		...resources
 			.filter((resource) => resource.name && isHttpUrl(resource.url))
@@ -393,8 +398,8 @@ $effect(() => {
 </script>
 
 <svelte:head>
-	<title>{data.anime.title} — Anipolis</title>
-	<meta property="og:title" content="{data.anime.title} — Anipolis">
+	<title>{data.anime.title} - Anipolis</title>
+	<meta property="og:title" content="{data.anime.title} - Anipolis">
 	<meta property="og:description" content={ogDescription}>
 	<meta property="og:type" content="website">
 	<meta property="og:url" content={page.url.href}>
@@ -421,7 +426,12 @@ $effect(() => {
 								{#if relation.anime}
 									<a href="/anime/{relation.anime.id}" class="relation-card">
 										{#if relation.anime.cover_url}
-											<img class="relation-card-thumb" src={relation.anime.cover_url} alt="">
+											<img
+												class="relation-card-thumb"
+												src={coverThumbSrc(relation.anime.cover_url)}
+												{@attach coverThumbFallback(relation.anime.cover_url)}
+												alt=""
+											>
 										{:else}
 											<span
 												class="relation-card-thumb relation-card-thumb--placeholder"
@@ -670,7 +680,6 @@ $effect(() => {
 									href={resource.url}
 									target="_blank"
 									rel="noopener noreferrer"
-									class:resource-link--muted={resource.name === 'MAL'}
 									class="official-link resource-link"
 									>{resource.name}</a
 								>
@@ -1430,27 +1439,6 @@ $effect(() => {
 			{/if}
 		</div>
 	</div>
-
-	{#if data.dataAttributions.length > 0}
-		<footer class="anime-data-source">
-			<span class="anime-data-source-title">データ出典</span>
-			{#each data.dataAttributions as attribution, index (attribution.source)}
-				{#if index > 0}
-					<span aria-hidden="true">・</span>
-				{/if}
-				<a href={attribution.source_url} target="_blank" rel="noopener noreferrer">{attribution.label}</a>
-				{#if attribution.license_label && attribution.license_url}
-					<span
-						>（<a href={attribution.license_url} target="_blank" rel="noopener noreferrer"
-							>{attribution.license_label}</a
-						>）</span
-					>
-				{/if}
-			{/each}
-			<span aria-hidden="true">・</span>
-			<a href="/data-sources">利用データと変換手順</a>
-		</footer>
-	{/if}
 </div>
 
 <svelte:window onkeydown={handleModalKeydown} />
@@ -1691,7 +1679,7 @@ $effect(() => {
 .anime-cover {
 	width: 100%;
 	aspect-ratio: 1 / 1.414;
-	border-radius: 10px;
+	border-radius: 14px;
 	overflow: hidden;
 	background: var(--color-surface);
 	border: 1px solid var(--color-border);
@@ -1721,6 +1709,7 @@ $effect(() => {
 	width: 32px;
 	height: 32px;
 	border-radius: 50%;
+	corner-shape: round;
 	background: rgba(0, 0, 0, 0.65);
 	color: #fff;
 	display: flex;
@@ -1755,7 +1744,7 @@ $effect(() => {
 	padding: 14px;
 	background: var(--color-surface);
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 }
 .prod-row {
 	display: flex;
@@ -1783,7 +1772,7 @@ $effect(() => {
 .genre-chip {
 	font-size: 0.72rem;
 	padding: 2px 7px;
-	border-radius: 10px;
+	border-radius: 14px;
 	background: var(--color-surface-hover);
 	color: var(--color-text-muted);
 	border: 1px solid var(--color-border);
@@ -1814,11 +1803,11 @@ $effect(() => {
 	background: var(--accent);
 	color: #fff;
 }
-.resource-link--muted {
+.resource-link {
 	border-color: var(--border);
 	color: var(--text-muted);
 }
-.resource-link--muted:hover {
+.resource-link:hover {
 	background: var(--hover-bg);
 	border-color: var(--border);
 	color: var(--text);
@@ -1835,29 +1824,6 @@ $effect(() => {
 	font-weight: 600;
 	letter-spacing: 0.04em;
 	text-transform: uppercase;
-}
-.anime-data-source {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: baseline;
-	gap: 4px 6px;
-	margin-top: 36px;
-	padding-top: 16px;
-	border-top: 1px solid var(--border);
-	color: var(--text-muted);
-	font-size: 0.72rem;
-	line-height: 1.5;
-}
-.anime-data-source-title {
-	margin-right: 4px;
-	font-weight: 600;
-}
-.anime-data-source a {
-	color: var(--accent);
-	text-decoration: none;
-}
-.anime-data-source a:hover {
-	text-decoration: underline;
 }
 .copyright {
 	font-size: 0.72rem;
@@ -1989,7 +1955,7 @@ $effect(() => {
 	padding: 16px 24px;
 	background: var(--color-surface);
 	border: 1px solid var(--color-border);
-	border-radius: 10px;
+	border-radius: 14px;
 	min-width: 120px;
 }
 .stat-card--interactive {
@@ -2054,7 +2020,7 @@ $effect(() => {
 	gap: 18px;
 	padding: 24px;
 	border: 1px solid var(--border);
-	border-radius: 16px;
+	border-radius: 22px;
 	background: var(--card-bg);
 }
 .admin-edit-toggle {
@@ -2063,7 +2029,7 @@ $effect(() => {
 	justify-content: center;
 	min-height: 40px;
 	padding: 9px 16px;
-	border-radius: 8px;
+	border-radius: 12px;
 	border: 1px solid var(--border);
 	background: var(--card-bg);
 	color: var(--text);
@@ -2086,7 +2052,7 @@ $effect(() => {
 	gap: 8px;
 	padding: 4px;
 	border: 1px solid var(--border);
-	border-radius: 12px;
+	border-radius: 18px;
 	background: var(--hover-bg);
 }
 .admin-tab {
@@ -2097,7 +2063,7 @@ $effect(() => {
 	min-height: 40px;
 	padding: 8px 12px;
 	border: 1px solid transparent;
-	border-radius: 9px;
+	border-radius: 13px;
 	background: transparent;
 	color: var(--text-muted);
 	font-size: 0.86rem;
@@ -2140,7 +2106,7 @@ $effect(() => {
 .broadcast-override-table-wrap {
 	overflow-x: auto;
 	border: 1px solid #27272a;
-	border-radius: 12px;
+	border-radius: 18px;
 	background: #111113;
 }
 .broadcast-override-table {
@@ -2183,6 +2149,7 @@ $effect(() => {
 	padding: 2px 8px;
 	border: 1px solid var(--border);
 	border-radius: 999px;
+	corner-shape: round;
 	background: var(--card-bg);
 	color: var(--text-muted);
 	font-size: 0.76rem;
@@ -2226,7 +2193,7 @@ $effect(() => {
 	min-height: 40px;
 	padding: 0 16px;
 	border: 1px solid var(--border);
-	border-radius: 9px;
+	border-radius: 13px;
 	background: var(--card-bg);
 	color: var(--text);
 	font-size: 0.86rem;
@@ -2246,7 +2213,7 @@ $effect(() => {
 	animation: override-form-enter 0.18s ease-out;
 	padding: 14px;
 	border: 1px solid var(--border);
-	border-radius: 12px;
+	border-radius: 18px;
 	background: var(--card-bg);
 }
 .broadcast-override-form {
@@ -2273,7 +2240,7 @@ $effect(() => {
 	min-height: 56px;
 	padding: 9px 11px;
 	border: 1px solid var(--border);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--card-bg);
 	color: var(--text);
 	text-align: left;
@@ -2360,7 +2327,7 @@ $effect(() => {
 	gap: 12px;
 	padding: 12px;
 	border: 1px dashed var(--border);
-	border-radius: 9px;
+	border-radius: 13px;
 	background: var(--hover-bg);
 }
 .broadcast-override-form-actions {
@@ -2373,7 +2340,7 @@ $effect(() => {
 .broadcast-override-submit,
 .broadcast-override-cancel {
 	height: 40px;
-	border-radius: 8px;
+	border-radius: 12px;
 	font-weight: 700;
 	font-size: 0.88rem;
 	cursor: pointer;
@@ -2423,7 +2390,7 @@ $effect(() => {
 @media (max-width: 640px) {
 	.admin-edit-section {
 		padding: 16px;
-		border-radius: 14px;
+		border-radius: 20px;
 	}
 
 	.admin-tab-list {
@@ -2442,7 +2409,7 @@ $effect(() => {
 	width: 100%;
 	box-sizing: border-box;
 	padding: 14px 16px;
-	border-radius: 8px;
+	border-radius: 12px;
 	border: 1px solid color-mix(in srgb, #0f766e 36%, var(--border));
 	background: color-mix(in srgb, #14b8a6 13%, var(--card-bg));
 	color: var(--text);
@@ -2504,7 +2471,7 @@ $effect(() => {
 	padding: 7px 10px 7px 7px;
 	background: var(--card-bg);
 	border: 1px solid var(--border);
-	border-radius: 8px;
+	border-radius: 12px;
 	color: var(--text);
 	text-decoration: none;
 }
@@ -2573,7 +2540,7 @@ a.relation-card:hover {
 	padding: 12px 8px;
 	background: var(--card-bg);
 	border: 1px solid var(--border);
-	border-radius: 10px;
+	border-radius: 14px;
 	cursor: pointer;
 	color: var(--text-muted);
 	text-decoration: none;
@@ -2636,7 +2603,7 @@ a.relation-card:hover {
 	align-items: center;
 	gap: 7px;
 	padding: 11px 24px;
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--accent);
 	color: #fff;
 	border: none;
@@ -2717,6 +2684,7 @@ a.relation-card:hover {
 	padding: 4px 8px;
 	border: 1px solid var(--color-border);
 	border-radius: 999px;
+	corner-shape: round;
 	font-size: 0.78rem;
 	color: var(--text);
 	background: var(--color-surface-hover);
@@ -2729,6 +2697,7 @@ a.relation-card:hover {
 	width: 24px;
 	aspect-ratio: 1;
 	border-radius: 50%;
+	corner-shape: round;
 	object-fit: cover;
 	flex-shrink: 0;
 }
@@ -2750,7 +2719,7 @@ a.relation-card:hover {
 	right: 0;
 	background: var(--color-surface);
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
 	max-height: 240px;
 	overflow-y: auto;
@@ -2831,7 +2800,7 @@ a.relation-card:hover {
 	max-width: 448px;
 	padding: 24px;
 	border: 1px solid #27272a;
-	border-radius: 16px;
+	border-radius: 22px;
 	background: #18181b;
 	box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.65);
 }
@@ -2870,6 +2839,7 @@ a.relation-card:hover {
 	padding: 0;
 	border: 0;
 	border-radius: 999px;
+	corner-shape: round;
 	background: transparent;
 	color: var(--text-muted);
 	cursor: pointer;
@@ -2900,7 +2870,7 @@ a.relation-card:hover {
 	align-items: center;
 	gap: 12px;
 	padding: 8px;
-	border-radius: 10px;
+	border-radius: 14px;
 	text-decoration: none;
 	color: inherit;
 	transition: background 0.12s;
@@ -2921,6 +2891,7 @@ a.relation-card:hover {
 	width: 44px;
 	aspect-ratio: 1;
 	border-radius: 50%;
+	corner-shape: round;
 	object-fit: cover;
 }
 
@@ -2941,6 +2912,7 @@ a.relation-card:hover {
 	width: 10px;
 	height: 10px;
 	border-radius: 50%;
+	corner-shape: round;
 	border: 2px solid #18181b;
 }
 
@@ -3026,7 +2998,7 @@ a.relation-card:hover {
 	flex-direction: column;
 	gap: 2px;
 	padding: 10px 12px;
-	border-radius: 10px;
+	border-radius: 14px;
 	text-decoration: none;
 	color: var(--text);
 	border: 1px solid var(--border);
@@ -3058,6 +3030,7 @@ a.relation-card:hover {
 	margin-top: 4px;
 	padding: 0 6px;
 	border-radius: 999px;
+	corner-shape: round;
 	background: #ef4444;
 	color: #fff;
 	font-size: 0.66rem;
@@ -3093,7 +3066,7 @@ a.relation-card:hover {
 	gap: 7px;
 	aspect-ratio: 1;
 	padding: 10px 6px;
-	border-radius: 10px;
+	border-radius: 14px;
 	text-decoration: none;
 	color: var(--text);
 	border: 1px solid var(--border);
@@ -3148,6 +3121,7 @@ a.relation-card:hover {
 	height: 18px;
 	padding: 0 6px;
 	border-radius: 999px;
+	corner-shape: round;
 	background: #ef4444;
 	color: #fff;
 	font-size: 0.66rem;
@@ -3206,7 +3180,7 @@ a.relation-card:hover {
 		font-size: 11px;
 		line-height: 1.3;
 		padding: 2px 7px;
-		border-radius: 10px;
+		border-radius: 14px;
 		background: var(--hover-bg);
 		color: var(--text-muted);
 		border: 1px solid var(--border);
@@ -3248,6 +3222,7 @@ a.relation-card:hover {
 		width: 30px;
 		height: 30px;
 		border-radius: 50%;
+		corner-shape: round;
 		border: 1px solid var(--border);
 		background: var(--hover-bg);
 		color: var(--text);
@@ -3368,7 +3343,7 @@ a.relation-card:hover {
 	.room-log-item {
 		gap: 0;
 		padding: 4px;
-		border-radius: 8px;
+		border-radius: 12px;
 	}
 	.room-log-ep,
 	.room-log-date,

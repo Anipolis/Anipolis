@@ -9,7 +9,7 @@ function getJwtPayload(session: AuthSession | null) {
 
 	try {
 		return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as {
-			amr?: { method?: string }[];
+			amr?: { method?: string; timestamp?: number }[];
 			app_metadata?: {
 				provider?: string;
 				providers?: string | string[];
@@ -56,4 +56,16 @@ export function hasPasswordProvider(user: AuthUser, session: AuthSession | null 
 		payload?.user_metadata?.has_password === "true" ||
 		payload?.amr?.some((entry) => entry.method === "password")
 	);
+}
+
+/**
+ * このセッションで最後に本人確認（ログイン）した時刻（ms）。取れなければ null。
+ * amr はリフレッシュしても引き継がれるので、「直近にログインし直したか」の判定に使える。
+ * session は safeGetSession() で getUser() による検証を通ったものを渡すこと。
+ */
+export function getLastSignInAt(session: AuthSession | null): number | null {
+	const timestamps = (getJwtPayload(session)?.amr ?? [])
+		.map((entry) => entry.timestamp)
+		.filter((timestamp): timestamp is number => typeof timestamp === "number" && Number.isFinite(timestamp));
+	return timestamps.length > 0 ? Math.max(...timestamps) * 1000 : null;
 }

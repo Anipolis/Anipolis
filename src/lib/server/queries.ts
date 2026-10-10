@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { groupGenreFilters, translateAnimeGenres } from "$lib/anime-vocabulary";
 import { computeBroadcastStatus } from "$lib/broadcast-status";
 import { toValidExchangeSubjectiveTags } from "$lib/exchange-tags";
 import { buildPostCardSelect } from "$lib/server/post-selects";
@@ -6,7 +7,6 @@ import type { Database } from "$lib/supabase/database.types";
 import { isEpisodeSuppressedSnapshot } from "$lib/syobocal-episodes";
 import type {
 	Anime,
-	AnimeDataAttribution,
 	AnimeExchangeItem,
 	AnimeExchangeShare,
 	AnimeMute,
@@ -1744,6 +1744,10 @@ export interface AnimeListOptions {
 	limit?: number;
 	userId?: string | null;
 	query?: string;
+	/** この曜日（0=日曜 … 6=土曜）に放送する作品を並び順を保ったまま先頭へ寄せる（放送中タブの「本日放送」用） */
+	prioritizeBroadcastDay?: number | null;
+	/** 新しいシーズン（例: 2026-fall）から順に並べる。同じシーズン内は sortBy の並びを保つ */
+	newestSeasonFirst?: boolean;
 }
 
 /**
@@ -1832,7 +1836,7 @@ function applyAnimeListFilters<T extends AnimeFilterQuery<T>>(
 			.or(`aired_from.is.null,aired_from.lte.${filters.scheduleRange.end}`)
 			.or(`aired_to.is.null,aired_to.gte.${filters.scheduleRange.start}`);
 	}
-	if (selectedGenres.length) q = q.or(buildGenreFilter(selectedGenres));
+	q = applyGenreFilters(q, selectedGenres);
 	if (filters.studio) q = q.or(arrayContainsAny(["studio", "studio_en"], filters.studio));
 	if (filters.producer) q = q.contains("producer", [filters.producer]);
 	if (filters.source) q = q.eq("source", filters.source);
@@ -1929,6 +1933,8 @@ export type AnimeCandidate = {
 	created_at: string;
 	genre: string[] | null;
 	genre_en: string[] | null;
+	broadcast_day?: number | null;
+	season?: string | null;
 };
 
 /**
@@ -1972,7 +1978,35 @@ export function rankAnimeCandidateIds(
 	return withIndex.map(({ c }) => String(c.id));
 }
 
-const ANIME_CANDIDATE_COLUMNS = "id, created_at, genre, genre_en";
+const SEASON_SORT_INDEX: Record<string, number> = { winter: 0, spring: 1, summer: 2, fall: 3 };
+
+/** "2026-fall" 形式のシーズンを新旧比較用の数値にする。形式どおりでなければ null（並びの最後へ） */
+export function seasonSortKey(season: string | null | undefined): number | null {
+	const match = season?.match(/^(\d{4})-(winter|spring|summer|fall)$/);
+	if (!match) return null;
+	return Number(match[1]) * 4 + (SEASON_SORT_INDEX[match[2] ?? ""] ?? 0);
+}
+
+/** 並び済みの ID 配列を新しいシーズン順に並べ直す純関数。同じシーズン内は元の相対順を保つ */
+export function sortIdsByNewestSeason(orderedIds: string[], candidates: AnimeCandidate[]): string[] {
+	const keys = new Map(candidates.map((c) => [String(c.id), seasonSortKey(c.season)]));
+	const rank = (id: string) => keys.get(id) ?? Number.NEGATIVE_INFINITY;
+	// -Infinity 同士の差は NaN になるので 0（同順位）に倒す
+	return [...orderedIds].sort((a, b) => rank(b) - rank(a) || 0);
+}
+
+/** 並び済みの ID 配列のうち、指定曜日に放送する作品を相対順を保ったまま先頭へ寄せる純関数 */
+export function moveBroadcastDayFirst(
+	orderedIds: string[],
+	candidates: AnimeCandidate[],
+	broadcastDay: number,
+): string[] {
+	const dayIds = new Set(candidates.filter((c) => c.broadcast_day === broadcastDay).map((c) => String(c.id)));
+	if (dayIds.size === 0) return orderedIds;
+	return [...orderedIds.filter((id) => dayIds.has(id)), ...orderedIds.filter((id) => !dayIds.has(id))];
+}
+
+const ANIME_CANDIDATE_COLUMNS = "id, created_at, genre, genre_en, broadcast_day, season";
 
 /** フィルター済みの候補行（軽量列）を created_at DESC で取得する。ビュー失敗時はベーステーブルへ */
 async function fetchAnimeCandidates(
@@ -2050,7 +2084,12 @@ export async function getAnimeListPage(
 					sortBy,
 				);
 
-	const orderedIds = rankAnimeCandidateIds(candidates, metrics, sortBy, selectedGenres);
+	// 優先順位: 本日放送 → 新しいシーズン → sortBy の並び（いずれも安定な並べ替えを重ねる）
+	let orderedIds = rankAnimeCandidateIds(candidates, metrics, sortBy, selectedGenres);
+	if (options.newestSeasonFirst) orderedIds = sortIdsByNewestSeason(orderedIds, candidates);
+	if (options.prioritizeBroadcastDay != null) {
+		orderedIds = moveBroadcastDayFirst(orderedIds, candidates, options.prioritizeBroadcastDay);
+	}
 	const start = Math.max(0, (page - 1) * pageSize);
 	const pageIds = orderedIds.slice(start, start + pageSize);
 	if (pageIds.length === 0) return { items: [], total };
@@ -2111,7 +2150,7 @@ export async function getAnimeCount(
 		broadcastSeasons?.length ? broadcastSeasons : broadcastSeason,
 	);
 	if (seasonFilter) q = q.or(seasonFilter);
-	if (selectedGenres.length) q = q.or(buildGenreFilter(selectedGenres));
+	q = applyGenreFilters(q, selectedGenres);
 	if (studio) q = q.or(arrayContainsAny(["studio", "studio_en"], studio));
 	if (producer) q = q.contains("producer", [producer]);
 	if (source) q = q.eq("source", source);
@@ -2122,7 +2161,7 @@ export async function getAnimeCount(
 	if (error || count === null) {
 		let fallback = supabase.from("anime").select("id", { count: "exact", head: true }).eq("metadata_ready", true);
 		if (seasonFilter) fallback = fallback.or(seasonFilter);
-		if (selectedGenres.length) fallback = fallback.or(buildGenreFilter(selectedGenres));
+		fallback = applyGenreFilters(fallback, selectedGenres);
 		if (studio) fallback = fallback.or(arrayContainsAny(["studio", "studio_en"], studio));
 		if (producer) fallback = fallback.contains("producer", [producer]);
 		if (source) fallback = fallback.eq("source", source);
@@ -2159,7 +2198,7 @@ async function getAnimeListRowsFromBaseTable(
 			.or(`aired_from.is.null,aired_from.lte.${scheduleRange.end}`)
 			.or(`aired_to.is.null,aired_to.gte.${scheduleRange.start}`);
 	}
-	if (selectedGenres.length) query = query.or(buildGenreFilter(selectedGenres));
+	query = applyGenreFilters(query, selectedGenres);
 	if (studio) query = query.or(arrayContainsAny(["studio", "studio_en"], studio));
 	if (producer) query = query.contains("producer", [producer]);
 	if (source) query = query.eq("source", source);
@@ -2228,9 +2267,15 @@ function buildGenreFilter(genres: string[]): string {
 		.join(",");
 }
 
+// 同じ種類(ジャンル/テーマ/対象層)のタグは OR、種類をまたぐと AND。
+// PostgREST では or フィルターを重ねると AND になるので、種類ごとに or を 1 つ足す。
+function applyGenreFilters<T extends { or(filters: string): T }>(query: T, genres: string[]): T {
+	return groupGenreFilters(genres).reduce((q, group) => q.or(buildGenreFilter(group)), query);
+}
+
 function normalizeGenreFilters(value: string | string[] | undefined): string[] {
 	const rawGenres = Array.isArray(value) ? value : (value ?? "").split(",");
-	return [...new Set(rawGenres.map((genre) => genre.trim()).filter(Boolean))];
+	return translateAnimeGenres(rawGenres.map((genre) => genre.trim()).filter(Boolean));
 }
 
 function countGenreMatches(anime: Anime, selectedGenres: string[]): number {
@@ -2416,20 +2461,22 @@ export async function getAnime(
 	return anime;
 }
 
-export async function getAnimeDataAttributions(
+/** 作品詳細のリソース欄に並べる、しょぼいカレンダーの作品ページURL */
+export async function getAnimeSyobocalUrl(
 	supabase: SupabaseClient<Database>,
 	malId: number | null,
-): Promise<AnimeDataAttribution[]> {
-	if (malId == null) return [];
+): Promise<string | null> {
+	if (malId == null) return null;
 
 	const { data, error } = await supabase
 		.from("anime_data_attributions" as never)
-		.select("anime_mal_id, source, label, source_url, license_label, license_url")
+		.select("source_url")
 		.eq("anime_mal_id", malId)
-		.order("source", { ascending: true });
+		.eq("source", "syobocal")
+		.maybeSingle();
 
-	if (error || !data) return [];
-	return data as unknown as AnimeDataAttribution[];
+	if (error || !data) return null;
+	return (data as unknown as { source_url: string }).source_url;
 }
 
 export async function getAnimeRelations(

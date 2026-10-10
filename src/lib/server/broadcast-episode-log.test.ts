@@ -13,6 +13,7 @@ const ANIME = {
 	aired_to: null,
 	broadcast_day: null,
 	broadcast_time: null,
+	episode_count: null,
 };
 
 function snapshot(
@@ -160,6 +161,58 @@ describe("buildBroadcastEpisodeLog", () => {
 			["2026-07-11", 2],
 			["2026-07-18", 3],
 			["2026-07-25", 4],
+		]);
+	});
+
+	it("stops synthesizing after the final episode when aired_to is still null", () => {
+		// MAOパターン: 全話数に達した最終話の後も MAL の aired_to が null のままだと、
+		// 今日まで空の週枠が作られ番号なしの最新枠になっていた。
+		const anime = {
+			...ANIME,
+			aired_from: "2026-07-04",
+			broadcast_day: 6,
+			broadcast_time: "23:45",
+			episode_count: "4",
+		};
+		const log = buildBroadcastEpisodeLog(anime, [snapshot("2026-07-25", 4)], [], FIXED_TODAY);
+		expect(log.map((slot) => [slot.date, slot.start])).toEqual([
+			["2026-07-04", 1],
+			["2026-07-11", 2],
+			["2026-07-18", 3],
+			["2026-07-25", 4],
+		]);
+	});
+
+	it("treats a marathon override reaching the total as the final episode", () => {
+		const anime = {
+			...ANIME,
+			aired_from: "2026-07-04",
+			broadcast_day: 6,
+			broadcast_time: "23:45",
+			episode_count: "4",
+		};
+		// しょぼいセッションは単一話数（第3話）しか持たないが、一挙放送オーバーライドが
+		// 第3〜4話を明示しているので、この日を最終話とみなして以降を補完しない。
+		const overrides = [override({ room_date: "2026-07-18", episode_start: 3, episode_end: 4 })];
+		const log = buildBroadcastEpisodeLog(anime, [snapshot("2026-07-18", 3)], overrides, FIXED_TODAY);
+		expect(log.map((slot) => slot.date)).toEqual(["2026-07-04", "2026-07-11", "2026-07-18"]);
+	});
+
+	it("keeps synthesizing while the anchor has not reached the total", () => {
+		const anime = {
+			...ANIME,
+			aired_from: "2026-08-01",
+			broadcast_day: 6,
+			broadcast_time: "23:45",
+			episode_count: "12",
+		};
+		const log = buildBroadcastEpisodeLog(anime, [snapshot("2026-08-15", 3)], [], FIXED_TODAY);
+		expect(log.map((slot) => [slot.date, slot.start])).toEqual([
+			["2026-08-01", 1],
+			["2026-08-08", 2],
+			["2026-08-15", 3],
+			["2026-08-22", null],
+			["2026-08-29", null],
 		]);
 	});
 

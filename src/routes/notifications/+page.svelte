@@ -2,6 +2,7 @@
 import { untrack } from "svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
+import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import { notificationPostPreview } from "$lib/notification-post-preview";
 import { requestNotificationCountsRefresh } from "$lib/stores/notifications";
 import type { AnimeStatus, Notification } from "$lib/types";
@@ -157,7 +158,8 @@ function emptyMessage(tab: TabId): string {
 										>
 											{#if notif.broadcast_anime_cover_url}
 												<img
-													src={notif.broadcast_anime_cover_url}
+													src={coverThumbSrc(notif.broadcast_anime_cover_url)}
+													{@attach coverThumbFallback(notif.broadcast_anime_cover_url)}
 													alt={notif.broadcast_anime_title ?? '放送作品'}
 												>
 											{/if}
@@ -179,7 +181,8 @@ function emptyMessage(tab: TabId): string {
 								<a href="/exchange" class="notification-anime-preview">
 									{#if notif.exchange_anime_cover_url}
 										<img
-											src={notif.exchange_anime_cover_url}
+											src={coverThumbSrc(notif.exchange_anime_cover_url)}
+											{@attach coverThumbFallback(notif.exchange_anime_cover_url)}
 											alt={notif.exchange_anime_title ?? '受け取った作品'}
 										>
 									{/if}
@@ -206,7 +209,8 @@ function emptyMessage(tab: TabId): string {
 									<a href="/anime/{notif.mylist_anime_id}" class="notification-anime-preview">
 										{#if notif.mylist_anime_cover_url}
 											<img
-												src={notif.mylist_anime_cover_url}
+												src={coverThumbSrc(notif.mylist_anime_cover_url)}
+												{@attach coverThumbFallback(notif.mylist_anime_cover_url)}
 												alt={notif.mylist_anime_title ?? '作品'}
 											>
 										{/if}
@@ -245,7 +249,8 @@ function emptyMessage(tab: TabId): string {
 									<a href="/anime/{notif.recommendation_anime_id}" class="notification-anime-preview">
 										{#if notif.recommendation_anime_cover_url}
 											<img
-												src={notif.recommendation_anime_cover_url}
+												src={coverThumbSrc(notif.recommendation_anime_cover_url)}
+												{@attach coverThumbFallback(notif.recommendation_anime_cover_url)}
 												alt={notif.recommendation_anime_title ?? '推薦作品'}
 											>
 										{/if}
@@ -303,7 +308,7 @@ function emptyMessage(tab: TabId): string {
 	align-items: center;
 	gap: 6px;
 	padding: 8px 16px;
-	border-radius: 20px;
+	border-radius: 28px;
 	font-size: 0.85rem;
 	font-weight: 600;
 	text-decoration: none;
@@ -328,6 +333,7 @@ function emptyMessage(tab: TabId): string {
 	height: 18px;
 	padding: 0 5px;
 	border-radius: 9999px;
+	corner-shape: round;
 	background: var(--color-accent, #6366f1);
 	color: #fff;
 	font-size: 11px;
@@ -369,6 +375,7 @@ function emptyMessage(tab: TabId): string {
 	width: 40px;
 	height: 40px;
 	border-radius: 9999px;
+	corner-shape: round;
 	background: color-mix(in srgb, var(--accent, #6366f1) 16%, transparent);
 	color: var(--accent, #6366f1);
 	font-size: 20px;
@@ -438,7 +445,7 @@ function emptyMessage(tab: TabId): string {
 	margin-top: 4px;
 	padding: 8px 10px;
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	color: inherit;
 	text-decoration: none;
 	background: var(--color-surface);

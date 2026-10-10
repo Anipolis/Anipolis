@@ -1,6 +1,7 @@
 <script lang="ts">
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
+import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import type { RowSaveState } from "$lib/mylist/save-queue";
 import type { Anime, AnimeStatus } from "$lib/types";
 
@@ -52,7 +53,13 @@ function confirmRemove() {
 <div class="anime-row-edit">
 	<a href="/anime/{anime.id}" class="edit-cover" tabindex="-1">
 		{#if anime.cover_url}
-			<img src={anime.cover_url} alt={anime.title} loading="lazy" decoding="async">
+			<img
+				src={coverThumbSrc(anime.cover_url)}
+				{@attach coverThumbFallback(anime.cover_url)}
+				alt={anime.title}
+				loading="lazy"
+				decoding="async"
+			>
 		{:else}
 			<div class="anime-cover-placeholder">?</div>
 		{/if}
@@ -192,7 +199,7 @@ function confirmRemove() {
 	min-height: 120px;
 	padding: 12px 52px 12px 12px;
 	border: 1px solid var(--border, #334155);
-	border-radius: 10px;
+	border-radius: 14px;
 	background: color-mix(in srgb, var(--fg, #e2e8f0) 4%, transparent);
 }
 
@@ -277,6 +284,7 @@ function confirmRemove() {
 	border: 2px solid currentColor;
 	border-right-color: transparent;
 	border-radius: 50%;
+	corner-shape: round;
 	animation: save-spin 0.8s linear infinite;
 }
 
@@ -420,7 +428,7 @@ function confirmRemove() {
 	width: min(100%, 380px);
 	padding: 24px;
 	border: 1px solid var(--border, #334155);
-	border-radius: 14px;
+	border-radius: 20px;
 	background: var(--surface, #1e293b);
 	box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
 	text-align: center;
@@ -433,6 +441,7 @@ function confirmRemove() {
 	margin: 0 auto 14px;
 	place-items: center;
 	border-radius: 50%;
+	corner-shape: round;
 	background: color-mix(in srgb, var(--color-danger, #f87171) 16%, transparent);
 	color: var(--color-danger, #f87171);
 	font-size: 1.15rem;
@@ -460,7 +469,7 @@ function confirmRemove() {
 .confirm-cancel,
 .confirm-delete {
 	min-height: 40px;
-	border-radius: 8px;
+	border-radius: 12px;
 	font-size: 0.85rem;
 	font-weight: 600;
 	cursor: pointer;

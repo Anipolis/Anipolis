@@ -1,5 +1,6 @@
 <script lang="ts">
 import { trapFocus } from "$lib/actions/trapFocus";
+import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import type { OpenBroadcastRoomSummary } from "$lib/types";
 
 type Props = {
@@ -56,7 +57,12 @@ $effect(() => {
 							onclick={onclose}
 						>
 							{#if room.anime?.cover_url}
-								<img src={room.anime.cover_url} alt={room.anime.title} class="anime-search-thumb">
+								<img
+									src={coverThumbSrc(room.anime.cover_url)}
+									{@attach coverThumbFallback(room.anime.cover_url)}
+									alt={room.anime.title}
+									class="anime-search-thumb"
+								>
 							{:else}
 								<div class="anime-search-thumb anime-search-thumb-empty"></div>
 							{/if}

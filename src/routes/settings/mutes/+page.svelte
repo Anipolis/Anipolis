@@ -5,6 +5,7 @@ import { enhance } from "$app/forms";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
 import SettingsBackLink from "$lib/components/SettingsBackLink.svelte";
+import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import type { AnimeMute, EventMute } from "$lib/types";
 import type { PageProps } from "./$types";
 
@@ -239,7 +240,12 @@ const activeTab = $derived.by((): "word" | "anime" => {
 						<div class="mute-item mute-item--virtual">
 							<div class="mute-row">
 								{#if v.cover_url}
-									<img src={v.cover_url} alt={v.title} class="mute-cover">
+									<img
+										src={coverThumbSrc(v.cover_url)}
+										{@attach coverThumbFallback(v.cover_url)}
+										alt={v.title}
+										class="mute-cover"
+									>
 								{:else}
 									<div class="mute-cover mute-cover--placeholder"></div>
 								{/if}
@@ -267,7 +273,12 @@ const activeTab = $derived.by((): "word" | "anime" => {
 								<div class="mute-item">
 									<div class="mute-row">
 										{#if mute.anime_cover_url}
-											<img src={mute.anime_cover_url} alt={mute.anime_title} class="mute-cover">
+											<img
+												src={coverThumbSrc(mute.anime_cover_url)}
+												{@attach coverThumbFallback(mute.anime_cover_url)}
+												alt={mute.anime_title}
+												class="mute-cover"
+											>
 										{:else}
 											<div class="mute-cover mute-cover--placeholder"></div>
 										{/if}
@@ -384,7 +395,7 @@ const activeTab = $derived.by((): "word" | "anime" => {
 }
 .mute-item {
 	border: 1px solid var(--color-border);
-	border-radius: 10px;
+	border-radius: 14px;
 	background: var(--color-surface);
 	overflow: hidden;
 }

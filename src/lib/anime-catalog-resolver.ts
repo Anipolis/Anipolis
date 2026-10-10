@@ -1,3 +1,5 @@
+import { translateAnimeGenres } from "./anime-vocabulary.ts";
+import { isXUrl } from "./copyright-platform.ts";
 import { normalizeStudioAlias, type StudioNameMapping } from "./wikidata-studio-names.ts";
 
 export type CatalogSourceName =
@@ -7,6 +9,7 @@ export type CatalogSourceName =
 	| "mal"
 	| "jikan"
 	| "anime_offline_database"
+	| "annict"
 	| "legacy";
 export type ResolutionConfidence = "verified" | "source" | "fallback";
 
@@ -268,6 +271,7 @@ export function resolveAnimeCatalog(
 	const mal = bySource.get("mal") ?? {};
 	const jikan = bySource.get("jikan") ?? {};
 	const manual = bySource.get("manual") ?? {};
+	const annict = bySource.get("annict") ?? {};
 	const malId = sourceRecords[0]?.mal_id ?? legacyRow?.mal_id;
 	if (!malId) throw new Error("A MAL ID is required to resolve an anime catalog row.");
 
@@ -363,7 +367,14 @@ export function resolveAnimeCatalog(
 			{ value: null, source: "legacy", confidence: "fallback" },
 		]);
 
-	const episodeCount = resolveNullableString("episode_count", true);
+	// AODB の話数は取り込み時点のスナップショット。AODB 自身が放送終了を見ていない
+	// （status が finished でない）値は放送前・放送中の暫定値なので、更新が止まると
+	// 終了後も MAL の確定値を覆い隠す（転スラ第4期: AODB=12 / MAL=24）。その場合は
+	// MAL/Jikan を優先し、AODB は両方に無いときの補完に回す。
+	const offlineSawFinish = stringValue(offline, "status") === "finished";
+	const episodeCount = offlineSawFinish
+		? resolveNullableString("episode_count", true)
+		: resolveNullableString("episode_count", false);
 	const type = resolveNullableString("type", true);
 	const season = resolveNullableString("season", true);
 	const source = resolveNullableString("source", false);
@@ -379,14 +390,31 @@ export function resolveAnimeCatalog(
 		candidate(legacyRow?.broadcast_time, "legacy", "fallback"),
 		{ value: null, source: "legacy", confidence: "fallback" },
 	]);
-	const resolveOfficialUrl = (key: "official_site_url" | "official_x_url") =>
-		firstDefined<string | null>([
+	const resolveOfficialUrl = (key: "official_site_url" | "official_x_url") => {
+		// X（旧 Twitter）のページは公式X欄に入るので、公式サイト欄には採用しない
+		// （Jikan が公式サイトとして X の投稿URLを返す作品がある。そのページの
+		// 「© X Corp.」を © 収集が作品の © として拾っていた）
+		const usable = <T extends string | null | undefined>(value: T): T | undefined =>
+			key === "official_site_url" && isXUrl(value) ? undefined : value;
+		return firstDefined<string | null>([
 			candidate(nullableStringValue(manual, key), "manual", "verified"),
-			candidate(stringValue(syobocal, key), "syobocal", "verified"),
-			candidate(stringValue(jikan, key), "jikan", "source"),
-			candidate(legacyRow?.[key], "legacy", "fallback"),
+			candidate(usable(stringValue(syobocal, key)), "syobocal", "verified"),
+			candidate(usable(stringValue(jikan, key)), "jikan", "source"),
+			candidate(usable(legacyRow?.[key] ?? undefined), "legacy", "fallback"),
+			// Annict はユーザー編集のデータベースなので、既存値（前回値）より下に置き
+			// 空欄の補完にだけ使う。2019年以前の作品はほかのソースに公式URLがほぼ無く、
+			// ここが主な供給源になる。
+			candidate(usable(stringValue(annict, key)), "annict", "source"),
+			// 「公式」ラベルの無い会社名ラベルの作品ページ（推定）。局・配給サイト内の
+			// ページなので、作品専用ドメインを持つことが多い既存値（Jikan・前回値）より
+			// 下に置き、公式サイトが無い作品の補完にだけ使う（戦隊大失格: 既存=専用ドメイン /
+			// 推定=松竹サイト内）。Annict の作品URLがあればそちらを優先する。
+			...(key === "official_site_url"
+				? [candidate(stringValue(syobocal, "official_site_url_inferred"), "syobocal", "source")]
+				: []),
 			{ value: null, source: "legacy", confidence: "fallback" },
 		]);
+	};
 	const officialSiteUrl = resolveOfficialUrl("official_site_url");
 	const officialXUrl = resolveOfficialUrl("official_x_url");
 	const coverUrl = resolveNullableString("cover_url", false);
@@ -472,7 +500,9 @@ export function resolveAnimeCatalog(
 			: undefined,
 		rawStudioNames,
 	]);
-	const genre = resolveArray("genre", "genre", "genres");
+	// 取り込み時に訳が無く英語のまま保存されたソース行も、解決時に現在の語彙で訳し直す
+	const rawGenre = resolveArray("genre", "genre", "genres");
+	const genre = { ...rawGenre, value: rawGenre.value && translateAnimeGenres(rawGenre.value) };
 	const genreEnglish = resolveArray("genre_en", "genre_en", "genres");
 	const broadcastDay = firstDefined<number | null>([
 		candidate(numberValue(manual, "broadcast_day"), "manual", "verified"),
@@ -584,10 +614,28 @@ export function resolveAnimeCatalog(
 			: airedFromKey != null
 				? false
 				: status.value === "airing";
-	if (effectivelyAiring && episodeCount.source === "anime_offline_database") {
+	// TV 作品で AODB が持つ「1」は放送前スナップショットの総話数未定の暫定値
+	// （Battle Spirits [Re] 絶界の空）。AODB は更新が止まると放送終了後もそのまま
+	// 残り、終了済み作品では AODB 優先のため MAL の確定値（天幕のジャードゥーガル:
+	// MAL=12）を覆い隠す。legacy（前回の解決値）も同じ暫定値の焼き直しなので信用しない。
+	// 放送前の「12」等は告知済みの話数であることが多いので残す。OVA・映画の「1」は正当。
+	const tvPlaceholderCount =
+		type.value === "TV" &&
+		episodeCount.value === "1" &&
+		(episodeCount.source === "anime_offline_database" || episodeCount.source === "legacy");
+	if ((effectivelyAiring && episodeCount.source === "anime_offline_database") || tvPlaceholderCount) {
 		const liveCount = stringValue(mal, "episode_count") ?? stringValue(jikan, "episode_count") ?? null;
 		episodeCount.value = liveCount;
 		if (liveCount !== null) episodeCount.source = stringValue(mal, "episode_count") ? "mal" : "jikan";
+	}
+	// しょぼいの確定話数（放送終了・第1話から欠けなし）は手動編集以外のどの値より優先する。
+	// 放送中の登録済み最大話数は総話数ではないので、importer は確定時にしか書かない。
+	const syobocalFinalCount =
+		syobocal["episode_count_basis"] === "final" ? stringValue(syobocal, "episode_count") : undefined;
+	if (syobocalFinalCount && episodeCount.source !== "manual") {
+		episodeCount.value = syobocalFinalCount;
+		episodeCount.source = "syobocal";
+		episodeCount.confidence = "verified";
 	}
 
 	const resolvedFields = {

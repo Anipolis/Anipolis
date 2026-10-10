@@ -245,7 +245,7 @@ const handleCancelSubmit: SubmitFunction = () => {
 	max-height: min(760px, calc(100dvh - 32px));
 	overflow-y: auto;
 	border: 1px solid var(--color-border);
-	border-radius: 18px;
+	border-radius: 24px;
 	background: var(--color-bg);
 	color: var(--color-text);
 	box-shadow: 0 24px 80px rgb(0 0 0 / 48%);
@@ -309,7 +309,7 @@ const handleCancelSubmit: SubmitFunction = () => {
 }
 .edit-form .input {
 	border: 1px solid var(--color-border);
-	border-radius: 10px;
+	border-radius: 14px;
 	background: var(--color-surface);
 	color: var(--color-text);
 	padding: 8px 10px;
@@ -338,7 +338,7 @@ const handleCancelSubmit: SubmitFunction = () => {
 	align-self: flex-start;
 	min-height: 40px;
 	border: 1px solid var(--color-accent);
-	border-radius: 11px;
+	border-radius: 16px;
 	padding: 0 18px;
 	background: var(--color-accent);
 	color: var(--color-bg);
@@ -371,7 +371,7 @@ const handleCancelSubmit: SubmitFunction = () => {
 .cancel-button {
 	min-height: 36px;
 	border: 1px solid var(--color-border-hover);
-	border-radius: 10px;
+	border-radius: 14px;
 	padding: 0 14px;
 	background: transparent;
 	color: var(--color-text-muted);
@@ -385,7 +385,7 @@ const handleCancelSubmit: SubmitFunction = () => {
 .danger-button {
 	min-height: 40px;
 	border: 1px solid var(--color-danger);
-	border-radius: 11px;
+	border-radius: 16px;
 	padding: 0 18px;
 	background: transparent;
 	color: var(--color-danger);
@@ -409,7 +409,7 @@ const handleCancelSubmit: SubmitFunction = () => {
 	.modal-card {
 		width: 100%;
 		max-height: calc(100dvh - 24px);
-		border-radius: 20px 20px 0 0;
+		border-radius: 28px 28px 0 0;
 	}
 }
 </style>

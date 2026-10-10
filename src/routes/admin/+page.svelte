@@ -13,6 +13,9 @@ const reasonLabels: Record<string, string> = {
 };
 
 const dashboard = $derived(data.dashboard);
+const copyrightReviewSub = $derived(
+	`取り込みで決めきれなかった権利表記の確認（確認待ち ${data.pendingCopyrightReviews.toLocaleString()} 件）`,
+);
 </script>
 
 <svelte:head> <title>Admin - Anipolis</title> </svelte:head>
@@ -110,6 +113,13 @@ const dashboard = $derived(data.dashboard);
 			</div>
 			<span class="nav-link-arrow">→</span>
 		</a>
+		<a href="/admin/copyright-reviews" class="nav-link">
+			<div class="nav-link-body">
+				<span class="nav-link-label">©確認</span>
+				<span class="nav-link-sub">{copyrightReviewSub}</span>
+			</div>
+			<span class="nav-link-arrow">→</span>
+		</a>
 		<a href="/admin/invites" class="nav-link">
 			<div class="nav-link-body">
 				<span class="nav-link-label">招待管理</span>
@@ -163,7 +173,7 @@ const dashboard = $derived(data.dashboard);
 	min-height: 84px;
 	padding: 14px;
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-surface);
 }
 
@@ -185,7 +195,7 @@ const dashboard = $derived(data.dashboard);
 .admin-section {
 	margin-top: 16px;
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-surface);
 	overflow: hidden;
 }
@@ -239,7 +249,7 @@ const dashboard = $derived(data.dashboard);
 	gap: 12px;
 	padding: 20px;
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-surface);
 	text-decoration: none;
 	color: inherit;

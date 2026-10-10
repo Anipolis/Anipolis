@@ -1,11 +1,18 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createClient } from "@supabase/supabase-js";
+import { dedupeCopyrightCandidates } from "../src/lib/annict.ts";
+import { isPlatformCopyright, isPlatformPageUrl } from "../src/lib/copyright-platform.ts";
+import { joinWrappedCopyrightLines } from "../src/lib/copyright-text.ts";
+import { decodeHtmlEntities } from "../src/lib/html-entities.ts";
+import { enqueueCopyrightReviews, fetchCopyrightClearedAnimeIds } from "./copyright-review-queue.ts";
 
 // Collect anime copyright notices (© lines) from resolved official sites.
 // Candidates go to a review file; --apply additionally fills anime.copyright,
 // but only where the column is still empty AND exactly one clean candidate
-// was found. Ambiguous pages always stay manual.
+// was found. Pages with several candidates are queued for the admin
+// "©確認" page (anime_copyright_reviews) when --apply is given. Titles an
+// admin confirmed as having no copyright notice are never refilled.
 //
 // LOCAL / SELF-HOSTED ONLY. Intentionally not run from GitHub Actions: --all
 // fetches every resolved official site (thousands of third-party domains),
@@ -120,7 +127,11 @@ async function fetchTargets(supabase: ReturnType<typeof getSupabaseClient>, opti
 		rows.push(...((data ?? []) as AnimeRow[]));
 		if (!data || data.length < DATABASE_BATCH_SIZE) break;
 	}
-	return options.limit ? rows.slice(0, options.limit) : rows;
+	// 公式サイト欄が X・YouTube などのプラットフォームのページだと、そのフッターの
+	// 「© X Corp.」「© Google LLC」を作品の © として拾ってしまうので対象外にする
+	// （こうした作品の © は import:annict で補う）
+	const sites = rows.filter((row) => !isPlatformPageUrl(row.official_site_url));
+	return options.limit ? sites.slice(0, options.limit) : sites;
 }
 
 function sniffCharset(bytes: Uint8Array, contentType: string | null): string {
@@ -142,13 +153,7 @@ function decodeHtml(bytes: Uint8Array, contentType: string | null): string {
 }
 
 function decodeEntities(value: string): string {
-	return value
-		.replaceAll("&copy;", "©")
-		.replaceAll("&amp;", "&")
-		.replaceAll("&nbsp;", " ")
-		.replaceAll("&quot;", '"')
-		.replaceAll("&#169;", "©")
-		.replaceAll("&#xa9;", "©");
+	return decodeHtmlEntities(value);
 }
 
 const COPYRIGHT_MARKER = /©|Ⓒ|\(C\)|（C）/;
@@ -164,7 +169,8 @@ function extractCandidates(html: string): string[] {
 			.replace(/<[^>]+>/g, " "),
 	);
 	const candidates = new Set<string>();
-	for (const rawLine of text.split(/\n+/)) {
+	// 区切り記号の直後で改行された © は1行に戻してから拾う
+	for (const rawLine of joinWrappedCopyrightLines(text.split(/\n+/))) {
 		const line = rawLine.replace(/\s+/g, " ").trim();
 		if (!line || !COPYRIGHT_MARKER.test(line)) continue;
 		// Trim leading noise before the marker, keep from the marker onward.
@@ -215,6 +221,7 @@ async function main() {
 	const options = parseArgs(process.argv.slice(2));
 	const supabase = getSupabaseClient();
 	const targets = await fetchTargets(supabase, options);
+	const clearedAnimeIds = await fetchCopyrightClearedAnimeIds(supabase);
 	const scope = options.season ?? "all";
 	console.log(
 		`Targets with an official site${options.includeFilled ? "" : " and no copyright yet"}: ${targets.length}`,
@@ -226,7 +233,10 @@ async function main() {
 		const url = anime.official_site_url as string;
 		console.log(`[${index + 1}/${targets.length}] ${anime.title} — ${url}`);
 		const { html, status } = await fetchOfficialPage(url);
-		const candidates = html ? extractCandidates(html) : [];
+		// 年・区切り記号・会社の接尾語だけ違う候補は1つにまとめる（年が新しい表記を残す）
+		const candidates = html
+			? dedupeCopyrightCandidates(extractCandidates(html).filter((candidate) => !isPlatformCopyright(candidate)))
+			: [];
 		const result: CollectionResult = {
 			anime_id: anime.id,
 			mal_id: anime.mal_id,
@@ -239,7 +249,7 @@ async function main() {
 			applied: null,
 		};
 
-		if (options.apply && anime.copyright === null && candidates.length === 1) {
+		if (options.apply && anime.copyright === null && candidates.length === 1 && !clearedAnimeIds.has(anime.id)) {
 			const value = candidates[0] as string;
 			if (await applyCopyright(supabase, anime.id, value)) {
 				result.applied = value;
@@ -249,6 +259,20 @@ async function main() {
 		}
 		results.push(result);
 		await sleep(REQUEST_INTERVAL_MS);
+	}
+
+	if (options.apply) {
+		await enqueueCopyrightReviews(
+			supabase,
+			results
+				.filter((r) => r.candidates.length > 1 && !clearedAnimeIds.has(r.anime_id))
+				.map((r) => ({
+					anime_id: r.anime_id,
+					kind: "collector_multiple" as const,
+					candidates: r.candidates.map((text) => ({ text, source: "official_site" as const })),
+					note: r.official_site_url,
+				})),
+		);
 	}
 
 	await mkdir(OUTPUT_DIRECTORY, { recursive: true });

@@ -10,6 +10,7 @@ import {
 	validateInviteCode,
 } from "$lib/server/invites";
 import { getExtraAccounts, setExtraAccounts } from "$lib/server/multi-account";
+import { isPasskeyEnabled } from "$lib/server/passkey";
 import { getClientKey, isRateLimited } from "$lib/server/rate-limit";
 import { createServiceRoleClient } from "$lib/server/supabase-admin";
 import { sanitizeInternalRedirect } from "$lib/utils/url";
@@ -75,6 +76,7 @@ export const load: PageServerLoad = async ({ url, cookies, locals: { supabase, s
 		betaGateEnabled,
 		inviteCode,
 		inviteCodeValid,
+		passkeyEnabled: isPasskeyEnabled(),
 		error: url.searchParams.get("error"),
 	};
 };

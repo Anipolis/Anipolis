@@ -13,6 +13,7 @@ import {
 	findSyobocalOfficialXUrl,
 	findSyobocalWikipediaArticleLinks,
 	findSyobocalWikipediaKeywordLinks,
+	inferSyobocalOfficialSiteUrl,
 	kanaFoldTitle,
 	latinFoldTitle,
 	matchSyobocalTitlesByReading,
@@ -22,6 +23,7 @@ import {
 	type SyobocalWikipediaArticleLink,
 } from "../src/lib/syobocal.ts";
 import {
+	confirmedFinalEpisodeCount,
 	detectEpisodeAnomaliesByGroup,
 	type EpisodeAnomaly,
 	episodeAnomalyKey,
@@ -78,11 +80,15 @@ type SyobocalTitle = {
 	category: number | null;
 	firstYear: number | null;
 	firstMonth: number | null;
+	firstEndYear: number | null;
+	firstEndMonth: number | null;
 	firstChannel: string | null;
 	comment: string;
 	links: { name: string; url: string }[];
 	wikipediaLinks: SyobocalWikipediaArticleLink[];
 	officialSiteUrl: string | null;
+	/** 「公式」ラベルが無いときの推定（会社名ラベルの作品ページ）。officialSiteUrl があれば null */
+	officialSiteUrlInferred: string | null;
 	officialXUrl: string | null;
 	raw: Record<string, unknown>;
 };
@@ -363,6 +369,7 @@ function parseTitle(raw: Record<string, unknown>): SyobocalTitle | null {
 	const comment = textValue(raw, "Comment") ?? "";
 	const keywords = textValue(raw, "Keywords") ?? "";
 	const links = parseSyobocalLinks(comment);
+	const officialSiteUrl = findSyobocalOfficialSiteUrl(links);
 	const wikipediaLinks = [
 		...findSyobocalWikipediaKeywordLinks(keywords),
 		...findSyobocalWikipediaArticleLinks(comment),
@@ -383,11 +390,14 @@ function parseTitle(raw: Record<string, unknown>): SyobocalTitle | null {
 		category: integerValue(raw, "Cat"),
 		firstYear: integerValue(raw, "FirstYear"),
 		firstMonth: integerValue(raw, "FirstMonth"),
+		firstEndYear: integerValue(raw, "FirstEndYear"),
+		firstEndMonth: integerValue(raw, "FirstEndMonth"),
 		firstChannel: textValue(raw, "FirstCh"),
 		comment,
 		links,
 		wikipediaLinks,
-		officialSiteUrl: findSyobocalOfficialSiteUrl(links),
+		officialSiteUrl,
+		officialSiteUrlInferred: officialSiteUrl ? null : inferSyobocalOfficialSiteUrl(comment),
 		officialXUrl: findSyobocalOfficialXUrl(links),
 		raw,
 	};
@@ -441,7 +451,7 @@ async function fetchTitles(): Promise<SyobocalTitle[]> {
 		"TitleLookup",
 		{
 			TID: "*",
-			Fields: "TID,LastUpdate,Title,ShortTitle,TitleYomi,Comment,Keywords,Cat,FirstYear,FirstMonth,FirstCh",
+			Fields: "TID,LastUpdate,Title,ShortTitle,TitleYomi,Comment,Keywords,Cat,FirstYear,FirstMonth,FirstEndYear,FirstEndMonth,FirstCh",
 		},
 		"titles.xml",
 	);
@@ -1330,6 +1340,56 @@ type BroadcastRoomSessionRow = {
 	posting_opens_at: string;
 };
 
+/**
+ * 放送が終わった作品の確定総話数（MAL ID → 話数）。しょぼい由来の話数付きセッションが
+ * 第1話から欠けなく揃い、終了月（または有効期間の終わり）を過ぎた作品だけを返す。
+ * 判定は confirmedFinalEpisodeCount を参照。
+ */
+async function deriveFinalEpisodeCounts(
+	supabase: ReturnType<typeof getSupabaseClient>,
+	animeRows: readonly AnimeRoomRow[],
+	mappings: readonly ProgramSyncMapping[],
+	titleByTid: ReadonlyMap<number, SyobocalTitle>,
+	now: Date,
+): Promise<Map<number, number>> {
+	const sessionsByAnime = new Map<number, { scheduledAt: string; episodeNumber: number | null }[]>();
+	for (let page = 0; ; page += 1000) {
+		const { data, error } = await supabase
+			.from("broadcast_room_sessions")
+			.select("anime_id,scheduled_at,episode_number")
+			.eq("room_kind", "episode")
+			.eq("schedule_source", "syobocal")
+			.order("id", { ascending: true })
+			.range(page, page + 999);
+		if (error) throw new Error(`Could not read Syobocal sessions for final episode counts: ${error.message}`);
+		for (const row of (data ?? []) as { anime_id: number; scheduled_at: string; episode_number: number | null }[]) {
+			const sessions = sessionsByAnime.get(row.anime_id) ?? [];
+			sessions.push({ scheduledAt: row.scheduled_at, episodeNumber: row.episode_number });
+			sessionsByAnime.set(row.anime_id, sessions);
+		}
+		if (!data || data.length < 1000) break;
+	}
+	const mappingByMal = new Map(mappings.map((mapping) => [mapping.malId, mapping]));
+	const result = new Map<number, number>();
+	for (const anime of animeRows) {
+		const mapping = mappingByMal.get(anime.mal_id);
+		const sessions = sessionsByAnime.get(anime.id);
+		if (!mapping || !sessions) continue;
+		const title = titleByTid.get(mapping.tid);
+		const count = confirmedFinalEpisodeCount(
+			sessions,
+			{
+				endYear: title?.firstEndYear ?? null,
+				endMonth: title?.firstEndMonth ?? null,
+				validTo: mapping.validTo,
+			},
+			now,
+		);
+		if (count !== null) result.set(anime.mal_id, count);
+	}
+	return result;
+}
+
 async function fetchAnimeRoomRows(supabase: ReturnType<typeof getSupabaseClient>, malIds: number[]) {
 	const rows: AnimeRoomRow[] = [];
 	for (let start = 0; start < malIds.length; start += DATABASE_BATCH_SIZE) {
@@ -1930,6 +1990,7 @@ async function main() {
 			"pid",
 		);
 	}
+	let finalEpisodeCountByMal = new Map<number, number>();
 	if (programRange) {
 		await saveBroadcastRoomSessions(
 			supabase,
@@ -1938,10 +1999,19 @@ async function main() {
 			animeRoomRows.map((anime) => anime.id),
 		);
 		await pruneExpiredSyobocalPrograms(supabase);
+		finalEpisodeCountByMal = await deriveFinalEpisodeCounts(
+			supabase,
+			animeRoomRows,
+			programMappings,
+			titleByTid,
+			new Date(),
+		);
+		console.log(`Confirmed final episode counts from Syobocal sessions: ${finalEpisodeCountByMal.size} titles.`);
 	}
 	// 番組データを取得しない実行（シーズン照合のみ）では放送情報を導出できない。
 	// normalized_data は丸ごと置き換わるので、既存レコードの放送情報を温存する。
 	const existingBroadcastByMal = new Map<number, Record<string, unknown>>();
+	const existingFinalEpisodeCountByMal = new Map<number, Record<string, unknown>>();
 	{
 		const selectedIds = mapping.selected.map((proposal) => proposal.malId);
 		for (let start = 0; start < selectedIds.length; start += DATABASE_BATCH_SIZE) {
@@ -1953,6 +2023,13 @@ async function main() {
 			if (error) throw new Error(`Could not read existing Syobocal source records: ${error.message}`);
 			for (const row of (data ?? []) as { mal_id: number; normalized_data: Record<string, unknown> }[]) {
 				const normalized = row.normalized_data;
+				// 確定話数は番組同期（--sync-programs）だけが導出するので、シーズン照合だけの実行でも温存する
+				if (normalized?.["episode_count_basis"] === "final") {
+					existingFinalEpisodeCountByMal.set(row.mal_id, {
+						episode_count: normalized["episode_count"],
+						episode_count_basis: "final",
+					});
+				}
 				if (normalized?.["broadcast_day"] === undefined) continue;
 				existingBroadcastByMal.set(row.mal_id, {
 					broadcast_day: normalized["broadcast_day"],
@@ -1987,11 +2064,18 @@ async function main() {
 					// 常に保存する。かな検索のカバレッジに直結する。
 					title_yomi: title.titleYomi,
 					official_site_url: title.officialSiteUrl,
+					official_site_url_inferred: title.officialSiteUrlInferred,
 					official_x_url: title.officialXUrl,
 					wikipedia_url: verifiedWikipedia?.sourceUrl ?? null,
 					resources,
 					// 地上波最速主局の放送情報（曜日・時刻・局名）。導出できない実行では既存値
 					...(broadcastFieldsByMal.get(proposal.malId) ?? existingBroadcastByMal.get(proposal.malId) ?? {}),
+					...(finalEpisodeCountByMal.has(proposal.malId)
+						? {
+								episode_count: String(finalEpisodeCountByMal.get(proposal.malId)),
+								episode_count_basis: "final",
+							}
+						: (existingFinalEpisodeCountByMal.get(proposal.malId) ?? {})),
 				},
 				imported_at: importedAt,
 			},
@@ -2037,6 +2121,37 @@ async function main() {
 	}
 	if (continuingUpdated > 0) {
 		console.log(`Updated broadcast fields on ${continuingUpdated} continuing Syobocal source records.`);
+	}
+	// 今季シーズン外（放送を終えた前クール作品等）の確定話数も既存レコードへマージする
+	const finalCountMalIds = [...finalEpisodeCountByMal.keys()].filter((malId) => !seasonSourceMalIds.has(malId));
+	let finalCountUpdated = 0;
+	for (let start = 0; start < finalCountMalIds.length; start += DATABASE_BATCH_SIZE) {
+		const { data, error } = await supabase
+			.from("anime_source_records")
+			.select("mal_id,normalized_data")
+			.eq("source", "syobocal")
+			.in("mal_id", finalCountMalIds.slice(start, start + DATABASE_BATCH_SIZE));
+		if (error) throw new Error(`Could not read Syobocal source records for final episode counts: ${error.message}`);
+		for (const row of (data ?? []) as { mal_id: number; normalized_data: Record<string, unknown> | null }[]) {
+			const episodeCount = String(finalEpisodeCountByMal.get(row.mal_id));
+			const normalized = row.normalized_data ?? {};
+			if (normalized["episode_count"] === episodeCount && normalized["episode_count_basis"] === "final") continue;
+			const { error: updateError } = await supabase
+				.from("anime_source_records")
+				.update({
+					normalized_data: { ...normalized, episode_count: episodeCount, episode_count_basis: "final" },
+					imported_at: importedAt,
+				})
+				.eq("source", "syobocal")
+				.eq("mal_id", row.mal_id);
+			if (updateError) {
+				throw new Error(`Could not update Syobocal final episode count: ${updateError.message}`);
+			}
+			finalCountUpdated += 1;
+		}
+	}
+	if (finalCountUpdated > 0) {
+		console.log(`Recorded final episode counts on ${finalCountUpdated} Syobocal source records.`);
 	}
 	const selectedMalIds = new Set(mapping.selected.map((proposal) => proposal.malId));
 	const staleMalIds = malIds.filter((malId) => !selectedMalIds.has(malId));

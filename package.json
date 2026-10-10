@@ -4,7 +4,7 @@
 	"license": "MIT",
 	"private": true,
 	"type": "module",
-	"packageManager": "pnpm@10.33.2",
+	"packageManager": "pnpm@12.8.1",
 	"engines": {
 		"node": ">=22.14.0"
 	},
@@ -28,17 +28,21 @@
 		"lint:fix": "biome check . --write",
 		"format": "biome format --write .",
 		"import:jikan": "node --env-file-if-exists=.env --experimental-strip-types scripts/import-jikan-season.ts",
+		"import:jikan-covers": "node --env-file-if-exists=.env --experimental-strip-types scripts/import-jikan-covers.ts",
 		"import:mal": "node --env-file-if-exists=.env --experimental-strip-types scripts/import-mal-season.ts",
 		"import:anime-offline": "node --env-file-if-exists=.env --experimental-strip-types scripts/import-anime-offline-database.ts",
 		"import:wikidata-titles": "node --env-file-if-exists=.env --experimental-strip-types scripts/import-wikidata-anime-titles.ts",
 		"import:wikidata-studios": "node --env-file-if-exists=.env --experimental-strip-types scripts/import-wikidata-studio-names.ts",
 		"import:syobocal": "node --env-file-if-exists=.env --experimental-strip-types scripts/import-syobocal.ts",
+		"import:annict": "node --env-file-if-exists=.env --experimental-strip-types scripts/import-annict.ts",
 		"sync:syobocal-programs": "node --env-file-if-exists=.env --experimental-strip-types scripts/import-syobocal.ts --sync-programs",
 		"audit:episode-numbers": "node --env-file-if-exists=.env --experimental-strip-types scripts/audit-episode-numbers.ts",
 		"resolve:anime-catalog": "node --env-file-if-exists=.env --experimental-strip-types scripts/resolve-anime-catalog.ts",
 		"export:anime-catalog": "node --env-file-if-exists=.env --experimental-strip-types scripts/export-anime-catalog.ts",
+		"generate:cover-thumbnails": "node --env-file-if-exists=.env --experimental-strip-types scripts/generate-cover-thumbnails.ts",
 		"enrich:jikan-links": "node --env-file-if-exists=.env --experimental-strip-types scripts/enrich-jikan-links.ts",
 		"collect:copyright": "node --env-file-if-exists=.env --experimental-strip-types scripts/collect-copyright-notices.ts",
+		"resolve:copyright-seasons": "node --env-file-if-exists=.env --experimental-strip-types scripts/resolve-copyright-seasons.ts",
 		"collect:official-x": "node --env-file-if-exists=.env --experimental-strip-types scripts/collect-official-x.ts",
 		"collect:wayback": "node --env-file-if-exists=.env --experimental-strip-types scripts/collect-wayback.ts"
 	},
@@ -46,6 +50,9 @@
 		"pre-commit": "pnpm check:biome"
 	},
 	"dependencies": {
+		"@fontsource/zen-maru-gothic": "^5.3.0",
+		"@simplewebauthn/browser": "^14.0.0",
+		"@simplewebauthn/server": "^14.0.3",
 		"@supabase/ssr": "^0.6.1",
 		"@supabase/supabase-js": "^2.105.4",
 		"fast-xml-parser": "^5.10.1",
@@ -65,6 +72,7 @@
 		"@unocss/preset-wind3": "^66.6.8",
 		"@vitest/coverage-v8": "^4.1.6",
 		"happy-dom": "^20.9.0",
+		"sharp": "^0.34.5",
 		"simple-git-hooks": "^2.13.1",
 		"supabase": "^2.107.0",
 		"svelte": "^5.55.7",

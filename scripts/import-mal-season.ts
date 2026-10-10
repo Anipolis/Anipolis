@@ -6,14 +6,9 @@ import {
 	type AnimeCatalogSeasonSource,
 	collectAnimeCatalogSeasonMalIds,
 } from "../src/lib/anime-catalog-season.ts";
-import { translateAnimeSource } from "../src/lib/anime-vocabulary.ts";
+import { translateAnimeGenres, translateAnimeSource } from "../src/lib/anime-vocabulary.ts";
 import { fetchWithRetry } from "../src/lib/utils/http-retry.ts";
-import {
-	fetchAniListSeasonMalIds,
-	GENRE_JA_BY_EN,
-	normalizeBroadcastSchedule,
-	STUDIO_JA_BY_EN,
-} from "./import-jikan-season.ts";
+import { fetchAniListSeasonMalIds, normalizeBroadcastSchedule, STUDIO_JA_BY_EN } from "./import-jikan-season.ts";
 
 type SeasonName = "winter" | "spring" | "summer" | "fall";
 
@@ -347,7 +342,7 @@ function mapMalAnime(anime: MalAnimeNode, year: number, season: SeasonName): Mal
 	}
 	if (genreEn.length > 0) {
 		normalized.genre_en = genreEn;
-		normalized.genre = translateNames(genreEn, GENRE_JA_BY_EN);
+		normalized.genre = translateAnimeGenres(genreEn);
 	}
 	if (broadcastSchedule.broadcast_day !== null) normalized.broadcast_day = broadcastSchedule.broadcast_day;
 	if (broadcastSchedule.broadcast_time !== null) normalized.broadcast_time = broadcastSchedule.broadcast_time;

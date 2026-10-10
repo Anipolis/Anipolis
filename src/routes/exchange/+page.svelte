@@ -6,6 +6,7 @@ import AnimeExchangeResult from "$lib/components/AnimeExchangeResult.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import WaitingStatus from "$lib/components/WaitingStatus.svelte";
+import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import { EXCHANGE_SUBJECTIVE_TAG_OPTIONS, MAX_EXCHANGE_SUBJECTIVE_TAGS } from "$lib/exchange-tags";
 import type { UserAnimeEntry } from "$lib/types";
 import type { PageProps } from "./$types";
@@ -352,7 +353,11 @@ const handleCancelExchangeSubmit: SubmitFunction = () => {
 									{#each animeResults as anime (anime.id)}
 										<button type="button" class="anime-result" onclick={() => selectAnime(anime)}>
 											{#if anime.cover_url}
-												<img src={anime.cover_url} alt={anime.title}>
+												<img
+													src={coverThumbSrc(anime.cover_url)}
+													{@attach coverThumbFallback(anime.cover_url)}
+													alt={anime.title}
+												>
 											{:else}
 												<span class="anime-result-cover"></span>
 											{/if}
@@ -371,7 +376,11 @@ const handleCancelExchangeSubmit: SubmitFunction = () => {
 							{#if selectedAnime}
 								<div class="selected-anime">
 									{#if selectedAnime.cover_url}
-										<img src={selectedAnime.cover_url} alt={selectedAnime.title}>
+										<img
+											src={coverThumbSrc(selectedAnime.cover_url)}
+											{@attach coverThumbFallback(selectedAnime.cover_url)}
+											alt={selectedAnime.title}
+										>
 									{/if}
 									<span>{selectedAnime.title}</span>
 									<button type="button" onclick={clearAnime} aria-label="選択を解除">×</button>
@@ -606,7 +615,7 @@ const handleCancelExchangeSubmit: SubmitFunction = () => {
 .exchange-panel {
 	background: var(--color-surface);
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	padding: 20px;
 	display: flex;
 	flex-direction: column;
@@ -663,7 +672,7 @@ const handleCancelExchangeSubmit: SubmitFunction = () => {
 	width: 100%;
 	padding: 10px 12px;
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-bg);
 	color: var(--color-text);
 }
@@ -716,6 +725,7 @@ const handleCancelExchangeSubmit: SubmitFunction = () => {
 	padding: 0 10px;
 	border: 1px solid color-mix(in srgb, var(--color-accent) 24%, var(--color-border));
 	border-radius: 999px;
+	corner-shape: round;
 	background: color-mix(in srgb, var(--color-surface-hover) 80%, transparent);
 	color: var(--color-text);
 	font-size: 0.82rem;
@@ -771,7 +781,7 @@ const handleCancelExchangeSubmit: SubmitFunction = () => {
 	overflow-y: auto;
 	background: var(--color-surface);
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
 }
 
@@ -837,7 +847,7 @@ const handleCancelExchangeSubmit: SubmitFunction = () => {
 	max-width: 100%;
 	padding: 8px 10px;
 	border: 1px solid var(--color-accent);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: color-mix(in srgb, var(--color-accent) 10%, transparent);
 	color: var(--color-text);
 }
@@ -879,7 +889,7 @@ const handleCancelExchangeSubmit: SubmitFunction = () => {
 	gap: 8px;
 	min-height: 42px;
 	padding: 0 18px;
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-accent);
 	color: #fff;
 	font-weight: 700;

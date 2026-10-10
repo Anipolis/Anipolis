@@ -13,6 +13,7 @@ import {
 	isAdminUser,
 } from "$lib/server/queries";
 import type { Anime, AnimeListItem } from "$lib/types";
+import { dateKeyWeekday, jstBroadcastDateKey } from "$lib/utils/jst";
 import type { Actions, PageServerLoad } from "./$types";
 
 /** Anime 全フィールドを HTML に埋め込まず、カード描画に必要なフィールドだけへ射影する。 */
@@ -56,6 +57,8 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	const page = Number.isFinite(pageParam) && pageParam >= 1 ? Math.floor(pageParam) : 1;
 	const offset = (page - 1) * PAGE_SIZE;
 	const userId = user?.id ?? null;
+	// 放送中タブは本日（JST・午前4時境界）放送の作品を先頭に、その中と残りをそれぞれ新しいシーズン順に並べる。カードの「本日放送」バッジと同じ基準
+	const prioritizeBroadcastDay = tab === "airing" ? dateKeyWeekday(jstBroadcastDateKey(new Date())) : null;
 
 	/** ランキングビュー系タブ：件数0なら通常一覧にフォールバック（既存挙動を維持） */
 	const rankingTab = async (
@@ -75,6 +78,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 				? { items: [], total: 0 }
 				: await getAnimeListPage(supabase, {
 						...buildAnimeListOptions(filters, userId),
+						prioritizeBroadcastDay,
 						page,
 						pageSize: PAGE_SIZE,
 					});
@@ -90,7 +94,14 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	} else if (tab === "top_rated") {
 		result = await rankingTab("top_rated", (limit, off) => getAnimeRankingTopRated(supabase, limit, off));
 	} else if (tab === "airing") {
-		result = await getAnimeListPage(supabase, { broadcastStatus: "airing", userId, page, pageSize: PAGE_SIZE });
+		result = await getAnimeListPage(supabase, {
+			broadcastStatus: "airing",
+			newestSeasonFirst: true,
+			prioritizeBroadcastDay,
+			userId,
+			page,
+			pageSize: PAGE_SIZE,
+		});
 	} else if (tab === "upcoming") {
 		result = await getAnimeListPage(supabase, { broadcastStatus: "upcoming", userId, page, pageSize: PAGE_SIZE });
 	} else if (tab === "all") {

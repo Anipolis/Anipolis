@@ -1,4 +1,5 @@
 import { redirect } from "@sveltejs/kit";
+import { countPendingCopyrightReviews } from "$lib/server/copyright-reviews";
 import { getAdminDashboardData, isAdminUser } from "$lib/server/queries";
 import type { PageServerLoad } from "./$types";
 
@@ -16,5 +17,8 @@ export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession 
 		return null;
 	});
 
-	return { dashboard };
+	const copyrightReviewCounts = await countPendingCopyrightReviews(supabase);
+	const pendingCopyrightReviews = Object.values(copyrightReviewCounts).reduce((sum, count) => sum + count, 0);
+
+	return { dashboard, pendingCopyrightReviews };
 };

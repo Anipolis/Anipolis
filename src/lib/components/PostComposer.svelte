@@ -1,9 +1,10 @@
-﻿<script lang="ts">
+<script lang="ts">
 import type { SubmitFunction } from "@sveltejs/kit";
 import { onMount } from "svelte";
 import { enhance } from "$app/forms";
 import { replaceState } from "$app/navigation";
 import { page } from "$app/state";
+import { autosize } from "$lib/actions/autosize";
 import { trapFocus } from "$lib/actions/trapFocus";
 import {
 	type ComposeDraft,
@@ -13,6 +14,7 @@ import {
 	loadComposeDraft,
 	saveComposeDraft,
 } from "$lib/compose-draft";
+import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import type { AnimeExchangeShare, OpenBroadcastRoomSummary } from "$lib/types";
 import { animeQuoteChipLabel, cwChipLabel } from "$lib/utils/composer-chips";
 import { charCountClass } from "$lib/utils/format";
@@ -442,7 +444,11 @@ function handleOverlayEscape(e: KeyboardEvent, close: () => void) {
 	close();
 }
 
-const handleSubmit: SubmitFunction = () => {
+const handleSubmit: SubmitFunction = ({ cancel }) => {
+	if (!canSubmit) {
+		cancel();
+		return;
+	}
 	submitting = true;
 	errorMessage = "";
 	return async ({ result, update }) => {
@@ -468,17 +474,18 @@ const handleSubmit: SubmitFunction = () => {
 };
 </script>
 
-<div class="composer">
+<div class="composer compact-composer">
 	<div class="composer-body">
-		<UserAvatar src={avatarUrl} {username} size="md" />
+		<UserAvatar src={avatarUrl} {username} size="sm" />
 		<form method="POST" action="?/createPost" use:enhance={handleSubmit} class="composer-form">
-			<div style="position:relative;">
+			<div class="composer-input">
 				<textarea
 					bind:this={textareaEl}
 					name="content"
 					class="composer-textarea"
-					placeholder="どのアニメ見てる？"
-					rows="3"
+					placeholder="ひとこと…"
+					rows="1"
+					use:autosize={content}
 					bind:value={content}
 					maxlength={MAX_LENGTH + 10}
 					oninput={handleContentInput}
@@ -520,6 +527,63 @@ const handleSubmit: SubmitFunction = () => {
 						{/each}
 					</div>
 				{/if}
+			</div>
+
+			<!-- 追加機能（画像・アニメ引用・CW・実況ルーム）のタイル -->
+			<div class="composer-tools" role="group" aria-label="投稿の追加機能">
+				<button
+					type="button"
+					class="composer-tool-tile"
+					disabled={imageUrls.length >= MAX_IMAGES || uploading}
+					onclick={() => fileInput?.click()}
+					aria-label="画像を添付"
+					title="画像を添付（最大{MAX_IMAGES}枚）"
+				>
+					<span class={uploading ? "i-lucide-loader-circle" : "i-lucide-image"} aria-hidden="true"></span>
+				</button>
+
+				<input
+					bind:this={fileInput}
+					type="file"
+					accept="image/jpeg,image/png,image/gif,image/webp"
+					multiple
+					style="display:none"
+					onchange={handleFileChange}
+				>
+
+				<button
+					type="button"
+					class="composer-tool-tile"
+					class:active={selectedAnime !== null}
+					disabled={selectedAnime !== null}
+					onclick={openAnimeSearch}
+					aria-label="アニメを引用"
+					title="アニメを引用"
+				>
+					<span class="i-lucide-clapperboard" aria-hidden="true"></span>
+				</button>
+
+				<button
+					type="button"
+					class="composer-tool-tile"
+					class:active={selectedCwAnime !== null}
+					onclick={openCwSearch}
+					aria-label="ネタバレCWを設定"
+					title="ネタバレCW（コンテンツ警告）を設定"
+				>
+					<span class="i-lucide-eye-off" aria-hidden="true"></span>
+				</button>
+
+				<button
+					type="button"
+					class="composer-tool-tile"
+					class:active={selectedRoom !== null}
+					onclick={openRoomSearch}
+					aria-label="実況ルームにリンク"
+					title="実況ルームにリンク"
+				>
+					<span class="i-lucide-door-open" aria-hidden="true"></span>
+				</button>
 			</div>
 
 			{#if selectedAnime || selectedCwAnime || selectedRoom}
@@ -651,133 +715,13 @@ const handleSubmit: SubmitFunction = () => {
 			{/if}
 
 			<div class="composer-footer">
-				<!-- 画像添付ボタン -->
-				<button
-					type="button"
-					class="composer-image-btn"
-					disabled={imageUrls.length >= MAX_IMAGES || uploading}
-					onclick={() => fileInput?.click()}
-					aria-label="画像を添付"
-					title="画像を添付（最大{MAX_IMAGES}枚）"
-				>
-					{#if uploading}
-						<svg
-							width="18"
-							height="18"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							aria-hidden="true"
-						>
-							<path
-								d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"
-							/>
-						</svg>
-					{:else}
-						<svg
-							width="18"
-							height="18"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							aria-hidden="true"
-						>
-							<rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-							<circle cx="8.5" cy="8.5" r="1.5" />
-							<polyline points="21 15 16 10 5 21" />
-						</svg>
-					{/if}
-				</button>
-
-				<input
-					bind:this={fileInput}
-					type="file"
-					accept="image/jpeg,image/png,image/gif,image/webp"
-					multiple
-					style="display:none"
-					onchange={handleFileChange}
-				>
-
-				<!-- アニメ引用ボタン -->
-				<button
-					type="button"
-					class="composer-image-btn"
-					class:active={selectedAnime !== null}
-					disabled={selectedAnime !== null}
-					onclick={openAnimeSearch}
-					aria-label="アニメを引用"
-					title="アニメを引用"
-				>
-					<svg
-						width="18"
-						height="18"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						aria-hidden="true"
-					>
-						<rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18" />
-						<line x1="7" y1="2" x2="7" y2="22" />
-						<line x1="17" y1="2" x2="17" y2="22" />
-						<line x1="2" y1="12" x2="22" y2="12" />
-						<line x1="2" y1="7" x2="7" y2="7" />
-						<line x1="2" y1="17" x2="7" y2="17" />
-						<line x1="17" y1="17" x2="22" y2="17" />
-						<line x1="17" y1="7" x2="22" y2="7" />
-					</svg>
-				</button>
-
-				<!-- CWボタン -->
-				<button
-					type="button"
-					class="composer-image-btn"
-					class:active={selectedCwAnime !== null}
-					onclick={openCwSearch}
-					aria-label="ネタバレCWを設定"
-					title="ネタバレCW（コンテンツ警告）を設定"
-				>
-					<svg
-						width="18"
-						height="18"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						aria-hidden="true"
-					>
-						<path
-							d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
-						/>
-						<line x1="1" y1="1" x2="23" y2="23" />
-					</svg>
-				</button>
-
-				<!-- 実況ルームリンクボタン -->
-				<button
-					type="button"
-					class="composer-image-btn"
-					class:active={selectedRoom !== null}
-					onclick={openRoomSearch}
-					aria-label="実況ルームにリンク"
-					title="実況ルームにリンク"
-				>
-					<span class="i-lucide-door-open" style="width:18px;height:18px;" aria-hidden="true"></span>
-				</button>
-
 				{#if draftKey && hasDraft}
 					<!-- 下書きの破棄は明示操作にする（閉じるだけでは消えない）: GitLab #2 -->
 					<button type="button" class="composer-draft-discard" onclick={discardDraft}>下書きを破棄</button>
 				{/if}
-				<span class="char-count {countClass}">{remaining}</span>
+				{#if remaining <= 40}
+					<span class="char-count {countClass}" aria-label="残り文字数">{remaining}</span>
+				{/if}
 				<button type="submit" class="btn btn-primary" disabled={!canSubmit}>
 					{submitting ? '投稿中…' : '投稿'}
 				</button>
@@ -825,7 +769,8 @@ const handleSubmit: SubmitFunction = () => {
 						<button type="button" class="anime-search-item" onclick={() => selectAnime(anime)}>
 							{#if anime.cover_url}
 								<img
-									src={anime.cover_url}
+									src={coverThumbSrc(anime.cover_url)}
+									{@attach coverThumbFallback(anime.cover_url)}
 									alt={anime.title}
 									class="anime-search-thumb"
 									loading="lazy"
@@ -884,7 +829,12 @@ const handleSubmit: SubmitFunction = () => {
 					{#each (cwQuery.trim() ? cwResults : watchingAnime) as anime}
 						<button type="button" class="anime-search-item" onclick={() => selectCwAnime(anime)}>
 							{#if anime.cover_url}
-								<img src={anime.cover_url} alt={anime.title} class="anime-search-thumb">
+								<img
+									src={coverThumbSrc(anime.cover_url)}
+									{@attach coverThumbFallback(anime.cover_url)}
+									alt={anime.title}
+									class="anime-search-thumb"
+								>
 							{:else}
 								<div class="anime-search-thumb anime-search-thumb-empty"></div>
 							{/if}
@@ -930,7 +880,12 @@ const handleSubmit: SubmitFunction = () => {
 					{#each openRooms as room (room.id)}
 						<button type="button" class="anime-search-item" onclick={() => selectRoom(room)}>
 							{#if room.anime?.cover_url}
-								<img src={room.anime.cover_url} alt={room.anime.title} class="anime-search-thumb">
+								<img
+									src={coverThumbSrc(room.anime.cover_url)}
+									{@attach coverThumbFallback(room.anime.cover_url)}
+									alt={room.anime.title}
+									class="anime-search-thumb"
+								>
 							{:else}
 								<div class="anime-search-thumb anime-search-thumb-empty"></div>
 							{/if}
@@ -951,6 +906,105 @@ const handleSubmit: SubmitFunction = () => {
 {/if}
 
 <style>
+.compact-composer {
+	padding: 14px;
+	margin: 0 0 12px;
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius);
+	background: var(--color-surface);
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+	transition:
+		border-color 0.15s,
+		box-shadow 0.15s;
+}
+.compact-composer .composer-body {
+	align-items: flex-start;
+	gap: 10px;
+}
+.compact-composer .composer-body :global(.avatar) {
+	width: 28px;
+	height: 28px;
+	margin-top: 5px;
+}
+.compact-composer .composer-form {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	column-gap: 8px;
+	align-items: start;
+}
+.compact-composer .composer-form > :not(.composer-input):not(.composer-footer) {
+	grid-column: 1 / -1;
+}
+.composer-input {
+	position: relative;
+	grid-column: 1;
+	grid-row: 1;
+}
+.compact-composer .composer-textarea {
+	display: block;
+	min-height: 96px;
+	max-height: 280px;
+	padding: 6px 0;
+	line-height: 26px;
+	font-size: 16px;
+	overflow-y: auto;
+}
+.compact-composer:focus-within {
+	border-color: var(--color-accent);
+	box-shadow: 0 2px 8px color-mix(in srgb, var(--color-accent) 18%, transparent);
+}
+.compact-composer .composer-footer {
+	grid-column: 2;
+	grid-row: 1;
+	position: relative;
+	border: 0;
+	padding: 0;
+	margin: 0;
+	gap: 6px;
+}
+.compact-composer .composer-footer .btn {
+	min-height: 36px;
+	padding: 6px 14px;
+	border-radius: 6px;
+	font-size: 13px;
+}
+.composer-tools {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-top: 6px;
+}
+.composer-tool-tile {
+	display: grid;
+	place-items: center;
+	width: 32px;
+	height: 32px;
+	border: 0;
+	border-radius: var(--radius-sm);
+	background: transparent;
+	color: var(--color-text-muted);
+	cursor: pointer;
+	transition:
+		background 0.15s,
+		color 0.15s;
+}
+.composer-tool-tile > span {
+	width: 18px;
+	height: 18px;
+}
+.composer-tool-tile:hover:not(:disabled),
+.composer-tool-tile:focus-visible {
+	background: var(--accent-muted);
+	color: var(--color-accent);
+}
+.composer-tool-tile.active {
+	color: var(--color-accent);
+}
+.composer-tool-tile:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
 .mention-dropdown {
 	position: absolute;
 	top: 100%;
@@ -958,7 +1012,7 @@ const handleSubmit: SubmitFunction = () => {
 	right: 0;
 	background: var(--color-surface);
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 	z-index: 50;
 	max-height: 200px;
@@ -1007,7 +1061,7 @@ const handleSubmit: SubmitFunction = () => {
 	margin-top: 10px;
 	padding: 10px;
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-bg);
 }
 .composer-exchange-preview .composer-anime-remove {

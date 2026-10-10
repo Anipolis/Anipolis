@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { createClient } from "@supabase/supabase-js";
 import { containsJapaneseScript } from "../src/lib/anime-offline-database.ts";
-import { translateAnimeSource } from "../src/lib/anime-vocabulary.ts";
+import { translateAnimeGenres, translateAnimeSource } from "../src/lib/anime-vocabulary.ts";
 import { isFiniteReleaseType } from "../src/lib/broadcast-status.ts";
 import { fetchWithRetry } from "../src/lib/utils/http-retry.ts";
 import {
@@ -231,86 +231,6 @@ class JikanCircuitOpenError extends Error {
 		this.name = "JikanCircuitOpenError";
 	}
 }
-
-export const GENRE_JA_BY_EN: Record<string, string> = {
-	Action: "アクション",
-	Adventure: "アドベンチャー",
-	"Avant Garde": "アバンギャルド",
-	"Award Winning": "受賞歴あり",
-	"Boys Love": "ボーイズラブ",
-	Comedy: "コメディ",
-	Drama: "ドラマ",
-	Ecchi: "エッチ",
-	Erotica: "エロティカ",
-	Fantasy: "ファンタジー",
-	"Girls Love": "ガールズラブ",
-	Gourmet: "グルメ",
-	Hentai: "成人向け",
-	Horror: "ホラー",
-	Mystery: "ミステリー",
-	Romance: "ロマンス",
-	"Sci-Fi": "SF",
-	"Slice of Life": "日常",
-	Sports: "スポーツ",
-	Supernatural: "オカルト",
-	Suspense: "サスペンス",
-	"Adult Cast": "大人キャスト",
-	Anthropomorphic: "擬人化",
-	CGDCT: "日常系",
-	Childcare: "子育て",
-	"Combat Sports": "格闘技",
-	Crossdressing: "女装・男装",
-	Delinquents: "不良",
-	Detective: "探偵",
-	Educational: "教育",
-	"Gag Humor": "ギャグ",
-	Gore: "ゴア",
-	Harem: "ハーレム",
-	"High Stakes Game": "デスゲーム",
-	Historical: "歴史",
-	"Idols (Female)": "女性アイドル",
-	"Idols (Male)": "男性アイドル",
-	Isekai: "異世界",
-	Iyashikei: "癒し系",
-	"Love Polygon": "恋愛群像",
-	"Magical Sex Shift": "性転換",
-	"Mahou Shoujo": "魔法少女",
-	"Martial Arts": "武術",
-	Mecha: "メカ",
-	Medical: "医療",
-	Military: "ミリタリー",
-	Music: "音楽",
-	Mythology: "神話",
-	"Organized Crime": "犯罪組織",
-	"Otaku Culture": "オタク文化",
-	Parody: "パロディ",
-	"Performing Arts": "芸能",
-	Pets: "ペット",
-	Psychological: "心理",
-	Racing: "レース",
-	Reincarnation: "転生",
-	"Reverse Harem": "逆ハーレム",
-	"Romantic Subtext": "恋愛要素",
-	Samurai: "侍",
-	School: "学園",
-	Showbiz: "ショービズ",
-	Space: "宇宙",
-	"Strategy Game": "頭脳戦",
-	"Super Power": "超能力",
-	Survival: "サバイバル",
-	"Team Sports": "チームスポーツ",
-	"Time Travel": "タイムトラベル",
-	Vampire: "吸血鬼",
-	"Video Game": "ゲーム",
-	Villainess: "悪役令嬢",
-	"Visual Arts": "ビジュアルアーツ",
-	Workplace: "職場",
-	Josei: "女性向け",
-	Kids: "子ども向け",
-	Seinen: "青年向け",
-	Shoujo: "少女向け",
-	Shounen: "少年向け",
-};
 
 export const STUDIO_JA_BY_EN: Record<string, string> = {
 	"8bit": "エイトビット",
@@ -1077,7 +997,7 @@ function mapJikanAnime(anime: JikanAnime, year: number, season: SeasonName): Ani
 	const studioEn = normalizeNameList(anime.studios);
 	const studioJa = translateNameList(studioEn, STUDIO_JA_BY_EN);
 	const genreEn = normalizeNameList(anime.genres);
-	const genreJa = translateNameList(genreEn, GENRE_JA_BY_EN);
+	const genreJa = translateAnimeGenres(genreEn);
 	const officialSiteUrl = findOfficialSiteUrl(anime.external);
 	const broadcastSchedule = normalizeBroadcastSchedule(anime.broadcast);
 	const airedFrom = shiftDateOnly(toDateOnly(anime.aired?.from), broadcastSchedule.aired_date_offset_days);

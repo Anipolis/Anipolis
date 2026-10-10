@@ -1,5 +1,6 @@
 <script lang="ts">
 import { enhance } from "$app/forms";
+import { invalidateAll } from "$app/navigation";
 import { ANIME_GENRES, ANIME_SOURCE_OPTIONS } from "$lib/anime-vocabulary";
 import type { Anime } from "$lib/types";
 
@@ -18,6 +19,23 @@ let {
 
 const GENRES = [...ANIME_GENRES];
 const SOURCE_OPTIONS = [...ANIME_SOURCE_OPTIONS];
+// 値はカタログ（MAL 由来）と同じ英語表記。日本語の値にすると、編集を保存しただけで
+// 映画・特別の作品のタイプが「未設定」に変わっていた
+const TYPE_OPTIONS = [
+	{ value: "TV", label: "TV" },
+	{ value: "Movie", label: "映画" },
+	{ value: "OVA", label: "OVA" },
+	{ value: "ONA", label: "ONA" },
+	{ value: "Special", label: "特別" },
+];
+// 今の値が選択肢に無い（旧表記・取り込み元の表記）ときは、そのまま残る選択肢を足す。
+// 足さないと select が「未設定」になり、保存で値が消える
+const extraTypeOption = $derived(
+	anime?.type && !TYPE_OPTIONS.some((option) => option.value === anime.type) ? anime.type : null,
+);
+const extraSourceOption = $derived(
+	anime?.source && !SOURCE_OPTIONS.some((source) => source === anime.source) ? anime.source : null,
+);
 
 // svelte-ignore state_referenced_locally
 let selectedGenres = $state<string[]>(anime?.genre ?? []);
@@ -126,7 +144,13 @@ async function handleFileChange(e: Event) {
 		{action}
 		use:enhance={async ({ formData }) => {
         if (resizedBlob) formData.set('image_file', resizedBlob, `cover_${Date.now()}.jpg`);
-        return async ({ update }) => { await update(); };
+        return async ({ result, update }) => {
+            await update();
+            // 失敗でも作品データは更新済みのことがある（保護レコードだけ失敗など）。
+            // 再読み込みしないと画面が古い値のままになり、そのフォームで再保存すると
+            // 古い値で上書きしてしまう
+            if (result.type === "failure") await invalidateAll();
+        };
     }}
 		class="register-form"
 		class:register-form--edit={isEditMode}
@@ -193,11 +217,12 @@ async function handleFileChange(e: Event) {
 					<label for="rf-type">タイプ</label>
 					<select id="rf-type" name="type" class="rf-select">
 						<option value="">未設定</option>
-						<option value="TV" selected={anime?.type === "TV"}>TV</option>
-						<option value="映画" selected={anime?.type === "映画"}>映画</option>
-						<option value="OVA" selected={anime?.type === "OVA"}>OVA</option>
-						<option value="ONA" selected={anime?.type === "ONA"}>ONA</option>
-						<option value="特別" selected={anime?.type === "特別"}>特別</option>
+						{#each TYPE_OPTIONS as option}
+							<option value={option.value} selected={anime?.type === option.value}>{option.label}</option>
+						{/each}
+						{#if extraTypeOption}
+							<option value={extraTypeOption} selected>{extraTypeOption}</option>
+						{/if}
 					</select>
 				</div>
 				<div class="form-group">
@@ -207,6 +232,9 @@ async function handleFileChange(e: Event) {
 						{#each SOURCE_OPTIONS as source}
 							<option value={source} selected={anime?.source === source}>{source}</option>
 						{/each}
+						{#if extraSourceOption}
+							<option value={extraSourceOption} selected>{extraSourceOption}</option>
+						{/if}
 					</select>
 				</div>
 				<div class="form-group">
@@ -527,7 +555,7 @@ async function handleFileChange(e: Event) {
 }
 .form-success {
 	padding: 12px 16px;
-	border-radius: 8px;
+	border-radius: 12px;
 	background: color-mix(in srgb, var(--color-success) 10%, transparent);
 	color: var(--color-success);
 	margin-bottom: 16px;
@@ -539,7 +567,7 @@ async function handleFileChange(e: Event) {
 }
 .form-error {
 	padding: 12px 16px;
-	border-radius: 8px;
+	border-radius: 12px;
 	background: color-mix(in srgb, var(--color-danger) 10%, transparent);
 	color: var(--color-danger);
 	margin-bottom: 16px;
@@ -592,7 +620,7 @@ async function handleFileChange(e: Event) {
 .rf-textarea,
 .rf-select {
 	padding: 8px 10px;
-	border-radius: 8px;
+	border-radius: 12px;
 	border: 1px solid var(--color-border);
 	background: var(--color-surface);
 	color: var(--color-text);
@@ -624,7 +652,7 @@ async function handleFileChange(e: Event) {
 }
 .tag-btn {
 	padding: 4px 10px;
-	border-radius: 14px;
+	border-radius: 20px;
 	border: 1px solid var(--color-border);
 	background: transparent;
 	color: var(--color-text-muted);
@@ -651,7 +679,7 @@ async function handleFileChange(e: Event) {
 }
 .tag-add-btn {
 	padding: 8px 14px;
-	border-radius: 8px;
+	border-radius: 12px;
 	border: 1px solid var(--color-border);
 	background: var(--color-surface-hover);
 	color: var(--color-text);
@@ -676,7 +704,7 @@ async function handleFileChange(e: Event) {
 	align-items: center;
 	gap: 4px;
 	padding: 3px 10px;
-	border-radius: 14px;
+	border-radius: 20px;
 	background: var(--color-accent);
 	color: #fff;
 	font-size: 0.8rem;
@@ -703,7 +731,7 @@ async function handleFileChange(e: Event) {
 }
 .submit-btn {
 	padding: 10px 28px;
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-accent);
 	color: #fff;
 	border: none;
@@ -733,7 +761,7 @@ async function handleFileChange(e: Event) {
 	width: 100%;
 	height: 110px;
 	border: 2px dashed var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	cursor: pointer;
 	transition:
 		border-color 0.15s,

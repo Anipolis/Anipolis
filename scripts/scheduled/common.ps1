@@ -31,6 +31,23 @@ function Get-SeasonTargets {
     )
 }
 
+function Get-CopyrightSeasonTargets {
+    # © 収集の対象: 前期・今期・次期を "2026-fall" 形式で返す。前期は放送後に増える ©、
+    # 次期は告知とともに公開される公式サイトの © を拾うため。
+    $current = (Get-SeasonTargets)[0]
+    $names = @("winter", "spring", "summer", "fall")
+    $index = [Array]::IndexOf($names, $current.Season)
+    $targets = @()
+    foreach ($offset in @(-1, 0, 1)) {
+        $i = $index + $offset
+        $year = $current.Year
+        if ($i -lt 0) { $i += 4; $year -= 1 }
+        elseif ($i -gt 3) { $i -= 4; $year += 1 }
+        $targets += ([string]$year + "-" + $names[$i])
+    }
+    return $targets
+}
+
 function Start-SyncLog {
     param([string]$Name)
     $startedAt = Get-JstNow
