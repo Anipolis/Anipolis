@@ -66,6 +66,11 @@ const items = $derived.by((): Item[] => {
 			description: "招待コードを発行して他のユーザーを招待します",
 			href: "/settings/invites",
 		});
+		list.push({
+			label: "退会",
+			description: "アカウントと投稿・マイリストをすべて削除します",
+			href: "/settings/account/delete",
+		});
 		return list;
 	}
 	if (activeSection === "privacy") {
@@ -79,6 +84,11 @@ const items = $derived.by((): Item[] => {
 				label: "ミュート設定",
 				description: "ワード・ルームのミュートをまとめて管理します",
 				href: "/settings/mutes",
+			},
+			{
+				label: "ブロックしたユーザー",
+				description: "ブロックした相手を確認・解除します",
+				href: "/settings/blocks",
 			},
 		];
 		if (data.pendingFollowRequestCount > 0) {

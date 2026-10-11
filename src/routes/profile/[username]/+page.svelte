@@ -41,6 +41,7 @@ let reportDetails = $state("");
 let reportSubmitting = $state(false);
 let reportMessage = $state("");
 let showKebabMenu = $state(false);
+let blocking = $state(false);
 
 $effect(() => {
 	isFollowing = data.isFollowing;
@@ -61,6 +62,21 @@ const activeTab = $derived(
 );
 const bioRemaining = $derived(160 - editBio.length);
 const editableHeaderUrl = $derived(headerPreviewUrl ?? (headerPendingDelete ? null : profile.header_url));
+
+const submitBlock: SubmitFunction = ({ cancel }) => {
+	if (!data.isBlocked && !window.confirm(`@${profile.username} をブロックします。フォロー関係も解除されます。`)) {
+		cancel();
+		return;
+	}
+	blocking = true;
+	return async ({ update }) => {
+		blocking = false;
+		showKebabMenu = false;
+		// ブロックすると相手の投稿を落とすため、表示中のタイムラインも取り直す
+		await update({ reset: false });
+		await invalidateAll();
+	};
+};
 
 const handleProfileSubmit: SubmitFunction = () => {
 	// 保存中に選択が変わっても送信開始時点の画像状態を使う
@@ -405,6 +421,21 @@ const grouped = $derived(
 											e.stopPropagation();
 										}}
 									>
+										<form
+											method="POST"
+											action={data.isBlocked ? "?/unblock" : "?/block"}
+											use:enhance={submitBlock}
+										>
+											<input type="hidden" name="target_id" value={profile.id}>
+											<button
+												type="submit"
+												role="menuitem"
+												class="danger-menuitem"
+												disabled={blocking}
+											>
+												{data.isBlocked ? "ブロック解除" : "ブロック"}
+											</button>
+										</form>
 										<button
 											type="button"
 											role="menuitem"
@@ -844,6 +875,10 @@ const grouped = $derived(
 	background: var(--color-surface);
 	box-shadow: 0 8px 24px rgb(0 0 0 / 0.24);
 	overflow: hidden;
+}
+
+.profile-kebab-dropdown .danger-menuitem {
+	color: var(--color-danger);
 }
 
 .profile-kebab-dropdown button {

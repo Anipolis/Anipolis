@@ -24,6 +24,9 @@ function fakeSupabase(tables: Record<string, TableResult>, rpc: Record<string, T
 		return awaitableChain(result);
 	});
 	const rpcFn = vi.fn((name: string) => {
+		// ブロックの除外（141 の get_blocked_user_ids）はこのテストの対象外。
+		// 個別に指定されていなければ「ブロック無し」として扱う。
+		if (name === "get_blocked_user_ids" && !rpc[name]) return Promise.resolve({ data: [], error: null });
 		const result = rpc[name];
 		if (!result) throw new Error(`unexpected rpc: ${name}`);
 		return Promise.resolve(result);
