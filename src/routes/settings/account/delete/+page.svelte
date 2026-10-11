@@ -23,9 +23,10 @@ const submitDelete: SubmitFunction = ({ cancel }) => {
 	}
 	deleting = true;
 	return async ({ result, update }) => {
-		deleting = false;
-		// 成功時はリダイレクトされるため、ここに来るのは失敗したときだけ
-		if (result.type !== "redirect") await update({ reset: false });
+		// 成功時は redirect が届く。遷移が終わるまで送信ボタンは無効のままにする
+		if (result.type !== "redirect") deleting = false;
+		// カスタムコールバックでは既定の処理が走らないので、redirect も update に任せて遷移させる
+		await update({ reset: false });
 	};
 };
 </script>

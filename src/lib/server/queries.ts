@@ -581,7 +581,8 @@ export async function getNotifications(
 	}
 
 	if (blockedUserIds.size > 0) {
-		query = query.not("actor_id", "in", `(${[...blockedUserIds].join(",")})`);
+		// NOT IN は NULL を落とすため、actor_id が NULL のシステム通知（放送・トレード成立）は明示的に残す
+		query = query.or(`actor_id.is.null,actor_id.not.in.(${[...blockedUserIds].join(",")})`);
 	}
 
 	const { data, error } = await query;

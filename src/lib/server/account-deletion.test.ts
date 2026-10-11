@@ -2,7 +2,13 @@ import { readFileSync } from "node:fs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
 import type { Database } from "$lib/supabase/database.types";
-import { checkDeletionGate, DELETE_REAUTH_WINDOW_MS, deleteAccount, USER_OWNED_BUCKETS } from "./account-deletion";
+import {
+	checkDeletionGate,
+	DELETE_REAUTH_WINDOW_MS,
+	deleteAccount,
+	STORAGE_LIST_PAGE_SIZE,
+	USER_OWNED_BUCKETS,
+} from "./account-deletion";
 
 const migration = readFileSync(
 	new URL("../../../supabase/migrations/142_account_deletion.sql", import.meta.url),
@@ -107,6 +113,10 @@ function createAdminMock(
 	options: {
 		filesByBucket?: Record<string, { name: string }[]>;
 		deleteUserError?: { message: string } | null;
+		listError?: { message: string } | null;
+		removeError?: { message: string } | null;
+		/** true なら remove が成功を返しても実際には何も消さない（サブフォルダ等） */
+		removeIsNoop?: boolean;
 		postCount?: number;
 		moderationStatus?: string | null;
 	} = {},
@@ -151,11 +161,22 @@ function createAdminMock(
 			from: vi.fn((bucket: string) => {
 				let mock = storageByBucket.get(bucket);
 				if (!mock) {
+					// 実際の Storage と同じく、削除したファイルは次の列挙から消え、
+					// list は limit を省略すると 100 件までしか返さない
+					const remaining = [...(options.filesByBucket?.[bucket] ?? [])];
 					mock = {
-						list: vi.fn(async () => ({ data: options.filesByBucket?.[bucket] ?? [], error: null })),
+						list: vi.fn(async (_prefix: string, listOptions?: { limit?: number }) => {
+							if (options.listError) return { data: null, error: options.listError };
+							return { data: remaining.slice(0, listOptions?.limit ?? 100), error: null };
+						}),
 						remove: vi.fn(async (paths: string[]) => {
+							if (options.removeError) return { data: null, error: options.removeError };
+							if (options.removeIsNoop) return { data: [], error: null };
 							removed.push({ bucket, paths });
-							return { error: null };
+							const names = new Set(paths.map((path) => path.slice(path.indexOf("/") + 1)));
+							const deleted = remaining.filter((file) => names.has(file.name));
+							remaining.splice(0, remaining.length, ...remaining.filter((file) => !names.has(file.name)));
+							return { data: deleted, error: null };
 						}),
 					};
 					storageByBucket.set(bucket, mock);
@@ -199,6 +220,49 @@ describe("deleteAccount", () => {
 		for (const bucket of USER_OWNED_BUCKETS) {
 			expect(admin.client.storage.from).toHaveBeenCalledWith(bucket);
 		}
+	});
+
+	it("1ページに収まらない枚数でも全件消してから auth ユーザーを消す", async () => {
+		const total = STORAGE_LIST_PAGE_SIZE * 2 + 1;
+		const files = Array.from({ length: total }, (_, index) => ({ name: `${index}.webp` }));
+		const admin = createAdminMock({ filesByBucket: { "post-images": files } });
+
+		const result = await deleteAccount("user-1", { admin: admin.client });
+
+		expect(result).toEqual({ ok: true, removedFiles: total });
+		expect(admin.removed.flatMap((entry) => entry.paths)).toHaveLength(total);
+		expect(admin.deleteUser).toHaveBeenCalledWith("user-1");
+	});
+
+	it("列挙に失敗したら auth ユーザーを消さずに失敗を返す", async () => {
+		const admin = createAdminMock({
+			filesByBucket: { "post-images": [{ name: "a.webp" }] },
+			listError: { message: "storage unavailable" },
+		});
+		const result = await deleteAccount("user-1", { admin: admin.client });
+		expect(result).toEqual({ ok: false, reason: "failed" });
+		expect(admin.deleteUser).not.toHaveBeenCalled();
+		expect(admin.inserted).toEqual([]);
+	});
+
+	it("削除に失敗したら auth ユーザーを消さずに失敗を返す", async () => {
+		const admin = createAdminMock({
+			filesByBucket: { "post-images": [{ name: "a.webp" }] },
+			removeError: { message: "storage unavailable" },
+		});
+		const result = await deleteAccount("user-1", { admin: admin.client });
+		expect(result).toEqual({ ok: false, reason: "failed" });
+		expect(admin.deleteUser).not.toHaveBeenCalled();
+	});
+
+	it("削除しても一覧が減らない場合は打ち切って失敗を返す（無限ループしない）", async () => {
+		const admin = createAdminMock({
+			filesByBucket: { "post-images": [{ name: "nested-folder" }] },
+			removeIsNoop: true,
+		});
+		const result = await deleteAccount("user-1", { admin: admin.client });
+		expect(result).toEqual({ ok: false, reason: "failed" });
+		expect(admin.deleteUser).not.toHaveBeenCalled();
 	});
 
 	it("外部キーで削除が止まった場合は原因が分かる理由を返す", async () => {

@@ -51,6 +51,45 @@ export function checkDeletionGate(input: {
 	return { ok: true, needsPassword: false };
 }
 
+/** 1回の列挙で取る件数。SDK の既定は 100 件で、それ以降は明示しないと返らない */
+export const STORAGE_LIST_PAGE_SIZE = 1000;
+
+/**
+ * `<user_id>/` 配下のファイルをすべて消し、消した件数を返す。失敗したら null。
+ *
+ * 消すと一覧が縮むので offset は進めず、先頭ページが空になるまで列挙と削除を繰り返す。
+ */
+async function removeAllUserFiles(
+	admin: SupabaseClient<Database>,
+	bucket: (typeof USER_OWNED_BUCKETS)[number],
+	userId: string,
+): Promise<number | null> {
+	let removed = 0;
+	for (;;) {
+		const { data: files, error: listError } = await admin.storage
+			.from(bucket)
+			.list(userId, { limit: STORAGE_LIST_PAGE_SIZE });
+		if (listError) {
+			console.error(`deleteAccount: list ${bucket} failed:`, listError);
+			return null;
+		}
+		const paths = (files ?? []).map((file) => `${userId}/${file.name}`);
+		if (paths.length === 0) return removed;
+
+		const { data: deleted, error: removeError } = await admin.storage.from(bucket).remove(paths);
+		if (removeError) {
+			console.error(`deleteAccount: remove ${bucket} failed:`, removeError);
+			return null;
+		}
+		// 1件も消えないなら（サブフォルダ等）同じ一覧が返り続けるので打ち切る
+		if (!deleted || deleted.length === 0) {
+			console.error(`deleteAccount: remove ${bucket} made no progress for`, paths.length, "entries");
+			return null;
+		}
+		removed += deleted.length;
+	}
+}
+
 export type DeleteAccountResult =
 	| { ok: true; removedFiles: number }
 	| { ok: false; reason: "has_room_experiments" | "failed" };
@@ -76,21 +115,13 @@ export async function deleteAccount(
 		admin.from("posts").select("id", { count: "exact", head: true }).eq("user_id", userId),
 	]);
 
+	// 所有ファイルが残っていると auth ユーザーを削除できないため、全バケットを
+	// 消し切れたときだけ先へ進む
 	let removedFiles = 0;
 	for (const bucket of USER_OWNED_BUCKETS) {
-		const { data: files, error: listError } = await admin.storage.from(bucket).list(userId);
-		if (listError) {
-			console.error(`deleteAccount: list ${bucket} failed:`, listError);
-			continue;
-		}
-		const paths = (files ?? []).map((file) => `${userId}/${file.name}`);
-		if (paths.length === 0) continue;
-		const { error: removeError } = await admin.storage.from(bucket).remove(paths);
-		if (removeError) {
-			console.error(`deleteAccount: remove ${bucket} failed:`, removeError);
-			continue;
-		}
-		removedFiles += paths.length;
+		const removed = await removeAllUserFiles(admin, bucket, userId);
+		if (removed === null) return { ok: false, reason: "failed" };
+		removedFiles += removed;
 	}
 
 	const { error: deleteError } = await admin.auth.admin.deleteUser(userId);
