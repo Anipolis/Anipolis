@@ -78,6 +78,8 @@ export const load: PageServerLoad = async ({ url, cookies, locals: { supabase, s
 		inviteCodeValid,
 		passkeyEnabled: isPasskeyEnabled(),
 		error: url.searchParams.get("error"),
+		// 退会完了後のリダイレクト先（/settings/account/delete）
+		accountDeleted: url.searchParams.get("deleted") === "1",
 	};
 };
 

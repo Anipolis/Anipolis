@@ -161,6 +161,74 @@ export async function ensureAccountCanWrite(supabase: SupabaseClient<Database>, 
 }
 
 /**
+ * ブロック関係があれば fail(403) を返す。無ければ null。
+ *
+ * DB 側（141 のポリシーと can_view_profile_content）でも止まるが、
+ * そこで弾かれた場合のメッセージは「できませんでした」になってしまう。
+ * 理由の分かる応答を返すために、書き込み前にアプリ側でも確認する。
+ */
+export async function ensureNotBlocked(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+	targetUserId: string | null | undefined,
+) {
+	if (!targetUserId || targetUserId === userId) return null;
+	// biome-ignore lint/suspicious/noExplicitAny: user_blocks RPCs not yet in auto-generated DB types
+	const { data, error } = await (supabase as any).rpc("is_blocked_between", {
+		user_a: userId,
+		user_b: targetUserId,
+	});
+	if (error) {
+		console.error("ensureNotBlocked error:", error);
+		return null;
+	}
+	if (data === true) return fail(403, { message: "ブロックしているユーザー、またはブロックされているユーザーです" });
+	return null;
+}
+
+export async function blockUserAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
+	const form = await request.formData();
+	const targetId = (form.get("target_id") as string | null)?.trim() ?? "";
+	if (!targetId) return fail(400, { message: "ユーザーIDが不正です" });
+	if (targetId === userId) return fail(400, { message: "自分自身をブロックできません" });
+
+	const { data: target } = await supabase.from("profiles").select("id").eq("id", targetId).maybeSingle();
+	if (!target) return fail(404, { message: "ユーザーが見つかりません" });
+
+	// フォロー・フォロー申請・未読通知の解除は 141 のトリガーが同じトランザクションで行う
+	// biome-ignore lint/suspicious/noExplicitAny: user_blocks not yet in auto-generated DB types
+	const { error } = await (supabase as any)
+		.from("user_blocks")
+		.upsert(
+			{ blocker_id: userId, blocked_id: targetId },
+			{ onConflict: "blocker_id,blocked_id", ignoreDuplicates: true },
+		);
+	if (error) {
+		console.error("blockUserAction error:", error);
+		return fail(403, { message: "ブロックできませんでした" });
+	}
+	return { blocked: true };
+}
+
+export async function unblockUserAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
+	const form = await request.formData();
+	const targetId = (form.get("target_id") as string | null)?.trim() ?? "";
+	if (!targetId) return fail(400, { message: "ユーザーIDが不正です" });
+
+	// biome-ignore lint/suspicious/noExplicitAny: user_blocks not yet in auto-generated DB types
+	const { error } = await (supabase as any)
+		.from("user_blocks")
+		.delete()
+		.eq("blocker_id", userId)
+		.eq("blocked_id", targetId);
+	if (error) {
+		console.error("unblockUserAction error:", error);
+		return fail(500, { message: "ブロック解除に失敗しました" });
+	}
+	return { blocked: false };
+}
+
+/**
  * API ルート（+server.ts）用: 利用制限・BAN中なら error() を投げる。
  * form action 用の ensureAccountCanWrite と同じ判定を、HTTP エラーとして返す。
  */
@@ -807,6 +875,19 @@ export async function toggleFollowAction(request: Request, supabase: SupabaseCli
 	if (!targetId) return fail(400, { message: "ユーザーIDが不正です" });
 	if (targetId === userId) return fail(400, { message: "自分自身をフォローできません" });
 
+	const { data: existingFollow } = await supabase
+		.from("follows")
+		.select("follower_id")
+		.eq("follower_id", userId)
+		.eq("following_id", targetId)
+		.maybeSingle();
+
+	// ブロック後もフォロー解除はできるようにする（解除は相手との関係を減らす操作）
+	if (!existingFollow) {
+		const blockFailure = await ensureNotBlocked(supabase, userId, targetId);
+		if (blockFailure) return blockFailure;
+	}
+
 	const { data: existing } = await supabase
 		.from("follows")
 		.select("follower_id")
@@ -962,6 +1043,11 @@ export async function recommendAnimeAction(supabase: SupabaseClient<Database>, r
 
 	const { data: recipient } = await supabase.from("profiles").select("id").eq("id", recipientId).maybeSingle();
 	if (!recipient) return fail(404, { recommendMessage: "ユーザーが見つかりません" });
+
+	const blockFailure = await ensureNotBlocked(supabase, userId, recipientId);
+	if (blockFailure) {
+		return fail(403, { recommendMessage: "このユーザーにはおすすめを送れません" });
+	}
 
 	const { error } = await supabase.from("anime_recommendations").insert({
 		recommender_id: userId,

@@ -2,10 +2,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
 import type { Database } from "$lib/supabase/database.types";
 import {
+	blockUserAction,
 	createInviteErrorStatus,
+	ensureNotBlocked,
 	getAnimeExchangeErrorDetail,
 	insertPostWithHashtags,
 	requireAccountCanWrite,
+	unblockUserAction,
 } from "./actions";
 
 type TableChain = Record<string, unknown>;
@@ -230,6 +233,117 @@ describe("requireAccountCanWrite", () => {
 	it("throws 403 for accounts restricted into the future", async () => {
 		const client = moderationClient({ status: "restricted", restricted_until: "2999-01-01T00:00:00Z" });
 		await expect(requireAccountCanWrite(client, "user-1")).rejects.toMatchObject({ status: 403 });
+	});
+});
+
+describe("ensureNotBlocked", () => {
+	function rpcClient(blocked: boolean | null, error: { message: string } | null = null) {
+		const rpc = vi.fn(async () => ({ data: blocked, error }));
+		return { client: { rpc } as unknown as SupabaseClient<Database>, rpc };
+	}
+
+	it("ブロック関係があれば 403 を返す", async () => {
+		const { client, rpc } = rpcClient(true);
+		const failure = await ensureNotBlocked(client, "me", "them");
+		expect(failure).toMatchObject({ status: 403 });
+		expect(rpc).toHaveBeenCalledWith("is_blocked_between", { user_a: "me", user_b: "them" });
+	});
+
+	it("ブロック関係が無ければ null を返す", async () => {
+		const { client } = rpcClient(false);
+		expect(await ensureNotBlocked(client, "me", "them")).toBeNull();
+	});
+
+	it("自分自身と相手不明は照会せずに通す", async () => {
+		const { client, rpc } = rpcClient(true);
+		expect(await ensureNotBlocked(client, "me", "me")).toBeNull();
+		expect(await ensureNotBlocked(client, "me", null)).toBeNull();
+		expect(rpc).not.toHaveBeenCalled();
+	});
+
+	it("照会に失敗したら通す（DB 側のポリシーが最終防壁）", async () => {
+		const { client } = rpcClient(null, { message: "boom" });
+		expect(await ensureNotBlocked(client, "me", "them")).toBeNull();
+	});
+});
+
+describe("blockUserAction / unblockUserAction", () => {
+	function blockClient(options: { targetExists?: boolean; upsertError?: { message: string } | null } = {}) {
+		const upsert = vi.fn(async () => ({ error: options.upsertError ?? null }));
+		const deleteEq = vi.fn(async () => ({ error: null }));
+		const deleted: Record<string, string>[] = [];
+		const client = {
+			from: vi.fn((table: string) => {
+				if (table === "profiles") {
+					return {
+						select: vi.fn(() => ({
+							eq: vi.fn(() => ({
+								maybeSingle: vi.fn(async () => ({
+									data: options.targetExists === false ? null : { id: "them" },
+									error: null,
+								})),
+							})),
+						})),
+					};
+				}
+				if (table === "user_blocks") {
+					return {
+						upsert,
+						delete: vi.fn(() => ({
+							eq: vi.fn((columnA: string, valueA: string) => ({
+								eq: vi.fn(async (columnB: string, valueB: string) => {
+									deleted.push({ [columnA]: valueA, [columnB]: valueB });
+									return deleteEq();
+								}),
+							})),
+						})),
+					};
+				}
+				throw new Error(`unexpected table: ${table}`);
+			}),
+		};
+		return { client: client as unknown as SupabaseClient<Database>, upsert, deleted };
+	}
+
+	const formRequest = (fields: Record<string, string>) => {
+		const form = new FormData();
+		for (const [key, value] of Object.entries(fields)) form.set(key, value);
+		return new Request("http://localhost/profile/them", { method: "POST", body: form });
+	};
+
+	it("ブロックを記録する（二重送信でも成功扱い）", async () => {
+		const { client, upsert } = blockClient();
+		const result = await blockUserAction(formRequest({ target_id: "them" }), client, "me");
+		expect(result).toEqual({ blocked: true });
+		expect(upsert).toHaveBeenCalledWith(
+			{ blocker_id: "me", blocked_id: "them" },
+			{ onConflict: "blocker_id,blocked_id", ignoreDuplicates: true },
+		);
+	});
+
+	it("自分自身はブロックできない", async () => {
+		const { client, upsert } = blockClient();
+		const result = await blockUserAction(formRequest({ target_id: "me" }), client, "me");
+		expect(result).toMatchObject({ status: 400 });
+		expect(upsert).not.toHaveBeenCalled();
+	});
+
+	it("存在しないユーザーは 404", async () => {
+		const { client } = blockClient({ targetExists: false });
+		const result = await blockUserAction(formRequest({ target_id: "ghost" }), client, "me");
+		expect(result).toMatchObject({ status: 404 });
+	});
+
+	it("ブロック解除は自分の行だけを消す", async () => {
+		const { client, deleted } = blockClient();
+		const result = await unblockUserAction(formRequest({ target_id: "them" }), client, "me");
+		expect(result).toEqual({ blocked: false });
+		expect(deleted).toEqual([{ blocker_id: "me", blocked_id: "them" }]);
+	});
+
+	it("target_id が無ければ 400", async () => {
+		const { client } = blockClient();
+		expect(await unblockUserAction(formRequest({}), client, "me")).toMatchObject({ status: 400 });
 	});
 });
 

@@ -159,6 +159,7 @@ const muteSettingsCache = new WeakMap<
 			mutedWords?: Promise<string[]>;
 			animeMuteIds?: Promise<Set<string>>;
 			mutedEventIds?: Promise<Set<string>>;
+			blockedUserIds?: Promise<Set<string>>;
 		}
 	>
 >();
@@ -202,6 +203,78 @@ function getMutedEventIdsCached(supabase: SupabaseClient<Database>, userId: stri
 }
 
 /**
+ * 自分がブロックした相手と、自分をブロックしている相手の ID。
+ *
+ * ブロックは双方向に効かせるので、どちらの向きも同じ Set にまとめる。
+ * user_blocks の SELECT は自分が作った行だけなので、「自分をブロックしている相手」は
+ * is_blocked_between と同じ理由で RLS 越しには読めない。そのため RPC で引く。
+ */
+export async function getBlockedUserIds(
+	supabase: SupabaseClient<Database>,
+	userId: string | null,
+): Promise<Set<string>> {
+	if (!userId) return new Set();
+	// biome-ignore lint/suspicious/noExplicitAny: user_blocks RPCs not yet in auto-generated DB types
+	const { data, error } = await (supabase as any).rpc("get_blocked_user_ids");
+	if (error) {
+		console.error("getBlockedUserIds error:", error);
+		return new Set();
+	}
+	return new Set(((data ?? []) as { user_id: string }[]).map((row) => row.user_id));
+}
+
+/** 自分がブロックした相手の一覧（設定画面用。自分をブロックしている相手は含めない） */
+export async function getBlockedProfiles(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+): Promise<(ProfileSummary & { blocked_at: string })[]> {
+	// biome-ignore lint/suspicious/noExplicitAny: user_blocks not yet in auto-generated DB types
+	const { data, error } = await (supabase as any)
+		.from("user_blocks")
+		.select(
+			"created_at, blocked:profiles!user_blocks_blocked_id_fkey ( id, username, display_name, avatar_url, bio )",
+		)
+		.eq("blocker_id", userId)
+		.order("created_at", { ascending: false });
+
+	if (error) {
+		console.error("getBlockedProfiles error:", error);
+		return [];
+	}
+
+	type BlockRow = { created_at: string; blocked: ProfileSummary | ProfileSummary[] | null };
+	return ((data ?? []) as unknown as BlockRow[]).flatMap((row) => {
+		const profile = Array.isArray(row.blocked) ? row.blocked[0] : row.blocked;
+		return profile ? [{ ...profile, blocked_at: row.created_at }] : [];
+	});
+}
+
+/** 自分が相手をブロックしているか（プロフィール画面のメニュー表示用） */
+export async function isBlockedByMe(
+	supabase: SupabaseClient<Database>,
+	userId: string | null,
+	targetId: string,
+): Promise<boolean> {
+	if (!userId || userId === targetId) return false;
+	// biome-ignore lint/suspicious/noExplicitAny: user_blocks not yet in auto-generated DB types
+	const { data } = await (supabase as any)
+		.from("user_blocks")
+		.select("blocked_id")
+		.eq("blocker_id", userId)
+		.eq("blocked_id", targetId)
+		.maybeSingle();
+	return data != null;
+}
+
+/** リクエストスコープでメモ化された getBlockedUserIds */
+function getBlockedUserIdsCached(supabase: SupabaseClient<Database>, userId: string | null): Promise<Set<string>> {
+	if (!userId) return Promise.resolve(new Set<string>());
+	const entry = getMuteCacheEntry(supabase, userId);
+	if (!entry.blockedUserIds) entry.blockedUserIds = getBlockedUserIds(supabase, userId);
+	return entry.blockedUserIds;
+}
+
+/**
  * rawPost 配列に like_count / repost_count / reply_count / liked_by_me / reposted_by_me を付加して
  * Post[] に変換する共通ヘルパー。
  * 全ルートサーバー（タイムライン・プロフィール・ハッシュタグ・検索・詳細）で使い回す。
@@ -222,6 +295,8 @@ export async function enrichPostsWithCounts(
 	const mutedEventIdsPromise = options.includeMutedRoomPosts
 		? Promise.resolve(new Set<string>())
 		: getMutedEventIdsCached(supabase, userId);
+	// ブロックは入室中のルームでも解除しない（ミュートと違い、相手を避けるための機能）
+	const blockedUserIdsPromise = getBlockedUserIdsCached(supabase, userId);
 
 	type QuotedPostRow = {
 		id: string;
@@ -251,13 +326,24 @@ export async function enrichPostsWithCounts(
 		}
 	}
 
-	const [mutedWords, mutedRoomAnimeIds, mutedEventIds] = await Promise.all([
+	const [mutedWords, mutedRoomAnimeIds, mutedEventIds, blockedUserIds] = await Promise.all([
 		mutedWordsPromise,
 		mutedRoomAnimeIdsPromise,
 		mutedEventIdsPromise,
+		blockedUserIdsPromise,
 	]);
+
+	// 引用先がブロック相手なら引用枠を落とす（本文だけ残す）
+	if (blockedUserIds.size > 0) {
+		for (const raw of rawPosts) {
+			const quoted = Array.isArray(raw.quoted_post) ? raw.quoted_post[0] : raw.quoted_post;
+			if (quoted && blockedUserIds.has(quoted.user_id)) raw.quoted_post = null;
+		}
+	}
+
 	const visibleRawPosts = rawPosts.filter(
 		(post) =>
+			!blockedUserIds.has(post.user_id) &&
 			!(mutedWords.length > 0 && containsMutedWord(post, mutedWords)) &&
 			!(
 				post.broadcast_room_session_id &&
@@ -427,6 +513,10 @@ export async function getNotifications(
 	limit = 50,
 	types?: readonly string[],
 ): Promise<Notification[]> {
+	// ブロック相手からの通知は、ブロック前に作られた行も含めて出さない。
+	// 取得上限を無駄にしないよう、絞り込みはクエリ側で行う。
+	const blockedUserIds = await getBlockedUserIdsCached(supabase, userId);
+
 	let query = supabase
 		.from("notifications")
 		.select(`
@@ -488,6 +578,11 @@ export async function getNotifications(
 
 	if (types && types.length > 0) {
 		query = query.in("type", types as string[]);
+	}
+
+	if (blockedUserIds.size > 0) {
+		// NOT IN は NULL を落とすため、actor_id が NULL のシステム通知（放送・トレード成立）は明示的に残す
+		query = query.or(`actor_id.is.null,actor_id.not.in.(${[...blockedUserIds].join(",")})`);
 	}
 
 	const { data, error } = await query;
@@ -1377,9 +1472,11 @@ function toAdminReport(
 export async function getFollowerProfiles(
 	supabase: SupabaseClient<Database>,
 	profileId: string,
+	viewerId: string | null = null,
 ): Promise<ProfileSummary[]> {
 	const { data: follows } = await supabase.from("follows").select("follower_id").eq("following_id", profileId);
-	const ids = (follows ?? []).map((r) => r.follower_id);
+	const blockedUserIds = await getBlockedUserIdsCached(supabase, viewerId);
+	const ids = (follows ?? []).map((r) => r.follower_id).filter((id) => !blockedUserIds.has(id));
 	if (ids.length === 0) return [];
 	const { data } = await supabase
 		.from("profiles")
@@ -1391,9 +1488,11 @@ export async function getFollowerProfiles(
 export async function getFollowingProfiles(
 	supabase: SupabaseClient<Database>,
 	profileId: string,
+	viewerId: string | null = null,
 ): Promise<ProfileSummary[]> {
 	const { data: follows } = await supabase.from("follows").select("following_id").eq("follower_id", profileId);
-	const ids = (follows ?? []).map((r) => r.following_id);
+	const blockedUserIds = await getBlockedUserIdsCached(supabase, viewerId);
+	const ids = (follows ?? []).map((r) => r.following_id).filter((id) => !blockedUserIds.has(id));
 	if (ids.length === 0) return [];
 	const { data } = await supabase
 		.from("profiles")

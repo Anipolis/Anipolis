@@ -77,6 +77,8 @@ async function handlePasskeyLogin(): Promise<void> {
 
 			{#if form?.success && form.message}
 				<div class="flash-success">{form.message}</div>
+			{:else if data.accountDeleted && !form}
+				<div class="flash-success" role="status">退会が完了しました。ご利用ありがとうございました。</div>
 			{/if}
 
 			{#if form && 'message' in form && !form.success}

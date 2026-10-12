@@ -17,7 +17,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 
 	const followCounts = await getFollowCounts(supabase, profile.id);
 
-	const followersPromise = getFollowerProfiles(supabase, profile.id).catch((err) => {
+	const followersPromise = getFollowerProfiles(supabase, profile.id, user?.id ?? null).catch((err) => {
 		console.error("[profile/followers] error:", err);
 		return [] as Awaited<ReturnType<typeof getFollowerProfiles>>;
 	});

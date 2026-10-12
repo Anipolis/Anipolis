@@ -41,6 +41,7 @@ let reportDetails = $state("");
 let reportSubmitting = $state(false);
 let reportMessage = $state("");
 let showKebabMenu = $state(false);
+let blocking = $state(false);
 
 $effect(() => {
 	isFollowing = data.isFollowing;
@@ -61,6 +62,21 @@ const activeTab = $derived(
 );
 const bioRemaining = $derived(160 - editBio.length);
 const editableHeaderUrl = $derived(headerPreviewUrl ?? (headerPendingDelete ? null : profile.header_url));
+
+const submitBlock: SubmitFunction = ({ cancel }) => {
+	if (!data.isBlocked && !window.confirm(`@${profile.username} をブロックします。フォロー関係も解除されます。`)) {
+		cancel();
+		return;
+	}
+	blocking = true;
+	return async ({ update }) => {
+		blocking = false;
+		showKebabMenu = false;
+		// ブロックすると相手の投稿を落とすため、表示中のタイムラインも取り直す
+		await update({ reset: false });
+		await invalidateAll();
+	};
+};
 
 const handleProfileSubmit: SubmitFunction = () => {
 	// 保存中に選択が変わっても送信開始時点の画像状態を使う
@@ -343,10 +359,14 @@ const grouped = $derived(
 								プロフィールを編集
 							</button>
 						{:else if data.user}
-							<form
-								method="POST"
-								action="?/follow"
-								use:enhance={({ cancel }) => {
+							{#if data.isBlocked}
+								<!-- ブロック中はフォローできない（RLS で拒否される）ので、操作の代わりに状態を示す -->
+								<span class="btn btn-outline" style="font-size: 13px;">ブロック中</span>
+							{:else}
+								<form
+									method="POST"
+									action="?/follow"
+									use:enhance={({ cancel }) => {
                             if (isProcessing) {
                                 cancel();
                                 return;
@@ -369,17 +389,18 @@ const grouped = $derived(
                                 }
                             };
                         }}
-							>
-								<input type="hidden" name="target_id" value={profile.id}>
-								<button
-									type="submit"
-									class="btn {isFollowing || followRequestStatus === 'pending' ? 'btn-outline' : 'btn-primary'}"
-									disabled={isProcessing || followRequestStatus === 'pending'}
-									style="font-size: 13px;"
 								>
-									{isFollowing ? 'フォロー中' : followRequestStatus === 'pending' ? '申請中' : profile.is_private ? 'フォロー申請' : 'フォローする'}
-								</button>
-							</form>
+									<input type="hidden" name="target_id" value={profile.id}>
+									<button
+										type="submit"
+										class="btn {isFollowing || followRequestStatus === 'pending' ? 'btn-outline' : 'btn-primary'}"
+										disabled={isProcessing || followRequestStatus === 'pending'}
+										style="font-size: 13px;"
+									>
+										{isFollowing ? 'フォロー中' : followRequestStatus === 'pending' ? '申請中' : profile.is_private ? 'フォロー申請' : 'フォローする'}
+									</button>
+								</form>
+							{/if}
 							<div class="profile-kebab-menu">
 								<button
 									type="button"
@@ -405,6 +426,21 @@ const grouped = $derived(
 											e.stopPropagation();
 										}}
 									>
+										<form
+											method="POST"
+											action={data.isBlocked ? "?/unblock" : "?/block"}
+											use:enhance={submitBlock}
+										>
+											<input type="hidden" name="target_id" value={profile.id}>
+											<button
+												type="submit"
+												role="menuitem"
+												class="danger-menuitem"
+												disabled={blocking}
+											>
+												{data.isBlocked ? "ブロック解除" : "ブロック"}
+											</button>
+										</form>
 										<button
 											type="button"
 											role="menuitem"
@@ -697,7 +733,11 @@ const grouped = $derived(
 
 		<!-- 投稿タブ -->
 		{#if activeTab === 'posts'}
-			{#if !canViewContent}
+			{#if data.isBlocked}
+				<div class="empty-state">
+					<p>@{profile.username} さんをブロックしています</p>
+				</div>
+			{:else if !canViewContent}
 				<div class="empty-state profile-private-state">
 					<p>このアカウントの投稿はフォロワーだけが見ることができます</p>
 				</div>
@@ -844,6 +884,10 @@ const grouped = $derived(
 	background: var(--color-surface);
 	box-shadow: 0 8px 24px rgb(0 0 0 / 0.24);
 	overflow: hidden;
+}
+
+.profile-kebab-dropdown .danger-menuitem {
+	color: var(--color-danger);
 }
 
 .profile-kebab-dropdown button {
