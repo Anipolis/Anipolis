@@ -2107,19 +2107,30 @@ export function moveBroadcastDayFirst(
 
 /** 並べ替え用の値（シーズンの新旧・人気・話題・評価）を作品の列と並べたビュー（144） */
 const ANIME_LIST_SORTABLE_VIEW = "anime_list_sortable";
-/** ページ分けで取る軽量列。重い一覧列は現在ページの ID だけ後段でまとめて取る */
-const ANIME_SORTABLE_COLUMNS = "id, list_count, recent_count, avg_score, score_count";
-const ANIME_CANDIDATE_COLUMNS = `id, created_at, genre, genre_en, broadcast_day, season, ${ANIME_SORTABLE_COLUMNS}`;
+/** 放送中タブでアプリ側の並べ替えに使う列 */
+const ANIME_CANDIDATE_BASE_COLUMNS = ["id", "created_at", "genre", "genre_en", "broadcast_day", "season"];
 /** 候補を全件取る経路（放送中タブ）の安全上限。放送中の作品は数百件程度の想定 */
 const MAX_ANIME_CANDIDATES = 5000;
 
 type AnimeSortableRow = {
 	id: number;
-	list_count: number | null;
-	recent_count: number | null;
-	avg_score: number | null;
-	score_count: number | null;
+	list_count?: number | null;
+	recent_count?: number | null;
+	avg_score?: number | null;
+	score_count?: number | null;
 };
+
+/**
+ * ページ分けで取る軽量列（重い一覧列は現在ページの ID だけ後段でまとめて取る）。
+ * 集計は並び順に要るものだけを取る。使わない集計の JOIN を planner が省けるので、
+ * 集計を3つとも取るより本番で約3割速い。
+ */
+function animeSortableColumns(sortBy: NonNullable<AnimeListOptions["sortBy"]>): string[] {
+	if (sortBy === "popular") return ["id", "list_count"];
+	if (sortBy === "trending") return ["id", "recent_count"];
+	if (sortBy === "top_rated") return ["id", "avg_score", "score_count"];
+	return ["id"];
+}
 type AnimeMetric = { primary: number; secondary: number };
 
 function fromAnimeListSortable(supabase: SupabaseClient<Database>) {
@@ -2138,12 +2149,15 @@ function fromAnimeListSortable(supabase: SupabaseClient<Database>) {
 export function animeListOrderColumns(
 	sortBy: NonNullable<AnimeListOptions["sortBy"]>,
 	newestSeasonFirst: boolean,
+	rankByGenreMatch = false,
 ): string[] {
 	const columns: string[] = [];
 	if (newestSeasonFirst) columns.push("season_sort_key");
 	if (sortBy === "popular") columns.push("list_count");
 	else if (sortBy === "trending") columns.push("recent_count");
 	else if (sortBy === "top_rated") columns.push("rating_sort_score", "score_count");
+	// 選んだタグに多く当てはまる作品を先に（rankAnimeCandidateIds と同じく、集計値の次に効かせる）
+	if (rankByGenreMatch) columns.push("genre_match");
 	if (sortBy !== "created" && !newestSeasonFirst) columns.push("season_sort_key");
 	columns.push("created_at", "id");
 	return columns;
@@ -2168,8 +2182,31 @@ function metricsFromSortableRows(
 	return new Map(rows.map((row) => [String(row.id), metricFromSortableRow(row, sortBy)]));
 }
 
+/** 範囲を指定した取得の順番を付ける（すべて降順・NULL は最後） */
+function orderAnimeQuery<T extends { order(column: string, options: object): T }>(query: T, orderColumns: string[]): T {
+	return orderColumns.reduce((q, column) => q.order(column, { ascending: false, nullsFirst: false }), query);
+}
+
+/** 絞り込み後の件数だけを数える（一致数の並びに関係なく、ビューで数えられる） */
+async function countAnimeSortable(
+	supabase: SupabaseClient<Database>,
+	filters: AnimeFilterInput,
+	seasonFilter: string | null,
+): Promise<number | null> {
+	const { count, error } = await applyAnimeListFilters(
+		fromAnimeListSortable(supabase).select("id", { count: "exact", head: true }),
+		filters,
+		seasonFilter,
+	);
+	if (error) {
+		console.error("countAnimeSortable error:", error);
+		return null;
+	}
+	return count ?? 0;
+}
+
 /**
- * 絞り込み・並べ替え・ページ分け・件数を DB で1回に行う（#322）。
+ * 絞り込み・並べ替え・ページ分け・件数を DB で行う（#322）。
  * offset が件数を超えると PostgREST は範囲外エラー（PGRST103）を返すので、そのときは件数だけ取り直す。
  */
 async function fetchAnimeSortedPage(
@@ -2177,30 +2214,84 @@ async function fetchAnimeSortedPage(
 	filters: AnimeFilterInput,
 	seasonFilter: string | null,
 	orderColumns: string[],
+	selectColumns: string[],
 	offset: number,
 	limit: number,
+	/** 一致数で並べるときの、表記をそろえた選択タグ（並べないときは空） */
+	rankGenres: string[] = [],
 ): Promise<{ rows: AnimeSortableRow[]; total: number } | null> {
-	let query = applyAnimeListFilters(
-		fromAnimeListSortable(supabase).select(ANIME_SORTABLE_COLUMNS, { count: "exact" }),
-		filters,
-		seasonFilter,
-	);
-	for (const column of orderColumns) query = query.order(column, { ascending: false, nullsFirst: false });
-	const { data, error, count } = await query.range(offset, offset + limit - 1);
-
-	if (error?.code === "PGRST103") {
-		const head = await applyAnimeListFilters(
-			fromAnimeListSortable(supabase).select("id", { count: "exact", head: true }),
+	if (rankGenres.length > 0) {
+		return fetchAnimeGenreRankedPage(
+			supabase,
 			filters,
 			seasonFilter,
+			orderColumns,
+			selectColumns,
+			offset,
+			limit,
+			rankGenres,
 		);
-		return head.error ? null : { rows: [], total: head.count ?? 0 };
+	}
+
+	const { data, error, count } = await orderAnimeQuery(
+		applyAnimeListFilters(
+			fromAnimeListSortable(supabase).select(selectColumns.join(", "), { count: "exact" }),
+			filters,
+			seasonFilter,
+		),
+		orderColumns,
+	).range(offset, offset + limit - 1);
+
+	if (error?.code === "PGRST103") {
+		const total = await countAnimeSortable(supabase, filters, seasonFilter);
+		return total === null ? null : { rows: [], total };
 	}
 	if (error || !data) {
 		console.error("fetchAnimeSortedPage error:", error);
 		return null;
 	}
 	return { rows: data as AnimeSortableRow[], total: count ?? data.length };
+}
+
+/**
+ * 選んだタグの一致数（genre_match）で並べる経路。一致数は選んだタグで決まるので、引数を受け取る
+ * 関数（145）から1ページ分を取る。
+ *
+ * - GET で呼ぶ。POST だと PostgREST が関数を間接的に呼び出す形になり、planner が関数を展開できず
+ *   絞り込みが効かない（本番で 84 件に絞っても約0.55秒）。GET なら展開されビューと同程度になる。
+ * - 件数は関数経由で数えると遅いので、同じ絞り込みのビューで並行して数える（一致数は件数に関係しない）。
+ * - PostgREST は関数の結果を並べ替えるとき、並べ替えに使う列も select に含まれている必要がある。
+ */
+async function fetchAnimeGenreRankedPage(
+	supabase: SupabaseClient<Database>,
+	filters: AnimeFilterInput,
+	seasonFilter: string | null,
+	orderColumns: string[],
+	selectColumns: string[],
+	offset: number,
+	limit: number,
+	rankGenres: string[],
+): Promise<{ rows: AnimeSortableRow[]; total: number } | null> {
+	const columns = [...new Set([...selectColumns, ...orderColumns])].join(", ");
+	const [page, total] = await Promise.all([
+		orderAnimeQuery(
+			applyAnimeListFilters(
+				// biome-ignore lint/suspicious/noExplicitAny: anime_list_with_genre_match（145）は生成型にまだ無い（#216）
+				(supabase as any)
+					.rpc("anime_list_with_genre_match", { p_genres: rankGenres }, { get: true })
+					.select(columns),
+				filters,
+				seasonFilter,
+			),
+			orderColumns,
+		).range(offset, offset + limit - 1),
+		countAnimeSortable(supabase, filters, seasonFilter),
+	]);
+	if (page.error || !page.data || total === null) {
+		if (page.error) console.error("fetchAnimeGenreRankedPage error:", page.error);
+		return null;
+	}
+	return { rows: page.data as AnimeSortableRow[], total };
 }
 
 /**
@@ -2211,11 +2302,13 @@ async function fetchAllAnimeCandidates(
 	supabase: SupabaseClient<Database>,
 	filters: AnimeFilterInput,
 	seasonFilter: string | null,
+	sortableColumns: string[],
 ): Promise<(AnimeCandidate & AnimeSortableRow)[] | null> {
+	const columns = [...new Set([...ANIME_CANDIDATE_BASE_COLUMNS, ...sortableColumns])].join(", ");
 	const rows: (AnimeCandidate & AnimeSortableRow)[] = [];
 	while (rows.length < MAX_ANIME_CANDIDATES) {
 		const { data, error } = await applyAnimeListFilters(
-			fromAnimeListSortable(supabase).select(ANIME_CANDIDATE_COLUMNS),
+			fromAnimeListSortable(supabase).select(columns),
 			filters,
 			seasonFilter,
 		)
@@ -2275,7 +2368,7 @@ export async function getAnimeListPage(
 	let pageIds: string[];
 	let metrics: Map<string, AnimeMetric>;
 	if (options.prioritizeBroadcastDay != null) {
-		const candidates = await fetchAllAnimeCandidates(supabase, filters, seasonFilter);
+		const candidates = await fetchAllAnimeCandidates(supabase, filters, seasonFilter, animeSortableColumns(sortBy));
 		if (!candidates) return { items: [], total: 0 };
 		total = candidates.length;
 		metrics = metricsFromSortableRows(candidates, sortBy);
@@ -2285,13 +2378,17 @@ export async function getAnimeListPage(
 		orderedIds = moveBroadcastDayFirst(orderedIds, candidates, options.prioritizeBroadcastDay);
 		pageIds = orderedIds.slice(start, start + pageSize);
 	} else {
+		// 同じ種類のタグは OR で絞るので、2つ以上選ぶと一致数が作品ごとに変わる（1つなら全件同じ）
+		const rankByGenreMatch = selectedGenres.length >= 2;
 		const result = await fetchAnimeSortedPage(
 			supabase,
 			filters,
 			seasonFilter,
-			animeListOrderColumns(sortBy, Boolean(options.newestSeasonFirst)),
+			animeListOrderColumns(sortBy, Boolean(options.newestSeasonFirst), rankByGenreMatch),
+			animeSortableColumns(sortBy),
 			start,
 			pageSize,
+			rankByGenreMatch ? selectedGenres : [],
 		);
 		if (!result) return { items: [], total: 0 };
 		total = result.total;
