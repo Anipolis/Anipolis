@@ -3465,6 +3465,20 @@ form + .repost-menu-item {
 	overflow: hidden;
 }
 
+/* 引用元に CW があるときの警告ラベル（本文の代わりに出す） */
+.quoted-post-cw {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-weight: 700;
+	color: var(--color-text);
+}
+
+.quoted-post-cw > span {
+	flex-shrink: 0;
+	color: var(--color-warning, #f59e0b);
+}
+
 /* ============================================================
    MOBILE RESPONSIVE (≤960px additions)
    ============================================================ */

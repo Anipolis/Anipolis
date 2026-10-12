@@ -6,6 +6,7 @@ import { formatBroadcastRelativeTime } from "$lib/utils/format";
 import { getPostDisplayContent, getPostRoomContext } from "$lib/utils/post-presentation";
 import LikeButton from "./post/LikeButton.svelte";
 import PostActionBar from "./post/PostActionBar.svelte";
+import PostCwGuard from "./post/PostCwGuard.svelte";
 import PostEmbeds from "./post/PostEmbeds.svelte";
 import PostOverlays from "./post/PostOverlays.svelte";
 import PostText from "./post/PostText.svelte";
@@ -122,25 +123,28 @@ function handleKeydown(event: KeyboardEvent) {
 
 	<div class="post-row-main">
 		<div class="post-row-body">
-			<PostText {post} {content} collapsible inline>
-				{#snippet trailing()}
-					{#if !insideRoom && roomContext}
-						<a href={roomContext.href} class="post-inline-context" title={roomContext.title}
-							><span class="i-lucide-door-open" aria-hidden="true"></span
-							><span class="post-context-title">{roomContext.title}</span></a
-						>
-					{:else if !insideRoom && post.anime_quote && !post.exchange_share}
-						<a
-							href="/anime/{post.anime_quote.id}"
-							class="post-inline-context"
-							title={post.anime_quote.title}
-							><span class="i-lucide-tv" aria-hidden="true"></span
-							><span class="post-context-title">{post.anime_quote.title}</span></a
-						>
-					{/if}
-				{/snippet}
-			</PostText>
-			<PostEmbeds {controller} />
+			<!-- CW 中は本文と画像・引用・トレード結果をまとめて隠す（#318） -->
+			<PostCwGuard {post}>
+				<PostText {content} collapsible inline>
+					{#snippet trailing()}
+						{#if !insideRoom && roomContext}
+							<a href={roomContext.href} class="post-inline-context" title={roomContext.title}
+								><span class="i-lucide-door-open" aria-hidden="true"></span
+								><span class="post-context-title">{roomContext.title}</span></a
+							>
+						{:else if !insideRoom && post.anime_quote && !post.exchange_share}
+							<a
+								href="/anime/{post.anime_quote.id}"
+								class="post-inline-context"
+								title={post.anime_quote.title}
+								><span class="i-lucide-tv" aria-hidden="true"></span
+								><span class="post-context-title">{post.anime_quote.title}</span></a
+							>
+						{/if}
+					{/snippet}
+				</PostText>
+				<PostEmbeds {controller} />
+			</PostCwGuard>
 		</div>
 		<LikeButton {controller} />
 	</div>

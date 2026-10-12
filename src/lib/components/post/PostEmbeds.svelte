@@ -1,6 +1,7 @@
 <script lang="ts">
 import AnimeExchangeResult from "$lib/components/AnimeExchangeResult.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
+import { contentWarningLabel, hasContentWarning } from "$lib/content-warning";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import type { PostController } from "./post-controller.svelte";
 
@@ -39,7 +40,15 @@ function openLightbox(event: MouseEvent, url: string) {
 			<span class="quoted-post-name">{post.quoted_post.display_name || post.quoted_post.username}</span>
 			<span class="quoted-post-at">@{post.quoted_post.username}</span>
 		</div>
-		<p class="quoted-post-content">{post.quoted_post.content}</p>
+		{#if hasContentWarning(post.quoted_post)}
+			<!-- 引用元の CW は引用枠でも守る。本文は元の投稿を開いて展開したときだけ見せる（#319） -->
+			<p class="quoted-post-content quoted-post-cw">
+				<span class="i-lucide-triangle-alert" aria-hidden="true"></span>
+				{contentWarningLabel(post.quoted_post)}
+			</p>
+		{:else}
+			<p class="quoted-post-content">{post.quoted_post.content}</p>
+		{/if}
 	</a>
 {/if}
 

@@ -86,6 +86,9 @@ export interface QuotedPost {
 	username: string;
 	display_name: string | null;
 	avatar_url: string | null;
+	/** 引用元の CW。引用枠では本文の代わりに警告を出す（#319） */
+	cw_anime_id: string | null;
+	cw_anime: { title: string } | null;
 }
 
 export interface RepostContext {
@@ -171,6 +174,9 @@ export interface Notification {
 	post_has_anime_quote: boolean;
 	post_has_quoted_post: boolean;
 	post_has_exchange_share: boolean;
+	/** 投稿の CW。プレビューでは本文の代わりに警告ラベルを出す（#319） */
+	post_cw_anime_id: string | null;
+	post_cw_anime_title: string | null;
 	recommendation_anime_id: string | null;
 	recommendation_anime_title: string | null;
 	recommendation_anime_cover_url: string | null;
@@ -398,6 +404,8 @@ export interface RawPost {
 				content: string;
 				user_id: string;
 				created_at: string;
+				cw_anime_id?: string | number | null;
+				cw_anime?: { title: string } | { title: string }[] | null;
 				profiles: {
 					username: string;
 					display_name: string | null;
@@ -435,6 +443,8 @@ export function toPost(
 				username: qp.profiles?.username ?? "unknown",
 				display_name: qp.profiles?.display_name ?? null,
 				avatar_url: qp.profiles?.avatar_url ?? null,
+				cw_anime_id: qp.cw_anime_id != null ? String(qp.cw_anime_id) : null,
+				cw_anime: (Array.isArray(qp.cw_anime) ? qp.cw_anime[0] : qp.cw_anime) ?? null,
 			};
 		})(),
 		content: raw.content,

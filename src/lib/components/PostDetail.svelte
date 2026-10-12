@@ -3,6 +3,7 @@ import type { Post } from "$lib/types";
 import { formatRelativeTime } from "$lib/utils/format";
 import { getPostDisplayContent, getPostRoomContext } from "$lib/utils/post-presentation";
 import PostActionBar from "./post/PostActionBar.svelte";
+import PostCwGuard from "./post/PostCwGuard.svelte";
 import PostEmbeds from "./post/PostEmbeds.svelte";
 import PostOverlays from "./post/PostOverlays.svelte";
 import PostText from "./post/PostText.svelte";
@@ -99,8 +100,11 @@ function handleKeydown(event: KeyboardEvent) {
 		{/if}
 	</header>
 
-	<PostText {post} {content} />
-	<PostEmbeds {controller} animeCard={!roomContext} />
+	<!-- CW 中は本文と画像・引用・トレード結果をまとめて隠す（#318） -->
+	<PostCwGuard {post}>
+		<PostText {content} />
+		<PostEmbeds {controller} animeCard={!roomContext} />
+	</PostCwGuard>
 	<ReactionErrorNotice feedback={controller.reactionFeedback} />
 	<PostActionBar {controller} id="post-actions-{post.id}" detail />
 	<PostOverlays {controller} {content} />
