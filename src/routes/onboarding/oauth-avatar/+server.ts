@@ -17,7 +17,9 @@ export const GET: RequestHandler = async ({ locals: { safeGetSession } }) => {
 	return new Response(avatar.bytes, {
 		headers: {
 			"content-type": avatar.mime,
-			"cache-control": "private, max-age=300",
+			// URL は全員共通で中身はログイン中の本人で変わるので、ブラウザにも保存させない。
+			// 同じブラウザでアカウントを切り替えたときに前の人の画像が候補に出るのを防ぐ
+			"cache-control": "no-store",
 			"x-content-type-options": "nosniff",
 		},
 	});
