@@ -266,6 +266,8 @@ export interface Anime {
 	title_romaji: string | null;
 	synopsis: string | null;
 	cover_url: string | null;
+	/** 画像の実体。cover_url は © がある作品だけ値が入る表示用の列（migration 136） */
+	cover_source_url: string | null;
 	season: string | null;
 	episode_count: string | null;
 	type: string | null;

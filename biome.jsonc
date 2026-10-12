@@ -29,6 +29,19 @@
 			}
 		}
 	},
+	// scripts/ は tsc の対象外なので、未定義の変数参照だけはここで落とす（#335）
+	"overrides": [
+		{
+			"includes": ["scripts/**"],
+			"linter": {
+				"rules": {
+					"correctness": {
+						"noUndeclaredVariables": "error"
+					}
+				}
+			}
+		}
+	],
 	"assist": {
 		"actions": {
 			"source": {

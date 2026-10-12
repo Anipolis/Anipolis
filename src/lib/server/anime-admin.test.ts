@@ -18,22 +18,27 @@ function createSourceWriter(readResult: unknown) {
 	return { writer: writer as unknown as SupabaseClient<Database>, upsert };
 }
 
-function createUpdateWriter() {
-	const animeUpdate = vi.fn(() => ({
+function createUpdateWriter({
+	previousRow = { mal_id: 123, title: "旧タイトル" } as Record<string, unknown>,
+	updatedRow = { id: 123 } as Record<string, unknown>,
+	failFirstManualRead = true,
+} = {}) {
+	const animeUpdate = vi.fn((_payload: Record<string, unknown>) => ({
 		eq: vi.fn(() => ({
-			select: vi.fn(() => ({ single: vi.fn(async () => ({ data: { id: 123 }, error: null })) })),
+			select: vi.fn(() => ({ single: vi.fn(async () => ({ data: updatedRow, error: null })) })),
 		})),
 	}));
 	const animeRead = {
 		eq: vi.fn(() => animeRead),
-		maybeSingle: vi.fn(async () => ({ data: { mal_id: 123, title: "旧タイトル" }, error: null })),
+		maybeSingle: vi.fn(async () => ({ data: previousRow, error: null })),
 	};
+	const manualReadResult = vi.fn().mockResolvedValue({ data: null, error: null });
+	if (failFirstManualRead) {
+		manualReadResult.mockResolvedValueOnce({ data: null, error: { message: "temporary read failure" } });
+	}
 	const manualRead = {
 		eq: vi.fn(() => manualRead),
-		maybeSingle: vi
-			.fn()
-			.mockResolvedValueOnce({ data: null, error: { message: "temporary read failure" } })
-			.mockResolvedValue({ data: null, error: null }),
+		maybeSingle: manualReadResult,
 	};
 	const manualUpsert = vi.fn(async () => ({ error: null }));
 	const writer = {
@@ -59,11 +64,12 @@ function createUpdateWriter() {
 	};
 }
 
-function updateRequest(title: string) {
+function updateRequest(title: string, fields: Record<string, string> = {}) {
 	const form = new FormData();
 	form.set("title", title);
 	form.set("episode_count", "12");
 	form.set("broadcast_duration_minutes", "30");
+	for (const [name, value] of Object.entries(fields)) form.set(name, value);
 	return new Request("https://example.test/anime/123", { method: "POST", body: form });
 }
 
@@ -144,5 +150,54 @@ describe("upsertManualSourceRecord", () => {
 			}),
 			{ onConflict: "mal_id,source" },
 		);
+	});
+});
+
+describe("updateAnimeAction のカバー（migration 136 で © の無い作品は cover_url が隠れる）", () => {
+	const coverSource = "https://example.test/covers/123.jpg";
+
+	it("隠れているカバーを変えずに保存しても、カバーを編集したことにしない", async () => {
+		const { writer, manualUpsert } = createUpdateWriter({
+			previousRow: { mal_id: 123, title: "旧タイトル", cover_url: null, cover_source_url: coverSource },
+			failFirstManualRead: false,
+		});
+
+		await updateAnimeAction(writer, updateRequest("新タイトル", { cover_url: coverSource }), "123", coverSource);
+
+		const saved = manualUpsert.mock.calls[0] as unknown as [{ normalized_data: Record<string, unknown> }];
+		expect(saved[0].normalized_data).toMatchObject({ title: "新タイトル" });
+		expect(saved[0].normalized_data).not.toHaveProperty("cover_url");
+	});
+
+	it("URL 欄を空にして保存すると、画像の実体ごとカバーを外す", async () => {
+		const { writer, animeUpdate } = createUpdateWriter({
+			previousRow: { mal_id: 123, title: "旧タイトル", cover_url: null, cover_source_url: coverSource },
+			failFirstManualRead: false,
+		});
+
+		await updateAnimeAction(writer, updateRequest("旧タイトル", { cover_url: "" }), "123", coverSource);
+
+		expect(animeUpdate).toHaveBeenCalledWith(expect.objectContaining({ cover_url: null, cover_source_url: null }));
+	});
+
+	it("URL 欄が送られない（画像ファイルを選んだ）ときは今のカバーを引き継ぐ", async () => {
+		const { writer, animeUpdate } = createUpdateWriter({ failFirstManualRead: false });
+
+		await updateAnimeAction(writer, updateRequest("旧タイトル"), "123", coverSource);
+
+		const payload = animeUpdate.mock.calls[0]?.[0];
+		expect(payload).toMatchObject({ cover_url: coverSource });
+		expect(payload).not.toHaveProperty("cover_source_url");
+	});
+
+	it("保存後に © が無くカバーが隠れていれば coverHidden を返す", async () => {
+		const { writer } = createUpdateWriter({
+			updatedRow: { id: 123, cover_url: null, cover_source_url: coverSource },
+			failFirstManualRead: false,
+		});
+
+		const result = await updateAnimeAction(writer, updateRequest("旧タイトル"), "123", coverSource);
+
+		expect(result).toEqual({ success: true, animeId: "123", coverHidden: true });
 	});
 });

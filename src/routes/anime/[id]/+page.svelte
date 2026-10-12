@@ -5,6 +5,7 @@ import { fade, scale } from "svelte/transition";
 import { enhance } from "$app/forms";
 import { page } from "$app/state";
 import { trapFocus } from "$lib/actions/trapFocus";
+import { isCoverHiddenWithoutCopyright } from "$lib/anime-cover";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
@@ -215,9 +216,12 @@ function openRecommendModal() {
 }
 
 let coverUrl = $state("");
+// 画像はあるが © が無いため表示されていない（管理者にだけ理由を示す）
+let coverHidden = $state(false);
 
 $effect(() => {
 	coverUrl = data.anime.cover_url ?? "";
+	coverHidden = isCoverHiddenWithoutCopyright(data.anime);
 });
 
 async function resizeImage(file: File, maxWidth: number): Promise<Blob> {
@@ -259,7 +263,12 @@ async function uploadCover(e: Event) {
 	const res = await fetch("/api/upload/anime-cover", { method: "POST", body: form });
 	if (res.ok) {
 		const json = await res.json();
-		coverUrl = json.url;
+		if (json.visible === false) {
+			coverHidden = true;
+		} else {
+			coverUrl = json.url;
+			coverHidden = false;
+		}
 	} else {
 		const json = await res.json().catch(() => ({}));
 		coverError = json.message ?? "アップロードに失敗しました";
@@ -596,6 +605,9 @@ $effect(() => {
 			<div class="left-panel-info">
 				{#if coverError}
 					<p class="cover-error">{coverError}</p>
+				{/if}
+				{#if data.isAdmin && coverHidden}
+					<p class="cover-hidden-note">権利表記（©）が未設定のため、カバー画像は表示されていません。</p>
 				{/if}
 
 				<!-- Production info below cover -->
@@ -1732,6 +1744,12 @@ $effect(() => {
 .cover-error {
 	font-size: 0.78rem;
 	color: var(--danger, #ef4444);
+	margin: 0;
+}
+
+.cover-hidden-note {
+	font-size: 0.78rem;
+	color: var(--color-text-muted);
 	margin: 0;
 }
 
