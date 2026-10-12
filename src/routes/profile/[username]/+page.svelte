@@ -359,10 +359,14 @@ const grouped = $derived(
 								プロフィールを編集
 							</button>
 						{:else if data.user}
-							<form
-								method="POST"
-								action="?/follow"
-								use:enhance={({ cancel }) => {
+							{#if data.isBlocked}
+								<!-- ブロック中はフォローできない（RLS で拒否される）ので、操作の代わりに状態を示す -->
+								<span class="btn btn-outline" style="font-size: 13px;">ブロック中</span>
+							{:else}
+								<form
+									method="POST"
+									action="?/follow"
+									use:enhance={({ cancel }) => {
                             if (isProcessing) {
                                 cancel();
                                 return;
@@ -385,17 +389,18 @@ const grouped = $derived(
                                 }
                             };
                         }}
-							>
-								<input type="hidden" name="target_id" value={profile.id}>
-								<button
-									type="submit"
-									class="btn {isFollowing || followRequestStatus === 'pending' ? 'btn-outline' : 'btn-primary'}"
-									disabled={isProcessing || followRequestStatus === 'pending'}
-									style="font-size: 13px;"
 								>
-									{isFollowing ? 'フォロー中' : followRequestStatus === 'pending' ? '申請中' : profile.is_private ? 'フォロー申請' : 'フォローする'}
-								</button>
-							</form>
+									<input type="hidden" name="target_id" value={profile.id}>
+									<button
+										type="submit"
+										class="btn {isFollowing || followRequestStatus === 'pending' ? 'btn-outline' : 'btn-primary'}"
+										disabled={isProcessing || followRequestStatus === 'pending'}
+										style="font-size: 13px;"
+									>
+										{isFollowing ? 'フォロー中' : followRequestStatus === 'pending' ? '申請中' : profile.is_private ? 'フォロー申請' : 'フォローする'}
+									</button>
+								</form>
+							{/if}
 							<div class="profile-kebab-menu">
 								<button
 									type="button"
@@ -728,7 +733,11 @@ const grouped = $derived(
 
 		<!-- 投稿タブ -->
 		{#if activeTab === 'posts'}
-			{#if !canViewContent}
+			{#if data.isBlocked}
+				<div class="empty-state">
+					<p>@{profile.username} さんをブロックしています</p>
+				</div>
+			{:else if !canViewContent}
 				<div class="empty-state profile-private-state">
 					<p>このアカウントの投稿はフォロワーだけが見ることができます</p>
 				</div>
