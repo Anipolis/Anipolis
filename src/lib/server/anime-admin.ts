@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fail } from "@sveltejs/kit";
 import { validateImageBuffer } from "$lib/server/upload";
-import type { Database } from "$lib/supabase/database.types";
+import type { Database, Json } from "$lib/supabase/database.types";
 import type { BroadcastOverrideKind } from "$lib/utils/broadcast-episodes";
 
 const ALLOWED_INLINE_COVER_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];
@@ -46,11 +46,7 @@ type ManualSourceRecord = {
 	source_url?: unknown;
 } | null;
 
-async function readManualSourceRecord(
-	// biome-ignore lint/suspicious/noExplicitAny: generated types may lag behind source-record migrations
-	writer: SupabaseClient<any>,
-	malId: number,
-) {
+async function readManualSourceRecord(writer: SupabaseClient<Database>, malId: number) {
 	const { data, error } = await writer
 		.from("anime_source_records")
 		.select("normalized_data,source_url")
@@ -70,8 +66,7 @@ async function readManualSourceRecord(
  * capture_anime_manual_source は auth.uid() が無いと発火しないため）。
  */
 export async function upsertManualSourceRecord(
-	// biome-ignore lint/suspicious/noExplicitAny: generated types may lag behind source-record migrations
-	writer: SupabaseClient<any>,
+	writer: SupabaseClient<Database>,
 	malId: number,
 	previous: Record<string, unknown>,
 	payload: Record<string, unknown>,
@@ -101,7 +96,7 @@ export async function upsertManualSourceRecord(
 			source_version: new Date().toISOString().slice(0, 10),
 			// source_url は NOT NULL: 既存が無い初回作成は MAL ページを充てる
 			source_url: (existing?.source_url as string | null) ?? `https://myanimelist.net/anime/${malId}`,
-			normalized_data: { ...((existing?.normalized_data as Record<string, unknown>) ?? {}), ...changed },
+			normalized_data: { ...((existing?.normalized_data as Record<string, unknown>) ?? {}), ...changed } as Json,
 		},
 		{ onConflict: "mal_id,source" },
 	);
@@ -297,8 +292,7 @@ export async function registerAnimeAction(
 	const payload = await buildAnimePayload(supabase, fd, null);
 	if ("status" in payload) return payload;
 
-	// biome-ignore lint/suspicious/noExplicitAny: shared writer must tolerate generated type lag after migrations
-	const animeWriter = supabase as SupabaseClient<any>;
+	const animeWriter = supabase;
 	const { data, error } = await animeWriter.from("anime").insert(payload).select("id").single();
 
 	if (error) return fail(500, { message: `登録エラー: ${error.message}` });
@@ -322,14 +316,12 @@ export async function updateAnimeAction(
 	// 欄を空にして保存したときは実体ごと外す
 	const payload = isCoverCleared(fd) ? { ...built, cover_source_url: null } : built;
 
-	// biome-ignore lint/suspicious/noExplicitAny: shared writer must tolerate generated type lag after migrations
-	const animeWriter = supabase as SupabaseClient<any>;
-	// biome-ignore lint/suspicious/noExplicitAny: generated types may lag behind source-record migrations
-	const manualWriter = sourceWriter as SupabaseClient<any>;
+	const animeWriter = supabase;
+	const manualWriter = sourceWriter;
 	const { data: previousData, error: previousError } = await animeWriter
 		.from("anime")
 		.select(`mal_id,cover_source_url,${MANUAL_SOURCE_KEYS.join(",")}`)
-		.eq("id", animeId)
+		.eq("id", Number(animeId))
 		.maybeSingle();
 	if (previousError) return fail(500, { message: `更新前のデータ取得に失敗しました: ${previousError.message}` });
 	// 差分は画像の実体で比べる。© の無い作品は cover_url が隠れて NULL なので、そのまま
@@ -360,7 +352,7 @@ export async function updateAnimeAction(
 	const { data, error } = await animeWriter
 		.from("anime")
 		.update(payload)
-		.eq("id", animeId)
+		.eq("id", Number(animeId))
 		.select("id,cover_url,cover_source_url")
 		.single();
 
@@ -470,8 +462,7 @@ export async function addBroadcastOverrideAction(
 		return fail(400, { message: "一挙放送では対象話数の開始より大きい終了話数を入力してください" });
 	}
 
-	// biome-ignore lint/suspicious/noExplicitAny: broadcast_room_overrides not yet in generated types
-	const writer = supabase as SupabaseClient<any>;
+	const writer = supabase;
 	const { error } = await writer.from("broadcast_room_overrides").upsert(
 		{
 			anime_id: Number(animeId),
@@ -506,8 +497,7 @@ export async function deleteBroadcastOverrideAction(
 	const overrideId = nullableText(fd, "override_id");
 	if (!overrideId) return fail(400, { message: "対象が見つかりません" });
 
-	// biome-ignore lint/suspicious/noExplicitAny: broadcast_room_overrides not yet in generated types
-	const writer = supabase as SupabaseClient<any>;
+	const writer = supabase;
 	const { error } = await writer.from("broadcast_room_overrides").delete().eq("id", overrideId);
 
 	if (error) return fail(500, { message: `削除エラー: ${error.message}` });

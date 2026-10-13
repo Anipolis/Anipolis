@@ -11,6 +11,7 @@ import {
 } from "$lib/server/invites";
 import { getExtraAccounts, setExtraAccounts } from "$lib/server/multi-account";
 import { isPasskeyEnabled } from "$lib/server/passkey";
+import { isUsernameAvailable } from "$lib/server/queries";
 import { getClientKey, isRateLimited } from "$lib/server/rate-limit";
 import { createServiceRoleClient } from "$lib/server/supabase-admin";
 import { sanitizeInternalRedirect } from "$lib/utils/url";
@@ -247,18 +248,13 @@ export const actions: Actions = {
 			}
 		}
 
-		const { data: existingProfile } = await supabase
-			.from("profiles")
-			.select("id")
-			.eq("username", username)
-			.maybeSingle();
-
-		if (existingProfile) {
+		// 使用中の名前に加えて、退会から30日以内の名前も使えない（#363）
+		if (!(await isUsernameAvailable(supabase, username))) {
 			return fail(400, {
 				mode: "register",
 				...values,
 				field: "username",
-				message: "このユーザー名はすでに使われています",
+				message: "このユーザー名は使えません（使用中か、退会から30日以内のユーザー名です）",
 			});
 		}
 
@@ -345,8 +341,7 @@ export const actions: Actions = {
 		}
 
 		// 既存リンク数チェック（追加アカウントは最大2）
-		// biome-ignore lint/suspicious/noExplicitAny: linked_accounts not yet in auto-generated DB types
-		const { count } = await (supabase as any)
+		const { count } = await supabase
 			.from("linked_accounts")
 			.select("*", { count: "exact", head: true })
 			.eq("owner_user_id", ownerUser.id);
@@ -385,8 +380,7 @@ export const actions: Actions = {
 
 		// 既にリンク済みかチェック（B のセッションで owner=A のリンクは見えないので service role 使用）
 		const serviceClient = createServiceRoleClient();
-		// biome-ignore lint/suspicious/noExplicitAny: linked_accounts not yet in auto-generated DB types
-		const { data: existingLink } = await (serviceClient as any)
+		const { data: existingLink } = await serviceClient
 			.from("linked_accounts")
 			.select("owner_user_id")
 			.eq("owner_user_id", ownerUser.id)

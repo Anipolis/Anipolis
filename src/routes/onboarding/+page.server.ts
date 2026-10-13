@@ -1,7 +1,7 @@
 import { fail, redirect } from "@sveltejs/kit";
 import { completeProfileSetupAction, readProfileSetupForm } from "$lib/server/actions";
 import { getOAuthAvatarUrl, parseOAuthAvatarUrl } from "$lib/server/oauth-avatar";
-import { getProfileIdByUsername } from "$lib/server/queries";
+import { isUsernameAvailable } from "$lib/server/queries";
 import { sanitizeInternalRedirect } from "$lib/utils/url";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -45,9 +45,9 @@ async function getOnboardingDefaults(
 	const usernameCandidate = getUsernameCandidate(metadata.rawUsername);
 	if (!usernameCandidate) return { username: "", displayName: metadata.displayName, avatarUrl };
 
-	const existingProfileId = await getProfileIdByUsername(supabase, usernameCandidate);
+	const available = await isUsernameAvailable(supabase, usernameCandidate);
 	return {
-		username: existingProfileId ? "" : usernameCandidate,
+		username: available ? usernameCandidate : "",
 		displayName: metadata.displayName,
 		avatarUrl,
 	};

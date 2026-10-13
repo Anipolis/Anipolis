@@ -54,6 +54,8 @@ function inviteStatus(invite: (typeof data.invites)[number]): { label: string; a
 							<td>
 								{#if invite.created_by_username}
 									<a href="/{invite.created_by_username}">@{invite.created_by_username}</a>
+								{:else if invite.created_by === null}
+									<span class="muted">退会済み</span>
 								{:else}
 									<span class="muted">不明</span>
 								{/if}
