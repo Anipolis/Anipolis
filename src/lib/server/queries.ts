@@ -1029,7 +1029,9 @@ export async function ensureEpisodeRoom(
 export async function getEpisodeRoomAirings(supabase: SupabaseClient<Database>, roomId: string): Promise<RoomAiring[]> {
 	const { data, error } = await supabase
 		.from("broadcast_room_sessions")
-		.select("id, scheduled_at, posting_opens_at, posting_closes_at, airing_kind, source_channel_name")
+		.select(
+			"id, scheduled_at, duration_minutes, posting_opens_at, posting_closes_at, airing_kind, source_channel_name",
+		)
 		.eq("episode_room_id", roomId)
 		.order("posting_opens_at", { ascending: true });
 	if (error) {
@@ -1039,6 +1041,7 @@ export async function getEpisodeRoomAirings(supabase: SupabaseClient<Database>, 
 	return (data ?? []).map((row) => ({
 		id: row.id,
 		scheduled_at: row.scheduled_at,
+		ends_at: new Date(Date.parse(row.scheduled_at) + row.duration_minutes * 60_000).toISOString(),
 		posting_opens_at: row.posting_opens_at,
 		posting_closes_at: row.posting_closes_at,
 		airing_kind: (["first", "rerun", "event"].includes(row.airing_kind)
@@ -1056,18 +1059,14 @@ export async function getEpisodeRoomPosts(
 	supabase: SupabaseClient<Database>,
 	roomId: string,
 	userId: string | null,
-	options: { limit?: number; from?: "start" | "latest" } = {},
+	options: { limit?: number; from?: "start" | "latest"; since?: string | undefined } = {},
 ): Promise<Post[]> {
-	const { limit = 100, from = "start" } = options;
-	const ascending = from === "start";
-	const { data: rawPosts } = await supabase
-		.from("posts")
-		.select(POST_LIST_SELECT)
-		.eq("episode_room_id", roomId)
-		.is("parent_id", null)
-		.order("created_at", { ascending })
-		.order("id", { ascending })
-		.limit(limit);
+	const { limit = 100, from = "start", since } = options;
+	// since があれば、その時刻（放送枠の開場など）以降を古い順に
+	const ascending = from === "start" || since != null;
+	let query = supabase.from("posts").select(POST_LIST_SELECT).eq("episode_room_id", roomId).is("parent_id", null);
+	if (since) query = query.gte("created_at", since);
+	const { data: rawPosts } = await query.order("created_at", { ascending }).order("id", { ascending }).limit(limit);
 	const ordered = ascending ? (rawPosts ?? []) : [...(rawPosts ?? [])].reverse();
 	// ルーム内ではそのルームのミュートを適用しない（明示的に入室しているため）
 	return enrichPostsWithCounts(supabase, ordered as unknown as RawPost[], userId, { includeMutedRoomPosts: true });
@@ -1118,6 +1117,49 @@ export async function getRoomPostsAfter(
 	return {
 		posts,
 		nextCursor: last ? { createdAt: last.created_at, id: last.id } : cursor,
+		hasMore: rawPosts.length === limit,
+	};
+}
+
+/** 境界（created_at と id）より前だけに絞る */
+function beforeCursorFilter(cursor: TimelineCursor): string {
+	return `created_at.lt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.lt.${cursor.id})`;
+}
+
+/**
+ * ルームの古い側を、境界（cursor）より前から新しい順に limit 件取り、古い順に並べて返す。
+ * 話数ルームは最新の100件や放送枠の途中から読み始めるので、それより前を読み足すのに使う。
+ * nextCursor は取得した中で最も古い行（次はそれより前を取る）。
+ */
+export async function getRoomPostsBefore(
+	supabase: SupabaseClient<Database>,
+	room: RoomRef,
+	userId: string | null,
+	cursor: TimelineCursor,
+	limit = 100,
+): Promise<{ posts: Post[]; nextCursor: TimelineCursor | null; hasMore: boolean } | null> {
+	let query = supabase.from("posts").select(POST_LIST_SELECT).is("parent_id", null);
+	query =
+		room.kind === "event"
+			? query.eq("event_id", room.id)
+			: room.kind === "episode_room"
+				? query.eq("episode_room_id", room.id)
+				: query.eq("broadcast_room_session_id", room.id);
+	const { data, error } = await query
+		.or(beforeCursorFilter(cursor))
+		.order("created_at", { ascending: false })
+		.order("id", { ascending: false })
+		.limit(limit);
+	if (error) {
+		console.error("getRoomPostsBefore error:", error);
+		return null;
+	}
+	const rawPosts = [...((data ?? []) as unknown as RawPost[])].reverse();
+	const oldest = rawPosts[0];
+	const posts = await enrichPostsWithCounts(supabase, rawPosts, userId, { includeMutedRoomPosts: true });
+	return {
+		posts,
+		nextCursor: oldest ? { createdAt: oldest.created_at, id: oldest.id } : cursor,
 		hasMore: rawPosts.length === limit,
 	};
 }

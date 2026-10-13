@@ -10,7 +10,7 @@ import ExitSurveyModal from "$lib/components/ExitSurveyModal.svelte";
 import LiveRoomPostCard from "$lib/components/LiveRoomPostCard.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
-import { airingAt, airingHeading } from "$lib/episode-room";
+import { airingAt, airingHeading, airingOnAirAt } from "$lib/episode-room";
 import {
 	applyPostStates,
 	comparePostsAsc,
@@ -77,8 +77,8 @@ const isGlobalLobby = $derived(data.room.kind === "global");
 // 話数ルーム（153）: 投稿の期限が無く、放送枠はルームの中の区切り
 const isEpisodeRoom = $derived(data.room.kind === "episode_room");
 const airings = $derived<RoomAiring[]>(data.room.airings ?? []);
-/** いま投稿受付の時間内にある放送枠（話数ルームだけ） */
-const liveAiring = $derived(isEpisodeRoom ? airingAt(airings, now) : null);
+/** いま放送中（開場から放送の終わりまで）の放送枠（話数ルームだけ）。放送後の感想受付の時間は含めない */
+const liveAiring = $derived(isEpisodeRoom ? airingOnAirAt(airings, now) : null);
 // 話数ルームは放送時間外も開いたままなので、放送枠の外ではポーリングの間隔を延ばす（Realtime は続ける）
 const EPISODE_ROOM_IDLE_POLL_MS = 60_000;
 const livePollIntervalMs = $derived(
@@ -121,7 +121,8 @@ let connection = $state(createRoomConnectionState());
 // 手動再接続でチャンネルを張り直すためのトリガー。インクリメントすると購読 effect が再実行される
 let realtimeGeneration = $state(0);
 let reconnecting = $state(false);
-const connectionPhase = $derived(deriveRoomConnectionPhase(connection, now));
+// 停止の判定はポーリングの間隔に合わせる（話数ルームの放送枠外は60秒ごとなので、既定の45秒では毎回警告が出る）
+const connectionPhase = $derived(deriveRoomConnectionPhase(connection, now, livePollIntervalMs * 3));
 const connectionLabel = $derived(ROOM_CONNECTION_PHASE_LABELS[connectionPhase]);
 const connectionTone = $derived(ROOM_CONNECTION_PHASE_TONES[connectionPhase]);
 const connectionNeedsAttention = $derived(shouldOfferManualReconnect(connectionPhase));
@@ -714,12 +715,57 @@ async function scrollToAiring(airing: RoomAiring | null) {
 	postListEl.scrollTo({ top: 0, behavior: "instant" });
 }
 
-/** 「ライブ開始地点へ」: 放送中の枠の最初の投稿へ */
-function jumpToLiveStart() {
-	if (!liveAiring) return;
+// 読み込んだ分より前にも投稿があるか（話数ルームで最新や放送枠の途中から読み始めたとき）
+// ルームごとに再マウントされるので、最初の値だけを使う
+let hasOlderPosts = $state(untrack(() => data.room.has_older_posts ?? false));
+let loadingOlder = $state(false);
+
+/** 古い側を1ページ読み足す。時系列順で見ているときは表示位置がずれないよう高さの差だけ戻す */
+async function loadOlderPosts(): Promise<boolean> {
+	const first = allPosts[0];
+	if (loadingOlder || !hasOlderPosts || !first) return false;
+	loadingOlder = true;
+	try {
+		const params = new URLSearchParams({
+			[liveDiffQueryParam()]: data.room.session_id,
+			before_created_at: first.created_at,
+			before_id: first.id,
+		});
+		const res = await fetch(`/api/rooms/posts?${params}`, {
+			signal: AbortSignal.timeout(ROOM_LIVE_FETCH_TIMEOUT_MS),
+		});
+		if (!res.ok) return false;
+		const page = (await res.json()) as RoomPostPage;
+		const seen = new Set(allPosts.map((post) => post.id));
+		const older = page.posts.filter((post) => !seen.has(post.id) && !hiddenPostIds.has(post.id));
+		const heightBefore = postListEl?.scrollHeight ?? 0;
+		extraPosts = [...older, ...extraPosts];
+		hasOlderPosts = page.hasMore;
+		if (postOrder === "oldest" && postListEl) {
+			await tick();
+			postListEl.scrollTop += postListEl.scrollHeight - heightBefore;
+		}
+		return true;
+	} catch {
+		return false;
+	} finally {
+		loadingOlder = false;
+	}
+}
+
+/** 「ライブ開始地点へ」: 放送中の枠の最初の投稿へ。読み込んだ分に無ければ、枠の開場より前まで読み足す */
+async function jumpToLiveStart() {
+	const airing = liveAiring;
+	if (!airing) return;
 	if (postOrder !== "oldest") setPostOrder("oldest");
 	isFollowingLatest = false;
-	void scrollToAiring(liveAiring);
+	const opensMs = Date.parse(airing.posting_opens_at);
+	for (let page = 0; page < 20 && hasOlderPosts; page += 1) {
+		const first = allPosts[0];
+		if (first && Date.parse(first.created_at) < opensMs) break;
+		if (!(await loadOlderPosts())) break;
+	}
+	await scrollToAiring(airing);
 }
 
 function formatHMS(ms: number) {
@@ -930,6 +976,16 @@ function formatCompactDate(iso: string) {
 				use:timelineScroll={{ following: isFollowingLatest, newestFirst: postOrder === "newest" }}
 			>
 				<div class="room-post-list-content">
+					{#if isEpisodeRoom && hasOlderPosts && postOrder === "oldest"}
+						<button
+							type="button"
+							class="room-load-older"
+							onclick={() => void loadOlderPosts()}
+							disabled={loadingOlder}
+						>
+							{loadingOlder ? "読み込み中..." : "前の投稿を読み込む"}
+						</button>
+					{/if}
 					{#if allPosts.length === 0}
 						<div class="card anime-room-empty">まだ投稿はありません。最初の感想を残しましょう。</div>
 					{:else}
@@ -959,7 +1015,7 @@ function formatCompactDate(iso: string) {
 			</div>
 
 			{#if liveAiring}
-				<button type="button" class="room-live-start-button" onclick={jumpToLiveStart}>
+				<button type="button" class="room-live-start-button" onclick={() => void jumpToLiveStart()}>
 					<span class="i-lucide-radio" aria-hidden="true"></span>
 					<span>ライブ開始地点へ</span>
 				</button>
@@ -1217,6 +1273,24 @@ function formatCompactDate(iso: string) {
 	background: color-mix(in srgb, var(--color-primary) 14%, transparent);
 	color: var(--color-primary);
 	font-size: 11px;
+}
+
+.room-load-older {
+	display: block;
+	width: 100%;
+	margin: 8px 0;
+	padding: 8px;
+	border: 1px solid var(--color-border);
+	border-radius: 8px;
+	background: transparent;
+	color: var(--color-text-secondary);
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.room-load-older:disabled {
+	cursor: default;
+	opacity: 0.6;
 }
 
 /* 放送中の枠の最初の投稿へ戻るボタン（一覧の右上） */

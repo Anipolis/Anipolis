@@ -40,6 +40,19 @@ export function airingAt(airings: readonly RoomAiring[], at: string | number): R
 	return found;
 }
 
+/**
+ * いま放送中（開場から放送の終わりまで）の放送枠。放送後の感想受付の時間は含めない。
+ * 「放送中」の表示・「ライブ開始地点へ」・ポーリングの間隔に使う（投稿の分類は airingAt）
+ */
+export function airingOnAirAt(airings: readonly RoomAiring[], at: number): RoomAiring | null {
+	let found: RoomAiring | null = null;
+	for (const airing of airings) {
+		if (at < Date.parse(airing.posting_opens_at) || at > Date.parse(airing.ends_at)) continue;
+		if (!found || Date.parse(airing.posting_opens_at) > Date.parse(found.posting_opens_at)) found = airing;
+	}
+	return found;
+}
+
 const AIRING_KIND_LABEL: Record<RoomAiring["airing_kind"], string> = {
 	first: "初回放送",
 	rerun: "再放送",

@@ -655,6 +655,8 @@ export interface EpisodeRoom {
 export interface RoomAiring {
 	id: string;
 	scheduled_at: string;
+	/** 放送の終わり（scheduled_at + 尺）。「放送中」の判定に使う（投稿受付はこの後も続く） */
+	ends_at: string;
 	posting_opens_at: string;
 	posting_closes_at: string;
 	airing_kind: "first" | "rerun" | "event";

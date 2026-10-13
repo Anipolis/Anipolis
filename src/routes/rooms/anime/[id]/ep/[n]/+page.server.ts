@@ -1,5 +1,5 @@
 import { error, fail, redirect } from "@sveltejs/kit";
-import { airingAt, episodeRoomPath, hasEpisodeRooms, parseEpisodeNumberParam } from "$lib/episode-room";
+import { airingOnAirAt, episodeRoomPath, hasEpisodeRooms, parseEpisodeNumberParam } from "$lib/episode-room";
 import {
 	deletePostAction,
 	insertPostWithHashtags,
@@ -78,22 +78,34 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 
 	const airings = room ? await getEpisodeRoomAirings(supabase, room.id) : [];
 	const now = Date.now();
-	const liveAiring = airingAt(airings, now);
+	const liveAiring = airingOnAirAt(airings, now);
 	const requestedAiringId = url.searchParams.get("airing");
 	const initialAiringId = airings.some((airing) => airing.id === requestedAiringId) ? requestedAiringId : null;
 	const firstAiring = airings.find((airing) => airing.airing_kind === "first") ?? airings[0] ?? null;
 
-	const [posts, trending, animeTrending] = await Promise.all([
+	const initialAiring = airings.find((airing) => airing.id === initialAiringId) ?? null;
+	// 読み始める位置: ?airing= はその放送枠の開場から、放送中は最新から、それ以外はルームの最初から
+	const from = initialAiring ? "start" : liveAiring ? "latest" : "start";
+	const since = initialAiring?.posting_opens_at;
+	const [posts, trending, animeTrending, olderExists] = await Promise.all([
 		room
-			? getEpisodeRoomPosts(supabase, room.id, user?.id ?? null, {
-					limit: 100,
-					// 放送中は最新から、それ以外はルームの最初から読ませる
-					from: liveAiring && !initialAiringId ? "latest" : "start",
-				})
+			? getEpisodeRoomPosts(supabase, room.id, user?.id ?? null, { limit: 100, from, since })
 			: Promise.resolve([]),
 		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
 		getAnimeRankingTrending(supabase, 5),
+		// 放送枠から読み始めたとき、それより前の投稿があるか（「前の投稿を読み込む」を出すか）
+		room && since
+			? supabase
+					.from("posts")
+					.select("id")
+					.eq("episode_room_id", room.id)
+					.is("parent_id", null)
+					.lt("created_at", since)
+					.limit(1)
+					.then(({ data }) => (data ?? []).length > 0)
+			: Promise.resolve(false),
 	]);
+	const hasOlderPosts = since ? olderExists : from === "latest" && posts.length >= 100;
 
 	// 開く時刻が決まっていない話は「まだ投稿できない」状態にする（開場は十分先として渡す）
 	const opensAt = room?.opens_at ?? NEVER_CLOSES;
@@ -110,15 +122,14 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 			posting_opens_at: opensAt,
 			posting_closes_at: NEVER_CLOSES,
 			duration_minutes: firstAiring
-				? Math.round(
-						(Date.parse(firstAiring.posting_closes_at) - Date.parse(firstAiring.scheduled_at)) / 60_000,
-					)
+				? Math.round((Date.parse(firstAiring.ends_at) - Date.parse(firstAiring.scheduled_at)) / 60_000)
 				: null,
 			title: `${anime.title} 第${episodeNumber}話`,
 			episode_number: episodeNumber,
 			opens_at_known: room?.opens_at != null,
 			airings,
 			initial_airing_id: initialAiringId,
+			has_older_posts: hasOlderPosts,
 		},
 		posts,
 		trending: trending.data ?? [],
