@@ -99,9 +99,12 @@ export type DeleteAccountResult =
  *
  * profiles.id は auth.users(id) ON DELETE CASCADE なので、投稿・いいね・通知・
  * マイリスト等の行は auth ユーザーの削除で連鎖削除される（142 のコメント参照）。
- * 連鎖で消えないのは Storage のファイルだけなので、先に明示的に消す。
- * （先に消すのは、auth ユーザーが消えた後だと「誰のファイルだったか」を
- *   引く手段が無くなり、消し漏れが残るため）
+ * 連鎖で消えないのは Storage のファイルだけなので、auth ユーザーを消した後に消す。
+ *
+ * 順番は「auth ユーザー → ファイル」。Storage のファイルが残っていても auth ユーザーは削除できる
+ * （2026-10-14 本番で確認）。逆の順番だと、auth ユーザーの削除が失敗したときにアカウントと投稿は
+ * 残ったまま画像だけが失われる（#383 の Codex レビュー）。ファイルの削除に失敗した場合はアカウントの
+ * 削除は完了しているので成功として返し、残ったファイルはログに残す（利用者 ID のフォルダごと消せる）。
  */
 export async function deleteAccount(
 	userId: string,
@@ -109,20 +112,11 @@ export async function deleteAccount(
 ): Promise<DeleteAccountResult> {
 	const admin = options.admin ?? createServiceRoleClient();
 
-	// 監査用の集計値（個人を識別する値は残さない）
+	// 監査用の集計値（個人を識別する値は残さない）。削除の前に取る
 	const [{ data: moderation }, { count: postCount }] = await Promise.all([
 		admin.from("account_moderation").select("status").eq("user_id", userId).maybeSingle(),
 		admin.from("posts").select("id", { count: "exact", head: true }).eq("user_id", userId),
 	]);
-
-	// 所有ファイルが残っていると auth ユーザーを削除できないため、全バケットを
-	// 消し切れたときだけ先へ進む
-	let removedFiles = 0;
-	for (const bucket of USER_OWNED_BUCKETS) {
-		const removed = await removeAllUserFiles(admin, bucket, userId);
-		if (removed === null) return { ok: false, reason: "failed" };
-		removedFiles += removed;
-	}
 
 	const { error: deleteError } = await admin.auth.admin.deleteUser(userId);
 	if (deleteError) {
@@ -131,6 +125,17 @@ export async function deleteAccount(
 		// 未適用の環境では外部キー違反でここに来る。原因が伝わる形で返す。
 		if (/foreign key|violates/i.test(deleteError.message)) return { ok: false, reason: "has_room_experiments" };
 		return { ok: false, reason: "failed" };
+	}
+
+	let removedFiles = 0;
+	for (const bucket of USER_OWNED_BUCKETS) {
+		const removed = await removeAllUserFiles(admin, bucket, userId);
+		if (removed === null) {
+			// アカウントは削除済み。残ったファイルは <user_id>/ のフォルダごと後で消せるよう ID を残す
+			console.error(`deleteAccount: files may remain in ${bucket} for deleted user ${userId}`);
+			continue;
+		}
+		removedFiles += removed;
 	}
 
 	const { error: auditError } = await admin.from("account_deletions").insert({

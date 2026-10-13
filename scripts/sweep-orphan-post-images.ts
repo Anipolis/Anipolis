@@ -54,9 +54,17 @@ async function referencedPaths(): Promise<Set<string>> {
 /** バケット直下のフォルダ（利用者 ID）ごとに、ファイルと作成日時を集める */
 async function listObjects(): Promise<{ path: string; createdAt: number }[]> {
 	const objects: { path: string; createdAt: number }[] = [];
-	const { data: folders, error } = await supabase.storage.from(BUCKET).list("", { limit: PAGE_SIZE });
-	if (error) throw new Error(error.message);
-	for (const folder of folders ?? []) {
+	// フォルダの一覧もページを追う（利用者が PAGE_SIZE を超えても後ろのフォルダを取りこぼさない）
+	const folders: { name: string; id: string | null }[] = [];
+	for (let offset = 0; ; offset += PAGE_SIZE) {
+		const { data, error } = await supabase.storage
+			.from(BUCKET)
+			.list("", { limit: PAGE_SIZE, offset, sortBy: { column: "name", order: "asc" } });
+		if (error) throw new Error(error.message);
+		folders.push(...(data ?? []));
+		if ((data ?? []).length < PAGE_SIZE) break;
+	}
+	for (const folder of folders) {
 		if (folder.id !== null) continue; // 直下のファイルは扱わない（パスは <user_id>/... で統一）
 		for (let offset = 0; ; offset += PAGE_SIZE) {
 			const { data: files, error: listError } = await supabase.storage

@@ -222,7 +222,15 @@ describe("deleteAccount", () => {
 		}
 	});
 
-	it("1ページに収まらない枚数でも全件消してから auth ユーザーを消す", async () => {
+	it("auth ユーザーを先に消し、その後でファイルを消す", async () => {
+		const admin = createAdminMock({ filesByBucket: { "post-images": [{ name: "a.webp" }] } });
+		await deleteAccount("user-1", { admin: admin.client });
+		const deletedAt = admin.deleteUser.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY;
+		const firstStorageCall = vi.mocked(admin.client.storage.from).mock.invocationCallOrder[0] ?? 0;
+		expect(deletedAt).toBeLessThan(firstStorageCall);
+	});
+
+	it("1ページに収まらない枚数でも全件消す", async () => {
 		const total = STORAGE_LIST_PAGE_SIZE * 2 + 1;
 		const files = Array.from({ length: total }, (_, index) => ({ name: `${index}.webp` }));
 		const admin = createAdminMock({ filesByBucket: { "post-images": files } });
@@ -234,35 +242,36 @@ describe("deleteAccount", () => {
 		expect(admin.deleteUser).toHaveBeenCalledWith("user-1");
 	});
 
-	it("列挙に失敗したら auth ユーザーを消さずに失敗を返す", async () => {
+	it("auth ユーザーの削除に失敗したらファイルには触れない（画像だけが失われないように）", async () => {
 		const admin = createAdminMock({
 			filesByBucket: { "post-images": [{ name: "a.webp" }] },
-			listError: { message: "storage unavailable" },
+			deleteUserError: { message: "service unavailable" },
 		});
 		const result = await deleteAccount("user-1", { admin: admin.client });
 		expect(result).toEqual({ ok: false, reason: "failed" });
-		expect(admin.deleteUser).not.toHaveBeenCalled();
+		expect(admin.removed).toEqual([]);
 		expect(admin.inserted).toEqual([]);
 	});
 
-	it("削除に失敗したら auth ユーザーを消さずに失敗を返す", async () => {
-		const admin = createAdminMock({
-			filesByBucket: { "post-images": [{ name: "a.webp" }] },
-			removeError: { message: "storage unavailable" },
-		});
-		const result = await deleteAccount("user-1", { admin: admin.client });
-		expect(result).toEqual({ ok: false, reason: "failed" });
-		expect(admin.deleteUser).not.toHaveBeenCalled();
+	it("ファイルの列挙・削除に失敗しても、アカウントは削除済みなので成功として返す", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		for (const failure of [{ listError: { message: "storage unavailable" } }, { removeError: { message: "x" } }]) {
+			const admin = createAdminMock({ filesByBucket: { "post-images": [{ name: "a.webp" }] }, ...failure });
+			const result = await deleteAccount("user-1", { admin: admin.client });
+			expect(result.ok).toBe(true);
+			expect(admin.deleteUser).toHaveBeenCalledWith("user-1");
+			expect(admin.inserted).toHaveLength(1);
+		}
 	});
 
-	it("削除しても一覧が減らない場合は打ち切って失敗を返す（無限ループしない）", async () => {
+	it("削除しても一覧が減らない場合は打ち切る（無限ループしない）", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
 		const admin = createAdminMock({
 			filesByBucket: { "post-images": [{ name: "nested-folder" }] },
 			removeIsNoop: true,
 		});
 		const result = await deleteAccount("user-1", { admin: admin.client });
-		expect(result).toEqual({ ok: false, reason: "failed" });
-		expect(admin.deleteUser).not.toHaveBeenCalled();
+		expect(result).toEqual({ ok: true, removedFiles: 0 });
 	});
 
 	it("外部キーで削除が止まった場合は原因が分かる理由を返す", async () => {

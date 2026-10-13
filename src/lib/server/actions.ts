@@ -385,6 +385,16 @@ async function removePostImages(supabase: SupabaseClient<Database>, imageUrls: s
 /**
  * いいねのトグル — 既にいいね済みなら削除、未いいねなら挿入
  */
+/**
+ * リアクション（いいね・ブックマーク・リポスト）の押した後の状態。"on" / "off" 以外（古いクライアント）は null。
+ * 指定があればサーバーは反転ではなくこの状態に合わせる。表示が古い（件数の取得に失敗して未反応と
+ * 表示されていた等）まま押しても、意図と逆の操作（解除）にならないようにするため（#383 の Codex レビュー）。
+ */
+function readReactionIntent(form: FormData): "on" | "off" | null {
+	const intent = form.get("intent");
+	return intent === "on" || intent === "off" ? intent : null;
+}
+
 export async function toggleLikeAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
 	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
 	if (moderationFailure) return moderationFailure;
@@ -399,6 +409,10 @@ export async function toggleLikeAction(request: Request, supabase: SupabaseClien
 		.eq("post_id", postId)
 		.eq("user_id", userId)
 		.maybeSingle();
+
+	const intent = readReactionIntent(form);
+	if (existing && intent === "on") return { liked: true };
+	if (!existing && intent === "off") return { liked: false };
 
 	if (existing) {
 		const { error: deleteError } = await supabase
@@ -416,7 +430,7 @@ export async function toggleLikeAction(request: Request, supabase: SupabaseClien
 }
 
 /**
- * ブックマークのトグル — 既にブックマーク済みなら削除、未ブックマークなら挿入
+ * ブックマークのトグル — 既にブックマーク済みなら削除、未ブックマークなら挿入（intent があればその状態に合わせる）
  */
 export async function toggleBookmarkAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
 	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
@@ -432,6 +446,10 @@ export async function toggleBookmarkAction(request: Request, supabase: SupabaseC
 		.eq("post_id", postId)
 		.eq("user_id", userId)
 		.maybeSingle();
+
+	const intent = readReactionIntent(form);
+	if (existing && intent === "on") return { bookmarked: true };
+	if (!existing && intent === "off") return { bookmarked: false };
 
 	if (existing) {
 		const { error: deleteError } = await supabase
@@ -462,6 +480,10 @@ export async function toggleRepostAction(request: Request, supabase: SupabaseCli
 		.eq("post_id", postId)
 		.eq("user_id", userId)
 		.maybeSingle();
+
+	const intent = readReactionIntent(form);
+	if (existing && intent === "on") return { reposted: true };
+	if (!existing && intent === "off") return { reposted: false };
 
 	if (existing) {
 		const { error: deleteError } = await supabase
