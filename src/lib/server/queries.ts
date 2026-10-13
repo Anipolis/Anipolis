@@ -219,8 +219,7 @@ export async function getBlockedUserIds(
 	userId: string | null,
 ): Promise<Set<string>> {
 	if (!userId) return new Set();
-	// biome-ignore lint/suspicious/noExplicitAny: user_blocks RPCs not yet in auto-generated DB types
-	const { data, error } = await (supabase as any).rpc("get_blocked_user_ids");
+	const { data, error } = await supabase.rpc("get_blocked_user_ids");
 	if (error) {
 		console.error("getBlockedUserIds error:", error);
 		return new Set();
@@ -233,8 +232,7 @@ export async function getBlockedProfiles(
 	supabase: SupabaseClient<Database>,
 	userId: string,
 ): Promise<(ProfileSummary & { blocked_at: string })[]> {
-	// biome-ignore lint/suspicious/noExplicitAny: user_blocks not yet in auto-generated DB types
-	const { data, error } = await (supabase as any)
+	const { data, error } = await supabase
 		.from("user_blocks")
 		.select(
 			"created_at, blocked:profiles!user_blocks_blocked_id_fkey ( id, username, display_name, avatar_url, bio )",
@@ -261,8 +259,7 @@ export async function isBlockedByMe(
 	targetId: string,
 ): Promise<boolean> {
 	if (!userId || userId === targetId) return false;
-	// biome-ignore lint/suspicious/noExplicitAny: user_blocks not yet in auto-generated DB types
-	const { data } = await (supabase as any)
+	const { data } = await supabase
 		.from("user_blocks")
 		.select("blocked_id")
 		.eq("blocker_id", userId)
@@ -293,13 +290,14 @@ type PostCountsRow = Database["public"]["Functions"]["get_post_counts"]["Returns
  * 投稿の件数と自分の反応を、RPC の上限（200件）ごとに分けて取る（#323）。
  * 以前は全件を1回で渡していたため、返信が多い投稿詳細（本投稿＋親＋返信で200件超）では
  * RPC 全体が失敗し、件数が0・いいね済みも「未操作」に見えていた（押すと意図と逆の操作になる）。
- * 一時的な失敗は1回だけやり直し、それでも失敗した分はログに残す。
+ * 一時的な失敗は1回だけやり直し、それでも失敗した分はログに残して failed で知らせる。
+ * get_post_counts は呼び出し元が閲覧できる投稿の行だけを返す（削除・非表示・ブロックは含まれない）。
  */
 async function fetchPostCountsById(
 	supabase: SupabaseClient<Database>,
 	postIds: string[],
 	userId: string | null,
-): Promise<Map<string, PostCountsRow>> {
+): Promise<{ counts: Map<string, PostCountsRow>; failed: boolean }> {
 	const chunks: string[][] = [];
 	for (let start = 0; start < postIds.length; start += POST_COUNTS_RPC_MAX_IDS) {
 		chunks.push(postIds.slice(start, start + POST_COUNTS_RPC_MAX_IDS));
@@ -307,15 +305,19 @@ async function fetchPostCountsById(
 	const fetchChunk = (ids: string[]) =>
 		supabase.rpc("get_post_counts", { p_post_ids: ids, ...(userId ? { p_user_id: userId } : {}) });
 
+	let failed = false;
 	const results = await Promise.all(
 		chunks.map(async (ids) => {
 			let result = await fetchChunk(ids);
 			if (result.error) result = await fetchChunk(ids);
-			if (result.error) console.error("get_post_counts failed:", result.error);
+			if (result.error) {
+				console.error("get_post_counts failed:", result.error);
+				failed = true;
+			}
 			return result.data ?? [];
 		}),
 	);
-	return new Map(results.flat().map((row) => [row.post_id, row]));
+	return { counts: new Map(results.flat().map((row) => [row.post_id, row])), failed };
 }
 
 export async function enrichPostsWithCounts(
@@ -403,7 +405,7 @@ export async function enrichPostsWithCounts(
 	// get_post_counts は like/repost/reply の件数に加え、
 	// liked_by_me / reposted_by_me / bookmarked_by_me を1クエリで返す。
 	// p_user_id が NULL（未ログイン）の場合は各 *_by_me が全て false になる。
-	const countsByPostId = await fetchPostCountsById(supabase, postIds, userId);
+	const { counts: countsByPostId } = await fetchPostCountsById(supabase, postIds, userId);
 
 	// ── アニメ引用がある投稿のスコアを一括取得 ────────────────────
 	const animeIds = Array.from(new Set(visibleRawPosts.map((p) => p.anime_id).filter((n): n is number => n != null)));
@@ -998,30 +1000,19 @@ export async function getRoomPostsAfter(
 }
 
 /** get_post_counts（121）に一度に渡せる投稿 ID の上限 */
-const POST_COUNTS_MAX_IDS = 200;
-
 /**
  * 表示中の投稿のうち、今も閲覧できるものの返信数を返す（#324）。
  * get_post_counts は呼び出し元が閲覧できる投稿の行だけを返すので、削除・管理者非表示・
- * ブロックで見えなくなった投稿は結果に含まれない。失敗したら null。
+ * ブロックで見えなくなった投稿は結果に含まれない。
+ * 一部でも取れなければ null。失敗を「見えない」と取り違えて表示中の投稿を消さないため。
  */
 export async function getVisiblePostReplyCounts(
 	supabase: SupabaseClient<Database>,
 	postIds: string[],
 ): Promise<Map<string, number> | null> {
-	const ids = [...new Set(postIds)];
-	const counts = new Map<string, number>();
-	for (let start = 0; start < ids.length; start += POST_COUNTS_MAX_IDS) {
-		const { data, error } = await supabase.rpc("get_post_counts", {
-			p_post_ids: ids.slice(start, start + POST_COUNTS_MAX_IDS),
-		});
-		if (error) {
-			console.error("getVisiblePostReplyCounts error:", error);
-			return null;
-		}
-		for (const row of data ?? []) counts.set(row.post_id, Number(row.reply_count ?? 0));
-	}
-	return counts;
+	const { counts, failed } = await fetchPostCountsById(supabase, [...new Set(postIds)], null);
+	if (failed) return null;
+	return new Map([...counts].map(([id, row]) => [id, Number(row.reply_count ?? 0)]));
 }
 
 /**
@@ -1313,8 +1304,7 @@ export async function getInvites(
 	userId: string,
 	options: { allUsers?: boolean } = {},
 ): Promise<InviteRow[]> {
-	// biome-ignore lint/suspicious/noExplicitAny: invites not yet in auto-generated DB types
-	let query = (supabase as any).from("invites").select("*").order("created_at", { ascending: false }).limit(200);
+	let query = supabase.from("invites").select("*").order("created_at", { ascending: false }).limit(200);
 	if (!options.allUsers) {
 		query = query.eq("created_by", userId);
 	}
@@ -2284,8 +2274,7 @@ function animeSortableColumns(sortBy: NonNullable<AnimeListOptions["sortBy"]>): 
 type AnimeMetric = { primary: number; secondary: number };
 
 function fromAnimeListSortable(supabase: SupabaseClient<Database>) {
-	// biome-ignore lint/suspicious/noExplicitAny: anime_list_sortable（144）は生成型にまだ無い（#216）
-	return (supabase as any).from(ANIME_LIST_SORTABLE_VIEW);
+	return supabase.from(ANIME_LIST_SORTABLE_VIEW);
 }
 
 /**
@@ -2400,7 +2389,8 @@ async function fetchAnimeSortedPage(
 		console.error("fetchAnimeSortedPage error:", error);
 		return null;
 	}
-	return { rows: data as AnimeSortableRow[], total: count ?? data.length };
+	// 取得する列は並び順に応じて実行時に組み立てるので、型は読み取れない
+	return { rows: data as unknown as AnimeSortableRow[], total: count ?? data.length };
 }
 
 /**
@@ -2426,10 +2416,7 @@ async function fetchAnimeGenreRankedPage(
 	const [page, total] = await Promise.all([
 		orderAnimeQuery(
 			applyAnimeListFilters(
-				// biome-ignore lint/suspicious/noExplicitAny: anime_list_with_genre_match（145）は生成型にまだ無い（#216）
-				(supabase as any)
-					.rpc("anime_list_with_genre_match", { p_genres: rankGenres }, { get: true })
-					.select(columns),
+				supabase.rpc("anime_list_with_genre_match", { p_genres: rankGenres }, { get: true }).select(columns),
 				filters,
 				seasonFilter,
 			),
@@ -2441,7 +2428,7 @@ async function fetchAnimeGenreRankedPage(
 		if (page.error) console.error("fetchAnimeGenreRankedPage error:", page.error);
 		return null;
 	}
-	return { rows: page.data as AnimeSortableRow[], total };
+	return { rows: page.data as unknown as AnimeSortableRow[], total };
 }
 
 /**
@@ -2470,7 +2457,7 @@ async function fetchAllAnimeCandidates(
 			return null;
 		}
 		if (data.length === 0) return rows;
-		rows.push(...(data as (AnimeCandidate & AnimeSortableRow)[]));
+		rows.push(...(data as unknown as (AnimeCandidate & AnimeSortableRow)[]));
 	}
 	console.warn(`fetchAllAnimeCandidates: truncated at ${MAX_ANIME_CANDIDATES} candidates`);
 	return rows;
@@ -3609,8 +3596,7 @@ export async function getBroadcastRoomScheduleSnapshotsForAnime(
 	supabase: SupabaseClient<Database>,
 	animeId: number,
 ): Promise<(import("$lib/utils/broadcast-episodes").BroadcastEpisodeSlot & { opened: boolean })[]> {
-	// biome-ignore lint/suspicious/noExplicitAny: migration 104 columns are not in generated types until applied
-	const reader = supabase as SupabaseClient<any>;
+	const reader = supabase;
 	// 未来セッションも返す: しょぼい話数はローリング同期の範囲でしか付かないため、
 	// 未開場の番号付きセッションが過去日付への逆算の唯一のアンカーになることがある。
 	// ログに表示してよいのは opened のものだけ（呼び出し側でフィルタする）。
@@ -3642,8 +3628,7 @@ export async function getGlobalAnimeLobbySession(
 	supabase: SupabaseClient<Database>,
 	animeId: string,
 ): Promise<BroadcastRoomSession | null> {
-	// biome-ignore lint/suspicious/noExplicitAny: generated types may lag behind the lobby-room migration
-	const reader = supabase as SupabaseClient<any>;
+	const reader = supabase;
 	const { data, error } = await reader.rpc("ensure_global_anime_lobby_session", {
 		p_anime_id: Number(animeId),
 	});
@@ -3659,8 +3644,7 @@ export async function getBroadcastRoomOverride(
 	animeId: string,
 	roomDate: string,
 ): Promise<BroadcastRoomOverride | null> {
-	// biome-ignore lint/suspicious/noExplicitAny: broadcast_room_overrides not yet in generated types
-	const reader = supabase as SupabaseClient<any>;
+	const reader = supabase;
 	const { data, error } = await reader
 		.from("broadcast_room_overrides")
 		.select("*")
@@ -3678,8 +3662,7 @@ export async function getBroadcastRoomOverridesForAnime(
 	supabase: SupabaseClient<Database>,
 	animeId: string,
 ): Promise<BroadcastRoomOverride[]> {
-	// biome-ignore lint/suspicious/noExplicitAny: broadcast_room_overrides not yet in generated types
-	const reader = supabase as SupabaseClient<any>;
+	const reader = supabase;
 	const { data, error } = await reader
 		.from("broadcast_room_overrides")
 		.select("*")
@@ -3697,8 +3680,7 @@ export async function getBroadcastRoomOverridesForAnimeIds(
 	animeIds: string[],
 ): Promise<Record<string, BroadcastRoomOverride[]>> {
 	if (animeIds.length === 0) return {};
-	// biome-ignore lint/suspicious/noExplicitAny: broadcast_room_overrides not yet in generated types
-	const reader = supabase as SupabaseClient<any>;
+	const reader = supabase;
 	const { data, error } = await reader
 		.from("broadcast_room_overrides")
 		.select("*")
@@ -3739,8 +3721,7 @@ export async function getScheduleBroadcastSessionsInRange(
 	startDate: string,
 	endDate: string,
 ): Promise<ScheduleBroadcastSession[]> {
-	// biome-ignore lint/suspicious/noExplicitAny: migration 104 columns are not in generated types until applied
-	const reader = supabase as SupabaseClient<any>;
+	const reader = supabase;
 	const { data, error } = await reader
 		.from("broadcast_room_sessions")
 		.select("anime_id,room_date,scheduled_at,episode_number,source_snapshot")
@@ -3770,8 +3751,7 @@ export async function getOverrideAnimeIdsInRange(
 	startDate: string,
 	endDate: string,
 ): Promise<number[]> {
-	// biome-ignore lint/suspicious/noExplicitAny: broadcast_room_overrides not yet in generated types
-	const reader = supabase as SupabaseClient<any>;
+	const reader = supabase;
 	const { data, error } = await reader
 		.from("broadcast_room_overrides")
 		.select("anime_id")
@@ -3852,8 +3832,7 @@ export async function getActiveAnimeMuteIds(
 ): Promise<Set<string>> {
 	if (!userId) return new Set();
 	type ActiveMuteRow = AnimeMuteRow & { anime: { id: number; broadcast_day: number | null } | null };
-	// biome-ignore lint/suspicious/noExplicitAny: anime_mutes not yet in auto-generated DB types
-	const { data } = await (supabase as any)
+	const { data } = await supabase
 		.from("anime_mutes")
 		.select(
 			"anime_id, mute_type, period_days, is_repeat, muted_until, anime:anime!anime_mutes_anime_id_fkey ( id, broadcast_day )",
@@ -3903,8 +3882,7 @@ export async function getAnimeMutes(supabase: SupabaseClient<Database>, userId: 
 		created_at: string;
 		anime: { title: string; cover_url: string | null } | null;
 	};
-	// biome-ignore lint/suspicious/noExplicitAny: anime_mutes not yet in auto-generated DB types
-	const { data } = await (supabase as any)
+	const { data } = await supabase
 		.from("anime_mutes")
 		.select(
 			"id, anime_id, mute_type, period_days, is_repeat, muted_until, created_at, anime:anime!anime_mutes_anime_id_fkey ( title, cover_url )",
@@ -3991,8 +3969,7 @@ export async function getOpenBroadcastRoomSessions(
 	options?: { kind?: "episode" | "global" },
 ): Promise<OpenBroadcastRoomSummary[]> {
 	const now = new Date().toISOString();
-	// biome-ignore lint/suspicious/noExplicitAny: migration 104 columns are not in generated types until applied
-	const sessionReader = supabase as SupabaseClient<any>;
+	const sessionReader = supabase;
 	let query = sessionReader
 		.from("broadcast_room_sessions")
 		.select(
@@ -4024,8 +4001,7 @@ export async function getOpenBroadcastRoomSessions(
 	if (episodeRows.length > 0) {
 		const animeIds = [...new Set(episodeRows.map((row) => row.anime_id))];
 		const roomDates = [...new Set(episodeRows.map((row) => row.room_date))];
-		// biome-ignore lint/suspicious/noExplicitAny: broadcast_room_overrides not yet in generated types
-		const reader = supabase as SupabaseClient<any>;
+		const reader = supabase;
 		const { data: overrides, error: overrideError } = await reader
 			.from("broadcast_room_overrides")
 			.select("anime_id, room_date, is_cancelled")

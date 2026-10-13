@@ -31,8 +31,7 @@ export async function validateInviteCode(supabase: SupabaseClient<Database>, cod
 	const normalized = code.trim();
 	if (!normalized) return false;
 
-	// biome-ignore lint/suspicious/noExplicitAny: invite RPCs not yet in auto-generated DB types
-	const { data, error } = await (supabase as any).rpc("check_invite_code", { p_code: normalized });
+	const { data, error } = await supabase.rpc("check_invite_code", { p_code: normalized });
 	if (error) {
 		console.error("check_invite_code error:", error);
 		return false;
@@ -50,8 +49,7 @@ export async function redeemInviteCode(supabase: SupabaseClient<Database>, code:
 	const normalized = code.trim();
 	if (!normalized) return { success: false, detail: "INVITE_INVALID" };
 
-	// biome-ignore lint/suspicious/noExplicitAny: invite RPCs not yet in auto-generated DB types
-	const { error } = await (supabase as any).rpc("redeem_invite", { p_code: normalized });
+	const { error } = await supabase.rpc("redeem_invite", { p_code: normalized });
 	if (error) {
 		return { success: false, detail: getInviteRedeemErrorDetail(error) };
 	}

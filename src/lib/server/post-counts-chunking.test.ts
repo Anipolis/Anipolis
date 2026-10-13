@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
 import type { Database } from "$lib/supabase/database.types";
 import type { RawPost } from "$lib/types";
-import { enrichPostsWithCounts } from "./queries";
+import { enrichPostsWithCounts, getVisiblePostReplyCounts } from "./queries";
 
 const CHAIN_METHODS = ["select", "eq", "in", "is", "or", "order", "limit", "gt", "gte", "lt", "not"] as const;
 
@@ -34,7 +34,7 @@ function rawPost(index: number): RawPost {
 }
 
 /** 本番の get_post_counts と同じく、200件を超える配列は例外にする */
-function fakeSupabase(failFirstCall = false) {
+function fakeSupabase(failFirstCall = false, alwaysFail = false) {
 	let calls = 0;
 	const rpc = vi.fn(async (name: string, args: { p_post_ids?: string[] }) => {
 		if (name === "get_blocked_user_ids") return { data: [], error: null };
@@ -43,6 +43,7 @@ function fakeSupabase(failFirstCall = false) {
 		const ids = args.p_post_ids ?? [];
 		if (ids.length > 200) return { data: null, error: { message: "too many post ids (max 200)" } };
 		if (failFirstCall && calls === 1) return { data: null, error: { message: "temporary failure" } };
+		if (alwaysFail) return { data: null, error: { message: "unavailable" } };
 		return {
 			data: ids.map((post_id) => ({
 				post_id,
@@ -91,5 +92,21 @@ describe("enrichPostsWithCounts の get_post_counts 分割（#323）", () => {
 		const posts = await enrichPostsWithCounts(client, [rawPost(0)], "viewer");
 		expect(posts[0]?.liked_by_me).toBe(true);
 		expect(posts[0]?.like_count).toBe(3);
+	});
+});
+
+describe("getVisiblePostReplyCounts（#324、分割は enrichPostsWithCounts と共通）", () => {
+	const ids = Array.from({ length: 250 }, (_, i) => rawPost(i).id);
+
+	it("200件を超えても分けて取り、見える投稿の返信数を返す", async () => {
+		const { client } = fakeSupabase();
+		const counts = await getVisiblePostReplyCounts(client, ids);
+		expect(counts?.size).toBe(250);
+		expect(counts?.get(ids[0] ?? "")).toBe(2);
+	});
+
+	it("取得に失敗し続けたら null（失敗を「見えない」と取り違えて表示中の投稿を消さない）", async () => {
+		const { client } = fakeSupabase(false, true);
+		expect(await getVisiblePostReplyCounts(client, ids)).toBeNull();
 	});
 });

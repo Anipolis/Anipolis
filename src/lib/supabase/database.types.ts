@@ -8,6 +8,30 @@ export type Database = {
 	};
 	public: {
 		Tables: {
+			account_deletions: {
+				Row: {
+					deleted_at: string;
+					id: string;
+					initiated_by: string;
+					moderation_status: string;
+					post_count: number;
+				};
+				Insert: {
+					deleted_at?: string;
+					id?: string;
+					initiated_by?: string;
+					moderation_status?: string;
+					post_count?: number;
+				};
+				Update: {
+					deleted_at?: string;
+					id?: string;
+					initiated_by?: string;
+					moderation_status?: string;
+					post_count?: number;
+				};
+				Relationships: [];
+			};
 			account_moderation: {
 				Row: {
 					moderated_at: string | null;
@@ -263,6 +287,20 @@ export type Database = {
 						foreignKeyName: "anime_copyright_reviews_anime_id_fkey";
 						columns: ["anime_id"];
 						isOneToOne: false;
+						referencedRelation: "anime_list_genre_ranked";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "anime_copyright_reviews_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_sortable";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "anime_copyright_reviews_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
 						referencedRelation: "anime_popularity";
 						referencedColumns: ["anime_id"];
 					},
@@ -362,6 +400,20 @@ export type Database = {
 						foreignKeyName: "anime_cover_assets_anime_id_fkey";
 						columns: ["anime_id"];
 						isOneToOne: false;
+						referencedRelation: "anime_list_genre_ranked";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "anime_cover_assets_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_sortable";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "anime_cover_assets_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
 						referencedRelation: "anime_popularity";
 						referencedColumns: ["anime_id"];
 					},
@@ -425,6 +477,20 @@ export type Database = {
 						foreignKeyName: "anime_data_attributions_anime_mal_id_fkey";
 						columns: ["anime_mal_id"];
 						isOneToOne: false;
+						referencedRelation: "anime_list_genre_ranked";
+						referencedColumns: ["mal_id"];
+					},
+					{
+						foreignKeyName: "anime_data_attributions_anime_mal_id_fkey";
+						columns: ["anime_mal_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_sortable";
+						referencedColumns: ["mal_id"];
+					},
+					{
+						foreignKeyName: "anime_data_attributions_anime_mal_id_fkey";
+						columns: ["anime_mal_id"];
+						isOneToOne: false;
 						referencedRelation: "anime_with_computed_broadcast_status";
 						referencedColumns: ["mal_id"];
 					},
@@ -470,6 +536,20 @@ export type Database = {
 						columns: ["anime_id"];
 						isOneToOne: false;
 						referencedRelation: "anime";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "anime_exchange_entries_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_genre_ranked";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "anime_exchange_entries_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_sortable";
 						referencedColumns: ["id"];
 					},
 					{
@@ -613,6 +693,20 @@ export type Database = {
 						foreignKeyName: "anime_mutes_anime_id_fkey";
 						columns: ["anime_id"];
 						isOneToOne: false;
+						referencedRelation: "anime_list_genre_ranked";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "anime_mutes_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_sortable";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "anime_mutes_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
 						referencedRelation: "anime_popularity";
 						referencedColumns: ["anime_id"];
 					},
@@ -670,6 +764,20 @@ export type Database = {
 						columns: ["anime_id"];
 						isOneToOne: false;
 						referencedRelation: "anime";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "anime_recommendations_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_genre_ranked";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "anime_recommendations_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_sortable";
 						referencedColumns: ["id"];
 					},
 					{
@@ -750,6 +858,20 @@ export type Database = {
 						foreignKeyName: "anime_relations_anime_mal_id_fkey";
 						columns: ["anime_mal_id"];
 						isOneToOne: false;
+						referencedRelation: "anime_list_genre_ranked";
+						referencedColumns: ["mal_id"];
+					},
+					{
+						foreignKeyName: "anime_relations_anime_mal_id_fkey";
+						columns: ["anime_mal_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_sortable";
+						referencedColumns: ["mal_id"];
+					},
+					{
+						foreignKeyName: "anime_relations_anime_mal_id_fkey";
+						columns: ["anime_mal_id"];
+						isOneToOne: false;
 						referencedRelation: "anime_with_computed_broadcast_status";
 						referencedColumns: ["mal_id"];
 					},
@@ -786,6 +908,20 @@ export type Database = {
 						columns: ["mal_id"];
 						isOneToOne: true;
 						referencedRelation: "anime";
+						referencedColumns: ["mal_id"];
+					},
+					{
+						foreignKeyName: "anime_resolution_records_mal_id_fkey";
+						columns: ["mal_id"];
+						isOneToOne: true;
+						referencedRelation: "anime_list_genre_ranked";
+						referencedColumns: ["mal_id"];
+					},
+					{
+						foreignKeyName: "anime_resolution_records_mal_id_fkey";
+						columns: ["mal_id"];
+						isOneToOne: true;
+						referencedRelation: "anime_list_sortable";
 						referencedColumns: ["mal_id"];
 					},
 					{
@@ -938,6 +1074,20 @@ export type Database = {
 						foreignKeyName: "broadcast_notification_subscriptions_anime_id_fkey";
 						columns: ["anime_id"];
 						isOneToOne: false;
+						referencedRelation: "anime_list_genre_ranked";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "broadcast_notification_subscriptions_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_sortable";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "broadcast_notification_subscriptions_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
 						referencedRelation: "anime_popularity";
 						referencedColumns: ["anime_id"];
 					},
@@ -1014,6 +1164,20 @@ export type Database = {
 						columns: ["anime_id"];
 						isOneToOne: false;
 						referencedRelation: "anime";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "broadcast_room_mutes_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_genre_ranked";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "broadcast_room_mutes_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_sortable";
 						referencedColumns: ["id"];
 					},
 					{
@@ -1127,6 +1291,20 @@ export type Database = {
 						foreignKeyName: "broadcast_room_overrides_anime_id_fkey";
 						columns: ["anime_id"];
 						isOneToOne: false;
+						referencedRelation: "anime_list_genre_ranked";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "broadcast_room_overrides_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_sortable";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "broadcast_room_overrides_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
 						referencedRelation: "anime_popularity";
 						referencedColumns: ["anime_id"];
 					},
@@ -1226,6 +1404,20 @@ export type Database = {
 						columns: ["anime_id"];
 						isOneToOne: false;
 						referencedRelation: "anime";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "broadcast_room_sessions_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_genre_ranked";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "broadcast_room_sessions_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_sortable";
 						referencedColumns: ["id"];
 					},
 					{
@@ -1365,6 +1557,20 @@ export type Database = {
 						columns: ["anime_id"];
 						isOneToOne: false;
 						referencedRelation: "anime";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "events_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_genre_ranked";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "events_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_sortable";
 						referencedColumns: ["id"];
 					},
 					{
@@ -1737,6 +1943,20 @@ export type Database = {
 						foreignKeyName: "notifications_broadcast_anime_id_fkey";
 						columns: ["broadcast_anime_id"];
 						isOneToOne: false;
+						referencedRelation: "anime_list_genre_ranked";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "notifications_broadcast_anime_id_fkey";
+						columns: ["broadcast_anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_sortable";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "notifications_broadcast_anime_id_fkey";
+						columns: ["broadcast_anime_id"];
+						isOneToOne: false;
 						referencedRelation: "anime_popularity";
 						referencedColumns: ["anime_id"];
 					},
@@ -1779,6 +1999,20 @@ export type Database = {
 						foreignKeyName: "notifications_exchange_anime_id_fkey";
 						columns: ["exchange_anime_id"];
 						isOneToOne: false;
+						referencedRelation: "anime_list_genre_ranked";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "notifications_exchange_anime_id_fkey";
+						columns: ["exchange_anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_sortable";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "notifications_exchange_anime_id_fkey";
+						columns: ["exchange_anime_id"];
+						isOneToOne: false;
 						referencedRelation: "anime_popularity";
 						referencedColumns: ["anime_id"];
 					},
@@ -1808,6 +2042,20 @@ export type Database = {
 						columns: ["mylist_anime_id"];
 						isOneToOne: false;
 						referencedRelation: "anime";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "notifications_mylist_anime_id_fkey";
+						columns: ["mylist_anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_genre_ranked";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "notifications_mylist_anime_id_fkey";
+						columns: ["mylist_anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_sortable";
 						referencedColumns: ["id"];
 					},
 					{
@@ -1926,6 +2174,24 @@ export type Database = {
 					},
 				];
 			};
+			post_rate_limits: {
+				Row: {
+					post_count: number;
+					user_id: string;
+					window_started_at: string;
+				};
+				Insert: {
+					post_count: number;
+					user_id: string;
+					window_started_at: string;
+				};
+				Update: {
+					post_count?: number;
+					user_id?: string;
+					window_started_at?: string;
+				};
+				Relationships: [];
+			};
 			posts: {
 				Row: {
 					anime_id: number | null;
@@ -1984,6 +2250,20 @@ export type Database = {
 						foreignKeyName: "posts_anime_id_fkey";
 						columns: ["anime_id"];
 						isOneToOne: false;
+						referencedRelation: "anime_list_genre_ranked";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "posts_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_sortable";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "posts_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
 						referencedRelation: "anime_popularity";
 						referencedColumns: ["anime_id"];
 					},
@@ -2020,6 +2300,20 @@ export type Database = {
 						columns: ["cw_anime_id"];
 						isOneToOne: false;
 						referencedRelation: "anime";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "posts_cw_anime_id_fkey";
+						columns: ["cw_anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_genre_ranked";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "posts_cw_anime_id_fkey";
+						columns: ["cw_anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_sortable";
 						referencedColumns: ["id"];
 					},
 					{
@@ -2301,6 +2595,20 @@ export type Database = {
 						foreignKeyName: "room_exit_survey_responses_anime_id_fkey";
 						columns: ["anime_id"];
 						isOneToOne: false;
+						referencedRelation: "anime_list_genre_ranked";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "room_exit_survey_responses_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_sortable";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "room_exit_survey_responses_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
 						referencedRelation: "anime_popularity";
 						referencedColumns: ["anime_id"];
 					},
@@ -2359,7 +2667,7 @@ export type Database = {
 				Row: {
 					anime_id: number | null;
 					created_at: string;
-					created_by: string;
+					created_by: string | null;
 					ended_at: string | null;
 					ended_by: string | null;
 					event_id: string | null;
@@ -2373,7 +2681,7 @@ export type Database = {
 				Insert: {
 					anime_id?: number | null;
 					created_at?: string;
-					created_by: string;
+					created_by?: string | null;
 					ended_at?: string | null;
 					ended_by?: string | null;
 					event_id?: string | null;
@@ -2387,7 +2695,7 @@ export type Database = {
 				Update: {
 					anime_id?: number | null;
 					created_at?: string;
-					created_by?: string;
+					created_by?: string | null;
 					ended_at?: string | null;
 					ended_by?: string | null;
 					event_id?: string | null;
@@ -2404,6 +2712,20 @@ export type Database = {
 						columns: ["anime_id"];
 						isOneToOne: false;
 						referencedRelation: "anime";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "room_experiment_runs_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_genre_ranked";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "room_experiment_runs_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_sortable";
 						referencedColumns: ["id"];
 					},
 					{
@@ -2515,6 +2837,20 @@ export type Database = {
 						columns: ["anime_id"];
 						isOneToOne: false;
 						referencedRelation: "anime";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "room_experiment_visits_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_genre_ranked";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "room_experiment_visits_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_sortable";
 						referencedColumns: ["id"];
 					},
 					{
@@ -2857,6 +3193,20 @@ export type Database = {
 						foreignKeyName: "user_anime_list_anime_id_fkey";
 						columns: ["anime_id"];
 						isOneToOne: false;
+						referencedRelation: "anime_list_genre_ranked";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "user_anime_list_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_sortable";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "user_anime_list_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
 						referencedRelation: "anime_popularity";
 						referencedColumns: ["anime_id"];
 					},
@@ -2890,8 +3240,140 @@ export type Database = {
 					},
 				];
 			};
+			user_blocks: {
+				Row: {
+					blocked_id: string;
+					blocker_id: string;
+					created_at: string;
+				};
+				Insert: {
+					blocked_id: string;
+					blocker_id: string;
+					created_at?: string;
+				};
+				Update: {
+					blocked_id?: string;
+					blocker_id?: string;
+					created_at?: string;
+				};
+				Relationships: [
+					{
+						foreignKeyName: "user_blocks_blocked_id_fkey";
+						columns: ["blocked_id"];
+						isOneToOne: false;
+						referencedRelation: "profiles";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "user_blocks_blocker_id_fkey";
+						columns: ["blocker_id"];
+						isOneToOne: false;
+						referencedRelation: "profiles";
+						referencedColumns: ["id"];
+					},
+				];
+			};
 		};
 		Views: {
+			anime_list_genre_ranked: {
+				Row: {
+					aired_from: string | null;
+					aired_to: string | null;
+					avg_score: number | null;
+					broadcast_day: number | null;
+					broadcast_duration_minutes: number | null;
+					broadcast_room_post_close_minutes: number | null;
+					broadcast_room_pre_open_minutes: number | null;
+					broadcast_station: string[] | null;
+					broadcast_time: string | null;
+					computed_broadcast_status: string | null;
+					copyright: string | null;
+					cover_source_url: string | null;
+					cover_url: string | null;
+					created_at: string | null;
+					episode_count: string | null;
+					genre: string[] | null;
+					genre_en: string[] | null;
+					genre_match: number | null;
+					hidden_by_admin: boolean | null;
+					id: number | null;
+					list_count: number | null;
+					mal_id: number | null;
+					metadata_ready: boolean | null;
+					official_hashtag: string[] | null;
+					official_site_url: string | null;
+					official_x_url: string | null;
+					producer: string[] | null;
+					rating_sort_score: number | null;
+					recent_count: number | null;
+					resources: Json | null;
+					room_type: string | null;
+					room_type_source: string | null;
+					score_count: number | null;
+					season: string | null;
+					season_sort_key: number | null;
+					source: string | null;
+					status: string | null;
+					studio: string[] | null;
+					studio_en: string[] | null;
+					synopsis: string | null;
+					title: string | null;
+					title_en: string | null;
+					title_romaji: string | null;
+					title_yomi: string | null;
+					type: string | null;
+				};
+				Relationships: [];
+			};
+			anime_list_sortable: {
+				Row: {
+					aired_from: string | null;
+					aired_to: string | null;
+					avg_score: number | null;
+					broadcast_day: number | null;
+					broadcast_duration_minutes: number | null;
+					broadcast_room_post_close_minutes: number | null;
+					broadcast_room_pre_open_minutes: number | null;
+					broadcast_station: string[] | null;
+					broadcast_time: string | null;
+					computed_broadcast_status: string | null;
+					copyright: string | null;
+					cover_source_url: string | null;
+					cover_url: string | null;
+					created_at: string | null;
+					episode_count: string | null;
+					genre: string[] | null;
+					genre_en: string[] | null;
+					hidden_by_admin: boolean | null;
+					id: number | null;
+					list_count: number | null;
+					mal_id: number | null;
+					metadata_ready: boolean | null;
+					official_hashtag: string[] | null;
+					official_site_url: string | null;
+					official_x_url: string | null;
+					producer: string[] | null;
+					rating_sort_score: number | null;
+					recent_count: number | null;
+					resources: Json | null;
+					room_type: string | null;
+					room_type_source: string | null;
+					score_count: number | null;
+					season: string | null;
+					season_sort_key: number | null;
+					source: string | null;
+					status: string | null;
+					studio: string[] | null;
+					studio_en: string[] | null;
+					synopsis: string | null;
+					title: string | null;
+					title_en: string | null;
+					title_romaji: string | null;
+					title_yomi: string | null;
+					type: string | null;
+				};
+				Relationships: [];
+			};
 			anime_popularity: {
 				Row: {
 					anime_id: number | null;
@@ -3039,6 +3521,62 @@ export type Database = {
 			};
 		};
 		Functions: {
+			anime_list_with_genre_match: {
+				Args: { p_genres: string[] };
+				Returns: {
+					aired_from: string | null;
+					aired_to: string | null;
+					avg_score: number | null;
+					broadcast_day: number | null;
+					broadcast_duration_minutes: number | null;
+					broadcast_room_post_close_minutes: number | null;
+					broadcast_room_pre_open_minutes: number | null;
+					broadcast_station: string[] | null;
+					broadcast_time: string | null;
+					computed_broadcast_status: string | null;
+					copyright: string | null;
+					cover_source_url: string | null;
+					cover_url: string | null;
+					created_at: string | null;
+					episode_count: string | null;
+					genre: string[] | null;
+					genre_en: string[] | null;
+					genre_match: number | null;
+					hidden_by_admin: boolean | null;
+					id: number | null;
+					list_count: number | null;
+					mal_id: number | null;
+					metadata_ready: boolean | null;
+					official_hashtag: string[] | null;
+					official_site_url: string | null;
+					official_x_url: string | null;
+					producer: string[] | null;
+					rating_sort_score: number | null;
+					recent_count: number | null;
+					resources: Json | null;
+					room_type: string | null;
+					room_type_source: string | null;
+					score_count: number | null;
+					season: string | null;
+					season_sort_key: number | null;
+					source: string | null;
+					status: string | null;
+					studio: string[] | null;
+					studio_en: string[] | null;
+					synopsis: string | null;
+					title: string | null;
+					title_en: string | null;
+					title_romaji: string | null;
+					title_yomi: string | null;
+					type: string | null;
+				}[];
+				SetofOptions: {
+					from: "*";
+					to: "anime_list_genre_ranked";
+					isOneToOne: false;
+					isSetofReturn: true;
+				};
+			};
 			can_select_anime_exchange_entry: {
 				Args: { entry_id: string };
 				Returns: boolean;
@@ -3147,6 +3685,12 @@ export type Database = {
 				};
 			};
 			generate_due_broadcast_notifications: { Args: never; Returns: undefined };
+			get_blocked_user_ids: {
+				Args: never;
+				Returns: {
+					user_id: string;
+				}[];
+			};
 			get_following_timeline: {
 				Args: { p_before?: string; p_before_id?: string; p_limit?: number };
 				Returns: {
@@ -3191,11 +3735,20 @@ export type Database = {
 				}[];
 			};
 			has_beta_write_access: { Args: never; Returns: boolean };
+			is_blocked_between: {
+				Args: { user_a: string; user_b: string };
+				Returns: boolean;
+			};
+			is_blocked_with_post_author: {
+				Args: { target_post_id: string };
+				Returns: boolean;
+			};
 			is_current_user_admin: { Args: never; Returns: boolean };
 			is_profile_active_for_writes: {
 				Args: { profile_id: string };
 				Returns: boolean;
 			};
+			is_profile_banned: { Args: { profile_id: string }; Returns: boolean };
 			redeem_invite: { Args: { p_code: string }; Returns: undefined };
 			revoke_invite: { Args: { p_invite_id: string }; Returns: undefined };
 			show_limit: { Args: never; Returns: number };
