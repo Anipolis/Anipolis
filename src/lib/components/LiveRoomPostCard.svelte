@@ -1,5 +1,6 @@
 <script lang="ts">
 import { contentWarningLabel, hasContentWarning } from "$lib/content-warning";
+import { fetchRoomPostPages, mergeReplies, type RoomPostCursor, type RoomPostPage } from "$lib/room-live-sync";
 import type { Post } from "$lib/types";
 import { formatRelativeTime } from "$lib/utils/format";
 import PostRow from "./PostRow.svelte";
@@ -22,10 +23,20 @@ let {
 let expanded = $state(false);
 let replies = $state<Post[]>([]);
 let repliesLoaded = $state(false);
-let allRepliesLoaded = $state(false);
 let repliesLoading = $state(false);
 let repliesError = $state("");
+// 「さらに表示する」で古い順に取ってきた境界（#325）。続きはここから取る
+let replyCursor: RoomPostCursor | null = null;
+// 続きが無いところまで取り切ったときの返信数。これより増えたら（新しい返信が付いたら）また取れる
+let exhaustedAtReplyCount = $state<number | null>(null);
 const remainingReplyCount = $derived(Math.max(post.reply_count - replies.length, 0));
+// ミュート等で除外された返信があると件数が合わないので、取り切った後は返信数が増えたときだけ出す
+const canLoadMoreReplies = $derived(
+	remainingReplyCount > 0 && (exhaustedAtReplyCount === null || post.reply_count > exhaustedAtReplyCount),
+);
+/** 1回の「さらに表示する」で続けて取る最大ページ数（1ページ100件） */
+const MAX_REPLY_PAGES = 10;
+
 function stop(event: Event) {
 	event.stopPropagation();
 }
@@ -35,37 +46,74 @@ async function toggleExpanded() {
 }
 async function loadRecentReplies() {
 	if (repliesLoaded || post.reply_count <= 0 || repliesLoading) return;
-	if (await fetchReplies("recent", 3)) {
-		repliesLoaded = true;
-		allRepliesLoaded = post.reply_count <= replies.length;
-	}
-}
-
-async function loadAllReplies(event: MouseEvent) {
-	event.preventDefault();
-	event.stopPropagation();
-	if (await fetchReplies("all", 100)) {
-		repliesLoaded = true;
-		allRepliesLoaded = true;
-	}
-}
-
-async function fetchReplies(mode: "recent" | "all", limit: number): Promise<boolean> {
 	repliesLoading = true;
 	repliesError = "";
 	try {
-		const params = new URLSearchParams({ mode, limit: String(limit) });
+		const params = new URLSearchParams({ mode: "recent", limit: "3" });
 		const response = await fetch(`/api/posts/${encodeURIComponent(post.id)}/replies?${params}`);
 		const body = (await response.json().catch(() => ({}))) as { replies?: Post[]; message?: string };
 		if (!response.ok) {
 			repliesError = body.message ?? "返信を読み込めませんでした";
-			return false;
+			return;
 		}
-		replies = body.replies ?? [];
-		return true;
+		replies = mergeReplies(replies, body.replies ?? []);
+		repliesLoaded = true;
 	} catch {
 		repliesError = "返信を読み込めませんでした";
-		return false;
+	} finally {
+		repliesLoading = false;
+	}
+}
+
+// 展開中に返信が付いたら（ルームの再確認で返信数が 0 から増えたら）読み込む（#324）
+$effect(() => {
+	if (expanded && !repliesLoaded && !repliesLoading && !repliesError && post.reply_count > 0) {
+		void loadRecentReplies();
+	}
+});
+
+/** 返信を古い順に1ページ取る。失敗したら null（メッセージは repliesError に入れる） */
+async function fetchReplyPage(cursor: RoomPostCursor | null): Promise<RoomPostPage | null> {
+	const params = new URLSearchParams({ mode: "all", limit: "100" });
+	if (cursor) {
+		params.set("after_created_at", cursor.createdAt);
+		params.set("after_id", cursor.id);
+	}
+	try {
+		const response = await fetch(`/api/posts/${encodeURIComponent(post.id)}/replies?${params}`);
+		const body = (await response.json().catch(() => ({}))) as {
+			replies?: Post[];
+			nextCursor?: RoomPostCursor | null;
+			hasMore?: boolean;
+			message?: string;
+		};
+		if (!response.ok) {
+			repliesError = body.message ?? "返信を読み込めませんでした";
+			return null;
+		}
+		return { posts: body.replies ?? [], nextCursor: body.nextCursor ?? null, hasMore: Boolean(body.hasMore) };
+	} catch {
+		repliesError = "返信を読み込めませんでした";
+		return null;
+	}
+}
+
+/**
+ * 「さらに表示する」: 取得済みの境界から続きを古い順に取り、取得済みの返信と ID でまとめる（#325）。
+ * 以前は古い100件で打ち切って全件取得済み扱いにしていたため、101件目以降へ進めなかった。
+ */
+async function loadMoreReplies(event: MouseEvent) {
+	event.preventDefault();
+	event.stopPropagation();
+	if (repliesLoading) return;
+	repliesLoading = true;
+	repliesError = "";
+	try {
+		const result = await fetchRoomPostPages(fetchReplyPage, replyCursor, MAX_REPLY_PAGES);
+		replyCursor = result.cursor;
+		replies = mergeReplies(replies, result.posts);
+		repliesLoaded = true;
+		if (result.ok && !result.hasMore) exhaustedAtReplyCount = post.reply_count;
 	} finally {
 		repliesLoading = false;
 	}
@@ -99,8 +147,8 @@ async function fetchReplies(mode: "recent" | "all", limit: number): Promise<bool
 					>
 				</a>
 			{/each}
-			{#if !allRepliesLoaded && remainingReplyCount > 0}
-				<button type="button" class="live-more-replies" onclick={loadAllReplies}>
+			{#if canLoadMoreReplies}
+				<button type="button" class="live-more-replies" onclick={loadMoreReplies}>
 					💬 さらに表示する（残り{remainingReplyCount}件）
 				</button>
 			{/if}

@@ -234,3 +234,64 @@ describe("CW（ネタバレ注意）の保護（#317〜#319）", () => {
 		expect(target.querySelector(".quoted-post")?.textContent).toContain("最終回で主人公が旅を終える");
 	});
 });
+
+describe("実況ルームの返信の続き（#325）", () => {
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	function reply(index: number) {
+		const base = fixturePost(0);
+		const id = `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
+		const second = String(index % 60).padStart(2, "0");
+		const minute = String(Math.floor(index / 60)).padStart(2, "0");
+		return {
+			...base,
+			id,
+			parent_id: base.id,
+			content: `返信${index}`,
+			created_at: `2026-10-13T12:${minute}:${second}.000Z`,
+		};
+	}
+
+	it("101件目以降も「さらに表示する」で辿れ、最新の返信を失わない", async () => {
+		const all = Array.from({ length: 150 }, (_, i) => reply(i));
+		const fetchMock = vi.fn(async (input: string) => {
+			const url = new URL(input, "http://localhost");
+			if (url.searchParams.get("mode") === "recent") return Response.json({ replies: all.slice(-3) });
+			const afterId = url.searchParams.get("after_id");
+			const start = afterId ? all.findIndex((r) => r.id === afterId) + 1 : 0;
+			const page = all.slice(start, start + 100);
+			const last = page[page.length - 1];
+			return Response.json({
+				replies: page,
+				nextCursor: last ? { createdAt: last.created_at, id: last.id } : null,
+				hasMore: start + 100 < all.length,
+			});
+		});
+		vi.stubGlobal("fetch", fetchMock);
+
+		const target = document.body.appendChild(document.createElement("div"));
+		const component = mount(LiveRoomPostCard, {
+			target,
+			props: { post: { ...fixturePost(18), reply_count: 150 }, currentUserId: "preview-user-0" },
+		});
+		cleanup.push(() => unmount(component));
+		await tick();
+		target.querySelector<HTMLButtonElement>('[aria-label="投稿の返信を表示"]')?.click();
+		await vi.waitFor(() => expect(target.querySelectorAll(".live-reply")).toHaveLength(3));
+		expect(target.querySelector(".live-more-replies")?.textContent).toContain("残り147件");
+
+		target.querySelector<HTMLButtonElement>(".live-more-replies")?.click();
+		await vi.waitFor(() => expect(target.querySelectorAll(".live-reply")).toHaveLength(150));
+		// 取り切ったら追加のボタンは出さない。最新の返信も残っている
+		expect(target.querySelector(".live-more-replies")).toBeNull();
+		expect(target.querySelector(".live-reply:last-of-type")?.textContent).toContain("返信149");
+		// 2ページ目は1ページ目の境界から続けて取る
+		const allModeCalls = fetchMock.mock.calls
+			.map(([input]) => new URL(input, "http://localhost"))
+			.filter((u) => u.searchParams.get("mode") === "all");
+		expect(allModeCalls).toHaveLength(2);
+		expect(allModeCalls[1]?.searchParams.get("after_id")).toBe(all[99]?.id);
+	});
+});

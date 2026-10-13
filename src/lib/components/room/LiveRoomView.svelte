@@ -10,6 +10,15 @@ import ExitSurveyModal from "$lib/components/ExitSurveyModal.svelte";
 import LiveRoomPostCard from "$lib/components/LiveRoomPostCard.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
+import {
+	applyPostStates,
+	comparePostsAsc,
+	cursorOfLast,
+	fetchRoomPostPages,
+	mergeRoomPosts,
+	type RoomPostCursor,
+	type RoomPostPage,
+} from "$lib/room-live-sync";
 import type { Post, RoomExitSurveyComparisonWithX, RoomExitSurveyNextParticipation } from "$lib/types";
 import type { LiveRoomActionData, LiveRoomData } from "$lib/types/live-room";
 import { isPostContinuation } from "$lib/utils/post-presentation";
@@ -20,7 +29,9 @@ import {
 	ROOM_CONNECTION_PHASE_LABELS,
 	ROOM_CONNECTION_PHASE_TONES,
 	ROOM_LIVE_FETCH_TIMEOUT_MS,
+	ROOM_LIVE_MAX_PAGES,
 	ROOM_LIVE_POLL_INTERVAL_MS,
+	ROOM_STATE_MAX_IDS,
 	type RoomConnectionEvent,
 	reduceRoomConnection,
 	shouldOfferManualReconnect,
@@ -72,6 +83,11 @@ const overLimit = $derived(charCount > maxLen);
 const surveyPostCount = $derived(data.roomExitSurvey.postCount + localSurveyPostCount);
 // ライブ更新で受信した投稿（load 由来の data.posts とは別に保持し、ID でマージする）
 let extraPosts = $state<Post[]>([]);
+// 新着取得の境界。表示中の投稿ではなく、取得した行の境界で進める（#320）
+let liveCursor: RoomPostCursor | null = null;
+// 再確認で見えなくなった投稿（削除・管理者非表示・ブロック）と、更新された返信数（#324）
+let hiddenPostIds = $state<Set<string>>(new Set());
+let replyCountOverrides = $state<Map<string, number>>(new Map());
 let roomExperimentVisitId: string | null = null;
 let roomExperimentHeartbeatTimer: ReturnType<typeof setInterval> | undefined;
 let roomExperimentExitSent = false;
@@ -81,20 +97,10 @@ function getRoomExperimentVisitStorageKey(sessionId: string) {
 	return `room-experiment-visit:${sessionId}`;
 }
 
-const allPosts = $derived.by(() => {
-	if (extraPosts.length === 0) return data.posts;
-	const seen = new Set(data.posts.map((p) => p.id));
-	const fresh = extraPosts.filter((p) => !seen.has(p.id));
-	if (fresh.length === 0) return data.posts;
-	return [...data.posts, ...fresh].sort(
-		(a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-	);
-});
+const allPosts = $derived(mergeRoomPosts(data.posts, extraPosts, hiddenPostIds, replyCountOverrides));
 
 const displayedPosts = $derived(
-	postOrder === "oldest"
-		? allPosts
-		: [...allPosts].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+	postOrder === "oldest" ? allPosts : [...allPosts].sort((a, b) => comparePostsAsc(b, a)),
 );
 
 let fetchingLive = false;
@@ -354,39 +360,81 @@ function liveDiffQueryParam() {
 	return data.room.kind === "event" ? "event_id" : "session_id";
 }
 
+/** 差分 API を1ページ分叩く。非成功応答・例外・タイムアウトは null */
+async function fetchRoomPostPage(cursor: RoomPostCursor | null): Promise<RoomPostPage | null> {
+	const params = new URLSearchParams({ [liveDiffQueryParam()]: data.room.session_id });
+	if (cursor) {
+		params.set("after_created_at", cursor.createdAt);
+		params.set("after_id", cursor.id);
+	}
+	try {
+		// ハングした fetch が fetchingLive を握り続けてポーリングを塞がないようタイムアウトを付ける
+		const res = await fetch(`/api/rooms/posts?${params}`, {
+			signal: AbortSignal.timeout(ROOM_LIVE_FETCH_TIMEOUT_MS),
+		});
+		if (!res.ok) return null;
+		return (await res.json()) as RoomPostPage;
+	} catch {
+		return null;
+	}
+}
+
 /**
- * 最後に受信した投稿以降の差分を取得して extraPosts に追加する。
- * 成否は接続状態に反映し、非成功応答・例外・タイムアウトを「更新失敗」として画面に伝える。
- * since は最後の投稿の created_at より後(gt)を返すため、復旧後も ID の重複チェックと合わせて
- * 取りこぼし・二重表示なく追いつける。
+ * 取得済みの境界より後ろの新着を古い順に取り、extraPosts に追加する（#320）。
+ * 続きがある間はページを追うので、バックグラウンドから戻って未受信が100件を超えていても取りこぼさない。
+ * 成否は接続状態に反映し、失敗したらそこまでの境界を残して次回その続きから取る。
  */
 async function fetchNewPosts() {
 	if (fetchingLive) return;
 	fetchingLive = true;
 	dispatchConnection({ type: "fetch_start" });
 	try {
-		const last = allPosts[allPosts.length - 1];
-		const params = new URLSearchParams({ [liveDiffQueryParam()]: data.room.session_id });
-		if (last) params.set("since", last.created_at);
-		// ハングした fetch が fetchingLive を握り続けてポーリングを塞がないようタイムアウトを付ける
-		const res = await fetch(`/api/rooms/posts?${params}`, {
-			signal: AbortSignal.timeout(ROOM_LIVE_FETCH_TIMEOUT_MS),
-		});
-		if (!res.ok) {
-			dispatchConnection({ type: "fetch_failure", at: Date.now() });
-			return;
-		}
-		const body = (await res.json()) as { posts: Post[] };
-		dispatchConnection({ type: "fetch_success", at: Date.now() });
-		if (body.posts.length === 0) return;
+		const result = await fetchRoomPostPages(
+			fetchRoomPostPage,
+			liveCursor ?? cursorOfLast(allPosts),
+			ROOM_LIVE_MAX_PAGES,
+		);
+		liveCursor = result.cursor;
 		const seen = new Set(allPosts.map((p) => p.id));
-		const fresh = body.posts.filter((p) => !seen.has(p.id));
+		const fresh = result.posts.filter((p) => !seen.has(p.id) && !hiddenPostIds.has(p.id));
 		if (fresh.length > 0) extraPosts = [...extraPosts, ...fresh];
-	} catch {
-		// ネットワークエラーは次回の受信/ポーリングで回復する。状態には失敗として残す
-		dispatchConnection({ type: "fetch_failure", at: Date.now() });
+		dispatchConnection(
+			result.ok ? { type: "fetch_success", at: Date.now() } : { type: "fetch_failure", at: Date.now() },
+		);
 	} finally {
 		fetchingLive = false;
+	}
+}
+
+let resyncingStates = false;
+
+/**
+ * 表示中の投稿が今も見えるかと返信数を確かめ直す（#324 #347）。
+ * Realtime は INSERT しか購読しておらず、削除・管理者非表示・返信の追加は届かないため、
+ * ポーリングと同じ間隔、および load のやり直し（自分で削除した直後など）のたびに確かめる。
+ */
+async function resyncPostStates() {
+	if (resyncingStates || allPosts.length === 0) return;
+	resyncingStates = true;
+	try {
+		// 新しい側から上限件数まで（古い投稿の変化は見落としても影響が小さい）
+		const ids = allPosts.slice(-ROOM_STATE_MAX_IDS).map((p) => p.id);
+		const res = await fetch("/api/rooms/posts/state", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ ids }),
+			signal: AbortSignal.timeout(ROOM_LIVE_FETCH_TIMEOUT_MS),
+		});
+		if (!res.ok) return;
+		const { visible } = (await res.json()) as { visible: Record<string, number> };
+		const next = applyPostStates(ids, visible, hiddenPostIds, replyCountOverrides);
+		if (!next.changed) return;
+		hiddenPostIds = next.hidden;
+		replyCountOverrides = next.replyCounts;
+	} catch {
+		// 次回のポーリングで確かめ直す
+	} finally {
+		resyncingStates = false;
 	}
 }
 
@@ -398,6 +446,7 @@ async function handleManualReconnect() {
 		dispatchConnection({ type: "reconnect" });
 		realtimeGeneration += 1;
 		await fetchNewPosts();
+		void resyncPostStates();
 	} finally {
 		reconnecting = false;
 	}
@@ -406,7 +455,10 @@ async function handleManualReconnect() {
 function handleOnline() {
 	dispatchConnection({ type: "online" });
 	// 回線復帰時は Realtime の再参加を待たずに差分を取りに行く
-	if (status === "open") void fetchNewPosts();
+	if (status === "open") {
+		void fetchNewPosts();
+		void resyncPostStates();
+	}
 }
 
 function handleOffline() {
@@ -415,7 +467,10 @@ function handleOffline() {
 
 function handleVisibilityChange() {
 	// バックグラウンドから戻ったとき、止まっていたポーリングを待たずに追いつく
-	if (document.visibilityState === "visible" && status === "open") void fetchNewPosts();
+	if (document.visibilityState === "visible" && status === "open") {
+		void fetchNewPosts();
+		void resyncPostStates();
+	}
 }
 
 const status = $derived.by<RoomStatus>(() => {
@@ -509,6 +564,14 @@ $effect(() => {
 	}
 });
 
+// load をやり直したら（自分で投稿を削除した直後など）、表示中の投稿を確かめ直す（#347）。
+// ライブ受信分は load の結果に含まれないので、削除してもそのままでは画面に残るため
+$effect(() => {
+	void data.posts;
+	if (!mounted) return;
+	untrack(() => void resyncPostStates());
+});
+
 $effect(() => {
 	if (!mounted || status !== "open") return;
 	const freshCount = allPosts.filter((post) => !knownPostIds.has(post.id)).length;
@@ -553,7 +616,10 @@ $effect(() => {
 			if (!active) return;
 			dispatchConnection({ type: "realtime", status: subscribeStatus });
 		});
-	const pollId = setInterval(() => void fetchNewPosts(), ROOM_LIVE_POLL_INTERVAL_MS);
+	const pollId = setInterval(() => {
+		void fetchNewPosts();
+		void resyncPostStates();
+	}, ROOM_LIVE_POLL_INTERVAL_MS);
 	// 入室直後に一度取得して「最終更新」を確定させる(購読完了までの取りこぼしも拾う)。
 	// allPosts 等を effect の依存にしないよう untrack で呼ぶ
 	untrack(() => void fetchNewPosts());

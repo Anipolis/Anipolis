@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
 import type { Database } from "$lib/supabase/database.types";
-import { buildTimelineNextCursor, getFollowingTimelinePosts, getHomeTimelinePosts } from "./queries";
+import { buildTimelineNextCursor, getFollowingTimelinePosts, getHomeTimelinePosts, getRoomPostsAfter } from "./queries";
 
 type TableResult = { data: unknown; error: { message: string } | null };
 
@@ -191,5 +191,67 @@ describe("getFollowingTimelinePosts pagination with mutes", () => {
 		const result = await getFollowingTimelinePosts(supabase, "viewer", { limit: 50 });
 		expect(result.posts).toHaveLength(1);
 		expect(result.nextCursor).toBeNull();
+	});
+});
+
+describe("getRoomPostsAfter（#320）", () => {
+	/** posts への問い合わせで呼ばれたフィルター・並びを記録する（他のテーブルは空で返す） */
+	function recordingSupabase(rows: ReturnType<typeof rawPost>[], mutedWords: string[] = []) {
+		const calls: { method: string; args: unknown[] }[] = [];
+		const from = vi.fn((table: string) => {
+			if (table !== "posts") {
+				const result = table === "muted_words" ? mutedWords.map((word) => ({ word })) : [];
+				return awaitableChain({ data: result, error: null });
+			}
+			const chain = Promise.resolve({ data: rows, error: null }) as Promise<TableResult> &
+				Record<string, (...args: unknown[]) => unknown>;
+			for (const method of CHAIN_METHODS) {
+				chain[method] = (...args: unknown[]) => {
+					calls.push({ method, args });
+					return chain;
+				};
+			}
+			return chain;
+		});
+		const rpc = vi.fn(async () => ({ data: [], error: null }));
+		return { client: { from, rpc } as unknown as SupabaseClient<Database>, calls };
+	}
+
+	it("境界より後ろ（同じ時刻は id で比較）を古い順に取る", async () => {
+		const { client, calls } = recordingSupabase([rawPost(1)]);
+		await getRoomPostsAfter(
+			client,
+			{ kind: "broadcast", id: "session-1" },
+			null,
+			{ createdAt: "2026-09-28T10:05:00.000Z", id: "post-05" },
+			100,
+		);
+
+		expect(calls).toContainEqual({ method: "eq", args: ["broadcast_room_session_id", "session-1"] });
+		expect(calls).toContainEqual({
+			method: "or",
+			args: ["created_at.gt.2026-09-28T10:05:00.000Z,and(created_at.eq.2026-09-28T10:05:00.000Z,id.gt.post-05)"],
+		});
+		expect(calls.filter((c) => c.method === "order")).toEqual([
+			{ method: "order", args: ["created_at", { ascending: true }] },
+			{ method: "order", args: ["id", { ascending: true }] },
+		]);
+	});
+
+	it("次の境界はミュートで除外する前の取得行から決める（除外があっても先へ進める）", async () => {
+		const rows = [rawPost(1), rawPost(2, "spoiler inside")];
+		const { client } = recordingSupabase(rows, ["spoiler"]);
+		const page = await getRoomPostsAfter(client, { kind: "event", id: "event-1" }, "viewer", null, 2);
+
+		expect(page?.posts.map((p) => p.id)).toEqual(["post-01"]);
+		expect(page?.nextCursor).toEqual({ createdAt: rows[1]?.created_at, id: "post-02" });
+		expect(page?.hasMore).toBe(true);
+	});
+
+	it("新着が無ければ境界を据え置く", async () => {
+		const { client } = recordingSupabase([]);
+		const cursor = { createdAt: "2026-09-28T10:05:00.000Z", id: "post-05" };
+		const page = await getRoomPostsAfter(client, { kind: "broadcast", id: "session-1" }, null, cursor, 100);
+		expect(page).toEqual({ posts: [], nextCursor: cursor, hasMore: false });
 	});
 });
