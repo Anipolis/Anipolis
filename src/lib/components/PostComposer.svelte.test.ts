@@ -1,6 +1,6 @@
 import { flushSync, mount, tick, unmount } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { composeDraftKey } from "$lib/compose-draft";
+import { composeContextKey, composeDraftKey } from "$lib/compose-draft";
 import PostComposer from "./PostComposer.svelte";
 
 // happy-dom の複製フォームは method を "post" と報告しないため use:enhance が開発時チェックで投げる。
@@ -60,6 +60,35 @@ describe("PostComposer mention candidates", () => {
 	afterEach(() => {
 		vi.unstubAllGlobals();
 		vi.useRealTimers();
+	});
+
+	it("@ を消した後に届いた古い応答で、閉じた候補を開き直さない（#329）", async () => {
+		// 応答を手で返せるようにして、@ を消した後に届く状況を作る
+		let respond: (value: unknown) => void = () => {};
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(
+				() =>
+					new Promise((resolve) => {
+						respond = resolve;
+					}),
+			),
+		);
+		const { target, textarea, cleanup } = mountComposer();
+		textarea.value = "hi @ali";
+		textarea.setSelectionRange(7, 7);
+		textarea.dispatchEvent(new Event("input", { bubbles: true }));
+		await vi.advanceTimersByTimeAsync(250); // 検索を送った（応答はまだ）
+
+		textarea.value = "hi ";
+		textarea.setSelectionRange(3, 3);
+		textarea.dispatchEvent(new Event("input", { bubbles: true }));
+		respond({ ok: true, json: async () => users });
+		await vi.advanceTimersByTimeAsync(50);
+		await tick();
+
+		expect(target.querySelector('[role="listbox"]')).toBeNull();
+		await cleanup();
 	});
 
 	it("exposes the candidates as a listbox tied to the textarea", async () => {
@@ -198,6 +227,148 @@ describe("PostComposer draft persistence", () => {
 		flushSync();
 		expect(localStorage.getItem(key)).toBeNull();
 
+		await cleanup();
+	});
+
+	it("スマホで開き直したとき、直前の投稿の CW と受付中のルームを戻す（#331）", async () => {
+		const room = {
+			id: "r1",
+			anime_id: "a1",
+			room_date: "2026-10-13",
+			room_kind: "episode",
+			room_key: "a1:2026-10-13",
+			scheduled_at: "2026-10-13T12:00:00Z",
+			anime: { id: "a1", title: "葬送のフリーレン", cover_url: null },
+		};
+		localStorage.setItem(
+			composeContextKey("user-1"),
+			JSON.stringify({
+				v: 1,
+				savedAt: Date.now(),
+				cwAnime: { id: "a1", title: "葬送のフリーレン", title_en: null, cover_url: null },
+				room,
+			}),
+		);
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => ({ ok: true, json: async () => [room] })),
+		);
+		const { target, cleanup } = mountComposer({ draftKey: "user-1" });
+		await vi.waitFor(() => expect(target.textContent).toContain("ネタバレ: 葬送のフリーレン"));
+		await vi.waitFor(() => expect(target.querySelector('input[name="broadcast_room_session_id"]')).not.toBeNull());
+		vi.unstubAllGlobals();
+		await cleanup();
+	});
+
+	it("ルームの確認中に下書きを破棄したら、後から届いた確認結果でルームを戻さない", async () => {
+		const room = {
+			id: "r1",
+			anime_id: "a1",
+			room_date: "2026-10-13",
+			room_kind: "episode",
+			room_key: "k",
+			scheduled_at: "2026-10-13T12:00:00Z",
+			anime: null,
+		};
+		localStorage.setItem(
+			key,
+			JSON.stringify({
+				v: 1,
+				savedAt: Date.now(),
+				content: "書きかけ",
+				imageUrls: [],
+				anime: null,
+				cwAnime: null,
+				room: null,
+			}),
+		);
+		localStorage.setItem(
+			composeContextKey("user-1"),
+			JSON.stringify({ v: 1, savedAt: Date.now(), cwAnime: null, room }),
+		);
+		let respond: (value: unknown) => void = () => {};
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(
+				() =>
+					new Promise((resolve) => {
+						respond = resolve;
+					}),
+			),
+		);
+		const { target, cleanup } = mountComposer({ draftKey: "user-1" });
+		await tick();
+
+		Array.from(target.querySelectorAll("button"))
+			.find((b) => b.textContent?.includes("下書きを破棄"))
+			?.click();
+		flushSync();
+		respond({ ok: true, json: async () => [room] });
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		await tick();
+
+		expect(target.querySelector('input[name="broadcast_room_session_id"]')).toBeNull();
+		expect(localStorage.getItem(composeContextKey("user-1"))).toBeNull();
+		vi.unstubAllGlobals();
+		await cleanup();
+	});
+
+	it("受付が終わったルームは戻さない（#331）", async () => {
+		localStorage.setItem(
+			composeContextKey("user-1"),
+			JSON.stringify({ v: 1, savedAt: Date.now(), cwAnime: null, room: { id: "closed", anime_id: "a1" } }),
+		);
+		const fetchMock = vi.fn(async () => ({ ok: true, json: async () => [] }));
+		vi.stubGlobal("fetch", fetchMock);
+		const { target, cleanup } = mountComposer({ draftKey: "user-1" });
+		await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/rooms/open", expect.anything()));
+		await tick();
+		expect(target.querySelector('input[name="broadcast_room_session_id"]')).toBeNull();
+		vi.unstubAllGlobals();
+		await cleanup();
+	});
+
+	it("外した画像と、破棄した下書きの画像を Storage から消すよう依頼する（#330）", async () => {
+		const urls = [
+			"https://project.supabase.co/storage/v1/object/public/post-images/user-1/1-a.png",
+			"https://project.supabase.co/storage/v1/object/public/post-images/user-1/2-b.png",
+			"https://project.supabase.co/storage/v1/object/public/post-images/user-1/3-c.png",
+		];
+		localStorage.setItem(
+			key,
+			JSON.stringify({
+				v: 1,
+				savedAt: Date.now(),
+				content: "画像つき",
+				imageUrls: urls,
+				anime: null,
+				cwAnime: null,
+				room: null,
+			}),
+		);
+		const fetchMock = vi.fn(async (_input: string, _init?: RequestInit) => ({
+			ok: true,
+			json: async () => ({ removed: true }),
+		}));
+		vi.stubGlobal("fetch", fetchMock);
+		const { target, cleanup } = mountComposer({ draftKey: "user-1" });
+		await tick();
+
+		target.querySelector<HTMLButtonElement>('[aria-label="画像を削除"]')?.click();
+		flushSync();
+		const deletedUrls = () =>
+			fetchMock.mock.calls
+				.filter(([, init]) => init?.method === "DELETE")
+				.map(([, init]) => JSON.parse(String(init?.body)).url);
+		expect(deletedUrls()).toEqual([urls[0]]);
+
+		Array.from(target.querySelectorAll("button"))
+			.find((b) => b.textContent?.includes("下書きを破棄"))
+			?.click();
+		flushSync();
+		expect(deletedUrls()).toEqual(urls);
+
+		vi.unstubAllGlobals();
 		await cleanup();
 	});
 

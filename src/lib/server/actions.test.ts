@@ -196,6 +196,24 @@ describe("insertPostWithHashtags", () => {
 		expect(insertedPosts).toHaveLength(0);
 	});
 
+	it("アップロードから7日を過ぎた画像は、回収されうるので受け付けない（#330）", async () => {
+		const { client, insertedPosts } = createInsertPostClient(null);
+		const uuid = "0b7c6a8e-5d4f-4a3b-9c2d-1e0f9a8b7c6d";
+		const base = "https://example.supabase.co/storage/v1/object/public/post-images/user-1";
+		const expired = `${base}/${Date.now() - 8 * 24 * 60 * 60 * 1000}-${uuid}.png`;
+		const fresh = `${base}/${Date.now() - 60_000}-${uuid}.png`;
+
+		const rejected = await insertPostWithHashtags(client, "user-1", "old image", null, [expired]);
+		expect(rejected).toMatchObject({
+			status: 400,
+			data: { message: "添付画像の有効期限が切れました。画像をもう一度添付してください" },
+		});
+		expect(insertedPosts).toEqual([]);
+
+		const accepted = await insertPostWithHashtags(client, "user-1", "new image", null, [fresh]);
+		expect(accepted).toEqual({ success: true, postId: "post-1" });
+	});
+
 	it("accepts up to 4 images from the poster's own folder", async () => {
 		const { client, insertedPosts } = createInsertPostClient(null);
 		const urls = [1, 2, 3, 4].map(

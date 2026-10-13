@@ -12,6 +12,7 @@
  * - localStorage が使えない環境（プライベートモード等）では例外を握りつぶし、保存無しで動作する
  */
 
+import { isPostImageUsable } from "$lib/post-image-lifetime";
 import type { OpenBroadcastRoomSummary } from "$lib/types";
 
 export interface ComposeDraftAnime {
@@ -102,8 +103,9 @@ export function parseComposeDraft(raw: string | null, now = Date.now()): Compose
 
 	const draft: ComposeDraft = {
 		content: typeof stored.content === "string" ? stored.content : "",
+		// 使用期限（アップロードから7日）を過ぎた画像は外す。回収済みかもしれないため（#330）
 		imageUrls: Array.isArray(stored.imageUrls)
-			? stored.imageUrls.filter((url): url is string => typeof url === "string")
+			? stored.imageUrls.filter((url): url is string => typeof url === "string" && isPostImageUsable(url, now))
 			: [],
 		anime: isAnime(stored.anime) ? stored.anime : null,
 		cwAnime: isAnime(stored.cwAnime) ? stored.cwAnime : null,
@@ -151,6 +153,73 @@ export function clearComposeDraft(storage: DraftStorage | null, userId: string) 
 	if (!storage) return;
 	try {
 		storage.removeItem(composeDraftKey(userId));
+	} catch {
+		// 同上
+	}
+}
+
+// ---- 直前の投稿の文脈（#331） ----
+// CW とルームの指定は、連投しやすいよう投稿後も引き継ぐ。PC では投稿欄がページに残るので
+// そのまま残るが、スマホは投稿のたびにモーダルごと閉じ、本文が空の下書きは消えるので毎回外れていた。
+// 本文の下書きとは別に短い間だけ保存し、次に投稿欄を開いたときに戻す。
+
+export interface ComposeContext {
+	cwAnime: ComposeDraftAnime | null;
+	room: OpenBroadcastRoomSummary | null;
+}
+
+/** CW を戻す期限。同じ話題を続けて書く間は残し、時間が空けば外す */
+export const COMPOSE_CONTEXT_CW_TTL_MS = 30 * 60 * 1000;
+/** ルームを戻す期限。受付中かどうかは戻すときに確かめるので、こちらは古すぎる保存を捨てるだけ */
+export const COMPOSE_CONTEXT_ROOM_TTL_MS = 12 * 60 * 60 * 1000;
+const CONTEXT_KEY_PREFIX = "anipolis_compose_context:";
+
+export function composeContextKey(userId: string): string {
+	return `${CONTEXT_KEY_PREFIX}${userId}`;
+}
+
+export function saveComposeContext(
+	storage: DraftStorage | null,
+	userId: string,
+	context: ComposeContext,
+	now = Date.now(),
+) {
+	if (!storage) return;
+	const key = composeContextKey(userId);
+	try {
+		if (!context.cwAnime && !context.room) {
+			storage.removeItem(key);
+			return;
+		}
+		storage.setItem(key, JSON.stringify({ v: 1, savedAt: now, cwAnime: context.cwAnime, room: context.room }));
+	} catch {
+		// 下書きと同じく補助機能なので黙って諦める
+	}
+}
+
+/** 期限内の文脈だけを返す。ルームが受付中かどうかは呼び出し側で確かめる */
+export function loadComposeContext(storage: DraftStorage | null, userId: string, now = Date.now()): ComposeContext {
+	const empty: ComposeContext = { cwAnime: null, room: null };
+	if (!storage) return empty;
+	try {
+		const raw = storage.getItem(composeContextKey(userId));
+		if (!raw) return empty;
+		const parsed = JSON.parse(raw) as { v?: unknown; savedAt?: unknown; cwAnime?: unknown; room?: unknown };
+		if (parsed.v !== 1 || typeof parsed.savedAt !== "number") return empty;
+		const age = now - parsed.savedAt;
+		return {
+			cwAnime: age <= COMPOSE_CONTEXT_CW_TTL_MS && isAnime(parsed.cwAnime) ? parsed.cwAnime : null,
+			room: age <= COMPOSE_CONTEXT_ROOM_TTL_MS && isRoom(parsed.room) ? parsed.room : null,
+		};
+	} catch {
+		return empty;
+	}
+}
+
+export function clearComposeContext(storage: DraftStorage | null, userId: string) {
+	if (!storage) return;
+	try {
+		storage.removeItem(composeContextKey(userId));
 	} catch {
 		// 同上
 	}

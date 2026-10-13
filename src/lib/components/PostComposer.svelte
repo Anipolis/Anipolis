@@ -1,6 +1,6 @@
 <script lang="ts">
 import type { SubmitFunction } from "@sveltejs/kit";
-import { onMount } from "svelte";
+import { onDestroy, onMount } from "svelte";
 import { enhance } from "$app/forms";
 import { replaceState } from "$app/navigation";
 import { page } from "$app/state";
@@ -8,10 +8,13 @@ import { autosize } from "$lib/actions/autosize";
 import { trapFocus } from "$lib/actions/trapFocus";
 import {
 	type ComposeDraft,
+	clearComposeContext,
 	clearComposeDraft,
 	getBrowserDraftStorage,
 	isDraftEmpty,
+	loadComposeContext,
 	loadComposeDraft,
+	saveComposeContext,
 	saveComposeDraft,
 } from "$lib/compose-draft";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
@@ -19,6 +22,7 @@ import type { AnimeExchangeShare, OpenBroadcastRoomSummary } from "$lib/types";
 import { animeQuoteChipLabel, cwChipLabel } from "$lib/utils/composer-chips";
 import { charCountClass } from "$lib/utils/format";
 import { applyMention, findMentionQuery, mentionOptionId, resolveMentionKey } from "$lib/utils/mention-suggest";
+import { createSearchGate } from "$lib/utils/search-gate";
 import AnimeExchangeResult from "./AnimeExchangeResult.svelte";
 import { classifyComposerSubmitResult } from "./post-composer-submit";
 import UserAvatar from "./UserAvatar.svelte";
@@ -108,6 +112,12 @@ let textareaEl = $state<HTMLTextAreaElement | null>(null);
 let mentionResults = $state<UserResult[]>([]);
 let mentionDropdownOpen = $state(false);
 let mentionDebounce = $state<ReturnType<typeof setTimeout> | null>(null);
+// 検索ごとの新旧の管理（#329）。古い応答が新しい結果を上書きしたり、閉じた候補を開き直したりしないようにする
+const animeSearchGate = createSearchGate();
+const cwSearchGate = createSearchGate();
+const mentionSearchGate = createSearchGate();
+// ルームの復元（受付中かの確認）の新旧。確認中に破棄・選び直しがあったら、後から届いた結果を反映しない
+const roomRestoreGate = createSearchGate();
 /** キーボードで選択中の候補 index。-1 は未選択 */
 let mentionActiveIndex = $state(-1);
 // 同じページに複数の PostComposer が乗る（デスクトップ用とモバイルモーダル）ので id は個別に振る
@@ -189,21 +199,47 @@ async function handleFileChange(e: Event) {
 	input.value = "";
 }
 
+/**
+ * 投稿に使わないと決まった画像を Storage から消す（#330）。画像は選んだ時点で保存されるため。
+ * サーバーは投稿に使われている画像を消さない。失敗しても投稿欄の操作は止めない（放置分は定期の掃除で回収する）
+ */
+function deleteUploadedImages(urls: string[]) {
+	for (const url of urls) {
+		void fetch("/api/upload", {
+			method: "DELETE",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ url }),
+		}).catch(() => {});
+	}
+}
+
 function removeImage(index: number) {
+	const removed = imageUrls[index];
 	imageUrls = imageUrls.filter((_, i) => i !== index);
+	if (removed) deleteUploadedImages([removed]);
+}
+
+function cancelAnimeSearch() {
+	if (searchDebounce) clearTimeout(searchDebounce);
+	searchDebounce = null;
+	animeSearchGate.cancel();
+	animeSearching = false;
 }
 
 function openAnimeSearch() {
+	cancelAnimeSearch();
 	animeSearchOpen = true;
 	animeQuery = "";
 	animeResults = [];
 }
 
 function closeAnimeSearch() {
+	cancelAnimeSearch();
 	animeSearchOpen = false;
 }
 
 function selectAnime(anime: AnimeResult) {
+	cancelAnimeSearch();
 	selectedAnime = anime;
 	animeSearchOpen = false;
 	animeQuery = "";
@@ -214,7 +250,15 @@ function clearAnime() {
 	selectedAnime = null;
 }
 
+function cancelCwSearch() {
+	if (cwSearchDebounce) clearTimeout(cwSearchDebounce);
+	cwSearchDebounce = null;
+	cwSearchGate.cancel();
+	cwSearching = false;
+}
+
 function openCwSearch() {
+	cancelCwSearch();
 	cwSearchOpen = true;
 	cwQuery = "";
 	cwResults = [];
@@ -250,14 +294,46 @@ function restoreDraft(key: string) {
 
 /** 明示的な破棄操作。フォームを空にして保存済みの下書きも消す。 */
 function discardDraft() {
+	roomRestoreGate.cancel();
+	deleteUploadedImages(imageUrls);
 	content = "";
 	imageUrls = [];
 	selectedAnime = null;
 	selectedCwAnime = null;
 	selectedRoom = null;
 	clearExchangeShare();
-	if (draftKey) clearComposeDraft(getBrowserDraftStorage(), draftKey);
+	if (draftKey) {
+		clearComposeDraft(getBrowserDraftStorage(), draftKey);
+		clearComposeContext(getBrowserDraftStorage(), draftKey);
+	}
 	textareaEl?.focus();
+}
+
+/**
+ * CW とルームの指定を「直前の投稿の文脈」として保存する（#331）。連投しやすいよう投稿後も引き継ぐが、
+ * スマホは投稿のたびにモーダルごと閉じるので、次に開いたときに戻せるよう投稿欄の外に残す。
+ */
+function persistComposeContext() {
+	if (!draftKey) return;
+	saveComposeContext(getBrowserDraftStorage(), draftKey, { cwAnime: selectedCwAnime, room: selectedRoom });
+}
+
+/** 期限内の CW と、まだ受付中のルームだけを戻す（下書きや引用リンクで既に入っていれば上書きしない） */
+async function restoreComposeContext(key: string) {
+	const context = loadComposeContext(getBrowserDraftStorage(), key);
+	if (!selectedCwAnime && context.cwAnime) selectedCwAnime = context.cwAnime;
+	if (selectedRoom || !context.room) return;
+	const roomId = context.room.id;
+	const request = roomRestoreGate.start();
+	try {
+		const res = await fetch("/api/rooms/open", { signal: request.signal });
+		const rooms = res.ok ? ((await res.json()) as OpenBroadcastRoomSummary[]) : [];
+		const open = rooms.find((room) => room.id === roomId);
+		// 確認中に破棄・ルームの選び直し・アンマウントがあれば反映しない
+		if (open && !selectedRoom && request.isCurrent()) selectedRoom = open;
+	} catch {
+		// 確かめられなければ戻さない（受付が終わったルームに投稿させない）
+	}
 }
 
 // 復元が終わってから入力の変化を追って保存する（復元前に空の状態で上書きしないため）。
@@ -267,20 +343,35 @@ $effect(() => {
 	saveComposeDraft(getBrowserDraftStorage(), draftKey, currentDraft());
 });
 
+// 閉じた投稿欄に、保留中の検索の応答を反映しない（#329）
+onDestroy(() => {
+	roomRestoreGate.cancel();
+	cancelAnimeSearch();
+	cancelCwSearch();
+	cancelMentionSearch();
+});
+
 onMount(() => {
 	// 初期値の反映（上の $effect）より後に走る宣言順なので、引用リンクの値が先に入る
-	if (draftKey) restoreDraft(draftKey);
+	if (draftKey) {
+		restoreDraft(draftKey);
+		void restoreComposeContext(draftKey);
+	}
 	if (focusOnMount) textareaEl?.focus();
 });
 function closeCwSearch() {
+	cancelCwSearch();
 	cwSearchOpen = false;
 }
 function selectCwAnime(anime: AnimeResult) {
+	cancelCwSearch();
 	selectedCwAnime = anime;
 	cwSearchOpen = false;
+	persistComposeContext();
 }
 function clearCwAnime() {
 	selectedCwAnime = null;
+	persistComposeContext();
 }
 
 async function openRoomSearch() {
@@ -300,27 +391,36 @@ function closeRoomModal() {
 	roomModalOpen = false;
 }
 function selectRoom(room: OpenBroadcastRoomSummary) {
+	roomRestoreGate.cancel();
 	selectedRoom = room;
 	roomModalOpen = false;
+	persistComposeContext();
 }
 function clearRoom() {
+	roomRestoreGate.cancel();
 	selectedRoom = null;
+	persistComposeContext();
 }
 function handleCwQueryInput() {
-	if (cwSearchDebounce) clearTimeout(cwSearchDebounce);
+	cancelCwSearch();
 	if (cwQuery.trim().length === 0) {
 		cwResults = [];
 		return;
 	}
 	cwSearchDebounce = setTimeout(async () => {
+		const request = cwSearchGate.start();
 		cwSearching = true;
 		try {
-			const res = await fetch(`/api/anime/search?q=${encodeURIComponent(cwQuery.trim())}`);
-			cwResults = res.ok ? await res.json() : [];
+			const res = await fetch(`/api/anime/search?q=${encodeURIComponent(cwQuery.trim())}`, {
+				signal: request.signal,
+			});
+			const results = res.ok ? await res.json() : [];
+			if (request.isCurrent()) cwResults = results;
 		} catch {
-			cwResults = [];
+			if (request.isCurrent()) cwResults = [];
+		} finally {
+			if (request.isCurrent()) cwSearching = false;
 		}
-		cwSearching = false;
 	}, 300);
 }
 
@@ -336,20 +436,25 @@ function clearExchangeShare() {
 }
 
 function handleAnimeQueryInput() {
-	if (searchDebounce) clearTimeout(searchDebounce);
+	cancelAnimeSearch();
 	if (animeQuery.trim().length === 0) {
 		animeResults = [];
 		return;
 	}
 	searchDebounce = setTimeout(async () => {
+		const request = animeSearchGate.start();
 		animeSearching = true;
 		try {
-			const res = await fetch(`/api/anime/search?q=${encodeURIComponent(animeQuery.trim())}`);
-			animeResults = res.ok ? await res.json() : [];
+			const res = await fetch(`/api/anime/search?q=${encodeURIComponent(animeQuery.trim())}`, {
+				signal: request.signal,
+			});
+			const results = res.ok ? await res.json() : [];
+			if (request.isCurrent()) animeResults = results;
 		} catch {
-			animeResults = [];
+			if (request.isCurrent()) animeResults = [];
+		} finally {
+			if (request.isCurrent()) animeSearching = false;
 		}
-		animeSearching = false;
 	}, 300);
 }
 
@@ -358,33 +463,45 @@ function closeMentionDropdown() {
 	mentionActiveIndex = -1;
 }
 
-function handleContentInput() {
-	if (!textareaEl) return;
-	const val = textareaEl.value;
-	const cursor = textareaEl.selectionStart ?? val.length;
-	const q = findMentionQuery(val, cursor);
+/** 保留中のメンション検索を止めて候補を閉じる。後から届いた応答で開き直さない（#329） */
+function cancelMentionSearch() {
+	if (mentionDebounce) clearTimeout(mentionDebounce);
+	mentionDebounce = null;
+	mentionSearchGate.cancel();
+	closeMentionDropdown();
+}
 
-	if (q !== null) {
-		if (mentionDebounce) clearTimeout(mentionDebounce);
-		mentionDebounce = setTimeout(async () => {
-			if (q.length === 0) {
-				closeMentionDropdown();
-				return;
-			}
-			try {
-				const res = await fetch(`/api/users/search?q=${encodeURIComponent(q)}`);
-				mentionResults = res.ok ? await res.json() : [];
-				mentionDropdownOpen = mentionResults.length > 0;
-				// 候補が入れ替わったら先頭を選択状態にして、Enter/Tab ですぐ確定できるようにする
-				mentionActiveIndex = mentionDropdownOpen ? 0 : -1;
-			} catch {
-				mentionResults = [];
-				closeMentionDropdown();
-			}
-		}, 200);
-	} else {
-		closeMentionDropdown();
+/** 今のカーソル位置のメンションの検索語（無ければ null） */
+function currentMentionQuery(): string | null {
+	if (!textareaEl) return null;
+	const val = textareaEl.value;
+	return findMentionQuery(val, textareaEl.selectionStart ?? val.length);
+}
+
+function handleContentInput() {
+	const q = currentMentionQuery();
+	if (q === null || q.length === 0) {
+		cancelMentionSearch();
+		return;
 	}
+	if (mentionDebounce) clearTimeout(mentionDebounce);
+	mentionDebounce = setTimeout(async () => {
+		const request = mentionSearchGate.start();
+		try {
+			const res = await fetch(`/api/users/search?q=${encodeURIComponent(q)}`, { signal: request.signal });
+			const results = res.ok ? await res.json() : [];
+			// 応答が届くまでに入力が変わっていたら（@ を消した・別の語にした）候補を開かない
+			if (!request.isCurrent() || currentMentionQuery() !== q) return;
+			mentionResults = results;
+			mentionDropdownOpen = mentionResults.length > 0;
+			// 候補が入れ替わったら先頭を選択状態にして、Enter/Tab ですぐ確定できるようにする
+			mentionActiveIndex = mentionDropdownOpen ? 0 : -1;
+		} catch {
+			if (!request.isCurrent()) return;
+			mentionResults = [];
+			closeMentionDropdown();
+		}
+	}, 200);
 }
 
 /**
@@ -404,7 +521,7 @@ function handleContentKeydown(e: KeyboardEvent) {
 	if (action.type === "close") {
 		// 外側のモーダルの Escape（閉じる）まで届かせない
 		e.stopPropagation();
-		closeMentionDropdown();
+		cancelMentionSearch();
 		return;
 	}
 	if (action.type === "move") {
@@ -428,7 +545,7 @@ function selectMention(user: UserResult) {
 	const cursor = textareaEl.selectionStart ?? val.length;
 	const applied = applyMention(val, cursor, user.username);
 	content = applied.text;
-	closeMentionDropdown();
+	cancelMentionSearch();
 	mentionResults = [];
 	setTimeout(() => {
 		textareaEl?.focus();
@@ -464,6 +581,8 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 			await update();
 			return;
 		}
+		// CW とルームは連投しやすいよう残し、次に開いたときにも戻せるよう保存し直す（#331）
+		persistComposeContext();
 		content = "";
 		imageUrls = [];
 		selectedAnime = null;
