@@ -12,6 +12,7 @@
  * - localStorage が使えない環境（プライベートモード等）では例外を握りつぶし、保存無しで動作する
  */
 
+import { isPostImageUsable } from "$lib/post-image-lifetime";
 import type { OpenBroadcastRoomSummary } from "$lib/types";
 
 export interface ComposeDraftAnime {
@@ -102,8 +103,9 @@ export function parseComposeDraft(raw: string | null, now = Date.now()): Compose
 
 	const draft: ComposeDraft = {
 		content: typeof stored.content === "string" ? stored.content : "",
+		// 使用期限（アップロードから7日）を過ぎた画像は外す。回収済みかもしれないため（#330）
 		imageUrls: Array.isArray(stored.imageUrls)
-			? stored.imageUrls.filter((url): url is string => typeof url === "string")
+			? stored.imageUrls.filter((url): url is string => typeof url === "string" && isPostImageUsable(url, now))
 			: [],
 		anime: isAnime(stored.anime) ? stored.anime : null,
 		cwAnime: isAnime(stored.cwAnime) ? stored.cwAnime : null,

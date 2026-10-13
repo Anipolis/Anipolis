@@ -1,18 +1,20 @@
 import { createClient } from "@supabase/supabase-js";
+import { shouldSweepPostImage } from "../src/lib/post-image-lifetime.ts";
 import { publicUrlToStoragePath } from "../src/lib/server/upload.ts";
 
 // post-images のうち、どの投稿にも使われていない古い画像を消す（#330）。
 //
 // 画像は投稿欄で選んだ時点で保存される。外した・破棄した画像はその場で消すが（DELETE /api/upload）、
 // 投稿欄を閉じて放置した・通信に失敗したなどで残ったものをここで回収する。
-// 書きかけの下書きは最大7日（DRAFT_TTL_MS）保存されるので、それより長い8日を過ぎたものだけを対象にする。
+// 投稿していない画像はアップロードから7日までしか使えない（下書きの復元・投稿時に外す／拒否する。
+// src/lib/post-image-lifetime.ts）。それより1日長い8日を過ぎたものだけを対象にする。
+// 下書きは編集のたびに期限が延びるので、下書きの期限ではなく画像の使用期限を基準にしている。
 //
 //   pnpm sweep:orphan-post-images            # 確認だけ（消さない）
 //   pnpm sweep:orphan-post-images -- --apply # 消す
 
 const apply = process.argv.includes("--apply");
 const BUCKET = "post-images";
-const MIN_AGE_MS = 8 * 24 * 60 * 60 * 1000;
 const PAGE_SIZE = 1000;
 
 function getSupabaseClient() {
@@ -76,8 +78,8 @@ async function listObjects(): Promise<{ path: string; createdAt: number }[]> {
 }
 
 const [referenced, objects] = await Promise.all([referencedPaths(), listObjects()]);
-const cutoff = Date.now() - MIN_AGE_MS;
-const orphans = objects.filter((object) => object.createdAt < cutoff && !referenced.has(object.path));
+const now = Date.now();
+const orphans = objects.filter((object) => shouldSweepPostImage(object.path, object.createdAt, referenced, now));
 
 console.log(
 	`${apply ? "APPLY" : "DRY RUN"}: ${objects.length} objects, ${referenced.size} referenced, ${orphans.length} orphans older than 8 days`,

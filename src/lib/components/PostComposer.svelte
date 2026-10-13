@@ -116,6 +116,8 @@ let mentionDebounce = $state<ReturnType<typeof setTimeout> | null>(null);
 const animeSearchGate = createSearchGate();
 const cwSearchGate = createSearchGate();
 const mentionSearchGate = createSearchGate();
+// ルームの復元（受付中かの確認）の新旧。確認中に破棄・選び直しがあったら、後から届いた結果を反映しない
+const roomRestoreGate = createSearchGate();
 /** キーボードで選択中の候補 index。-1 は未選択 */
 let mentionActiveIndex = $state(-1);
 // 同じページに複数の PostComposer が乗る（デスクトップ用とモバイルモーダル）ので id は個別に振る
@@ -292,6 +294,7 @@ function restoreDraft(key: string) {
 
 /** 明示的な破棄操作。フォームを空にして保存済みの下書きも消す。 */
 function discardDraft() {
+	roomRestoreGate.cancel();
 	deleteUploadedImages(imageUrls);
 	content = "";
 	imageUrls = [];
@@ -321,11 +324,13 @@ async function restoreComposeContext(key: string) {
 	if (!selectedCwAnime && context.cwAnime) selectedCwAnime = context.cwAnime;
 	if (selectedRoom || !context.room) return;
 	const roomId = context.room.id;
+	const request = roomRestoreGate.start();
 	try {
-		const res = await fetch("/api/rooms/open");
+		const res = await fetch("/api/rooms/open", { signal: request.signal });
 		const rooms = res.ok ? ((await res.json()) as OpenBroadcastRoomSummary[]) : [];
 		const open = rooms.find((room) => room.id === roomId);
-		if (open && !selectedRoom) selectedRoom = open;
+		// 確認中に破棄・ルームの選び直し・アンマウントがあれば反映しない
+		if (open && !selectedRoom && request.isCurrent()) selectedRoom = open;
 	} catch {
 		// 確かめられなければ戻さない（受付が終わったルームに投稿させない）
 	}
@@ -340,6 +345,7 @@ $effect(() => {
 
 // 閉じた投稿欄に、保留中の検索の応答を反映しない（#329）
 onDestroy(() => {
+	roomRestoreGate.cancel();
 	cancelAnimeSearch();
 	cancelCwSearch();
 	cancelMentionSearch();
@@ -385,11 +391,13 @@ function closeRoomModal() {
 	roomModalOpen = false;
 }
 function selectRoom(room: OpenBroadcastRoomSummary) {
+	roomRestoreGate.cancel();
 	selectedRoom = room;
 	roomModalOpen = false;
 	persistComposeContext();
 }
 function clearRoom() {
+	roomRestoreGate.cancel();
 	selectedRoom = null;
 	persistComposeContext();
 }

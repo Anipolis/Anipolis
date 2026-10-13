@@ -260,6 +260,59 @@ describe("PostComposer draft persistence", () => {
 		await cleanup();
 	});
 
+	it("ルームの確認中に下書きを破棄したら、後から届いた確認結果でルームを戻さない", async () => {
+		const room = {
+			id: "r1",
+			anime_id: "a1",
+			room_date: "2026-10-13",
+			room_kind: "episode",
+			room_key: "k",
+			scheduled_at: "2026-10-13T12:00:00Z",
+			anime: null,
+		};
+		localStorage.setItem(
+			key,
+			JSON.stringify({
+				v: 1,
+				savedAt: Date.now(),
+				content: "書きかけ",
+				imageUrls: [],
+				anime: null,
+				cwAnime: null,
+				room: null,
+			}),
+		);
+		localStorage.setItem(
+			composeContextKey("user-1"),
+			JSON.stringify({ v: 1, savedAt: Date.now(), cwAnime: null, room }),
+		);
+		let respond: (value: unknown) => void = () => {};
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(
+				() =>
+					new Promise((resolve) => {
+						respond = resolve;
+					}),
+			),
+		);
+		const { target, cleanup } = mountComposer({ draftKey: "user-1" });
+		await tick();
+
+		Array.from(target.querySelectorAll("button"))
+			.find((b) => b.textContent?.includes("下書きを破棄"))
+			?.click();
+		flushSync();
+		respond({ ok: true, json: async () => [room] });
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		await tick();
+
+		expect(target.querySelector('input[name="broadcast_room_session_id"]')).toBeNull();
+		expect(localStorage.getItem(composeContextKey("user-1"))).toBeNull();
+		vi.unstubAllGlobals();
+		await cleanup();
+	});
+
 	it("受付が終わったルームは戻さない（#331）", async () => {
 		localStorage.setItem(
 			composeContextKey("user-1"),
@@ -268,7 +321,7 @@ describe("PostComposer draft persistence", () => {
 		const fetchMock = vi.fn(async () => ({ ok: true, json: async () => [] }));
 		vi.stubGlobal("fetch", fetchMock);
 		const { target, cleanup } = mountComposer({ draftKey: "user-1" });
-		await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/rooms/open"));
+		await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/rooms/open", expect.anything()));
 		await tick();
 		expect(target.querySelector('input[name="broadcast_room_session_id"]')).toBeNull();
 		vi.unstubAllGlobals();

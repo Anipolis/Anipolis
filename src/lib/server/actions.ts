@@ -5,6 +5,7 @@ import {
 	toExchangeSubjectiveTags,
 	validateExchangeSubjectiveTags,
 } from "$lib/exchange-tags";
+import { isPostImageUsable } from "$lib/post-image-lifetime";
 import { fetchOAuthAvatar } from "$lib/server/oauth-avatar";
 import { getEvent, isAdminUser } from "$lib/server/queries";
 import { createServiceRoleClient } from "$lib/server/supabase-admin";
@@ -276,6 +277,10 @@ export async function insertPostWithHashtags(
 		const storagePath = typeof imageUrl === "string" ? publicUrlToStoragePath(imageUrl, "post-images") : null;
 		if (!storagePath?.startsWith(`${userId}/`)) {
 			return fail(400, { message: "添付画像のURLが不正です" });
+		}
+		// 投稿していない画像の使用期限（アップロードから7日）。過ぎた画像は回収されうるので受け付けない（#330）
+		if (!isPostImageUsable(storagePath)) {
+			return fail(400, { message: "添付画像の有効期限が切れました。画像をもう一度添付してください" });
 		}
 	}
 
