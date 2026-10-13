@@ -105,7 +105,8 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	} else if (tab === "upcoming") {
 		result = await getAnimeListPage(supabase, { broadcastStatus: "upcoming", userId, page, pageSize: PAGE_SIZE });
 	} else if (tab === "all") {
-		result = await getAnimeListPage(supabase, { userId, page, pageSize: PAGE_SIZE });
+		// 登録順は取り込みの順でしかないので、新しいシーズンから並べる（同じシーズン内は新着順）
+		result = await getAnimeListPage(supabase, { newestSeasonFirst: true, userId, page, pageSize: PAGE_SIZE });
 	} else if (tab === "register") {
 		result = { items: [], total: 0 };
 	} else {
