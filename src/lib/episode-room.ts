@@ -1,4 +1,4 @@
-import type { RoomAiring } from "$lib/types";
+import type { EpisodeRoom, RoomAiring } from "$lib/types";
 
 /**
  * 話数ルーム（実況ルームの話数単位化）の、クライアントからも使う判定と表示。
@@ -65,4 +65,102 @@ export function airingHeading(airing: RoomAiring): string {
 	return [airingKindLabel(airing), formatAiringTime(airing.scheduled_at), airing.channel_name]
 		.filter(Boolean)
 		.join(" ");
+}
+
+/** 作品ページの話数ルーム一覧の1行 */
+export interface EpisodeRoomListEntry {
+	key: string;
+	kind: "episode" | "special";
+	episodeNumber: number | null;
+	label: string;
+	href: string;
+	/** open: 投稿できる / upcoming: 開く時刻が決まっている / unaired: まだ決まっていない */
+	state: "open" | "upcoming" | "unaired";
+	/** 初回放送の開始時刻（放送枠が無ければ null） */
+	firstAiredAt: string | null;
+	/** 放送中の判定に使う放送枠の投稿受付の時間帯 */
+	windows: { opens: string; closes: string }[];
+}
+
+type RoomAiringWithRoom = RoomAiring & { episode_room_id: string };
+
+/**
+ * 作品ページに並べる話数ルームの一覧。第1話から作品の話数（無ければ作られたルームの最大話数）までと、特番。
+ * ルームがまだ無い話は「まだ放送されていない」行として出す（開いたときに作る）。
+ */
+export function buildEpisodeRoomList(input: {
+	animeId: number | string;
+	rooms: readonly EpisodeRoom[];
+	airings: readonly RoomAiringWithRoom[];
+	episodeTotal: number | null;
+	now: number;
+}): EpisodeRoomListEntry[] {
+	const { animeId, rooms, airings, episodeTotal, now } = input;
+	const live = rooms.filter((room) => !room.merged_into);
+	const airingsByRoom = new Map<string, RoomAiringWithRoom[]>();
+	for (const airing of airings) {
+		const list = airingsByRoom.get(airing.episode_room_id) ?? [];
+		list.push(airing);
+		airingsByRoom.set(airing.episode_room_id, list);
+	}
+
+	const toEntry = (
+		room: EpisodeRoom | undefined,
+		base: Omit<EpisodeRoomListEntry, "state" | "firstAiredAt" | "windows">,
+	) => {
+		const roomAirings = room ? (airingsByRoom.get(room.id) ?? []) : [];
+		const first = roomAirings
+			.filter((airing) => airing.airing_kind === "first")
+			.sort((a, b) => Date.parse(a.scheduled_at) - Date.parse(b.scheduled_at))[0];
+		const opensMs = room?.opens_at ? Date.parse(room.opens_at) : null;
+		const state: EpisodeRoomListEntry["state"] = opensMs == null ? "unaired" : opensMs <= now ? "open" : "upcoming";
+		return {
+			...base,
+			state,
+			firstAiredAt: first?.scheduled_at ?? null,
+			windows: roomAirings.map((airing) => ({
+				opens: airing.posting_opens_at,
+				closes: airing.posting_closes_at,
+			})),
+		};
+	};
+
+	const byNumber = new Map(
+		live
+			.filter((room) => room.kind === "episode" && room.episode_number != null)
+			.map((room) => [room.episode_number, room]),
+	);
+	const maxRoomNumber = Math.max(0, ...[...byNumber.keys()].filter((n): n is number => n != null));
+	const lastEpisode = Math.max(episodeTotal ?? 0, maxRoomNumber);
+
+	const entries: EpisodeRoomListEntry[] = [];
+	for (let n = 1; n <= lastEpisode; n += 1) {
+		entries.push(
+			toEntry(byNumber.get(n), {
+				key: `ep-${n}`,
+				kind: "episode",
+				episodeNumber: n,
+				label: `第${n}話`,
+				href: episodeRoomPath(animeId, n),
+			}),
+		);
+	}
+	for (const room of live) {
+		if (room.kind !== "special" || !room.special_key) continue;
+		entries.push(
+			toEntry(room, {
+				key: `sp-${room.special_key}`,
+				kind: "special",
+				episodeNumber: null,
+				label: room.label ?? "特番",
+				href: `/rooms/anime/${animeId}/sp/${encodeURIComponent(room.special_key)}`,
+			}),
+		);
+	}
+	return entries;
+}
+
+/** 放送枠の時間内にある行か（作品ページの LIVE 表示） */
+export function isEpisodeRoomEntryLive(entry: Pick<EpisodeRoomListEntry, "windows">, now: number): boolean {
+	return entry.windows.some((window) => Date.parse(window.opens) <= now && now <= Date.parse(window.closes));
 }

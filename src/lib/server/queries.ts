@@ -1048,6 +1048,45 @@ export async function getEpisodeRoomAirings(supabase: SupabaseClient<Database>, 
 	}));
 }
 
+/** 作品ページの話数ルーム一覧用: 作品の話数ルームと、それぞれの放送枠 */
+export async function getEpisodeRoomLog(
+	supabase: SupabaseClient<Database>,
+	animeId: number,
+): Promise<{ rooms: EpisodeRoom[]; airings: (RoomAiring & { episode_room_id: string })[] }> {
+	const [roomsResult, airingsResult] = await Promise.all([
+		supabase.from("episode_rooms").select(EPISODE_ROOM_SELECT).eq("anime_id", animeId),
+		supabase
+			.from("broadcast_room_sessions")
+			.select(
+				"id, episode_room_id, scheduled_at, posting_opens_at, posting_closes_at, airing_kind, source_channel_name",
+			)
+			.eq("anime_id", animeId)
+			.not("episode_room_id", "is", null),
+	]);
+	if (roomsResult.error) console.error("getEpisodeRoomLog rooms error:", roomsResult.error);
+	if (airingsResult.error) console.error("getEpisodeRoomLog airings error:", airingsResult.error);
+	return {
+		rooms: (roomsResult.data ?? []) as EpisodeRoom[],
+		airings: (airingsResult.data ?? []).flatMap((row) =>
+			row.episode_room_id
+				? [
+						{
+							id: row.id,
+							episode_room_id: row.episode_room_id,
+							scheduled_at: row.scheduled_at,
+							posting_opens_at: row.posting_opens_at,
+							posting_closes_at: row.posting_closes_at,
+							airing_kind: (["first", "rerun", "event"].includes(row.airing_kind)
+								? row.airing_kind
+								: "first") as RoomAiring["airing_kind"],
+							channel_name: row.source_channel_name,
+						},
+					]
+				: [],
+		),
+	};
+}
+
 /**
  * 話数ルームの投稿。from = "start" は最初の投稿から古い順に、"latest" は新しい側の limit 件を古い順に返す。
  * 放送中は最新を、それ以外はルームの最初から読ませる（続きはライブ更新の差分 API が後ろへ読み足す）。

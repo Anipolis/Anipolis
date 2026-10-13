@@ -1,4 +1,5 @@
 import { error, fail } from "@sveltejs/kit";
+import { buildEpisodeRoomList, hasEpisodeRooms } from "$lib/episode-room";
 import { recommendAnimeAction, removeUserAnimeEntry, upsertUserAnimeEntry } from "$lib/server/actions";
 import { addBroadcastOverrideAction, deleteBroadcastOverrideAction, updateAnimeAction } from "$lib/server/anime-admin";
 import { buildBroadcastEpisodeLog } from "$lib/server/broadcast-episode-log";
@@ -8,6 +9,7 @@ import {
 	getAnimeSyobocalUrl,
 	getBroadcastRoomOverridesForAnime,
 	getBroadcastRoomScheduleSnapshotsForAnime,
+	getEpisodeRoomLog,
 	getEventsForAnime,
 	getUsersWhoListedAnime,
 	isAdminUser,
@@ -26,13 +28,27 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 
 	if (!anime) throw error(404, "アニメが見つかりません");
 
-	const [relations, syobocalUrl, broadcastOverrides, events, scheduleSnapshots] = await Promise.all([
+	const [relations, syobocalUrl, broadcastOverrides, events, scheduleSnapshots, roomInfo] = await Promise.all([
 		getAnimeRelations(supabase, anime.mal_id),
 		getAnimeSyobocalUrl(supabase, anime.mal_id),
 		getBroadcastRoomOverridesForAnime(supabase, params.id),
 		getEventsForAnime(supabase, Number(anime.id)),
 		getBroadcastRoomScheduleSnapshotsForAnime(supabase, Number(anime.id)),
+		// episode_total（152）は作品のビューに含まれないので anime から直接読む
+		supabase.from("anime").select("type, room_type, episode_total").eq("id", Number(anime.id)).maybeSingle(),
 	]);
+
+	// 話数ルーム（153）の一覧。話数のある作品だけ（映画・特番・1話だけの配信作品は無し）
+	const roomAnime = roomInfo.data;
+	const episodeRooms =
+		roomAnime && hasEpisodeRooms(roomAnime)
+			? buildEpisodeRoomList({
+					animeId: anime.id,
+					...(await getEpisodeRoomLog(supabase, Number(anime.id))),
+					episodeTotal: roomAnime.episode_total,
+					now: Date.now(),
+				})
+			: [];
 
 	// 各話ルームの履歴タイムライン（実在セッション+同期前の合成補完+アンカー逆算）
 	// の構築は buildBroadcastEpisodeLog に集約。未開場セッションは逆算のアンカー
@@ -41,7 +57,18 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 		.filter((slot) => slot.opened)
 		.sort((left, right) => right.date.localeCompare(left.date));
 
-	return { anime, user, isAdmin, listedUsers, relations, syobocalUrl, episodes, broadcastOverrides, events };
+	return {
+		anime,
+		user,
+		isAdmin,
+		listedUsers,
+		relations,
+		syobocalUrl,
+		episodes,
+		episodeRooms,
+		broadcastOverrides,
+		events,
+	};
 };
 
 export const actions: Actions = {

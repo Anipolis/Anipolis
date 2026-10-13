@@ -9,6 +9,7 @@ import { isCoverHiddenWithoutCopyright } from "$lib/anime-cover";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
+import { isEpisodeRoomEntryLive } from "$lib/episode-room";
 import type { BroadcastRoomOverride } from "$lib/types";
 import {
 	type BroadcastOverrideKind,
@@ -64,6 +65,10 @@ const otherRelations = $derived(
 const animeListHref = $derived(getAnimeListHref());
 const sortedRoomLogs = $derived([...data.episodes].sort((a, b) => a.date.localeCompare(b.date)));
 const latestRoomLog = $derived(sortedRoomLogs.at(-1));
+// 話数ルームの「Latest」: 放送中の作品で、投稿できる最も新しい話
+const latestEpisodeRoom = $derived(
+	[...data.episodeRooms].reverse().find((entry) => entry.kind === "episode" && entry.state === "open"),
+);
 const isAnimeAiring = $derived(data.anime.computed_broadcast_status === "airing");
 
 const broadcastLabels: Record<string, string> = {
@@ -285,6 +290,7 @@ let recommendSubmitting = $state(false);
 let recommendFeedback = $state("");
 let recommendError = $state("");
 let liveRoomDates = $state(new Set<string>());
+let liveEpisodeRoomKeys = $state(new Set<string>());
 
 function handleRecipientInput() {
 	selectedRecipient = null;
@@ -396,6 +402,10 @@ function refreshLiveRoomDates() {
 		if (isRoomLive(now, episode.date)) next.add(episode.date);
 	}
 	liveRoomDates = next;
+	const nowMs = now.getTime();
+	liveEpisodeRoomKeys = new Set(
+		data.episodeRooms.filter((entry) => isEpisodeRoomEntryLive(entry, nowMs)).map((entry) => entry.key),
+	);
 }
 
 $effect(() => {
@@ -1364,6 +1374,53 @@ $effect(() => {
 										<strong>この作品の総合実況・雑談ロビーへ入る</strong>
 									</span>
 								</a>
+							</section>
+						{:else if data.episodeRooms.length > 0}
+							<section class="room-log-section">
+								<h2 class="room-log-heading">話数ルーム</h2>
+								<ol class="room-log-list">
+									{#if isAnimeAiring && latestEpisodeRoom}
+										<li class="room-log-latest-slot">
+											<a
+												href={latestEpisodeRoom.href}
+												class="room-log-item room-log-item--latest"
+											>
+												<span class="room-log-latest-label">
+													<span class="i-lucide-zap" aria-hidden="true"></span>
+													Latest
+												</span>
+												<span class="room-log-ep">{latestEpisodeRoom.label}</span>
+												<span class="room-log-ep-compact">{latestEpisodeRoom.label}</span>
+												{#if liveEpisodeRoomKeys.has(latestEpisodeRoom.key)}
+													<span class="room-log-live-badge">LIVE</span>
+												{/if}
+												<span class="room-log-date"
+													>{latestEpisodeRoom.firstAiredAt?.slice(0, 10) ?? ""}</span
+												>
+											</a>
+										</li>
+									{/if}
+									{#each data.episodeRooms as entry (entry.key)}
+										<li>
+											<a
+												href={entry.href}
+												class="room-log-item"
+												class:room-log-item--unaired={entry.state !== "open"}
+											>
+												<span class="room-log-ep">{entry.label}</span>
+												<span class="room-log-ep-compact">{entry.label}</span>
+												{#if liveEpisodeRoomKeys.has(entry.key)}
+													<span class="room-log-live-badge">LIVE</span>
+												{:else if entry.state !== "open"}
+													<span class="room-log-unaired-label">未放送</span>
+												{/if}
+												<span class="room-log-date"
+													>{entry.firstAiredAt?.slice(0, 10) ?? ""}</span
+												>
+											</a>
+										</li>
+									{/each}
+								</ol>
 							</section>
 						{:else if data.episodes.length > 0}
 							<section class="room-log-section">
@@ -3057,6 +3114,15 @@ a.relation-card:hover {
 }
 
 /* Room log */
+.room-log-item--unaired {
+	opacity: 0.6;
+}
+
+.room-log-unaired-label {
+	font-size: 11px;
+	color: var(--color-text-secondary);
+}
+
 .room-log-section {
 	display: flex;
 	flex-direction: column;
