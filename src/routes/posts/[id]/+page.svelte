@@ -48,8 +48,8 @@ $effect(() => {
 	<meta property="og:description" content={data.post.content.slice(0, 120)}>
 	<meta property="og:type" content="website">
 	<meta property="og:url" content={page.url.href}>
-	{#if data.post.image_urls?.[0]}
-		<meta property="og:image" content={data.post.image_urls[0]}>
+	{#if data.ogImageUrl}
+		<meta property="og:image" content={data.ogImageUrl}>
 		<meta name="twitter:card" content="summary_large_image">
 	{/if}
 </svelte:head>

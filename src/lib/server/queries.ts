@@ -3,6 +3,8 @@ import { isRepeatMuteActive } from "$lib/anime-mute-schedule";
 import { groupGenreFilters, translateAnimeGenres } from "$lib/anime-vocabulary";
 import { computeBroadcastStatus } from "$lib/broadcast-status";
 import { toValidExchangeSubjectiveTags } from "$lib/exchange-tags";
+import { postImageMediaUrl } from "$lib/post-image-url";
+import { signPostImageUrls } from "$lib/server/post-image-signing";
 import { buildPostCardSelect, POST_CW_ANIME_SELECT } from "$lib/server/post-selects";
 import type { Database } from "$lib/supabase/database.types";
 import { isEpisodeSuppressedSnapshot } from "$lib/syobocal-episodes";
@@ -417,6 +419,11 @@ export async function enrichPostsWithCounts(
 		}
 	}
 
+	// 投稿画像は非公開（148）。ここに来るのは RLS で読めた投稿だけなので、その画像にだけ
+	// 期限付きの URL を発行して差し替える（#316）
+	const imageUrls = visibleRawPosts.flatMap((raw) => raw.image_urls ?? []);
+	const signedImageUrls = imageUrls.length > 0 ? await signPostImageUrls(imageUrls) : new Map<string, string>();
+
 	return visibleRawPosts.map((raw) => {
 		const post = toPost(raw, {
 			like_count: countsByPostId.get(raw["id"])?.like_count ?? 0,
@@ -428,6 +435,9 @@ export async function enrichPostsWithCounts(
 		});
 		if (post.anime_quote && post.anime_id) {
 			post.anime_quote.user_score = normalizeScore(userScoreMap.get(post.anime_id));
+		}
+		if (post.image_urls.length > 0) {
+			post.image_urls = post.image_urls.map((url) => signedImageUrls.get(url) ?? postImageMediaUrl(url));
 		}
 		return post;
 	});

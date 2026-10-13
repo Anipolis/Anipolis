@@ -18,6 +18,7 @@ import {
 	saveComposeDraft,
 } from "$lib/compose-draft";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
+import { postImageMediaUrl } from "$lib/post-image-url";
 import type { AnimeExchangeShare, OpenBroadcastRoomSummary } from "$lib/types";
 import { animeQuoteChipLabel, cwChipLabel } from "$lib/utils/composer-chips";
 import { charCountClass } from "$lib/utils/format";
@@ -812,7 +813,8 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 				<div class="composer-image-previews">
 					{#each imageUrls as url, i}
 						<div class="composer-image-preview">
-							<img src={url} alt="添付画像 {i + 1}">
+							<!-- 投稿画像は非公開なので、閲覧権限を確かめて転送する固定リンクで表示する（#316） -->
+							<img src={postImageMediaUrl(url)} alt="添付画像 {i + 1}">
 							<button
 								type="button"
 								class="composer-image-remove"

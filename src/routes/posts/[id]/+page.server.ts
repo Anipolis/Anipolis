@@ -1,5 +1,6 @@
 ﻿import type { SupabaseClient } from "@supabase/supabase-js";
 import { error, fail } from "@sveltejs/kit";
+import { postImageMediaUrl } from "$lib/post-image-url";
 import {
 	deletePostAction,
 	insertPostWithHashtags,
@@ -14,7 +15,7 @@ import type { Actions, PageServerLoad } from "./$types";
 
 const POSTS_SELECT = buildPostCardSelect();
 
-export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
+export const load: PageServerLoad = async ({ params, url, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 	// biome-ignore lint/suspicious/noExplicitAny: migration 061 columns are not present in generated Supabase types yet
 	const postReader = supabase as SupabaseClient<any>;
@@ -65,7 +66,10 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 		currentUserId: user?.id ?? null,
 		trending: trendingResult.data ?? [],
 		animeTrending,
-		post: { content: post.content, image_urls: post.image_urls },
+		post: { content: post.content },
+		// SNS のカード（OGP）は後から画像を取り直すことがあるので、期限付き URL ではなく
+		// 閲覧権限を確かめて転送する固定リンクを出す（#316）
+		ogImageUrl: post.image_urls?.[0] ? new URL(postImageMediaUrl(post.image_urls[0]), url.origin).href : null,
 	};
 };
 

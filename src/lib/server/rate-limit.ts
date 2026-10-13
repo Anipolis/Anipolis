@@ -70,6 +70,8 @@ export const API_RATE_RULES: RateRule[] = [
 	// 全件エクスポート系はDB走査・巨大レスポンスを伴うため厳しめに絞る（通常はCDNキャッシュが受ける）
 	{ name: "data-export", pattern: /^\/api\/data\//, methods: ["GET"], limit: 2, windowMs: 60_000 },
 	{ name: "room-posts", pattern: /^\/api\/rooms\/posts$/, limit: 60, windowMs: 60_000 },
+	// 投稿画像の固定リンク。投稿欄のプレビュー（最大4枚）と外部からの参照で使う
+	{ name: "media", pattern: /^\/api\/media\//, methods: ["GET"], limit: 120, windowMs: 60_000 },
 	{
 		name: "room-experiment-visit",
 		pattern: /^\/api\/room-experiment-visits$/,
