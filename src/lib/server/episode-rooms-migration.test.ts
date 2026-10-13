@@ -13,6 +13,8 @@ describe("episode rooms migration (153)", () => {
 			/episode_rooms_special_unique\s+ON public\.episode_rooms \(anime_id, special_key\)\s+WHERE kind = 'special'/,
 		);
 		expect(migration).toContain("ALTER TABLE public.episode_rooms ENABLE ROW LEVEL SECURITY;");
+		// 管理者が非表示にした作品のルームは管理者だけが読める
+		expect(migration).toContain("AND (NOT a.hidden_by_admin OR public.is_current_user_admin())");
 		expect(migration).not.toMatch(/CREATE POLICY[^;]*episode_rooms[^;]*FOR (INSERT|UPDATE|DELETE)/);
 	});
 
@@ -24,6 +26,26 @@ describe("episode rooms migration (153)", () => {
 		expect(migration).not.toMatch(
 			/ALTER COLUMN|DROP COLUMN|DROP TRIGGER IF EXISTS posts_enforce_broadcast_room_window/,
 		);
+	});
+
+	it("ルームの開く時刻は放送枠の変更のたびに計算し直し、延期なら後ろへ動かす（開いたルームは閉じない）", () => {
+		const start = migration.indexOf("CREATE OR REPLACE FUNCTION public.refresh_episode_room_opens_at(");
+		const body = migration.slice(start, migration.indexOf("$$;", start));
+		expect(body).toContain("WHEN opens_at IS NULL OR opens_at > now() THEN earliest");
+		expect(body).toContain("ELSE LEAST(opens_at, earliest)");
+		expect(body).toContain("AND NOT opens_at_locked");
+		expect(migration).toMatch(
+			/CREATE TRIGGER broadcast_room_sessions_refresh_room_opens\s+AFTER INSERT OR UPDATE OF episode_room_id, posting_opens_at, episode_number, room_kind, anime_id OR DELETE/,
+		);
+	});
+
+	it("話数の放送枠でなくなった放送枠（ロビーへの変更など）はルームから外す", () => {
+		const start = migration.indexOf(
+			"CREATE OR REPLACE FUNCTION public.assign_broadcast_room_session_episode_room()",
+		);
+		const body = migration.slice(start, migration.indexOf("$$;", start));
+		expect(body).toContain("NEW.episode_room_id := NULL;");
+		expect(body).not.toContain("ELSIF TG_OP = 'INSERT' OR NEW.episode_number IS DISTINCT FROM OLD.episode_number");
 	});
 
 	it("話数の訂正で放送枠が別の話数ルームへ移ったら、その時間内の投稿も移す", () => {
@@ -42,6 +64,8 @@ describe("episode rooms migration (153)", () => {
 		expect(body).toContain("target_room.opens_at > clock_timestamp()");
 		expect(body).toContain("target_room.merged_into IS NOT NULL");
 		expect(body).toContain("NEW.broadcast_room_session_id := live_session_id;");
+		// 話数ルームの無い放送枠（総合ロビーなど）に話数ルームを併記した投稿も拒否する
+		expect(body).toContain("ELSIF NEW.episode_room_id IS DISTINCT FROM session_room_id THEN");
 		// 061 の時間の検査より先に動く名前にする
 		expect("posts_assign_episode_room" < "posts_enforce_broadcast_room_window").toBe(true);
 	});
@@ -50,6 +74,7 @@ describe("episode rooms migration (153)", () => {
 		const start = migration.indexOf("CREATE OR REPLACE FUNCTION public.ensure_episode_room(");
 		const body = migration.slice(start, migration.indexOf("$$;", start));
 		expect(body).toContain("target_anime.type = 'TV'");
+		expect(body).toContain("(target_anime.hidden_by_admin AND NOT public.is_current_user_admin())");
 		expect(body).toContain("target_anime.type IN ('ONA', 'OVA') AND COALESCE(target_anime.episode_total, 0) >= 2");
 		expect(body).toContain("p_episode_number > target_anime.episode_total");
 		expect(body).toContain("p_episode_number > max_aired_episode");
