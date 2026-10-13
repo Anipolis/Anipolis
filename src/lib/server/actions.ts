@@ -20,6 +20,9 @@ import { eventScheduledAtIsoFromBroadcastInput } from "$lib/utils/event-time";
 import { extractHashtags } from "$lib/utils/hashtag";
 
 const MAX_POST_IMAGES = 4;
+/** 147 のトリガーが投稿の回数制限で返す SQLSTATE（PostgREST は HTTP 429 にする） */
+export const POST_RATE_LIMIT_ERROR_CODE = "PT429";
+export const POST_RATE_LIMIT_MESSAGE = "投稿が多すぎます。1分ほど待ってから、もう一度投稿してください";
 const reportStatuses = new Set(["open", "reviewing", "resolved", "rejected"]);
 const moderationStatuses = new Set(["active", "restricted", "banned"]);
 const animeExchangeErrorMessages = {
@@ -305,6 +308,11 @@ export async function insertPostWithHashtags(
 
 	const { data: post, error: postError } = await supabase.from("posts").insert(postPayload).select("id").single();
 
+	// 回数制限（147 のトリガー）。経路を問わず DB で数え、PostgREST は SQLSTATE PT429 を返す（#321）。
+	// 書きかけを残して再送できるよう、エラーではなく 429 の失敗として返す
+	if (postError?.code === POST_RATE_LIMIT_ERROR_CODE) {
+		return fail(429, { message: POST_RATE_LIMIT_MESSAGE });
+	}
 	if (postError || !post) {
 		console.error("post insert error:", postError);
 		return fail(500, {
