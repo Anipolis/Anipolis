@@ -7,11 +7,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 pnpm dev          # Start dev server
 pnpm build        # Production build
-pnpm check        # Format (Biome) + type-check (svelte-check + tsc) — run before committing
+pnpm check        # Biome + Svelte + TypeScript + anime-view checks — run before committing
 pnpm test         # Vitest unit tests with coverage
 ```
 
-`pnpm check` runs three tools in sequence: `biome check --write` → `svelte-check` → `tsc --noEmit`. Fix Biome issues first, then type errors.
+`pnpm check` checks source files without auto-fixing them, running Biome, Svelte, TypeScript, and anime-view type consistency checks. SvelteKit sync may regenerate local framework artifacts. `package.json` is the source of truth. Use `pnpm lint:fix` or `pnpm format` explicitly for formatting changes.
+
+For PR reviews, follow the `Code Review Rules` in `AGENTS.md`.
 
 ## Architecture
 
@@ -62,7 +64,7 @@ Migrations are applied with the Supabase CLI (`[db.migrations] enabled = true`).
 - `supabase/migrations_archive/` holds files whose version duplicated an applied migration or had no version, which blocked `db push`. Their contents are already in production; keep them for history and do not re-apply them.
 - `db reset` targets the local database only; never run it against the linked project.
 
-RLS is enforced for all tables. The `posts` select policy uses `USING (true)` — all posts are publicly readable.
+Post reads are restricted by RLS, including private-account visibility, blocks, BAN status, and administrative hiding. Consult the latest migrations and their helper functions for the effective policy and owner/admin exceptions; do not assume posts are publicly readable. Service-role clients bypass RLS and require explicit authorization checks.
 
 ### Key Files
 
