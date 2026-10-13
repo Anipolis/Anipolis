@@ -1,5 +1,5 @@
 import { fail, redirect } from "@sveltejs/kit";
-import { completeProfileSetupAction } from "$lib/server/actions";
+import { completeProfileSetupAction, readProfileSetupForm } from "$lib/server/actions";
 import { getOAuthAvatarUrl, parseOAuthAvatarUrl } from "$lib/server/oauth-avatar";
 import { getProfileIdByUsername } from "$lib/server/queries";
 import { sanitizeInternalRedirect } from "$lib/utils/url";
@@ -71,8 +71,9 @@ export const actions: Actions = {
 		const { user } = await safeGetSession();
 		if (!user) return fail(401, { username: "", display_name: "", message: "ログインが必要です" });
 
-		const form = await request.formData();
-		const next = getSafeNext(form.get("next"));
+		// 上限付きで読む。request.formData() だと巨大な送信を全部展開してしまう（#327）
+		const form = await readProfileSetupForm(request);
+		const next = getSafeNext(form instanceof FormData ? form.get("next") : null);
 		const metadata = getOnboardingMetadata(user);
 		const result = await completeProfileSetupAction(form, supabase, user.id, {
 			oauthAvatarUrl: metadata.avatarUrl,

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { error, fail } from "@sveltejs/kit";
+import { computeMutedUntil } from "$lib/anime-mute-schedule";
 import {
 	MAX_EXCHANGE_SUBJECTIVE_TAGS,
 	toExchangeSubjectiveTags,
@@ -984,6 +985,24 @@ export async function rejectFollowRequestAction(request: Request, supabase: Supa
 	return { rejected: true };
 }
 
+export const MYLIST_SCORE_INVALID_MESSAGE = "スコアは1〜10の整数で指定してください";
+
+/**
+ * マイリストのスコアを解釈する（#355）。空（未送信・空文字）は「スコアなし」として null。
+ * それ以外は 1〜10 の整数だけを受け付ける（DB は smallint CHECK (score BETWEEN 1 AND 10)）。
+ * 以前は parseFloat して 0 より大きいかだけを見ていたため、小数や範囲外が DB で落ちて
+ * 原因の分からない 500 になっていた。0 は「なし」ではなく範囲外として扱う。
+ */
+export function parseMylistScore(raw: FormDataEntryValue | null): { ok: true; score: number | null } | { ok: false } {
+	if (raw == null) return { ok: true, score: null };
+	if (typeof raw !== "string") return { ok: false };
+	const value = raw.trim();
+	if (value === "") return { ok: true, score: null };
+	if (!/^\d{1,2}$/.test(value)) return { ok: false };
+	const score = Number(value);
+	return score >= 1 && score <= 10 ? { ok: true, score } : { ok: false };
+}
+
 export async function upsertUserAnimeEntry(supabase: SupabaseClient<Database>, request: Request, userId: string) {
 	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
 	if (moderationFailure) return moderationFailure;
@@ -991,14 +1010,15 @@ export async function upsertUserAnimeEntry(supabase: SupabaseClient<Database>, r
 	const form = await request.formData();
 	const animeId = parsePositiveInt(form.get("anime_id") as string | null);
 	const status = (form.get("status") as string | null)?.trim() as AnimeStatus | null;
-	const scoreRaw = form.get("score") as string | null;
+	const scoreRaw = form.get("score");
 	const progressRaw = form.get("progress") as string | null;
 
 	if (!animeId) return fail(400, { message: "アニメIDが不正です" });
 	if (!status) return fail(400, { message: "ステータスを選択してください" });
 
-	const parsedScore = scoreRaw ? parseFloat(scoreRaw) : null;
-	const score = parsedScore != null && Number.isFinite(parsedScore) && parsedScore > 0 ? parsedScore : null;
+	const parsedScore = parseMylistScore(scoreRaw);
+	if (!parsedScore.ok) return fail(400, { message: MYLIST_SCORE_INVALID_MESSAGE });
+	const score = parsedScore.score;
 	const progress = progressRaw ? parseInt(progressRaw, 10) : 0;
 
 	const { error } = await supabase
@@ -1309,18 +1329,27 @@ async function uploadOnboardingAvatar(
 	return storeOnboardingAvatar(supabase, userId, arrayBuffer, validated);
 }
 
+type ProfileSetupFormReadFailure = "too_large" | "invalid";
+
+/**
+ * プロフィール作成フォームを上限付きで読む（#327）。
+ * request.formData() を先に呼ぶと、巨大な multipart を全部メモリへ展開した後でしかサイズを検査できない。
+ * ルートは next などを取り出すためにフォームを読むので、最初の読み込みをこれにする。
+ */
+export function readProfileSetupForm(request: Request): Promise<FormData | ProfileSetupFormReadFailure> {
+	return readFormDataWithLimit(request, ONBOARDING_MAX_AVATAR_SIZE + MULTIPART_OVERHEAD_BYTES);
+}
+
 /** 初回オンボーディング：ユーザーが確認した公開プロフィールを初めて作成する */
 export async function completeProfileSetupAction(
-	requestOrForm: Request | FormData,
+	requestOrForm: Request | FormData | ProfileSetupFormReadFailure,
 	supabase: SupabaseClient<Database>,
 	userId: string,
 	options: ProfileSetupOptions = {},
 ): Promise<ProfileSetupResult> {
-	// アバターファイルを含むフォームのため、サイズ検証前の全量バッファを避けて上限付きで読む
-	const parsedForm =
-		requestOrForm instanceof FormData
-			? requestOrForm
-			: await readFormDataWithLimit(requestOrForm, ONBOARDING_MAX_AVATAR_SIZE + MULTIPART_OVERHEAD_BYTES);
+	// アバターファイルを含むフォームのため、サイズ検証前の全量バッファを避けて上限付きで読む。
+	// ルートが readProfileSetupForm で先に読んだ結果（読み込み失敗を含む）もそのまま受け取る
+	const parsedForm = requestOrForm instanceof Request ? await readProfileSetupForm(requestOrForm) : requestOrForm;
 	if (parsedForm === "too_large") {
 		return {
 			error: "画像は2MB以内にしてください",
@@ -1540,8 +1569,8 @@ export async function upsertAnimeMute(
 
 	let mutedUntil: string | null = null;
 	if (muteType === "period" && periodDays != null && !isRepeat) {
-		const base = roomDate ? new Date(`${roomDate}T00:00:00`) : new Date();
-		mutedUntil = new Date(base.getTime() + periodDays * 24 * 60 * 60 * 1000).toISOString();
+		// 起点はルームの放送日の始まり（JST 04:00）。サーバーの時刻帯に依存させない（#326）
+		mutedUntil = computeMutedUntil(roomDate, periodDays).toISOString();
 	}
 
 	const record = {

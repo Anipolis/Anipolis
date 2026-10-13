@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isRepeatMuteActive } from "$lib/anime-mute-schedule";
 import { groupGenreFilters, translateAnimeGenres } from "$lib/anime-vocabulary";
 import { computeBroadcastStatus } from "$lib/broadcast-status";
 import { toValidExchangeSubjectiveTags } from "$lib/exchange-tags";
@@ -281,6 +282,40 @@ function getBlockedUserIdsCached(supabase: SupabaseClient<Database>, userId: str
  * Post[] に変換する共通ヘルパー。
  * 全ルートサーバー（タイムライン・プロフィール・ハッシュタグ・検索・詳細）で使い回す。
  */
+/** get_post_counts（121）に一度に渡せる投稿 ID の上限。超えると RPC 全体が例外になる */
+const POST_COUNTS_RPC_MAX_IDS = 200;
+
+type PostCountsRow = Database["public"]["Functions"]["get_post_counts"]["Returns"][number];
+
+/**
+ * 投稿の件数と自分の反応を、RPC の上限（200件）ごとに分けて取る（#323）。
+ * 以前は全件を1回で渡していたため、返信が多い投稿詳細（本投稿＋親＋返信で200件超）では
+ * RPC 全体が失敗し、件数が0・いいね済みも「未操作」に見えていた（押すと意図と逆の操作になる）。
+ * 一時的な失敗は1回だけやり直し、それでも失敗した分はログに残す。
+ */
+async function fetchPostCountsById(
+	supabase: SupabaseClient<Database>,
+	postIds: string[],
+	userId: string | null,
+): Promise<Map<string, PostCountsRow>> {
+	const chunks: string[][] = [];
+	for (let start = 0; start < postIds.length; start += POST_COUNTS_RPC_MAX_IDS) {
+		chunks.push(postIds.slice(start, start + POST_COUNTS_RPC_MAX_IDS));
+	}
+	const fetchChunk = (ids: string[]) =>
+		supabase.rpc("get_post_counts", { p_post_ids: ids, ...(userId ? { p_user_id: userId } : {}) });
+
+	const results = await Promise.all(
+		chunks.map(async (ids) => {
+			let result = await fetchChunk(ids);
+			if (result.error) result = await fetchChunk(ids);
+			if (result.error) console.error("get_post_counts failed:", result.error);
+			return result.data ?? [];
+		}),
+	);
+	return new Map(results.flat().map((row) => [row.post_id, row]));
+}
+
 export async function enrichPostsWithCounts(
 	supabase: SupabaseClient<Database>,
 	rawPosts: RawPost[],
@@ -362,16 +397,11 @@ export async function enrichPostsWithCounts(
 
 	const postIds = visibleRawPosts.map((p) => p.id as string);
 
-	// ── 件数＋自分のリアクション有無を単一RPCで取得（DB往復 4→1）──────
+	// ── 件数＋自分のリアクション有無を RPC で取得（DB往復 4→1）──────
 	// get_post_counts は like/repost/reply の件数に加え、
 	// liked_by_me / reposted_by_me / bookmarked_by_me を1クエリで返す。
 	// p_user_id が NULL（未ログイン）の場合は各 *_by_me が全て false になる。
-	const { data: countsData } = await supabase.rpc("get_post_counts", {
-		p_post_ids: postIds,
-		...(userId ? { p_user_id: userId } : {}),
-	});
-
-	const countsByPostId = new Map((countsData ?? []).map((row) => [row.post_id, row]));
+	const countsByPostId = await fetchPostCountsById(supabase, postIds, userId);
 
 	// ── アニメ引用がある投稿のスコアを一括取得 ────────────────────
 	const animeIds = Array.from(new Set(visibleRawPosts.map((p) => p.anime_id).filter((n): n is number => n != null)));
@@ -3723,7 +3753,6 @@ export async function getActiveAnimeMuteIds(
 
 	const now = Date.now();
 	const activeIds = new Set<string>();
-	const todayDay = new Date().getDay();
 
 	for (const row of rows) {
 		if (row.mute_type === "always") {
@@ -3734,8 +3763,9 @@ export async function getActiveAnimeMuteIds(
 					activeIds.add(String(row.anime_id));
 				}
 			} else if (row.period_days != null && row.anime?.broadcast_day != null) {
-				const daysSince = (todayDay - row.anime.broadcast_day + 7) % 7;
-				if (daysSince < row.period_days) activeIds.add(String(row.anime_id));
+				// 曜日は JST の放送日（午前4時境界）で決める（#326）
+				if (isRepeatMuteActive(row.anime.broadcast_day, row.period_days, now))
+					activeIds.add(String(row.anime_id));
 			}
 		}
 	}
