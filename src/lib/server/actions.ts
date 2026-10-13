@@ -5,6 +5,7 @@ import {
 	toExchangeSubjectiveTags,
 	validateExchangeSubjectiveTags,
 } from "$lib/exchange-tags";
+import { fetchOAuthAvatar } from "$lib/server/oauth-avatar";
 import { getEvent, isAdminUser } from "$lib/server/queries";
 import { createServiceRoleClient } from "$lib/server/supabase-admin";
 import {
@@ -1257,7 +1258,35 @@ type ProfileSetupResult =
 
 type ProfileSetupOptions = {
 	oauthAvatarUrl?: string | null;
+	/** テスト用。OAuth 画像の取得に使う */
+	fetchFn?: typeof fetch;
 };
+
+/** 検証済みの画像を本人の profile-avatars に置き、公開 URL と置き換える古いファイルを返す */
+async function storeOnboardingAvatar(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+	bytes: ArrayBuffer,
+	validated: { mime: string; ext: string },
+): Promise<{ url: string; path: string; stalePaths: string[] } | { error: string }> {
+	const { data: existingFiles } = await supabase.storage.from("profile-avatars").list(userId);
+	const path = `${userId}/avatar_${Date.now()}.${validated.ext}`;
+	const { error } = await supabase.storage
+		.from("profile-avatars")
+		.upload(path, bytes, { contentType: validated.mime, upsert: true });
+	if (error) {
+		console.error("onboarding avatar upload error:", error);
+		return { error: "画像のアップロードに失敗しました" };
+	}
+
+	const {
+		data: { publicUrl },
+	} = supabase.storage.from("profile-avatars").getPublicUrl(path);
+	const stalePaths = (existingFiles ?? [])
+		.map((file) => `${userId}/${file.name}`)
+		.filter((existingPath) => existingPath !== path);
+	return { url: publicUrl, path, stalePaths };
+}
 
 async function uploadOnboardingAvatar(
 	supabase: SupabaseClient<Database>,
@@ -1277,23 +1306,7 @@ async function uploadOnboardingAvatar(
 		return { error: "対応していないファイル形式です（JPEG/PNG/WebP）" };
 	}
 
-	const { data: existingFiles } = await supabase.storage.from("profile-avatars").list(userId);
-	const path = `${userId}/avatar_${Date.now()}.${validated.ext}`;
-	const { error } = await supabase.storage
-		.from("profile-avatars")
-		.upload(path, arrayBuffer, { contentType: validated.mime, upsert: true });
-	if (error) {
-		console.error("onboarding avatar upload error:", error);
-		return { error: "画像のアップロードに失敗しました" };
-	}
-
-	const {
-		data: { publicUrl },
-	} = supabase.storage.from("profile-avatars").getPublicUrl(path);
-	const stalePaths = (existingFiles ?? [])
-		.map((file) => `${userId}/${file.name}`)
-		.filter((existingPath) => existingPath !== path);
-	return { url: publicUrl, path, stalePaths };
+	return storeOnboardingAvatar(supabase, userId, arrayBuffer, validated);
 }
 
 /** 初回オンボーディング：ユーザーが確認した公開プロフィールを初めて作成する */
@@ -1355,7 +1368,20 @@ export async function completeProfileSetupAction(
 	let uploadedAvatarPath: string | null = null;
 	let staleAvatarPaths: string[] = [];
 	if (avatarChoice === "oauth") {
-		avatarUrl = options.oauthAvatarUrl ?? null;
+		// 外部 URL は保存せず、自前の Storage に取り込む（#328）。取得できなければ画像なしで作成し、
+		// プロバイダー側の一時的な不調でプロフィール作成自体を止めない（後から設定で変えられる）
+		const fetched = await fetchOAuthAvatar(options.oauthAvatarUrl, options.fetchFn);
+		if (fetched) {
+			const stored = await storeOnboardingAvatar(supabase, userId, fetched.bytes, fetched);
+			if ("error" in stored) {
+				return { error: stored.error, status: 500, field: "avatar", values };
+			}
+			avatarUrl = stored.url;
+			uploadedAvatarPath = stored.path;
+			staleAvatarPaths = stored.stalePaths;
+		} else {
+			console.warn("onboarding: OAuth avatar could not be imported; continuing without avatar");
+		}
 	} else if (avatarChoice === "upload") {
 		if (!(avatarFileEntry instanceof File) || avatarFileEntry.size === 0) {
 			return { error: "プロフィール画像を選択してください", status: 400, field: "avatar", values };

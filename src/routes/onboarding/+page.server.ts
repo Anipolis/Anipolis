@@ -1,10 +1,12 @@
 import { fail, redirect } from "@sveltejs/kit";
 import { completeProfileSetupAction } from "$lib/server/actions";
+import { getOAuthAvatarUrl, parseOAuthAvatarUrl } from "$lib/server/oauth-avatar";
 import { getProfileIdByUsername } from "$lib/server/queries";
 import { sanitizeInternalRedirect } from "$lib/utils/url";
 import type { Actions, PageServerLoad } from "./$types";
 
 const USERNAME_PATTERN = /^[a-zA-Z0-9_]{3,20}$/;
+const OAUTH_AVATAR_PREVIEW_PATH = "/onboarding/oauth-avatar";
 
 function getSafeNext(raw: FormDataEntryValue | string | null): string {
 	return sanitizeInternalRedirect(typeof raw === "string" ? raw : "/");
@@ -28,7 +30,7 @@ function getOnboardingMetadata(user: NonNullable<Awaited<ReturnType<App.Locals["
 		getMetadataString(metadata, "name") ??
 		getMetadataString(metadata, "user_name") ??
 		"";
-	const avatarUrl = getMetadataString(metadata, "avatar_url") ?? getMetadataString(metadata, "picture");
+	const avatarUrl = getOAuthAvatarUrl(metadata);
 
 	return { rawUsername, displayName, avatarUrl };
 }
@@ -38,14 +40,16 @@ async function getOnboardingDefaults(
 	user: NonNullable<Awaited<ReturnType<App.Locals["safeGetSession"]>>["user"]>,
 ) {
 	const metadata = getOnboardingMetadata(user);
+	// 外部の画像 URL は CSP で表示できないので、取り込める画像だけを同一オリジン経由でプレビューする
+	const avatarUrl = parseOAuthAvatarUrl(metadata.avatarUrl) ? OAUTH_AVATAR_PREVIEW_PATH : null;
 	const usernameCandidate = getUsernameCandidate(metadata.rawUsername);
-	if (!usernameCandidate) return { username: "", displayName: metadata.displayName, avatarUrl: metadata.avatarUrl };
+	if (!usernameCandidate) return { username: "", displayName: metadata.displayName, avatarUrl };
 
 	const existingProfileId = await getProfileIdByUsername(supabase, usernameCandidate);
 	return {
 		username: existingProfileId ? "" : usernameCandidate,
 		displayName: metadata.displayName,
-		avatarUrl: metadata.avatarUrl,
+		avatarUrl,
 	};
 }
 
