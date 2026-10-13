@@ -1,5 +1,4 @@
-﻿import type { SupabaseClient } from "@supabase/supabase-js";
-import { error, fail } from "@sveltejs/kit";
+﻿import { error, fail } from "@sveltejs/kit";
 import {
 	deletePostAction,
 	insertPostWithHashtags,
@@ -16,10 +15,8 @@ const POSTS_SELECT = buildPostCardSelect();
 
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
-	// biome-ignore lint/suspicious/noExplicitAny: migration 061 columns are not present in generated Supabase types yet
-	const postReader = supabase as SupabaseClient<any>;
 
-	const { data: rawPost } = await postReader.from("posts").select(POSTS_SELECT).eq("id", params.id).maybeSingle();
+	const { data: rawPost } = await supabase.from("posts").select(POSTS_SELECT).eq("id", params.id).maybeSingle();
 
 	if (!rawPost) error(404, "投稿が見つかりません");
 	const post = rawPost as unknown as RawPost;
@@ -32,9 +29,9 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 	const enrichedDataPromise = (async () => {
 		const [rawParentRes, rawRepliesRes] = await Promise.all([
 			post.parent_id
-				? postReader.from("posts").select(POSTS_SELECT).eq("id", post.parent_id).maybeSingle()
+				? supabase.from("posts").select(POSTS_SELECT).eq("id", post.parent_id).maybeSingle()
 				: Promise.resolve({ data: null }),
-			postReader
+			supabase
 				.from("posts")
 				.select(POSTS_SELECT)
 				.eq("parent_id", params.id)

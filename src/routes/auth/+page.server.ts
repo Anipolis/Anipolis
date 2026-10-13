@@ -345,8 +345,7 @@ export const actions: Actions = {
 		}
 
 		// 既存リンク数チェック（追加アカウントは最大2）
-		// biome-ignore lint/suspicious/noExplicitAny: linked_accounts not yet in auto-generated DB types
-		const { count } = await (supabase as any)
+		const { count } = await supabase
 			.from("linked_accounts")
 			.select("*", { count: "exact", head: true })
 			.eq("owner_user_id", ownerUser.id);
@@ -385,8 +384,7 @@ export const actions: Actions = {
 
 		// 既にリンク済みかチェック（B のセッションで owner=A のリンクは見えないので service role 使用）
 		const serviceClient = createServiceRoleClient();
-		// biome-ignore lint/suspicious/noExplicitAny: linked_accounts not yet in auto-generated DB types
-		const { data: existingLink } = await (serviceClient as any)
+		const { data: existingLink } = await serviceClient
 			.from("linked_accounts")
 			.select("owner_user_id")
 			.eq("owner_user_id", ownerUser.id)
