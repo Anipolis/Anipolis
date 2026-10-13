@@ -9,9 +9,10 @@ const PATH_PATTERN = /^[0-9a-f-]{36}\/[\w.-]+$/i;
 /**
  * 投稿画像の固定リンク（#316）。OGP など外に出るリンクと、投稿欄のプレビューで使う。
  *
- * post-images は非公開（148）なので、アクセスのたびに閲覧権限を確かめ、その時点の期限付き URL へ
+ * post-images は非公開（149）なので、アクセスのたびに閲覧権限を確かめ、その時点の期限付き URL へ
  * 転送する。画像のデータそのものは Storage から直接届く。
- * 見てよいのは、本人の画像か、閲覧者の権限（RLS）で読める投稿に使われている画像。鍵アカウントで
+ * 見てよいのは、本人の画像か、閲覧者の権限（RLS）で読める「画像の持ち主自身の」投稿に使われている画像。
+ * 他人の画像を参照する投稿を経由させない（PR #380 レビュー。保存時の検査は 148）。鍵アカウントで
  * フォロワーでない・管理者非表示・BAN・ブロック・削除済みの投稿の画像は 404 にする。
  */
 export const GET: RequestHandler = async ({ params, setHeaders, locals: { supabase, safeGetSession } }) => {
@@ -23,12 +24,14 @@ export const GET: RequestHandler = async ({ params, setHeaders, locals: { supaba
 	// image_urls には getPublicUrl の形で保存している（識別子として使う）
 	const storedUrl = `${supabaseUrl}/storage/v1/object/public/post-images/${path}`;
 
+	const ownerId = path.split("/")[0] ?? "";
 	const { user } = await safeGetSession();
-	const isOwner = Boolean(user && path.startsWith(`${user.id}/`));
+	const isOwner = user?.id === ownerId;
 	if (!isOwner) {
 		const { data, error: lookupError } = await supabase
 			.from("posts")
 			.select("id")
+			.eq("user_id", ownerId)
 			.contains("image_urls", [storedUrl])
 			.limit(1);
 		if (lookupError) {

@@ -14,15 +14,16 @@ const PATH = `${OWNER}/1760000000000-0b7c6a8e-5d4f-4a3b-9c2d-1e0f9a8b7c6d.png`;
 function call(path: string, options: { viewer?: string | null; visiblePosts?: number } = {}) {
 	const headers: Record<string, string> = {};
 	const limit = vi.fn(async () => ({ data: Array(options.visiblePosts ?? 0).fill({ id: "p" }), error: null }));
+	const eq = vi.fn(() => ({ contains: () => ({ limit }) }));
 	const event = {
 		params: { path },
 		setHeaders: (h: Record<string, string>) => Object.assign(headers, h),
 		locals: {
-			supabase: { from: () => ({ select: () => ({ contains: () => ({ limit }) }) }) },
+			supabase: { from: () => ({ select: () => ({ eq }) }) },
 			safeGetSession: async () => ({ user: options.viewer ? { id: options.viewer } : null, session: null }),
 		},
 	};
-	return { result: GET(event as unknown as Parameters<typeof GET>[0]), headers, limit };
+	return { result: GET(event as unknown as Parameters<typeof GET>[0]), headers, limit, eq };
 }
 
 beforeEach(() => {
@@ -37,6 +38,12 @@ describe("GET /api/media/post-images/…（#316）", () => {
 			location: expect.stringContaining("https://signed.example/"),
 		});
 		expect(headers["cache-control"]).toBe("private, max-age=300");
+	});
+
+	it("画像の持ち主自身の投稿だけを探す（他人の画像を参照する投稿を経由させない）", async () => {
+		const { result, eq } = call(PATH, { viewer: "22222222-2222-4222-8222-222222222222", visiblePosts: 1 });
+		await expect(result).rejects.toMatchObject({ status: 302 });
+		expect(eq).toHaveBeenCalledWith("user_id", OWNER);
 	});
 
 	it("閲覧できる投稿に使われていない画像（鍵・非表示・BAN・ブロック・削除）は 404", async () => {
