@@ -9,7 +9,7 @@ import { isCoverHiddenWithoutCopyright } from "$lib/anime-cover";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
-import { isEpisodeRoomEntryLive } from "$lib/episode-room";
+import { episodeRoomEntryState, formatAiringDate, isEpisodeRoomEntryLive } from "$lib/episode-room";
 import type { BroadcastRoomOverride } from "$lib/types";
 import {
 	type BroadcastOverrideKind,
@@ -67,7 +67,9 @@ const sortedRoomLogs = $derived([...data.episodes].sort((a, b) => a.date.localeC
 const latestRoomLog = $derived(sortedRoomLogs.at(-1));
 // 話数ルームの「Latest」: 放送中の作品で、投稿できる最も新しい話
 const latestEpisodeRoom = $derived(
-	[...data.episodeRooms].reverse().find((entry) => entry.kind === "episode" && entry.state === "open"),
+	[...data.episodeRooms]
+		.reverse()
+		.find((entry) => entry.kind === "episode" && episodeRoomEntryState(entry, episodeRoomNow) === "open"),
 );
 const isAnimeAiring = $derived(data.anime.computed_broadcast_status === "airing");
 
@@ -291,6 +293,8 @@ let recommendFeedback = $state("");
 let recommendError = $state("");
 let liveRoomDates = $state(new Set<string>());
 let liveEpisodeRoomKeys = $state(new Set<string>());
+// 一覧の状態（投稿できる／未放送）を開く時刻で計算し直すための現在時刻（30秒ごとに更新）
+let episodeRoomNow = $state(Date.now());
 
 function handleRecipientInput() {
 	selectedRecipient = null;
@@ -403,6 +407,7 @@ function refreshLiveRoomDates() {
 	}
 	liveRoomDates = next;
 	const nowMs = now.getTime();
+	episodeRoomNow = nowMs;
 	liveEpisodeRoomKeys = new Set(
 		data.episodeRooms.filter((entry) => isEpisodeRoomEntryLive(entry, nowMs)).map((entry) => entry.key),
 	);
@@ -1382,7 +1387,7 @@ $effect(() => {
 									{#if isAnimeAiring && latestEpisodeRoom}
 										<li class="room-log-latest-slot">
 											<a
-												href={latestEpisodeRoom.href}
+												href={latestEpisodeRoom.href ?? undefined}
 												class="room-log-item room-log-item--latest"
 											>
 												<span class="room-log-latest-label">
@@ -1395,33 +1400,55 @@ $effect(() => {
 													<span class="room-log-live-badge">LIVE</span>
 												{/if}
 												<span class="room-log-date"
-													>{latestEpisodeRoom.firstAiredAt?.slice(0, 10) ?? ""}</span
+													>{latestEpisodeRoom.firstAiredAt
+														? formatAiringDate(latestEpisodeRoom.firstAiredAt)
+														: ""}</span
 												>
 											</a>
 										</li>
 									{/if}
 									{#each data.episodeRooms as entry (entry.key)}
+										{@const entryState = episodeRoomEntryState(entry, episodeRoomNow)}
 										<li>
-											<a
-												href={entry.href}
+											<svelte:element
+												this={entry.href ? "a" : "span"}
+												href={entry.href ?? undefined}
 												class="room-log-item"
-												class:room-log-item--unaired={entry.state !== "open"}
+												class:room-log-item--unaired={entryState !== "open"}
 											>
 												<span class="room-log-ep">{entry.label}</span>
 												<span class="room-log-ep-compact">{entry.label}</span>
 												{#if liveEpisodeRoomKeys.has(entry.key)}
 													<span class="room-log-live-badge">LIVE</span>
-												{:else if entry.state !== "open"}
+												{:else if entryState !== "open"}
 													<span class="room-log-unaired-label">未放送</span>
 												{/if}
 												<span class="room-log-date"
-													>{entry.firstAiredAt?.slice(0, 10) ?? ""}</span
+													>{entry.firstAiredAt ? formatAiringDate(entry.firstAiredAt) : ""}</span
 												>
-											</a>
+											</svelte:element>
 										</li>
 									{/each}
 								</ol>
 							</section>
+							{#if data.episodesWithoutRoom.length > 0}
+								<section class="room-log-section">
+									<h2 class="room-log-heading">話数の分からない放送日</h2>
+									<ol class="room-log-list">
+										{#each data.episodesWithoutRoom as ep (ep.date)}
+											<li>
+												<a href="/rooms/anime/{data.anime.id}/{ep.date}" class="room-log-item">
+													<span class="room-log-ep">{formatBroadcastEpisodeSlot(ep)}</span>
+													<span class="room-log-ep-compact"
+														>{formatBroadcastEpisodeNumber(ep)}</span
+													>
+													<span class="room-log-date">{ep.date}</span>
+												</a>
+											</li>
+										{/each}
+									</ol>
+								</section>
+							{/if}
 						{:else if data.episodes.length > 0}
 							<section class="room-log-section">
 								<h2 class="room-log-heading">ルームログ</h2>

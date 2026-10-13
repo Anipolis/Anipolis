@@ -1051,43 +1051,68 @@ export async function getEpisodeRoomAirings(supabase: SupabaseClient<Database>, 
 	}));
 }
 
-/** 作品ページの話数ルーム一覧用: 作品の話数ルームと、それぞれの放送枠 */
+/** 作品ページの話数ルーム一覧用の放送枠（どの放送日の枠かも持つ） */
+export type EpisodeRoomLogAiring = RoomAiring & { episode_room_id: string; room_date: string };
+
+/**
+ * 作品ページの話数ルーム一覧用: 作品の話数ルームと、それぞれの放送枠。
+ * PostgREST の上限（本番 1000 件）で切れないよう、どちらもページを追って全件を取る。
+ * 取得に失敗したら null（呼び出し側は今の日付のルームログに戻す。空データと区別するため）
+ */
 export async function getEpisodeRoomLog(
 	supabase: SupabaseClient<Database>,
 	animeId: number,
-): Promise<{ rooms: EpisodeRoom[]; airings: (RoomAiring & { episode_room_id: string })[] }> {
-	const [roomsResult, airingsResult] = await Promise.all([
-		supabase.from("episode_rooms").select(EPISODE_ROOM_SELECT).eq("anime_id", animeId),
-		supabase
+): Promise<{ rooms: EpisodeRoom[]; airings: EpisodeRoomLogAiring[] } | null> {
+	const PAGE = 1000;
+	const rooms: EpisodeRoom[] = [];
+	for (let from = 0; ; from += PAGE) {
+		const { data, error } = await supabase
+			.from("episode_rooms")
+			.select(EPISODE_ROOM_SELECT)
+			.eq("anime_id", animeId)
+			.order("id")
+			.range(from, from + PAGE - 1);
+		if (error) {
+			console.error("getEpisodeRoomLog rooms error:", error);
+			return null;
+		}
+		rooms.push(...((data ?? []) as EpisodeRoom[]));
+		if ((data ?? []).length < PAGE) break;
+	}
+	const airings: EpisodeRoomLogAiring[] = [];
+	for (let from = 0; ; from += PAGE) {
+		const { data, error } = await supabase
 			.from("broadcast_room_sessions")
 			.select(
-				"id, episode_room_id, scheduled_at, posting_opens_at, posting_closes_at, airing_kind, source_channel_name",
+				"id, episode_room_id, room_date, scheduled_at, duration_minutes, posting_opens_at, posting_closes_at, airing_kind, source_channel_name",
 			)
 			.eq("anime_id", animeId)
-			.not("episode_room_id", "is", null),
-	]);
-	if (roomsResult.error) console.error("getEpisodeRoomLog rooms error:", roomsResult.error);
-	if (airingsResult.error) console.error("getEpisodeRoomLog airings error:", airingsResult.error);
-	return {
-		rooms: (roomsResult.data ?? []) as EpisodeRoom[],
-		airings: (airingsResult.data ?? []).flatMap((row) =>
-			row.episode_room_id
-				? [
-						{
-							id: row.id,
-							episode_room_id: row.episode_room_id,
-							scheduled_at: row.scheduled_at,
-							posting_opens_at: row.posting_opens_at,
-							posting_closes_at: row.posting_closes_at,
-							airing_kind: (["first", "rerun", "event"].includes(row.airing_kind)
-								? row.airing_kind
-								: "first") as RoomAiring["airing_kind"],
-							channel_name: row.source_channel_name,
-						},
-					]
-				: [],
-		),
-	};
+			.not("episode_room_id", "is", null)
+			.order("id")
+			.range(from, from + PAGE - 1);
+		if (error) {
+			console.error("getEpisodeRoomLog airings error:", error);
+			return null;
+		}
+		for (const row of data ?? []) {
+			if (!row.episode_room_id) continue;
+			airings.push({
+				id: row.id,
+				episode_room_id: row.episode_room_id,
+				room_date: row.room_date,
+				scheduled_at: row.scheduled_at,
+				ends_at: new Date(Date.parse(row.scheduled_at) + row.duration_minutes * 60_000).toISOString(),
+				posting_opens_at: row.posting_opens_at,
+				posting_closes_at: row.posting_closes_at,
+				airing_kind: (["first", "rerun", "event"].includes(row.airing_kind)
+					? row.airing_kind
+					: "first") as RoomAiring["airing_kind"],
+				channel_name: row.source_channel_name,
+			});
+		}
+		if ((data ?? []).length < PAGE) break;
+	}
+	return { rooms, airings };
 }
 
 /**
