@@ -40,6 +40,25 @@ beforeEach(() => {
 });
 
 describe("GET /api/rooms/posts（#320）", () => {
+	it("話数ルーム（episode_room_id）の差分も取れる", async () => {
+		const res = await get(`episode_room_id=${SESSION}`);
+		expect(res.status).toBe(200);
+		expect(getRoomPostsAfter).toHaveBeenCalledWith(
+			expect.anything(),
+			{ kind: "episode_room", id: SESSION },
+			null,
+			null,
+			100,
+		);
+	});
+
+	it("ルームの指定はちょうど一つ", async () => {
+		expect((await get("")).status).toBe(400);
+		expect((await get(`session_id=${SESSION}&episode_room_id=${SESSION}`)).status).toBe(400);
+		expect((await get("episode_room_id=not-a-uuid")).status).toBe(400);
+		expect(getRoomPostsAfter).not.toHaveBeenCalled();
+	});
+
 	it("取得済みの境界（created_at と id）より後ろから取る", async () => {
 		const res = await get(`session_id=${SESSION}&after_created_at=2026-10-13T12:00:00.000Z&after_id=${POST_ID}`);
 		expect(res.status).toBe(200);

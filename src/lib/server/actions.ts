@@ -256,6 +256,7 @@ export async function insertPostWithHashtags(
 	cwAnimeId: string | null = null,
 	additionalHashtags: string[] = [],
 	eventId: string | null = null,
+	episodeRoomId: string | null = null,
 ) {
 	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
 	if (moderationFailure) return moderationFailure;
@@ -302,6 +303,8 @@ export async function insertPostWithHashtags(
 		quoted_post_id: quotedPostId || null,
 		broadcast_room_session_id: broadcastRoomSessionId,
 		event_id: eventId,
+		// 話数ルーム（153）。放送枠の時間内なら DB のトリガーが放送枠も補う
+		episode_room_id: episodeRoomId,
 	};
 	const postPayload = exchangeShare ? { ...basePost, exchange_share: exchangeShare as unknown as Json } : basePost;
 

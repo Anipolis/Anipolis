@@ -12,33 +12,8 @@ import {
 	getBroadcastRoomPosts,
 	getGlobalAnimeLobbySession,
 } from "$lib/server/queries";
-import type { Anime } from "$lib/types";
+import { roomHashtag, stripTrailingRoomHashtag } from "$lib/server/room-hashtag";
 import type { Actions, PageServerLoad } from "./$types";
-
-function fallbackRoomHashtag(title: string) {
-	return title.replace(/\s+/g, "").replace(/[^\p{L}\p{N}_]/gu, "");
-}
-
-function normalizeHashtag(value: string) {
-	return value.trim().replace(/^#+/, "").toLowerCase();
-}
-
-function roomHashtag(anime: Anime) {
-	const officialHashtag = anime.official_hashtag?.map(normalizeHashtag).find((tag) => tag.length > 0);
-	return officialHashtag ?? fallbackRoomHashtag(anime.title);
-}
-
-function stripTrailingRoomHashtag(content: string, hashtag: string) {
-	const tag = normalizeHashtag(hashtag);
-	if (!tag) return content.trim();
-	const trimmed = content.trim();
-	const normalized = trimmed.toLowerCase();
-	const suffix = `#${tag}`;
-	if (!normalized.endsWith(suffix)) return trimmed;
-	const before = trimmed.slice(0, trimmed.length - suffix.length);
-	if (before.length > 0 && !/\s$/.test(before)) return trimmed;
-	return before.trimEnd();
-}
 
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();

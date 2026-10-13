@@ -11,7 +11,7 @@ const MAX_UUID = "ffffffff-ffff-ffff-ffff-ffffffffffff";
 
 /**
  * ルームの投稿差分取得（ライブ更新用）。
- * session_id（放送ルーム）または event_id（イベントルーム）のいずれか一方を指定する。
+ * session_id（放送ルーム）、event_id（イベントルーム）、episode_room_id（話数ルーム）のいずれか一つを指定する。
  *
  * after_created_at と after_id（取得済みの境界）より後ろの投稿を古い順に最大 PAGE_SIZE 件返す。
  * 応答の nextCursor を次の境界にし、hasMore が true の間は続けて取る（#320）。
@@ -20,12 +20,16 @@ const MAX_UUID = "ffffffff-ffff-ffff-ffff-ffffffffffff";
 export const GET: RequestHandler = async ({ url, locals: { supabase, safeGetSession } }) => {
 	const sessionId = url.searchParams.get("session_id")?.trim() ?? "";
 	const eventId = url.searchParams.get("event_id")?.trim() ?? "";
+	const episodeRoomId = url.searchParams.get("episode_room_id")?.trim() ?? "";
 
-	if (!sessionId && !eventId) {
-		return json({ message: "session_id または event_id が必要です" }, { status: 400 });
+	if ([sessionId, eventId, episodeRoomId].filter(Boolean).length !== 1) {
+		return json({ message: "session_id・event_id・episode_room_id のいずれか一つが必要です" }, { status: 400 });
 	}
 	if (sessionId && !UUID_RE.test(sessionId)) return json({ message: "session_id が不正です" }, { status: 400 });
 	if (eventId && !UUID_RE.test(eventId)) return json({ message: "event_id が不正です" }, { status: 400 });
+	if (episodeRoomId && !UUID_RE.test(episodeRoomId)) {
+		return json({ message: "episode_room_id が不正です" }, { status: 400 });
+	}
 
 	const afterCreatedAt = url.searchParams.get("after_created_at")?.trim() ?? "";
 	const afterId = url.searchParams.get("after_id")?.trim() ?? "";
@@ -43,7 +47,11 @@ export const GET: RequestHandler = async ({ url, locals: { supabase, safeGetSess
 	}
 
 	const { user } = await safeGetSession();
-	const room: RoomRef = eventId ? { kind: "event", id: eventId } : { kind: "broadcast", id: sessionId };
+	const room: RoomRef = eventId
+		? { kind: "event", id: eventId }
+		: episodeRoomId
+			? { kind: "episode_room", id: episodeRoomId }
+			: { kind: "broadcast", id: sessionId };
 	const page = await getRoomPostsAfter(supabase, room, user?.id ?? null, cursor, PAGE_SIZE);
 	if (!page) return json({ message: "投稿の取得に失敗しました" }, { status: 500 });
 
