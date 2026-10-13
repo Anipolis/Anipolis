@@ -130,3 +130,107 @@ describe("shared reaction rows", () => {
 		expect(target.querySelector(".char-count")?.textContent).toBe("30");
 	});
 });
+
+describe("CW（ネタバレ注意）の保護（#317〜#319）", () => {
+	const quoted = {
+		id: "quoted-1",
+		content: "最終回で主人公が旅を終える",
+		user_id: "preview-user-9",
+		created_at: "2026-09-08T11:00:00.000Z",
+		username: "spoiler_author",
+		display_name: null,
+		avatar_url: null,
+		cw_anime_id: "42",
+		cw_anime: { title: "星をめぐる旅" },
+	};
+
+	async function render(component: typeof PostRow | typeof PostDetail, post: ReturnType<typeof fixturePost>) {
+		const target = document.body.appendChild(document.createElement("div"));
+		const instance = mount(component, { target, props: { post } });
+		cleanup.push(() => unmount(instance));
+		await tick();
+		return target;
+	}
+
+	for (const [name, component] of [
+		["タイムライン", PostRow],
+		["投稿詳細", PostDetail],
+	] as const) {
+		it(`${name}: 折り畳み中は本文だけでなく画像・引用も隠し、展開すると見せる`, async () => {
+			const post = { ...fixturePost(22), image_urls: ["https://example.com/spoiler.png"], quoted_post: null };
+			const target = await render(component, post);
+
+			const hidden = target.querySelector(".post-cw-content");
+			expect(hidden?.getAttribute("aria-hidden")).toBe("true");
+			expect(hidden?.hasAttribute("inert")).toBe(true);
+			// 画像は折り畳みの中にある（外に出ていない）
+			expect(target.querySelector(".post-cw-content .post-image")).not.toBeNull();
+			expect(target.querySelectorAll(".post-image")).toHaveLength(1);
+
+			target.querySelector<HTMLButtonElement>(".post-cw-banner")?.click();
+			await tick();
+			expect(target.querySelector(".post-cw-content")?.getAttribute("aria-hidden")).toBe("false");
+			expect(target.querySelector(".post-cw-content")?.hasAttribute("inert")).toBe(false);
+		});
+	}
+
+	it("作品の情報が取れなくても CW の ID があれば折り畳む（通常の本文として出さない）", async () => {
+		const post = { ...fixturePost(22), cw_anime: null };
+		const target = await render(PostRow, post);
+		expect(target.querySelector(".post-cw-banner")?.textContent).toContain("ネタバレを含みます");
+		expect(target.querySelector(".post-cw-content")?.getAttribute("aria-hidden")).toBe("true");
+	});
+
+	it("CW の無い投稿は折り畳まない", async () => {
+		const target = await render(PostRow, fixturePost(0));
+		expect(target.querySelector(".post-cw-banner")).toBeNull();
+		expect(target.querySelector(".post-content")).not.toBeNull();
+	});
+
+	it("引用元に CW があれば、引用枠は本文の代わりに警告を出す", async () => {
+		const post = { ...fixturePost(0), quoted_post_id: quoted.id, quoted_post: quoted };
+		const target = await render(PostRow, post);
+		const quote = target.querySelector(".quoted-post");
+		expect(quote?.textContent).toContain("『星をめぐる旅』のネタバレを含む投稿");
+		expect(quote?.textContent).not.toContain("最終回");
+		// 本文を読むには元の投稿（CW で折り畳まれる）を開く
+		expect(quote?.getAttribute("href")).toBe("/posts/quoted-1");
+	});
+
+	for (const [name, component] of [
+		["タイムライン", PostRow],
+		["投稿詳細", PostDetail],
+	] as const) {
+		it(`${name}: 引用リポストの作成画面でも、CW 付き投稿の本文をプレビューに出さない`, async () => {
+			const target = document.body.appendChild(document.createElement("div"));
+			const instance = mount(component, {
+				target,
+				props: { post: fixturePost(22), currentUserId: "preview-user-0" },
+			});
+			cleanup.push(() => unmount(instance));
+			await tick();
+			// CW を折り畳んだまま 投稿の操作 → リポスト → 引用リポスト
+			target.querySelector<HTMLButtonElement>('[aria-label="投稿の操作"]')?.click();
+			await tick();
+			target.querySelector<HTMLButtonElement>('[aria-label="リポスト"]')?.click();
+			await tick();
+			target.querySelector<HTMLButtonElement>(".repost-menu-item-quote")?.click();
+			await tick();
+
+			const preview = target.querySelector(".quote-preview-content");
+			expect(target.querySelector(".post-cw-content")?.getAttribute("aria-hidden")).toBe("true");
+			expect(preview?.textContent).toContain("『星をめぐる旅』のネタバレを含む投稿");
+			expect(preview?.textContent).not.toContain("音楽も最高");
+		});
+	}
+
+	it("引用元に CW が無ければ、引用枠は本文を出す", async () => {
+		const post = {
+			...fixturePost(0),
+			quoted_post_id: quoted.id,
+			quoted_post: { ...quoted, cw_anime_id: null, cw_anime: null },
+		};
+		const target = await render(PostRow, post);
+		expect(target.querySelector(".quoted-post")?.textContent).toContain("最終回で主人公が旅を終える");
+	});
+});

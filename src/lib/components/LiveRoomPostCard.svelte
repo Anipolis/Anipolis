@@ -1,4 +1,5 @@
 <script lang="ts">
+import { contentWarningLabel, hasContentWarning } from "$lib/content-warning";
 import type { Post } from "$lib/types";
 import { formatRelativeTime } from "$lib/utils/format";
 import PostRow from "./PostRow.svelte";
@@ -89,7 +90,10 @@ async function fetchReplies(mode: "recent" | "all", limit: number): Promise<bool
 				<a href="/posts/{reply.id}" class="live-reply" onclick={stop}>
 					<UserAvatar src={reply.avatar_url} username={reply.username} size="xs" />
 					<span class="live-reply-name">{reply.display_name || reply.username}</span>
-					<span class="live-reply-text">{reply.content}</span>
+					<!-- 返信一覧は本文を1行で出すので、CW 付きは本文の代わりに警告を出す（#319） -->
+					<span class="live-reply-text"
+						>{hasContentWarning(reply) ? contentWarningLabel(reply) : reply.content}</span
+					>
 					<time class="live-reply-time" datetime={reply.created_at}
 						>{formatRelativeTime(reply.created_at)}</time
 					>

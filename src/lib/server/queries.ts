@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { groupGenreFilters, translateAnimeGenres } from "$lib/anime-vocabulary";
 import { computeBroadcastStatus } from "$lib/broadcast-status";
 import { toValidExchangeSubjectiveTags } from "$lib/exchange-tags";
-import { buildPostCardSelect } from "$lib/server/post-selects";
+import { buildPostCardSelect, POST_CW_ANIME_SELECT } from "$lib/server/post-selects";
 import type { Database } from "$lib/supabase/database.types";
 import { isEpisodeSuppressedSnapshot } from "$lib/syobocal-episodes";
 import type {
@@ -43,6 +43,8 @@ type NotificationPost = {
 	anime_id: number | null;
 	quoted_post_id: string | null;
 	exchange_share: unknown | null;
+	cw_anime_id: number | null;
+	cw_anime: { title: string } | { title: string }[] | null;
 };
 
 type NotificationRecommendation = {
@@ -303,6 +305,8 @@ export async function enrichPostsWithCounts(
 		content: string;
 		created_at: string;
 		user_id: string;
+		cw_anime_id: number | null;
+		cw_anime: { title: string } | null;
 		profiles: { username: string; display_name: string | null; avatar_url: string | null } | null;
 	};
 	const quotedPostIds = [...new Set(rawPosts.map((p) => p.quoted_post_id).filter(Boolean))] as string[];
@@ -311,7 +315,8 @@ export async function enrichPostsWithCounts(
 		const { data: quotedRaw } = await supabase
 			.from("posts")
 			.select(
-				"id, content, created_at, user_id, profiles!posts_user_id_fkey ( username, display_name, avatar_url )",
+				// 引用元の CW も引き継ぐ。引用枠で本文がそのまま出ないようにする（#319）
+				`id, content, created_at, user_id, cw_anime_id, ${POST_CW_ANIME_SELECT}, profiles!posts_user_id_fkey ( username, display_name, avatar_url )`,
 			)
 			.in("id", quotedPostIds);
 		for (const qp of quotedRaw ?? []) {
@@ -543,7 +548,9 @@ export async function getNotifications(
                 image_urls,
                 anime_id,
                 quoted_post_id,
-                exchange_share
+                exchange_share,
+                cw_anime_id,
+                cw_anime:anime!posts_cw_anime_id_fkey ( title )
             ),
             recommendation:anime_recommendations!notifications_anime_recommendation_id_fkey (
                 anime_id,
@@ -617,6 +624,8 @@ export async function getNotifications(
 			post_has_anime_quote: post?.anime_id != null,
 			post_has_quoted_post: post?.quoted_post_id != null,
 			post_has_exchange_share: post?.exchange_share != null,
+			post_cw_anime_id: post?.cw_anime_id != null ? String(post.cw_anime_id) : null,
+			post_cw_anime_title: (Array.isArray(post?.cw_anime) ? post.cw_anime[0] : post?.cw_anime)?.title ?? null,
 			recommendation_anime_id: recommendation?.anime_id != null ? String(recommendation.anime_id) : null,
 			recommendation_anime_title: recommendation?.anime?.title ?? null,
 			recommendation_anime_cover_url: recommendation?.anime?.cover_url ?? null,
