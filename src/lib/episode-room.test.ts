@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
 	airingAt,
 	airingHeading,
+	airingOnAirAt,
 	buildEpisodeRoomList,
 	episodeRoomPath,
 	formatAiringTime,
@@ -15,6 +16,7 @@ function airing(id: string, opens: string, closes: string, kind: RoomAiring["air
 	return {
 		id,
 		scheduled_at: new Date(Date.parse(opens) + 5 * 60_000).toISOString(),
+		ends_at: new Date(Date.parse(opens) + 35 * 60_000).toISOString(),
 		posting_opens_at: opens,
 		posting_closes_at: closes,
 		airing_kind: kind,
@@ -64,6 +66,17 @@ describe("airingAt", () => {
 	it("重なるときは後に始まった枠", () => {
 		const overlap = airing("late", "2026-10-05T15:00:00Z", "2026-10-05T16:00:00Z", "event");
 		expect(airingAt([first, overlap], "2026-10-05T15:10:00Z")?.id).toBe("late");
+	});
+});
+
+describe("airingOnAirAt（放送中の判定）", () => {
+	it("開場から放送の終わりまで。放送後の感想受付の時間は放送中にしない", () => {
+		const first = airing("first", "2026-10-05T14:25:00Z", "2026-10-05T15:30:00Z");
+		expect(airingOnAirAt([first], Date.parse("2026-10-05T14:26:00Z"))?.id).toBe("first");
+		expect(airingOnAirAt([first], Date.parse("2026-10-05T15:00:00Z"))?.id).toBe("first");
+		// 放送の終わり（14:30 + 30分 = 15:00）を過ぎた感想受付の時間
+		expect(airingOnAirAt([first], Date.parse("2026-10-05T15:10:00Z"))).toBeNull();
+		expect(airingAt([first], "2026-10-05T15:10:00Z")?.id).toBe("first");
 	});
 });
 

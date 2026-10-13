@@ -31,6 +31,8 @@ export type LiveRoomData = {
 		airings?: RoomAiring[];
 		/** ?airing= で指定された放送枠。最初にその位置を表示する */
 		initial_airing_id?: string | null;
+		/** 読み込んだ分より前に投稿があるか（「前の投稿を読み込む」を出す） */
+		has_older_posts?: boolean;
 	};
 	posts: Post[];
 	trending: TrendingHashtag[];

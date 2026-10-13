@@ -1,5 +1,5 @@
 import { json } from "@sveltejs/kit";
-import { getRoomPostsAfter, type RoomRef, type TimelineCursor } from "$lib/server/queries";
+import { getRoomPostsAfter, getRoomPostsBefore, type RoomRef, type TimelineCursor } from "$lib/server/queries";
 import type { RequestHandler } from "./$types";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -31,6 +31,9 @@ export const GET: RequestHandler = async ({ url, locals: { supabase, safeGetSess
 		return json({ message: "episode_room_id が不正です" }, { status: 400 });
 	}
 
+	// before_*: その境界より前（古い側）を読み足す（話数ルームで最新や放送枠の途中から読み始めたとき）
+	const beforeCreatedAt = url.searchParams.get("before_created_at")?.trim() ?? "";
+	const beforeId = url.searchParams.get("before_id")?.trim() ?? "";
 	const afterCreatedAt = url.searchParams.get("after_created_at")?.trim() ?? "";
 	const afterId = url.searchParams.get("after_id")?.trim() ?? "";
 	const since = url.searchParams.get("since")?.trim() ?? "";
@@ -46,13 +49,23 @@ export const GET: RequestHandler = async ({ url, locals: { supabase, safeGetSess
 		cursor = { createdAt: since, id: MAX_UUID };
 	}
 
+	let beforeCursor: TimelineCursor | null = null;
+	if (beforeCreatedAt || beforeId) {
+		if (!TIMESTAMP_RE.test(beforeCreatedAt) || !UUID_RE.test(beforeId) || cursor) {
+			return json({ message: "before_created_at / before_id が不正です" }, { status: 400 });
+		}
+		beforeCursor = { createdAt: beforeCreatedAt, id: beforeId };
+	}
+
 	const { user } = await safeGetSession();
 	const room: RoomRef = eventId
 		? { kind: "event", id: eventId }
 		: episodeRoomId
 			? { kind: "episode_room", id: episodeRoomId }
 			: { kind: "broadcast", id: sessionId };
-	const page = await getRoomPostsAfter(supabase, room, user?.id ?? null, cursor, PAGE_SIZE);
+	const page = beforeCursor
+		? await getRoomPostsBefore(supabase, room, user?.id ?? null, beforeCursor, PAGE_SIZE)
+		: await getRoomPostsAfter(supabase, room, user?.id ?? null, cursor, PAGE_SIZE);
 	if (!page) return json({ message: "投稿の取得に失敗しました" }, { status: 500 });
 
 	return json(page);
