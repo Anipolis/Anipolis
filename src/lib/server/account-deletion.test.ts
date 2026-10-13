@@ -109,9 +109,12 @@ type StorageMock = {
 	remove: ReturnType<typeof vi.fn>;
 };
 
+type CleanupRow = { user_id: string; requested_at: string; attempts: number; last_error?: string | null };
+
 function createAdminMock(
 	options: {
-		filesByBucket?: Record<string, { name: string }[]>;
+		/** owner を省略したファイルは user-1 のもの */
+		filesByBucket?: Record<string, { name: string; owner?: string }[]>;
 		deleteUserError?: { message: string } | null;
 		listError?: { message: string } | null;
 		removeError?: { message: string } | null;
@@ -119,12 +122,63 @@ function createAdminMock(
 		removeIsNoop?: boolean;
 		postCount?: number;
 		moderationStatus?: string | null;
+		/** account_storage_cleanups に最初からある行（前の退会の消し残し） */
+		pendingCleanups?: CleanupRow[];
+		recordError?: { message: string } | null;
+		/** auth にまだ存在する利用者 */
+		existingUserIds?: string[];
 	} = {},
 ) {
 	const storageByBucket = new Map<string, StorageMock>();
 	const removed: { bucket: string; paths: string[] }[] = [];
 	const inserted: unknown[] = [];
+	const cleanups = new Map<string, CleanupRow>((options.pendingCleanups ?? []).map((row) => [row.user_id, row]));
+	const existing = new Set(options.existingUserIds ?? []);
 	const deleteUser = vi.fn(async () => ({ error: options.deleteUserError ?? null }));
+	const getUserById = vi.fn(async (id: string) =>
+		existing.has(id)
+			? { data: { user: { id } }, error: null }
+			: { data: { user: null }, error: { status: 404, message: "User not found" } },
+	);
+
+	/** account_storage_cleanups の select / update / delete の条件を最小限まねる */
+	const cleanupQuery = (op: "select" | "update" | "delete", patch?: Partial<CleanupRow>) => {
+		const filters: ((row: CleanupRow) => boolean)[] = [];
+		let limit = Number.POSITIVE_INFINITY;
+		const rows = () =>
+			[...cleanups.values()]
+				.filter((row) => filters.every((f) => f(row)))
+				.sort((a, b) => a.requested_at.localeCompare(b.requested_at))
+				.slice(0, limit);
+		const run = () => {
+			const matched = rows();
+			if (op === "delete") for (const row of matched) cleanups.delete(row.user_id);
+			if (op === "update") for (const row of matched) Object.assign(row, patch);
+			return { data: op === "select" ? matched : null, error: null };
+		};
+		// await できるように、Promise に条件のメソッドを足す（条件は await までに積まれ、実行は次のマイクロタスク）
+		const query = Object.assign(Promise.resolve().then(run), {
+			eq: (column: keyof CleanupRow, value: unknown) => {
+				filters.push((row) => row[column] === value);
+				return query;
+			},
+			neq: (column: keyof CleanupRow, value: unknown) => {
+				filters.push((row) => row[column] !== value);
+				return query;
+			},
+			lt: (column: keyof CleanupRow, value: string) => {
+				filters.push((row) => String(row[column]) < value);
+				return query;
+			},
+			order: () => query,
+			limit: (n: number) => {
+				limit = n;
+				return query;
+			},
+			maybeSingle: async () => ({ data: rows()[0] ?? null, error: null }),
+		});
+		return query;
+	};
 
 	const client = {
 		from: vi.fn((table: string) => {
@@ -155,6 +209,24 @@ function createAdminMock(
 					}),
 				};
 			}
+			if (table === "account_storage_cleanups") {
+				return {
+					upsert: vi.fn(async (row: { user_id: string }) => {
+						if (options.recordError) return { error: options.recordError };
+						if (!cleanups.has(row.user_id)) {
+							cleanups.set(row.user_id, {
+								user_id: row.user_id,
+								requested_at: new Date().toISOString(),
+								attempts: 0,
+							});
+						}
+						return { error: null };
+					}),
+					select: vi.fn(() => cleanupQuery("select")),
+					update: vi.fn((patch: Partial<CleanupRow>) => cleanupQuery("update", patch)),
+					delete: vi.fn(() => cleanupQuery("delete")),
+				};
+			}
 			throw new Error(`unexpected table: ${table}`);
 		}),
 		storage: {
@@ -163,19 +235,27 @@ function createAdminMock(
 				if (!mock) {
 					// 実際の Storage と同じく、削除したファイルは次の列挙から消え、
 					// list は limit を省略すると 100 件までしか返さない
-					const remaining = [...(options.filesByBucket?.[bucket] ?? [])];
+					const remaining = [...(options.filesByBucket?.[bucket] ?? [])].map((file) => ({
+						name: file.name,
+						owner: file.owner ?? "user-1",
+					}));
 					mock = {
-						list: vi.fn(async (_prefix: string, listOptions?: { limit?: number }) => {
+						list: vi.fn(async (prefix: string, listOptions?: { limit?: number }) => {
 							if (options.listError) return { data: null, error: options.listError };
-							return { data: remaining.slice(0, listOptions?.limit ?? 100), error: null };
+							const own = remaining.filter((file) => file.owner === prefix);
+							return { data: own.slice(0, listOptions?.limit ?? 100), error: null };
 						}),
 						remove: vi.fn(async (paths: string[]) => {
 							if (options.removeError) return { data: null, error: options.removeError };
 							if (options.removeIsNoop) return { data: [], error: null };
 							removed.push({ bucket, paths });
-							const names = new Set(paths.map((path) => path.slice(path.indexOf("/") + 1)));
-							const deleted = remaining.filter((file) => names.has(file.name));
-							remaining.splice(0, remaining.length, ...remaining.filter((file) => !names.has(file.name)));
+							const keys = new Set(paths);
+							const deleted = remaining.filter((file) => keys.has(`${file.owner}/${file.name}`));
+							remaining.splice(
+								0,
+								remaining.length,
+								...remaining.filter((file) => !keys.has(`${file.owner}/${file.name}`)),
+							);
 							return { data: deleted, error: null };
 						}),
 					};
@@ -184,10 +264,10 @@ function createAdminMock(
 				return mock;
 			}),
 		},
-		auth: { admin: { deleteUser } },
+		auth: { admin: { deleteUser, getUserById } },
 	};
 
-	return { client: client as unknown as SupabaseClient<Database>, removed, inserted, deleteUser };
+	return { client: client as unknown as SupabaseClient<Database>, removed, inserted, deleteUser, cleanups };
 }
 
 describe("deleteAccount", () => {
@@ -253,7 +333,14 @@ describe("deleteAccount", () => {
 		expect(admin.inserted).toEqual([]);
 	});
 
-	it("ファイルの列挙・削除に失敗しても、アカウントは削除済みなので成功として返す", async () => {
+	it("全部消せたら、消す予定の記録を外す", async () => {
+		const admin = createAdminMock({ filesByBucket: { "post-images": [{ name: "a.webp" }] } });
+		const result = await deleteAccount("user-1", { admin: admin.client });
+		expect(result).toEqual({ ok: true, removedFiles: 1 });
+		expect(admin.cleanups.size).toBe(0);
+	});
+
+	it("ファイルの削除に失敗したら、アカウントは削除済みなので成功を返し、記録を残して後でやり直す", async () => {
 		vi.spyOn(console, "error").mockImplementation(() => {});
 		for (const failure of [{ listError: { message: "storage unavailable" } }, { removeError: { message: "x" } }]) {
 			const admin = createAdminMock({ filesByBucket: { "post-images": [{ name: "a.webp" }] }, ...failure });
@@ -261,7 +348,49 @@ describe("deleteAccount", () => {
 			expect(result.ok).toBe(true);
 			expect(admin.deleteUser).toHaveBeenCalledWith("user-1");
 			expect(admin.inserted).toHaveLength(1);
+			expect(admin.cleanups.get("user-1")?.attempts).toBe(1);
 		}
+	});
+
+	it("消す予定を記録できなければ退会を始めない", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		const admin = createAdminMock({ recordError: { message: "db unavailable" } });
+		const result = await deleteAccount("user-1", { admin: admin.client });
+		expect(result).toEqual({ ok: false, reason: "failed" });
+		expect(admin.deleteUser).not.toHaveBeenCalled();
+	});
+
+	it("auth ユーザーの削除に失敗したら、消す予定の記録も外す", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		const admin = createAdminMock({ deleteUserError: { message: "service unavailable" } });
+		await deleteAccount("user-1", { admin: admin.client });
+		expect(admin.cleanups.size).toBe(0);
+	});
+
+	it("前の退会で消し残したファイルをやり直す。auth にまだいる利用者と、退会の途中の記録には触れない", async () => {
+		const hourAgo = new Date(Date.now() - 60 * 60_000).toISOString();
+		const justNow = new Date().toISOString();
+		const admin = createAdminMock({
+			filesByBucket: {
+				"post-images": [
+					{ name: "gone.webp", owner: "gone-user" },
+					{ name: "alive.webp", owner: "alive-user" },
+					{ name: "inflight.webp", owner: "inflight-user" },
+				],
+			},
+			pendingCleanups: [
+				{ user_id: "gone-user", requested_at: hourAgo, attempts: 1 },
+				{ user_id: "alive-user", requested_at: hourAgo, attempts: 0 },
+				{ user_id: "inflight-user", requested_at: justNow, attempts: 0 },
+			],
+			existingUserIds: ["alive-user"],
+		});
+		await deleteAccount("user-1", { admin: admin.client });
+		const removedPaths = admin.removed.flatMap((entry) => entry.paths);
+		expect(removedPaths).toContain("gone-user/gone.webp");
+		expect(removedPaths).not.toContain("alive-user/alive.webp");
+		expect(removedPaths).not.toContain("inflight-user/inflight.webp");
+		expect([...admin.cleanups.keys()].sort()).toEqual(["alive-user", "inflight-user"]);
 	});
 
 	it("削除しても一覧が減らない場合は打ち切る（無限ループしない）", async () => {

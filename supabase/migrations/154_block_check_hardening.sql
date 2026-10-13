@@ -51,3 +51,25 @@ CREATE POLICY "anime_recommendations: users can insert own recommendations"
         AND public.is_profile_active_for_writes(recommender_id)
         AND NOT public.is_blocked_between(recommender_id, recipient_id)
     );
+
+-- ----------------------------------------------------------------
+-- 3) 退会したアカウントの Storage の後始末の記録（#388 の Codex レビュー）
+-- ----------------------------------------------------------------
+-- 退会は auth ユーザーを先に削除し、その後で Storage のファイルを消す（auth の削除に失敗したとき
+-- 画像だけが失われないように）。ファイルの削除が一時的に失敗しても本人はもう再試行できないので、
+-- 消す予定の利用者 ID を退会の前に記録し、消し終えるまでアプリ（退会のたびに少しずつ）と
+-- scripts/cleanup-deleted-account-files.ts がやり直す。消し終えたら行を消す。
+--   * 持つのは利用者 ID と試行の記録だけ。消し終えれば残らない
+--   * 読み書きは service role だけ（RLS を有効にしてポリシーは作らない）
+CREATE TABLE IF NOT EXISTS public.account_storage_cleanups (
+    user_id uuid PRIMARY KEY,
+    requested_at timestamptz NOT NULL DEFAULT now(),
+    attempts integer NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+    last_attempt_at timestamptz,
+    last_error text
+);
+
+ALTER TABLE public.account_storage_cleanups ENABLE ROW LEVEL SECURITY;
+
+COMMENT ON TABLE public.account_storage_cleanups IS
+    'Pending Storage cleanups for deleted accounts. A row is removed once all of the user''s folders are deleted.';

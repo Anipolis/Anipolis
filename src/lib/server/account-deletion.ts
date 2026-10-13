@@ -1,7 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+	cancelAccountStorageCleanup,
+	recordAccountStorageCleanup,
+	retryPendingAccountStorageCleanups,
+	runAccountStorageCleanup,
+} from "$lib/server/account-storage-cleanup";
 import { getLastSignInAt, hasPasswordProvider } from "$lib/server/auth";
 import { createServiceRoleClient } from "$lib/server/supabase-admin";
 import type { Database } from "$lib/supabase/database.types";
+
+export { STORAGE_LIST_PAGE_SIZE, USER_OWNED_BUCKETS } from "$lib/server/account-storage-cleanup";
 
 type AuthUser = NonNullable<Awaited<ReturnType<App.Locals["safeGetSession"]>>["user"]>;
 type AuthSession = NonNullable<Awaited<ReturnType<App.Locals["safeGetSession"]>>["session"]>;
@@ -11,9 +19,6 @@ type AuthSession = NonNullable<Awaited<ReturnType<App.Locals["safeGetSession"]>>
  * 直近のログインを要求する。パスキーの追加と同じ 10 分の窓を使う。
  */
 export const DELETE_REAUTH_WINDOW_MS = 10 * 60_000;
-
-/** 退会時に本人のファイルが残るバケット。パスは `<user_id>/...` で統一されている */
-export const USER_OWNED_BUCKETS = ["post-images", "profile-avatars", "profile-headers"] as const;
 
 export function isRecentlyAuthenticated(session: AuthSession | null, now = Date.now()): boolean {
 	const signedInAt = getLastSignInAt(session);
@@ -51,48 +56,12 @@ export function checkDeletionGate(input: {
 	return { ok: true, needsPassword: false };
 }
 
-/** 1回の列挙で取る件数。SDK の既定は 100 件で、それ以降は明示しないと返らない */
-export const STORAGE_LIST_PAGE_SIZE = 1000;
-
-/**
- * `<user_id>/` 配下のファイルをすべて消し、消した件数を返す。失敗したら null。
- *
- * 消すと一覧が縮むので offset は進めず、先頭ページが空になるまで列挙と削除を繰り返す。
- */
-async function removeAllUserFiles(
-	admin: SupabaseClient<Database>,
-	bucket: (typeof USER_OWNED_BUCKETS)[number],
-	userId: string,
-): Promise<number | null> {
-	let removed = 0;
-	for (;;) {
-		const { data: files, error: listError } = await admin.storage
-			.from(bucket)
-			.list(userId, { limit: STORAGE_LIST_PAGE_SIZE });
-		if (listError) {
-			console.error(`deleteAccount: list ${bucket} failed:`, listError);
-			return null;
-		}
-		const paths = (files ?? []).map((file) => `${userId}/${file.name}`);
-		if (paths.length === 0) return removed;
-
-		const { data: deleted, error: removeError } = await admin.storage.from(bucket).remove(paths);
-		if (removeError) {
-			console.error(`deleteAccount: remove ${bucket} failed:`, removeError);
-			return null;
-		}
-		// 1件も消えないなら（サブフォルダ等）同じ一覧が返り続けるので打ち切る
-		if (!deleted || deleted.length === 0) {
-			console.error(`deleteAccount: remove ${bucket} made no progress for`, paths.length, "entries");
-			return null;
-		}
-		removed += deleted.length;
-	}
-}
-
 export type DeleteAccountResult =
 	| { ok: true; removedFiles: number }
 	| { ok: false; reason: "has_room_experiments" | "failed" };
+
+/** 退会のたびに、前の退会で消し残したファイルをやり直す件数（退会の応答を遅くしすぎない範囲） */
+const RETRY_PENDING_CLEANUPS_PER_DELETION = 3;
 
 /**
  * アカウントを削除する。
@@ -101,10 +70,11 @@ export type DeleteAccountResult =
  * マイリスト等の行は auth ユーザーの削除で連鎖削除される（142 のコメント参照）。
  * 連鎖で消えないのは Storage のファイルだけなので、auth ユーザーを消した後に消す。
  *
- * 順番は「auth ユーザー → ファイル」。Storage のファイルが残っていても auth ユーザーは削除できる
- * （2026-10-14 本番で確認）。逆の順番だと、auth ユーザーの削除が失敗したときにアカウントと投稿は
- * 残ったまま画像だけが失われる（#383 の Codex レビュー）。ファイルの削除に失敗した場合はアカウントの
- * 削除は完了しているので成功として返し、残ったファイルはログに残す（利用者 ID のフォルダごと消せる）。
+ * 順番は「消す予定の記録 → auth ユーザー → ファイル」。
+ *   * Storage のファイルが残っていても auth ユーザーは削除できる（2026-10-14 本番で確認）。逆の順番だと、
+ *     auth ユーザーの削除が失敗したときにアカウントと投稿は残ったまま画像だけが失われる（#383 Codex）
+ *   * ファイルの削除が一時的に失敗しても本人は再試行できないので、利用者 ID を account_storage_cleanups
+ *     （154）に先に記録し、消し終えるまでやり直す（#388 Codex。account-storage-cleanup.ts）
  */
 export async function deleteAccount(
 	userId: string,
@@ -118,25 +88,21 @@ export async function deleteAccount(
 		admin.from("posts").select("id", { count: "exact", head: true }).eq("user_id", userId),
 	]);
 
+	// ファイルを消し終えるまでやり直せるよう、先に記録する。記録できなければ退会を始めない
+	if (!(await recordAccountStorageCleanup(admin, userId))) return { ok: false, reason: "failed" };
+
 	const { error: deleteError } = await admin.auth.admin.deleteUser(userId);
 	if (deleteError) {
 		console.error("deleteAccount: auth.admin.deleteUser failed:", deleteError);
+		await cancelAccountStorageCleanup(admin, userId);
 		// room_experiment_runs.created_by の RESTRICT は 142 で SET NULL に変えたが、
 		// 未適用の環境では外部キー違反でここに来る。原因が伝わる形で返す。
 		if (/foreign key|violates/i.test(deleteError.message)) return { ok: false, reason: "has_room_experiments" };
 		return { ok: false, reason: "failed" };
 	}
 
-	let removedFiles = 0;
-	for (const bucket of USER_OWNED_BUCKETS) {
-		const removed = await removeAllUserFiles(admin, bucket, userId);
-		if (removed === null) {
-			// アカウントは削除済み。残ったファイルは <user_id>/ のフォルダごと後で消せるよう ID を残す
-			console.error(`deleteAccount: files may remain in ${bucket} for deleted user ${userId}`);
-			continue;
-		}
-		removedFiles += removed;
-	}
+	// 消し残しは記録が残り、次の退会や scripts/cleanup-deleted-account-files.ts でやり直す
+	const { removedFiles } = await runAccountStorageCleanup(admin, userId);
 
 	const { error: auditError } = await admin.from("account_deletions").insert({
 		moderation_status: (moderation?.status as string | undefined) ?? "active",
@@ -145,6 +111,12 @@ export async function deleteAccount(
 	});
 	// 記録に失敗しても削除自体は完了している。やり直せないので成功として返す。
 	if (auditError) console.error("deleteAccount: audit insert failed:", auditError);
+
+	// 前の退会で消し残したファイルを少しだけやり直す（失敗しても今回の退会には影響しない）
+	await retryPendingAccountStorageCleanups(admin, {
+		limit: RETRY_PENDING_CLEANUPS_PER_DELETION,
+		excludeUserId: userId,
+	}).catch((error) => console.error("deleteAccount: retry pending cleanups failed:", error));
 
 	return { ok: true, removedFiles };
 }

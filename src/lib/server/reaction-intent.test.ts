@@ -4,7 +4,7 @@ import type { Database } from "$lib/supabase/database.types";
 import { toggleBookmarkAction, toggleLikeAction, toggleRepostAction } from "./actions";
 
 /** account_moderation は「制限なし」、対象テーブルは existing の有無を返す最小のクライアント */
-function client(existing: boolean) {
+function client(existing: boolean, lookupError: { message: string } | null = null) {
 	const inserted: string[] = [];
 	const deleted: string[] = [];
 	// select(...).eq().eq().maybeSingle() と delete().eq().eq() の両方を受ける（await できる Promise に eq を足す）
@@ -19,7 +19,11 @@ function client(existing: boolean) {
 	};
 	const from = vi.fn((table: string) => ({
 		select: () =>
-			chain(table === "account_moderation" ? { data: null, error: null } : { data: existing ? {} : null }),
+			chain(
+				table === "account_moderation"
+					? { data: null, error: null }
+					: { data: existing ? {} : null, error: lookupError },
+			),
 		delete: () => {
 			deleted.push(table);
 			return chain({ error: null });
@@ -63,6 +67,16 @@ describe.each([
 		const off = client(true);
 		expect(await action(request("off"), off.supabase, "user-1")).toEqual({ [key]: false });
 		expect(off.deleted).toEqual([table]);
+	});
+
+	it("状態の照会に失敗したら、何もせず失敗を返す（成功扱いにしない）", async () => {
+		for (const intent of ["on", "off", undefined]) {
+			const c = client(false, { message: "network" });
+			const result = await action(request(intent), c.supabase, "user-1");
+			expect(result).toMatchObject({ status: 500 });
+			expect(c.inserted).toEqual([]);
+			expect(c.deleted).toEqual([]);
+		}
 	});
 
 	it("intent の無い古いクライアントは今どおり反転する", async () => {

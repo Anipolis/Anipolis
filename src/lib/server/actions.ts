@@ -403,12 +403,14 @@ export async function toggleLikeAction(request: Request, supabase: SupabaseClien
 	const postId = (form.get("post_id") as string | null)?.trim() ?? "";
 	if (!postId) return fail(400, { message: "投稿IDが不正です" });
 
-	const { data: existing } = await supabase
+	const { data: existing, error: lookupError } = await supabase
 		.from("likes")
 		.select("post_id")
 		.eq("post_id", postId)
 		.eq("user_id", userId)
 		.maybeSingle();
+	// 照会に失敗したら、今の状態が分からないので何もせず失敗を返す（成功扱いにすると表示と実際がずれる）
+	if (lookupError) return fail(500, { message: "いいねの状態を確認できませんでした" });
 
 	const intent = readReactionIntent(form);
 	if (existing && intent === "on") return { liked: true };
@@ -440,12 +442,14 @@ export async function toggleBookmarkAction(request: Request, supabase: SupabaseC
 	const postId = (form.get("post_id") as string | null)?.trim() ?? "";
 	if (!postId) return fail(400, { message: "投稿IDが不正です" });
 
-	const { data: existing } = await supabase
+	const { data: existing, error: lookupError } = await supabase
 		.from("bookmarks")
 		.select("post_id")
 		.eq("post_id", postId)
 		.eq("user_id", userId)
 		.maybeSingle();
+	// 照会に失敗したら、今の状態が分からないので何もせず失敗を返す（成功扱いにすると表示と実際がずれる）
+	if (lookupError) return fail(500, { message: "ブックマークの状態を確認できませんでした" });
 
 	const intent = readReactionIntent(form);
 	if (existing && intent === "on") return { bookmarked: true };
@@ -474,12 +478,14 @@ export async function toggleRepostAction(request: Request, supabase: SupabaseCli
 	const postId = (form.get("post_id") as string | null)?.trim() ?? "";
 	if (!postId) return fail(400, { message: "投稿IDが不正です" });
 
-	const { data: existing } = await supabase
+	const { data: existing, error: lookupError } = await supabase
 		.from("reposts")
 		.select("post_id")
 		.eq("post_id", postId)
 		.eq("user_id", userId)
 		.maybeSingle();
+	// 照会に失敗したら、今の状態が分からないので何もせず失敗を返す（成功扱いにすると表示と実際がずれる）
+	if (lookupError) return fail(500, { message: "リポストの状態を確認できませんでした" });
 
 	const intent = readReactionIntent(form);
 	if (existing && intent === "on") return { reposted: true };

@@ -25,4 +25,10 @@ describe("block check hardening migration (154, #383 Codex レビュー)", () =>
 		// 130 の条件はそのまま残す
 		expect(migration).toContain("AND public.is_profile_active_for_writes(recommender_id)");
 	});
+
+	it("退会したアカウントの Storage の後始末を記録する表は service role だけ（RLS 有効・ポリシー無し）", () => {
+		expect(migration).toContain("CREATE TABLE IF NOT EXISTS public.account_storage_cleanups");
+		expect(migration).toContain("ALTER TABLE public.account_storage_cleanups ENABLE ROW LEVEL SECURITY;");
+		expect(migration).not.toMatch(/CREATE POLICY[^;]*account_storage_cleanups/);
+	});
 });
