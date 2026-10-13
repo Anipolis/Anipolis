@@ -3,6 +3,7 @@ import { enhance } from "$app/forms";
 import { trapFocus } from "$lib/actions/trapFocus";
 import AnimeExchangeResult from "$lib/components/AnimeExchangeResult.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
+import { contentWarningLabel, hasContentWarning } from "$lib/content-warning";
 import type { PostController } from "./post-controller.svelte";
 
 interface Props {
@@ -80,7 +81,15 @@ function handleKeydown(event: KeyboardEvent) {
 						<span class="quote-preview-name">{post.display_name || post.username}</span>
 						<span class="quote-preview-at">@{post.username}</span>
 					</div>
-					<p class="quote-preview-content">{content}</p>
+					{#if hasContentWarning(post)}
+						<!-- 引用元の CW は作成画面のプレビューでも守る（展開済みでも本文は出さない） -->
+						<p class="quote-preview-content quote-preview-cw">
+							<span class="i-lucide-triangle-alert" aria-hidden="true"></span>
+							{contentWarningLabel(post)}
+						</p>
+					{:else}
+						<p class="quote-preview-content">{content}</p>
+					{/if}
 				</div>
 				{#if controller.quoteError}
 					<p class="flash-error" role="alert" style="margin-top:8px;">{controller.quoteError}</p>

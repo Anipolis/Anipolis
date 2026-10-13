@@ -197,6 +197,33 @@ describe("CW（ネタバレ注意）の保護（#317〜#319）", () => {
 		expect(quote?.getAttribute("href")).toBe("/posts/quoted-1");
 	});
 
+	for (const [name, component] of [
+		["タイムライン", PostRow],
+		["投稿詳細", PostDetail],
+	] as const) {
+		it(`${name}: 引用リポストの作成画面でも、CW 付き投稿の本文をプレビューに出さない`, async () => {
+			const target = document.body.appendChild(document.createElement("div"));
+			const instance = mount(component, {
+				target,
+				props: { post: fixturePost(22), currentUserId: "preview-user-0" },
+			});
+			cleanup.push(() => unmount(instance));
+			await tick();
+			// CW を折り畳んだまま 投稿の操作 → リポスト → 引用リポスト
+			target.querySelector<HTMLButtonElement>('[aria-label="投稿の操作"]')?.click();
+			await tick();
+			target.querySelector<HTMLButtonElement>('[aria-label="リポスト"]')?.click();
+			await tick();
+			target.querySelector<HTMLButtonElement>(".repost-menu-item-quote")?.click();
+			await tick();
+
+			const preview = target.querySelector(".quote-preview-content");
+			expect(target.querySelector(".post-cw-content")?.getAttribute("aria-hidden")).toBe("true");
+			expect(preview?.textContent).toContain("『星をめぐる旅』のネタバレを含む投稿");
+			expect(preview?.textContent).not.toContain("音楽も最高");
+		});
+	}
+
 	it("引用元に CW が無ければ、引用枠は本文を出す", async () => {
 		const post = {
 			...fixturePost(0),
