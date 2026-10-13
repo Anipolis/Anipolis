@@ -1,6 +1,12 @@
 import { error, json } from "@sveltejs/kit";
 import { requireAccountCanWrite } from "$lib/server/actions";
-import { MULTIPART_OVERHEAD_BYTES, readFormDataWithLimit, validateImageBuffer } from "$lib/server/upload";
+import { createServiceRoleClient } from "$lib/server/supabase-admin";
+import {
+	MULTIPART_OVERHEAD_BYTES,
+	publicUrlToStoragePath,
+	readFormDataWithLimit,
+	validateImageBuffer,
+} from "$lib/server/upload";
 import type { RequestHandler } from "./$types";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
@@ -42,4 +48,39 @@ export const POST: RequestHandler = async ({ request, locals: { supabase, safeGe
 	} = supabase.storage.from("post-images").getPublicUrl(path);
 
 	return json({ url: publicUrl });
+};
+
+/**
+ * 投稿欄で外した画像・破棄した下書きの画像を消す（#330）。
+ * 画像は選んだ時点で保存されるので、投稿しなかった画像を消す経路が無いと公開 URL のまま残り続ける。
+ * 自分のフォルダの画像だけを、どの投稿にも使われていないことを確かめてから消す
+ * （別の端末で投稿済みの画像などを消さないため。投稿の参照は RLS に左右されないよう service role で見る）。
+ * 投稿欄を閉じて放置された画像は、scripts/sweep-orphan-post-images.ts が期限付きで回収する。
+ */
+export const DELETE: RequestHandler = async ({ request, locals: { supabase, safeGetSession } }) => {
+	const { user } = await safeGetSession();
+	if (!user) error(401, "ログインが必要です");
+
+	const body = (await request.json().catch(() => null)) as { url?: unknown } | null;
+	const url = typeof body?.url === "string" ? body.url : null;
+	const path = url ? publicUrlToStoragePath(url, "post-images") : null;
+	if (!url || !path?.startsWith(`${user.id}/`)) error(400, "画像のURLが不正です");
+
+	const { data: usedBy, error: referenceError } = await createServiceRoleClient()
+		.from("posts")
+		.select("id")
+		.contains("image_urls", [url])
+		.limit(1);
+	if (referenceError) {
+		console.error("upload delete reference check error:", referenceError);
+		error(500, "画像を削除できませんでした");
+	}
+	if ((usedBy ?? []).length > 0) return json({ removed: false });
+
+	const { error: removeError } = await supabase.storage.from("post-images").remove([path]);
+	if (removeError) {
+		console.error("upload delete error:", removeError);
+		error(500, "画像を削除できませんでした");
+	}
+	return json({ removed: true });
 };

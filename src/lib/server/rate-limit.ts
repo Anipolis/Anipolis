@@ -57,6 +57,8 @@ export interface RateRule {
 /** API ルートのレート制限ルール（IP 単位） */
 export const API_RATE_RULES: RateRule[] = [
 	{ name: "upload", pattern: /^\/api\/upload/, methods: ["POST"], limit: 10, windowMs: 60_000 },
+	// 投稿欄で外した画像の削除。下書きの破棄で最大4枚まとめて消える
+	{ name: "upload-delete", pattern: /^\/api\/upload$/, methods: ["DELETE"], limit: 30, windowMs: 60_000 },
 	// 実況中の連投を考慮して 20回/分（3秒に1回ペース）まで許容
 	{ name: "post-create", pattern: /^\/api\/posts$/, methods: ["POST"], limit: 20, windowMs: 60_000 },
 	{ name: "report", pattern: /^\/api\/reports$/, methods: ["POST"], limit: 5, windowMs: 60_000 },
