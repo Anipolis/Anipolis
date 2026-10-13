@@ -7,6 +7,7 @@ import {
 	ensureNotBlocked,
 	getAnimeExchangeErrorDetail,
 	insertPostWithHashtags,
+	POST_RATE_LIMIT_MESSAGE,
 	requireAccountCanWrite,
 	unblockUserAction,
 } from "./actions";
@@ -25,6 +26,7 @@ function maybeSingleChain(response: unknown): TableChain {
 function createInsertPostClient(
 	roomAnime: { title: string | null; official_hashtag: string[] | null } | null,
 	eventHashtag: string | null = null,
+	insertError: { code: string; message: string } | null = null,
 ) {
 	const insertedPosts: unknown[] = [];
 	const hashtagUpsert = vi.fn(async () => ({ error: null }));
@@ -53,7 +55,11 @@ function createInsertPostClient(
 						insertedPosts.push(payload);
 						return {
 							select: vi.fn(() => ({
-								single: vi.fn(async () => ({ data: { id: "post-1" }, error: null })),
+								single: vi.fn(async () =>
+									insertError
+										? { data: null, error: insertError }
+										: { data: { id: "post-1" }, error: null },
+								),
 							})),
 						};
 					}),
@@ -81,6 +87,24 @@ function createInsertPostClient(
 }
 
 describe("insertPostWithHashtags", () => {
+	it("DB の回数制限（147 のトリガー、PT429）は 429 の失敗として返し、ハッシュタグ登録へ進まない（#321）", async () => {
+		const { client, hashtagUpsert } = createInsertPostClient(null, null, {
+			code: "PT429",
+			message: "post_rate_limited",
+		});
+
+		const result = await insertPostWithHashtags(client, "user-1", "連投 #タグ");
+
+		expect(result).toMatchObject({ status: 429, data: { message: POST_RATE_LIMIT_MESSAGE } });
+		expect(hashtagUpsert).not.toHaveBeenCalled();
+	});
+
+	it("それ以外の保存失敗は従来どおり 500", async () => {
+		const { client } = createInsertPostClient(null, null, { code: "23505", message: "duplicate" });
+		const result = await insertPostWithHashtags(client, "user-1", "post");
+		expect(result).toMatchObject({ status: 500 });
+	});
+
 	it("adds the room-link anime hashtag to trend metadata", async () => {
 		const { client, hashtagUpsert, postHashtagUpsert, insertedPosts } = createInsertPostClient({
 			title: "Room Anime",
