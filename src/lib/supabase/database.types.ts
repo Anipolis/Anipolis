@@ -1727,7 +1727,7 @@ export type Database = {
 				Row: {
 					code: string;
 					created_at: string;
-					created_by: string;
+					created_by: string | null;
 					expires_at: string | null;
 					id: string;
 					max_uses: number;
@@ -1737,7 +1737,7 @@ export type Database = {
 				Insert: {
 					code: string;
 					created_at?: string;
-					created_by: string;
+					created_by?: string | null;
 					expires_at?: string | null;
 					id?: string;
 					max_uses?: number;
@@ -1747,7 +1747,7 @@ export type Database = {
 				Update: {
 					code?: string;
 					created_at?: string;
-					created_by?: string;
+					created_by?: string | null;
 					expires_at?: string | null;
 					id?: string;
 					max_uses?: number;
@@ -2416,13 +2416,28 @@ export type Database = {
 				};
 				Relationships: [];
 			};
+			released_usernames: {
+				Row: {
+					released_at: string;
+					username: string;
+				};
+				Insert: {
+					released_at?: string;
+					username: string;
+				};
+				Update: {
+					released_at?: string;
+					username?: string;
+				};
+				Relationships: [];
+			};
 			reports: {
 				Row: {
 					created_at: string;
 					details: string | null;
 					id: string;
 					reason: string;
-					reporter_id: string;
+					reporter_id: string | null;
 					resolved_at: string | null;
 					resolved_by: string | null;
 					status: string;
@@ -2436,7 +2451,7 @@ export type Database = {
 					details?: string | null;
 					id?: string;
 					reason: string;
-					reporter_id: string;
+					reporter_id?: string | null;
 					resolved_at?: string | null;
 					resolved_by?: string | null;
 					status?: string;
@@ -2450,7 +2465,7 @@ export type Database = {
 					details?: string | null;
 					id?: string;
 					reason?: string;
-					reporter_id?: string;
+					reporter_id?: string | null;
 					resolved_at?: string | null;
 					resolved_by?: string | null;
 					status?: string;
@@ -3749,6 +3764,9 @@ export type Database = {
 				Returns: boolean;
 			};
 			is_profile_banned: { Args: { profile_id: string }; Returns: boolean };
+			is_username_available: { Args: { p_username: string }; Returns: boolean };
+			is_username_held: { Args: { p_username: string }; Returns: boolean };
+			purge_released_usernames: { Args: never; Returns: number };
 			redeem_invite: { Args: { p_code: string }; Returns: undefined };
 			revoke_invite: { Args: { p_invite_id: string }; Returns: undefined };
 			show_limit: { Args: never; Returns: number };

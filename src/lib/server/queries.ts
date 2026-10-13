@@ -503,6 +503,22 @@ export async function getProfileIdByUsername(
 	return data?.id ?? null;
 }
 
+/** 退会したアカウントのユーザー名を保留していることを示す DB のエラー（150 の enforce_username_not_held） */
+export const USERNAME_HELD_ERROR_MESSAGE = "username is held after account deletion";
+export const USERNAME_HELD_USER_MESSAGE = "退会したアカウントのユーザー名は、退会から30日間は使えません";
+
+/**
+ * ユーザー名を新しく使えるか（使用中でも、退会から30日以内の保留中でもない）。
+ * 保留中の名前は profiles を見ても分からないので RPC で確かめる（150）。
+ * RPC が失敗したときは、従来どおり使用中かどうかだけで判定する（最終的には DB のトリガーが拒否する）。
+ */
+export async function isUsernameAvailable(supabase: SupabaseClient<Database>, username: string): Promise<boolean> {
+	const { data, error } = await supabase.rpc("is_username_available", { p_username: username });
+	if (!error) return data === true;
+	console.error("isUsernameAvailable error:", error);
+	return (await getProfileIdByUsername(supabase, username)) === null;
+}
+
 export async function getActiveBroadcastRoomMuteAnimeIds(
 	supabase: SupabaseClient<Database>,
 	userId: string | null,
@@ -1150,8 +1166,9 @@ export type ModerationStatus = "active" | "restricted" | "banned";
 
 export interface AdminReport {
 	id: string;
-	reporter_id: string;
-	reporter_username: string;
+	/** 通報者が退会すると null（通報は残す。150） */
+	reporter_id: string | null;
+	reporter_username: string | null;
 	reporter_display_name: string | null;
 	target_type: ReportTargetType;
 	target_id: string;
@@ -1287,7 +1304,8 @@ export async function isAdminUser(supabase: SupabaseClient<Database>, userId: st
 export type InviteRow = {
 	id: string;
 	code: string;
-	created_by: string;
+	/** 発行者が退会すると null（招待と利用記録は残す。150） */
+	created_by: string | null;
 	max_uses: number;
 	use_count: number;
 	expires_at: string | null;
@@ -1329,7 +1347,7 @@ export async function getInvitesWithCreators(supabase: SupabaseClient<Database>)
 	const invites = await getInvites(supabase, "", { allUsers: true });
 	if (invites.length === 0) return [];
 
-	const creatorIds = Array.from(new Set(invites.map((invite) => invite.created_by)));
+	const creatorIds = Array.from(new Set(invites.flatMap((invite) => (invite.created_by ? [invite.created_by] : []))));
 	const { data: profiles, error: profilesError } = await supabase
 		.from("profiles")
 		.select("id, username")
@@ -1341,7 +1359,7 @@ export async function getInvitesWithCreators(supabase: SupabaseClient<Database>)
 
 	return invites.map((invite) => ({
 		...invite,
-		created_by_username: usernameByCreatorId.get(invite.created_by) ?? null,
+		created_by_username: invite.created_by ? (usernameByCreatorId.get(invite.created_by) ?? null) : null,
 	}));
 }
 
@@ -1589,7 +1607,7 @@ function toAdminReport(
 	return {
 		id: row.id,
 		reporter_id: row.reporter_id,
-		reporter_username: reporter?.username ?? "unknown",
+		reporter_username: reporter?.username ?? null,
 		reporter_display_name: reporter?.display_name ?? null,
 		target_type: row.target_type as ReportTargetType,
 		target_id: row.target_id,

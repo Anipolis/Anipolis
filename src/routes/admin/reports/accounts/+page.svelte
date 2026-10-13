@@ -95,9 +95,13 @@ function toggleRow(id: string) {
 									</section>
 									<section class="detail-section">
 										<h3>通報者</h3>
-										<a href="/{report.reporter_username}" class="user-link"
-											>@{report.reporter_username}</a
-										>
+										{#if report.reporter_username}
+											<a href="/{report.reporter_username}" class="user-link"
+												>@{report.reporter_username}</a
+											>
+										{:else}
+											<span class="withdrawn-user">退会済みのユーザー</span>
+										{/if}
 										{#if report.details}
 											<p class="reporter-notes">{report.details}</p>
 										{/if}
@@ -322,6 +326,11 @@ function toggleRow(id: string) {
 
 .user-link:hover {
 	text-decoration: underline;
+}
+
+.withdrawn-user {
+	color: var(--color-text-muted);
+	font-size: 13px;
 }
 
 .mod-until {

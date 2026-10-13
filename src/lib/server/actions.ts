@@ -8,7 +8,7 @@ import {
 } from "$lib/exchange-tags";
 import { isPostImageUsable } from "$lib/post-image-lifetime";
 import { fetchOAuthAvatar } from "$lib/server/oauth-avatar";
-import { getEvent, isAdminUser } from "$lib/server/queries";
+import { getEvent, isAdminUser, USERNAME_HELD_ERROR_MESSAGE, USERNAME_HELD_USER_MESSAGE } from "$lib/server/queries";
 import { createServiceRoleClient } from "$lib/server/supabase-admin";
 import {
 	MULTIPART_OVERHEAD_BYTES,
@@ -1445,6 +1445,9 @@ export async function completeProfileSetupAction(
 			await supabase.storage.from("profile-avatars").remove([uploadedAvatarPath]);
 		}
 		if (error.code === "23505") {
+			if (error.message.includes(USERNAME_HELD_ERROR_MESSAGE)) {
+				return { error: USERNAME_HELD_USER_MESSAGE, status: 400, field: "username", values };
+			}
 			if (error.message.includes("username")) {
 				return { error: "このユーザー名はすでに使用されています", status: 400, field: "username", values };
 			}
