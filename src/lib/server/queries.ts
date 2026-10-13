@@ -291,13 +291,14 @@ type PostCountsRow = Database["public"]["Functions"]["get_post_counts"]["Returns
  * 投稿の件数と自分の反応を、RPC の上限（200件）ごとに分けて取る（#323）。
  * 以前は全件を1回で渡していたため、返信が多い投稿詳細（本投稿＋親＋返信で200件超）では
  * RPC 全体が失敗し、件数が0・いいね済みも「未操作」に見えていた（押すと意図と逆の操作になる）。
- * 一時的な失敗は1回だけやり直し、それでも失敗した分はログに残す。
+ * 一時的な失敗は1回だけやり直し、それでも失敗した分はログに残して failed で知らせる。
+ * get_post_counts は呼び出し元が閲覧できる投稿の行だけを返す（削除・非表示・ブロックは含まれない）。
  */
 async function fetchPostCountsById(
 	supabase: SupabaseClient<Database>,
 	postIds: string[],
 	userId: string | null,
-): Promise<Map<string, PostCountsRow>> {
+): Promise<{ counts: Map<string, PostCountsRow>; failed: boolean }> {
 	const chunks: string[][] = [];
 	for (let start = 0; start < postIds.length; start += POST_COUNTS_RPC_MAX_IDS) {
 		chunks.push(postIds.slice(start, start + POST_COUNTS_RPC_MAX_IDS));
@@ -305,15 +306,19 @@ async function fetchPostCountsById(
 	const fetchChunk = (ids: string[]) =>
 		supabase.rpc("get_post_counts", { p_post_ids: ids, ...(userId ? { p_user_id: userId } : {}) });
 
+	let failed = false;
 	const results = await Promise.all(
 		chunks.map(async (ids) => {
 			let result = await fetchChunk(ids);
 			if (result.error) result = await fetchChunk(ids);
-			if (result.error) console.error("get_post_counts failed:", result.error);
+			if (result.error) {
+				console.error("get_post_counts failed:", result.error);
+				failed = true;
+			}
 			return result.data ?? [];
 		}),
 	);
-	return new Map(results.flat().map((row) => [row.post_id, row]));
+	return { counts: new Map(results.flat().map((row) => [row.post_id, row])), failed };
 }
 
 export async function enrichPostsWithCounts(
@@ -401,7 +406,7 @@ export async function enrichPostsWithCounts(
 	// get_post_counts は like/repost/reply の件数に加え、
 	// liked_by_me / reposted_by_me / bookmarked_by_me を1クエリで返す。
 	// p_user_id が NULL（未ログイン）の場合は各 *_by_me が全て false になる。
-	const countsByPostId = await fetchPostCountsById(supabase, postIds, userId);
+	const { counts: countsByPostId } = await fetchPostCountsById(supabase, postIds, userId);
 
 	// ── アニメ引用がある投稿のスコアを一括取得 ────────────────────
 	const animeIds = Array.from(new Set(visibleRawPosts.map((p) => p.anime_id).filter((n): n is number => n != null)));
@@ -984,30 +989,19 @@ export async function getRoomPostsAfter(
 }
 
 /** get_post_counts（121）に一度に渡せる投稿 ID の上限 */
-const POST_COUNTS_MAX_IDS = 200;
-
 /**
  * 表示中の投稿のうち、今も閲覧できるものの返信数を返す（#324）。
  * get_post_counts は呼び出し元が閲覧できる投稿の行だけを返すので、削除・管理者非表示・
- * ブロックで見えなくなった投稿は結果に含まれない。失敗したら null。
+ * ブロックで見えなくなった投稿は結果に含まれない。
+ * 一部でも取れなければ null。失敗を「見えない」と取り違えて表示中の投稿を消さないため。
  */
 export async function getVisiblePostReplyCounts(
 	supabase: SupabaseClient<Database>,
 	postIds: string[],
 ): Promise<Map<string, number> | null> {
-	const ids = [...new Set(postIds)];
-	const counts = new Map<string, number>();
-	for (let start = 0; start < ids.length; start += POST_COUNTS_MAX_IDS) {
-		const { data, error } = await supabase.rpc("get_post_counts", {
-			p_post_ids: ids.slice(start, start + POST_COUNTS_MAX_IDS),
-		});
-		if (error) {
-			console.error("getVisiblePostReplyCounts error:", error);
-			return null;
-		}
-		for (const row of data ?? []) counts.set(row.post_id, Number(row.reply_count ?? 0));
-	}
-	return counts;
+	const { counts, failed } = await fetchPostCountsById(supabase, [...new Set(postIds)], null);
+	if (failed) return null;
+	return new Map([...counts].map(([id, row]) => [id, Number(row.reply_count ?? 0)]));
 }
 
 /**
