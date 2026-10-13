@@ -179,8 +179,7 @@ export async function ensureNotBlocked(
 	targetUserId: string | null | undefined,
 ) {
 	if (!targetUserId || targetUserId === userId) return null;
-	// biome-ignore lint/suspicious/noExplicitAny: user_blocks RPCs not yet in auto-generated DB types
-	const { data, error } = await (supabase as any).rpc("is_blocked_between", {
+	const { data, error } = await supabase.rpc("is_blocked_between", {
 		user_a: userId,
 		user_b: targetUserId,
 	});
@@ -202,8 +201,7 @@ export async function blockUserAction(request: Request, supabase: SupabaseClient
 	if (!target) return fail(404, { message: "ユーザーが見つかりません" });
 
 	// フォロー・フォロー申請・未読通知の解除は 141 のトリガーが同じトランザクションで行う
-	// biome-ignore lint/suspicious/noExplicitAny: user_blocks not yet in auto-generated DB types
-	const { error } = await (supabase as any)
+	const { error } = await supabase
 		.from("user_blocks")
 		.upsert(
 			{ blocker_id: userId, blocked_id: targetId },
@@ -221,12 +219,7 @@ export async function unblockUserAction(request: Request, supabase: SupabaseClie
 	const targetId = (form.get("target_id") as string | null)?.trim() ?? "";
 	if (!targetId) return fail(400, { message: "ユーザーIDが不正です" });
 
-	// biome-ignore lint/suspicious/noExplicitAny: user_blocks not yet in auto-generated DB types
-	const { error } = await (supabase as any)
-		.from("user_blocks")
-		.delete()
-		.eq("blocker_id", userId)
-		.eq("blocked_id", targetId);
+	const { error } = await supabase.from("user_blocks").delete().eq("blocker_id", userId).eq("blocked_id", targetId);
 	if (error) {
 		console.error("unblockUserAction error:", error);
 		return fail(500, { message: "ブロック解除に失敗しました" });
@@ -1595,8 +1588,7 @@ export async function upsertAnimeMute(
 		muted_until: mutedUntil,
 		updated_at: new Date().toISOString(),
 	};
-	// biome-ignore lint/suspicious/noExplicitAny: anime_mutes not yet in auto-generated DB types
-	const { error } = await (supabase as any).from("anime_mutes").upsert(record, { onConflict: "user_id,anime_id" });
+	const { error } = await supabase.from("anime_mutes").upsert(record, { onConflict: "user_id,anime_id" });
 	if (error) {
 		console.error("anime mute upsert error:", error);
 		return fail(500, { message: "ミュート設定に失敗しました" });
@@ -1605,12 +1597,7 @@ export async function upsertAnimeMute(
 }
 
 export async function removeAnimeMute(supabase: SupabaseClient<Database>, userId: string, animeId: string) {
-	// biome-ignore lint/suspicious/noExplicitAny: anime_mutes not yet in auto-generated DB types
-	const { error } = await (supabase as any)
-		.from("anime_mutes")
-		.delete()
-		.eq("user_id", userId)
-		.eq("anime_id", Number(animeId));
+	const { error } = await supabase.from("anime_mutes").delete().eq("user_id", userId).eq("anime_id", Number(animeId));
 	if (error) return fail(500, { message: "ミュート解除に失敗しました" });
 	return { roomMuteSuccess: true };
 }
@@ -1682,15 +1669,13 @@ export async function toggleEventNotificationSubscription(
 	return { subscribed: true };
 }
 
-// linked_accounts は自動生成型未収録のためテーブル名のみ型アサーション使用
 export async function linkAccounts(
 	serviceClient: SupabaseClient<Database>,
 	userIdA: string,
 	userIdB: string,
 	displayOrderForA: number,
 ): Promise<{ error: string | null }> {
-	// biome-ignore lint/suspicious/noExplicitAny: linked_accounts not yet in auto-generated DB types
-	const { error } = await (serviceClient as SupabaseClient<any>).from("linked_accounts").upsert([
+	const { error } = await serviceClient.from("linked_accounts").upsert([
 		{ owner_user_id: userIdA, linked_user_id: userIdB, display_order: displayOrderForA },
 		{ owner_user_id: userIdB, linked_user_id: userIdA, display_order: 0 },
 	]);
@@ -1724,10 +1709,10 @@ export async function createInviteAction(request: Request, supabase: SupabaseCli
 		expiresAtIso = parsed.toISOString();
 	}
 
-	// biome-ignore lint/suspicious/noExplicitAny: invite RPCs not yet in auto-generated DB types
-	const { data, error } = await (supabase as any).rpc("create_invite", {
+	// 期限なしは引数を省略する（RPC 側の既定 NULL = 無期限）
+	const { data, error } = await supabase.rpc("create_invite", {
 		p_max_uses: maxUses,
-		p_expires_at: expiresAtIso,
+		...(expiresAtIso ? { p_expires_at: expiresAtIso } : {}),
 	});
 
 	if (error) {
@@ -1757,8 +1742,7 @@ export async function revokeInviteAction(request: Request, supabase: SupabaseCli
 	const inviteId = (form.get("invite_id") as string | null)?.trim() ?? "";
 	if (!inviteId) return fail(400, { inviteMessage: "招待IDが不正です" });
 
-	// biome-ignore lint/suspicious/noExplicitAny: invite RPCs not yet in auto-generated DB types
-	const { error } = await (supabase as any).rpc("revoke_invite", { p_invite_id: inviteId });
+	const { error } = await supabase.rpc("revoke_invite", { p_invite_id: inviteId });
 	if (error) {
 		console.error("revoke_invite error:", { userId, error });
 		// 42501 = RPC 側の権限チェック（発行者本人・管理者以外）による拒否

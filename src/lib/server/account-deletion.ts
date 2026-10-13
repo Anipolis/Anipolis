@@ -133,8 +133,7 @@ export async function deleteAccount(
 		return { ok: false, reason: "failed" };
 	}
 
-	// biome-ignore lint/suspicious/noExplicitAny: account_deletions not yet in auto-generated DB types
-	const { error: auditError } = await (admin as any).from("account_deletions").insert({
+	const { error: auditError } = await admin.from("account_deletions").insert({
 		moderation_status: (moderation?.status as string | undefined) ?? "active",
 		post_count: postCount ?? 0,
 		initiated_by: options.initiatedBy ?? "self",
