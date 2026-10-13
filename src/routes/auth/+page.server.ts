@@ -11,6 +11,7 @@ import {
 } from "$lib/server/invites";
 import { getExtraAccounts, setExtraAccounts } from "$lib/server/multi-account";
 import { isPasskeyEnabled } from "$lib/server/passkey";
+import { isUsernameAvailable } from "$lib/server/queries";
 import { getClientKey, isRateLimited } from "$lib/server/rate-limit";
 import { createServiceRoleClient } from "$lib/server/supabase-admin";
 import { sanitizeInternalRedirect } from "$lib/utils/url";
@@ -247,18 +248,13 @@ export const actions: Actions = {
 			}
 		}
 
-		const { data: existingProfile } = await supabase
-			.from("profiles")
-			.select("id")
-			.eq("username", username)
-			.maybeSingle();
-
-		if (existingProfile) {
+		// 使用中の名前に加えて、退会から30日以内の名前も使えない（#363）
+		if (!(await isUsernameAvailable(supabase, username))) {
 			return fail(400, {
 				mode: "register",
 				...values,
 				field: "username",
-				message: "このユーザー名はすでに使われています",
+				message: "このユーザー名は使えません（使用中か、退会から30日以内のユーザー名です）",
 			});
 		}
 
