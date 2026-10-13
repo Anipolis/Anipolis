@@ -16,7 +16,7 @@
 --   * 既存の列・関数・ビューは変えない（列の追加とトリガーの追加だけ）
 --
 -- 話数ルームを開くとき（opens_at）:
---   * 放送枠があれば、その話の放送枠のうち最も早い posting_opens_at
+--   * 放送枠があれば、その話の放送枠のうち最も早い posting_opens_at（延期で後ろへ動けば追随。開いた後は閉じない）
 --   * 放送枠のない過去作・配信作品は ensure_episode_room() が作品の情報から決める
 --   * opens_at が NULL または未来のルームには投稿できない（まだ放送していない話）
 
@@ -57,12 +57,21 @@ CREATE UNIQUE INDEX IF NOT EXISTS episode_rooms_special_unique
 
 ALTER TABLE public.episode_rooms ENABLE ROW LEVEL SECURITY;
 
--- 放送枠（broadcast_room_sessions）と同じく誰でも読める。書き込みは下の関数と service role だけ。
+-- 誰でも読めるが、管理者が非表示にした作品（069）のルームは管理者だけ。
+-- 書き込みは下の関数と service role だけ。
 DROP POLICY IF EXISTS "episode_rooms: visible to all" ON public.episode_rooms;
-CREATE POLICY "episode_rooms: visible to all"
+DROP POLICY IF EXISTS "episode_rooms: visible with their anime" ON public.episode_rooms;
+CREATE POLICY "episode_rooms: visible with their anime"
     ON public.episode_rooms
     FOR SELECT
-    USING (true);
+    USING (
+        EXISTS (
+            SELECT 1
+            FROM public.anime a
+            WHERE a.id = episode_rooms.anime_id
+              AND (NOT a.hidden_by_admin OR public.is_current_user_admin())
+        )
+    );
 
 COMMENT ON TABLE public.episode_rooms IS
     'Per-episode (and special) rooms. Posts go here; broadcast_room_sessions are airings within a room.';
@@ -96,11 +105,11 @@ CREATE INDEX IF NOT EXISTS posts_episode_room_created_idx
 -- ----------------------------------------------------------------
 -- 3) 放送枠 → 話数ルーム
 -- ----------------------------------------------------------------
--- 話数ルームを取得し、無ければ作る（内部用。資格の判定はしない）
+-- 話数ルームを取得し、無ければ作る（内部用。資格の判定はしない）。
+-- 開く時刻は放送枠の変更のたびに refresh_episode_room_opens_at() が計算し直す。
 CREATE OR REPLACE FUNCTION public.upsert_episode_room_for_airing(
     p_anime_id integer,
-    p_episode_number integer,
-    p_opens_at timestamptz
+    p_episode_number integer
 )
 RETURNS uuid
 LANGUAGE plpgsql
@@ -110,20 +119,64 @@ AS $$
 DECLARE
     room_id uuid;
 BEGIN
-    INSERT INTO public.episode_rooms (anime_id, kind, episode_number, opens_at)
-    VALUES (p_anime_id, 'episode', p_episode_number, p_opens_at)
-    ON CONFLICT (anime_id, episode_number) WHERE kind = 'episode'
-    DO UPDATE SET opens_at = CASE
-        WHEN episode_rooms.opens_at_locked THEN episode_rooms.opens_at
-        ELSE LEAST(COALESCE(episode_rooms.opens_at, EXCLUDED.opens_at), EXCLUDED.opens_at)
-    END
+    INSERT INTO public.episode_rooms (anime_id, kind, episode_number)
+    VALUES (p_anime_id, 'episode', p_episode_number)
+    ON CONFLICT (anime_id, episode_number) WHERE kind = 'episode' DO NOTHING
     RETURNING id INTO room_id;
+
+    IF room_id IS NULL THEN
+        SELECT id INTO room_id
+          FROM public.episode_rooms
+         WHERE anime_id = p_anime_id AND kind = 'episode' AND episode_number = p_episode_number;
+    END IF;
     RETURN room_id;
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.upsert_episode_room_for_airing(integer, integer, timestamptz) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.upsert_episode_room_for_airing(integer, integer, timestamptz) TO service_role;
+REVOKE ALL ON FUNCTION public.upsert_episode_room_for_airing(integer, integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.upsert_episode_room_for_airing(integer, integer) TO service_role;
+
+-- ルームの開く時刻を、いま属している放送枠から計算し直す。
+--   * まだ開いていないルームは、最も早い放送枠の開場時刻に合わせる（延期なら後ろへ動く）
+--   * もう開いたルームは閉じない（早まる場合だけ反映する）
+--   * 放送枠が一つも無くなったルームと、管理者が設定したルーム（opens_at_locked）は変えない
+CREATE OR REPLACE FUNCTION public.refresh_episode_room_opens_at(p_room_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    earliest timestamptz;
+BEGIN
+    IF p_room_id IS NULL THEN
+        RETURN;
+    END IF;
+
+    SELECT min(posting_opens_at) INTO earliest
+      FROM public.broadcast_room_sessions
+     WHERE episode_room_id = p_room_id;
+
+    IF earliest IS NULL THEN
+        RETURN;
+    END IF;
+
+    UPDATE public.episode_rooms
+       SET opens_at = CASE
+            WHEN opens_at IS NULL OR opens_at > now() THEN earliest
+            ELSE LEAST(opens_at, earliest)
+        END
+     WHERE id = p_room_id
+       AND NOT opens_at_locked
+       AND opens_at IS DISTINCT FROM CASE
+            WHEN opens_at IS NULL OR opens_at > now() THEN earliest
+            ELSE LEAST(opens_at, earliest)
+        END;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.refresh_episode_room_opens_at(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.refresh_episode_room_opens_at(uuid) TO service_role;
 
 -- 話数のある放送枠に、話数ルームを割り当てる。話数の訂正（131）で話数が変われば付け替える
 CREATE OR REPLACE FUNCTION public.assign_broadcast_room_session_episode_room()
@@ -134,11 +187,10 @@ SET search_path = public
 AS $$
 BEGIN
     IF NEW.room_kind = 'episode' AND NEW.episode_number IS NOT NULL THEN
-        NEW.episode_room_id := public.upsert_episode_room_for_airing(
-            NEW.anime_id, NEW.episode_number, NEW.posting_opens_at
-        );
-    ELSIF TG_OP = 'INSERT' OR NEW.episode_number IS DISTINCT FROM OLD.episode_number THEN
-        -- 話数が外れた放送枠はルームから外す（投稿は放送日の URL から引き続き見られる）
+        NEW.episode_room_id := public.upsert_episode_room_for_airing(NEW.anime_id, NEW.episode_number);
+    ELSE
+        -- 話数が外れた放送枠・話数の放送枠でなくなったもの（ロビーへの変更など）はルームから外す
+        -- （投稿は放送日の URL から引き続き見られる）
         NEW.episode_room_id := NULL;
     END IF;
     RETURN NEW;
@@ -151,6 +203,35 @@ CREATE TRIGGER broadcast_room_sessions_assign_episode_room
     ON public.broadcast_room_sessions
     FOR EACH ROW
     EXECUTE FUNCTION public.assign_broadcast_room_session_episode_room();
+
+-- 放送枠の追加・変更・削除のたびに、関係するルームの開く時刻を計算し直す
+CREATE OR REPLACE FUNCTION public.refresh_episode_room_opens_for_session()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    old_room_id uuid;
+BEGIN
+    -- plpgsql の IF は条件の中の CASE ... THEN を区切りと読み違えるので、先に変数へ取り出す
+    IF TG_OP IN ('UPDATE', 'DELETE') THEN
+        old_room_id := OLD.episode_room_id;
+        PERFORM public.refresh_episode_room_opens_at(old_room_id);
+    END IF;
+    IF TG_OP IN ('INSERT', 'UPDATE') AND NEW.episode_room_id IS DISTINCT FROM old_room_id THEN
+        PERFORM public.refresh_episode_room_opens_at(NEW.episode_room_id);
+    END IF;
+    RETURN NULL;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS broadcast_room_sessions_refresh_room_opens ON public.broadcast_room_sessions;
+CREATE TRIGGER broadcast_room_sessions_refresh_room_opens
+    AFTER INSERT OR UPDATE OF episode_room_id, posting_opens_at, episode_number, room_kind, anime_id OR DELETE
+    ON public.broadcast_room_sessions
+    FOR EACH ROW
+    EXECUTE FUNCTION public.refresh_episode_room_opens_for_session();
 
 -- 放送枠のルームが変わったら、その放送枠の時間内の投稿も一緒に移す
 CREATE OR REPLACE FUNCTION public.move_broadcast_room_session_posts()
@@ -199,7 +280,9 @@ BEGIN
 
         IF NEW.episode_room_id IS NULL THEN
             NEW.episode_room_id := session_room_id;
-        ELSIF session_room_id IS NOT NULL AND NEW.episode_room_id <> session_room_id THEN
+        ELSIF NEW.episode_room_id IS DISTINCT FROM session_room_id THEN
+            -- 話数ルームの無い放送枠（総合ロビーなど）に話数ルームを併記した投稿も拒否する
+            -- （併記した話数ルームの開場・統合・作品の検査を素通りさせない）
             RAISE EXCEPTION 'Post room does not match its broadcast room session'
                 USING ERRCODE = 'check_violation';
         END IF;
@@ -287,6 +370,7 @@ BEGIN
 
     SELECT * INTO target_anime FROM public.anime WHERE id = p_anime_id;
     IF NOT FOUND
+       OR (target_anime.hidden_by_admin AND NOT public.is_current_user_admin())
        OR target_anime.room_type = 'global'
        OR NOT (
            target_anime.type = 'TV'

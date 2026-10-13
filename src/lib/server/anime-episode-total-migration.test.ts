@@ -13,7 +13,9 @@ describe("anime episode_total migration (152, #354)", () => {
 		expect(migration).toMatch(
 			/CREATE TRIGGER sync_anime_episode_total\s+BEFORE INSERT OR UPDATE OF episode_count, episode_total ON public\.anime/,
 		);
-		expect(migration).toContain("WHEN NEW.episode_count ~ '^[1-9][0-9]*$' THEN NEW.episode_count::integer");
+		// integer に収まる9桁までだけを変換する（桁数の制限が無い044の値で変換が失敗しないように）
+		expect(migration).toContain("WHEN NEW.episode_count ~ '^[1-9][0-9]{0,8}$' THEN NEW.episode_count::integer");
+		expect(migration).not.toMatch(/\[0-9\]\*\$'/);
 	});
 
 	it("今の本番アプリと互換にする（episode_count の型とビューには触れない）", () => {
