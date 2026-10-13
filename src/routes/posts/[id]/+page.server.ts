@@ -1,4 +1,5 @@
 ﻿import { error, fail } from "@sveltejs/kit";
+import { postImageMediaUrl } from "$lib/post-image-url";
 import {
 	deletePostAction,
 	insertPostWithHashtags,
@@ -13,7 +14,7 @@ import type { Actions, PageServerLoad } from "./$types";
 
 const POSTS_SELECT = buildPostCardSelect();
 
-export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
+export const load: PageServerLoad = async ({ params, url, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 
 	const { data: rawPost } = await supabase.from("posts").select(POSTS_SELECT).eq("id", params.id).maybeSingle();
@@ -62,7 +63,10 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 		currentUserId: user?.id ?? null,
 		trending: trendingResult.data ?? [],
 		animeTrending,
-		post: { content: post.content, image_urls: post.image_urls },
+		post: { content: post.content },
+		// SNS のカード（OGP）は後から画像を取り直すことがあるので、期限付き URL ではなく
+		// 閲覧権限を確かめて転送する固定リンクを出す（#316）
+		ogImageUrl: post.image_urls?.[0] ? new URL(postImageMediaUrl(post.image_urls[0]), url.origin).href : null,
 	};
 };
 
