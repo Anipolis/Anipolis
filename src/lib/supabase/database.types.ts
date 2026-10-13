@@ -1336,11 +1336,14 @@ export type Database = {
 			};
 			broadcast_room_sessions: {
 				Row: {
+					airing_kind: string;
 					anime_id: number;
 					created_at: string;
 					duration_minutes: number;
 					episode_number: number | null;
+					episode_room_id: string | null;
 					episode_title: string | null;
+					event_id: string | null;
 					id: string;
 					posting_closes_at: string;
 					posting_opens_at: string;
@@ -1358,11 +1361,14 @@ export type Database = {
 					source_title_id: number | null;
 				};
 				Insert: {
+					airing_kind?: string;
 					anime_id: number;
 					created_at?: string;
 					duration_minutes: number;
 					episode_number?: number | null;
+					episode_room_id?: string | null;
 					episode_title?: string | null;
+					event_id?: string | null;
 					id?: string;
 					posting_closes_at: string;
 					posting_opens_at: string;
@@ -1380,11 +1386,14 @@ export type Database = {
 					source_title_id?: number | null;
 				};
 				Update: {
+					airing_kind?: string;
 					anime_id?: number;
 					created_at?: string;
 					duration_minutes?: number;
 					episode_number?: number | null;
+					episode_room_id?: string | null;
 					episode_title?: string | null;
+					event_id?: string | null;
 					id?: string;
 					posting_closes_at?: string;
 					posting_opens_at?: string;
@@ -1513,6 +1522,45 @@ export type Database = {
 						referencedColumns: ["id"];
 					},
 				];
+			};
+			episode_rooms: {
+				Row: {
+					anime_id: number;
+					created_at: string;
+					episode_number: number | null;
+					id: string;
+					kind: string;
+					label: string | null;
+					merged_into: string | null;
+					opens_at: string | null;
+					opens_at_locked: boolean;
+					special_key: string | null;
+				};
+				Insert: {
+					anime_id: number;
+					created_at?: string;
+					episode_number?: number | null;
+					id?: string;
+					kind: string;
+					label?: string | null;
+					merged_into?: string | null;
+					opens_at?: string | null;
+					opens_at_locked?: boolean;
+					special_key?: string | null;
+				};
+				Update: {
+					anime_id?: number;
+					created_at?: string;
+					episode_number?: number | null;
+					id?: string;
+					kind?: string;
+					label?: string | null;
+					merged_into?: string | null;
+					opens_at?: string | null;
+					opens_at_locked?: boolean;
+					special_key?: string | null;
+				};
+				Relationships: [];
 			};
 			events: {
 				Row: {
@@ -2202,6 +2250,7 @@ export type Database = {
 					content: string;
 					created_at: string;
 					cw_anime_id: number | null;
+					episode_room_id: string | null;
 					event_id: string | null;
 					exchange_share: Json | null;
 					hidden_by_admin: boolean;
@@ -2217,6 +2266,7 @@ export type Database = {
 					content: string;
 					created_at?: string;
 					cw_anime_id?: number | null;
+					episode_room_id?: string | null;
 					event_id?: string | null;
 					exchange_share?: Json | null;
 					hidden_by_admin?: boolean;
@@ -2232,6 +2282,7 @@ export type Database = {
 					content?: string;
 					created_at?: string;
 					cw_anime_id?: number | null;
+					episode_room_id?: string | null;
 					event_id?: string | null;
 					exchange_share?: Json | null;
 					hidden_by_admin?: boolean;
@@ -3751,6 +3802,10 @@ export type Database = {
 					name: string;
 					post_count: number;
 				}[];
+			};
+			ensure_episode_room: {
+				Args: { p_anime_id: number; p_episode_number: number };
+				Returns: string;
 			};
 			has_beta_write_access: { Args: never; Returns: boolean };
 			is_blocked_between: {
