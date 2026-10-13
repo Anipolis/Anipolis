@@ -48,6 +48,10 @@ export type RoomConnectionPhase =
 export const ROOM_LIVE_POLL_INTERVAL_MS = 15_000;
 /** 差分APIの1回あたりのタイムアウト(ms)。ハングした fetch がポーリングを塞がないようにする */
 export const ROOM_LIVE_FETCH_TIMEOUT_MS = 10_000;
+/** 新着の取得で、続きがあるときに続けて取る最大ページ数(1ページ100件)。復帰直後の大量の未受信を取り切る */
+export const ROOM_LIVE_MAX_PAGES = 10;
+/** 表示中の投稿の状態(閲覧できるか・返信数)を確かめ直す件数の上限。新しい側から確かめる */
+export const ROOM_STATE_MAX_IDS = 400;
 /** 最終更新からこの時間を超えて成功がなければ「停止」とみなす(ポーリング3回分) */
 export const ROOM_LIVE_STALE_AFTER_MS = ROOM_LIVE_POLL_INTERVAL_MS * 3;
 

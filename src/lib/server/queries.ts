@@ -909,6 +909,103 @@ export async function getEventRoomPosts(
 	});
 }
 
+/** ルームの種類と ID（放送ルームはセッション ID、イベントルームはイベント ID） */
+export type RoomRef = { kind: "broadcast" | "event"; id: string };
+
+/** 取得済みの境界（created_at と id）より後ろだけに絞る。同じ created_at の投稿を落とさないよう id でも比べる */
+function afterCursorFilter(cursor: TimelineCursor): string {
+	return `created_at.gt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.gt.${cursor.id})`;
+}
+
+/**
+ * ルームの新着を、取得済みの境界（cursor）より後ろから古い順に limit 件取る（#320）。
+ *
+ * 以前は「since より新しいものを新しい順に100件」取っていたため、未受信が100件を超えると古い側を
+ * 取りこぼし、同じ created_at の投稿も落としていた。古い順に取り、hasMore の間はページを追う。
+ * nextCursor は表示前（ミュート・ブロックの除外前）の取得行で決めるので、除外があっても進める。
+ */
+export async function getRoomPostsAfter(
+	supabase: SupabaseClient<Database>,
+	room: RoomRef,
+	userId: string | null,
+	cursor: TimelineCursor | null,
+	limit = 100,
+): Promise<{ posts: Post[]; nextCursor: TimelineCursor | null; hasMore: boolean } | null> {
+	let query = supabase.from("posts").select(POST_LIST_SELECT).is("parent_id", null);
+	query = room.kind === "event" ? query.eq("event_id", room.id) : query.eq("broadcast_room_session_id", room.id);
+	if (cursor) query = query.or(afterCursorFilter(cursor));
+	const { data, error } = await query
+		.order("created_at", { ascending: true })
+		.order("id", { ascending: true })
+		.limit(limit);
+	if (error) {
+		console.error("getRoomPostsAfter error:", error);
+		return null;
+	}
+	const rawPosts = (data ?? []) as unknown as RawPost[];
+	const last = rawPosts[rawPosts.length - 1];
+	// ルーム内ではそのルームのミュートを適用しない（明示的に入室しているため）
+	const posts = await enrichPostsWithCounts(supabase, rawPosts, userId, { includeMutedRoomPosts: true });
+	return {
+		posts,
+		nextCursor: last ? { createdAt: last.created_at, id: last.id } : cursor,
+		hasMore: rawPosts.length === limit,
+	};
+}
+
+/** get_post_counts（121）に一度に渡せる投稿 ID の上限 */
+const POST_COUNTS_MAX_IDS = 200;
+
+/**
+ * 表示中の投稿のうち、今も閲覧できるものの返信数を返す（#324）。
+ * get_post_counts は呼び出し元が閲覧できる投稿の行だけを返すので、削除・管理者非表示・
+ * ブロックで見えなくなった投稿は結果に含まれない。失敗したら null。
+ */
+export async function getVisiblePostReplyCounts(
+	supabase: SupabaseClient<Database>,
+	postIds: string[],
+): Promise<Map<string, number> | null> {
+	const ids = [...new Set(postIds)];
+	const counts = new Map<string, number>();
+	for (let start = 0; start < ids.length; start += POST_COUNTS_MAX_IDS) {
+		const { data, error } = await supabase.rpc("get_post_counts", {
+			p_post_ids: ids.slice(start, start + POST_COUNTS_MAX_IDS),
+		});
+		if (error) {
+			console.error("getVisiblePostReplyCounts error:", error);
+			return null;
+		}
+		for (const row of data ?? []) counts.set(row.post_id, Number(row.reply_count ?? 0));
+	}
+	return counts;
+}
+
+/**
+ * 返信を古い順に、取得済みの境界（cursor）より後ろから limit 件取る（#325）。
+ * 以前は古い100件で打ち切って全件取得済み扱いにしていた。hasMore の間は続きを取れる。
+ */
+export async function getPostRepliesAfter(
+	supabase: SupabaseClient<Database>,
+	parentId: string,
+	cursor: TimelineCursor | null,
+	limit: number,
+): Promise<{ rows: RawPost[]; nextCursor: TimelineCursor | null; hasMore: boolean }> {
+	let query = supabase.from("posts").select(POST_LIST_SELECT).eq("parent_id", parentId);
+	if (cursor) query = query.or(afterCursorFilter(cursor));
+	const { data, error } = await query
+		.order("created_at", { ascending: true })
+		.order("id", { ascending: true })
+		.limit(limit);
+	if (error) throw error;
+	const rows = (data ?? []) as unknown as RawPost[];
+	const last = rows[rows.length - 1];
+	return {
+		rows,
+		nextCursor: last ? { createdAt: last.created_at, id: last.id } : cursor,
+		hasMore: rows.length === limit,
+	};
+}
+
 export async function getPostReplies(
 	supabase: SupabaseClient<Database>,
 	parentId: string,
