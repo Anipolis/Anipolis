@@ -11,7 +11,9 @@
 --   * 新しいコード（話数ルームなど）は episode_total を使う
 --   * 書き込み側を episode_total に移し終えたら、episode_count とこのトリガーを外し、
 --     ビューを作り直す（別 migration）
---   * 044 の CHECK で episode_count は NULL・空文字・正の整数のどれかなので、整数への変換は失敗しない
+--   * 044 の CHECK で episode_count は NULL・空文字・正の整数のどれか。ただし桁数の制限が無いので、
+--     integer に収まる9桁まで（999,999,999）だけを変換し、それより大きい値は NULL にする（変換の失敗で
+--     migration や書き込みが止まらないように）
 
 ALTER TABLE public.anime
     ADD COLUMN IF NOT EXISTS episode_total integer
@@ -27,7 +29,7 @@ SET search_path = public
 AS $$
 BEGIN
     NEW.episode_total := CASE
-        WHEN NEW.episode_count ~ '^[1-9][0-9]*$' THEN NEW.episode_count::integer
+        WHEN NEW.episode_count ~ '^[1-9][0-9]{0,8}$' THEN NEW.episode_count::integer
         ELSE NULL
     END;
     RETURN NEW;
@@ -43,10 +45,10 @@ CREATE TRIGGER sync_anime_episode_total
 -- 既存の行を埋める（トリガーは UPDATE OF episode_count で動かさず、直接計算する）
 UPDATE public.anime
    SET episode_total = CASE
-        WHEN episode_count ~ '^[1-9][0-9]*$' THEN episode_count::integer
+        WHEN episode_count ~ '^[1-9][0-9]{0,8}$' THEN episode_count::integer
         ELSE NULL
     END
  WHERE episode_total IS DISTINCT FROM CASE
-        WHEN episode_count ~ '^[1-9][0-9]*$' THEN episode_count::integer
+        WHEN episode_count ~ '^[1-9][0-9]{0,8}$' THEN episode_count::integer
         ELSE NULL
     END;
