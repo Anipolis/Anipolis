@@ -6,26 +6,47 @@ const migration = readFileSync(
 	new URL("../../../supabase/migrations/147_post_rate_limit.sql", import.meta.url),
 	"utf8",
 );
+const fn = migration.slice(
+	migration.indexOf("CREATE OR REPLACE FUNCTION public.enforce_post_rate_limit()"),
+	migration.indexOf("$$;", migration.indexOf("CREATE OR REPLACE FUNCTION public.enforce_post_rate_limit()")),
+);
 
 describe("post rate limit migration (147, #321)", () => {
-	it("投稿の INSERT 直前に、同じユーザーの直近60秒の投稿数で止める", () => {
+	it("投稿の INSERT 直前に、利用者ごとのカウンターで作成回数を数えて止める", () => {
 		expect(migration).toMatch(
 			/CREATE TRIGGER enforce_post_rate_limit\s+BEFORE INSERT ON public\.posts\s+FOR EACH ROW/,
 		);
-		expect(migration).toMatch(/p\.user_id = NEW\.user_id\s+AND p\.created_at > now\(\) - interval '60 seconds'/);
-		expect(migration).toMatch(/IF recent_count >= 20 THEN/);
-	});
-
-	it("アプリが判別する SQLSTATE（PostgREST が 429 にする PT429）で止める", () => {
-		expect(migration).toContain(`ERRCODE = '${POST_RATE_LIMIT_ERROR_CODE}'`);
+		expect(fn).toMatch(/IF current_count > 20 THEN/);
+		expect(fn).toContain(`ERRCODE = '${POST_RATE_LIMIT_ERROR_CODE}'`);
 		expect(POST_RATE_LIMIT_ERROR_CODE).toBe("PT429");
 	});
 
-	it("本人の INSERT だけを数え、非表示の自分の投稿も含めて数える", () => {
-		expect(migration).toMatch(
+	it("利用者が操作できる投稿の行（created_at の指定・削除）を数の根拠にしない", () => {
+		expect(fn).not.toMatch(/FROM public\.posts/);
+		expect(fn).not.toMatch(/NEW\.created_at/);
+		// 区切りは DB の時刻で決める
+		expect(fn).toMatch(/VALUES \(NEW\.user_id, now\(\), 1\)/);
+		expect(fn).toMatch(/r\.window_started_at <= now\(\) - interval '60 seconds'/);
+	});
+
+	it("同時の投稿で上限を越えないよう、1文の INSERT ... ON CONFLICT DO UPDATE で原子的に増やす", () => {
+		expect(fn).toMatch(
+			/INSERT INTO public\.post_rate_limits AS r[\s\S]*?ON CONFLICT \(user_id\) DO UPDATE[\s\S]*?RETURNING r\.post_count INTO current_count/,
+		);
+		expect(migration).toMatch(/user_id uuid PRIMARY KEY REFERENCES auth\.users\(id\) ON DELETE CASCADE/);
+	});
+
+	it("カウンター表は利用者から読めず変更もできない（トリガーだけが書く）", () => {
+		expect(migration).toContain("ALTER TABLE public.post_rate_limits ENABLE ROW LEVEL SECURITY");
+		expect(migration).toContain("REVOKE ALL ON public.post_rate_limits FROM anon, authenticated");
+		expect(migration).not.toMatch(/CREATE POLICY[\s\S]*?post_rate_limits/);
+		expect(fn).toMatch(/SECURITY DEFINER\s+SET search_path = public/);
+	});
+
+	it("本人の INSERT だけを数える（service role の取り込み等は対象外）", () => {
+		expect(fn).toMatch(
 			/IF auth\.uid\(\) IS NULL OR NEW\.user_id IS DISTINCT FROM auth\.uid\(\) THEN\s+RETURN NEW;/,
 		);
-		expect(migration).toMatch(/SECURITY DEFINER\s+SET search_path = public/);
 	});
 
 	it("CLI push 運用に反する CONCURRENTLY を含めない", () => {
