@@ -29,6 +29,10 @@ let repliesError = $state("");
 let replyCursor: RoomPostCursor | null = null;
 // 続きが無いところまで取り切ったときの返信数。これより増えたら（新しい返信が付いたら）また取れる
 let exhaustedAtReplyCount = $state<number | null>(null);
+// 最後に返信を取り込んだ時点の返信数。展開中にこれより増えたら、新しい返信を取り足す（#324）
+let syncedReplyCount = $state(0);
+// 新しい返信の取り足し中。一覧は出したまま裏で取るので、repliesLoading とは分ける
+let refreshingReplies = false;
 const remainingReplyCount = $derived(Math.max(post.reply_count - replies.length, 0));
 // ミュート等で除外された返信があると件数が合わないので、取り切った後は返信数が増えたときだけ出す
 const canLoadMoreReplies = $derived(
@@ -48,6 +52,7 @@ async function loadRecentReplies() {
 	if (repliesLoaded || post.reply_count <= 0 || repliesLoading) return;
 	repliesLoading = true;
 	repliesError = "";
+	const countAtRequest = post.reply_count;
 	try {
 		const params = new URLSearchParams({ mode: "recent", limit: "3" });
 		const response = await fetch(`/api/posts/${encodeURIComponent(post.id)}/replies?${params}`);
@@ -58,6 +63,7 @@ async function loadRecentReplies() {
 		}
 		replies = mergeReplies(replies, body.replies ?? []);
 		repliesLoaded = true;
+		syncedReplyCount = countAtRequest;
 	} catch {
 		repliesError = "返信を読み込めませんでした";
 	} finally {
@@ -65,11 +71,39 @@ async function loadRecentReplies() {
 	}
 }
 
-// 展開中に返信が付いたら（ルームの再確認で返信数が 0 から増えたら）読み込む（#324）
-$effect(() => {
-	if (expanded && !repliesLoaded && !repliesLoading && !repliesError && post.reply_count > 0) {
-		void loadRecentReplies();
+/**
+ * 取り込んだ後に付いた返信を取り足す（#324）。新しい返信は最新側に付くので、増えた件数ぶんの
+ * 最新の返信を取り、取得済みの一覧と ID でまとめる（「さらに表示する」の境界には影響しない）。
+ * 100件を超えて増えた分は「さらに表示する」で取れる。
+ */
+async function loadNewReplies() {
+	const added = post.reply_count - syncedReplyCount;
+	if (refreshingReplies || added <= 0) return;
+	refreshingReplies = true;
+	const countAtRequest = post.reply_count;
+	try {
+		const params = new URLSearchParams({ mode: "recent", limit: String(Math.min(added, 100)) });
+		const response = await fetch(`/api/posts/${encodeURIComponent(post.id)}/replies?${params}`);
+		if (!response.ok) return;
+		const body = (await response.json().catch(() => ({}))) as { replies?: Post[] };
+		replies = mergeReplies(replies, body.replies ?? []);
+		syncedReplyCount = countAtRequest;
+	} catch {
+		// 次に返信数が変わったとき、または「さらに表示する」で取り直せる
+	} finally {
+		refreshingReplies = false;
 	}
+}
+
+// 展開中に返信が付いたら（ルームの再確認で返信数が増えたら）読み込む（#324）。
+// 未取得なら最新の返信を、取得済みなら増えた分だけを取り足す
+$effect(() => {
+	if (!expanded || repliesLoading || repliesError || post.reply_count <= 0) return;
+	if (!repliesLoaded) {
+		void loadRecentReplies();
+		return;
+	}
+	if (post.reply_count > syncedReplyCount) void loadNewReplies();
 });
 
 /** 返信を古い順に1ページ取る。失敗したら null（メッセージは repliesError に入れる） */
@@ -108,11 +142,13 @@ async function loadMoreReplies(event: MouseEvent) {
 	if (repliesLoading) return;
 	repliesLoading = true;
 	repliesError = "";
+	const countAtRequest = post.reply_count;
 	try {
 		const result = await fetchRoomPostPages(fetchReplyPage, replyCursor, MAX_REPLY_PAGES);
 		replyCursor = result.cursor;
 		replies = mergeReplies(replies, result.posts);
 		repliesLoaded = true;
+		if (result.ok) syncedReplyCount = Math.max(syncedReplyCount, countAtRequest);
 		if (result.ok && !result.hasMore) exhaustedAtReplyCount = post.reply_count;
 	} finally {
 		repliesLoading = false;

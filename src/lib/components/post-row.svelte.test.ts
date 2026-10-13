@@ -254,6 +254,37 @@ describe("実況ルームの返信の続き（#325）", () => {
 		};
 	}
 
+	it("展開して返信を読み込んだ後に返信が付いたら、増えた分を一覧に取り足す（#324）", async () => {
+		const all = [reply(0), reply(1)];
+		let available = 1;
+		const fetchMock = vi.fn(async (input: string) => {
+			const url = new URL(input, "http://localhost");
+			const limit = Number(url.searchParams.get("limit") ?? "3");
+			// mode=recent は公開済みの返信のうち新しい limit 件を古い順に返す
+			return Response.json({ replies: all.slice(0, available).slice(-limit) });
+		});
+		vi.stubGlobal("fetch", fetchMock);
+
+		const props = $state({ post: { ...fixturePost(18), reply_count: 1 }, currentUserId: "preview-user-0" });
+		const target = document.body.appendChild(document.createElement("div"));
+		const component = mount(LiveRoomPostCard, { target, props });
+		cleanup.push(() => unmount(component));
+		await tick();
+		target.querySelector<HTMLButtonElement>('[aria-label="投稿の返信を表示"]')?.click();
+		await vi.waitFor(() => expect(target.querySelectorAll(".live-reply")).toHaveLength(1));
+
+		// ルームの再確認で返信数だけが 2 に更新される
+		available = 2;
+		props.post = { ...props.post, reply_count: 2 };
+		await vi.waitFor(() => expect(target.querySelectorAll(".live-reply")).toHaveLength(2));
+		expect(target.querySelector(".live-reply:last-of-type")?.textContent).toContain("返信1");
+		// 増えた1件だけを取り足し、一覧を出したまま更新する（読み込み中の表示に戻さない）
+		const lastUrl = new URL(String(fetchMock.mock.calls.at(-1)?.[0]), "http://localhost");
+		expect(lastUrl.searchParams.get("mode")).toBe("recent");
+		expect(lastUrl.searchParams.get("limit")).toBe("1");
+		expect(target.querySelector(".live-more-replies")).toBeNull();
+	});
+
 	it("101件目以降も「さらに表示する」で辿れ、最新の返信を失わない", async () => {
 		const all = Array.from({ length: 150 }, (_, i) => reply(i));
 		const fetchMock = vi.fn(async (input: string) => {
