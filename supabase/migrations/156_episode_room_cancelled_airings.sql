@@ -7,8 +7,8 @@
 --   * 開く時刻は休止していない放送枠から計算する。全部休止なら、まだ開いていないルームは未定に戻す
 --     （開いたルームは閉じない・管理者が設定した開く時刻は変えない、は 153 と同じ）
 --   * 休止の登録・変更・削除のたびに、その日の放送枠のルームの開く時刻を計算し直す
---   * ensure_episode_room() の「放送済みの最大話数」からも休止した放送枠を除く
---   * 話数は URL と同じく 9999 までにする（作品ページの一覧を際限なく作らないように）
+--   * ensure_episode_room() の「放送済みの最大話数」からも、投稿に放送枠を補うときも、休止した放送枠を除く
+--   * 話数は URL と同じく 9999 までにする（放送枠からルームを作るときも。作品ページの一覧を際限なく作らないように）
 
 -- 放送日が休止になっているか
 CREATE OR REPLACE FUNCTION public.is_broadcast_room_session_cancelled(p_anime_id integer, p_room_date date)
@@ -194,6 +194,94 @@ $$;
 
 REVOKE ALL ON FUNCTION public.ensure_episode_room(integer, integer) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.ensure_episode_room(integer, integer) TO authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION public.assign_broadcast_room_session_episode_room()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+    -- 話数は URL と同じく 9999 まで（156）。それより大きい話数は誤ったデータとしてルームを作らない
+    IF NEW.room_kind = 'episode' AND NEW.episode_number IS NOT NULL AND NEW.episode_number <= 9999 THEN
+        NEW.episode_room_id := public.upsert_episode_room_for_airing(NEW.anime_id, NEW.episode_number);
+    ELSE
+        -- 話数が外れた放送枠・話数の放送枠でなくなったもの（ロビーへの変更など）はルームから外す
+        -- （投稿は放送日の URL から引き続き見られる）
+        NEW.episode_room_id := NULL;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.assign_post_episode_room()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    session_room_id uuid;
+    target_room public.episode_rooms%ROWTYPE;
+    live_session_id uuid;
+BEGIN
+    -- 放送枠を指定した投稿（今のアプリ）: 放送枠の話数ルームを補う
+    IF NEW.broadcast_room_session_id IS NOT NULL THEN
+        SELECT episode_room_id INTO session_room_id
+          FROM public.broadcast_room_sessions
+         WHERE id = NEW.broadcast_room_session_id;
+
+        IF NEW.episode_room_id IS NULL THEN
+            NEW.episode_room_id := session_room_id;
+        ELSIF NEW.episode_room_id IS DISTINCT FROM session_room_id THEN
+            -- 話数ルームの無い放送枠（総合ロビーなど）に話数ルームを併記した投稿も拒否する
+            -- （併記した話数ルームの開場・統合・作品の検査を素通りさせない）
+            RAISE EXCEPTION 'Post room does not match its broadcast room session'
+                USING ERRCODE = 'check_violation';
+        END IF;
+        RETURN NEW;
+    END IF;
+
+    IF NEW.episode_room_id IS NULL THEN
+        RETURN NEW;
+    END IF;
+
+    -- 話数ルームを直接指定した投稿（新しいアプリ）
+    SELECT * INTO target_room FROM public.episode_rooms WHERE id = NEW.episode_room_id;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Invalid episode room for post' USING ERRCODE = 'check_violation';
+    END IF;
+
+    IF NEW.anime_id IS NULL THEN
+        NEW.anime_id := target_room.anime_id;
+    ELSIF NEW.anime_id <> target_room.anime_id THEN
+        RAISE EXCEPTION 'Invalid episode room for post' USING ERRCODE = 'check_violation';
+    END IF;
+
+    -- 新しい投稿だけ、ルームが開いているかを確かめる（管理者の付け替えなどの UPDATE は対象外）
+    IF TG_OP = 'INSERT' THEN
+        IF target_room.merged_into IS NOT NULL
+           OR target_room.opens_at IS NULL
+           OR target_room.opens_at > clock_timestamp() THEN
+            RAISE EXCEPTION 'Episode room is not accepting posts' USING ERRCODE = 'check_violation';
+        END IF;
+
+        -- 放送枠の時間内なら、その放送枠の投稿としても記録する（画面の見出し・話数の訂正で使う）
+        SELECT id INTO live_session_id
+          FROM public.broadcast_room_sessions
+         WHERE episode_room_id = NEW.episode_room_id
+           AND posting_opens_at <= clock_timestamp()
+           AND posting_closes_at >= clock_timestamp()
+           -- 休止した放送枠には付けない（156。日付のルームは休止日を 404 にするため）
+           AND NOT public.is_broadcast_room_session_cancelled(anime_id, room_date)
+         ORDER BY posting_opens_at DESC
+         LIMIT 1;
+        NEW.broadcast_room_session_id := live_session_id;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
 
 -- 既存の休止日の放送枠を持つルームの開く時刻を計算し直す
 SELECT public.refresh_episode_room_opens_at(room_id)

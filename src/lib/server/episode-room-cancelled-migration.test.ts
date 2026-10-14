@@ -33,4 +33,15 @@ describe("episode room cancelled airings migration (156, #387 Codex)", () => {
 	it("CLI push 運用に反する CONCURRENTLY を含めない", () => {
 		expect(migration).not.toMatch(/CONCURRENTLY/i);
 	});
+
+	it("投稿に放送枠を補うときも休止した放送枠を除き、放送枠からルームを作るのも 9999 話まで", () => {
+		const post = migration.slice(migration.indexOf("CREATE OR REPLACE FUNCTION public.assign_post_episode_room()"));
+		expect(post.slice(0, post.indexOf("$$;"))).toContain(
+			"AND NOT public.is_broadcast_room_session_cancelled(anime_id, room_date)",
+		);
+		const session = migration.slice(
+			migration.indexOf("CREATE OR REPLACE FUNCTION public.assign_broadcast_room_session_episode_room()"),
+		);
+		expect(session.slice(0, session.indexOf("$$;"))).toContain("AND NEW.episode_number <= 9999");
+	});
 });

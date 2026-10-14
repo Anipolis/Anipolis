@@ -729,18 +729,21 @@ async function scrollToAiring(airing: RoomAiring | null) {
 // 読み込んだ分より前にも投稿があるか（話数ルームで最新や放送枠の途中から読み始めたとき）
 // ルームごとに再マウントされるので、最初の値だけを使う
 let hasOlderPosts = $state(untrack(() => data.room.has_older_posts ?? false));
+// 前へ読み足す境界。ミュート・ブロックで全部除外されたページでも先へ進めるよう、表示中の投稿ではなく取得した行で進める
+let olderCursor: RoomPostCursor | null = untrack(() => data.room.older_cursor ?? null);
 let loadingOlder = $state(false);
 
 /** 古い側を1ページ読み足す。時系列順で見ているときは表示位置がずれないよう高さの差だけ戻す */
 async function loadOlderPosts(): Promise<boolean> {
 	const first = allPosts[0];
-	if (loadingOlder || !hasOlderPosts || !first) return false;
+	const cursor = olderCursor ?? (first ? { createdAt: first.created_at, id: first.id } : null);
+	if (loadingOlder || !hasOlderPosts || !cursor) return false;
 	loadingOlder = true;
 	try {
 		const params = new URLSearchParams({
 			[liveDiffQueryParam()]: data.room.session_id,
-			before_created_at: first.created_at,
-			before_id: first.id,
+			before_created_at: cursor.createdAt,
+			before_id: cursor.id,
 		});
 		const res = await fetch(`/api/rooms/posts?${params}`, {
 			signal: AbortSignal.timeout(ROOM_LIVE_FETCH_TIMEOUT_MS),
@@ -754,6 +757,7 @@ async function loadOlderPosts(): Promise<boolean> {
 		const heightBefore = postListEl?.scrollHeight ?? 0;
 		extraPosts = [...older, ...extraPosts];
 		hasOlderPosts = page.hasMore;
+		olderCursor = page.nextCursor ?? olderCursor;
 		if (postOrder === "oldest" && postListEl) {
 			await tick();
 			postListEl.scrollTop += postListEl.scrollHeight - heightBefore;

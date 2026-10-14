@@ -1052,11 +1052,13 @@ export async function getEpisodeRoomAirings(supabase: SupabaseClient<Database>, 
 		console.error("getEpisodeRoomAirings error:", error);
 		return [];
 	}
-	// 休止した放送日の枠は見出し・放送中の判定に使わない
+	// 休止した放送日の枠は見出し・放送中の判定に使わない。休止日を取れなければ、休止した枠を放送中と
+	// 見せないよう放送枠を出さない（見出しと「ライブ開始地点へ」が出ないだけで、投稿は読める）
 	const animeId = data?.[0]?.anime_id;
-	const cancelled = animeId != null ? await getCancelledRoomDates(supabase, animeId) : null;
+	const cancelled = animeId != null ? await getCancelledRoomDates(supabase, animeId) : new Set<string>();
+	if (!cancelled) return [];
 	return (data ?? [])
-		.filter((row) => !cancelled?.has(row.room_date))
+		.filter((row) => !cancelled.has(row.room_date))
 		.map((row) => ({
 			id: row.id,
 			scheduled_at: row.scheduled_at,
@@ -1168,7 +1170,7 @@ export async function getEpisodeRoomPosts(
 	roomId: string,
 	userId: string | null,
 	options: { limit?: number; from?: "start" | "latest"; since?: string | undefined } = {},
-): Promise<{ posts: Post[]; hasMore: boolean }> {
+): Promise<{ posts: Post[]; hasMore: boolean; oldestCursor: TimelineCursor | null }> {
 	const { limit = 100, from = "start", since } = options;
 	// since があれば、その時刻（放送枠の開場など）以降を古い順に
 	const ascending = from === "start" || since != null;
@@ -1180,8 +1182,13 @@ export async function getEpisodeRoomPosts(
 	const posts = await enrichPostsWithCounts(supabase, ordered as unknown as RawPost[], userId, {
 		includeMutedRoomPosts: true,
 	});
-	// 続きの有無はミュートワード・ブロックで除外する前の取得行数で決める（除外で打ち切らない）
-	return { posts, hasMore: (rawPosts ?? []).length === limit };
+	// 続きの有無と前へ読み足す境界は、ミュートワード・ブロックで除外する前の取得行で決める（除外で打ち切らない）
+	const oldest = ordered[0] as unknown as RawPost | undefined;
+	return {
+		posts,
+		hasMore: (rawPosts ?? []).length === limit,
+		oldestCursor: oldest ? { createdAt: oldest.created_at, id: oldest.id } : null,
+	};
 }
 
 /** ルームの種類と ID（放送ルームはセッション ID、イベントルームはイベント ID、話数ルームはルーム ID） */

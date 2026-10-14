@@ -90,7 +90,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 	const [postPage, trending, animeTrending, olderExists] = await Promise.all([
 		room
 			? getEpisodeRoomPosts(supabase, room.id, user?.id ?? null, { limit: 100, from, since })
-			: Promise.resolve({ posts: [], hasMore: false }),
+			: Promise.resolve({ posts: [], hasMore: false, oldestCursor: null }),
 		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
 		getAnimeRankingTrending(supabase, 5),
 		// 放送枠から読み始めたとき、それより前の投稿があるか（「前の投稿を読み込む」を出すか）
@@ -132,6 +132,8 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 			airings,
 			initial_airing_id: initialAiringId,
 			has_older_posts: hasOlderPosts,
+			// 前へ読み足す境界（ミュート・ブロックで除外する前の最古の行）
+			older_cursor: postPage.oldestCursor,
 		},
 		posts,
 		trending: trending.data ?? [],
