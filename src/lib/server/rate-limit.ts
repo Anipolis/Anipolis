@@ -57,15 +57,21 @@ export interface RateRule {
 /** API ルートのレート制限ルール（IP 単位） */
 export const API_RATE_RULES: RateRule[] = [
 	{ name: "upload", pattern: /^\/api\/upload/, methods: ["POST"], limit: 10, windowMs: 60_000 },
+	// 投稿欄で外した画像の削除。下書きの破棄で最大4枚まとめて消える
+	{ name: "upload-delete", pattern: /^\/api\/upload$/, methods: ["DELETE"], limit: 30, windowMs: 60_000 },
 	// 実況中の連投を考慮して 20回/分（3秒に1回ペース）まで許容
 	{ name: "post-create", pattern: /^\/api\/posts$/, methods: ["POST"], limit: 20, windowMs: 60_000 },
 	{ name: "report", pattern: /^\/api\/reports$/, methods: ["POST"], limit: 5, windowMs: 60_000 },
+	// パスキーは1回の登録・ログインで options と verify の2回叩く
+	{ name: "passkey", pattern: /^\/api\/auth\/passkey\//, methods: ["POST"], limit: 20, windowMs: 60_000 },
 	{ name: "reaction", pattern: /^\/api\/posts\/[^/]+\/reactions$/, limit: 60, windowMs: 60_000 },
 	{ name: "search", pattern: /^\/api\/(anime|users)\/search/, limit: 30, windowMs: 10_000 },
 	{ name: "anime-count", pattern: /^\/api\/anime\/count$/, limit: 30, windowMs: 10_000 },
 	// 全件エクスポート系はDB走査・巨大レスポンスを伴うため厳しめに絞る（通常はCDNキャッシュが受ける）
 	{ name: "data-export", pattern: /^\/api\/data\//, methods: ["GET"], limit: 2, windowMs: 60_000 },
 	{ name: "room-posts", pattern: /^\/api\/rooms\/posts$/, limit: 60, windowMs: 60_000 },
+	// 投稿画像の固定リンク。投稿欄のプレビュー（最大4枚）と外部からの参照で使う
+	{ name: "media", pattern: /^\/api\/media\//, methods: ["GET"], limit: 120, windowMs: 60_000 },
 	{
 		name: "room-experiment-visit",
 		pattern: /^\/api\/room-experiment-visits$/,

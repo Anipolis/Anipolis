@@ -1,13 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
+	COMPOSE_CONTEXT_CW_TTL_MS,
+	COMPOSE_CONTEXT_ROOM_TTL_MS,
+	clearComposeContext,
 	clearComposeDraft,
+	composeContextKey,
 	composeDraftKey,
 	createEmptyDraft,
 	DRAFT_TTL_MS,
 	type DraftStorage,
 	isDraftEmpty,
+	loadComposeContext,
 	loadComposeDraft,
 	parseComposeDraft,
+	saveComposeContext,
 	saveComposeDraft,
 	serializeComposeDraft,
 } from "./compose-draft";
@@ -148,5 +154,44 @@ describe("storage helpers", () => {
 		expect(loadComposeDraft(throwing, "u")).toBeNull();
 		expect(() => saveComposeDraft(throwing, "u", { ...createEmptyDraft(), content: "x" })).not.toThrow();
 		expect(() => clearComposeDraft(throwing, "u")).not.toThrow();
+	});
+});
+
+describe("直前の投稿の文脈（#331）", () => {
+	const now = Date.UTC(2026, 9, 13, 12, 0, 0);
+
+	it("CW とルームを保存し、期限内なら戻す", () => {
+		const storage = memoryStorage();
+		saveComposeContext(storage, "user-1", { cwAnime: anime, room }, now);
+		expect(loadComposeContext(storage, "user-1", now + 60_000)).toEqual({ cwAnime: anime, room });
+		expect(storage.data.has(composeContextKey("user-2"))).toBe(false);
+	});
+
+	it("CW は30分、ルームは12時間を過ぎたら戻さない", () => {
+		const storage = memoryStorage();
+		saveComposeContext(storage, "user-1", { cwAnime: anime, room }, now);
+		expect(loadComposeContext(storage, "user-1", now + COMPOSE_CONTEXT_CW_TTL_MS + 1)).toEqual({
+			cwAnime: null,
+			room,
+		});
+		expect(loadComposeContext(storage, "user-1", now + COMPOSE_CONTEXT_ROOM_TTL_MS + 1)).toEqual({
+			cwAnime: null,
+			room: null,
+		});
+	});
+
+	it("どちらも無ければ保存を消し、破棄でも消える。壊れた保存は無視する", () => {
+		const storage = memoryStorage();
+		saveComposeContext(storage, "user-1", { cwAnime: anime, room: null }, now);
+		saveComposeContext(storage, "user-1", { cwAnime: null, room: null }, now);
+		expect(storage.data.size).toBe(0);
+
+		saveComposeContext(storage, "user-1", { cwAnime: anime, room: null }, now);
+		clearComposeContext(storage, "user-1");
+		expect(storage.data.size).toBe(0);
+
+		storage.setItem(composeContextKey("user-1"), "{broken");
+		expect(loadComposeContext(storage, "user-1", now)).toEqual({ cwAnime: null, room: null });
+		expect(loadComposeContext(null, "user-1", now)).toEqual({ cwAnime: null, room: null });
 	});
 });

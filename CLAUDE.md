@@ -7,11 +7,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 pnpm dev          # Start dev server
 pnpm build        # Production build
-pnpm check        # Format (Biome) + type-check (svelte-check + tsc) — run before committing
+pnpm check        # Biome + Svelte + TypeScript + anime-view checks — run before committing
 pnpm test         # Vitest unit tests with coverage
 ```
 
-`pnpm check` runs three tools in sequence: `biome check --write` → `svelte-check` → `tsc --noEmit`. Fix Biome issues first, then type errors.
+`pnpm check` checks source files without auto-fixing them, running Biome, Svelte, TypeScript, and anime-view type consistency checks. SvelteKit sync may regenerate local framework artifacts. `package.json` is the source of truth. Use `pnpm lint:fix` or `pnpm format` explicitly for formatting changes.
+
+For PR reviews, follow the `Code Review Rules` in `AGENTS.md`.
 
 ## Architecture
 
@@ -55,12 +57,14 @@ Migrations are applied with the Supabase CLI (`[db.migrations] enabled = true`).
 - Apply: `pnpm exec supabase db push --dry-run`, review the list, then `pnpm exec supabase db push`.
 - Do not apply migrations from the Dashboard SQL Editor. It leaves the history out of sync, and a batch run there silently skipped 082.
 - Never use `--include-all`; it re-runs files that are already applied.
-- Avoid `CREATE INDEX CONCURRENTLY`; a plain `CREATE INDEX` is fine at current data volumes. The CLI runs each migration file in a transaction, where CONCURRENTLY fails. If it is truly needed, put it in its own file, run it by hand one statement at a time outside a transaction, then record it with `pnpm exec supabase migration repair --status applied <NNN>`.
+- The CLI (2.107, pinned in the lockfile) sends a migration file's statements and its history row as one batch, which PostgreSQL runs as a single implicit transaction. A file is all-or-nothing, and `LOCK TABLE` holds until the file ends, so explicit `BEGIN`/`COMMIT` is not needed. The comment in `132_like_repost_notification_dedupe.sql` saying each statement autocommits is wrong; that file is applied, so it is left as is.
+- Avoid `CREATE INDEX CONCURRENTLY`; a plain `CREATE INDEX` is fine at current data volumes. CONCURRENTLY fails inside the batch transaction. If it is truly needed, put it in its own file, run it by hand one statement at a time outside a transaction, then record it with `pnpm exec supabase migration repair --status applied <NNN>`.
+- CLI releases from August 2026 run `CONCURRENTLY` index statements, `VACUUM`, `CLUSTER` and `ALTER SYSTEM` outside the batch, after committing the statements before them. When upgrading the CLI, keep such statements out of files that need to be atomic.
 - Before running `migration repair`, check the real remote state (function bodies, policy conditions, indexes), not just the presence of one object or a history row.
 - `supabase/migrations_archive/` holds files whose version duplicated an applied migration or had no version, which blocked `db push`. Their contents are already in production; keep them for history and do not re-apply them.
 - `db reset` targets the local database only; never run it against the linked project.
 
-RLS is enforced for all tables. The `posts` select policy uses `USING (true)` — all posts are publicly readable.
+Post reads are restricted by RLS, including private-account visibility, blocks, BAN status, and administrative hiding. Consult the latest migrations and their helper functions for the effective policy and owner/admin exceptions; do not assume posts are publicly readable. Service-role clients bypass RLS and require explicit authorization checks.
 
 ### Key Files
 

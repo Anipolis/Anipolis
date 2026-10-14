@@ -160,11 +160,105 @@ export function findSyobocalWikipediaKeywordLinks(keywords: string): SyobocalWik
 export function findSyobocalOfficialSiteUrl(links: readonly SyobocalLink[]): string | null {
 	// 「公式」単体に加え「公式サイト」「公式ホームページ」等の表記揺れも受け付ける。
 	// 「公式X」「公式Twitter」等の SNS は対象外（無関係な「公式ショップ」等を拾わないよう
-	// 接尾辞はホワイトリスト方式にしている）。
+	// 接尾辞はホワイトリスト方式にしている）。前置きは「アニメ公式」「TVアニメ公式サイト」
+	// 「作品公式」だけを許す（「原作公式」「北斗の拳公式」等の原作・シリーズ総合サイトは除外）。
 	return (
-		links.find((link) => /^公式(?:サイト|ホームページ|ページ|HP|Web(?:サイト)?)?(?:\s|\(|（|$)/i.test(link.name))
-			?.url ?? null
+		links.find((link) =>
+			/^(?:(?:TV|テレビ)?アニメ(?:版)?|作品)?公式(?:サイト|ホームページ|ページ|HP|Web(?:サイト)?)?(?:\s|\(|（|$)/i.test(
+				link.name,
+			),
+		)?.url ?? null
 	);
+}
+
+/** コメントの「*リンク」節（次の「*見出し」行まで）。節が無ければ空文字 */
+export function syobocalLinkSection(comment: string): string {
+	const match = comment.match(/(?:^|\n)\*リンク[^\n]*\n([\s\S]*?)(?=\n\*[^\n]|$)/);
+	return match?.[1] ?? "";
+}
+
+// 公式ページ以外であることがラベルで分かるもの（原作・出版社サイト、報道・配信・SNS・物販等）
+const NON_OFFICIAL_LINK_LABEL =
+	/原作|プレスリリース|ニュース|YouTube|ニコニコ|Wikipedia|配信|キーワード検索|特設|キャンペーン|コラボ|グッズ|ショップ|ストア|Blu-?ray|DVD|CD|主題歌|ゲーム|ラジオ|^(?:X|Twitter|Instagram|TikTok|LINE|Facebook)(?:\s|\(|（|$)/i;
+
+// ホスト単位で公式ページになり得ないもの（SNS・動画/配信・報道・投稿サイト等）
+const NON_OFFICIAL_LINK_HOSTS = [
+	"x.com",
+	"twitter.com",
+	"youtube.com",
+	"youtu.be",
+	"nicovideo.jp",
+	"nico.ms",
+	"abema.tv",
+	"tver.jp",
+	"lemino.docomo.ne.jp",
+	"animestore.docomo.ne.jp",
+	"netflix.com",
+	"amazon.co.jp",
+	"primevideo.com",
+	"unext.jp",
+	"hulu.jp",
+	"fod.fujitv.co.jp",
+	"b-ch.com",
+	"dmm.com",
+	"atpress.ne.jp",
+	"prtimes.jp",
+	"natalie.mu",
+	"animatetimes.com",
+	"mantan-web.jp",
+	"wikipedia.org",
+	"wikidata.org",
+	"instagram.com",
+	"tiktok.com",
+	"facebook.com",
+	"line.me",
+	"syosetu.com",
+	"kakuyomu.jp",
+	"pixiv.net",
+	"cal.syoboi.jp",
+];
+
+// 属性型 JP ドメイン（example.co.jp の登録可能ドメインは3ラベル）
+const JP_SECOND_LEVEL = new Set(["co", "ne", "or", "ac", "go", "ad", "ed", "gr", "lg"]);
+
+function isNonOfficialHost(hostname: string): boolean {
+	return NON_OFFICIAL_LINK_HOSTS.some((host) => hostname === host || hostname.endsWith(`.${host}`));
+}
+
+/**
+ * 作品専用ページらしいURLか。パス付き（会社サイト内の作品ページ）か、
+ * www 以外のサブドメイン（arne.asmik-ace.co.jp 等）なら作品専用とみなす。
+ * 会社・局サイトのトップ（https://www.toei-anim.co.jp/）は作品ページではない。
+ */
+function looksLikeWorkPage(url: URL): boolean {
+	if (url.pathname.replace(/\/+$/, "") !== "") return true;
+	const labels = url.hostname.split(".");
+	const registrable =
+		labels.length >= 3 && JP_SECOND_LEVEL.has(labels.at(-2) ?? "") && labels.at(-1) === "jp" ? 3 : 2;
+	return labels.length > registrable && labels[0] !== "www";
+}
+
+/**
+ * 「公式」ラベルが無い作品の公式サイト推定。しょぼいでは配給・局・制作会社サイト内の
+ * 作品ページが会社名ラベル（「松竹」「TBS」「バンダイナムコピクチャーズ」等）で
+ * 「*リンク」節の先頭に載ることが多い。節内を先頭から見て、SNS・配信・報道・原作等を
+ * 除いた最初の作品専用ページを返す。推定値なのでラベル一致（findSyobocalOfficialSiteUrl）
+ * より信頼度を下げて扱うこと。
+ */
+export function inferSyobocalOfficialSiteUrl(comment: string): string | null {
+	for (const link of parseSyobocalLinks(syobocalLinkSection(comment))) {
+		if (NON_OFFICIAL_LINK_LABEL.test(link.name)) continue;
+		let url: URL;
+		try {
+			url = new URL(link.url);
+		} catch {
+			continue;
+		}
+		if (isNonOfficialHost(url.hostname.toLocaleLowerCase())) continue;
+		if (!looksLikeWorkPage(url)) continue;
+		return link.url;
+	}
+	return null;
 }
 
 export function findSyobocalOfficialXUrl(links: readonly SyobocalLink[]): string | null {

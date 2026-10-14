@@ -168,7 +168,7 @@ async function copyLink(code: string) {
 
 .invite-item {
 	border: 1px solid var(--border);
-	border-radius: 8px;
+	border-radius: 12px;
 	padding: 12px 14px;
 	display: flex;
 	flex-direction: column;
@@ -193,6 +193,7 @@ async function copyLink(code: string) {
 	font-weight: 700;
 	padding: 2px 8px;
 	border-radius: 999px;
+	corner-shape: round;
 	background: var(--border);
 	color: var(--fg-muted);
 }

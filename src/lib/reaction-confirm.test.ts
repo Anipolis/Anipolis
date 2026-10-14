@@ -2,6 +2,19 @@ import { describe, expect, it } from "vitest";
 import { confirmReaction } from "./reaction-confirm";
 
 describe("confirmReaction", () => {
+	it("uses the count the server returns over the guess from the displayed count", () => {
+		// 件数の取得に失敗して 0 件・未いいねと表示されていた投稿（実際は10件・いいね済み）
+		const result = {
+			type: "success" as const,
+			status: 200,
+			data: { liked: true, count: 10 },
+		};
+		expect(confirmReaction("like", result, { wasActive: false, countBefore: 0 })).toEqual({
+			active: true,
+			count: 10,
+		});
+	});
+
 	it("keeps the optimistic toggle when the server agrees", () => {
 		expect(
 			confirmReaction(

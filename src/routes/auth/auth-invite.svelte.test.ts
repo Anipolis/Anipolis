@@ -114,4 +114,28 @@ describe("auth invite gate", () => {
 		await unmount(page);
 		target.remove();
 	});
+
+	it("shows a completion notice after account deletion", async () => {
+		const target = document.createElement("div");
+		document.body.appendChild(target);
+		const props = {
+			params: {},
+			data: {
+				mode: "login",
+				next: "/",
+				betaGateEnabled: true,
+				inviteCode: "",
+				inviteCodeValid: false,
+				error: null,
+				accountDeleted: true,
+			} as unknown as PageProps["data"],
+			form: null,
+		} satisfies PageProps;
+
+		const page = mount(AuthPage, { target, props });
+		expect(target.querySelector('[role="status"]')?.textContent).toContain("退会が完了しました");
+
+		await unmount(page);
+		target.remove();
+	});
 });

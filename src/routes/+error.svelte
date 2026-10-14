@@ -3,7 +3,7 @@ import { page } from "$app/state";
 </script>
 
 <svelte:head>
-	<title>{page.status === 404 ? "ページが見つかりません" : "エラーが発生しました"} — Anipolis</title>
+	<title>{page.status === 404 ? "ページが見つかりません" : "エラーが発生しました"} - Anipolis</title>
 </svelte:head>
 
 <div class="error-container">

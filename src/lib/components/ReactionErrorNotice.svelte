@@ -42,7 +42,7 @@ function stop(event: Event) {
 	margin: 6px 0 2px;
 	padding: 8px 12px;
 	border: 1px solid var(--color-error-border, var(--color-danger));
-	border-radius: var(--radius-sm, 8px);
+	border-radius: var(--radius-sm, 12px);
 	background: var(--color-error-bg);
 	color: var(--color-error-text, var(--color-danger));
 	font-size: 13px;
@@ -59,6 +59,7 @@ function stop(event: Event) {
 	padding: 2px 8px;
 	border: 1px solid currentColor;
 	border-radius: 999px;
+	corner-shape: round;
 	background: transparent;
 	color: inherit;
 	font: inherit;

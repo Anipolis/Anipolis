@@ -2,8 +2,9 @@
 import type { SubmitFunction } from "@sveltejs/kit";
 import { enhance } from "$app/forms";
 import { page } from "$app/state";
-import PostCard from "$lib/components/PostCard.svelte";
 import PostCardSkeleton from "$lib/components/PostCardSkeleton.svelte";
+import PostDetail from "$lib/components/PostDetail.svelte";
+import PostRow from "$lib/components/PostRow.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
 import { charCountClass } from "$lib/utils/format";
@@ -47,8 +48,8 @@ $effect(() => {
 	<meta property="og:description" content={data.post.content.slice(0, 120)}>
 	<meta property="og:type" content="website">
 	<meta property="og:url" content={page.url.href}>
-	{#if data.post.image_urls?.[0]}
-		<meta property="og:image" content={data.post.image_urls[0]}>
+	{#if data.ogImageUrl}
+		<meta property="og:image" content={data.ogImageUrl}>
 		<meta name="twitter:card" content="summary_large_image">
 	{/if}
 </svelte:head>
@@ -83,14 +84,14 @@ $effect(() => {
 			<!-- 親投稿（このポストがリプライの場合） -->
 			{#if enriched.parentPost}
 				<div class="thread-parent">
-					<PostCard post={enriched.parentPost} currentUserId={data.currentUserId} />
+					<PostRow post={enriched.parentPost} currentUserId={data.currentUserId} />
 					<div class="thread-line"></div>
 				</div>
 			{/if}
 
 			<!-- メイン投稿 -->
 			<div class="thread-main">
-				<PostCard post={enriched.post} currentUserId={data.currentUserId} isDetailView />
+				<PostDetail post={enriched.post} currentUserId={data.currentUserId} />
 			</div>
 
 			<!-- リプライ入力フォーム -->
@@ -138,7 +139,7 @@ $effect(() => {
 			{#if enriched.replies.length > 0}
 				<div class="replies-section">
 					{#each enriched.replies as reply (reply.id)}
-						<PostCard post={reply} currentUserId={data.currentUserId} />
+						<PostRow post={reply} currentUserId={data.currentUserId} />
 					{/each}
 				</div>
 			{:else}

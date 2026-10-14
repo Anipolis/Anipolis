@@ -135,7 +135,9 @@ const LEGACY_COLUMNS = [
 	"official_site_url",
 	"official_x_url",
 	"resources",
-	"cover_url",
+	// cover_url は © の無い作品で隠れる表示用の列（migration 136）。前回値は画像の
+	// 実体を読む（隠れた作品を「カバー無し」と誤解して差分を出さないため）
+	"cover_url:cover_source_url",
 	"metadata_ready",
 	// applyShortAnimeLobbyRuleが全canonical行に注入するため、changedFieldsの
 	// 差分比較でノイズにならないよう既存値も読み込む
@@ -343,8 +345,14 @@ async function saveResolutions(supabase: ReturnType<typeof getSupabaseClient>, r
 	const resolvedAt = new Date().toISOString();
 	for (let start = 0; start < resolutions.length; start += BATCH_SIZE) {
 		const batch = resolutions.slice(start, start + BATCH_SIZE);
+		// cover_url は © の無い作品で隠れる表示用の列（migration 136）。upsert では画像の
+		// 実体 cover_source_url に書き、表示用の列は DB のトリガーに決めさせる
+		// （表示用の列を upsert すると、隠した値が既存行の更新に渡り画像が消えていた）
 		const { error: animeError } = await supabase.from("anime").upsert(
-			batch.map((resolution) => resolution.canonical),
+			batch.map(({ canonical: { cover_url: coverSourceUrl, ...canonical } }) => ({
+				...canonical,
+				cover_source_url: coverSourceUrl,
+			})),
 			{ onConflict: "mal_id" },
 		);
 		if (animeError) throw new Error(`Could not materialize anime catalog: ${animeError.message}`);

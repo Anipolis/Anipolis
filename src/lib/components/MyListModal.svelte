@@ -40,7 +40,7 @@ let score = $state<number | null>(null);
 let progress = $state(0);
 let submitting = $state(false);
 let errorMessage = $state("");
-let initializedFor = $state<string | null>(null);
+let initializedFor: string | null = null;
 let totalEpisodes = $derived(parseEpisodeCount(episodeCount));
 let statusOnly = $derived(variant === "status-only");
 
@@ -82,18 +82,29 @@ const handleSubmit: SubmitFunction = () => {
 	};
 };
 
-$effect(() => {
-	if (!open) {
-		initializedFor = null;
-		return;
-	}
-	const key = `${animeId}:${entry?.updated_at ?? "new"}`;
-	if (initializedFor === key) return;
+function resetFromEntry(key: string) {
 	initializedFor = key;
 	selectedStatus = entry?.status ?? "plan_to_watch";
 	score = entry?.score != null && entry.score > 0 ? Math.round(entry.score) : null;
 	progress = clampProgress(entry?.progress ?? 0);
 	errorMessage = "";
+}
+
+function entryKey(): string {
+	return `${animeId}:${entry?.updated_at ?? "new"}`;
+}
+
+// 最初のフレームから登録済みの値で描画する。effect で入れると初回描画が「視聴予定」になり、
+// ボタンの background トランジションで一瞬見えてしまう。
+resetFromEntry(entryKey());
+
+// 開いている間は登録内容が更新されたときだけ同期し、編集中の値を上書きしない。
+// 閉じたら登録内容に戻しておき、次に開いた最初のフレームも正しい値で出す。
+// initializedFor は $state にしない(effect 内で読み書きすると自己無効化になる)。
+$effect(() => {
+	const key = entryKey();
+	if (open && initializedFor === key) return;
+	resetFromEntry(key);
 });
 
 $effect(() => {
@@ -236,7 +247,7 @@ $effect(() => {
 	max-height: min(760px, calc(100dvh - 32px));
 	overflow-y: auto;
 	border: 1px solid var(--color-border);
-	border-radius: 18px;
+	border-radius: 24px;
 	background: var(--color-bg);
 	color: var(--color-text);
 	box-shadow: 0 24px 80px rgb(0 0 0 / 48%);
@@ -302,7 +313,7 @@ form {
 	width: 38px;
 	height: 38px;
 	border: 1px solid var(--color-border);
-	border-radius: 10px;
+	border-radius: 14px;
 	background: var(--color-surface);
 	color: var(--color-text-muted);
 	cursor: pointer;
@@ -367,7 +378,7 @@ form {
 	width: 44px;
 	height: 44px;
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: 18px;
 	background: var(--color-surface);
 	color: var(--color-text);
 	cursor: pointer;
@@ -388,7 +399,7 @@ form {
 	width: 66px;
 	height: 44px;
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: 18px;
 	outline: none;
 	background: var(--color-bg);
 	color: var(--color-text);
@@ -418,7 +429,7 @@ form {
 	grid-column: span 2;
 	min-height: 44px;
 	border: 1px solid var(--color-border);
-	border-radius: 11px;
+	border-radius: 16px;
 	background: var(--color-surface);
 	color: var(--color-text-muted);
 	cursor: pointer;
@@ -448,7 +459,7 @@ form {
 }
 .modal-footer button {
 	min-height: 44px;
-	border-radius: 11px;
+	border-radius: 16px;
 	padding: 0 18px;
 	cursor: pointer;
 	font-weight: 750;
@@ -495,7 +506,7 @@ form {
 	.modal-card {
 		width: 100%;
 		max-height: calc(100dvh - 24px);
-		border-radius: 20px 20px 0 0;
+		border-radius: 28px 28px 0 0;
 	}
 	.modal-header {
 		padding: 20px 18px 16px;

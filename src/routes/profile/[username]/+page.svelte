@@ -5,7 +5,7 @@ import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
 import AnimeStatusSection from "$lib/components/AnimeStatusSection.svelte";
-import PostCard from "$lib/components/PostCard.svelte";
+import PostRow from "$lib/components/PostRow.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
 import type { Anime, AnimeStatus } from "$lib/types";
@@ -41,6 +41,7 @@ let reportDetails = $state("");
 let reportSubmitting = $state(false);
 let reportMessage = $state("");
 let showKebabMenu = $state(false);
+let blocking = $state(false);
 
 $effect(() => {
 	isFollowing = data.isFollowing;
@@ -61,6 +62,21 @@ const activeTab = $derived(
 );
 const bioRemaining = $derived(160 - editBio.length);
 const editableHeaderUrl = $derived(headerPreviewUrl ?? (headerPendingDelete ? null : profile.header_url));
+
+const submitBlock: SubmitFunction = ({ cancel }) => {
+	if (!data.isBlocked && !window.confirm(`@${profile.username} をブロックします。フォロー関係も解除されます。`)) {
+		cancel();
+		return;
+	}
+	blocking = true;
+	return async ({ update }) => {
+		blocking = false;
+		showKebabMenu = false;
+		// ブロックすると相手の投稿を落とすため、表示中のタイムラインも取り直す
+		await update({ reset: false });
+		await invalidateAll();
+	};
+};
 
 const handleProfileSubmit: SubmitFunction = () => {
 	// 保存中に選択が変わっても送信開始時点の画像状態を使う
@@ -309,8 +325,8 @@ const grouped = $derived(
 </script>
 
 <svelte:head>
-	<title>{displayName} (@{profile.username}) — Anipolis</title>
-	<meta property="og:title" content="{displayName} (@{profile.username}) — Anipolis">
+	<title>{displayName} (@{profile.username}) - Anipolis</title>
+	<meta property="og:title" content="{displayName} (@{profile.username}) - Anipolis">
 	<meta property="og:description" content={profile.bio ?? `@${profile.username}のAnipolisプロフィール`}>
 	<meta property="og:type" content="website">
 	<meta property="og:url" content={page.url.href}>
@@ -343,10 +359,14 @@ const grouped = $derived(
 								プロフィールを編集
 							</button>
 						{:else if data.user}
-							<form
-								method="POST"
-								action="?/follow"
-								use:enhance={({ cancel }) => {
+							{#if data.isBlocked}
+								<!-- ブロック中はフォローできない（RLS で拒否される）ので、操作の代わりに状態を示す -->
+								<span class="btn btn-outline" style="font-size: 13px;">ブロック中</span>
+							{:else}
+								<form
+									method="POST"
+									action="?/follow"
+									use:enhance={({ cancel }) => {
                             if (isProcessing) {
                                 cancel();
                                 return;
@@ -369,17 +389,18 @@ const grouped = $derived(
                                 }
                             };
                         }}
-							>
-								<input type="hidden" name="target_id" value={profile.id}>
-								<button
-									type="submit"
-									class="btn {isFollowing || followRequestStatus === 'pending' ? 'btn-outline' : 'btn-primary'}"
-									disabled={isProcessing || followRequestStatus === 'pending'}
-									style="font-size: 13px;"
 								>
-									{isFollowing ? 'フォロー中' : followRequestStatus === 'pending' ? '申請中' : profile.is_private ? 'フォロー申請' : 'フォローする'}
-								</button>
-							</form>
+									<input type="hidden" name="target_id" value={profile.id}>
+									<button
+										type="submit"
+										class="btn {isFollowing || followRequestStatus === 'pending' ? 'btn-outline' : 'btn-primary'}"
+										disabled={isProcessing || followRequestStatus === 'pending'}
+										style="font-size: 13px;"
+									>
+										{isFollowing ? 'フォロー中' : followRequestStatus === 'pending' ? '申請中' : profile.is_private ? 'フォロー申請' : 'フォローする'}
+									</button>
+								</form>
+							{/if}
 							<div class="profile-kebab-menu">
 								<button
 									type="button"
@@ -405,6 +426,21 @@ const grouped = $derived(
 											e.stopPropagation();
 										}}
 									>
+										<form
+											method="POST"
+											action={data.isBlocked ? "?/unblock" : "?/block"}
+											use:enhance={submitBlock}
+										>
+											<input type="hidden" name="target_id" value={profile.id}>
+											<button
+												type="submit"
+												role="menuitem"
+												class="danger-menuitem"
+												disabled={blocking}
+											>
+												{data.isBlocked ? "ブロック解除" : "ブロック"}
+											</button>
+										</form>
 										<button
 											type="button"
 											role="menuitem"
@@ -697,7 +733,11 @@ const grouped = $derived(
 
 		<!-- 投稿タブ -->
 		{#if activeTab === 'posts'}
-			{#if !canViewContent}
+			{#if data.isBlocked}
+				<div class="empty-state">
+					<p>@{profile.username} さんをブロックしています</p>
+				</div>
+			{:else if !canViewContent}
 				<div class="empty-state profile-private-state">
 					<p>このアカウントの投稿はフォロワーだけが見ることができます</p>
 				</div>
@@ -707,7 +747,7 @@ const grouped = $derived(
 				</div>
 			{:else}
 				{#each posts as post (post.id)}
-					<PostCard {post} currentUserId={data.user?.id ?? null} />
+					<PostRow {post} currentUserId={data.user?.id ?? null} />
 				{/each}
 			{/if}
 		{/if}
@@ -724,7 +764,7 @@ const grouped = $derived(
 				</div>
 			{:else}
 				{#each imagePosts as post (post.id)}
-					<PostCard {post} currentUserId={data.user?.id ?? null} />
+					<PostRow {post} currentUserId={data.user?.id ?? null} />
 				{/each}
 			{/if}
 		{/if}
@@ -790,7 +830,7 @@ const grouped = $derived(
 				</div>
 			{:else}
 				{#each data.likedPosts as post (post.id)}
-					<PostCard {post} currentUserId={data.user?.id ?? null} />
+					<PostRow {post} currentUserId={data.user?.id ?? null} />
 				{/each}
 			{/if}
 		{/if}
@@ -820,6 +860,7 @@ const grouped = $derived(
 	height: 34px;
 	border: 1px solid var(--color-border);
 	border-radius: 999px;
+	corner-shape: round;
 	background: transparent;
 	color: var(--color-text-muted);
 	cursor: pointer;
@@ -839,10 +880,14 @@ const grouped = $derived(
 	z-index: 100;
 	min-width: 140px;
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-surface);
 	box-shadow: 0 8px 24px rgb(0 0 0 / 0.24);
 	overflow: hidden;
+}
+
+.profile-kebab-dropdown .danger-menuitem {
+	color: var(--color-danger);
 }
 
 .profile-kebab-dropdown button {
@@ -868,6 +913,7 @@ const grouped = $derived(
 	padding: 1px 6px;
 	border: 1px solid var(--color-border);
 	border-radius: 999px;
+	corner-shape: round;
 	color: var(--color-text-muted);
 	font-size: 0.72rem;
 	font-weight: 700;
@@ -920,7 +966,7 @@ const grouped = $derived(
 .report-modal-card {
 	width: min(100%, 420px);
 	border: 1px solid var(--color-border, var(--border, #334155));
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-surface, var(--surface, #1e293b));
 	box-shadow: 0 24px 60px rgb(0 0 0 / 0.36);
 }
@@ -951,6 +997,7 @@ const grouped = $derived(
 	height: 32px;
 	border: 0;
 	border-radius: 999px;
+	corner-shape: round;
 	background: transparent;
 	color: var(--color-text-muted, var(--fg-muted, #94a3b8));
 	cursor: pointer;
@@ -983,7 +1030,7 @@ const grouped = $derived(
 .report-field textarea {
 	width: 100%;
 	border: 1px solid var(--color-border, var(--border, #334155));
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-bg, var(--bg, #0f172a));
 	color: var(--color-text, var(--fg, #e2e8f0));
 	padding: 9px 10px;
@@ -1019,7 +1066,7 @@ const grouped = $derived(
 	max-height: calc(100dvh - 32px);
 	overflow: hidden;
 	border: 1px solid var(--color-border, var(--border, #334155));
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-surface, var(--surface, #1e293b));
 	box-shadow: 0 24px 60px rgb(0 0 0 / 0.36);
 }
@@ -1051,6 +1098,7 @@ const grouped = $derived(
 	height: 32px;
 	border: 0;
 	border-radius: 999px;
+	corner-shape: round;
 	background: transparent;
 	color: var(--color-text-muted, var(--fg-muted, #94a3b8));
 	cursor: pointer;
@@ -1097,7 +1145,7 @@ const grouped = $derived(
 	width: 100%;
 	aspect-ratio: 3 / 1;
 	border: 1px solid var(--color-border, var(--border, #334155));
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-bg, var(--bg, #0f172a));
 }
 

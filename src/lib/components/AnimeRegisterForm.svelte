@@ -1,9 +1,14 @@
 <script lang="ts">
 import { enhance } from "$app/forms";
+import { invalidateAll } from "$app/navigation";
+import { isCoverHiddenWithoutCopyright } from "$lib/anime-cover";
 import { ANIME_GENRES, ANIME_SOURCE_OPTIONS } from "$lib/anime-vocabulary";
 import type { Anime } from "$lib/types";
 
-type FormResult = { success?: boolean; animeId?: string | number; message?: string } | null | undefined;
+type FormResult =
+	| { success?: boolean; animeId?: string | number; message?: string; coverHidden?: boolean }
+	| null
+	| undefined;
 let {
 	form,
 	mode = "create",
@@ -18,6 +23,23 @@ let {
 
 const GENRES = [...ANIME_GENRES];
 const SOURCE_OPTIONS = [...ANIME_SOURCE_OPTIONS];
+// 値はカタログ（MAL 由来）と同じ英語表記。日本語の値にすると、編集を保存しただけで
+// 映画・特別の作品のタイプが「未設定」に変わっていた
+const TYPE_OPTIONS = [
+	{ value: "TV", label: "TV" },
+	{ value: "Movie", label: "映画" },
+	{ value: "OVA", label: "OVA" },
+	{ value: "ONA", label: "ONA" },
+	{ value: "Special", label: "特別" },
+];
+// 今の値が選択肢に無い（旧表記・取り込み元の表記）ときは、そのまま残る選択肢を足す。
+// 足さないと select が「未設定」になり、保存で値が消える
+const extraTypeOption = $derived(
+	anime?.type && !TYPE_OPTIONS.some((option) => option.value === anime.type) ? anime.type : null,
+);
+const extraSourceOption = $derived(
+	anime?.source && !SOURCE_OPTIONS.some((source) => source === anime.source) ? anime.source : null,
+);
 
 // svelte-ignore state_referenced_locally
 let selectedGenres = $state<string[]>(anime?.genre ?? []);
@@ -31,6 +53,9 @@ let studioInput = $state("");
 let producerInput = $state("");
 let hashtagInput = $state("");
 const isEditMode = $derived(mode === "edit");
+// cover_url は © が無いと隠れて空になる（migration 136）ので、編集欄には画像の実体を出す
+const currentCoverUrl = $derived(anime?.cover_source_url ?? anime?.cover_url ?? "");
+const coverHiddenNow = $derived(anime ? isCoverHiddenWithoutCopyright(anime) : false);
 const broadcastStationValue = $derived((anime?.broadcast_station ?? []).join(", "));
 
 function dateValue(value: string | null | undefined) {
@@ -115,6 +140,9 @@ async function handleFileChange(e: Event) {
 	{#if form?.success}
 		<div class="form-success" aria-live="polite">
 			{isEditMode ? "更新しました！" : "登録しました！"} <a href="/anime/{form.animeId}">詳細を見る →</a>
+			{#if form.coverHidden}
+				<p class="form-note">権利表記（©）が未設定のため、カバー画像は表示されません。</p>
+			{/if}
 		</div>
 	{/if}
 	{#if form?.message}
@@ -126,7 +154,13 @@ async function handleFileChange(e: Event) {
 		{action}
 		use:enhance={async ({ formData }) => {
         if (resizedBlob) formData.set('image_file', resizedBlob, `cover_${Date.now()}.jpg`);
-        return async ({ update }) => { await update(); };
+        return async ({ result, update }) => {
+            await update();
+            // 失敗でも作品データは更新済みのことがある（保護レコードだけ失敗など）。
+            // 再読み込みしないと画面が古い値のままになり、そのフォームで再保存すると
+            // 古い値で上書きしてしまう
+            if (result.type === "failure") await invalidateAll();
+        };
     }}
 		class="register-form"
 		class:register-form--edit={isEditMode}
@@ -193,11 +227,12 @@ async function handleFileChange(e: Event) {
 					<label for="rf-type">タイプ</label>
 					<select id="rf-type" name="type" class="rf-select">
 						<option value="">未設定</option>
-						<option value="TV" selected={anime?.type === "TV"}>TV</option>
-						<option value="映画" selected={anime?.type === "映画"}>映画</option>
-						<option value="OVA" selected={anime?.type === "OVA"}>OVA</option>
-						<option value="ONA" selected={anime?.type === "ONA"}>ONA</option>
-						<option value="特別" selected={anime?.type === "特別"}>特別</option>
+						{#each TYPE_OPTIONS as option}
+							<option value={option.value} selected={anime?.type === option.value}>{option.label}</option>
+						{/each}
+						{#if extraTypeOption}
+							<option value={extraTypeOption} selected>{extraTypeOption}</option>
+						{/if}
 					</select>
 				</div>
 				<div class="form-group">
@@ -207,6 +242,9 @@ async function handleFileChange(e: Event) {
 						{#each SOURCE_OPTIONS as source}
 							<option value={source} selected={anime?.source === source}>{source}</option>
 						{/each}
+						{#if extraSourceOption}
+							<option value={extraSourceOption} selected>{extraSourceOption}</option>
+						{/if}
 					</select>
 				</div>
 				<div class="form-group">
@@ -498,9 +536,18 @@ async function handleFileChange(e: Event) {
 							class="rf-input"
 							style="margin-top:6px"
 							placeholder="または画像 URL を直接入力..."
-							value={anime?.cover_url ?? ""}
+							value={currentCoverUrl}
 						>
 					{/if}
+					<p class="cover-note">
+						{#if coverHiddenNow}
+							権利表記（©）が未設定のため、今のカバー画像は表示されていません。
+						{/if}
+						カバー画像は権利表記（©）のある作品だけに表示されます。
+						{#if isEditMode}
+							URL 欄を空にして保存するとカバーを外します。
+						{/if}
+					</p>
 				</div>
 			</div>
 		</div>
@@ -527,7 +574,7 @@ async function handleFileChange(e: Event) {
 }
 .form-success {
 	padding: 12px 16px;
-	border-radius: 8px;
+	border-radius: 12px;
 	background: color-mix(in srgb, var(--color-success) 10%, transparent);
 	color: var(--color-success);
 	margin-bottom: 16px;
@@ -537,9 +584,20 @@ async function handleFileChange(e: Event) {
 	color: var(--color-success);
 	font-weight: 600;
 }
+.form-note {
+	margin: 6px 0 0;
+	font-size: 0.8rem;
+	color: var(--color-text-muted);
+}
+.cover-note {
+	margin: 6px 0 0;
+	font-size: 0.75rem;
+	line-height: 1.5;
+	color: var(--color-text-muted);
+}
 .form-error {
 	padding: 12px 16px;
-	border-radius: 8px;
+	border-radius: 12px;
 	background: color-mix(in srgb, var(--color-danger) 10%, transparent);
 	color: var(--color-danger);
 	margin-bottom: 16px;
@@ -592,7 +650,7 @@ async function handleFileChange(e: Event) {
 .rf-textarea,
 .rf-select {
 	padding: 8px 10px;
-	border-radius: 8px;
+	border-radius: 12px;
 	border: 1px solid var(--color-border);
 	background: var(--color-surface);
 	color: var(--color-text);
@@ -624,7 +682,7 @@ async function handleFileChange(e: Event) {
 }
 .tag-btn {
 	padding: 4px 10px;
-	border-radius: 14px;
+	border-radius: 20px;
 	border: 1px solid var(--color-border);
 	background: transparent;
 	color: var(--color-text-muted);
@@ -651,7 +709,7 @@ async function handleFileChange(e: Event) {
 }
 .tag-add-btn {
 	padding: 8px 14px;
-	border-radius: 8px;
+	border-radius: 12px;
 	border: 1px solid var(--color-border);
 	background: var(--color-surface-hover);
 	color: var(--color-text);
@@ -676,7 +734,7 @@ async function handleFileChange(e: Event) {
 	align-items: center;
 	gap: 4px;
 	padding: 3px 10px;
-	border-radius: 14px;
+	border-radius: 20px;
 	background: var(--color-accent);
 	color: #fff;
 	font-size: 0.8rem;
@@ -703,7 +761,7 @@ async function handleFileChange(e: Event) {
 }
 .submit-btn {
 	padding: 10px 28px;
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-accent);
 	color: #fff;
 	border: none;
@@ -733,7 +791,7 @@ async function handleFileChange(e: Event) {
 	width: 100%;
 	height: 110px;
 	border: 2px dashed var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	cursor: pointer;
 	transition:
 		border-color 0.15s,

@@ -51,6 +51,7 @@ let { name, checked = $bindable(), disabled = false, label, onchange }: Props = 
 	height: 24px;
 	padding: 3px;
 	border-radius: 999px;
+	corner-shape: round;
 	background: color-mix(in srgb, var(--color-text-muted) 35%, transparent);
 	transition: background 0.18s ease;
 }
@@ -58,6 +59,7 @@ let { name, checked = $bindable(), disabled = false, label, onchange }: Props = 
 	width: 18px;
 	height: 18px;
 	border-radius: 50%;
+	corner-shape: round;
 	background: #fff;
 	box-shadow: 0 1px 3px rgb(0 0 0 / 35%);
 	transition: transform 0.18s ease;

@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { GET } from "./+server";
 
-function makeEvent(q: string | null) {
+function makeEvent(q: string | null, blockedUserIds: string[] = []) {
 	const calls: { method: string; args: unknown[] }[] = [];
 	const chain: Record<string, unknown> = {};
-	for (const method of ["select", "ilike", "order"]) {
+	for (const method of ["select", "ilike", "order", "not"]) {
 		chain[method] = vi.fn((...args: unknown[]) => {
 			calls.push({ method, args });
 			return chain;
@@ -16,7 +16,17 @@ function makeEvent(q: string | null) {
 	});
 	const url = new URL("http://localhost/api/users/search");
 	if (q !== null) url.searchParams.set("q", q);
-	const event = { url, locals: { supabase: { from: vi.fn(() => chain) } } } as unknown as Parameters<typeof GET>[0];
+	const event = {
+		url,
+		locals: {
+			supabase: {
+				from: vi.fn(() => chain),
+				// ブロック相手の除外用（141 の get_blocked_user_ids）
+				rpc: vi.fn(async () => ({ data: blockedUserIds.map((id) => ({ user_id: id })), error: null })),
+			},
+			safeGetSession: vi.fn(async () => ({ user: { id: "me" }, session: null })),
+		},
+	} as unknown as Parameters<typeof GET>[0];
 	return { event, calls };
 }
 
@@ -42,5 +52,17 @@ describe("GET /api/users/search", () => {
 		expect(pattern.slice(0, 4)).toBe(String.raw`%\_a`);
 		expect(pattern).not.toContain("a%%");
 		expect(pattern.length).toBeLessThanOrEqual(50 + 4);
+	});
+
+	it("ブロック関係のあるユーザーを候補から外す", async () => {
+		const { event, calls } = makeEvent("@mikan", ["blocked-1", "blocked-2"]);
+		await GET(event);
+		expect(calls.find((c) => c.method === "not")?.args).toEqual(["id", "in", "(blocked-1,blocked-2)"]);
+	});
+
+	it("ブロックが無ければ除外条件を付けない", async () => {
+		const { event, calls } = makeEvent("@mikan");
+		await GET(event);
+		expect(calls.find((c) => c.method === "not")).toBeUndefined();
 	});
 });

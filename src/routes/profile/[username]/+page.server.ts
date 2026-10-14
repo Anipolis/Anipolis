@@ -1,10 +1,12 @@
 import { error, fail } from "@sveltejs/kit";
 import {
+	blockUserAction,
 	deletePostAction,
 	toggleBookmarkAction,
 	toggleFollowAction,
 	toggleLikeAction,
 	toggleRepostAction,
+	unblockUserAction,
 } from "$lib/server/actions";
 import {
 	checkIsFollowing,
@@ -15,6 +17,7 @@ import {
 	getProfileTimelinePosts,
 	getTrendingHashtags,
 	getUserAnimeList,
+	isBlockedByMe,
 } from "$lib/server/queries";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -33,9 +36,10 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 	const isOwn = user?.id === profile.id;
 	const myId = user?.id;
 
-	const [isFollowing, rawFollowRequestStatus] = await Promise.all([
+	const [isFollowing, rawFollowRequestStatus, isBlocked] = await Promise.all([
 		myId && !isOwn ? checkIsFollowing(supabase, myId, profile.id) : Promise.resolve(false),
 		myId && !isOwn ? getFollowRequestStatus(supabase, myId, profile.id) : Promise.resolve("none" as const),
+		myId && !isOwn ? isBlockedByMe(supabase, myId, profile.id) : Promise.resolve(false),
 	]);
 	const followRequestStatus = isFollowing ? ("none" as const) : rawFollowRequestStatus;
 	const canViewContent = isOwn || !profile.is_private || isFollowing;
@@ -81,6 +85,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 		followCounts,
 		isFollowing,
 		followRequestStatus,
+		isBlocked,
 		trending: trendingResult,
 		animeTrending,
 		animeList,
@@ -148,5 +153,17 @@ export const actions: Actions = {
 		const { user } = await safeGetSession();
 		if (!user) return fail(401, { message: "ログインが必要です" });
 		return toggleBookmarkAction(request, supabase, user.id);
+	},
+
+	block: async ({ request, locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { message: "ログインが必要です" });
+		return blockUserAction(request, supabase, user.id);
+	},
+
+	unblock: async ({ request, locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { message: "ログインが必要です" });
+		return unblockUserAction(request, supabase, user.id);
 	},
 };

@@ -1,5 +1,6 @@
 import { fail, redirect } from "@sveltejs/kit";
 import { hasPasswordProvider } from "$lib/server/auth";
+import { USERNAME_HELD_ERROR_MESSAGE, USERNAME_HELD_USER_MESSAGE } from "$lib/server/queries";
 import type { Actions, PageServerLoad } from "./$types";
 
 async function verifyCurrentPassword(
@@ -53,7 +54,10 @@ export const actions: Actions = {
 
 		if (error) {
 			if (error.code === "23505") {
-				return fail(400, { field: "username", message: "このユーザー名はすでに使用されています" });
+				const message = error.message.includes(USERNAME_HELD_ERROR_MESSAGE)
+					? USERNAME_HELD_USER_MESSAGE
+					: "このユーザー名はすでに使用されています";
+				return fail(400, { field: "username", message });
 			}
 			return fail(500, { message: "ユーザー名の更新に失敗しました" });
 		}

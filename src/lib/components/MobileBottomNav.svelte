@@ -299,7 +299,7 @@ function isActive(path: string): boolean {
 	font-size: 9px;
 	font-weight: 700;
 	padding: 1px 4px;
-	border-radius: 10px;
+	border-radius: 14px;
 	line-height: 1.4;
 	min-width: 16px;
 	text-align: center;

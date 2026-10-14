@@ -1,12 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isRepeatMuteActive } from "$lib/anime-mute-schedule";
+import { groupGenreFilters, translateAnimeGenres } from "$lib/anime-vocabulary";
 import { computeBroadcastStatus } from "$lib/broadcast-status";
 import { toValidExchangeSubjectiveTags } from "$lib/exchange-tags";
-import { buildPostCardSelect } from "$lib/server/post-selects";
+import { isOwnPostImage, postImageMediaUrl } from "$lib/post-image-url";
+import { signPostImageUrls } from "$lib/server/post-image-signing";
+import { buildPostCardSelect, POST_CW_ANIME_SELECT } from "$lib/server/post-selects";
 import type { Database } from "$lib/supabase/database.types";
 import { isEpisodeSuppressedSnapshot } from "$lib/syobocal-episodes";
 import type {
 	Anime,
-	AnimeDataAttribution,
 	AnimeExchangeItem,
 	AnimeExchangeShare,
 	AnimeMute,
@@ -43,6 +46,8 @@ type NotificationPost = {
 	anime_id: number | null;
 	quoted_post_id: string | null;
 	exchange_share: unknown | null;
+	cw_anime_id: number | null;
+	cw_anime: { title: string } | { title: string }[] | null;
 };
 
 type NotificationRecommendation = {
@@ -159,6 +164,7 @@ const muteSettingsCache = new WeakMap<
 			mutedWords?: Promise<string[]>;
 			animeMuteIds?: Promise<Set<string>>;
 			mutedEventIds?: Promise<Set<string>>;
+			blockedUserIds?: Promise<Set<string>>;
 		}
 	>
 >();
@@ -202,10 +208,118 @@ function getMutedEventIdsCached(supabase: SupabaseClient<Database>, userId: stri
 }
 
 /**
+ * 自分がブロックした相手と、自分をブロックしている相手の ID。
+ *
+ * ブロックは双方向に効かせるので、どちらの向きも同じ Set にまとめる。
+ * user_blocks の SELECT は自分が作った行だけなので、「自分をブロックしている相手」は
+ * is_blocked_between と同じ理由で RLS 越しには読めない。そのため RPC で引く。
+ */
+export async function getBlockedUserIds(
+	supabase: SupabaseClient<Database>,
+	userId: string | null,
+): Promise<Set<string>> {
+	if (!userId) return new Set();
+	const { data, error } = await supabase.rpc("get_blocked_user_ids");
+	if (error) {
+		console.error("getBlockedUserIds error:", error);
+		return new Set();
+	}
+	return new Set(((data ?? []) as { user_id: string }[]).map((row) => row.user_id));
+}
+
+/** 自分がブロックした相手の一覧（設定画面用。自分をブロックしている相手は含めない） */
+export async function getBlockedProfiles(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+): Promise<(ProfileSummary & { blocked_at: string })[]> {
+	const { data, error } = await supabase
+		.from("user_blocks")
+		.select(
+			"created_at, blocked:profiles!user_blocks_blocked_id_fkey ( id, username, display_name, avatar_url, bio )",
+		)
+		.eq("blocker_id", userId)
+		.order("created_at", { ascending: false });
+
+	if (error) {
+		console.error("getBlockedProfiles error:", error);
+		return [];
+	}
+
+	type BlockRow = { created_at: string; blocked: ProfileSummary | ProfileSummary[] | null };
+	return ((data ?? []) as unknown as BlockRow[]).flatMap((row) => {
+		const profile = Array.isArray(row.blocked) ? row.blocked[0] : row.blocked;
+		return profile ? [{ ...profile, blocked_at: row.created_at }] : [];
+	});
+}
+
+/** 自分が相手をブロックしているか（プロフィール画面のメニュー表示用） */
+export async function isBlockedByMe(
+	supabase: SupabaseClient<Database>,
+	userId: string | null,
+	targetId: string,
+): Promise<boolean> {
+	if (!userId || userId === targetId) return false;
+	const { data } = await supabase
+		.from("user_blocks")
+		.select("blocked_id")
+		.eq("blocker_id", userId)
+		.eq("blocked_id", targetId)
+		.maybeSingle();
+	return data != null;
+}
+
+/** リクエストスコープでメモ化された getBlockedUserIds */
+function getBlockedUserIdsCached(supabase: SupabaseClient<Database>, userId: string | null): Promise<Set<string>> {
+	if (!userId) return Promise.resolve(new Set<string>());
+	const entry = getMuteCacheEntry(supabase, userId);
+	if (!entry.blockedUserIds) entry.blockedUserIds = getBlockedUserIds(supabase, userId);
+	return entry.blockedUserIds;
+}
+
+/**
  * rawPost 配列に like_count / repost_count / reply_count / liked_by_me / reposted_by_me を付加して
  * Post[] に変換する共通ヘルパー。
  * 全ルートサーバー（タイムライン・プロフィール・ハッシュタグ・検索・詳細）で使い回す。
  */
+/** get_post_counts（121）に一度に渡せる投稿 ID の上限。超えると RPC 全体が例外になる */
+const POST_COUNTS_RPC_MAX_IDS = 200;
+
+type PostCountsRow = Database["public"]["Functions"]["get_post_counts"]["Returns"][number];
+
+/**
+ * 投稿の件数と自分の反応を、RPC の上限（200件）ごとに分けて取る（#323）。
+ * 以前は全件を1回で渡していたため、返信が多い投稿詳細（本投稿＋親＋返信で200件超）では
+ * RPC 全体が失敗し、件数が0・いいね済みも「未操作」に見えていた（押すと意図と逆の操作になる）。
+ * 一時的な失敗は1回だけやり直し、それでも失敗した分はログに残して failed で知らせる。
+ * get_post_counts は呼び出し元が閲覧できる投稿の行だけを返す（削除・非表示・ブロックは含まれない）。
+ */
+async function fetchPostCountsById(
+	supabase: SupabaseClient<Database>,
+	postIds: string[],
+	userId: string | null,
+): Promise<{ counts: Map<string, PostCountsRow>; failed: boolean }> {
+	const chunks: string[][] = [];
+	for (let start = 0; start < postIds.length; start += POST_COUNTS_RPC_MAX_IDS) {
+		chunks.push(postIds.slice(start, start + POST_COUNTS_RPC_MAX_IDS));
+	}
+	const fetchChunk = (ids: string[]) =>
+		supabase.rpc("get_post_counts", { p_post_ids: ids, ...(userId ? { p_user_id: userId } : {}) });
+
+	let failed = false;
+	const results = await Promise.all(
+		chunks.map(async (ids) => {
+			let result = await fetchChunk(ids);
+			if (result.error) result = await fetchChunk(ids);
+			if (result.error) {
+				console.error("get_post_counts failed:", result.error);
+				failed = true;
+			}
+			return result.data ?? [];
+		}),
+	);
+	return { counts: new Map(results.flat().map((row) => [row.post_id, row])), failed };
+}
+
 export async function enrichPostsWithCounts(
 	supabase: SupabaseClient<Database>,
 	rawPosts: RawPost[],
@@ -222,12 +336,16 @@ export async function enrichPostsWithCounts(
 	const mutedEventIdsPromise = options.includeMutedRoomPosts
 		? Promise.resolve(new Set<string>())
 		: getMutedEventIdsCached(supabase, userId);
+	// ブロックは入室中のルームでも解除しない（ミュートと違い、相手を避けるための機能）
+	const blockedUserIdsPromise = getBlockedUserIdsCached(supabase, userId);
 
 	type QuotedPostRow = {
 		id: string;
 		content: string;
 		created_at: string;
 		user_id: string;
+		cw_anime_id: number | null;
+		cw_anime: { title: string } | null;
 		profiles: { username: string; display_name: string | null; avatar_url: string | null } | null;
 	};
 	const quotedPostIds = [...new Set(rawPosts.map((p) => p.quoted_post_id).filter(Boolean))] as string[];
@@ -236,7 +354,8 @@ export async function enrichPostsWithCounts(
 		const { data: quotedRaw } = await supabase
 			.from("posts")
 			.select(
-				"id, content, created_at, user_id, profiles!posts_user_id_fkey ( username, display_name, avatar_url )",
+				// 引用元の CW も引き継ぐ。引用枠で本文がそのまま出ないようにする（#319）
+				`id, content, created_at, user_id, cw_anime_id, ${POST_CW_ANIME_SELECT}, profiles!posts_user_id_fkey ( username, display_name, avatar_url )`,
 			)
 			.in("id", quotedPostIds);
 		for (const qp of quotedRaw ?? []) {
@@ -251,13 +370,24 @@ export async function enrichPostsWithCounts(
 		}
 	}
 
-	const [mutedWords, mutedRoomAnimeIds, mutedEventIds] = await Promise.all([
+	const [mutedWords, mutedRoomAnimeIds, mutedEventIds, blockedUserIds] = await Promise.all([
 		mutedWordsPromise,
 		mutedRoomAnimeIdsPromise,
 		mutedEventIdsPromise,
+		blockedUserIdsPromise,
 	]);
+
+	// 引用先がブロック相手なら引用枠を落とす（本文だけ残す）
+	if (blockedUserIds.size > 0) {
+		for (const raw of rawPosts) {
+			const quoted = Array.isArray(raw.quoted_post) ? raw.quoted_post[0] : raw.quoted_post;
+			if (quoted && blockedUserIds.has(quoted.user_id)) raw.quoted_post = null;
+		}
+	}
+
 	const visibleRawPosts = rawPosts.filter(
 		(post) =>
+			!blockedUserIds.has(post.user_id) &&
 			!(mutedWords.length > 0 && containsMutedWord(post, mutedWords)) &&
 			!(
 				post.broadcast_room_session_id &&
@@ -271,16 +401,11 @@ export async function enrichPostsWithCounts(
 
 	const postIds = visibleRawPosts.map((p) => p.id as string);
 
-	// ── 件数＋自分のリアクション有無を単一RPCで取得（DB往復 4→1）──────
+	// ── 件数＋自分のリアクション有無を RPC で取得（DB往復 4→1）──────
 	// get_post_counts は like/repost/reply の件数に加え、
 	// liked_by_me / reposted_by_me / bookmarked_by_me を1クエリで返す。
 	// p_user_id が NULL（未ログイン）の場合は各 *_by_me が全て false になる。
-	const { data: countsData } = await supabase.rpc("get_post_counts", {
-		p_post_ids: postIds,
-		...(userId ? { p_user_id: userId } : {}),
-	});
-
-	const countsByPostId = new Map((countsData ?? []).map((row) => [row.post_id, row]));
+	const { counts: countsByPostId } = await fetchPostCountsById(supabase, postIds, userId);
 
 	// ── アニメ引用がある投稿のスコアを一括取得 ────────────────────
 	const animeIds = Array.from(new Set(visibleRawPosts.map((p) => p.anime_id).filter((n): n is number => n != null)));
@@ -296,6 +421,13 @@ export async function enrichPostsWithCounts(
 		}
 	}
 
+	// 投稿画像は非公開（149）。ここに来るのは RLS で読めた投稿だけなので、その投稿者自身の画像にだけ
+	// 期限付きの URL を発行して差し替える（#316）。他人の画像を参照している投稿からは出さない
+	const imageUrls = visibleRawPosts.flatMap((raw) =>
+		(raw.image_urls ?? []).filter((url) => isOwnPostImage(url, raw.user_id)),
+	);
+	const signedImageUrls = imageUrls.length > 0 ? await signPostImageUrls(imageUrls) : new Map<string, string>();
+
 	return visibleRawPosts.map((raw) => {
 		const post = toPost(raw, {
 			like_count: countsByPostId.get(raw["id"])?.like_count ?? 0,
@@ -307,6 +439,11 @@ export async function enrichPostsWithCounts(
 		});
 		if (post.anime_quote && post.anime_id) {
 			post.anime_quote.user_score = normalizeScore(userScoreMap.get(post.anime_id));
+		}
+		if (post.image_urls.length > 0) {
+			post.image_urls = post.image_urls
+				.filter((url) => isOwnPostImage(url, raw.user_id))
+				.map((url) => signedImageUrls.get(url) ?? postImageMediaUrl(url));
 		}
 		return post;
 	});
@@ -364,6 +501,22 @@ export async function getProfileIdByUsername(
 ): Promise<string | null> {
 	const { data } = await supabase.from("profiles").select("id").eq("username", username).maybeSingle();
 	return data?.id ?? null;
+}
+
+/** 退会したアカウントのユーザー名を保留していることを示す DB のエラー（150 の enforce_username_not_held） */
+export const USERNAME_HELD_ERROR_MESSAGE = "username is held after account deletion";
+export const USERNAME_HELD_USER_MESSAGE = "退会したアカウントのユーザー名は、退会から30日間は使えません";
+
+/**
+ * ユーザー名を新しく使えるか（使用中でも、退会から30日以内の保留中でもない）。
+ * 保留中の名前は profiles を見ても分からないので RPC で確かめる（150）。
+ * RPC が失敗したときは、従来どおり使用中かどうかだけで判定する（最終的には DB のトリガーが拒否する）。
+ */
+export async function isUsernameAvailable(supabase: SupabaseClient<Database>, username: string): Promise<boolean> {
+	const { data, error } = await supabase.rpc("is_username_available", { p_username: username });
+	if (!error) return data === true;
+	console.error("isUsernameAvailable error:", error);
+	return (await getProfileIdByUsername(supabase, username)) === null;
 }
 
 export async function getActiveBroadcastRoomMuteAnimeIds(
@@ -427,6 +580,10 @@ export async function getNotifications(
 	limit = 50,
 	types?: readonly string[],
 ): Promise<Notification[]> {
+	// ブロック相手からの通知は、ブロック前に作られた行も含めて出さない。
+	// 取得上限を無駄にしないよう、絞り込みはクエリ側で行う。
+	const blockedUserIds = await getBlockedUserIdsCached(supabase, userId);
+
 	let query = supabase
 		.from("notifications")
 		.select(`
@@ -453,7 +610,9 @@ export async function getNotifications(
                 image_urls,
                 anime_id,
                 quoted_post_id,
-                exchange_share
+                exchange_share,
+                cw_anime_id,
+                cw_anime:anime!posts_cw_anime_id_fkey ( title )
             ),
             recommendation:anime_recommendations!notifications_anime_recommendation_id_fkey (
                 anime_id,
@@ -490,6 +649,11 @@ export async function getNotifications(
 		query = query.in("type", types as string[]);
 	}
 
+	if (blockedUserIds.size > 0) {
+		// NOT IN は NULL を落とすため、actor_id が NULL のシステム通知（放送・トレード成立）は明示的に残す
+		query = query.or(`actor_id.is.null,actor_id.not.in.(${[...blockedUserIds].join(",")})`);
+	}
+
 	const { data, error } = await query;
 
 	if (error || !data) return [];
@@ -522,6 +686,8 @@ export async function getNotifications(
 			post_has_anime_quote: post?.anime_id != null,
 			post_has_quoted_post: post?.quoted_post_id != null,
 			post_has_exchange_share: post?.exchange_share != null,
+			post_cw_anime_id: post?.cw_anime_id != null ? String(post.cw_anime_id) : null,
+			post_cw_anime_title: (Array.isArray(post?.cw_anime) ? post.cw_anime[0] : post?.cw_anime)?.title ?? null,
 			recommendation_anime_id: recommendation?.anime_id != null ? String(recommendation.anime_id) : null,
 			recommendation_anime_title: recommendation?.anime?.title ?? null,
 			recommendation_anime_cover_url: recommendation?.anime?.cover_url ?? null,
@@ -805,6 +971,92 @@ export async function getEventRoomPosts(
 	});
 }
 
+/** ルームの種類と ID（放送ルームはセッション ID、イベントルームはイベント ID） */
+export type RoomRef = { kind: "broadcast" | "event"; id: string };
+
+/** 取得済みの境界（created_at と id）より後ろだけに絞る。同じ created_at の投稿を落とさないよう id でも比べる */
+function afterCursorFilter(cursor: TimelineCursor): string {
+	return `created_at.gt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.gt.${cursor.id})`;
+}
+
+/**
+ * ルームの新着を、取得済みの境界（cursor）より後ろから古い順に limit 件取る（#320）。
+ *
+ * 以前は「since より新しいものを新しい順に100件」取っていたため、未受信が100件を超えると古い側を
+ * 取りこぼし、同じ created_at の投稿も落としていた。古い順に取り、hasMore の間はページを追う。
+ * nextCursor は表示前（ミュート・ブロックの除外前）の取得行で決めるので、除外があっても進める。
+ */
+export async function getRoomPostsAfter(
+	supabase: SupabaseClient<Database>,
+	room: RoomRef,
+	userId: string | null,
+	cursor: TimelineCursor | null,
+	limit = 100,
+): Promise<{ posts: Post[]; nextCursor: TimelineCursor | null; hasMore: boolean } | null> {
+	let query = supabase.from("posts").select(POST_LIST_SELECT).is("parent_id", null);
+	query = room.kind === "event" ? query.eq("event_id", room.id) : query.eq("broadcast_room_session_id", room.id);
+	if (cursor) query = query.or(afterCursorFilter(cursor));
+	const { data, error } = await query
+		.order("created_at", { ascending: true })
+		.order("id", { ascending: true })
+		.limit(limit);
+	if (error) {
+		console.error("getRoomPostsAfter error:", error);
+		return null;
+	}
+	const rawPosts = (data ?? []) as unknown as RawPost[];
+	const last = rawPosts[rawPosts.length - 1];
+	// ルーム内ではそのルームのミュートを適用しない（明示的に入室しているため）
+	const posts = await enrichPostsWithCounts(supabase, rawPosts, userId, { includeMutedRoomPosts: true });
+	return {
+		posts,
+		nextCursor: last ? { createdAt: last.created_at, id: last.id } : cursor,
+		hasMore: rawPosts.length === limit,
+	};
+}
+
+/** get_post_counts（121）に一度に渡せる投稿 ID の上限 */
+/**
+ * 表示中の投稿のうち、今も閲覧できるものの返信数を返す（#324）。
+ * get_post_counts は呼び出し元が閲覧できる投稿の行だけを返すので、削除・管理者非表示・
+ * ブロックで見えなくなった投稿は結果に含まれない。
+ * 一部でも取れなければ null。失敗を「見えない」と取り違えて表示中の投稿を消さないため。
+ */
+export async function getVisiblePostReplyCounts(
+	supabase: SupabaseClient<Database>,
+	postIds: string[],
+): Promise<Map<string, number> | null> {
+	const { counts, failed } = await fetchPostCountsById(supabase, [...new Set(postIds)], null);
+	if (failed) return null;
+	return new Map([...counts].map(([id, row]) => [id, Number(row.reply_count ?? 0)]));
+}
+
+/**
+ * 返信を古い順に、取得済みの境界（cursor）より後ろから limit 件取る（#325）。
+ * 以前は古い100件で打ち切って全件取得済み扱いにしていた。hasMore の間は続きを取れる。
+ */
+export async function getPostRepliesAfter(
+	supabase: SupabaseClient<Database>,
+	parentId: string,
+	cursor: TimelineCursor | null,
+	limit: number,
+): Promise<{ rows: RawPost[]; nextCursor: TimelineCursor | null; hasMore: boolean }> {
+	let query = supabase.from("posts").select(POST_LIST_SELECT).eq("parent_id", parentId);
+	if (cursor) query = query.or(afterCursorFilter(cursor));
+	const { data, error } = await query
+		.order("created_at", { ascending: true })
+		.order("id", { ascending: true })
+		.limit(limit);
+	if (error) throw error;
+	const rows = (data ?? []) as unknown as RawPost[];
+	const last = rows[rows.length - 1];
+	return {
+		rows,
+		nextCursor: last ? { createdAt: last.created_at, id: last.id } : cursor,
+		hasMore: rows.length === limit,
+	};
+}
+
 export async function getPostReplies(
 	supabase: SupabaseClient<Database>,
 	parentId: string,
@@ -914,8 +1166,9 @@ export type ModerationStatus = "active" | "restricted" | "banned";
 
 export interface AdminReport {
 	id: string;
-	reporter_id: string;
-	reporter_username: string;
+	/** 通報者が退会すると null（通報は残す。150） */
+	reporter_id: string | null;
+	reporter_username: string | null;
 	reporter_display_name: string | null;
 	target_type: ReportTargetType;
 	target_id: string;
@@ -1051,7 +1304,8 @@ export async function isAdminUser(supabase: SupabaseClient<Database>, userId: st
 export type InviteRow = {
 	id: string;
 	code: string;
-	created_by: string;
+	/** 発行者が退会すると null（招待と利用記録は残す。150） */
+	created_by: string | null;
 	max_uses: number;
 	use_count: number;
 	expires_at: string | null;
@@ -1068,8 +1322,7 @@ export async function getInvites(
 	userId: string,
 	options: { allUsers?: boolean } = {},
 ): Promise<InviteRow[]> {
-	// biome-ignore lint/suspicious/noExplicitAny: invites not yet in auto-generated DB types
-	let query = (supabase as any).from("invites").select("*").order("created_at", { ascending: false }).limit(200);
+	let query = supabase.from("invites").select("*").order("created_at", { ascending: false }).limit(200);
 	if (!options.allUsers) {
 		query = query.eq("created_by", userId);
 	}
@@ -1094,7 +1347,7 @@ export async function getInvitesWithCreators(supabase: SupabaseClient<Database>)
 	const invites = await getInvites(supabase, "", { allUsers: true });
 	if (invites.length === 0) return [];
 
-	const creatorIds = Array.from(new Set(invites.map((invite) => invite.created_by)));
+	const creatorIds = Array.from(new Set(invites.flatMap((invite) => (invite.created_by ? [invite.created_by] : []))));
 	const { data: profiles, error: profilesError } = await supabase
 		.from("profiles")
 		.select("id, username")
@@ -1106,7 +1359,7 @@ export async function getInvitesWithCreators(supabase: SupabaseClient<Database>)
 
 	return invites.map((invite) => ({
 		...invite,
-		created_by_username: usernameByCreatorId.get(invite.created_by) ?? null,
+		created_by_username: invite.created_by ? (usernameByCreatorId.get(invite.created_by) ?? null) : null,
 	}));
 }
 
@@ -1354,7 +1607,7 @@ function toAdminReport(
 	return {
 		id: row.id,
 		reporter_id: row.reporter_id,
-		reporter_username: reporter?.username ?? "unknown",
+		reporter_username: reporter?.username ?? null,
 		reporter_display_name: reporter?.display_name ?? null,
 		target_type: row.target_type as ReportTargetType,
 		target_id: row.target_id,
@@ -1377,9 +1630,11 @@ function toAdminReport(
 export async function getFollowerProfiles(
 	supabase: SupabaseClient<Database>,
 	profileId: string,
+	viewerId: string | null = null,
 ): Promise<ProfileSummary[]> {
 	const { data: follows } = await supabase.from("follows").select("follower_id").eq("following_id", profileId);
-	const ids = (follows ?? []).map((r) => r.follower_id);
+	const blockedUserIds = await getBlockedUserIdsCached(supabase, viewerId);
+	const ids = (follows ?? []).map((r) => r.follower_id).filter((id) => !blockedUserIds.has(id));
 	if (ids.length === 0) return [];
 	const { data } = await supabase
 		.from("profiles")
@@ -1391,9 +1646,11 @@ export async function getFollowerProfiles(
 export async function getFollowingProfiles(
 	supabase: SupabaseClient<Database>,
 	profileId: string,
+	viewerId: string | null = null,
 ): Promise<ProfileSummary[]> {
 	const { data: follows } = await supabase.from("follows").select("following_id").eq("follower_id", profileId);
-	const ids = (follows ?? []).map((r) => r.following_id);
+	const blockedUserIds = await getBlockedUserIdsCached(supabase, viewerId);
+	const ids = (follows ?? []).map((r) => r.following_id).filter((id) => !blockedUserIds.has(id));
 	if (ids.length === 0) return [];
 	const { data } = await supabase
 		.from("profiles")
@@ -1744,6 +2001,10 @@ export interface AnimeListOptions {
 	limit?: number;
 	userId?: string | null;
 	query?: string;
+	/** この曜日（0=日曜 … 6=土曜）に放送する作品を並び順を保ったまま先頭へ寄せる（放送中タブの「本日放送」用） */
+	prioritizeBroadcastDay?: number | null;
+	/** 新しいシーズン（例: 2026-fall）から順に並べる。同じシーズン内は sortBy の並びを保つ */
+	newestSeasonFirst?: boolean;
 }
 
 /**
@@ -1832,7 +2093,7 @@ function applyAnimeListFilters<T extends AnimeFilterQuery<T>>(
 			.or(`aired_from.is.null,aired_from.lte.${filters.scheduleRange.end}`)
 			.or(`aired_to.is.null,aired_to.gte.${filters.scheduleRange.start}`);
 	}
-	if (selectedGenres.length) q = q.or(buildGenreFilter(selectedGenres));
+	q = applyGenreFilters(q, selectedGenres);
 	if (filters.studio) q = q.or(arrayContainsAny(["studio", "studio_en"], filters.studio));
 	if (filters.producer) q = q.contains("producer", [filters.producer]);
 	if (filters.source) q = q.eq("source", filters.source);
@@ -1929,6 +2190,8 @@ export type AnimeCandidate = {
 	created_at: string;
 	genre: string[] | null;
 	genre_en: string[] | null;
+	broadcast_day?: number | null;
+	season?: string | null;
 };
 
 /**
@@ -1972,41 +2235,259 @@ export function rankAnimeCandidateIds(
 	return withIndex.map(({ c }) => String(c.id));
 }
 
-const ANIME_CANDIDATE_COLUMNS = "id, created_at, genre, genre_en";
+const SEASON_SORT_INDEX: Record<string, number> = { winter: 0, spring: 1, summer: 2, fall: 3 };
 
-/** フィルター済みの候補行（軽量列）を created_at DESC で取得する。ビュー失敗時はベーステーブルへ */
-async function fetchAnimeCandidates(
-	supabase: SupabaseClient<Database>,
-	filters: AnimeFilterInput,
-	seasonFilter: string | null,
-): Promise<AnimeCandidate[]> {
-	const viewRes = await applyAnimeListFilters(
-		supabase
-			.from("anime_with_computed_broadcast_status")
-			.select(ANIME_CANDIDATE_COLUMNS)
-			.order("created_at", { ascending: false })
-			.limit(2000),
-		filters,
-		seasonFilter,
-	);
-	if (!viewRes.error && viewRes.data) return viewRes.data as unknown as AnimeCandidate[];
+/** "2026-fall" 形式のシーズンを新旧比較用の数値にする。形式どおりでなければ null（並びの最後へ） */
+export function seasonSortKey(season: string | null | undefined): number | null {
+	const match = season?.match(/^(\d{4})-(winter|spring|summer|fall)$/);
+	if (!match) return null;
+	return Number(match[1]) * 4 + (SEASON_SORT_INDEX[match[2] ?? ""] ?? 0);
+}
 
-	// broadcastStatus はビュー専用列なのでベーステーブルには渡さない
-	const { broadcastStatus: _broadcastStatus, ...baseFilters } = filters;
-	const baseRes = await applyAnimeListFilters(
-		supabase.from("anime").select(ANIME_CANDIDATE_COLUMNS).order("created_at", { ascending: false }).limit(2000),
-		baseFilters,
-		seasonFilter,
-	);
-	return (baseRes.data ?? []) as unknown as AnimeCandidate[];
+/** 並び済みの ID 配列を新しいシーズン順に並べ直す純関数。同じシーズン内は元の相対順を保つ */
+export function sortIdsByNewestSeason(orderedIds: string[], candidates: AnimeCandidate[]): string[] {
+	const keys = new Map(candidates.map((c) => [String(c.id), seasonSortKey(c.season)]));
+	const rank = (id: string) => keys.get(id) ?? Number.NEGATIVE_INFINITY;
+	// -Infinity 同士の差は NaN になるので 0（同順位）に倒す
+	return [...orderedIds].sort((a, b) => rank(b) - rank(a) || 0);
+}
+
+/** 並び済みの ID 配列のうち、指定曜日に放送する作品を相対順を保ったまま先頭へ寄せる純関数 */
+export function moveBroadcastDayFirst(
+	orderedIds: string[],
+	candidates: AnimeCandidate[],
+	broadcastDay: number,
+): string[] {
+	const dayIds = new Set(candidates.filter((c) => c.broadcast_day === broadcastDay).map((c) => String(c.id)));
+	if (dayIds.size === 0) return orderedIds;
+	return [...orderedIds.filter((id) => dayIds.has(id)), ...orderedIds.filter((id) => !dayIds.has(id))];
+}
+
+/** 並べ替え用の値（シーズンの新旧・人気・話題・評価）を作品の列と並べたビュー（144） */
+const ANIME_LIST_SORTABLE_VIEW = "anime_list_sortable";
+/** 放送中タブでアプリ側の並べ替えに使う列 */
+const ANIME_CANDIDATE_BASE_COLUMNS = ["id", "created_at", "genre", "genre_en", "broadcast_day", "season"];
+/** 候補を全件取る経路（放送中タブ）の安全上限。放送中の作品は数百件程度の想定 */
+const MAX_ANIME_CANDIDATES = 5000;
+
+type AnimeSortableRow = {
+	id: number;
+	list_count?: number | null;
+	recent_count?: number | null;
+	avg_score?: number | null;
+	score_count?: number | null;
+};
+
+/**
+ * ページ分けで取る軽量列（重い一覧列は現在ページの ID だけ後段でまとめて取る）。
+ * 集計は並び順に要るものだけを取る。使わない集計の JOIN を planner が省けるので、
+ * 集計を3つとも取るより本番で約3割速い。
+ */
+function animeSortableColumns(sortBy: NonNullable<AnimeListOptions["sortBy"]>): string[] {
+	if (sortBy === "popular") return ["id", "list_count"];
+	if (sortBy === "trending") return ["id", "recent_count"];
+	if (sortBy === "top_rated") return ["id", "avg_score", "score_count"];
+	return ["id"];
+}
+type AnimeMetric = { primary: number; secondary: number };
+
+function fromAnimeListSortable(supabase: SupabaseClient<Database>) {
+	return supabase.from(ANIME_LIST_SORTABLE_VIEW);
 }
 
 /**
- * アニメ一覧を1ページ分だけ取得する（P1: SSR ペイロード削減 / P2: DB 相当のグローバル順を保証）。
+ * sortBy ごとの DB 側の並び（すべて降順・NULL は最後）。
  *
- * まず軽量な候補行（id/created_at/ジャンル）を取得して total と正しい並び順を確定し、
- * 重い一覧列は現在ページの ID 群（最大 pageSize 件）だけ後段でまとめて取得する。
- * これにより「最新N件を取ってからJSで人気順に並べ替える」既存の不整合（P2）も解消する。
+ * 人気・話題・評価が同点のときは新しいシーズンを先にする。登録がある作品はまだ少なく大半が
+ * 0件で同点になるため、登録順のままだと最後に一括で取り込んだ古い作品が上位に来てしまう。
+ * 最後に created_at と id を足して順番を一意にする。一括取り込みで created_at が同じ作品が多く、
+ * 一意でないとページを送るたびに同時刻の作品の並びが変わり、重複・欠落が起きるため。
+ */
+export function animeListOrderColumns(
+	sortBy: NonNullable<AnimeListOptions["sortBy"]>,
+	newestSeasonFirst: boolean,
+	rankByGenreMatch = false,
+): string[] {
+	const columns: string[] = [];
+	if (newestSeasonFirst) columns.push("season_sort_key");
+	if (sortBy === "popular") columns.push("list_count");
+	else if (sortBy === "trending") columns.push("recent_count");
+	else if (sortBy === "top_rated") columns.push("rating_sort_score", "score_count");
+	// 選んだタグに多く当てはまる作品を先に（rankAnimeCandidateIds と同じく、集計値の次に効かせる）
+	if (rankByGenreMatch) columns.push("genre_match");
+	if (sortBy !== "created" && !newestSeasonFirst) columns.push("season_sort_key");
+	columns.push("created_at", "id");
+	return columns;
+}
+
+/** ビューの集計列を、一覧カードに出す値（rankAnimeCandidateIds の metrics と同じ形）にする */
+function metricFromSortableRow(
+	row: AnimeSortableRow,
+	sortBy: Exclude<NonNullable<AnimeListOptions["sortBy"]>, "created">,
+): AnimeMetric {
+	if (sortBy === "popular") return { primary: Number(row.list_count ?? 0), secondary: 0 };
+	if (sortBy === "trending") return { primary: Number(row.recent_count ?? 0), secondary: 0 };
+	const scoreCount = Number(row.score_count ?? 0);
+	return { primary: normalizeAverageScore(Number(row.avg_score ?? 0), scoreCount) ?? 0, secondary: scoreCount };
+}
+
+function metricsFromSortableRows(
+	rows: AnimeSortableRow[],
+	sortBy: NonNullable<AnimeListOptions["sortBy"]>,
+): Map<string, AnimeMetric> {
+	if (sortBy === "created") return new Map();
+	return new Map(rows.map((row) => [String(row.id), metricFromSortableRow(row, sortBy)]));
+}
+
+/** 範囲を指定した取得の順番を付ける（すべて降順・NULL は最後） */
+function orderAnimeQuery<T extends { order(column: string, options: object): T }>(query: T, orderColumns: string[]): T {
+	return orderColumns.reduce((q, column) => q.order(column, { ascending: false, nullsFirst: false }), query);
+}
+
+/** 絞り込み後の件数だけを数える（一致数の並びに関係なく、ビューで数えられる） */
+async function countAnimeSortable(
+	supabase: SupabaseClient<Database>,
+	filters: AnimeFilterInput,
+	seasonFilter: string | null,
+): Promise<number | null> {
+	const { count, error } = await applyAnimeListFilters(
+		fromAnimeListSortable(supabase).select("id", { count: "exact", head: true }),
+		filters,
+		seasonFilter,
+	);
+	if (error) {
+		console.error("countAnimeSortable error:", error);
+		return null;
+	}
+	return count ?? 0;
+}
+
+/**
+ * 絞り込み・並べ替え・ページ分け・件数を DB で行う（#322）。
+ * offset が件数を超えると PostgREST は範囲外エラー（PGRST103）を返すので、そのときは件数だけ取り直す。
+ */
+async function fetchAnimeSortedPage(
+	supabase: SupabaseClient<Database>,
+	filters: AnimeFilterInput,
+	seasonFilter: string | null,
+	orderColumns: string[],
+	selectColumns: string[],
+	offset: number,
+	limit: number,
+	/** 一致数で並べるときの、表記をそろえた選択タグ（並べないときは空） */
+	rankGenres: string[] = [],
+): Promise<{ rows: AnimeSortableRow[]; total: number } | null> {
+	if (rankGenres.length > 0) {
+		return fetchAnimeGenreRankedPage(
+			supabase,
+			filters,
+			seasonFilter,
+			orderColumns,
+			selectColumns,
+			offset,
+			limit,
+			rankGenres,
+		);
+	}
+
+	const { data, error, count } = await orderAnimeQuery(
+		applyAnimeListFilters(
+			fromAnimeListSortable(supabase).select(selectColumns.join(", "), { count: "exact" }),
+			filters,
+			seasonFilter,
+		),
+		orderColumns,
+	).range(offset, offset + limit - 1);
+
+	if (error?.code === "PGRST103") {
+		const total = await countAnimeSortable(supabase, filters, seasonFilter);
+		return total === null ? null : { rows: [], total };
+	}
+	if (error || !data) {
+		console.error("fetchAnimeSortedPage error:", error);
+		return null;
+	}
+	// 取得する列は並び順に応じて実行時に組み立てるので、型は読み取れない
+	return { rows: data as unknown as AnimeSortableRow[], total: count ?? data.length };
+}
+
+/**
+ * 選んだタグの一致数（genre_match）で並べる経路。一致数は選んだタグで決まるので、引数を受け取る
+ * 関数（145）から1ページ分を取る。
+ *
+ * - GET で呼ぶ。POST だと PostgREST が関数を間接的に呼び出す形になり、planner が関数を展開できず
+ *   絞り込みが効かない（本番で 84 件に絞っても約0.55秒）。GET なら展開されビューと同程度になる。
+ * - 件数は関数経由で数えると遅いので、同じ絞り込みのビューで並行して数える（一致数は件数に関係しない）。
+ * - PostgREST は関数の結果を並べ替えるとき、並べ替えに使う列も select に含まれている必要がある。
+ */
+async function fetchAnimeGenreRankedPage(
+	supabase: SupabaseClient<Database>,
+	filters: AnimeFilterInput,
+	seasonFilter: string | null,
+	orderColumns: string[],
+	selectColumns: string[],
+	offset: number,
+	limit: number,
+	rankGenres: string[],
+): Promise<{ rows: AnimeSortableRow[]; total: number } | null> {
+	const columns = [...new Set([...selectColumns, ...orderColumns])].join(", ");
+	const [page, total] = await Promise.all([
+		orderAnimeQuery(
+			applyAnimeListFilters(
+				supabase.rpc("anime_list_with_genre_match", { p_genres: rankGenres }, { get: true }).select(columns),
+				filters,
+				seasonFilter,
+			),
+			orderColumns,
+		).range(offset, offset + limit - 1),
+		countAnimeSortable(supabase, filters, seasonFilter),
+	]);
+	if (page.error || !page.data || total === null) {
+		if (page.error) console.error("fetchAnimeGenreRankedPage error:", page.error);
+		return null;
+	}
+	return { rows: page.data as unknown as AnimeSortableRow[], total };
+}
+
+/**
+ * 候補を全件取る（放送中タブのように、DB で表せない並べ方をアプリ側でする経路用）。
+ * PostgREST の max_rows で1回の取得が切られるので、返ってきた件数ずつ進めて空になるまで取る。
+ */
+async function fetchAllAnimeCandidates(
+	supabase: SupabaseClient<Database>,
+	filters: AnimeFilterInput,
+	seasonFilter: string | null,
+	sortableColumns: string[],
+): Promise<(AnimeCandidate & AnimeSortableRow)[] | null> {
+	const columns = [...new Set([...ANIME_CANDIDATE_BASE_COLUMNS, ...sortableColumns])].join(", ");
+	const rows: (AnimeCandidate & AnimeSortableRow)[] = [];
+	while (rows.length < MAX_ANIME_CANDIDATES) {
+		const { data, error } = await applyAnimeListFilters(
+			fromAnimeListSortable(supabase).select(columns),
+			filters,
+			seasonFilter,
+		)
+			.order("created_at", { ascending: false })
+			.order("id", { ascending: false })
+			.range(rows.length, MAX_ANIME_CANDIDATES - 1);
+		if (error || !data) {
+			console.error("fetchAllAnimeCandidates error:", error);
+			return null;
+		}
+		if (data.length === 0) return rows;
+		rows.push(...(data as unknown as (AnimeCandidate & AnimeSortableRow)[]));
+	}
+	console.warn(`fetchAllAnimeCandidates: truncated at ${MAX_ANIME_CANDIDATES} candidates`);
+	return rows;
+}
+
+/**
+ * アニメ一覧を1ページ分だけ取得する。
+ *
+ * 並べ替え・ページ分け・件数は anime_list_sortable（144）で DB に任せ、重い一覧列は現在ページの
+ * ID 群（最大 pageSize 件）だけ後段でまとめて取得する。以前は候補をアプリに取ってきて並べていたため、
+ * PostgREST の max_rows（本番 1000）で候補が切れていた（#322）。
+ * 放送中タブの「本日放送を先頭に」だけは DB の並びで表せないので、候補を全件取ってアプリで並べる。
  */
 export async function getAnimeListPage(
 	supabase: SupabaseClient<Database>,
@@ -2036,24 +2517,40 @@ export async function getAnimeListPage(
 		query: options.query,
 		listedAnimeIds,
 	};
-
-	const candidates = await fetchAnimeCandidates(supabase, filters, seasonFilter);
-	const total = candidates.length;
-	if (total === 0) return { items: [], total: 0 };
-
-	const metrics =
-		sortBy === "created"
-			? new Map<string, { primary: number; secondary: number }>()
-			: await getAnimeRankingMetrics(
-					supabase,
-					candidates.map((c) => String(c.id)),
-					sortBy,
-				);
-
-	const orderedIds = rankAnimeCandidateIds(candidates, metrics, sortBy, selectedGenres);
 	const start = Math.max(0, (page - 1) * pageSize);
-	const pageIds = orderedIds.slice(start, start + pageSize);
-	if (pageIds.length === 0) return { items: [], total };
+
+	let total: number;
+	let pageIds: string[];
+	let metrics: Map<string, AnimeMetric>;
+	if (options.prioritizeBroadcastDay != null) {
+		const candidates = await fetchAllAnimeCandidates(supabase, filters, seasonFilter, animeSortableColumns(sortBy));
+		if (!candidates) return { items: [], total: 0 };
+		total = candidates.length;
+		metrics = metricsFromSortableRows(candidates, sortBy);
+		// 優先順位: 本日放送 → 新しいシーズン → sortBy の並び（いずれも安定な並べ替えを重ねる）
+		let orderedIds = rankAnimeCandidateIds(candidates, metrics, sortBy, selectedGenres);
+		if (options.newestSeasonFirst) orderedIds = sortIdsByNewestSeason(orderedIds, candidates);
+		orderedIds = moveBroadcastDayFirst(orderedIds, candidates, options.prioritizeBroadcastDay);
+		pageIds = orderedIds.slice(start, start + pageSize);
+	} else {
+		// 同じ種類のタグは OR で絞るので、2つ以上選ぶと一致数が作品ごとに変わる（1つなら全件同じ）
+		const rankByGenreMatch = selectedGenres.length >= 2;
+		const result = await fetchAnimeSortedPage(
+			supabase,
+			filters,
+			seasonFilter,
+			animeListOrderColumns(sortBy, Boolean(options.newestSeasonFirst), rankByGenreMatch),
+			animeSortableColumns(sortBy),
+			start,
+			pageSize,
+			rankByGenreMatch ? selectedGenres : [],
+		);
+		if (!result) return { items: [], total: 0 };
+		total = result.total;
+		pageIds = result.rows.map((row) => String(row.id));
+		metrics = metricsFromSortableRows(result.rows, sortBy);
+	}
+	if (total === 0 || pageIds.length === 0) return { items: [], total };
 
 	const animes = await fetchAnimesByIds(supabase, pageIds);
 
@@ -2111,7 +2608,7 @@ export async function getAnimeCount(
 		broadcastSeasons?.length ? broadcastSeasons : broadcastSeason,
 	);
 	if (seasonFilter) q = q.or(seasonFilter);
-	if (selectedGenres.length) q = q.or(buildGenreFilter(selectedGenres));
+	q = applyGenreFilters(q, selectedGenres);
 	if (studio) q = q.or(arrayContainsAny(["studio", "studio_en"], studio));
 	if (producer) q = q.contains("producer", [producer]);
 	if (source) q = q.eq("source", source);
@@ -2122,7 +2619,7 @@ export async function getAnimeCount(
 	if (error || count === null) {
 		let fallback = supabase.from("anime").select("id", { count: "exact", head: true }).eq("metadata_ready", true);
 		if (seasonFilter) fallback = fallback.or(seasonFilter);
-		if (selectedGenres.length) fallback = fallback.or(buildGenreFilter(selectedGenres));
+		fallback = applyGenreFilters(fallback, selectedGenres);
 		if (studio) fallback = fallback.or(arrayContainsAny(["studio", "studio_en"], studio));
 		if (producer) fallback = fallback.contains("producer", [producer]);
 		if (source) fallback = fallback.eq("source", source);
@@ -2159,7 +2656,7 @@ async function getAnimeListRowsFromBaseTable(
 			.or(`aired_from.is.null,aired_from.lte.${scheduleRange.end}`)
 			.or(`aired_to.is.null,aired_to.gte.${scheduleRange.start}`);
 	}
-	if (selectedGenres.length) query = query.or(buildGenreFilter(selectedGenres));
+	query = applyGenreFilters(query, selectedGenres);
 	if (studio) query = query.or(arrayContainsAny(["studio", "studio_en"], studio));
 	if (producer) query = query.contains("producer", [producer]);
 	if (source) query = query.eq("source", source);
@@ -2228,9 +2725,15 @@ function buildGenreFilter(genres: string[]): string {
 		.join(",");
 }
 
+// 同じ種類(ジャンル/テーマ/対象層)のタグは OR、種類をまたぐと AND。
+// PostgREST では or フィルターを重ねると AND になるので、種類ごとに or を 1 つ足す。
+function applyGenreFilters<T extends { or(filters: string): T }>(query: T, genres: string[]): T {
+	return groupGenreFilters(genres).reduce((q, group) => q.or(buildGenreFilter(group)), query);
+}
+
 function normalizeGenreFilters(value: string | string[] | undefined): string[] {
 	const rawGenres = Array.isArray(value) ? value : (value ?? "").split(",");
-	return [...new Set(rawGenres.map((genre) => genre.trim()).filter(Boolean))];
+	return translateAnimeGenres(rawGenres.map((genre) => genre.trim()).filter(Boolean));
 }
 
 function countGenreMatches(anime: Anime, selectedGenres: string[]): number {
@@ -2416,20 +2919,22 @@ export async function getAnime(
 	return anime;
 }
 
-export async function getAnimeDataAttributions(
+/** 作品詳細のリソース欄に並べる、しょぼいカレンダーの作品ページURL */
+export async function getAnimeSyobocalUrl(
 	supabase: SupabaseClient<Database>,
 	malId: number | null,
-): Promise<AnimeDataAttribution[]> {
-	if (malId == null) return [];
+): Promise<string | null> {
+	if (malId == null) return null;
 
 	const { data, error } = await supabase
 		.from("anime_data_attributions" as never)
-		.select("anime_mal_id, source, label, source_url, license_label, license_url")
+		.select("source_url")
 		.eq("anime_mal_id", malId)
-		.order("source", { ascending: true });
+		.eq("source", "syobocal")
+		.maybeSingle();
 
-	if (error || !data) return [];
-	return data as unknown as AnimeDataAttribution[];
+	if (error || !data) return null;
+	return (data as unknown as { source_url: string }).source_url;
 }
 
 export async function getAnimeRelations(
@@ -2903,6 +3408,7 @@ function toAnime(raw: Record<string, unknown>): Anime {
 		title_romaji: (raw["title_romaji"] as string | null) ?? null,
 		synopsis: (raw["synopsis"] as string | null) ?? null,
 		cover_url: (raw["cover_url"] as string | null) ?? null,
+		cover_source_url: (raw["cover_source_url"] as string | null) ?? null,
 		season: (raw["season"] as string | null) ?? null,
 		episode_count: (raw["episode_count"] as string | null) || null,
 		type: (raw["type"] as string | null) ?? null,
@@ -3108,8 +3614,7 @@ export async function getBroadcastRoomScheduleSnapshotsForAnime(
 	supabase: SupabaseClient<Database>,
 	animeId: number,
 ): Promise<(import("$lib/utils/broadcast-episodes").BroadcastEpisodeSlot & { opened: boolean })[]> {
-	// biome-ignore lint/suspicious/noExplicitAny: migration 104 columns are not in generated types until applied
-	const reader = supabase as SupabaseClient<any>;
+	const reader = supabase;
 	// 未来セッションも返す: しょぼい話数はローリング同期の範囲でしか付かないため、
 	// 未開場の番号付きセッションが過去日付への逆算の唯一のアンカーになることがある。
 	// ログに表示してよいのは opened のものだけ（呼び出し側でフィルタする）。
@@ -3141,8 +3646,7 @@ export async function getGlobalAnimeLobbySession(
 	supabase: SupabaseClient<Database>,
 	animeId: string,
 ): Promise<BroadcastRoomSession | null> {
-	// biome-ignore lint/suspicious/noExplicitAny: generated types may lag behind the lobby-room migration
-	const reader = supabase as SupabaseClient<any>;
+	const reader = supabase;
 	const { data, error } = await reader.rpc("ensure_global_anime_lobby_session", {
 		p_anime_id: Number(animeId),
 	});
@@ -3158,8 +3662,7 @@ export async function getBroadcastRoomOverride(
 	animeId: string,
 	roomDate: string,
 ): Promise<BroadcastRoomOverride | null> {
-	// biome-ignore lint/suspicious/noExplicitAny: broadcast_room_overrides not yet in generated types
-	const reader = supabase as SupabaseClient<any>;
+	const reader = supabase;
 	const { data, error } = await reader
 		.from("broadcast_room_overrides")
 		.select("*")
@@ -3177,8 +3680,7 @@ export async function getBroadcastRoomOverridesForAnime(
 	supabase: SupabaseClient<Database>,
 	animeId: string,
 ): Promise<BroadcastRoomOverride[]> {
-	// biome-ignore lint/suspicious/noExplicitAny: broadcast_room_overrides not yet in generated types
-	const reader = supabase as SupabaseClient<any>;
+	const reader = supabase;
 	const { data, error } = await reader
 		.from("broadcast_room_overrides")
 		.select("*")
@@ -3196,8 +3698,7 @@ export async function getBroadcastRoomOverridesForAnimeIds(
 	animeIds: string[],
 ): Promise<Record<string, BroadcastRoomOverride[]>> {
 	if (animeIds.length === 0) return {};
-	// biome-ignore lint/suspicious/noExplicitAny: broadcast_room_overrides not yet in generated types
-	const reader = supabase as SupabaseClient<any>;
+	const reader = supabase;
 	const { data, error } = await reader
 		.from("broadcast_room_overrides")
 		.select("*")
@@ -3238,8 +3739,7 @@ export async function getScheduleBroadcastSessionsInRange(
 	startDate: string,
 	endDate: string,
 ): Promise<ScheduleBroadcastSession[]> {
-	// biome-ignore lint/suspicious/noExplicitAny: migration 104 columns are not in generated types until applied
-	const reader = supabase as SupabaseClient<any>;
+	const reader = supabase;
 	const { data, error } = await reader
 		.from("broadcast_room_sessions")
 		.select("anime_id,room_date,scheduled_at,episode_number,source_snapshot")
@@ -3269,8 +3769,7 @@ export async function getOverrideAnimeIdsInRange(
 	startDate: string,
 	endDate: string,
 ): Promise<number[]> {
-	// biome-ignore lint/suspicious/noExplicitAny: broadcast_room_overrides not yet in generated types
-	const reader = supabase as SupabaseClient<any>;
+	const reader = supabase;
 	const { data, error } = await reader
 		.from("broadcast_room_overrides")
 		.select("anime_id")
@@ -3351,8 +3850,7 @@ export async function getActiveAnimeMuteIds(
 ): Promise<Set<string>> {
 	if (!userId) return new Set();
 	type ActiveMuteRow = AnimeMuteRow & { anime: { id: number; broadcast_day: number | null } | null };
-	// biome-ignore lint/suspicious/noExplicitAny: anime_mutes not yet in auto-generated DB types
-	const { data } = await (supabase as any)
+	const { data } = await supabase
 		.from("anime_mutes")
 		.select(
 			"anime_id, mute_type, period_days, is_repeat, muted_until, anime:anime!anime_mutes_anime_id_fkey ( id, broadcast_day )",
@@ -3363,7 +3861,6 @@ export async function getActiveAnimeMuteIds(
 
 	const now = Date.now();
 	const activeIds = new Set<string>();
-	const todayDay = new Date().getDay();
 
 	for (const row of rows) {
 		if (row.mute_type === "always") {
@@ -3374,8 +3871,9 @@ export async function getActiveAnimeMuteIds(
 					activeIds.add(String(row.anime_id));
 				}
 			} else if (row.period_days != null && row.anime?.broadcast_day != null) {
-				const daysSince = (todayDay - row.anime.broadcast_day + 7) % 7;
-				if (daysSince < row.period_days) activeIds.add(String(row.anime_id));
+				// 曜日は JST の放送日（午前4時境界）で決める（#326）
+				if (isRepeatMuteActive(row.anime.broadcast_day, row.period_days, now))
+					activeIds.add(String(row.anime_id));
 			}
 		}
 	}
@@ -3402,8 +3900,7 @@ export async function getAnimeMutes(supabase: SupabaseClient<Database>, userId: 
 		created_at: string;
 		anime: { title: string; cover_url: string | null } | null;
 	};
-	// biome-ignore lint/suspicious/noExplicitAny: anime_mutes not yet in auto-generated DB types
-	const { data } = await (supabase as any)
+	const { data } = await supabase
 		.from("anime_mutes")
 		.select(
 			"id, anime_id, mute_type, period_days, is_repeat, muted_until, created_at, anime:anime!anime_mutes_anime_id_fkey ( title, cover_url )",
@@ -3490,8 +3987,7 @@ export async function getOpenBroadcastRoomSessions(
 	options?: { kind?: "episode" | "global" },
 ): Promise<OpenBroadcastRoomSummary[]> {
 	const now = new Date().toISOString();
-	// biome-ignore lint/suspicious/noExplicitAny: migration 104 columns are not in generated types until applied
-	const sessionReader = supabase as SupabaseClient<any>;
+	const sessionReader = supabase;
 	let query = sessionReader
 		.from("broadcast_room_sessions")
 		.select(
@@ -3523,8 +4019,7 @@ export async function getOpenBroadcastRoomSessions(
 	if (episodeRows.length > 0) {
 		const animeIds = [...new Set(episodeRows.map((row) => row.anime_id))];
 		const roomDates = [...new Set(episodeRows.map((row) => row.room_date))];
-		// biome-ignore lint/suspicious/noExplicitAny: broadcast_room_overrides not yet in generated types
-		const reader = supabase as SupabaseClient<any>;
+		const reader = supabase;
 		const { data: overrides, error: overrideError } = await reader
 			.from("broadcast_room_overrides")
 			.select("anime_id, room_date, is_cancelled")

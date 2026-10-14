@@ -116,7 +116,7 @@ let {
 .anime-card {
 	display: flex;
 	flex-direction: column;
-	border-radius: 8px;
+	border-radius: 12px;
 	overflow: hidden;
 	text-decoration: none;
 	color: inherit;

@@ -1,12 +1,19 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fail } from "@sveltejs/kit";
 import { validateImageBuffer } from "$lib/server/upload";
-import type { Database } from "$lib/supabase/database.types";
+import type { Database, Json } from "$lib/supabase/database.types";
 import type { BroadcastOverrideKind } from "$lib/utils/broadcast-episodes";
 
 const ALLOWED_INLINE_COVER_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];
 
-type AnimeWriteResult = { success: true; animeId: string } | ReturnType<typeof fail<{ message: string }>>;
+type AnimeWriteResult =
+	| {
+			success: true;
+			animeId: string;
+			/** 画像はあるが © が無いためカバーが表示されない（migration 136） */
+			coverHidden?: true;
+	  }
+	| ReturnType<typeof fail<{ message: string }>>;
 
 // リゾルバ（anime-catalog-resolver）が manual ソースとして参照するキー。
 // 管理画面での編集をこのキーに限って anime_source_records(source='manual') に
@@ -39,11 +46,7 @@ type ManualSourceRecord = {
 	source_url?: unknown;
 } | null;
 
-async function readManualSourceRecord(
-	// biome-ignore lint/suspicious/noExplicitAny: generated types may lag behind source-record migrations
-	writer: SupabaseClient<any>,
-	malId: number,
-) {
+async function readManualSourceRecord(writer: SupabaseClient<Database>, malId: number) {
 	const { data, error } = await writer
 		.from("anime_source_records")
 		.select("normalized_data,source_url")
@@ -63,8 +66,7 @@ async function readManualSourceRecord(
  * capture_anime_manual_source は auth.uid() が無いと発火しないため）。
  */
 export async function upsertManualSourceRecord(
-	// biome-ignore lint/suspicious/noExplicitAny: generated types may lag behind source-record migrations
-	writer: SupabaseClient<any>,
+	writer: SupabaseClient<Database>,
 	malId: number,
 	previous: Record<string, unknown>,
 	payload: Record<string, unknown>,
@@ -94,7 +96,7 @@ export async function upsertManualSourceRecord(
 			source_version: new Date().toISOString().slice(0, 10),
 			// source_url は NOT NULL: 既存が無い初回作成は MAL ページを充てる
 			source_url: (existing?.source_url as string | null) ?? `https://myanimelist.net/anime/${malId}`,
-			normalized_data: { ...((existing?.normalized_data as Record<string, unknown>) ?? {}), ...changed },
+			normalized_data: { ...((existing?.normalized_data as Record<string, unknown>) ?? {}), ...changed } as Json,
 		},
 		{ onConflict: "mal_id,source" },
 	);
@@ -204,8 +206,19 @@ function parseRoomType(fd: FormData) {
 	return fd.get("room_type") === "global" ? "global" : "episode";
 }
 
+function hasInlineCoverFile(fd: FormData) {
+	const imageFile = fd.get("image_file");
+	return imageFile instanceof File && imageFile.size > 0;
+}
+
+/** URL 欄を空にして保存した（画像ファイルも選んでいない）= カバーを外す */
+function isCoverCleared(fd: FormData) {
+	return fd.has("cover_url") && nullableText(fd, "cover_url") === null && !hasInlineCoverFile(fd);
+}
+
 async function uploadInlineCover(supabase: SupabaseClient<Database>, fd: FormData, fallbackCoverUrl: string | null) {
-	let coverUrl = nullableText(fd, "cover_url") ?? fallbackCoverUrl;
+	// URL 欄は画像ファイルを選ぶと送られない。そのときだけ今のカバーを引き継ぐ
+	let coverUrl = fd.has("cover_url") ? nullableText(fd, "cover_url") : fallbackCoverUrl;
 	const imageFile = fd.get("image_file");
 	if (imageFile instanceof File && imageFile.size > 0) {
 		const arrayBuffer = await imageFile.arrayBuffer();
@@ -279,8 +292,7 @@ export async function registerAnimeAction(
 	const payload = await buildAnimePayload(supabase, fd, null);
 	if ("status" in payload) return payload;
 
-	// biome-ignore lint/suspicious/noExplicitAny: shared writer must tolerate generated type lag after migrations
-	const animeWriter = supabase as SupabaseClient<any>;
+	const animeWriter = supabase;
 	const { data, error } = await animeWriter.from("anime").insert(payload).select("id").single();
 
 	if (error) return fail(500, { message: `登録エラー: ${error.message}` });
@@ -292,19 +304,34 @@ export async function updateAnimeAction(
 	request: Request,
 	animeId: string,
 	currentCoverUrl: string | null,
+	// manual ソースレコードの読み書きに使うクライアント。anime_source_records には
+	// 管理者ユーザーの書き込みポリシーが無い（RLS で拒否される）ため、呼び出し側で
+	// 管理者を確認したうえで service role のクライアントを渡す。
+	sourceWriter: SupabaseClient<Database> = supabase,
 ): Promise<AnimeWriteResult> {
 	const fd = await request.formData();
-	const payload = await buildAnimePayload(supabase, fd, currentCoverUrl);
-	if ("status" in payload) return payload;
+	const built = await buildAnimePayload(supabase, fd, currentCoverUrl);
+	if ("status" in built) return built;
+	// © の無い作品は cover_url に NULL を書いても画像の実体が残る（migration 136）ので、
+	// 欄を空にして保存したときは実体ごと外す
+	const payload = isCoverCleared(fd) ? { ...built, cover_source_url: null } : built;
 
-	// biome-ignore lint/suspicious/noExplicitAny: shared writer must tolerate generated type lag after migrations
-	const animeWriter = supabase as SupabaseClient<any>;
-	const { data: previousRow, error: previousError } = await animeWriter
+	const animeWriter = supabase;
+	const manualWriter = sourceWriter;
+	const { data: previousData, error: previousError } = await animeWriter
 		.from("anime")
-		.select(`mal_id,${MANUAL_SOURCE_KEYS.join(",")}`)
-		.eq("id", animeId)
+		.select(`mal_id,cover_source_url,${MANUAL_SOURCE_KEYS.join(",")}`)
+		.eq("id", Number(animeId))
 		.maybeSingle();
 	if (previousError) return fail(500, { message: `更新前のデータ取得に失敗しました: ${previousError.message}` });
+	// 差分は画像の実体で比べる。© の無い作品は cover_url が隠れて NULL なので、そのまま
+	// 比べると画像を変えていない保存でもカバーが編集されたことになる
+	const previous = previousData as
+		| (Record<string, unknown> & { cover_url?: string | null; cover_source_url?: string | null })
+		| null;
+	const previousRow = previous
+		? { ...previous, cover_url: previous.cover_source_url ?? previous.cover_url ?? null }
+		: null;
 
 	// Read the existing manual record before mutating the anime row. If this
 	// read fails, returning now preserves the original anime values and keeps
@@ -312,7 +339,7 @@ export async function updateAnimeAction(
 	const malId = (previousRow as { mal_id: number | null } | null)?.mal_id;
 	let existingManualRecord: ManualSourceRecord | undefined;
 	if (malId != null) {
-		const result = await readManualSourceRecord(animeWriter, malId);
+		const result = await readManualSourceRecord(manualWriter, malId);
 		if (result.error) {
 			console.error("manual source record read failed:", result.error.message);
 			return fail(500, {
@@ -322,14 +349,20 @@ export async function updateAnimeAction(
 		existingManualRecord = result.data;
 	}
 
-	const { data, error } = await animeWriter.from("anime").update(payload).eq("id", animeId).select("id").single();
+	const { data, error } = await animeWriter
+		.from("anime")
+		.update(payload)
+		.eq("id", Number(animeId))
+		.select("id,cover_url,cover_source_url")
+		.single();
 
 	if (error) return fail(500, { message: `更新エラー: ${error.message}` });
+	const updated = data as { id: number; cover_url?: string | null; cover_source_url?: string | null };
 
 	// 編集差分を manual ソースとして保存し、カタログ再解決での上書きを防ぐ
 	if (malId != null) {
 		const manualSaved = await upsertManualSourceRecord(
-			animeWriter,
+			manualWriter,
 			malId,
 			(previousRow ?? {}) as Record<string, unknown>,
 			payload as Record<string, unknown>,
@@ -343,7 +376,8 @@ export async function updateAnimeAction(
 			});
 		}
 	}
-	return { success: true, animeId: String((data as { id: number }).id) };
+	const coverHidden = !updated.cover_url && !!updated.cover_source_url;
+	return { success: true, animeId: String(updated.id), ...(coverHidden ? { coverHidden: true as const } : {}) };
 }
 
 type BroadcastOverrideWriteResult = { success: true } | ReturnType<typeof fail<{ message: string }>>;
@@ -428,8 +462,7 @@ export async function addBroadcastOverrideAction(
 		return fail(400, { message: "一挙放送では対象話数の開始より大きい終了話数を入力してください" });
 	}
 
-	// biome-ignore lint/suspicious/noExplicitAny: broadcast_room_overrides not yet in generated types
-	const writer = supabase as SupabaseClient<any>;
+	const writer = supabase;
 	const { error } = await writer.from("broadcast_room_overrides").upsert(
 		{
 			anime_id: Number(animeId),
@@ -464,8 +497,7 @@ export async function deleteBroadcastOverrideAction(
 	const overrideId = nullableText(fd, "override_id");
 	if (!overrideId) return fail(400, { message: "対象が見つかりません" });
 
-	// biome-ignore lint/suspicious/noExplicitAny: broadcast_room_overrides not yet in generated types
-	const writer = supabase as SupabaseClient<any>;
+	const writer = supabase;
 	const { error } = await writer.from("broadcast_room_overrides").delete().eq("id", overrideId);
 
 	if (error) return fail(500, { message: `削除エラー: ${error.message}` });

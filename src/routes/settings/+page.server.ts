@@ -1,5 +1,6 @@
 import { redirect } from "@sveltejs/kit";
 import { hasPasswordProvider } from "$lib/server/auth";
+import { isPasskeyEnabled } from "$lib/server/passkey";
 import { getPendingFollowRequestCount } from "$lib/server/queries";
 import type { PageServerLoad } from "./$types";
 
@@ -9,5 +10,5 @@ export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession 
 
 	const hasEmailProvider = hasPasswordProvider(user, session);
 	const pendingFollowRequestCount = await getPendingFollowRequestCount(supabase, user.id);
-	return { pendingFollowRequestCount, hasEmailProvider };
+	return { pendingFollowRequestCount, hasEmailProvider, passkeyEnabled: isPasskeyEnabled() };
 };

@@ -79,7 +79,7 @@ const relativeTime = $derived(formatRelativeTime(data.createdAt));
 .exchange-result-header,
 .exchange-result-main {
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: color-mix(in srgb, var(--color-surface) 88%, transparent);
 }
 
@@ -161,7 +161,7 @@ const relativeTime = $derived(formatRelativeTime(data.createdAt));
 	justify-content: center;
 	min-height: 42px;
 	padding: 0 16px;
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-accent);
 	color: #fff;
 	font-weight: 800;

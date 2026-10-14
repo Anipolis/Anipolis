@@ -1,6 +1,9 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createClient } from "@supabase/supabase-js";
+import { joinWrappedCopyrightLines } from "../src/lib/copyright-text.ts";
+import { decodeHtmlEntities } from "../src/lib/html-entities.ts";
+import { fetchCopyrightClearedAnimeIds } from "./copyright-review-queue.ts";
 
 // Recover copyright notices and official X links for dead official sites
 // (fetch_failed in earlier passes) from Wayback Machine snapshots taken close
@@ -100,13 +103,7 @@ function extractHandles(html: string): { handles: string[]; corporate: string[] 
 const COPYRIGHT_MARKER = /©|Ⓒ|\(C\)|（C）/;
 
 function decodeEntities(value: string): string {
-	return value
-		.replaceAll("&copy;", "©")
-		.replaceAll("&amp;", "&")
-		.replaceAll("&nbsp;", " ")
-		.replaceAll("&quot;", '"')
-		.replaceAll("&#169;", "©")
-		.replaceAll("&#xa9;", "©");
+	return decodeHtmlEntities(value);
 }
 
 function extractCopyrightCandidates(html: string): string[] {
@@ -124,7 +121,8 @@ function extractCopyrightCandidates(html: string): string[] {
 			.replace(/<[^>]+>/g, " "),
 	);
 	const candidates = new Set<string>();
-	for (const rawLine of text.split(/\n+/)) {
+	// 区切り記号の直後で改行された © は1行に戻してから拾う
+	for (const rawLine of joinWrappedCopyrightLines(text.split(/\n+/))) {
 		const line = rawLine.replace(/\s+/g, " ").trim();
 		if (!line || !COPYRIGHT_MARKER.test(line)) continue;
 		if (/internet archive|wayback/i.test(line)) continue;
@@ -202,6 +200,8 @@ async function main() {
 	} catch {}
 
 	const malIds = [...failedIds];
+	// 管理者が「©なし」に確定した作品には、アーカイブからも © を入れない
+	const clearedAnimeIds = await fetchCopyrightClearedAnimeIds(supabase);
 	const targets: {
 		anime_id: number;
 		mal_id: number;
@@ -220,7 +220,7 @@ async function main() {
 		for (const row of data ?? []) {
 			if (!row.official_site_url || row.official_site_url.includes("web.archive.org")) continue;
 			const needX = !row.official_x_url;
-			const needCopyright = !row.copyright;
+			const needCopyright = !row.copyright && !clearedAnimeIds.has(row.id);
 			if (!needX && !needCopyright) continue;
 			targets.push({
 				anime_id: row.id,
