@@ -20,6 +20,7 @@ import type {
 	BroadcastRoomOverride,
 	BroadcastRoomSession,
 	BroadcastStatus,
+	EpisodeRoom,
 	Event,
 	EventMute,
 	Notification,
@@ -28,6 +29,7 @@ import type {
 	RawPost,
 	ReactionType,
 	ReactionUser,
+	RoomAiring,
 	UserAnimeEntry,
 } from "$lib/types";
 import { toPost } from "$lib/types";
@@ -971,8 +973,107 @@ export async function getEventRoomPosts(
 	});
 }
 
-/** ルームの種類と ID（放送ルームはセッション ID、イベントルームはイベント ID） */
-export type RoomRef = { kind: "broadcast" | "event"; id: string };
+const EPISODE_ROOM_SELECT = "id, anime_id, kind, episode_number, special_key, label, opens_at, merged_into";
+
+/** 話数ルームを話数で引く（153）。無ければ null */
+export async function getEpisodeRoomByNumber(
+	supabase: SupabaseClient<Database>,
+	animeId: number,
+	episodeNumber: number,
+): Promise<EpisodeRoom | null> {
+	const { data, error } = await supabase
+		.from("episode_rooms")
+		.select(EPISODE_ROOM_SELECT)
+		.eq("anime_id", animeId)
+		.eq("kind", "episode")
+		.eq("episode_number", episodeNumber)
+		.maybeSingle();
+	if (error) console.error("getEpisodeRoomByNumber error:", error);
+	return (data as EpisodeRoom | null) ?? null;
+}
+
+export async function getEpisodeRoomById(
+	supabase: SupabaseClient<Database>,
+	roomId: string,
+): Promise<EpisodeRoom | null> {
+	const { data, error } = await supabase
+		.from("episode_rooms")
+		.select(EPISODE_ROOM_SELECT)
+		.eq("id", roomId)
+		.maybeSingle();
+	if (error) console.error("getEpisodeRoomById error:", error);
+	return (data as EpisodeRoom | null) ?? null;
+}
+
+/**
+ * 放送枠のない話数ルームを、開いてよければ作って返す（153 の ensure_episode_room）。
+ * 開けない話（未放送・範囲外・話数のない作品）は null。
+ */
+export async function ensureEpisodeRoom(
+	supabase: SupabaseClient<Database>,
+	animeId: number,
+	episodeNumber: number,
+): Promise<EpisodeRoom | null> {
+	const { data: roomId, error } = await supabase.rpc("ensure_episode_room", {
+		p_anime_id: animeId,
+		p_episode_number: episodeNumber,
+	});
+	if (error) {
+		console.error("ensureEpisodeRoom error:", error);
+		return null;
+	}
+	return roomId ? getEpisodeRoomById(supabase, roomId) : null;
+}
+
+/** 話数ルームの放送枠（初回・再放送・イベント）を開場の早い順に */
+export async function getEpisodeRoomAirings(supabase: SupabaseClient<Database>, roomId: string): Promise<RoomAiring[]> {
+	const { data, error } = await supabase
+		.from("broadcast_room_sessions")
+		.select(
+			"id, scheduled_at, duration_minutes, posting_opens_at, posting_closes_at, airing_kind, source_channel_name",
+		)
+		.eq("episode_room_id", roomId)
+		.order("posting_opens_at", { ascending: true });
+	if (error) {
+		console.error("getEpisodeRoomAirings error:", error);
+		return [];
+	}
+	return (data ?? []).map((row) => ({
+		id: row.id,
+		scheduled_at: row.scheduled_at,
+		ends_at: new Date(Date.parse(row.scheduled_at) + row.duration_minutes * 60_000).toISOString(),
+		posting_opens_at: row.posting_opens_at,
+		posting_closes_at: row.posting_closes_at,
+		airing_kind: (["first", "rerun", "event"].includes(row.airing_kind)
+			? row.airing_kind
+			: "first") as RoomAiring["airing_kind"],
+		channel_name: row.source_channel_name,
+	}));
+}
+
+/**
+ * 話数ルームの投稿。from = "start" は最初の投稿から古い順に、"latest" は新しい側の limit 件を古い順に返す。
+ * 放送中は最新を、それ以外はルームの最初から読ませる（続きはライブ更新の差分 API が後ろへ読み足す）。
+ */
+export async function getEpisodeRoomPosts(
+	supabase: SupabaseClient<Database>,
+	roomId: string,
+	userId: string | null,
+	options: { limit?: number; from?: "start" | "latest"; since?: string | undefined } = {},
+): Promise<Post[]> {
+	const { limit = 100, from = "start", since } = options;
+	// since があれば、その時刻（放送枠の開場など）以降を古い順に
+	const ascending = from === "start" || since != null;
+	let query = supabase.from("posts").select(POST_LIST_SELECT).eq("episode_room_id", roomId).is("parent_id", null);
+	if (since) query = query.gte("created_at", since);
+	const { data: rawPosts } = await query.order("created_at", { ascending }).order("id", { ascending }).limit(limit);
+	const ordered = ascending ? (rawPosts ?? []) : [...(rawPosts ?? [])].reverse();
+	// ルーム内ではそのルームのミュートを適用しない（明示的に入室しているため）
+	return enrichPostsWithCounts(supabase, ordered as unknown as RawPost[], userId, { includeMutedRoomPosts: true });
+}
+
+/** ルームの種類と ID（放送ルームはセッション ID、イベントルームはイベント ID、話数ルームはルーム ID） */
+export type RoomRef = { kind: "broadcast" | "event" | "episode_room"; id: string };
 
 /** 取得済みの境界（created_at と id）より後ろだけに絞る。同じ created_at の投稿を落とさないよう id でも比べる */
 function afterCursorFilter(cursor: TimelineCursor): string {
@@ -994,7 +1095,12 @@ export async function getRoomPostsAfter(
 	limit = 100,
 ): Promise<{ posts: Post[]; nextCursor: TimelineCursor | null; hasMore: boolean } | null> {
 	let query = supabase.from("posts").select(POST_LIST_SELECT).is("parent_id", null);
-	query = room.kind === "event" ? query.eq("event_id", room.id) : query.eq("broadcast_room_session_id", room.id);
+	query =
+		room.kind === "event"
+			? query.eq("event_id", room.id)
+			: room.kind === "episode_room"
+				? query.eq("episode_room_id", room.id)
+				: query.eq("broadcast_room_session_id", room.id);
 	if (cursor) query = query.or(afterCursorFilter(cursor));
 	const { data, error } = await query
 		.order("created_at", { ascending: true })
@@ -1011,6 +1117,49 @@ export async function getRoomPostsAfter(
 	return {
 		posts,
 		nextCursor: last ? { createdAt: last.created_at, id: last.id } : cursor,
+		hasMore: rawPosts.length === limit,
+	};
+}
+
+/** 境界（created_at と id）より前だけに絞る */
+function beforeCursorFilter(cursor: TimelineCursor): string {
+	return `created_at.lt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.lt.${cursor.id})`;
+}
+
+/**
+ * ルームの古い側を、境界（cursor）より前から新しい順に limit 件取り、古い順に並べて返す。
+ * 話数ルームは最新の100件や放送枠の途中から読み始めるので、それより前を読み足すのに使う。
+ * nextCursor は取得した中で最も古い行（次はそれより前を取る）。
+ */
+export async function getRoomPostsBefore(
+	supabase: SupabaseClient<Database>,
+	room: RoomRef,
+	userId: string | null,
+	cursor: TimelineCursor,
+	limit = 100,
+): Promise<{ posts: Post[]; nextCursor: TimelineCursor | null; hasMore: boolean } | null> {
+	let query = supabase.from("posts").select(POST_LIST_SELECT).is("parent_id", null);
+	query =
+		room.kind === "event"
+			? query.eq("event_id", room.id)
+			: room.kind === "episode_room"
+				? query.eq("episode_room_id", room.id)
+				: query.eq("broadcast_room_session_id", room.id);
+	const { data, error } = await query
+		.or(beforeCursorFilter(cursor))
+		.order("created_at", { ascending: false })
+		.order("id", { ascending: false })
+		.limit(limit);
+	if (error) {
+		console.error("getRoomPostsBefore error:", error);
+		return null;
+	}
+	const rawPosts = [...((data ?? []) as unknown as RawPost[])].reverse();
+	const oldest = rawPosts[0];
+	const posts = await enrichPostsWithCounts(supabase, rawPosts, userId, { includeMutedRoomPosts: true });
+	return {
+		posts,
+		nextCursor: oldest ? { createdAt: oldest.created_at, id: oldest.id } : cursor,
 		hasMore: rawPosts.length === limit,
 	};
 }

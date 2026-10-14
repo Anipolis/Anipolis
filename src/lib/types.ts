@@ -634,6 +634,33 @@ export interface BroadcastRoomSession {
 	/** しょぼい番組表由来の話数・サブタイトル（同期セッションのみ） */
 	episode_number?: number | null;
 	episode_title?: string | null;
+	/** この放送枠が属する話数ルーム（153） */
+	episode_room_id?: string | null;
+}
+
+/** 話数ルーム（153）。作品×話数、または作品×特番キー */
+export interface EpisodeRoom {
+	id: string;
+	anime_id: number;
+	kind: "episode" | "special";
+	episode_number: number | null;
+	special_key: string | null;
+	label: string | null;
+	/** 投稿を受け付け始める時刻。NULL はまだ決まっていない（未放送） */
+	opens_at: string | null;
+	merged_into: string | null;
+}
+
+/** 話数ルームの中の放送枠（broadcast_room_sessions の行）。ルームの見出しと「ライブ開始地点へ」に使う */
+export interface RoomAiring {
+	id: string;
+	scheduled_at: string;
+	/** 放送の終わり（scheduled_at + 尺）。「放送中」の判定に使う（投稿受付はこの後も続く） */
+	ends_at: string;
+	posting_opens_at: string;
+	posting_closes_at: string;
+	airing_kind: "first" | "rerun" | "event";
+	channel_name: string | null;
 }
 
 export interface OpenBroadcastRoomSummary {
