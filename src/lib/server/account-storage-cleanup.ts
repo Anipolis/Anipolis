@@ -31,37 +31,45 @@ const MAX_REMOVE_ROUNDS = 5;
 
 /**
  * prefix 配下のファイルのパスを、サブフォルダもたどって集める。失敗したら null。
- * 直下だけを消すとサブフォルダの中身が残る（#388 Codex）。フォルダは再帰ではなく順番待ちの列でたどり、
- * たどった項目が MAX_LISTED_ENTRIES を超えたら complete: false でそこまでの分を返す。
+ * 直下だけを消すとサブフォルダの中身が残る（#388 Codex）。
+ *   * フォルダは深さ優先でたどる（1ページ読むごとに、見つけたフォルダへ先に降りる）。Storage のフォルダは
+ *     中にファイルがあるときだけ存在するので、降りれば必ずファイルに届く
+ *   * たどった項目が maxEntries を超えたら complete: false でそこまでの分を返す。ただしファイルが1件も
+ *     見つかっていないうちは打ち切らない。フォルダだけで上限を使い切ると、消すものが無いまま毎回同じ
+ *     ところで止まり、いつまでも先へ進まないため（#397 Codex）
  */
-async function listFiles(
+export async function listUserStorageFiles(
 	admin: SupabaseClient<Database>,
 	bucket: string,
 	root: string,
+	maxEntries = MAX_LISTED_ENTRIES,
 ): Promise<{ paths: string[]; complete: boolean } | null> {
 	const paths: string[] = [];
-	const folders = [root];
+	// 次に読むフォルダとその位置。末尾から取り出す（深さ優先）
+	const stack: { prefix: string; offset: number }[] = [{ prefix: root, offset: 0 }];
 	let listed = 0;
-	for (let next = 0; next < folders.length; next += 1) {
-		const prefix = folders[next] as string;
-		for (let offset = 0; ; offset += STORAGE_LIST_PAGE_SIZE) {
-			const { data: entries, error } = await admin.storage
-				.from(bucket)
-				.list(prefix, { limit: STORAGE_LIST_PAGE_SIZE, offset, sortBy: { column: "name", order: "asc" } });
-			if (error) {
-				console.error(`account storage cleanup: list ${bucket}/${prefix} failed:`, error);
-				return null;
-			}
-			for (const entry of entries ?? []) {
-				listed += 1;
-				if (listed > MAX_LISTED_ENTRIES) return { paths, complete: false };
-				const path = `${prefix}/${entry.name}`;
-				// id が null の項目はフォルダ（Storage の疑似フォルダ）
-				if (entry.id === null) folders.push(path);
-				else paths.push(path);
-			}
-			if ((entries ?? []).length < STORAGE_LIST_PAGE_SIZE) break;
+	for (let frame = stack.pop(); frame; frame = stack.pop()) {
+		const { prefix, offset } = frame;
+		const { data: entries, error } = await admin.storage
+			.from(bucket)
+			.list(prefix, { limit: STORAGE_LIST_PAGE_SIZE, offset, sortBy: { column: "name", order: "asc" } });
+		if (error) {
+			console.error(`account storage cleanup: list ${bucket}/${prefix} failed:`, error);
+			return null;
 		}
+		const page = entries ?? [];
+		// 同じフォルダの続きのページは、このページで見つけたフォルダを読み終えてから
+		if (page.length >= STORAGE_LIST_PAGE_SIZE) stack.push({ prefix, offset: offset + STORAGE_LIST_PAGE_SIZE });
+		const folders: string[] = [];
+		for (const entry of page) {
+			listed += 1;
+			const path = `${prefix}/${entry.name}`;
+			// id が null の項目はフォルダ（Storage の疑似フォルダ）
+			if (entry.id === null) folders.push(path);
+			else paths.push(path);
+		}
+		for (const folder of folders.reverse()) stack.push({ prefix: folder, offset: 0 });
+		if (listed > maxEntries && paths.length > 0 && stack.length > 0) return { paths, complete: false };
 	}
 	return { paths, complete: true };
 }
@@ -75,7 +83,7 @@ async function removeAllUserFiles(
 	let removed = 0;
 	for (let round = 0; ; round += 1) {
 		// 列挙し直して、消し終えたか確かめる（消したはずのファイルが残っていれば失敗として記録を残す）
-		const listing = await listFiles(admin, bucket, userId);
+		const listing = await listUserStorageFiles(admin, bucket, userId);
 		if (listing === null) return null;
 		if (listing.complete && listing.paths.length === 0) return removed;
 		if (round >= MAX_REMOVE_ROUNDS || listing.paths.length === 0) {
