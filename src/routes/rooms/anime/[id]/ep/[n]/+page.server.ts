@@ -11,18 +11,6 @@ import type { Actions, PageServerLoad } from "./$types";
  * 放送枠（初回・再放送・イベント）はルームの中の区切りとして見出しに使う。
  */
 
-type AnimeRoomInfo = { type: string | null; room_type: string | null; episode_total: number | null };
-
-async function getAnimeRoomInfo(supabase: App.Locals["supabase"], animeId: number): Promise<AnimeRoomInfo | null> {
-	// episode_total（152）は作品の一覧ビューに含まれないので anime から直接読む
-	const { data } = await supabase
-		.from("anime")
-		.select("type, room_type, episode_total")
-		.eq("id", animeId)
-		.maybeSingle();
-	return data ?? null;
-}
-
 /** 話数ルームを探し、無ければ開いてよいか DB に判断させて作る。統合済みなら統合先を返す */
 async function resolveEpisodeRoom(
 	supabase: App.Locals["supabase"],
@@ -43,7 +31,6 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 	const anime = await getAnime(supabase, params.id, user?.id ?? null);
 	if (!anime) throw error(404, "アニメが見つかりません");
 	const animeId = Number(anime.id);
-	const info = await getAnimeRoomInfo(supabase, animeId);
 
 	const room = await resolveEpisodeRoom(supabase, animeId, episodeNumber);
 	if (room && room.kind === "episode" && room.episode_number != null && room.episode_number !== episodeNumber) {
@@ -52,10 +39,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 	}
 	if (!room) {
 		// ルームがまだ無い話: 話数のある作品の範囲内なら「まだ投稿できない」ページとして見せる
-		const inRange =
-			info != null &&
-			hasEpisodeRooms(info) &&
-			(info.episode_total == null || episodeNumber <= info.episode_total);
+		const inRange = hasEpisodeRooms(anime) && (anime.episode_total == null || episodeNumber <= anime.episode_total);
 		if (!inRange) throw error(404, "ルームが見つかりません");
 	}
 

@@ -280,6 +280,8 @@ export interface Anime {
 	cover_source_url: string | null;
 	season: string | null;
 	episode_count: string | null;
+	/** 整数の話数（152。episode_count から同期）。話数が数字でない・不明なら null */
+	episode_total: number | null;
 	type: string | null;
 	status: string | null;
 	computed_broadcast_status: BroadcastStatus;
