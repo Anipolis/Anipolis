@@ -6,7 +6,7 @@ import type { Database } from "$lib/supabase/database.types";
 /**
  * 投稿画像の期限付き URL を発行する（#316）。
  *
- * post-images は非公開（155）。呼び出し側は、閲覧できると確かめた投稿の、投稿者自身の画像だけを
+ * post-images は非公開（157）。呼び出し側は、閲覧できると確かめた投稿の、投稿者自身の画像だけを
  * 渡すこと（enrichPostsWithCounts は RLS で読めた投稿の本人の画像だけを扱う）。発行は service role で行う。
  *
  * 期限は1時間。鍵化・非表示の後も、既に開いているページでは最大1時間は見えるが、

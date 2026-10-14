@@ -421,7 +421,7 @@ export async function enrichPostsWithCounts(
 		}
 	}
 
-	// 投稿画像は非公開（155）。ここに来るのは RLS で読めた投稿だけなので、その投稿者自身の画像にだけ
+	// 投稿画像は非公開（157）。ここに来るのは RLS で読めた投稿だけなので、その投稿者自身の画像にだけ
 	// 期限付きの URL を発行して差し替える（#316）。他人の画像を参照している投稿からは出さない
 	const imageUrls = visibleRawPosts.flatMap((raw) =>
 		(raw.image_urls ?? []).filter((url) => isOwnPostImage(url, raw.user_id)),
