@@ -39,6 +39,22 @@ export function mergeRoomPosts(
 		});
 }
 
+/**
+ * load をやり直して base が新しい最新ページに置き換わったとき（#390）、前の base のうち
+ * 新しい base より古い投稿（新旧の境界の間）を extra に引き継ぐ。
+ * 「前の投稿を読み込む」の境界は前の base の先頭のまま進むので、引き継がないと間の投稿が抜ける。
+ * 新しい base より新しい側で消えた投稿（削除した投稿など）は引き継がない。
+ */
+export function carryOverOlderPosts(previousBase: readonly Post[], nextBase: readonly Post[], extra: Post[]): Post[] {
+	if (previousBase === nextBase) return extra;
+	const oldest = nextBase[0];
+	const known = new Set([...nextBase, ...extra].map((post) => post.id));
+	const gap = previousBase.filter(
+		(post) => !known.has(post.id) && (oldest === undefined || comparePostsAsc(post, oldest) < 0),
+	);
+	return gap.length === 0 ? extra : [...gap, ...extra];
+}
+
 export type RoomPostPage = { posts: Post[]; nextCursor: RoomPostCursor | null; hasMore: boolean };
 
 /**

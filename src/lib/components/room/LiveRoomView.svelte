@@ -13,6 +13,7 @@ import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import { airingAt, airingHeading, airingOnAirAt, formatAiringTime } from "$lib/episode-room";
 import {
 	applyPostStates,
+	carryOverOlderPosts,
 	comparePostsAsc,
 	cursorOfLast,
 	fetchRoomPostPages,
@@ -589,8 +590,15 @@ $effect(() => {
 
 // load をやり直したら（自分で投稿を削除した直後など）、表示中の投稿を確かめ直す（#347）。
 // ライブ受信分は load の結果に含まれないので、削除してもそのままでは画面に残るため
+// 最新ページが置き換わっても、前のページの古い側は残して「前の投稿を読み込む」の境界と連続させる（#390）
+let previousBasePosts = untrack(() => data.posts);
 $effect(() => {
-	void data.posts;
+	const base = data.posts;
+	untrack(() => {
+		const carried = carryOverOlderPosts(previousBasePosts, base, extraPosts);
+		if (carried !== extraPosts) extraPosts = carried;
+		previousBasePosts = base;
+	});
 	if (!mounted) return;
 	untrack(() => void resyncPostStates());
 });
