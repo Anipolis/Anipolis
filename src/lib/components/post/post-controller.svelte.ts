@@ -168,7 +168,7 @@ export class PostController {
 	// サーバーの結果（liked / bookmarked / reposted）で楽観更新を確定させるだけにする（#287）。
 	// 失敗時は null（= props の post に戻る）ではなく操作前の確定値へ戻す。再取得しないので
 	// props の post は古くなり得て、null に戻すと成功済みの操作まで巻き戻るため。
-	handleLike: SubmitFunction = ({ formElement, cancel }) => {
+	handleLike: SubmitFunction = ({ formData, formElement, cancel }) => {
 		if (this.likeInFlight) {
 			cancel();
 			this.likeQueued = !this.likeQueued;
@@ -181,6 +181,9 @@ export class PostController {
 		this.likeQueued = false;
 		const wasLiked = this.likedByMe;
 		const countBefore = this.likeCount;
+		// 押した後の状態を送る。サーバーは反転ではなくこの状態に合わせるので、表示が古くても
+		// （件数の取得に失敗して未いいねと表示されていた等）意図と逆の操作にならない
+		formData.set("intent", wasLiked ? "off" : "on");
 		this.likedByMeLocal = !wasLiked;
 		this.likeCountLocal = wasLiked ? countBefore - 1 : countBefore + 1;
 		return async ({ result }) => {
@@ -201,7 +204,7 @@ export class PostController {
 		};
 	};
 
-	handleBookmark: SubmitFunction = ({ formElement, cancel }) => {
+	handleBookmark: SubmitFunction = ({ formData, formElement, cancel }) => {
 		if (this.bookmarkInFlight) {
 			cancel();
 			this.bookmarkQueued = !this.bookmarkQueued;
@@ -211,6 +214,7 @@ export class PostController {
 		this.bookmarkInFlight = true;
 		this.bookmarkQueued = false;
 		const wasBookmarked = this.bookmarkedByMe;
+		formData.set("intent", wasBookmarked ? "off" : "on");
 		this.bookmarkedByMeLocal = !wasBookmarked;
 		return async ({ result }) => {
 			this.bookmarkInFlight = false;
@@ -238,7 +242,7 @@ export class PostController {
 		this.repostForm?.requestSubmit();
 	}
 
-	handleRepost: SubmitFunction = ({ cancel }) => {
+	handleRepost: SubmitFunction = ({ formData, cancel }) => {
 		this.repostMenuOpen = false;
 		if (this.repostInFlight) {
 			cancel();
@@ -247,6 +251,7 @@ export class PostController {
 		this.repostInFlight = true;
 		const wasReposted = this.repostedByMe;
 		const countBefore = this.repostCount;
+		formData.set("intent", wasReposted ? "off" : "on");
 		this.repostedByMeLocal = !wasReposted;
 		this.repostCountLocal = wasReposted ? countBefore - 1 : countBefore + 1;
 		return async ({ result }) => {

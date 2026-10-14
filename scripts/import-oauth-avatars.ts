@@ -25,13 +25,22 @@ function getSupabaseClient() {
 }
 
 const supabase = getSupabaseClient();
-const { data: profiles, error } = await supabase
-	.from("profiles")
-	.select("id, username, avatar_url")
-	.not("avatar_url", "is", null);
-if (error) throw new Error(error.message);
+// PostgREST の上限（本番 1000 件）で切れないよう、id の順にページを追って全件を見る
+const PAGE_SIZE = 1000;
+const profiles: { id: string; username: string; avatar_url: string }[] = [];
+for (let from = 0; ; from += PAGE_SIZE) {
+	const { data, error } = await supabase
+		.from("profiles")
+		.select("id, username, avatar_url")
+		.not("avatar_url", "is", null)
+		.order("id")
+		.range(from, from + PAGE_SIZE - 1);
+	if (error) throw new Error(error.message);
+	profiles.push(...((data ?? []) as typeof profiles));
+	if ((data ?? []).length < PAGE_SIZE) break;
+}
 
-const targets = (profiles ?? []).filter((profile) => parseOAuthAvatarUrl(profile.avatar_url));
+const targets = profiles.filter((profile) => parseOAuthAvatarUrl(profile.avatar_url));
 console.log(`${apply ? "APPLY" : "DRY RUN"}: ${targets.length} profiles with an external OAuth avatar`);
 
 let imported = 0;
