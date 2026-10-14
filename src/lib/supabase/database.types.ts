@@ -3463,6 +3463,7 @@ export type Database = {
 					cover_url: string | null;
 					created_at: string | null;
 					episode_count: string | null;
+					episode_total: number | null;
 					genre: string[] | null;
 					genre_en: string[] | null;
 					genre_match: number | null;
@@ -3513,6 +3514,7 @@ export type Database = {
 					cover_url: string | null;
 					created_at: string | null;
 					episode_count: string | null;
+					episode_total: number | null;
 					genre: string[] | null;
 					genre_en: string[] | null;
 					hidden_by_admin: boolean | null;
@@ -3583,6 +3585,7 @@ export type Database = {
 					cover_url: string | null;
 					created_at: string | null;
 					episode_count: string | null;
+					episode_total: number | null;
 					genre: string[] | null;
 					genre_en: string[] | null;
 					hidden_by_admin: boolean | null;
@@ -3623,6 +3626,7 @@ export type Database = {
 					cover_url?: string | null;
 					created_at?: string | null;
 					episode_count?: string | null;
+					episode_total?: number | null;
 					genre?: string[] | null;
 					genre_en?: string[] | null;
 					hidden_by_admin?: boolean | null;
@@ -3663,6 +3667,7 @@ export type Database = {
 					cover_url?: string | null;
 					created_at?: string | null;
 					episode_count?: string | null;
+					episode_total?: number | null;
 					genre?: string[] | null;
 					genre_en?: string[] | null;
 					hidden_by_admin?: boolean | null;
@@ -3710,6 +3715,7 @@ export type Database = {
 					cover_url: string | null;
 					created_at: string | null;
 					episode_count: string | null;
+					episode_total: number | null;
 					genre: string[] | null;
 					genre_en: string[] | null;
 					genre_match: number | null;

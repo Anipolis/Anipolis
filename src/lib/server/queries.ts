@@ -3733,6 +3733,7 @@ function toAnime(raw: Record<string, unknown>): Anime {
 		cover_source_url: (raw["cover_source_url"] as string | null) ?? null,
 		season: (raw["season"] as string | null) ?? null,
 		episode_count: (raw["episode_count"] as string | null) || null,
+		episode_total: typeof raw["episode_total"] === "number" ? raw["episode_total"] : null,
 		type: (raw["type"] as string | null) ?? null,
 		status: (raw["status"] as string | null) ?? null,
 		computed_broadcast_status: toBroadcastStatus(raw),

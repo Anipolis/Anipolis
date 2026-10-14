@@ -35,34 +35,25 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 
 	if (!anime) throw error(404, "アニメが見つかりません");
 
-	const [relations, syobocalUrl, broadcastOverrides, events, scheduleSnapshots, roomInfo] = await Promise.all([
+	const [relations, syobocalUrl, broadcastOverrides, events, scheduleSnapshots] = await Promise.all([
 		getAnimeRelations(supabase, anime.mal_id),
 		getAnimeSyobocalUrl(supabase, anime.mal_id),
 		getBroadcastRoomOverridesForAnime(supabase, params.id),
 		getEventsForAnime(supabase, Number(anime.id)),
 		getBroadcastRoomScheduleSnapshotsForAnime(supabase, Number(anime.id)),
-		// episode_total（152）は作品のビューに含まれないので anime から直接読む
-		supabase
-			.from("anime")
-			.select("type, room_type, episode_total, status, aired_from")
-			.eq("id", Number(anime.id))
-			.maybeSingle(),
 	]);
 
 	// 話数ルーム（153）の一覧。話数のある作品だけ（映画・特番・1話だけの配信作品は無し）。
 	// 取得に失敗したら空にして、今の日付のルームログを出す（失敗を「全話未放送」と見せないため）
-	const roomAnime = roomInfo.data;
-	const roomLog =
-		roomAnime && hasEpisodeRooms(roomAnime) ? await getEpisodeRoomLog(supabase, Number(anime.id)) : null;
-	const episodeRooms =
-		roomAnime && roomLog
-			? buildEpisodeRoomList({
-					animeId: anime.id,
-					...roomLog,
-					episodeTotal: roomAnime.episode_total,
-					openableUpTo: openableEpisodeLimit({ anime: roomAnime, ...roomLog, now: Date.now() }),
-				})
-			: [];
+	const roomLog = hasEpisodeRooms(anime) ? await getEpisodeRoomLog(supabase, Number(anime.id)) : null;
+	const episodeRooms = roomLog
+		? buildEpisodeRoomList({
+				animeId: anime.id,
+				...roomLog,
+				episodeTotal: anime.episode_total,
+				openableUpTo: openableEpisodeLimit({ anime, ...roomLog, now: Date.now() }),
+			})
+		: [];
 	// 話数ルームに入っていない実在の放送枠（話数が付いていない）の放送日。日付のルームログとして別に出す
 	const unroomedDates = new Set(roomLog?.unroomedDates ?? []);
 

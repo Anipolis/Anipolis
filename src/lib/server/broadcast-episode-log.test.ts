@@ -13,7 +13,7 @@ const ANIME = {
 	aired_to: null,
 	broadcast_day: null,
 	broadcast_time: null,
-	episode_count: null,
+	episode_total: null,
 };
 
 function snapshot(
@@ -172,7 +172,7 @@ describe("buildBroadcastEpisodeLog", () => {
 			aired_from: "2026-07-04",
 			broadcast_day: 6,
 			broadcast_time: "23:45",
-			episode_count: "4",
+			episode_total: 4,
 		};
 		const log = buildBroadcastEpisodeLog(anime, [snapshot("2026-07-25", 4)], [], FIXED_TODAY);
 		expect(log.map((slot) => [slot.date, slot.start])).toEqual([
@@ -189,7 +189,7 @@ describe("buildBroadcastEpisodeLog", () => {
 			aired_from: "2026-07-04",
 			broadcast_day: 6,
 			broadcast_time: "23:45",
-			episode_count: "4",
+			episode_total: 4,
 		};
 		// しょぼいセッションは単一話数（第3話）しか持たないが、一挙放送オーバーライドが
 		// 第3〜4話を明示しているので、この日を最終話とみなして以降を補完しない。
@@ -204,7 +204,7 @@ describe("buildBroadcastEpisodeLog", () => {
 			aired_from: "2026-08-01",
 			broadcast_day: 6,
 			broadcast_time: "23:45",
-			episode_count: "12",
+			episode_total: 12,
 		};
 		const log = buildBroadcastEpisodeLog(anime, [snapshot("2026-08-15", 3)], [], FIXED_TODAY);
 		expect(log.map((slot) => [slot.date, slot.start])).toEqual([

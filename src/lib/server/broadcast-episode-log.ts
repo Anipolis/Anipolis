@@ -12,7 +12,7 @@ export type BroadcastEpisodeLogSlot = BroadcastEpisodeSlot & { opened: boolean }
 
 type BroadcastEpisodeLogAnime = Pick<
 	Anime,
-	"season" | "room_type" | "aired_from" | "aired_to" | "broadcast_day" | "broadcast_time" | "episode_count"
+	"season" | "room_type" | "aired_from" | "aired_to" | "broadcast_day" | "broadcast_time" | "episode_total"
 >;
 
 /**
@@ -62,11 +62,11 @@ export function buildBroadcastEpisodeLog(
 		.filter((slot) => slot.start != null)
 		.sort((left, right) => left.date.localeCompare(right.date))[0];
 	const effectiveBroadcastDay = anchorSlot ? new Date(`${anchorSlot.date}T00:00:00`).getDay() : anime.broadcast_day;
-	// 最終話（話数が episode_count に達した日）より後は合成補完しない。MALの
+	// 最終話（話数が episode_total に達した日）より後は合成補完しない。MALの
 	// 放送終了日の反映が遅れて aired_to が null のままだと、今日まで存在しない
 	// 週の枠を作り続け、逆算の起点も無いので番号なしの「最新」枠になってしまう
 	// （MAO: 第26話 9/26 で終了したのに 10/3 の空枠が Latest に出ていた）。
-	const totalEpisodes = anime.episode_count ? Number.parseInt(anime.episode_count, 10) : Number.NaN;
+	const totalEpisodes = anime.episode_total ?? Number.NaN;
 	const finalEpisodeDate =
 		totalEpisodes > 0
 			? [
