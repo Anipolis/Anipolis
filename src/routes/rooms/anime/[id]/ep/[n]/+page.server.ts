@@ -87,10 +87,10 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 	// 読み始める位置: ?airing= はその放送枠の開場から、放送中は最新から、それ以外はルームの最初から
 	const from = initialAiring ? "start" : liveAiring ? "latest" : "start";
 	const since = initialAiring?.posting_opens_at;
-	const [posts, trending, animeTrending, olderExists] = await Promise.all([
+	const [postPage, trending, animeTrending, olderExists] = await Promise.all([
 		room
 			? getEpisodeRoomPosts(supabase, room.id, user?.id ?? null, { limit: 100, from, since })
-			: Promise.resolve([]),
+			: Promise.resolve({ posts: [], hasMore: false }),
 		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
 		getAnimeRankingTrending(supabase, 5),
 		// 放送枠から読み始めたとき、それより前の投稿があるか（「前の投稿を読み込む」を出すか）
@@ -105,7 +105,9 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 					.then(({ data }) => (data ?? []).length > 0)
 			: Promise.resolve(false),
 	]);
-	const hasOlderPosts = since ? olderExists : from === "latest" && posts.length >= 100;
+	const posts = postPage.posts;
+	// 最新から読んだときは、取得した行（除外前）が上限に達していれば前にも投稿がある
+	const hasOlderPosts = since ? olderExists : from === "latest" && postPage.hasMore;
 
 	// 開く時刻が決まっていない話は「まだ投稿できない」状態にする（開場は十分先として渡す）
 	const opensAt = room?.opens_at ?? NEVER_CLOSES;

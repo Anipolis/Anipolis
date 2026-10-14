@@ -1124,7 +1124,7 @@ export async function getEpisodeRoomPosts(
 	roomId: string,
 	userId: string | null,
 	options: { limit?: number; from?: "start" | "latest"; since?: string | undefined } = {},
-): Promise<Post[]> {
+): Promise<{ posts: Post[]; hasMore: boolean }> {
 	const { limit = 100, from = "start", since } = options;
 	// since があれば、その時刻（放送枠の開場など）以降を古い順に
 	const ascending = from === "start" || since != null;
@@ -1133,7 +1133,11 @@ export async function getEpisodeRoomPosts(
 	const { data: rawPosts } = await query.order("created_at", { ascending }).order("id", { ascending }).limit(limit);
 	const ordered = ascending ? (rawPosts ?? []) : [...(rawPosts ?? [])].reverse();
 	// ルーム内ではそのルームのミュートを適用しない（明示的に入室しているため）
-	return enrichPostsWithCounts(supabase, ordered as unknown as RawPost[], userId, { includeMutedRoomPosts: true });
+	const posts = await enrichPostsWithCounts(supabase, ordered as unknown as RawPost[], userId, {
+		includeMutedRoomPosts: true,
+	});
+	// 続きの有無はミュートワード・ブロックで除外する前の取得行数で決める（除外で打ち切らない）
+	return { posts, hasMore: (rawPosts ?? []).length === limit };
 }
 
 /** ルームの種類と ID（放送ルームはセッション ID、イベントルームはイベント ID、話数ルームはルーム ID） */

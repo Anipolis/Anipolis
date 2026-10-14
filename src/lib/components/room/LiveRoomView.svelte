@@ -10,7 +10,7 @@ import ExitSurveyModal from "$lib/components/ExitSurveyModal.svelte";
 import LiveRoomPostCard from "$lib/components/LiveRoomPostCard.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
-import { airingAt, airingHeading, airingOnAirAt } from "$lib/episode-room";
+import { airingAt, airingHeading, airingOnAirAt, formatAiringTime } from "$lib/episode-room";
 import {
 	applyPostStates,
 	comparePostsAsc,
@@ -689,9 +689,16 @@ function resumeLatestFollow() {
 	if (allPosts.length > 0) void focusLatestPost(postOrder);
 }
 
-/** 投稿が入る放送枠（話数ルームだけ）。放送時間外の投稿は null */
+/**
+ * 投稿が入る放送枠（話数ルームだけ）。放送時間外の投稿は null。
+ * 投稿が放送枠を持っていればそれを使い（重なる枠で後の枠に取られないように）、無ければ時刻で決める
+ */
 function airingOfPost(post: Post): RoomAiring | null {
-	return isEpisodeRoom ? airingAt(airings, post.created_at) : null;
+	if (!isEpisodeRoom) return null;
+	const own = post.broadcast_room_session_id
+		? airings.find((airing) => airing.id === post.broadcast_room_session_id)
+		: undefined;
+	return own ?? airingAt(airings, post.created_at);
 }
 
 /** 時系列順の一覧で、その放送枠の最初の投稿の前に見出しを出す */
@@ -742,6 +749,8 @@ async function loadOlderPosts(): Promise<boolean> {
 		const page = (await res.json()) as RoomPostPage;
 		const seen = new Set(allPosts.map((post) => post.id));
 		const older = page.posts.filter((post) => !seen.has(post.id) && !hiddenPostIds.has(post.id));
+		// 読み足した古い投稿は新着に数えない
+		for (const post of older) knownPostIds.add(post.id);
 		const heightBefore = postListEl?.scrollHeight ?? 0;
 		extraPosts = [...older, ...extraPosts];
 		hasOlderPosts = page.hasMore;
@@ -901,7 +910,7 @@ function formatCompactDate(iso: string) {
 		{:else if status === "not_open" && isEpisodeRoom}
 			<div class="card anime-room-login">
 				{#if data.room.opens_at_known}
-					この話はまだ放送されていません。{formatCompactDate(data.room.posting_opens_at)}から投稿できます。
+					この話はまだ放送されていません。{formatAiringTime(data.room.posting_opens_at)}から投稿できます。
 				{:else}
 					この話はまだ放送されていません。放送が始まると投稿できるようになります。
 				{/if}
