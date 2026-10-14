@@ -10,7 +10,7 @@ import ExitSurveyModal from "$lib/components/ExitSurveyModal.svelte";
 import LiveRoomPostCard from "$lib/components/LiveRoomPostCard.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
-import { airingAt, airingHeading, airingOnAirAt } from "$lib/episode-room";
+import { airingAt, airingHeading, airingOnAirAt, formatAiringTime } from "$lib/episode-room";
 import {
 	applyPostStates,
 	comparePostsAsc,
@@ -513,7 +513,11 @@ onMount(() => {
 	if (isEpisodeRoom && (initialAiring || !liveAiring)) {
 		// 話数ルームは、放送中でなければ最初から（?airing= があればその放送枠から）読ませる
 		isFollowingLatest = false;
-		void scrollToAiring(initialAiring).then(() => focusComposerTextarea({ preventScroll: true }));
+		void scrollToAiring(initialAiring).then(() => {
+			// 最初から読んでいても、投稿が少なく最新まで見えていれば「最新へ」は出さない
+			isFollowingLatest = isNearLatestEdge();
+			return focusComposerTextarea({ preventScroll: true });
+		});
 	} else if (status === "open" && data.posts.length > 0) {
 		void focusLatestPost().then(() => focusComposerTextarea({ preventScroll: true }));
 	} else {
@@ -685,9 +689,16 @@ function resumeLatestFollow() {
 	if (allPosts.length > 0) void focusLatestPost(postOrder);
 }
 
-/** 投稿が入る放送枠（話数ルームだけ）。放送時間外の投稿は null */
+/**
+ * 投稿が入る放送枠（話数ルームだけ）。放送時間外の投稿は null。
+ * 投稿が放送枠を持っていればそれを使い（重なる枠で後の枠に取られないように）、無ければ時刻で決める
+ */
 function airingOfPost(post: Post): RoomAiring | null {
-	return isEpisodeRoom ? airingAt(airings, post.created_at) : null;
+	if (!isEpisodeRoom) return null;
+	const own = post.broadcast_room_session_id
+		? airings.find((airing) => airing.id === post.broadcast_room_session_id)
+		: undefined;
+	return own ?? airingAt(airings, post.created_at);
 }
 
 /** 時系列順の一覧で、その放送枠の最初の投稿の前に見出しを出す */
@@ -718,18 +729,21 @@ async function scrollToAiring(airing: RoomAiring | null) {
 // 読み込んだ分より前にも投稿があるか（話数ルームで最新や放送枠の途中から読み始めたとき）
 // ルームごとに再マウントされるので、最初の値だけを使う
 let hasOlderPosts = $state(untrack(() => data.room.has_older_posts ?? false));
+// 前へ読み足す境界。ミュート・ブロックで全部除外されたページでも先へ進めるよう、表示中の投稿ではなく取得した行で進める
+let olderCursor: RoomPostCursor | null = untrack(() => data.room.older_cursor ?? null);
 let loadingOlder = $state(false);
 
 /** 古い側を1ページ読み足す。時系列順で見ているときは表示位置がずれないよう高さの差だけ戻す */
 async function loadOlderPosts(): Promise<boolean> {
 	const first = allPosts[0];
-	if (loadingOlder || !hasOlderPosts || !first) return false;
+	const cursor = olderCursor ?? (first ? { createdAt: first.created_at, id: first.id } : null);
+	if (loadingOlder || !hasOlderPosts || !cursor) return false;
 	loadingOlder = true;
 	try {
 		const params = new URLSearchParams({
 			[liveDiffQueryParam()]: data.room.session_id,
-			before_created_at: first.created_at,
-			before_id: first.id,
+			before_created_at: cursor.createdAt,
+			before_id: cursor.id,
 		});
 		const res = await fetch(`/api/rooms/posts?${params}`, {
 			signal: AbortSignal.timeout(ROOM_LIVE_FETCH_TIMEOUT_MS),
@@ -738,9 +752,12 @@ async function loadOlderPosts(): Promise<boolean> {
 		const page = (await res.json()) as RoomPostPage;
 		const seen = new Set(allPosts.map((post) => post.id));
 		const older = page.posts.filter((post) => !seen.has(post.id) && !hiddenPostIds.has(post.id));
+		// 読み足した古い投稿は新着に数えない
+		for (const post of older) knownPostIds.add(post.id);
 		const heightBefore = postListEl?.scrollHeight ?? 0;
 		extraPosts = [...older, ...extraPosts];
 		hasOlderPosts = page.hasMore;
+		olderCursor = page.nextCursor ?? olderCursor;
 		if (postOrder === "oldest" && postListEl) {
 			await tick();
 			postListEl.scrollTop += postListEl.scrollHeight - heightBefore;
@@ -897,7 +914,7 @@ function formatCompactDate(iso: string) {
 		{:else if status === "not_open" && isEpisodeRoom}
 			<div class="card anime-room-login">
 				{#if data.room.opens_at_known}
-					この話はまだ放送されていません。{formatCompactDate(data.room.posting_opens_at)}から投稿できます。
+					この話はまだ放送されていません。{formatAiringTime(data.room.posting_opens_at)}から投稿できます。
 				{:else}
 					この話はまだ放送されていません。放送が始まると投稿できるようになります。
 				{/if}

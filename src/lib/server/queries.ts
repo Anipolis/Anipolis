@@ -1025,12 +1025,26 @@ export async function ensureEpisodeRoom(
 	return roomId ? getEpisodeRoomById(supabase, roomId) : null;
 }
 
+/** 管理者が休止にした放送日（broadcast_room_overrides.is_cancelled）。話数ルームの放送枠から除く（156） */
+async function getCancelledRoomDates(supabase: SupabaseClient<Database>, animeId: number): Promise<Set<string> | null> {
+	const { data, error } = await supabase
+		.from("broadcast_room_overrides")
+		.select("room_date")
+		.eq("anime_id", animeId)
+		.eq("is_cancelled", true);
+	if (error) {
+		console.error("getCancelledRoomDates error:", error);
+		return null;
+	}
+	return new Set((data ?? []).map((row) => row.room_date));
+}
+
 /** 話数ルームの放送枠（初回・再放送・イベント）を開場の早い順に */
 export async function getEpisodeRoomAirings(supabase: SupabaseClient<Database>, roomId: string): Promise<RoomAiring[]> {
 	const { data, error } = await supabase
 		.from("broadcast_room_sessions")
 		.select(
-			"id, scheduled_at, duration_minutes, posting_opens_at, posting_closes_at, airing_kind, source_channel_name",
+			"id, anime_id, room_date, scheduled_at, duration_minutes, posting_opens_at, posting_closes_at, airing_kind, source_channel_name",
 		)
 		.eq("episode_room_id", roomId)
 		.order("posting_opens_at", { ascending: true });
@@ -1038,17 +1052,113 @@ export async function getEpisodeRoomAirings(supabase: SupabaseClient<Database>, 
 		console.error("getEpisodeRoomAirings error:", error);
 		return [];
 	}
-	return (data ?? []).map((row) => ({
-		id: row.id,
-		scheduled_at: row.scheduled_at,
-		ends_at: new Date(Date.parse(row.scheduled_at) + row.duration_minutes * 60_000).toISOString(),
-		posting_opens_at: row.posting_opens_at,
-		posting_closes_at: row.posting_closes_at,
-		airing_kind: (["first", "rerun", "event"].includes(row.airing_kind)
-			? row.airing_kind
-			: "first") as RoomAiring["airing_kind"],
-		channel_name: row.source_channel_name,
-	}));
+	// 休止した放送日の枠は見出し・放送中の判定に使わない。休止日を取れなければ、休止した枠を放送中と
+	// 見せないよう放送枠を出さない（見出しと「ライブ開始地点へ」が出ないだけで、投稿は読める）
+	const animeId = data?.[0]?.anime_id;
+	const cancelled = animeId != null ? await getCancelledRoomDates(supabase, animeId) : new Set<string>();
+	if (!cancelled) return [];
+	return (data ?? [])
+		.filter((row) => !cancelled.has(row.room_date))
+		.map((row) => ({
+			id: row.id,
+			scheduled_at: row.scheduled_at,
+			ends_at: new Date(Date.parse(row.scheduled_at) + row.duration_minutes * 60_000).toISOString(),
+			posting_opens_at: row.posting_opens_at,
+			posting_closes_at: row.posting_closes_at,
+			airing_kind: (["first", "rerun", "event"].includes(row.airing_kind)
+				? row.airing_kind
+				: "first") as RoomAiring["airing_kind"],
+			channel_name: row.source_channel_name,
+		}));
+}
+
+/** 作品ページの話数ルーム一覧用の放送枠（どの放送日の枠かも持つ） */
+export type EpisodeRoomLogAiring = RoomAiring & { episode_room_id: string; room_date: string };
+
+/**
+ * 作品ページの話数ルーム一覧用: 作品の話数ルームと、それぞれの放送枠。
+ * PostgREST の上限（本番 1000 件）で切れないよう、どちらもページを追って全件を取る。
+ * 取得に失敗したら null（呼び出し側は今の日付のルームログに戻す。空データと区別するため）
+ */
+export async function getEpisodeRoomLog(
+	supabase: SupabaseClient<Database>,
+	animeId: number,
+): Promise<{ rooms: EpisodeRoom[]; airings: EpisodeRoomLogAiring[]; unroomedDates: string[] } | null> {
+	const PAGE = 1000;
+	const rooms: EpisodeRoom[] = [];
+	for (let from = 0; ; from += PAGE) {
+		const { data, error } = await supabase
+			.from("episode_rooms")
+			.select(EPISODE_ROOM_SELECT)
+			.eq("anime_id", animeId)
+			.order("id")
+			.range(from, from + PAGE - 1);
+		if (error) {
+			console.error("getEpisodeRoomLog rooms error:", error);
+			return null;
+		}
+		rooms.push(...((data ?? []) as EpisodeRoom[]));
+		if ((data ?? []).length < PAGE) break;
+	}
+	const airings: EpisodeRoomLogAiring[] = [];
+	for (let from = 0; ; from += PAGE) {
+		const { data, error } = await supabase
+			.from("broadcast_room_sessions")
+			.select(
+				"id, episode_room_id, room_date, scheduled_at, duration_minutes, posting_opens_at, posting_closes_at, airing_kind, source_channel_name",
+			)
+			.eq("anime_id", animeId)
+			.not("episode_room_id", "is", null)
+			.order("id")
+			.range(from, from + PAGE - 1);
+		if (error) {
+			console.error("getEpisodeRoomLog airings error:", error);
+			return null;
+		}
+		for (const row of data ?? []) {
+			if (!row.episode_room_id) continue;
+			airings.push({
+				id: row.id,
+				episode_room_id: row.episode_room_id,
+				room_date: row.room_date,
+				scheduled_at: row.scheduled_at,
+				ends_at: new Date(Date.parse(row.scheduled_at) + row.duration_minutes * 60_000).toISOString(),
+				posting_opens_at: row.posting_opens_at,
+				posting_closes_at: row.posting_closes_at,
+				airing_kind: (["first", "rerun", "event"].includes(row.airing_kind)
+					? row.airing_kind
+					: "first") as RoomAiring["airing_kind"],
+				channel_name: row.source_channel_name,
+			});
+		}
+		if ((data ?? []).length < PAGE) break;
+	}
+	// 話数ルームに入っていない実在の放送枠（話数が付いていない）の放送日。作品ページで日付のルームログとして残す
+	const unroomedDates: string[] = [];
+	for (let from = 0; ; from += PAGE) {
+		const { data, error } = await supabase
+			.from("broadcast_room_sessions")
+			.select("id, room_date")
+			.eq("anime_id", animeId)
+			.eq("room_kind", "episode")
+			.is("episode_room_id", null)
+			.order("id")
+			.range(from, from + PAGE - 1);
+		if (error) {
+			console.error("getEpisodeRoomLog unroomed sessions error:", error);
+			return null;
+		}
+		unroomedDates.push(...(data ?? []).map((row) => row.room_date));
+		if ((data ?? []).length < PAGE) break;
+	}
+	const cancelled = await getCancelledRoomDates(supabase, animeId);
+	if (!cancelled) return null;
+	return {
+		rooms,
+		// 休止した放送日の枠は初回放送日・LIVE の判定に使わない
+		airings: airings.filter((airing) => !cancelled.has(airing.room_date)),
+		unroomedDates: unroomedDates.filter((date) => !cancelled.has(date)),
+	};
 }
 
 /**
@@ -1060,7 +1170,7 @@ export async function getEpisodeRoomPosts(
 	roomId: string,
 	userId: string | null,
 	options: { limit?: number; from?: "start" | "latest"; since?: string | undefined } = {},
-): Promise<Post[]> {
+): Promise<{ posts: Post[]; hasMore: boolean; oldestCursor: TimelineCursor | null }> {
 	const { limit = 100, from = "start", since } = options;
 	// since があれば、その時刻（放送枠の開場など）以降を古い順に
 	const ascending = from === "start" || since != null;
@@ -1069,7 +1179,16 @@ export async function getEpisodeRoomPosts(
 	const { data: rawPosts } = await query.order("created_at", { ascending }).order("id", { ascending }).limit(limit);
 	const ordered = ascending ? (rawPosts ?? []) : [...(rawPosts ?? [])].reverse();
 	// ルーム内ではそのルームのミュートを適用しない（明示的に入室しているため）
-	return enrichPostsWithCounts(supabase, ordered as unknown as RawPost[], userId, { includeMutedRoomPosts: true });
+	const posts = await enrichPostsWithCounts(supabase, ordered as unknown as RawPost[], userId, {
+		includeMutedRoomPosts: true,
+	});
+	// 続きの有無と前へ読み足す境界は、ミュートワード・ブロックで除外する前の取得行で決める（除外で打ち切らない）
+	const oldest = ordered[0] as unknown as RawPost | undefined;
+	return {
+		posts,
+		hasMore: (rawPosts ?? []).length === limit,
+		oldestCursor: oldest ? { createdAt: oldest.created_at, id: oldest.id } : null,
+	};
 }
 
 /** ルームの種類と ID（放送ルームはセッション ID、イベントルームはイベント ID、話数ルームはルーム ID） */

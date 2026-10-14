@@ -33,6 +33,8 @@ export type LiveRoomData = {
 		initial_airing_id?: string | null;
 		/** 読み込んだ分より前に投稿があるか（「前の投稿を読み込む」を出す） */
 		has_older_posts?: boolean;
+		/** 前へ読み足す境界（除外前の最古の行）。表示中の先頭投稿ではなくこれを使う */
+		older_cursor?: { createdAt: string; id: string } | null;
 	};
 	posts: Post[];
 	trending: TrendingHashtag[];
