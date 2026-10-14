@@ -6,11 +6,13 @@ export function isPostContinuation(post: Post, previous: Post | undefined): bool
 	const context = (item: Post) =>
 		item.event_room
 			? `event:${item.event_room.id}`
-			: item.broadcast_room_session_id
-				? `room:${item.broadcast_room_session_id}`
-				: item.anime_id
-					? `anime:${item.anime_id}`
-					: null;
+			: item.episode_room_id
+				? `episode-room:${item.episode_room_id}`
+				: item.broadcast_room_session_id
+					? `room:${item.broadcast_room_session_id}`
+					: item.anime_id
+						? `anime:${item.anime_id}`
+						: null;
 	const key = context(post);
 	const elapsed = Math.abs(Date.parse(post.created_at) - Date.parse(previous.created_at));
 	return key !== null && key === context(previous) && post.parent_id === previous.parent_id && elapsed <= 120_000;
@@ -32,7 +34,7 @@ function getRoomTagCandidates(post: Post) {
 		return [normalizeRoomTag(post.event_room.hashtag)].filter((tag) => tag.length > 0);
 	}
 	const anime = post.anime_quote;
-	if (!post.broadcast_room_session_id || !anime?.room_href) return [];
+	if ((!post.broadcast_room_session_id && !post.episode_room_id) || !anime?.room_href) return [];
 	return [
 		...(anime.official_hashtag ?? []).map(normalizeRoomTag),
 		normalizeRoomTag(fallbackRoomTag(anime.title)),

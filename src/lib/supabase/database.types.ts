@@ -3934,6 +3934,7 @@ export type Database = {
 				Returns: boolean;
 			};
 			is_profile_banned: { Args: { profile_id: string }; Returns: boolean };
+			merge_episode_rooms: { Args: { p_source: string; p_target: string }; Returns: number };
 			is_username_available: { Args: { p_username: string }; Returns: boolean };
 			is_username_held: { Args: { p_username: string }; Returns: boolean };
 			purge_released_usernames: { Args: never; Returns: number };
@@ -3944,6 +3945,7 @@ export type Database = {
 			};
 			revoke_invite: { Args: { p_invite_id: string }; Returns: undefined };
 			show_limit: { Args: never; Returns: number };
+			unlock_episode_room_opens_at: { Args: { p_room_id: string }; Returns: undefined };
 			show_trgm: { Args: { "": string }; Returns: string[] };
 			upsert_episode_room_for_airing: {
 				Args: { p_anime_id: number; p_episode_number: number };

@@ -40,6 +40,8 @@ export interface AnimeQuote {
 	official_hashtag: string[] | null;
 	room_href: string | null;
 	episode_number: number | null;
+	/** 話数ルーム（153）の投稿か。true なら episode_number はルームの話数 */
+	episode_room?: boolean;
 	/** 閲覧者自身のスコア（enrichPostsWithCounts で付加） */
 	user_score: number | null;
 }
@@ -120,6 +122,8 @@ export interface Post {
 	bookmarked_by_me: boolean;
 	anime_id: string | null;
 	broadcast_room_session_id: string | null;
+	/** 話数ルーム（153）。放送時間外の話数ルームへの投稿は broadcast_room_session_id を持たない */
+	episode_room_id: string | null;
 	anime_quote: AnimeQuote | null;
 	event_room: { id: string; title: string; hashtag: string } | null;
 	exchange_share: AnimeExchangeShare | null;
@@ -371,6 +375,23 @@ export interface RawPost {
 	anime_id?: string | number | null;
 	event_id?: string | null;
 	broadcast_room_session_id?: string | null;
+	episode_room_id?: string | null;
+	episode_room?:
+		| {
+				kind: string;
+				episode_number: number | null;
+				special_key: string | null;
+				label: string | null;
+				merged_into?: string | null;
+		  }
+		| {
+				kind: string;
+				episode_number: number | null;
+				special_key: string | null;
+				label: string | null;
+				merged_into?: string | null;
+		  }[]
+		| null;
 	broadcast_room_session?:
 		| { room_date: string; room_kind?: "episode" | "global" | null; room_key?: string | null }
 		| { room_date: string; room_kind?: "episode" | "global" | null; room_key?: string | null }[]
@@ -464,20 +485,38 @@ export function toPost(
 		bookmarked_by_me: counts?.bookmarked_by_me ?? false,
 		anime_id: raw.anime_id != null ? String(raw.anime_id) : null,
 		broadcast_room_session_id: raw.broadcast_room_session_id ?? null,
+		episode_room_id: raw.episode_room_id ?? null,
 		anime_quote: raw.anime
-			? {
-					id: String(raw.anime.id),
-					title: raw.anime.title,
-					cover_url: raw.anime.cover_url,
-					official_hashtag: raw.anime.official_hashtag ?? null,
-					room_href: buildAnimeRoomHref(raw.anime, raw.broadcast_room_session ?? null),
-					episode_number: calcEpisodeNumber(
-						raw.broadcast_room_session ?? null,
-						raw.anime.aired_from ?? null,
-						raw.anime.broadcast_time ?? null,
-					),
-					user_score: null,
-				}
+			? (() => {
+					const anime = raw.anime;
+					// 話数ルームの投稿は、ルームの話数とリンクをそのまま使う（放送日からの推定より正確）
+					const episodeRoom = Array.isArray(raw.episode_room) ? raw.episode_room[0] : raw.episode_room;
+					// 統合済みのルーム（merged_into あり）の話数は使わない。統合で投稿は統合先へ移るので通常は残らないが、
+					// 残っていた場合に「第N話」の表示と遷移先（統合先へ転送）が食い違わないように（#394 Codex）
+					const episodeNumber =
+						episodeRoom?.kind === "episode" && !episodeRoom.merged_into
+							? (episodeRoom.episode_number ?? null)
+							: null;
+					return {
+						id: String(anime.id),
+						title: anime.title,
+						cover_url: anime.cover_url,
+						official_hashtag: anime.official_hashtag ?? null,
+						room_href:
+							episodeNumber != null
+								? `/rooms/anime/${String(anime.id)}/ep/${episodeNumber}`
+								: buildAnimeRoomHref(anime, raw.broadcast_room_session ?? null),
+						episode_number:
+							episodeNumber ??
+							calcEpisodeNumber(
+								raw.broadcast_room_session ?? null,
+								anime.aired_from ?? null,
+								anime.broadcast_time ?? null,
+							),
+						episode_room: episodeNumber != null,
+						user_score: null,
+					};
+				})()
 			: null,
 		event_room: (() => {
 			const event = Array.isArray(raw.event) ? raw.event[0] : raw.event;
@@ -532,7 +571,11 @@ export function buildEventRoomLabel(eventRoom: { title: string; hashtag: string 
 	return tag.length > 0 ? `#${tag}` : eventRoom.title;
 }
 
-export function buildAnimeRoomLabel(anime: Pick<AnimeQuote, "title" | "official_hashtag" | "episode_number">): string {
+export function buildAnimeRoomLabel(
+	anime: Pick<AnimeQuote, "title" | "official_hashtag" | "episode_number" | "episode_room">,
+): string {
+	// 話数ルームの投稿は「作品名 第N話」
+	if (anime.episode_room && anime.episode_number != null) return `${anime.title} 第${anime.episode_number}話`;
 	const officialHashtag = anime.official_hashtag
 		?.map((tag) => tag.trim().replace(/^#+/, ""))
 		.find((tag) => tag.length > 0);

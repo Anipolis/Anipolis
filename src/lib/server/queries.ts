@@ -392,9 +392,12 @@ export async function enrichPostsWithCounts(
 			!blockedUserIds.has(post.user_id) &&
 			!(mutedWords.length > 0 && containsMutedWord(post, mutedWords)) &&
 			!(
-				post.broadcast_room_session_id &&
-				post.anime_id != null &&
-				mutedRoomAnimeIds.has(String(post.anime_id))
+				// 実況の投稿（放送枠、または放送時間外の話数ルーム）は作品ミュートで隠す
+				(
+					(post.broadcast_room_session_id || post.episode_room_id) &&
+					post.anime_id != null &&
+					mutedRoomAnimeIds.has(String(post.anime_id))
+				)
 			) &&
 			!(post.event_id != null && mutedEventIds.has(String(post.event_id))),
 	);
@@ -989,6 +992,57 @@ export async function getEpisodeRoomByNumber(
 		.eq("episode_number", episodeNumber)
 		.maybeSingle();
 	if (error) console.error("getEpisodeRoomByNumber error:", error);
+	return (data as EpisodeRoom | null) ?? null;
+}
+
+/** 管理タブ用: 作品の話数ルーム（開く時刻の固定・統合を含む）。話数順、特番は後ろ */
+export async function getAdminEpisodeRooms(supabase: SupabaseClient<Database>, animeId: number) {
+	// 長期作品で 1000 件を超えても切れないよう、安定した順でページを追って全件を取る
+	const PAGE = 1000;
+	const rooms: {
+		id: string;
+		kind: string;
+		episode_number: number | null;
+		special_key: string | null;
+		label: string | null;
+		opens_at: string | null;
+		opens_at_locked: boolean;
+		merged_into: string | null;
+	}[] = [];
+	for (let from = 0; ; from += PAGE) {
+		const { data, error } = await supabase
+			.from("episode_rooms")
+			.select("id, kind, episode_number, special_key, label, opens_at, opens_at_locked, merged_into")
+			.eq("anime_id", animeId)
+			.order("kind", { ascending: true })
+			.order("episode_number", { ascending: true, nullsFirst: false })
+			.order("id", { ascending: true })
+			.range(from, from + PAGE - 1);
+		if (error) {
+			console.error("getAdminEpisodeRooms error:", error);
+			break;
+		}
+		rooms.push(...(data ?? []));
+		if ((data ?? []).length < PAGE) break;
+	}
+	return rooms;
+}
+
+/** 特番ルーム（kind = special）を URL の名前で引く。無ければ null */
+export async function getSpecialEpisodeRoom(
+	supabase: SupabaseClient<Database>,
+	animeId: number,
+	specialKey: string,
+): Promise<EpisodeRoom | null> {
+	if (!/^[a-z0-9][a-z0-9-]{0,39}$/.test(specialKey)) return null;
+	const { data, error } = await supabase
+		.from("episode_rooms")
+		.select(EPISODE_ROOM_SELECT)
+		.eq("anime_id", animeId)
+		.eq("kind", "special")
+		.eq("special_key", specialKey)
+		.maybeSingle();
+	if (error) console.error("getSpecialEpisodeRoom error:", error);
 	return (data as EpisodeRoom | null) ?? null;
 }
 
