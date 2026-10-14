@@ -46,16 +46,16 @@ for (const row of pending) {
 }
 
 if (apply && pending.length > 0) {
-	// 1回で選ぶ件数を区切って、選べる記録が無くなるか、1件も消せない回が来るまで繰り返す
-	// （失敗した記録は次の回で後ろに回るので、残りの消せる記録にも届く）
+	// 200件ずつ選んでやり直す。失敗した記録は次の回で後ろに回るので、今ある記録の数だけ処理すれば
+	// 一巡する（失敗が続く記録で止まらず、後ろの消せる記録にも届く）
 	let completed = 0;
-	let remaining = 0;
-	for (let round = 0; round < 1000; round += 1) {
+	let processed = 0;
+	while (processed < pending.length) {
 		const result = await retryPendingAccountStorageCleanups(supabase, { limit: 200 });
+		if (result.processed === 0) break;
 		completed += result.completed;
-		remaining = result.remaining;
-		if (result.processed === 0 || result.completed === 0) break;
+		processed += result.processed;
 	}
 	const { count } = await supabase.from("account_storage_cleanups").select("user_id", { count: "exact", head: true });
-	console.log(`completed: ${completed}, still pending: ${count ?? "?"} (last round failed: ${remaining})`);
+	console.log(`processed: ${processed}, completed: ${completed}, still pending: ${count ?? "?"}`);
 }

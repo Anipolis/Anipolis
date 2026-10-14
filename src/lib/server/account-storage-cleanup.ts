@@ -161,8 +161,6 @@ export async function runAccountStorageCleanup(
 
 /** 退会の途中（auth ユーザーの削除前後）の記録には触れない。これより古い記録だけをやり直す */
 const RETRY_AFTER_MS = 10 * 60_000;
-/** auth ユーザーが残ったままの記録（削除が失敗し、記録を外すのにも失敗した）を外すまでの時間 */
-const STALE_RECORD_MS = 24 * 60 * 60_000;
 
 /**
  * 残っている記録を limit 件やり直す。消し終えた件数と残った件数を返す。
@@ -194,10 +192,9 @@ export async function retryPendingAccountStorageCleanups(
 	for (const row of data ?? []) {
 		const exists = await authUserExists(admin, row.user_id);
 		if (exists === true) {
-			// 退会は完了していない。古い記録なら外す（ファイルはアカウントのものとして残す）
-			if (now - Date.parse(row.requested_at) > STALE_RECORD_MS)
-				await cancelAccountStorageCleanup(admin, row.user_id);
-			else await markAttempt(admin, row.user_id, "auth user still exists");
+			// 退会は完了していない。記録は外さずに後ろへ回す（存在を確かめた直後に退会が完了する競合で、
+			// やり直しの手がかりを消してしまわないように。#388 Codex）
+			await markAttempt(admin, row.user_id, "auth user still exists");
 			continue;
 		}
 		if (exists === null) {
