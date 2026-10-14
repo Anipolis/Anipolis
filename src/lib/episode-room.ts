@@ -207,8 +207,7 @@ export function buildEpisodeRoomList(input: {
 				kind: "special",
 				episodeNumber: null,
 				label: room.label ?? "特番",
-				// 特番ルームのページは管理画面と一緒に作る。それまではリンクにしない
-				href: null,
+				href: `/rooms/anime/${animeId}/sp/${encodeURIComponent(room.special_key)}`,
 			}),
 		);
 	}

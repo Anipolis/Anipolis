@@ -9,7 +9,7 @@ import { isCoverHiddenWithoutCopyright } from "$lib/anime-cover";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
-import { episodeRoomEntryState, isEpisodeRoomEntryLive } from "$lib/episode-room";
+import { episodeRoomEntryState, formatAiringTime, isEpisodeRoomEntryLive } from "$lib/episode-room";
 import type { BroadcastRoomOverride } from "$lib/types";
 import {
 	type BroadcastOverrideKind,
@@ -171,8 +171,10 @@ let hideRecommendFormResult = $state(false);
 const recommendFormMessage = $derived(hideRecommendFormResult ? "" : (form?.recommendMessage ?? ""));
 const recommendFormSuccess = $derived(!hideRecommendFormResult && Boolean(form?.recommendSuccess));
 // svelte-ignore state_referenced_locally
-let adminEditOpen = $state(Boolean(form?.success || form?.message));
-let activeAdminTab = $state<"basic" | "overrides">("basic");
+let adminEditOpen = $state(Boolean(form?.success || form?.message || (form && "roomMessage" in form)));
+// 話数ルームの管理操作の結果を返したときは、そのタブを開いておく（最初の値だけを使う）
+// svelte-ignore state_referenced_locally
+let activeAdminTab = $state<"basic" | "overrides" | "rooms">(form && "roomMessage" in form ? "rooms" : "basic");
 let activeRoomTab = $state<"log" | "event">("log");
 let overrideFormOpen = $state(false);
 let selectedOverrideKind = $state<BroadcastOverrideKind>("cancelled");
@@ -891,12 +893,225 @@ $effect(() => {
 								<span class="i-lucide-calendar-cog" aria-hidden="true"></span>
 								イレギュラー放送設定
 							</button>
+							<button
+								type="button"
+								class="admin-tab"
+								class:admin-tab--active={activeAdminTab === "rooms"}
+								role="tab"
+								aria-selected={activeAdminTab === "rooms"}
+								onclick={() => {
+									activeAdminTab = "rooms";
+								}}
+							>
+								<span class="i-lucide-messages-square" aria-hidden="true"></span>
+								話数ルーム
+							</button>
 						</div>
 
 						{#if activeAdminTab === "basic"}
 							<div class="admin-edit-form">
 								<AnimeRegisterForm {form} mode="edit" anime={data.anime} action="?/updateAnime" />
 							</div>
+						{:else if activeAdminTab === "rooms"}
+							<section class="broadcast-override-section">
+								<div>
+									<h2 class="broadcast-override-heading">話数ルーム</h2>
+									<p class="broadcast-override-hint">
+										特番ルームの設置、話のルームを開く時刻の設定（週1配信の ONA
+										など）、再放送・イベントの放送枠の追加、二重にできたルームの統合ができます。
+									</p>
+								</div>
+								{#if form && "roomMessage" in form && form.roomMessage}
+									<p class="episode-room-admin-message" role="status">{form.roomMessage}</p>
+								{/if}
+
+								<div class="broadcast-override-table-wrap">
+									<table class="broadcast-override-table">
+										<thead>
+											<tr>
+												<th>ルーム</th>
+												<th>開く時刻</th>
+												<th>状態</th>
+											</tr>
+										</thead>
+										<tbody>
+											{#if data.adminEpisodeRooms.length > 0}
+												{#each data.adminEpisodeRooms as room (room.id)}
+													<tr>
+														<td>
+															{room.kind === "special"
+																? `特番：${room.label ?? room.special_key}（${room.special_key}）`
+																: `第${room.episode_number}話`}
+														</td>
+														<td>
+															{room.opens_at ? formatAiringTime(room.opens_at) : "未定"}
+															{#if room.opens_at_locked}
+																<span class="broadcast-override-tag">固定</span>
+															{/if}
+														</td>
+														<td>
+															{#if room.merged_into}
+																統合済み
+															{:else if room.opens_at && Date.parse(room.opens_at) <= Date.now()}
+																投稿できる
+															{:else}
+																未放送
+															{/if}
+														</td>
+													</tr>
+												{/each}
+											{:else}
+												<tr>
+													<td colspan="3">まだ話数ルームはありません</td>
+												</tr>
+											{/if}
+										</tbody>
+									</table>
+								</div>
+
+								<form
+									method="POST"
+									action="?/addSpecialRoom"
+									use:enhance
+									class="broadcast-override-form"
+								>
+									<h3 class="episode-room-admin-heading">特番ルームを設置</h3>
+									<div class="broadcast-override-field">
+										<label for="special-room-key">URL の名前（英小文字・数字・ハイフン）</label>
+										<input
+											id="special-room-key"
+											name="special_key"
+											required
+											pattern={"[a-z0-9][a-z0-9-]{0,39}"}
+											placeholder="recap-1"
+										>
+									</div>
+									<div class="broadcast-override-field">
+										<label for="special-room-label">表示名</label>
+										<input
+											id="special-room-label"
+											name="label"
+											required
+											maxlength="60"
+											placeholder="総集編"
+										>
+									</div>
+									<div class="broadcast-override-field">
+										<label for="special-room-opens">開く時刻（日本時間・空なら未定）</label>
+										<input id="special-room-opens" type="datetime-local" name="opens_at">
+									</div>
+									<button type="submit" class="btn btn-primary btn-sm">設置する</button>
+								</form>
+
+								<form
+									method="POST"
+									action="?/setEpisodeRoomOpensAt"
+									use:enhance
+									class="broadcast-override-form"
+								>
+									<h3 class="episode-room-admin-heading">話のルームを開く時刻を設定</h3>
+									<div class="broadcast-override-field">
+										<label for="room-opens-episode">話数</label>
+										<input
+											id="room-opens-episode"
+											type="number"
+											name="episode_number"
+											min="1"
+											max="9999"
+											required
+										>
+									</div>
+									<div class="broadcast-override-field">
+										<label for="room-opens-at">開く時刻（日本時間・空にすると固定を外す）</label>
+										<input id="room-opens-at" type="datetime-local" name="opens_at">
+									</div>
+									<button type="submit" class="btn btn-primary btn-sm">設定する</button>
+								</form>
+
+								<form
+									method="POST"
+									action="?/addEpisodeAiring"
+									use:enhance
+									class="broadcast-override-form"
+								>
+									<h3 class="episode-room-admin-heading">再放送・イベントの放送枠を追加</h3>
+									<div class="broadcast-override-field">
+										<label for="airing-episode">話数</label>
+										<input
+											id="airing-episode"
+											type="number"
+											name="episode_number"
+											min="1"
+											max="9999"
+											required
+										>
+									</div>
+									<div class="broadcast-override-field">
+										<label for="airing-kind">種類</label>
+										<select id="airing-kind" name="airing_kind">
+											<option value="rerun">再放送</option>
+											<option value="event">イベント（上映会など）</option>
+										</select>
+									</div>
+									<div class="broadcast-override-field">
+										<label for="airing-at">放送開始（日本時間）</label>
+										<input id="airing-at" type="datetime-local" name="scheduled_at" required>
+									</div>
+									<div class="broadcast-override-field">
+										<label for="airing-duration">放送時間（分）</label>
+										<input
+											id="airing-duration"
+											type="number"
+											name="duration_minutes"
+											min="1"
+											max="1440"
+											value="30"
+										>
+									</div>
+									<div class="broadcast-override-field">
+										<label for="airing-channel">放送局・配信先（任意）</label>
+										<input id="airing-channel" name="channel_name" maxlength="60">
+									</div>
+									<button type="submit" class="btn btn-primary btn-sm">追加する</button>
+								</form>
+
+								<form
+									method="POST"
+									action="?/mergeEpisodeRooms"
+									use:enhance
+									class="broadcast-override-form"
+								>
+									<h3 class="episode-room-admin-heading">ルームを統合</h3>
+									<p class="broadcast-override-hint">
+										話数のずれで同じ話のルームが二重にできたときに使います。統合元の投稿は統合先へ移り、統合元の
+										URL
+										は統合先へ転送されます。放送枠のあるルームは、先に放送枠の話数を直してください。
+									</p>
+									<div class="broadcast-override-field">
+										<label for="merge-from">統合元の話数</label>
+										<input
+											id="merge-from"
+											type="number"
+											name="from_episode"
+											min="1"
+											max="9999"
+											required
+										>
+									</div>
+									<div class="broadcast-override-field">
+										<label for="merge-to">統合先の話数</label>
+										<input
+											id="merge-to"
+											type="number"
+											name="to_episode"
+											min="1"
+											max="9999"
+											required
+										>
+									</div>
+									<button type="submit" class="btn btn-sm">統合する</button>
+								</form>
+							</section>
 						{:else}
 							<section class="broadcast-override-section">
 								<div>
@@ -2186,6 +2401,18 @@ $effect(() => {
 	min-width: 0;
 }
 
+.episode-room-admin-heading {
+	font-size: 0.9rem;
+	font-weight: 600;
+	margin: 0;
+}
+.episode-room-admin-message {
+	margin: 0;
+	padding: 8px 12px;
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+	font-size: 0.85rem;
+}
 .broadcast-override-section {
 	display: flex;
 	flex-direction: column;

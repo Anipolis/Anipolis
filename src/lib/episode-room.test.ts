@@ -162,7 +162,7 @@ describe("buildEpisodeRoomList（作品ページの話数ルーム一覧）", ()
 			episodeTotal: 4,
 		});
 		expect(list.map((entry) => entry.label)).toEqual(["第1話", "第2話", "第3話", "総集編"]);
-		expect(list.at(-1)?.href).toBeNull();
+		expect(list.at(-1)?.href).toBe("/rooms/anime/1/sp/recap");
 	});
 
 	it("話数が不明なら作られたルームの最大話数まで。ルームも話数も無ければ空", () => {
