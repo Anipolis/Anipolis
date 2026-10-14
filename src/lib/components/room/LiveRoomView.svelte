@@ -513,7 +513,11 @@ onMount(() => {
 	if (isEpisodeRoom && (initialAiring || !liveAiring)) {
 		// 話数ルームは、放送中でなければ最初から（?airing= があればその放送枠から）読ませる
 		isFollowingLatest = false;
-		void scrollToAiring(initialAiring).then(() => focusComposerTextarea({ preventScroll: true }));
+		void scrollToAiring(initialAiring).then(() => {
+			// 最初から読んでいても、投稿が少なく最新まで見えていれば「最新へ」は出さない
+			isFollowingLatest = isNearLatestEdge();
+			return focusComposerTextarea({ preventScroll: true });
+		});
 	} else if (status === "open" && data.posts.length > 0) {
 		void focusLatestPost().then(() => focusComposerTextarea({ preventScroll: true }));
 	} else {

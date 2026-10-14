@@ -9,7 +9,7 @@ import { isCoverHiddenWithoutCopyright } from "$lib/anime-cover";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
-import { episodeRoomEntryState, formatAiringDate, isEpisodeRoomEntryLive } from "$lib/episode-room";
+import { episodeRoomEntryState, isEpisodeRoomEntryLive } from "$lib/episode-room";
 import type { BroadcastRoomOverride } from "$lib/types";
 import {
 	type BroadcastOverrideKind,
@@ -1400,9 +1400,7 @@ $effect(() => {
 													<span class="room-log-live-badge">LIVE</span>
 												{/if}
 												<span class="room-log-date"
-													>{latestEpisodeRoom.firstAiredAt
-														? formatAiringDate(latestEpisodeRoom.firstAiredAt)
-														: ""}</span
+													>{latestEpisodeRoom.firstAiredOn ?? ""}</span
 												>
 											</a>
 										</li>
@@ -1423,9 +1421,7 @@ $effect(() => {
 												{:else if entryState !== "open"}
 													<span class="room-log-unaired-label">未放送</span>
 												{/if}
-												<span class="room-log-date"
-													>{entry.firstAiredAt ? formatAiringDate(entry.firstAiredAt) : ""}</span
-												>
+												<span class="room-log-date">{entry.firstAiredOn ?? ""}</span>
 											</svelte:element>
 										</li>
 									{/each}

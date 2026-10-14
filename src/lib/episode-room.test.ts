@@ -123,8 +123,8 @@ describe("buildEpisodeRoomList（作品ページの話数ルーム一覧）", ()
 			],
 			episodeTotal: 3,
 		});
-		expect(list.map((entry) => [entry.label, episodeRoomEntryState(entry, now), entry.firstAiredAt])).toEqual([
-			["第1話", "open", "2026-10-01T14:30:00.000Z"],
+		expect(list.map((entry) => [entry.label, episodeRoomEntryState(entry, now), entry.firstAiredOn])).toEqual([
+			["第1話", "open", "2026-10-01"],
 			["第2話", "upcoming", null],
 			["第3話", "unaired", null],
 		]);
@@ -174,8 +174,24 @@ describe("buildEpisodeRoomList（作品ページの話数ルーム一覧）", ()
 		expect(isEpisodeRoomEntryLive(entry, Date.parse("2026-10-14T00:50:00Z"))).toBe(false);
 	});
 
-	it("初回放送日は JST", () => {
+	it("初回放送日は放送日（朝4時区切り）を使い、無ければ JST の日付", () => {
 		expect(formatAiringDate("2026-10-05T16:00:00Z")).toBe("2026-10-06");
+		const lateNight = { ...airing("ln", "2026-10-13T15:25:00Z", "2026-10-13T16:30:00Z"), episode_room_id: "r1" };
+		const list = buildEpisodeRoomList({
+			animeId: 1,
+			rooms: [room("r1", 1, "2026-10-13T15:25:00Z")],
+			airings: [{ ...lateNight, room_date: "2026-10-13" }],
+			episodeTotal: 1,
+		});
+		// 10/14 0:30 JST の深夜放送は 10/13 の放送
+		expect(list[0]?.firstAiredOn).toBe("2026-10-13");
+		const withoutDate = buildEpisodeRoomList({
+			animeId: 1,
+			rooms: [room("r1", 1, null)],
+			airings: [lateNight],
+			episodeTotal: 1,
+		});
+		expect(withoutDate[0]?.firstAiredOn).toBe("2026-10-14");
 	});
 });
 

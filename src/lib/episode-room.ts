@@ -90,13 +90,14 @@ export interface EpisodeRoomListEntry {
 	href: string | null;
 	/** 投稿を受け付け始める時刻。null はまだ決まっていない（未放送） */
 	opensAt: string | null;
-	/** 初回放送の開始時刻（放送枠が無ければ null） */
-	firstAiredAt: string | null;
+	/** 初回放送の放送日（朝4時区切りの JST の日付、YYYY-MM-DD。放送枠が無ければ null） */
+	firstAiredOn: string | null;
 	/** 放送中の判定に使う、放送枠の開場から放送の終わりまで */
 	windows: { opens: string; closes: string }[];
 }
 
-type RoomAiringWithRoom = RoomAiring & { episode_room_id: string };
+/** room_date は放送日（朝4時区切り）。無ければ開始時刻の JST の日付を使う */
+type RoomAiringWithRoom = RoomAiring & { episode_room_id: string; room_date?: string };
 
 /** まだルームが無いが、開けば DB（153 の ensure_episode_room）がすぐ作って開く話に付ける開く時刻 */
 const OPENABLE_WITHOUT_ROOM = new Date(0).toISOString();
@@ -151,7 +152,7 @@ export function buildEpisodeRoomList(input: {
 
 	const toEntry = (
 		room: EpisodeRoom | undefined,
-		base: Omit<EpisodeRoomListEntry, "opensAt" | "firstAiredAt" | "windows">,
+		base: Omit<EpisodeRoomListEntry, "opensAt" | "firstAiredOn" | "windows">,
 	): EpisodeRoomListEntry => {
 		const roomAirings = room ? (airingsByRoom.get(room.id) ?? []) : [];
 		const first = roomAirings
@@ -161,7 +162,7 @@ export function buildEpisodeRoomList(input: {
 		return {
 			...base,
 			opensAt: room?.opens_at ?? (openable ? OPENABLE_WITHOUT_ROOM : null),
-			firstAiredAt: first?.scheduled_at ?? null,
+			firstAiredOn: first ? (first.room_date ?? formatAiringDate(first.scheduled_at)) : null,
 			windows: roomAirings.map((airing) => ({ opens: airing.posting_opens_at, closes: airing.ends_at })),
 		};
 	};

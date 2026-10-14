@@ -65,7 +65,9 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 	const episodes = buildBroadcastEpisodeLog(anime, scheduleSnapshots, broadcastOverrides)
 		.filter((slot) => slot.opened)
 		.sort((left, right) => right.date.localeCompare(left.date));
-	const episodesWithoutRoom = episodeRooms.length > 0 ? episodes.filter((slot) => !roomDates.has(slot.date)) : [];
+	// 話数の推定できる日付は話数ルームの一覧に含まれるので、話数の分からない日付だけを残す
+	const episodesWithoutRoom =
+		episodeRooms.length > 0 ? episodes.filter((slot) => !roomDates.has(slot.date) && slot.start == null) : [];
 
 	return {
 		anime,
