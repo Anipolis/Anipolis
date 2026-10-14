@@ -992,6 +992,37 @@ export async function getEpisodeRoomByNumber(
 	return (data as EpisodeRoom | null) ?? null;
 }
 
+/** 管理タブ用: 作品の話数ルーム（開く時刻の固定・統合を含む）。話数順、特番は後ろ */
+export async function getAdminEpisodeRooms(supabase: SupabaseClient<Database>, animeId: number) {
+	const { data, error } = await supabase
+		.from("episode_rooms")
+		.select("id, kind, episode_number, special_key, label, opens_at, opens_at_locked, merged_into")
+		.eq("anime_id", animeId)
+		.order("kind", { ascending: true })
+		.order("episode_number", { ascending: true, nullsFirst: false })
+		.limit(1000);
+	if (error) console.error("getAdminEpisodeRooms error:", error);
+	return data ?? [];
+}
+
+/** 特番ルーム（kind = special）を URL の名前で引く。無ければ null */
+export async function getSpecialEpisodeRoom(
+	supabase: SupabaseClient<Database>,
+	animeId: number,
+	specialKey: string,
+): Promise<EpisodeRoom | null> {
+	if (!/^[a-z0-9][a-z0-9-]{0,39}$/.test(specialKey)) return null;
+	const { data, error } = await supabase
+		.from("episode_rooms")
+		.select(EPISODE_ROOM_SELECT)
+		.eq("anime_id", animeId)
+		.eq("kind", "special")
+		.eq("special_key", specialKey)
+		.maybeSingle();
+	if (error) console.error("getSpecialEpisodeRoom error:", error);
+	return (data as EpisodeRoom | null) ?? null;
+}
+
 export async function getEpisodeRoomById(
 	supabase: SupabaseClient<Database>,
 	roomId: string,

@@ -4,6 +4,13 @@ import { recommendAnimeAction, removeUserAnimeEntry, upsertUserAnimeEntry } from
 import { addBroadcastOverrideAction, deleteBroadcastOverrideAction, updateAnimeAction } from "$lib/server/anime-admin";
 import { buildBroadcastEpisodeLog } from "$lib/server/broadcast-episode-log";
 import {
+	addEpisodeAiringAction,
+	addSpecialRoomAction,
+	mergeEpisodeRoomsAction,
+	setEpisodeRoomOpensAtAction,
+} from "$lib/server/episode-room-admin";
+import {
+	getAdminEpisodeRooms,
 	getAnime,
 	getAnimeRelations,
 	getAnimeSyobocalUrl,
@@ -69,6 +76,9 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 	// 放送枠の無い（推定だけの）日付は投稿が無いので出さない
 	const episodesWithoutRoom = episodeRooms.length > 0 ? episodes.filter((slot) => unroomedDates.has(slot.date)) : [];
 
+	// 管理タブ用: 話数ルームの一覧（開く時刻の固定・統合を含む）
+	const adminEpisodeRooms = isAdmin ? await getAdminEpisodeRooms(supabase, Number(anime.id)) : [];
+
 	return {
 		anime,
 		user,
@@ -79,6 +89,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 		episodes,
 		episodeRooms,
 		episodesWithoutRoom,
+		adminEpisodeRooms,
 		broadcastOverrides,
 		events,
 	};
@@ -137,4 +148,26 @@ export const actions: Actions = {
 
 		return deleteBroadcastOverrideAction(supabase, request);
 	},
+
+	addSpecialRoom: (event) => runEpisodeRoomAdminAction(event, addSpecialRoomAction),
+	setEpisodeRoomOpensAt: (event) => runEpisodeRoomAdminAction(event, setEpisodeRoomOpensAtAction),
+	addEpisodeAiring: (event) => runEpisodeRoomAdminAction(event, addEpisodeAiringAction),
+	mergeEpisodeRooms: (event) => runEpisodeRoomAdminAction(event, mergeEpisodeRoomsAction),
 };
+
+/** 話数ルームの管理操作は管理者だけ。episode_rooms には書き込みのポリシーが無いので service role で書く */
+async function runEpisodeRoomAdminAction(
+	{ request, params, locals: { supabase, safeGetSession } }: Parameters<Actions[string]>[0],
+	action: (
+		admin: ReturnType<typeof createServiceRoleClient>,
+		animeId: number,
+		form: FormData,
+	) => ReturnType<typeof addSpecialRoomAction>,
+) {
+	const { user } = await safeGetSession();
+	if (!user) return fail(401, { roomMessage: "ログインが必要です" });
+	if (!(await isAdminUser(supabase, user.id))) return fail(403, { roomMessage: "管理者権限が必要です" });
+	const anime = await getAnime(supabase, params.id, user.id);
+	if (!anime) return fail(404, { roomMessage: "アニメが見つかりません" });
+	return action(createServiceRoleClient(), Number(anime.id), await request.formData());
+}
