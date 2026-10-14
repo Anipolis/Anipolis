@@ -58,7 +58,7 @@ describe("search page load: posts quoting the matched anime", () => {
 		const { data, postsFilter } = await runLoad("レイアース", ids(17644));
 
 		expect(postsFilter).toBe(
-			'content.ilike."%レイアース%",and(anime_id.in.(17644),broadcast_room_session_id.is.null,event_id.is.null,cw_anime_id.is.null)',
+			'content.ilike."%レイアース%",and(anime_id.in.(17644),broadcast_room_session_id.is.null,episode_room_id.is.null,event_id.is.null,cw_anime_id.is.null)',
 		);
 		expect(data.posts).toHaveLength(1);
 		// 作品欄は出さない
