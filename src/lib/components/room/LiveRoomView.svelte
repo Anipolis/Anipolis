@@ -389,37 +389,44 @@ const handleCreatePost: SubmitFunction = ({ cancel, formData }) => {
 	// 送った文章はすぐ入力欄から消し、送信中も次の文章を書けるようにする（失敗したら戻す）
 	if (fromQueue == null) postContent = "";
 	return async ({ result, update }) => {
-		let succeeded = false;
-		try {
-			if (result.type === "success") {
-				// update()（applyAction）は成功時にフォーカスをリセットして入力欄から外すので呼ばない。
-				// 連投中にフォーカスが外れ、その間に打った文字が入力欄に入らなくなるため
-				succeeded = true;
-				localSurveyPostCount += 1;
-			} else {
-				if (result.type === "failure") {
-					const message = result.data?.["message"];
-					composerError = typeof message === "string" ? message : "投稿できませんでした";
+		if (result.type === "success") {
+			// update()（applyAction）は成功時にフォーカスをリセットして入力欄から外すので呼ばない。
+			// 連投中にフォーカスが外れ、その間に打った文字が入力欄に入らなくなるため
+			localSurveyPostCount += 1;
+			// 自分の投稿は、ライブ更新と同じ差分APIで反映する（invalidateAll は load 全体の再実行で重い）
+			void fetchNewPosts();
+			isPosting = false;
+			const [next, ...rest] = queuedContents;
+			if (next !== undefined) {
+				// 送信待ちは、ここで続けて送り出す（requestSubmit の中で handleCreatePost が同期的に呼ばれ、
+				// すぐ投稿中に戻る）。フォーカスを戻すのを待ってからにすると、その間の Enter に追い越される
+				queuedContents = rest;
+				sendingQueued = next;
+				composerFormEl?.requestSubmit();
+				if (!isPosting) {
+					// 送り出せなかった（入力欄が無くなった等）ときは、送信待ちを入力欄に戻す
+					sendingQueued = null;
+					restoreUnsentContent([next, ...rest]);
+					queuedContents = [];
 				}
-				// 送れなかった文章と送信待ちの文章は入力欄に戻す（順番は保つ）
-				restoreUnsentContent([submitted, ...queuedContents]);
-				queuedContents = [];
-				// エラーページ・リダイレクトは SvelteKit に任せる
-				if (result.type !== "failure") await update({ reset: false, invalidateAll: false });
 			}
+			await focusComposerTextarea({ preventScroll: true });
+			return;
+		}
+		try {
+			if (result.type === "failure") {
+				const message = result.data?.["message"];
+				composerError = typeof message === "string" ? message : "投稿できませんでした";
+			}
+			// 送れなかった文章と送信待ちの文章は入力欄に戻す（順番は保つ）
+			restoreUnsentContent([submitted, ...queuedContents]);
+			queuedContents = [];
+			// エラーページ・リダイレクトは SvelteKit に任せる
+			if (result.type !== "failure") await update({ reset: false, invalidateAll: false });
 		} finally {
 			isPosting = false;
 		}
 		await focusComposerTextarea({ preventScroll: true });
-		if (!succeeded) return;
-		// 自分の投稿は、ライブ更新と同じ差分APIで反映する（invalidateAll は load 全体の再実行で重い）
-		void fetchNewPosts();
-		const [next, ...rest] = queuedContents;
-		if (next !== undefined) {
-			queuedContents = rest;
-			sendingQueued = next;
-			composerFormEl?.requestSubmit();
-		}
 	};
 };
 
