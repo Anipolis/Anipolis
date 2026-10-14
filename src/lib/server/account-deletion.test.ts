@@ -431,6 +431,23 @@ describe("deleteAccount", () => {
 		expect(admin.cleanups.size).toBe(0);
 	});
 
+	it("深い入れ子のフォルダの中のファイルも消す（深さで打ち切らない, #391）", async () => {
+		const deep = `${Array.from({ length: 12 }, (_, i) => `d${i}`).join("/")}/deep.webp`;
+		const admin = createAdminMock({ filesByBucket: { "post-images": [{ name: "a.webp" }, { name: deep }] } });
+		const result = await deleteAccount("user-1", { admin: admin.client });
+		expect(result).toEqual({ ok: true, removedFiles: 2 });
+		expect(admin.removed.flatMap((entry) => entry.paths)).toContain(`user-1/${deep}`);
+		expect(admin.cleanups.size).toBe(0);
+	});
+
+	it("1回の列挙の上限を超えるファイルも、列挙し直して消し切る（#391）", async () => {
+		const files = Array.from({ length: 10_050 }, (_, i) => ({ name: `f${String(i).padStart(5, "0")}.webp` }));
+		const admin = createAdminMock({ filesByBucket: { "post-images": files } });
+		const result = await deleteAccount("user-1", { admin: admin.client });
+		expect(result).toEqual({ ok: true, removedFiles: 10_050 });
+		expect(admin.cleanups.size).toBe(0);
+	});
+
 	it("消したはずのファイルが残っていれば、記録を残して後でやり直す", async () => {
 		vi.spyOn(console, "error").mockImplementation(() => {});
 		const admin = createAdminMock({ filesByBucket: { "post-images": [{ name: "a.webp" }] }, removeIsNoop: true });
