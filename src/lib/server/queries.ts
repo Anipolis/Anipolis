@@ -1062,7 +1062,7 @@ export type EpisodeRoomLogAiring = RoomAiring & { episode_room_id: string; room_
 export async function getEpisodeRoomLog(
 	supabase: SupabaseClient<Database>,
 	animeId: number,
-): Promise<{ rooms: EpisodeRoom[]; airings: EpisodeRoomLogAiring[] } | null> {
+): Promise<{ rooms: EpisodeRoom[]; airings: EpisodeRoomLogAiring[]; unroomedDates: string[] } | null> {
 	const PAGE = 1000;
 	const rooms: EpisodeRoom[] = [];
 	for (let from = 0; ; from += PAGE) {
@@ -1112,7 +1112,25 @@ export async function getEpisodeRoomLog(
 		}
 		if ((data ?? []).length < PAGE) break;
 	}
-	return { rooms, airings };
+	// 話数ルームに入っていない実在の放送枠（話数が付いていない）の放送日。作品ページで日付のルームログとして残す
+	const unroomedDates: string[] = [];
+	for (let from = 0; ; from += PAGE) {
+		const { data, error } = await supabase
+			.from("broadcast_room_sessions")
+			.select("id, room_date")
+			.eq("anime_id", animeId)
+			.eq("room_kind", "episode")
+			.is("episode_room_id", null)
+			.order("id")
+			.range(from, from + PAGE - 1);
+		if (error) {
+			console.error("getEpisodeRoomLog unroomed sessions error:", error);
+			return null;
+		}
+		unroomedDates.push(...(data ?? []).map((row) => row.room_date));
+		if ((data ?? []).length < PAGE) break;
+	}
+	return { rooms, airings, unroomedDates };
 }
 
 /**

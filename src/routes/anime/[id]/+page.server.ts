@@ -56,8 +56,8 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 					openableUpTo: openableEpisodeLimit({ anime: roomAnime, ...roomLog, now: Date.now() }),
 				})
 			: [];
-	// 話数ルームに入っている放送日。日付のルームログのうち、これに入らない日（話数の分からない放送枠）は別に出す
-	const roomDates = new Set(roomLog?.airings.map((airing) => airing.room_date) ?? []);
+	// 話数ルームに入っていない実在の放送枠（話数が付いていない）の放送日。日付のルームログとして別に出す
+	const unroomedDates = new Set(roomLog?.unroomedDates ?? []);
 
 	// 各話ルームの履歴タイムライン（実在セッション+同期前の合成補完+アンカー逆算）
 	// の構築は buildBroadcastEpisodeLog に集約。未開場セッションは逆算のアンカー
@@ -65,9 +65,9 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 	const episodes = buildBroadcastEpisodeLog(anime, scheduleSnapshots, broadcastOverrides)
 		.filter((slot) => slot.opened)
 		.sort((left, right) => right.date.localeCompare(left.date));
-	// 話数の推定できる日付は話数ルームの一覧に含まれるので、話数の分からない日付だけを残す
-	const episodesWithoutRoom =
-		episodeRooms.length > 0 ? episodes.filter((slot) => !roomDates.has(slot.date) && slot.start == null) : [];
+	// 推定で話数が付いていても、実際の放送枠がルームに入っていなければ残す（日付のルームと投稿を見失わないように）。
+	// 放送枠の無い（推定だけの）日付は投稿が無いので出さない
+	const episodesWithoutRoom = episodeRooms.length > 0 ? episodes.filter((slot) => unroomedDates.has(slot.date)) : [];
 
 	return {
 		anime,

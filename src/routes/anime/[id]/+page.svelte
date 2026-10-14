@@ -1429,7 +1429,7 @@ $effect(() => {
 							</section>
 							{#if data.episodesWithoutRoom.length > 0}
 								<section class="room-log-section">
-									<h2 class="room-log-heading">話数の分からない放送日</h2>
+									<h2 class="room-log-heading">話数ルームに入っていない放送日</h2>
 									<ol class="room-log-list">
 										{#each data.episodesWithoutRoom as ep (ep.date)}
 											<li>
