@@ -1,7 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
 	authUserExists,
-	cancelAccountStorageCleanup,
 	recordAccountStorageCleanup,
 	retryPendingAccountStorageCleanups,
 	runAccountStorageCleanup,
@@ -102,8 +101,9 @@ export async function deleteAccount(
 			return { ok: false, reason: "failed" };
 		}
 		if (exists) {
-			// 削除されていない。記録を外してファイルには触れない
-			await cancelAccountStorageCleanup(admin, userId);
+			// 削除されていない。ファイルには触れない。記録は外さない（同じ利用者の退会が並行していて、
+			// もう一方が削除を完了する場合に、その後始末の手がかりを消さないように。#388 Codex）。
+			// 残った記録は、やり直しの処理が auth ユーザーの存在を確かめて後ろへ回すだけで、ファイルは消さない
 			// room_experiment_runs.created_by の RESTRICT は 142 で SET NULL に変えたが、
 			// 未適用の環境では外部キー違反でここに来る。原因が伝わる形で返す。
 			if (/foreign key|violates/i.test(deleteError.message)) return { ok: false, reason: "has_room_experiments" };

@@ -378,14 +378,17 @@ describe("deleteAccount", () => {
 		expect(admin.deleteUser).not.toHaveBeenCalled();
 	});
 
-	it("auth ユーザーの削除に失敗したら、消す予定の記録も外す", async () => {
+	it("auth ユーザーの削除に失敗し、まだ存在するなら、ファイルに触れず記録は残す（並行する退会の手がかりを消さない）", async () => {
 		vi.spyOn(console, "error").mockImplementation(() => {});
 		const admin = createAdminMock({
+			filesByBucket: { "post-images": [{ name: "a.webp" }] },
 			deleteUserError: { message: "service unavailable" },
 			existingUserIds: ["user-1"],
 		});
-		await deleteAccount("user-1", { admin: admin.client });
-		expect(admin.cleanups.size).toBe(0);
+		const result = await deleteAccount("user-1", { admin: admin.client });
+		expect(result).toEqual({ ok: false, reason: "failed" });
+		expect(admin.removed).toEqual([]);
+		expect(admin.cleanups.has("user-1")).toBe(true);
 	});
 
 	it("前の退会で消し残したファイルをやり直す。auth にまだいる利用者と、退会の途中の記録には触れない", async () => {

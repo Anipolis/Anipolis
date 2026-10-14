@@ -50,7 +50,10 @@ if (apply && pending.length > 0) {
 	// 一巡する（失敗が続く記録で止まらず、後ろの消せる記録にも届く）
 	let completed = 0;
 	let processed = 0;
-	while (processed < pending.length) {
+	// やり直しの対象は記録から10分以上経ったものだけ（退会の途中の記録は選ばれない）なので、その数だけ回す
+	const RETRY_AFTER_MS = 10 * 60_000;
+	const eligible = pending.filter((row) => Date.now() - Date.parse(row.requested_at) >= RETRY_AFTER_MS).length;
+	while (processed < eligible) {
 		const result = await retryPendingAccountStorageCleanups(supabase, { limit: 200 });
 		if (result.processed === 0) break;
 		completed += result.completed;
