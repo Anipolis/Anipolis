@@ -77,6 +77,30 @@ export type Database = {
 					},
 				];
 			};
+			account_storage_cleanups: {
+				Row: {
+					attempts: number;
+					last_attempt_at: string | null;
+					last_error: string | null;
+					requested_at: string;
+					user_id: string;
+				};
+				Insert: {
+					attempts?: number;
+					last_attempt_at?: string | null;
+					last_error?: string | null;
+					requested_at?: string;
+					user_id: string;
+				};
+				Update: {
+					attempts?: number;
+					last_attempt_at?: string | null;
+					last_error?: string | null;
+					requested_at?: string;
+					user_id?: string;
+				};
+				Relationships: [];
+			};
 			admin_audit_logs: {
 				Row: {
 					action: string;

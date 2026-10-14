@@ -24,8 +24,9 @@ type Submit = (
 function start(handler: Submit) {
 	const cancel = vi.fn();
 	const form = document.createElement("form");
-	const callback = handler({ formElement: form, cancel } as never);
-	return { cancel, callback, form };
+	const formData = new FormData();
+	const callback = handler({ formElement: form, formData, cancel } as never);
+	return { cancel, callback, form, formData };
 }
 
 async function finish(callback: ReturnType<Submit>, result: ActionResult): Promise<ReturnType<typeof vi.fn>> {
@@ -43,9 +44,11 @@ describe("PostController reactions", () => {
 			() => makePost(),
 			() => "viewer",
 		);
-		const { callback } = start(controller.handleLike as Submit);
+		const { callback, formData } = start(controller.handleLike as Submit);
 		expect(controller.likedByMe).toBe(true);
 		expect(controller.likeCount).toBe(6);
+		// 押した後の状態を送り、サーバーは反転ではなくその状態に合わせる（#383 Codex レビュー）
+		expect(formData.get("intent")).toBe("on");
 
 		const update = await finish(callback, success({ liked: true }));
 
