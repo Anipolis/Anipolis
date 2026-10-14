@@ -51,6 +51,13 @@ let isPosting = $state(false);
 let textareaEl: HTMLTextAreaElement | null = $state(null);
 let composerEl: HTMLDivElement | null = $state(null);
 let keepComposerFocused = $state(true);
+let composerFormEl: HTMLFormElement | null = $state(null);
+// 投稿の失敗理由。SvelteKit の applyAction（form の更新）は成功時にフォーカスをリセットするので使わず、ここで持つ
+let composerError = $state<string | null>(null);
+// 送信中に Enter で送った文章。前の投稿が終わったら順に送る（連投で Enter が空振りしないように）
+let queuedContents: string[] = [];
+// 次の送信で送る送信待ちの文章（入力欄の文章ではなくこちらを送る）
+let sendingQueued: string | null = null;
 let postListEl: HTMLDivElement | null = $state(null);
 let mounted = $state(false);
 let isMobileViewport = $state(false);
@@ -348,25 +355,71 @@ function handleWindowPointerDown(event: PointerEvent) {
 	keepComposerFocused = false;
 }
 
-const handleCreatePost: SubmitFunction = ({ cancel }) => {
+/** 送れなかった文章を入力欄に戻す。送信中に書き足した文章があれば、その前に置く */
+function restoreUnsentContent(contents: string[]) {
+	const unsent = contents.filter((content) => content.trim());
+	if (unsent.length === 0) return;
+	postContent = [...unsent, ...(postContent.trim() ? [postContent] : [])].join("\n");
+}
+
+/** 入力欄の文章を送る。送信中なら送信待ちに回し、入力欄はすぐ空にして次を書けるようにする */
+function submitComposer() {
+	if (overLimit || !postContent.trim()) return;
 	if (isPosting) {
+		queuedContents = [...queuedContents, postContent];
+		postContent = "";
+		return;
+	}
+	composerFormEl?.requestSubmit();
+}
+
+const handleCreatePost: SubmitFunction = ({ cancel, formData }) => {
+	if (isPosting) {
+		// 投稿ボタンは送信中は押せないので、ここに来るのは JavaScript から二重に送ったときだけ
 		cancel();
 		return;
 	}
+	const fromQueue = sendingQueued;
+	sendingQueued = null;
+	const submitted = fromQueue ?? String(formData.get("content") ?? "");
+	if (fromQueue != null) formData.set("content", fromQueue);
 	isPosting = true;
 	keepComposerFocused = true;
+	composerError = null;
+	// 送った文章はすぐ入力欄から消し、送信中も次の文章を書けるようにする（失敗したら戻す）
+	if (fromQueue == null) postContent = "";
 	return async ({ result, update }) => {
+		let succeeded = false;
 		try {
-			// invalidateAll は load 全体の再実行で重いため、自分の投稿はライブ更新と同じ差分APIで反映する
-			await update({ reset: false, invalidateAll: false });
 			if (result.type === "success") {
+				// update()（applyAction）は成功時にフォーカスをリセットして入力欄から外すので呼ばない。
+				// 連投中にフォーカスが外れ、その間に打った文字が入力欄に入らなくなるため
+				succeeded = true;
 				localSurveyPostCount += 1;
-				await fetchNewPosts();
+			} else {
+				if (result.type === "failure") {
+					const message = result.data?.["message"];
+					composerError = typeof message === "string" ? message : "投稿できませんでした";
+				}
+				// 送れなかった文章と送信待ちの文章は入力欄に戻す（順番は保つ）
+				restoreUnsentContent([submitted, ...queuedContents]);
+				queuedContents = [];
+				// エラーページ・リダイレクトは SvelteKit に任せる
+				if (result.type !== "failure") await update({ reset: false, invalidateAll: false });
 			}
 		} finally {
 			isPosting = false;
 		}
 		await focusComposerTextarea({ preventScroll: true });
+		if (!succeeded) return;
+		// 自分の投稿は、ライブ更新と同じ差分APIで反映する（invalidateAll は load 全体の再実行で重い）
+		void fetchNewPosts();
+		const [next, ...rest] = queuedContents;
+		if (next !== undefined) {
+			queuedContents = rest;
+			sendingQueued = next;
+			composerFormEl?.requestSubmit();
+		}
 	};
 };
 
@@ -591,12 +644,6 @@ function installRoomKeyboardOffsetTracking() {
 		document.documentElement.style.removeProperty("--room-keyboard-offset");
 	};
 }
-
-$effect(() => {
-	if (form && "success" in form && form.success) {
-		postContent = "";
-	}
-});
 
 // load をやり直したら（自分で投稿を削除した直後など）、表示中の投稿を確かめ直す（#347）。
 // ライブ受信分は load の結果に含まれないので、削除してもそのままでは画面に残るため
@@ -880,10 +927,13 @@ function formatCompactDate(iso: string) {
 
 		{#if data.user && status === "open"}
 			<div class="card composer" bind:this={composerEl}>
-				{#if form && "message" in form}
+				{#if composerError}
+					<p class="form-error">{composerError}</p>
+				{:else if form && "message" in form}
+					<!-- JavaScript が無いときの送信結果 -->
 					<p class="form-error">{form.message}</p>
 				{/if}
-				<form method="POST" action="?/createPost" use:enhance={handleCreatePost}>
+				<form method="POST" action="?/createPost" use:enhance={handleCreatePost} bind:this={composerFormEl}>
 					<div class="composer-body">
 						<textarea
 							bind:this={textareaEl}
@@ -906,9 +956,7 @@ function formatCompactDate(iso: string) {
 							onkeydown={(e) => {
 								if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
 									e.preventDefault();
-									if (!isPosting && !overLimit && postContent.trim()) {
-										e.currentTarget.closest('form')?.requestSubmit();
-									}
+									submitComposer();
 								}
 							}}
 						></textarea>
