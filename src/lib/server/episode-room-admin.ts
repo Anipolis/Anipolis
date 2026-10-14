@@ -85,10 +85,12 @@ export async function setEpisodeRoomOpensAtAction(admin: Admin, animeId: number,
 
 	if (opensAt == null) {
 		if (!existing) return { roomMessage: `第${episodeNumber}話のルームはまだありません`, roomSuccess: true };
-		const { error } = await admin.from("episode_rooms").update({ opens_at_locked: false }).eq("id", existing.id);
-		if (error) return fail(500, { roomMessage: "固定を外せませんでした" });
-		// 放送枠から計算し直す（放送枠が無ければそのまま）
-		await admin.rpc("refresh_episode_room_opens_at", { p_room_id: existing.id });
+		// 固定を外すことと放送枠からの計算し直しを1回で行う（158）。途中で失敗して古い手動の時刻が残らないように
+		const { error } = await admin.rpc("unlock_episode_room_opens_at", { p_room_id: existing.id });
+		if (error) {
+			console.error("unlock_episode_room_opens_at error:", error);
+			return fail(500, { roomMessage: "固定を外せませんでした" });
+		}
 		return { roomMessage: `第${episodeNumber}話の開く時刻の固定を外しました`, roomSuccess: true };
 	}
 
@@ -187,18 +189,11 @@ export async function mergeEpisodeRoomsAction(admin: Admin, animeId: number, for
 		});
 	}
 
-	const { error: moveError } = await admin
-		.from("posts")
-		.update({ episode_room_id: target.id })
-		.eq("episode_room_id", source.id);
-	if (moveError) {
-		console.error("mergeEpisodeRoomsAction move error:", moveError);
-		return fail(500, { roomMessage: "投稿を移せませんでした" });
-	}
-	const { error } = await admin.from("episode_rooms").update({ merged_into: target.id }).eq("id", source.id);
+	// 統合済みにすることと投稿の移動を1回で行う（158）。統合中の投稿は待たされ、統合後は統合元へ投稿できない
+	const { error } = await admin.rpc("merge_episode_rooms", { p_source: source.id, p_target: target.id });
 	if (error) {
-		console.error("mergeEpisodeRoomsAction error:", error);
-		return fail(500, { roomMessage: "統合できませんでした（投稿は移動済み）" });
+		console.error("merge_episode_rooms error:", error);
+		return fail(500, { roomMessage: "統合できませんでした" });
 	}
 	return { roomMessage: `第${from}話のルームを第${to}話に統合しました`, roomSuccess: true };
 }

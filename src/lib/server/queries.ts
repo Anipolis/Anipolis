@@ -994,15 +994,35 @@ export async function getEpisodeRoomByNumber(
 
 /** 管理タブ用: 作品の話数ルーム（開く時刻の固定・統合を含む）。話数順、特番は後ろ */
 export async function getAdminEpisodeRooms(supabase: SupabaseClient<Database>, animeId: number) {
-	const { data, error } = await supabase
-		.from("episode_rooms")
-		.select("id, kind, episode_number, special_key, label, opens_at, opens_at_locked, merged_into")
-		.eq("anime_id", animeId)
-		.order("kind", { ascending: true })
-		.order("episode_number", { ascending: true, nullsFirst: false })
-		.limit(1000);
-	if (error) console.error("getAdminEpisodeRooms error:", error);
-	return data ?? [];
+	// 長期作品で 1000 件を超えても切れないよう、安定した順でページを追って全件を取る
+	const PAGE = 1000;
+	const rooms: {
+		id: string;
+		kind: string;
+		episode_number: number | null;
+		special_key: string | null;
+		label: string | null;
+		opens_at: string | null;
+		opens_at_locked: boolean;
+		merged_into: string | null;
+	}[] = [];
+	for (let from = 0; ; from += PAGE) {
+		const { data, error } = await supabase
+			.from("episode_rooms")
+			.select("id, kind, episode_number, special_key, label, opens_at, opens_at_locked, merged_into")
+			.eq("anime_id", animeId)
+			.order("kind", { ascending: true })
+			.order("episode_number", { ascending: true, nullsFirst: false })
+			.order("id", { ascending: true })
+			.range(from, from + PAGE - 1);
+		if (error) {
+			console.error("getAdminEpisodeRooms error:", error);
+			break;
+		}
+		rooms.push(...(data ?? []));
+		if ((data ?? []).length < PAGE) break;
+	}
+	return rooms;
 }
 
 /** 特番ルーム（kind = special）を URL の名前で引く。無ければ null */
