@@ -92,4 +92,23 @@ describe("話数ルームの投稿（153）", () => {
 		});
 		expect(getPostDisplayContent(post)).toBe("よかった");
 	});
+
+	it("統合済みのルームに残った投稿は、その話数を使わない（遷移先と食い違わないように）", () => {
+		const raw: RawPost = {
+			id: "p2",
+			user_id: "u1",
+			content: "x",
+			created_at: "2026-10-14T00:00:00Z",
+			anime_id: 1129,
+			broadcast_room_session_id: null,
+			episode_room_id: "room-4",
+			episode_room: { kind: "episode", episode_number: 4, special_key: null, label: null, merged_into: "room-3" },
+			anime: { id: 1129, title: "天は赤い河のほとり", cover_url: null, official_hashtag: null },
+			profiles: { username: "u", display_name: null, avatar_url: null },
+			post_hashtags: [],
+		};
+		const post = toPost(raw);
+		expect(post.anime_quote?.episode_room).toBe(false);
+		expect(post.anime_quote?.room_href).not.toBe("/rooms/anime/1129/ep/4");
+	});
 });

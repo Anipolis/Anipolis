@@ -377,8 +377,20 @@ export interface RawPost {
 	broadcast_room_session_id?: string | null;
 	episode_room_id?: string | null;
 	episode_room?:
-		| { kind: string; episode_number: number | null; special_key: string | null; label: string | null }
-		| { kind: string; episode_number: number | null; special_key: string | null; label: string | null }[]
+		| {
+				kind: string;
+				episode_number: number | null;
+				special_key: string | null;
+				label: string | null;
+				merged_into?: string | null;
+		  }
+		| {
+				kind: string;
+				episode_number: number | null;
+				special_key: string | null;
+				label: string | null;
+				merged_into?: string | null;
+		  }[]
 		| null;
 	broadcast_room_session?:
 		| { room_date: string; room_kind?: "episode" | "global" | null; room_key?: string | null }
@@ -479,7 +491,12 @@ export function toPost(
 					const anime = raw.anime;
 					// 話数ルームの投稿は、ルームの話数とリンクをそのまま使う（放送日からの推定より正確）
 					const episodeRoom = Array.isArray(raw.episode_room) ? raw.episode_room[0] : raw.episode_room;
-					const episodeNumber = episodeRoom?.kind === "episode" ? (episodeRoom.episode_number ?? null) : null;
+					// 統合済みのルーム（merged_into あり）の話数は使わない。統合で投稿は統合先へ移るので通常は残らないが、
+					// 残っていた場合に「第N話」の表示と遷移先（統合先へ転送）が食い違わないように（#394 Codex）
+					const episodeNumber =
+						episodeRoom?.kind === "episode" && !episodeRoom.merged_into
+							? (episodeRoom.episode_number ?? null)
+							: null;
 					return {
 						id: String(anime.id),
 						title: anime.title,
