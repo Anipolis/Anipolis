@@ -24,18 +24,38 @@ function getSupabaseClient() {
 }
 
 const supabase = getSupabaseClient();
-const { data: pending, error } = await supabase
-	.from("account_storage_cleanups")
-	.select("user_id, requested_at, attempts, last_error")
-	.order("requested_at");
-if (error) throw new Error(error.message);
 
-console.log(`${apply ? "APPLY" : "DRY RUN"}: ${(pending ?? []).length} pending cleanups`);
-for (const row of pending ?? []) {
+// PostgREST の上限（本番 1000 件）で切れないよう、ページを追って全件を見る
+const PAGE_SIZE = 1000;
+const pending: { user_id: string; requested_at: string; attempts: number; last_error: string | null }[] = [];
+for (let from = 0; ; from += PAGE_SIZE) {
+	const { data, error } = await supabase
+		.from("account_storage_cleanups")
+		.select("user_id, requested_at, attempts, last_error")
+		.order("requested_at")
+		.order("user_id")
+		.range(from, from + PAGE_SIZE - 1);
+	if (error) throw new Error(error.message);
+	pending.push(...(data ?? []));
+	if ((data ?? []).length < PAGE_SIZE) break;
+}
+
+console.log(`${apply ? "APPLY" : "DRY RUN"}: ${pending.length} pending cleanups`);
+for (const row of pending) {
 	console.log(`  ${row.user_id} requested ${row.requested_at} attempts ${row.attempts} ${row.last_error ?? ""}`);
 }
 
-if (apply && (pending ?? []).length > 0) {
-	const result = await retryPendingAccountStorageCleanups(supabase, { limit: (pending ?? []).length });
-	console.log(`completed: ${result.completed}, remaining: ${result.remaining}`);
+if (apply && pending.length > 0) {
+	// 1回で選ぶ件数を区切って、選べる記録が無くなるか、1件も消せない回が来るまで繰り返す
+	// （失敗した記録は次の回で後ろに回るので、残りの消せる記録にも届く）
+	let completed = 0;
+	let remaining = 0;
+	for (let round = 0; round < 1000; round += 1) {
+		const result = await retryPendingAccountStorageCleanups(supabase, { limit: 200 });
+		completed += result.completed;
+		remaining = result.remaining;
+		if (result.processed === 0 || result.completed === 0) break;
+	}
+	const { count } = await supabase.from("account_storage_cleanups").select("user_id", { count: "exact", head: true });
+	console.log(`completed: ${completed}, still pending: ${count ?? "?"} (last round failed: ${remaining})`);
 }

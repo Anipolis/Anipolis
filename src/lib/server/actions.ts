@@ -395,6 +395,22 @@ function readReactionIntent(form: FormData): "on" | "off" | null {
 	return intent === "on" || intent === "off" ? intent : null;
 }
 
+/**
+ * 操作後のいいね数・リポスト数（get_post_counts）。取れなければ undefined（呼び出し側は推測で表示する）。
+ * 表示していた件数が取得の失敗で 0 だった投稿でも、押したあとに正しい件数を確定させるため（#388 Codex）。
+ */
+async function readReactionCount(
+	supabase: SupabaseClient<Database>,
+	postId: string,
+	userId: string,
+	column: "like_count" | "repost_count",
+): Promise<number | undefined> {
+	const { data, error } = await supabase.rpc("get_post_counts", { p_post_ids: [postId], p_user_id: userId });
+	if (error) return undefined;
+	const value = data?.[0]?.[column];
+	return typeof value === "number" ? value : undefined;
+}
+
 export async function toggleLikeAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
 	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
 	if (moderationFailure) return moderationFailure;
@@ -413,8 +429,11 @@ export async function toggleLikeAction(request: Request, supabase: SupabaseClien
 	if (lookupError) return fail(500, { message: "いいねの状態を確認できませんでした" });
 
 	const intent = readReactionIntent(form);
-	if (existing && intent === "on") return { liked: true };
-	if (!existing && intent === "off") return { liked: false };
+	if (existing && intent === "on")
+		return { liked: true, count: await readReactionCount(supabase, postId, userId, "like_count") };
+	if (!existing && intent === "off") {
+		return { liked: false, count: await readReactionCount(supabase, postId, userId, "like_count") };
+	}
 
 	if (existing) {
 		const { error: deleteError } = await supabase
@@ -423,12 +442,12 @@ export async function toggleLikeAction(request: Request, supabase: SupabaseClien
 			.eq("post_id", postId)
 			.eq("user_id", userId);
 		if (deleteError) return fail(500, { message: "いいねの解除に失敗しました" });
-		return { liked: false };
+		return { liked: false, count: await readReactionCount(supabase, postId, userId, "like_count") };
 	}
 
 	const { error } = await supabase.from("likes").insert({ post_id: postId, user_id: userId });
 	if (error) return fail(403, { message: "この投稿にいいねできません" });
-	return { liked: true };
+	return { liked: true, count: await readReactionCount(supabase, postId, userId, "like_count") };
 }
 
 /**
@@ -488,8 +507,12 @@ export async function toggleRepostAction(request: Request, supabase: SupabaseCli
 	if (lookupError) return fail(500, { message: "リポストの状態を確認できませんでした" });
 
 	const intent = readReactionIntent(form);
-	if (existing && intent === "on") return { reposted: true };
-	if (!existing && intent === "off") return { reposted: false };
+	if (existing && intent === "on") {
+		return { reposted: true, count: await readReactionCount(supabase, postId, userId, "repost_count") };
+	}
+	if (!existing && intent === "off") {
+		return { reposted: false, count: await readReactionCount(supabase, postId, userId, "repost_count") };
+	}
 
 	if (existing) {
 		const { error: deleteError } = await supabase
@@ -498,12 +521,12 @@ export async function toggleRepostAction(request: Request, supabase: SupabaseCli
 			.eq("post_id", postId)
 			.eq("user_id", userId);
 		if (deleteError) return fail(500, { message: "リポストの解除に失敗しました" });
-		return { reposted: false };
+		return { reposted: false, count: await readReactionCount(supabase, postId, userId, "repost_count") };
 	}
 
 	const { error } = await supabase.from("reposts").insert({ post_id: postId, user_id: userId });
 	if (error) return fail(403, { message: "この投稿をリポストできません" });
-	return { reposted: true };
+	return { reposted: true, count: await readReactionCount(supabase, postId, userId, "repost_count") };
 }
 
 /**

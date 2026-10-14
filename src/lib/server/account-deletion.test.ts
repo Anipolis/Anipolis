@@ -109,7 +109,13 @@ type StorageMock = {
 	remove: ReturnType<typeof vi.fn>;
 };
 
-type CleanupRow = { user_id: string; requested_at: string; attempts: number; last_error?: string | null };
+type CleanupRow = {
+	user_id: string;
+	requested_at: string;
+	attempts: number;
+	last_attempt_at?: string | null;
+	last_error?: string | null;
+};
 
 function createAdminMock(
 	options: {
@@ -127,6 +133,8 @@ function createAdminMock(
 		recordError?: { message: string } | null;
 		/** auth にまだ存在する利用者 */
 		existingUserIds?: string[];
+		/** getUserById が 404 以外のエラーを返す（存否を確かめられない） */
+		lookupError?: boolean;
 	} = {},
 ) {
 	const storageByBucket = new Map<string, StorageMock>();
@@ -135,11 +143,12 @@ function createAdminMock(
 	const cleanups = new Map<string, CleanupRow>((options.pendingCleanups ?? []).map((row) => [row.user_id, row]));
 	const existing = new Set(options.existingUserIds ?? []);
 	const deleteUser = vi.fn(async () => ({ error: options.deleteUserError ?? null }));
-	const getUserById = vi.fn(async (id: string) =>
-		existing.has(id)
+	const getUserById = vi.fn(async (id: string) => {
+		if (options.lookupError) return { data: { user: null }, error: { status: 500, message: "upstream timeout" } };
+		return existing.has(id)
 			? { data: { user: { id } }, error: null }
-			: { data: { user: null }, error: { status: 404, message: "User not found" } },
-	);
+			: { data: { user: null }, error: { status: 404, message: "User not found" } };
+	});
 
 	/** account_storage_cleanups の select / update / delete の条件を最小限まねる */
 	const cleanupQuery = (op: "select" | "update" | "delete", patch?: Partial<CleanupRow>) => {
@@ -148,7 +157,11 @@ function createAdminMock(
 		const rows = () =>
 			[...cleanups.values()]
 				.filter((row) => filters.every((f) => f(row)))
-				.sort((a, b) => a.requested_at.localeCompare(b.requested_at))
+				.sort(
+					(a, b) =>
+						(a.last_attempt_at ?? "").localeCompare(b.last_attempt_at ?? "") ||
+						a.requested_at.localeCompare(b.requested_at),
+				)
 				.slice(0, limit);
 		const run = () => {
 			const matched = rows();
@@ -233,30 +246,34 @@ function createAdminMock(
 			from: vi.fn((bucket: string) => {
 				let mock = storageByBucket.get(bucket);
 				if (!mock) {
-					// 実際の Storage と同じく、削除したファイルは次の列挙から消え、
-					// list は limit を省略すると 100 件までしか返さない
-					const remaining = [...(options.filesByBucket?.[bucket] ?? [])].map((file) => ({
-						name: file.name,
-						owner: file.owner ?? "user-1",
-					}));
+					// 実際の Storage と同じく、削除したファイルは次の列挙から消え、list は直下の項目だけ
+					// （フォルダは id が null）を limit / offset で返す。name に "/" を含むものはサブフォルダの中身
+					const remaining = [...(options.filesByBucket?.[bucket] ?? [])].map(
+						(file) => `${file.owner ?? "user-1"}/${file.name}`,
+					);
 					mock = {
-						list: vi.fn(async (prefix: string, listOptions?: { limit?: number }) => {
+						list: vi.fn(async (prefix: string, listOptions?: { limit?: number; offset?: number }) => {
 							if (options.listError) return { data: null, error: options.listError };
-							const own = remaining.filter((file) => file.owner === prefix);
-							return { data: own.slice(0, listOptions?.limit ?? 100), error: null };
+							const children = new Map<string, { name: string; id: string | null }>();
+							for (const path of remaining) {
+								if (!path.startsWith(`${prefix}/`)) continue;
+								const rest = path.slice(prefix.length + 1);
+								const [head, ...tail] = rest.split("/");
+								if (!head) continue;
+								children.set(head, { name: head, id: tail.length > 0 ? null : `id-${path}` });
+							}
+							const sorted = [...children.values()].sort((a, b) => a.name.localeCompare(b.name));
+							const offset = listOptions?.offset ?? 0;
+							return { data: sorted.slice(offset, offset + (listOptions?.limit ?? 100)), error: null };
 						}),
 						remove: vi.fn(async (paths: string[]) => {
 							if (options.removeError) return { data: null, error: options.removeError };
 							if (options.removeIsNoop) return { data: [], error: null };
 							removed.push({ bucket, paths });
 							const keys = new Set(paths);
-							const deleted = remaining.filter((file) => keys.has(`${file.owner}/${file.name}`));
-							remaining.splice(
-								0,
-								remaining.length,
-								...remaining.filter((file) => !keys.has(`${file.owner}/${file.name}`)),
-							);
-							return { data: deleted, error: null };
+							const deleted = remaining.filter((path) => keys.has(path));
+							remaining.splice(0, remaining.length, ...remaining.filter((path) => !keys.has(path)));
+							return { data: deleted.map((name) => ({ name })), error: null };
 						}),
 					};
 					storageByBucket.set(bucket, mock);
@@ -326,6 +343,7 @@ describe("deleteAccount", () => {
 		const admin = createAdminMock({
 			filesByBucket: { "post-images": [{ name: "a.webp" }] },
 			deleteUserError: { message: "service unavailable" },
+			existingUserIds: ["user-1"],
 		});
 		const result = await deleteAccount("user-1", { admin: admin.client });
 		expect(result).toEqual({ ok: false, reason: "failed" });
@@ -362,7 +380,10 @@ describe("deleteAccount", () => {
 
 	it("auth ユーザーの削除に失敗したら、消す予定の記録も外す", async () => {
 		vi.spyOn(console, "error").mockImplementation(() => {});
-		const admin = createAdminMock({ deleteUserError: { message: "service unavailable" } });
+		const admin = createAdminMock({
+			deleteUserError: { message: "service unavailable" },
+			existingUserIds: ["user-1"],
+		});
 		await deleteAccount("user-1", { admin: admin.client });
 		expect(admin.cleanups.size).toBe(0);
 	});
@@ -393,19 +414,77 @@ describe("deleteAccount", () => {
 		expect([...admin.cleanups.keys()].sort()).toEqual(["alive-user", "inflight-user"]);
 	});
 
-	it("削除しても一覧が減らない場合は打ち切る（無限ループしない）", async () => {
-		vi.spyOn(console, "error").mockImplementation(() => {});
+	it("サブフォルダの中のファイルも消す", async () => {
 		const admin = createAdminMock({
-			filesByBucket: { "post-images": [{ name: "nested-folder" }] },
-			removeIsNoop: true,
+			filesByBucket: { "post-images": [{ name: "a.webp" }, { name: "sub/b.webp" }, { name: "sub/deep/c.webp" }] },
 		});
 		const result = await deleteAccount("user-1", { admin: admin.client });
-		expect(result).toEqual({ ok: true, removedFiles: 0 });
+		expect(result).toEqual({ ok: true, removedFiles: 3 });
+		expect(admin.removed.flatMap((entry) => entry.paths).sort()).toEqual([
+			"user-1/a.webp",
+			"user-1/sub/b.webp",
+			"user-1/sub/deep/c.webp",
+		]);
+		expect(admin.cleanups.size).toBe(0);
+	});
+
+	it("消したはずのファイルが残っていれば、記録を残して後でやり直す", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		const admin = createAdminMock({ filesByBucket: { "post-images": [{ name: "a.webp" }] }, removeIsNoop: true });
+		const result = await deleteAccount("user-1", { admin: admin.client });
+		expect(result.ok).toBe(true);
+		expect(admin.cleanups.get("user-1")?.attempts).toBe(1);
+	});
+
+	it("auth の削除がエラーでも、確かめて消えていれば退会は完了として続ける（応答だけの失敗）", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		const admin = createAdminMock({
+			filesByBucket: { "post-images": [{ name: "a.webp" }] },
+			deleteUserError: { message: "socket hang up" },
+		});
+		const result = await deleteAccount("user-1", { admin: admin.client });
+		expect(result).toEqual({ ok: true, removedFiles: 1 });
+		expect(admin.inserted).toHaveLength(1);
+		expect(admin.cleanups.size).toBe(0);
+	});
+
+	it("auth の削除がエラーで、存否も確かめられなければ記録を残して失敗を返す", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		const admin = createAdminMock({
+			filesByBucket: { "post-images": [{ name: "a.webp" }] },
+			deleteUserError: { message: "socket hang up" },
+			lookupError: true,
+		});
+		const result = await deleteAccount("user-1", { admin: admin.client });
+		expect(result).toEqual({ ok: false, reason: "failed" });
+		expect(admin.removed).toEqual([]);
+		expect(admin.cleanups.has("user-1")).toBe(true);
+	});
+
+	it("失敗し続ける記録は後ろに回し、後ろの記録にも届く", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		const old = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
+		const admin = createAdminMock({
+			filesByBucket: { "post-images": [{ name: "x.webp", owner: "fresh-user" }] },
+			pendingCleanups: [
+				// 最も古いが、直前に試して失敗した記録（auth にまだいる）
+				{ user_id: "stuck-1", requested_at: old(300), attempts: 5, last_attempt_at: old(1) },
+				{ user_id: "stuck-2", requested_at: old(299), attempts: 5, last_attempt_at: old(1) },
+				{ user_id: "stuck-3", requested_at: old(298), attempts: 5, last_attempt_at: old(1) },
+				// 新しいが、まだ一度も試していない記録
+				{ user_id: "fresh-user", requested_at: old(60), attempts: 0 },
+			],
+			existingUserIds: ["stuck-1", "stuck-2", "stuck-3"],
+		});
+		await deleteAccount("user-1", { admin: admin.client });
+		expect(admin.removed.flatMap((entry) => entry.paths)).toContain("fresh-user/x.webp");
+		expect(admin.cleanups.has("fresh-user")).toBe(false);
 	});
 
 	it("外部キーで削除が止まった場合は原因が分かる理由を返す", async () => {
 		const admin = createAdminMock({
 			deleteUserError: { message: 'update or delete on table "users" violates foreign key constraint' },
+			existingUserIds: ["user-1"],
 		});
 		const result = await deleteAccount("user-1", { admin: admin.client });
 		expect(result).toEqual({ ok: false, reason: "has_room_experiments" });
@@ -414,7 +493,10 @@ describe("deleteAccount", () => {
 	});
 
 	it("その他の失敗は failed として返す", async () => {
-		const admin = createAdminMock({ deleteUserError: { message: "service unavailable" } });
+		const admin = createAdminMock({
+			deleteUserError: { message: "service unavailable" },
+			existingUserIds: ["user-1"],
+		});
 		const result = await deleteAccount("user-1", { admin: admin.client });
 		expect(result).toEqual({ ok: false, reason: "failed" });
 	});

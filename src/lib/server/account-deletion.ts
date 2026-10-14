@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+	authUserExists,
 	cancelAccountStorageCleanup,
 	recordAccountStorageCleanup,
 	retryPendingAccountStorageCleanups,
@@ -94,11 +95,21 @@ export async function deleteAccount(
 	const { error: deleteError } = await admin.auth.admin.deleteUser(userId);
 	if (deleteError) {
 		console.error("deleteAccount: auth.admin.deleteUser failed:", deleteError);
-		await cancelAccountStorageCleanup(admin, userId);
-		// room_experiment_runs.created_by の RESTRICT は 142 で SET NULL に変えたが、
-		// 未適用の環境では外部キー違反でここに来る。原因が伝わる形で返す。
-		if (/foreign key|violates/i.test(deleteError.message)) return { ok: false, reason: "has_room_experiments" };
-		return { ok: false, reason: "failed" };
+		// 応答が通信の失敗などで失われても、サーバー側では削除が済んでいることがある。存否を確かめて決める（#388 Codex）
+		const exists = await authUserExists(admin, userId);
+		if (exists === null) {
+			// 確かめられない。記録は残し（auth ユーザーが消えていれば、やり直しの処理が後でファイルを消す）、失敗を返す
+			return { ok: false, reason: "failed" };
+		}
+		if (exists) {
+			// 削除されていない。記録を外してファイルには触れない
+			await cancelAccountStorageCleanup(admin, userId);
+			// room_experiment_runs.created_by の RESTRICT は 142 で SET NULL に変えたが、
+			// 未適用の環境では外部キー違反でここに来る。原因が伝わる形で返す。
+			if (/foreign key|violates/i.test(deleteError.message)) return { ok: false, reason: "has_room_experiments" };
+			return { ok: false, reason: "failed" };
+		}
+		// auth ユーザーは消えている（エラーは応答だけの失敗）。退会は完了しているので続ける
 	}
 
 	// 消し残しは記録が残り、次の退会や scripts/cleanup-deleted-account-files.ts でやり直す

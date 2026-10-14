@@ -16,43 +16,77 @@ import type { Database } from "../supabase/database.types.ts";
 /** 退会時に本人のファイルが残るバケット。パスは `<user_id>/...` で統一されている */
 export const USER_OWNED_BUCKETS = ["post-images", "profile-avatars", "profile-headers"] as const;
 
-/** 1回の列挙で取る件数。SDK の既定は 100 件で、それ以降は明示しないと返らない */
+/** 1回の列挙・削除で扱う件数。SDK の既定は 100 件で、それ以降は明示しないと返らない */
 export const STORAGE_LIST_PAGE_SIZE = 1000;
 
+/** フォルダをたどる深さの上限（想定外の入れ子で止まらなくならないように） */
+const MAX_FOLDER_DEPTH = 8;
+
 /**
- * `<user_id>/` 配下のファイルをすべて消し、消した件数を返す。失敗したら null。
- *
- * 消すと一覧が縮むので offset は進めず、先頭ページが空になるまで列挙と削除を繰り返す。
+ * prefix 配下のファイルのパスを、サブフォルダもたどってすべて集める。失敗したら null。
+ * Storage のポリシー（128）は先頭が本人 ID なら `<user_id>/<subdir>/<file>` への直接アップロードも許すので、
+ * 直下だけを消すとサブフォルダの中身が残る（#388 Codex）。
  */
+async function listFilesRecursively(
+	admin: SupabaseClient<Database>,
+	bucket: string,
+	prefix: string,
+	depth = 0,
+): Promise<string[] | null> {
+	if (depth > MAX_FOLDER_DEPTH) {
+		console.error(`account storage cleanup: ${bucket}/${prefix} is nested too deeply`);
+		return null;
+	}
+	const paths: string[] = [];
+	for (let offset = 0; ; offset += STORAGE_LIST_PAGE_SIZE) {
+		const { data: entries, error } = await admin.storage
+			.from(bucket)
+			.list(prefix, { limit: STORAGE_LIST_PAGE_SIZE, offset, sortBy: { column: "name", order: "asc" } });
+		if (error) {
+			console.error(`account storage cleanup: list ${bucket}/${prefix} failed:`, error);
+			return null;
+		}
+		for (const entry of entries ?? []) {
+			const path = `${prefix}/${entry.name}`;
+			// id が null の項目はフォルダ（Storage の疑似フォルダ）
+			if (entry.id === null) {
+				const nested = await listFilesRecursively(admin, bucket, path, depth + 1);
+				if (nested === null) return null;
+				paths.push(...nested);
+			} else {
+				paths.push(path);
+			}
+		}
+		if ((entries ?? []).length < STORAGE_LIST_PAGE_SIZE) return paths;
+	}
+}
+
+/** `<user_id>/` 配下のファイルをサブフォルダも含めてすべて消し、消した件数を返す。失敗したら null */
 async function removeAllUserFiles(
 	admin: SupabaseClient<Database>,
 	bucket: (typeof USER_OWNED_BUCKETS)[number],
 	userId: string,
 ): Promise<number | null> {
+	const paths = await listFilesRecursively(admin, bucket, userId);
+	if (paths === null) return null;
 	let removed = 0;
-	for (;;) {
-		const { data: files, error: listError } = await admin.storage
-			.from(bucket)
-			.list(userId, { limit: STORAGE_LIST_PAGE_SIZE });
-		if (listError) {
-			console.error(`account storage cleanup: list ${bucket} failed:`, listError);
+	for (let start = 0; start < paths.length; start += STORAGE_LIST_PAGE_SIZE) {
+		const chunk = paths.slice(start, start + STORAGE_LIST_PAGE_SIZE);
+		const { data: deleted, error } = await admin.storage.from(bucket).remove(chunk);
+		if (error) {
+			console.error(`account storage cleanup: remove ${bucket} failed:`, error);
 			return null;
 		}
-		const paths = (files ?? []).map((file) => `${userId}/${file.name}`);
-		if (paths.length === 0) return removed;
-
-		const { data: deleted, error: removeError } = await admin.storage.from(bucket).remove(paths);
-		if (removeError) {
-			console.error(`account storage cleanup: remove ${bucket} failed:`, removeError);
-			return null;
-		}
-		// 1件も消えないなら（サブフォルダ等）同じ一覧が返り続けるので打ち切る
-		if (!deleted || deleted.length === 0) {
-			console.error(`account storage cleanup: remove ${bucket} made no progress for`, paths.length, "entries");
-			return null;
-		}
-		removed += deleted.length;
+		removed += deleted?.length ?? 0;
 	}
+	// 消し終えたか確かめる（消したはずのファイルが残っていれば失敗として記録を残す）
+	const rest = await listFilesRecursively(admin, bucket, userId);
+	if (rest === null) return null;
+	if (rest.length > 0) {
+		console.error(`account storage cleanup: ${rest.length} files remain in ${bucket} for ${userId}`);
+		return null;
+	}
+	return removed;
 }
 
 /** 消す予定として記録する。記録できなければ false（退会を始めない） */
@@ -64,10 +98,39 @@ export async function recordAccountStorageCleanup(admin: SupabaseClient<Database
 	return !error;
 }
 
-/** 退会をやめた（auth ユーザーの削除に失敗した）ときに記録を外す */
+/** 退会をやめた（auth ユーザーが残っている）ときに記録を外す */
 export async function cancelAccountStorageCleanup(admin: SupabaseClient<Database>, userId: string): Promise<void> {
 	const { error } = await admin.from("account_storage_cleanups").delete().eq("user_id", userId);
 	if (error) console.error("account storage cleanup: cancel failed:", error);
+}
+
+/**
+ * auth ユーザーがまだ存在するか。true = 存在する / false = 存在しない（404）/ null = 確かめられない。
+ * 退会の結果が曖昧なとき（削除のエラーが通信の失敗だった等）と、やり直しの前に使う。
+ */
+export async function authUserExists(admin: SupabaseClient<Database>, userId: string): Promise<boolean | null> {
+	const { data, error } = await admin.auth.admin.getUserById(userId);
+	if (data?.user) return true;
+	if (error && (error.status === 404 || /not.?found/i.test(error.message))) return false;
+	return error ? null : false;
+}
+
+/** 試行の記録を更新する（失敗した記録が次の回で後ろに回るように last_attempt_at を進める） */
+async function markAttempt(admin: SupabaseClient<Database>, userId: string, lastError: string): Promise<void> {
+	const { data: current } = await admin
+		.from("account_storage_cleanups")
+		.select("attempts")
+		.eq("user_id", userId)
+		.maybeSingle();
+	const { error } = await admin
+		.from("account_storage_cleanups")
+		.update({
+			attempts: (current?.attempts ?? 0) + 1,
+			last_attempt_at: new Date().toISOString(),
+			last_error: lastError,
+		})
+		.eq("user_id", userId);
+	if (error) console.error("account storage cleanup: update record failed:", error);
 }
 
 /**
@@ -92,20 +155,7 @@ export async function runAccountStorageCleanup(
 		return { ok: true, removedFiles };
 	}
 
-	const { data: current } = await admin
-		.from("account_storage_cleanups")
-		.select("attempts")
-		.eq("user_id", userId)
-		.maybeSingle();
-	const { error } = await admin
-		.from("account_storage_cleanups")
-		.update({
-			attempts: (current?.attempts ?? 0) + 1,
-			last_attempt_at: new Date().toISOString(),
-			last_error: `failed buckets: ${failedBuckets.join(", ")}`,
-		})
-		.eq("user_id", userId);
-	if (error) console.error("account storage cleanup: update record failed:", error);
+	await markAttempt(admin, userId, `failed buckets: ${failedBuckets.join(", ")}`);
 	return { ok: false, removedFiles };
 }
 
@@ -115,40 +165,44 @@ const RETRY_AFTER_MS = 10 * 60_000;
 const STALE_RECORD_MS = 24 * 60 * 60_000;
 
 /**
- * 残っている記録を古い順に limit 件やり直す。消し終えた件数と残った件数を返す。
- * auth ユーザーがまだ存在する記録は退会が完了していないので、ファイルを消さない
- * （消してしまうと、アカウントが残ったまま画像だけ失われる）。
+ * 残っている記録を limit 件やり直す。消し終えた件数と残った件数を返す。
+ *   * 未試行のものから、次に最後の試行が古いものから選ぶ。失敗し続ける記録が先頭に居座って、
+ *     後ろの消せる記録に届かなくならないように（#388 Codex）
+ *   * auth ユーザーがまだ存在する記録は退会が完了していないので、ファイルを消さない
+ *     （消してしまうと、アカウントが残ったまま画像だけ失われる）
  */
 export async function retryPendingAccountStorageCleanups(
 	admin: SupabaseClient<Database>,
 	options: { limit: number; excludeUserId?: string; now?: number },
-): Promise<{ completed: number; remaining: number }> {
+): Promise<{ completed: number; remaining: number; processed: number }> {
 	const now = options.now ?? Date.now();
 	let query = admin
 		.from("account_storage_cleanups")
 		.select("user_id, requested_at")
 		.lt("requested_at", new Date(now - RETRY_AFTER_MS).toISOString())
+		.order("last_attempt_at", { ascending: true, nullsFirst: true })
 		.order("requested_at", { ascending: true })
 		.limit(options.limit);
 	if (options.excludeUserId) query = query.neq("user_id", options.excludeUserId);
 	const { data, error } = await query;
 	if (error) {
 		console.error("account storage cleanup: list pending failed:", error);
-		return { completed: 0, remaining: 0 };
+		return { completed: 0, remaining: 0, processed: 0 };
 	}
 	let completed = 0;
 	let remaining = 0;
 	for (const row of data ?? []) {
-		const { data: found, error: lookupError } = await admin.auth.admin.getUserById(row.user_id);
-		if (found?.user) {
+		const exists = await authUserExists(admin, row.user_id);
+		if (exists === true) {
 			// 退会は完了していない。古い記録なら外す（ファイルはアカウントのものとして残す）
 			if (now - Date.parse(row.requested_at) > STALE_RECORD_MS)
 				await cancelAccountStorageCleanup(admin, row.user_id);
+			else await markAttempt(admin, row.user_id, "auth user still exists");
 			continue;
 		}
-		const notFound = lookupError && (lookupError.status === 404 || /not.?found/i.test(lookupError.message));
-		if (lookupError && !notFound) {
-			// 存在を確かめられないときは消さない
+		if (exists === null) {
+			// 存在を確かめられないときは消さない（次の回で後ろに回す）
+			await markAttempt(admin, row.user_id, "could not confirm the auth user was deleted");
 			remaining += 1;
 			continue;
 		}
@@ -156,5 +210,5 @@ export async function retryPendingAccountStorageCleanups(
 		if (result.ok) completed += 1;
 		else remaining += 1;
 	}
-	return { completed, remaining };
+	return { completed, remaining, processed: (data ?? []).length };
 }

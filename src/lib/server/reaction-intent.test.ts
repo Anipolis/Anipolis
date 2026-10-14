@@ -33,7 +33,9 @@ function client(existing: boolean, lookupError: { message: string } | null = nul
 			return { error: null };
 		},
 	}));
-	return { supabase: { from } as unknown as SupabaseClient<Database>, inserted, deleted };
+	// 操作後の件数（get_post_counts）
+	const rpc = vi.fn(async () => ({ data: [{ like_count: 7, repost_count: 3 }], error: null }));
+	return { supabase: { from, rpc } as unknown as SupabaseClient<Database>, inserted, deleted };
 }
 
 function request(intent?: string) {
@@ -44,28 +46,34 @@ function request(intent?: string) {
 }
 
 describe.each([
-	{ action: toggleLikeAction, table: "likes", key: "liked" },
-	{ action: toggleBookmarkAction, table: "bookmarks", key: "bookmarked" },
-	{ action: toggleRepostAction, table: "reposts", key: "reposted" },
-])("$table のリアクション（#383 Codex レビュー）", ({ action, table, key }) => {
+	{ action: toggleLikeAction, table: "likes", key: "liked", count: 7 },
+	{ action: toggleBookmarkAction, table: "bookmarks", key: "bookmarked", count: undefined },
+	{ action: toggleRepostAction, table: "reposts", key: "reposted", count: 3 },
+])("$table のリアクション（#383 Codex レビュー）", ({ action, table, key, count }) => {
+	it("いいね・リポストは操作後の件数も返す（表示していた件数が取得の失敗で 0 でも正しくなる）", async () => {
+		const c = client(false);
+		const result = (await action(request("on"), c.supabase, "user-1")) as Record<string, unknown>;
+		expect(result["count"]).toBe(count);
+	});
+
 	it("intent=on なら、すでに反応済みでも解除しない", async () => {
 		const c = client(true);
-		expect(await action(request("on"), c.supabase, "user-1")).toEqual({ [key]: true });
+		expect(await action(request("on"), c.supabase, "user-1")).toMatchObject({ [key]: true });
 		expect(c.deleted).toEqual([]);
 	});
 
 	it("intent=off なら、未反応のときに付けない", async () => {
 		const c = client(false);
-		expect(await action(request("off"), c.supabase, "user-1")).toEqual({ [key]: false });
+		expect(await action(request("off"), c.supabase, "user-1")).toMatchObject({ [key]: false });
 		expect(c.inserted).toEqual([]);
 	});
 
 	it("intent どおりに付け外しする", async () => {
 		const on = client(false);
-		expect(await action(request("on"), on.supabase, "user-1")).toEqual({ [key]: true });
+		expect(await action(request("on"), on.supabase, "user-1")).toMatchObject({ [key]: true });
 		expect(on.inserted).toEqual([table]);
 		const off = client(true);
-		expect(await action(request("off"), off.supabase, "user-1")).toEqual({ [key]: false });
+		expect(await action(request("off"), off.supabase, "user-1")).toMatchObject({ [key]: false });
 		expect(off.deleted).toEqual([table]);
 	});
 
@@ -81,7 +89,7 @@ describe.each([
 
 	it("intent の無い古いクライアントは今どおり反転する", async () => {
 		const c = client(true);
-		expect(await action(request(), c.supabase, "user-1")).toEqual({ [key]: false });
+		expect(await action(request(), c.supabase, "user-1")).toMatchObject({ [key]: false });
 		expect(c.deleted).toEqual([table]);
 	});
 });
