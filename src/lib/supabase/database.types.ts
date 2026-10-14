@@ -3924,6 +3924,10 @@ export type Database = {
 				Args: { target_post_id: string };
 				Returns: boolean;
 			};
+			is_broadcast_room_session_cancelled: {
+				Args: { p_anime_id: number; p_room_date: string };
+				Returns: boolean;
+			};
 			is_current_user_admin: { Args: never; Returns: boolean };
 			is_profile_active_for_writes: {
 				Args: { profile_id: string };
