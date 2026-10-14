@@ -44,4 +44,15 @@ describe("episode room cancelled airings migration (156, #387 Codex)", () => {
 		);
 		expect(session.slice(0, session.indexOf("$$;"))).toContain("AND NEW.episode_number <= 9999");
 	});
+
+	it("管理者が非表示にした作品は、既にあるルームも返さず、直接の投稿も拒否する", () => {
+		const ensure = migration.slice(migration.indexOf("CREATE OR REPLACE FUNCTION public.ensure_episode_room("));
+		const ensureBody = ensure.slice(0, ensure.indexOf("$$;"));
+		// 既存ルームを探すより前に作品の非表示を確かめる
+		expect(ensureBody.indexOf("target_anime.hidden_by_admin")).toBeLessThan(
+			ensureBody.indexOf("SELECT * INTO room"),
+		);
+		const post = migration.slice(migration.indexOf("CREATE OR REPLACE FUNCTION public.assign_post_episode_room()"));
+		expect(post.slice(0, post.indexOf("$$;"))).toContain("a.hidden_by_admin)");
+	});
 });

@@ -9,6 +9,7 @@
 --   * 休止の登録・変更・削除のたびに、その日の放送枠のルームの開く時刻を計算し直す
 --   * ensure_episode_room() の「放送済みの最大話数」からも、投稿に放送枠を補うときも、休止した放送枠を除く
 --   * 話数は URL と同じく 9999 までにする（放送枠からルームを作るときも。作品ページの一覧を際限なく作らないように）
+--   * 管理者が非表示にした作品は、ensure_episode_room() が既にあるルームも返さず、直接の投稿も拒否する
 
 -- 放送日が休止になっているか
 CREATE OR REPLACE FUNCTION public.is_broadcast_room_session_cancelled(p_anime_id integer, p_room_date date)
@@ -49,16 +50,15 @@ BEGIN
        AND NOT public.is_broadcast_room_session_cancelled(s.anime_id, s.room_date);
 
     IF earliest IS NULL THEN
-        -- 休止していない放送枠が無い。放送枠はあるのに全部休止なら、まだ開いていないルームは未定に戻す
-        -- （放送枠が一つも無いルーム＝過去作などで作ったルームはそのまま）
-        IF EXISTS (SELECT 1 FROM public.broadcast_room_sessions WHERE episode_room_id = p_room_id) THEN
-            UPDATE public.episode_rooms
-               SET opens_at = NULL
-             WHERE id = p_room_id
-               AND NOT opens_at_locked
-               AND opens_at IS NOT NULL
-               AND opens_at > now();
-        END IF;
+        -- 休止していない放送枠が無い（全部休止・話数の訂正で最後の放送枠が別の話へ移った等）。
+        -- まだ開いていないルームは開く時刻を未定に戻す。もう開いたルーム（過去作で作ったルームを含む）と
+        -- 管理者が設定したルームはそのまま
+        UPDATE public.episode_rooms
+           SET opens_at = NULL
+         WHERE id = p_room_id
+           AND NOT opens_at_locked
+           AND opens_at IS NOT NULL
+           AND opens_at > now();
         RETURN;
     END IF;
 
@@ -133,6 +133,12 @@ BEGIN
         RETURN NULL;
     END IF;
 
+    -- 管理者が非表示にした作品は、既にあるルームも返さない（#387 Codex）
+    SELECT * INTO target_anime FROM public.anime WHERE id = p_anime_id;
+    IF NOT FOUND OR (target_anime.hidden_by_admin AND NOT public.is_current_user_admin()) THEN
+        RETURN NULL;
+    END IF;
+
     SELECT * INTO room
       FROM public.episode_rooms
      WHERE anime_id = p_anime_id AND kind = 'episode' AND episode_number = p_episode_number;
@@ -140,9 +146,7 @@ BEGIN
         RETURN room.id;
     END IF;
 
-    SELECT * INTO target_anime FROM public.anime WHERE id = p_anime_id;
-    IF NOT FOUND
-       OR (target_anime.hidden_by_admin AND NOT public.is_current_user_admin())
+    IF (target_anime.hidden_by_admin AND NOT public.is_current_user_admin())
        OR target_anime.room_type = 'global'
        OR NOT (
            target_anime.type = 'TV'
@@ -256,6 +260,13 @@ BEGIN
         NEW.anime_id := target_room.anime_id;
     ELSIF NEW.anime_id <> target_room.anime_id THEN
         RAISE EXCEPTION 'Invalid episode room for post' USING ERRCODE = 'check_violation';
+    END IF;
+
+    -- 管理者が非表示にした作品のルームには投稿させない（#387 Codex）
+    IF TG_OP = 'INSERT'
+       AND EXISTS (SELECT 1 FROM public.anime a WHERE a.id = target_room.anime_id AND a.hidden_by_admin)
+       AND NOT public.is_current_user_admin() THEN
+        RAISE EXCEPTION 'Episode room is not accepting posts' USING ERRCODE = 'check_violation';
     END IF;
 
     -- 新しい投稿だけ、ルームが開いているかを確かめる（管理者の付け替えなどの UPDATE は対象外）
