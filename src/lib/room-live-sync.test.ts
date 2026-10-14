@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	applyPostStates,
+	carryOverOlderPosts,
 	comparePostsAsc,
 	cursorOfLast,
 	fetchRoomPostPages,
@@ -99,6 +100,36 @@ describe("mergeRoomPosts / applyPostStates（#324 #347）", () => {
 
 		const again = applyPostStates(["a", "b", "c"], { a: 0, b: 2 }, first.hidden, first.replyCounts);
 		expect(again.changed).toBe(false);
+	});
+});
+
+describe("carryOverOlderPosts（#390）", () => {
+	const p1 = post("p1", "2026-10-14T12:00:01Z");
+	const p2 = post("p2", "2026-10-14T12:00:02Z");
+	const p3 = post("p3", "2026-10-14T12:00:03Z");
+	const p4 = post("p4", "2026-10-14T12:00:04Z");
+	const p5 = post("p5", "2026-10-14T12:00:05Z");
+
+	it("最新ページが進んだら、外れた古い側の投稿を引き継ぐ", () => {
+		// 前: p1..p3、ライブで p4・p5 を受信 → やり直した load は最新の p3..p5
+		const carried = carryOverOlderPosts([p1, p2, p3], [p3, p4, p5], [p4, p5]);
+		expect(carried.map((item) => item.id)).toEqual(["p1", "p2", "p4", "p5"]);
+		expect(mergeRoomPosts([p3, p4, p5], carried).map((item) => item.id)).toEqual(["p1", "p2", "p3", "p4", "p5"]);
+	});
+
+	it("新しいページより新しい側で消えた投稿（削除した投稿）は引き継がない", () => {
+		const carried = carryOverOlderPosts([p1, p2, p3, p4], [p1, p2, p4], []);
+		expect(carried).toEqual([]);
+	});
+
+	it("同じ base なら extra をそのまま返す", () => {
+		const base = [p1, p2];
+		const extra = [p3];
+		expect(carryOverOlderPosts(base, base, extra)).toBe(extra);
+	});
+
+	it("新しいページが空なら前の投稿を引き継ぐ（後の再確認で消えたものは隠れる）", () => {
+		expect(carryOverOlderPosts([p1, p2], [], []).map((item) => item.id)).toEqual(["p1", "p2"]);
 	});
 });
 

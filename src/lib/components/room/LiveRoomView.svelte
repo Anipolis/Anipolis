@@ -13,6 +13,7 @@ import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import { airingAt, airingHeading, airingOnAirAt, formatAiringTime } from "$lib/episode-room";
 import {
 	applyPostStates,
+	carryOverOlderPosts,
 	comparePostsAsc,
 	cursorOfLast,
 	fetchRoomPostPages,
@@ -99,6 +100,8 @@ let liveCursor: RoomPostCursor | null = null;
 // 再確認で見えなくなった投稿（削除・管理者非表示・ブロック）と、更新された返信数（#324）
 let hiddenPostIds = $state<Set<string>>(new Set());
 let replyCountOverrides = $state<Map<string, number>>(new Map());
+// load のやり直しで引き継いだ古い投稿の ID。次の状態の再確認で、件数の上限に関係なく確かめる（#390）
+const pendingStateCheckIds = new Set<string>();
 let roomExperimentVisitId: string | null = null;
 let roomExperimentHeartbeatTimer: ReturnType<typeof setInterval> | undefined;
 let roomExperimentExitSent = false;
@@ -431,8 +434,14 @@ async function resyncPostStates() {
 	if (resyncingStates || allPosts.length === 0) return;
 	resyncingStates = true;
 	try {
-		// 新しい側から上限件数まで（古い投稿の変化は見落としても影響が小さい）
-		const ids = allPosts.slice(-ROOM_STATE_MAX_IDS).map((p) => p.id);
+		// 新しい側から上限件数まで（古い投稿の変化は見落としても影響が小さい）。
+		// ただし load のやり直しで引き継いだ古い投稿は、削除済みかもしれないので必ず確かめる（#390 / #396 Codex）
+		const visibleIds = new Set(allPosts.map((p) => p.id));
+		const pending = [...pendingStateCheckIds].filter((id) => visibleIds.has(id));
+		const ids = [...new Set([...pending, ...allPosts.slice(-ROOM_STATE_MAX_IDS).map((p) => p.id)])].slice(
+			0,
+			ROOM_STATE_MAX_IDS,
+		);
 		const res = await fetch("/api/rooms/posts/state", {
 			method: "POST",
 			headers: { "content-type": "application/json" },
@@ -441,6 +450,8 @@ async function resyncPostStates() {
 		});
 		if (!res.ok) return;
 		const { visible } = (await res.json()) as { visible: Record<string, number> };
+		for (const id of ids) pendingStateCheckIds.delete(id);
+		for (const id of pendingStateCheckIds) if (!visibleIds.has(id)) pendingStateCheckIds.delete(id);
 		const next = applyPostStates(ids, visible, hiddenPostIds, replyCountOverrides);
 		if (!next.changed) return;
 		hiddenPostIds = next.hidden;
@@ -589,8 +600,19 @@ $effect(() => {
 
 // load をやり直したら（自分で投稿を削除した直後など）、表示中の投稿を確かめ直す（#347）。
 // ライブ受信分は load の結果に含まれないので、削除してもそのままでは画面に残るため
+// 最新ページが置き換わっても、前のページの古い側は残して「前の投稿を読み込む」の境界と連続させる（#390）
+let previousBasePosts = untrack(() => data.posts);
 $effect(() => {
-	void data.posts;
+	const base = data.posts;
+	untrack(() => {
+		const carried = carryOverOlderPosts(previousBasePosts, base, extraPosts);
+		if (carried !== extraPosts) {
+			const known = new Set(extraPosts.map((post) => post.id));
+			for (const post of carried) if (!known.has(post.id)) pendingStateCheckIds.add(post.id);
+			extraPosts = carried;
+		}
+		previousBasePosts = base;
+	});
 	if (!mounted) return;
 	untrack(() => void resyncPostStates());
 });
