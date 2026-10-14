@@ -62,10 +62,11 @@ describe.each([
 		expect(c.deleted).toEqual([]);
 	});
 
-	it("intent=off なら、未反応のときに付けない", async () => {
+	it("intent=off なら付けない。照会で見えなくても（RLS で隠れた本人の行）消しにいく", async () => {
 		const c = client(false);
 		expect(await action(request("off"), c.supabase, "user-1")).toMatchObject({ [key]: false });
 		expect(c.inserted).toEqual([]);
+		expect(c.deleted).toEqual([table]);
 	});
 
 	it("intent どおりに付け外しする", async () => {
