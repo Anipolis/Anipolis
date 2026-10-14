@@ -21,7 +21,10 @@ export function episodeRoomPath(animeId: number | string, episodeNumber: number,
 	return airingId ? `${base}?airing=${encodeURIComponent(airingId)}` : base;
 }
 
-/** URL の話数（正の整数だけ）。それ以外は null */
+/** 話数の上限（URL・作品ページの一覧・156 の ensure_episode_room で揃える） */
+export const MAX_EPISODE_NUMBER = 9999;
+
+/** URL の話数（1〜MAX_EPISODE_NUMBER の正の整数だけ）。それ以外は null */
 export function parseEpisodeNumberParam(value: string): number | null {
 	if (!/^[1-9][0-9]{0,3}$/.test(value)) return null;
 	return Number(value);
@@ -180,7 +183,8 @@ export function buildEpisodeRoomList(input: {
 			.filter((n) => !byNumber.has(n)),
 	);
 	const maxRoomNumber = Math.max(0, ...[...byNumber.keys()].filter((n): n is number => n != null));
-	const lastEpisode = Math.max(episodeTotal ?? 0, maxRoomNumber);
+	// 誤った話数のデータで一覧を際限なく作らないよう、URL で開ける話数までにする
+	const lastEpisode = Math.min(MAX_EPISODE_NUMBER, Math.max(episodeTotal ?? 0, maxRoomNumber));
 
 	const entries: EpisodeRoomListEntry[] = [];
 	for (let n = 1; n <= lastEpisode; n += 1) {

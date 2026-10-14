@@ -11,6 +11,7 @@ import {
 	formatAiringTime,
 	hasEpisodeRooms,
 	isEpisodeRoomEntryLive,
+	MAX_EPISODE_NUMBER,
 	openableEpisodeLimit,
 	parseEpisodeNumberParam,
 } from "./episode-room";
@@ -133,6 +134,13 @@ describe("buildEpisodeRoomList（作品ページの話数ルーム一覧）", ()
 		// 開く時刻を過ぎれば、同じ行でも状態が変わる（ページを開いたまま）
 		const second = list[1] as EpisodeRoomListEntry;
 		expect(episodeRoomEntryState(second, Date.parse("2026-10-21T14:26:00Z"))).toBe("open");
+	});
+
+	it("話数は URL で開ける 9999 話までしか並べない（誤った話数のデータで一覧を際限なく作らない）", () => {
+		const list = buildEpisodeRoomList({ animeId: 1, rooms: [], airings: [], episodeTotal: 999_999_999 });
+		expect(list).toHaveLength(MAX_EPISODE_NUMBER);
+		expect(list.at(-1)?.href).toBe(`/rooms/anime/1/ep/${MAX_EPISODE_NUMBER}`);
+		expect(parseEpisodeNumberParam(String(MAX_EPISODE_NUMBER))).toBe(MAX_EPISODE_NUMBER);
 	});
 
 	it("ルームが無くても開ける話（ensure_episode_room がすぐ作る話）は投稿できる行にする", () => {
