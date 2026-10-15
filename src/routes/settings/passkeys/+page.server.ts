@@ -20,7 +20,7 @@ const REAUTH_PROVIDERS = [
 	{ provider: "twitter", action: "twitter", label: "X" },
 ] as const;
 
-export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession } }) => {
+export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {
 	const { user, session } = await safeGetSession();
 	if (!user) redirect(303, "/");
 	if (!isPasskeyEnabled()) error(404, "Not Found");
@@ -38,6 +38,10 @@ export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession 
 		reauthWindowMinutes: PASSKEY_REAUTH_WINDOW_MS / 60_000,
 		reauthProviders,
 		hasEmailProvider: hasPasswordProvider(user, session),
+		// OAuth でログインし直せなかったときの理由（/auth が付けて戻す）。符号の形のものだけ見せる
+		oauthError: /^[a-z0-9_]{1,40}$/.test(url.searchParams.get("oauth_error") ?? "")
+			? url.searchParams.get("oauth_error")
+			: null,
 	};
 };
 
