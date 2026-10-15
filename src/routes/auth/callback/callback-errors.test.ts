@@ -54,6 +54,17 @@ describe("auth callback errors", () => {
 		);
 	});
 
+	it("遷移先（next）も引き継ぐ", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		expect(await locationOf("?next=%2Fnotifications&error=server_error&error_code=unexpected_failure")).toBe(
+			"/auth?error=oauth_failed&reason=unexpected_failure&next=%2Fnotifications",
+		);
+		// 外部の URL は引き継がない（sanitizeInternalRedirect で / になる）
+		expect(await locationOf("?next=https%3A%2F%2Fevil.example&error=server_error")).toBe(
+			"/auth?error=oauth_failed&reason=server_error",
+		);
+	});
+
 	it("code の交換に失敗したら理由を付けて /auth に戻す", async () => {
 		vi.spyOn(console, "error").mockImplementation(() => {});
 		expect(await locationOf("?code=abc", { code: "flow_state_not_found" })).toBe(

@@ -69,6 +69,12 @@ const confirmDelete: SubmitFunction = ({ cancel }) => {
 				<div class="flash-error" role="alert">{form.message}</div>
 			{/if}
 
+			{#if data.oauthError}
+				<div class="flash-error" role="alert">
+					ログインし直せませんでした。もう一度お試しください。（理由: {data.oauthError}）
+				</div>
+			{/if}
+
 			{#if data.recentlyAuthenticated}
 				<button
 					type="button"
