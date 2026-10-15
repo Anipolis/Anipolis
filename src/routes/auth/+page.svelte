@@ -80,6 +80,13 @@ const hasInviteAccess = $derived(!data.betaGateEnabled || data.inviteCodeValid);
 				<div class="flash-error" role="alert">
 					アクセス許可の付与に失敗しました。しばらく待ってから再度ログインしてください。
 				</div>
+			{:else if data.error === 'oauth_failed'}
+				<div class="flash-error" role="alert">
+					ログインを完了できませんでした。時間をおいて、もう一度お試しください。
+					{#if data.errorReason}
+						（理由: {data.errorReason}）
+					{/if}
+				</div>
 			{/if}
 
 			{#if activeMode === 'add_account'}
