@@ -55,6 +55,8 @@ function animeStatusBadge(anime: AnimeListItem): string {
 }
 
 let quickAddAnime = $state<AnimeListItem | null>(null);
+// スマホの検索欄。URL の検索語から作り直し、入力で書き換える（bind:value でハイドレーション前の入力も残す、#417）
+let mobileSearchInput = $derived(data.search ?? "");
 // svelte-ignore state_referenced_locally
 let filterState = $state<AnimeFilterState>({
 	search: data.search ?? "",
@@ -429,8 +431,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 						type="text"
 						class="search-input"
 						placeholder="タイトルで検索..."
-						value={filterState.search}
-						oninput={(e) => updateFilterStateDebounced({ search: e.currentTarget.value })}
+						bind:value={() => filterState.search, (search) => updateFilterStateDebounced({ search })}
 					>
 				</div>
 				<button
@@ -495,8 +496,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 									max="2100"
 									class="filter-input"
 									placeholder="例: 2025"
-									value={filterState.year}
-									oninput={(e) => updateFilterStateDebounced({ year: e.currentTarget.value })}
+									bind:value={() => filterState.year, (year) => updateFilterStateDebounced({ year: year == null ? "" : String(year) })}
 								>
 								<button
 									type="button"
@@ -533,8 +533,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 								type="text"
 								class="filter-input"
 								placeholder="スタジオ名"
-								value={filterState.studio}
-								oninput={(e) => updateFilterStateDebounced({ studio: e.currentTarget.value })}
+								bind:value={() => filterState.studio, (studio) => updateFilterStateDebounced({ studio })}
 							>
 						</section>
 
@@ -590,7 +589,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 						name="search"
 						class="search-input"
 						placeholder="タイトルで検索..."
-						value={data.search ?? ''}
+						bind:value={mobileSearchInput}
 					>
 				</div>
 				<button type="submit" class="search-btn">検索</button>
