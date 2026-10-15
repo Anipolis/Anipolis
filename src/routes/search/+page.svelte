@@ -42,9 +42,12 @@ let { data }: PageProps = $props();
 			<button type="submit" class="global-search-button">検索</button>
 		</form>
 
-		<div class="mobile-search-trending">
-			<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
-		</div>
+		<!-- スマホのトレンドは検索語が無いときだけ。検索したら結果を検索欄のすぐ下に出す（#430）。PC は右の列に出る -->
+		{#if !data.query}
+			<div class="mobile-search-trending">
+				<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
+			</div>
+		{/if}
 
 		{#if !data.query}
 			<div class="empty-state">
