@@ -26,6 +26,8 @@ const config = {
 					"https://*.supabase.co",
 					"https://lh3.googleusercontent.com",
 					"https://pbs.twimg.com",
+					// プロフィール画像を設定していない X アカウントの既定のアイコン
+					"https://abs.twimg.com",
 					"https://cdn.discordapp.com",
 				],
 				// Zen Maru Gothic（UnoCSS presetWebFonts → Google Fonts）
