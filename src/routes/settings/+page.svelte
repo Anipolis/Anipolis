@@ -161,7 +161,8 @@ const activeLabel = $derived(sections.find((s) => s.id === activeSection)?.label
 <style>
 .settings-shell {
 	display: grid;
-	grid-template-columns: 220px 1fr;
+	/* 1fr だと列の最小幅が中身の最小幅になり、スマホでタブの合計幅に引っ張られて画面からはみ出す（#418） */
+	grid-template-columns: 220px minmax(0, 1fr);
 	min-height: 420px;
 }
 
@@ -264,7 +265,7 @@ const activeLabel = $derived(sections.find((s) => s.id === activeSection)?.label
 
 @media (max-width: 640px) {
 	.settings-shell {
-		grid-template-columns: 1fr;
+		grid-template-columns: minmax(0, 1fr);
 	}
 
 	.settings-sidebar {
@@ -277,10 +278,11 @@ const activeLabel = $derived(sections.find((s) => s.id === activeSection)?.label
 		padding: 0 16px 12px;
 	}
 
+	/* カテゴリは4つだけなので、横スクロールにせず折り返して全部見せる（選択中が隠れないように） */
 	.settings-nav-list {
 		display: flex;
 		flex-direction: row;
-		overflow-x: auto;
+		flex-wrap: wrap;
 		padding: 0 12px 12px;
 		gap: 4px;
 	}
@@ -298,7 +300,20 @@ const activeLabel = $derived(sections.find((s) => s.id === activeSection)?.label
 	}
 
 	.settings-panel {
-		padding: 20px 16px;
+		padding: 4px 16px 12px;
+	}
+
+	/* カテゴリの下の線と重なるので、一覧の先頭の線は引かない */
+	.settings-item-list {
+		margin-top: 0;
+	}
+
+	.settings-item-link:first-child {
+		border-top: none;
+	}
+
+	.settings-item-link:last-child {
+		border-bottom: none;
 	}
 }
 </style>
