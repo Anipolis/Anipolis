@@ -101,6 +101,13 @@ async function handlePasskeyLogin(): Promise<void> {
 				<div class="flash-error" role="alert">
 					アクセス許可の付与に失敗しました。しばらく待ってから再度ログインしてください。
 				</div>
+			{:else if data.error === 'confirm_failed'}
+				<div class="flash-error" role="alert">
+					確認のリンクが無効か、有効期限が切れています。もう一度ログインするか、登録し直してください。
+					{#if data.errorReason}
+						（理由: {data.errorReason}）
+					{/if}
+				</div>
 			{:else if data.error === 'oauth_failed'}
 				<div class="flash-error" role="alert">
 					ログインを完了できませんでした。時間をおいて、もう一度お試しください。

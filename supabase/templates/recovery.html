@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>パスワードの再設定</title>
+</head>
+<body style="margin:0;padding:0;background:#f6f6f8;font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Hiragino Kaku Gothic ProN','Noto Sans JP',Meiryo,sans-serif;color:#1f2330;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f6f8;padding:32px 16px;">
+<tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:12px;padding:32px 28px;">
+<tr><td style="font-size:20px;font-weight:700;padding-bottom:20px;">Anipolis</td></tr>
+<tr><td style="font-size:16px;font-weight:700;padding-bottom:12px;">パスワードの再設定</td></tr>
+<tr><td style="font-size:14px;line-height:1.8;padding-bottom:24px;">パスワードの再設定のお申し込みを受け付けました。<br>下のボタンから新しいパスワードを設定してください。</td></tr>
+<tr><td align="center" style="padding-bottom:24px;">
+<a href="{{ .SiteURL }}/auth/reset-password?token_hash={{ .TokenHash }}&type=recovery" style="display:inline-block;background:#19448e;color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:12px 28px;border-radius:999px;">パスワードを再設定する</a>
+</td></tr>
+<tr><td style="font-size:12px;line-height:1.7;color:#6b7080;padding-bottom:8px;">ボタンが押せない場合は、次のURLをブラウザに貼り付けて開いてください。</td></tr>
+<tr><td style="font-size:12px;line-height:1.7;color:#6b7080;word-break:break-all;padding-bottom:20px;">{{ .SiteURL }}/auth/reset-password?token_hash={{ .TokenHash }}&type=recovery</td></tr>
+<tr><td style="font-size:12px;line-height:1.7;color:#6b7080;border-top:1px solid #e6e7ec;padding-top:16px;">お申し込みに心当たりがない場合は、何もせずに破棄してください。パスワードは変わりません。<br>このメールは送信専用です。お問い合わせは contact@anipolis.net までお願いします。</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>
