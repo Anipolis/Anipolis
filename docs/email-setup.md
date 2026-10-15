@@ -48,8 +48,10 @@ Supabase の既定（`noreply@mail.app.supabase.io`・英語・supabase.co 経�
 | Confirm signup | `【Anipolis】メールアドレスの確認` | `supabase/templates/confirmation.html` |
 | Reset password | `【Anipolis】パスワードの再設定` | `supabase/templates/recovery.html` |
 | Change email address | `【Anipolis】メールアドレス変更の確認` | `supabase/templates/email_change.html` |
+| Reauthentication | `【Anipolis】確認コード` | `supabase/templates/reauthentication.html` |
 
 - 本文はファイルの中身をそのまま貼る
+- Reauthentication は、パスワードを持たない（OAuth だけの）利用者が設定 → アカウント → パスワードで初めてパスワードを作るときの確認コード（リンクではなく6桁のコード `{{ .Token }}`）
 - リンクは `https://anipolis.net/auth/confirm?token_hash=…`（確認）・`https://anipolis.net/auth/reset-password?token_hash=…`（再設定）になる。
   Anipolis のサーバーで確認するので、申請したのと別の端末・メールアプリのブラウザで開いても通る
 - テンプレートを変えたら、このリポジトリのファイルも同じ内容に直す（Dashboard の内容は Git に残らない）
