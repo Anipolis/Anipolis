@@ -36,7 +36,9 @@ function resolveTitle(path: string, kind: SkeletonKind): string {
 	if (path.startsWith("/bookmarks")) return "ブックマーク";
 	if (path.startsWith("/exchange")) return "アニメトレード";
 	if (path.startsWith("/follow-requests")) return "フォローリクエスト";
+	if (path.startsWith("/terms")) return "利用規約";
 	if (path.startsWith("/privacy-policy")) return "プライバシーポリシー";
+	if (path.startsWith("/contact")) return "お問い合わせ";
 	if (path.startsWith("/data-sources")) return "データ出典";
 	if (kind === "detail") return path.startsWith("/rooms") ? "実況ルーム" : "詳細";
 	return "読み込み中";

@@ -5,7 +5,7 @@ import { isBetaGateEnabled, isBetaMember } from "$lib/server/discord";
 import { isApiRateLimited } from "$lib/server/rate-limit";
 
 // クローズドβ：これらのプレフィックス配下は未資格ユーザーでもアクセス可
-const PUBLIC_PATH_PREFIXES = ["/auth"];
+const PUBLIC_PATH_PREFIXES = ["/auth", "/terms", "/privacy-policy", "/data-sources", "/contact"];
 
 function isPublicPath(pathname: string): boolean {
 	return PUBLIC_PATH_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
