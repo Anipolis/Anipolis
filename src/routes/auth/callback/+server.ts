@@ -17,6 +17,12 @@ import type { RequestHandler } from "./$types";
  * hooks のゲートは遷移を弾くだけでログアウトはさせず、セッションが残ると
  * 「ログインできてしまう」状態になるため、明示的に signOut する。
  */
+/** /auth に出す失敗の理由。URL から来る値なので、英小文字・数字・_ の短い符号だけを通す */
+function oauthFailurePath(reason: string | null | undefined): string {
+	const safe = reason && /^[a-z0-9_]{1,40}$/.test(reason) ? reason : "unknown";
+	return `/auth?error=oauth_failed&reason=${safe}`;
+}
+
 export const GET: RequestHandler = async ({ url, cookies, locals: { supabase } }) => {
 	// パスワード再設定リンク（type=recovery）は専用ページで検証する。
 	// ここで交換すると β ゲート未通過ユーザーの signOut が挟まり再設定できなくなるため、
@@ -28,10 +34,26 @@ export const GET: RequestHandler = async ({ url, cookies, locals: { supabase } }
 	const code = url.searchParams.get("code");
 	const safeNext = sanitizeInternalRedirect(url.searchParams.get("next"));
 
+	// プロバイダー（X など）や Supabase でログインが失敗すると、code の代わりに error が付いて戻ってくる。
+	// 黙ってトップへ戻すと理由が分からないので、ログに残して /auth に理由を出す
+	const providerError = url.searchParams.get("error");
+	if (providerError) {
+		const errorCode = url.searchParams.get("error_code");
+		console.error("OAuth callback returned an error:", {
+			error: providerError,
+			errorCode,
+			description: url.searchParams.get("error_description"),
+		});
+		redirect(303, oauthFailurePath(errorCode ?? providerError));
+	}
+
 	if (!code) redirect(303, "/");
 
 	const { error } = await supabase.auth.exchangeCodeForSession(code);
-	if (error) redirect(303, "/");
+	if (error) {
+		console.error("OAuth code exchange failed:", error);
+		redirect(303, oauthFailurePath(error.code ?? "exchange_failed"));
+	}
 
 	const {
 		data: { user },
