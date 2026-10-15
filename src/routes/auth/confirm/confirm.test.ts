@@ -5,6 +5,7 @@ const gate = { enabled: false };
 const redeemInviteCode = vi.fn();
 const grantBetaAccess = vi.fn(async () => ({ error: null }));
 const clearInviteCodeCookie = vi.fn();
+const setInviteCodeCookie = vi.fn();
 let cookieCode: string | null = null;
 
 vi.mock("$lib/server/discord", () => ({
@@ -15,6 +16,7 @@ vi.mock("$lib/server/discord", () => ({
 vi.mock("$lib/server/invites", () => ({
 	clearInviteCodeCookie: (...args: unknown[]) => clearInviteCodeCookie(...(args as [])),
 	getInviteCodeCookie: () => cookieCode,
+	setInviteCodeCookie: (...args: unknown[]) => setInviteCodeCookie(...(args as [])),
 	redeemInviteCode: (...args: unknown[]) => redeemInviteCode(...(args as [])),
 }));
 
@@ -44,6 +46,7 @@ describe("/auth/confirm", () => {
 		cookieCode = null;
 		redeemInviteCode.mockReset();
 		grantBetaAccess.mockClear();
+		setInviteCodeCookie.mockClear();
 		vi.spyOn(console, "error").mockImplementation(() => {});
 	});
 
@@ -89,5 +92,23 @@ describe("/auth/confirm", () => {
 		const r = await run("?token_hash=abc&type=email", { user: { id: "u1" }, error: null });
 		expect(r.signOut).toHaveBeenCalled();
 		expect(r.location).toBe("/auth?error=invite_required");
+	});
+
+	it("メールアドレスの変更で1通目の確認（user が返らない）は、もう一方の確認を案内する", async () => {
+		const r = await run("?token_hash=abc&type=email_change", { user: null, error: null });
+		expect(r.location).toBe("/auth/confirm/pending");
+	});
+
+	it("クローズドβ: 付与だけ失敗したら、ログインし直せるようコードをこのブラウザに残す", async () => {
+		gate.enabled = true;
+		redeemInviteCode.mockResolvedValue({ success: true });
+		grantBetaAccess.mockResolvedValueOnce({ error: "temporary" } as never);
+		const r = await run("?token_hash=abc&type=email", {
+			user: { id: "u1", user_metadata: { invite_code: "CODE-1" } },
+			error: null,
+		});
+		expect(setInviteCodeCookie).toHaveBeenCalledWith(expect.anything(), "CODE-1");
+		expect(r.signOut).toHaveBeenCalled();
+		expect(r.location).toBe("/auth?error=grant_failed");
 	});
 });

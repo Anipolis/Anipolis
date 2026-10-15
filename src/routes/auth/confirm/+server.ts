@@ -2,7 +2,7 @@ import type { EmailOtpType } from "@supabase/supabase-js";
 import { redirect } from "@sveltejs/kit";
 import { admitWithInviteCode } from "$lib/server/beta-admission";
 import { isBetaGateEnabled, isBetaMember } from "$lib/server/discord";
-import { getInviteCodeCookie } from "$lib/server/invites";
+import { getInviteCodeCookie, setInviteCodeCookie } from "$lib/server/invites";
 import { sanitizeInternalRedirect } from "$lib/utils/url";
 import type { RequestHandler } from "./$types";
 
@@ -30,6 +30,9 @@ export const GET: RequestHandler = async ({ url, cookies, locals: { supabase } }
 
 	const { data, error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
 	const user = data.user;
+	// メールアドレスの変更で古い・新しいアドレスの両方に確認が要る設定（Secure email change）では、
+	// 1通目の確認は成功しても user を返さない。もう一方のリンクを開くよう案内する
+	if (!error && !user && type === "email_change") redirect(303, "/auth/confirm/pending");
 	if (error || !user) {
 		console.error("Email confirmation failed:", { type, code: error?.code });
 		redirect(303, confirmFailurePath(error?.code ?? "verify_failed"));
@@ -42,6 +45,9 @@ export const GET: RequestHandler = async ({ url, cookies, locals: { supabase } }
 		const inviteCode = getInviteCodeCookie(cookies) ?? (typeof metadataCode === "string" ? metadataCode : null);
 		const admission = await admitWithInviteCode(supabase, cookies, user.id, inviteCode);
 		if (!admission.granted) {
+			// 付与だけが失敗した場合は、ログインし直して付与をやり直せるよう、コードをこのブラウザに残す
+			// （ログインはフォームか Cookie のコードを使う。償還は user_id 単位で冪等）
+			if (admission.errorCode === "grant_failed" && inviteCode) setInviteCodeCookie(cookies, inviteCode);
 			await supabase.auth.signOut();
 			redirect(303, `/auth?error=${admission.errorCode}`);
 		}
