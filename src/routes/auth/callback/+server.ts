@@ -17,10 +17,17 @@ import type { RequestHandler } from "./$types";
  * hooks のゲートは遷移を弾くだけでログアウトはさせず、セッションが残ると
  * 「ログインできてしまう」状態になるため、明示的に signOut する。
  */
-/** /auth に出す失敗の理由。URL から来る値なので、英小文字・数字・_ の短い符号だけを通す */
-function oauthFailurePath(reason: string | null | undefined): string {
-	const safe = reason && /^[a-z0-9_]{1,40}$/.test(reason) ? reason : "unknown";
-	return `/auth?error=oauth_failed&reason=${safe}`;
+/**
+ * ログインに失敗したときの戻り先。理由は URL から来る値なので、英小文字・数字・_ の短い符号だけを通す。
+ * 遷移先（next）も引き継ぎ、やり直したときに元の画面へ戻れるようにする
+ */
+function oauthFailurePath(reason: string | null | undefined, next: string): string {
+	const params = new URLSearchParams({
+		error: "oauth_failed",
+		reason: reason && /^[a-z0-9_]{1,40}$/.test(reason) ? reason : "unknown",
+	});
+	if (next !== "/") params.set("next", next);
+	return `/auth?${params}`;
 }
 
 export const GET: RequestHandler = async ({ url, cookies, locals: { supabase } }) => {
@@ -44,7 +51,7 @@ export const GET: RequestHandler = async ({ url, cookies, locals: { supabase } }
 			errorCode,
 			description: url.searchParams.get("error_description"),
 		});
-		redirect(303, oauthFailurePath(errorCode ?? providerError));
+		redirect(303, oauthFailurePath(errorCode ?? providerError, safeNext));
 	}
 
 	if (!code) redirect(303, "/");
@@ -52,7 +59,7 @@ export const GET: RequestHandler = async ({ url, cookies, locals: { supabase } }
 	const { error } = await supabase.auth.exchangeCodeForSession(code);
 	if (error) {
 		console.error("OAuth code exchange failed:", error);
-		redirect(303, oauthFailurePath(error.code ?? "exchange_failed"));
+		redirect(303, oauthFailurePath(error.code ?? "exchange_failed", safeNext));
 	}
 
 	const {
