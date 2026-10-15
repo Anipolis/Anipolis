@@ -94,6 +94,14 @@ let keepComposerFocused = $state(true);
 let composerFormEl: HTMLFormElement | null = $state(null);
 // 投稿の失敗理由。SvelteKit の applyAction（form の更新）は成功時にフォーカスをリセットするので使わず、ここで持つ
 let composerError = $state<string | null>(null);
+// 投稿を送ったら、ほかの操作（投稿の削除など）の古い失敗メッセージ（form.message）は隠す。
+// 投稿の成功時は form を更新しないので、隠さないと関係のない失敗が残り続ける
+let hideFormMessage = $state(false);
+$effect(() => {
+	// ほかの操作の結果で form が変わったら、また見せる
+	void form;
+	hideFormMessage = false;
+});
 // 送信中に Enter で送った文章。前の投稿が終わったら順に送る（連投で Enter が空振りしないように）
 let queuedContents: string[] = [];
 // 次の送信で送る送信待ちの文章（入力欄の文章ではなくこちらを送る）
@@ -418,6 +426,7 @@ const handleCreatePost: SubmitFunction = ({ cancel, formData }) => {
 	isPosting = true;
 	keepComposerFocused = true;
 	composerError = null;
+	hideFormMessage = true;
 	// 送った文章はすぐ入力欄から消し、送信中も次の文章を書けるようにする（失敗したら戻す）
 	if (fromQueue == null) postContent = "";
 	return async ({ result, update }) => {
@@ -785,8 +794,8 @@ function formatCompactDate(iso: string) {
 			<div class="card composer" bind:this={composerEl}>
 				{#if composerError}
 					<p class="form-error">{composerError}</p>
-				{:else if form && "message" in form}
-					<!-- JavaScript が無いときの送信結果 -->
+				{:else if !hideFormMessage && form && "message" in form}
+					<!-- JavaScript が無いときの送信結果や、ほかの操作（投稿の削除など）の失敗 -->
 					<p class="form-error">{form.message}</p>
 				{/if}
 				<form method="POST" action="?/createPost" use:enhance={handleCreatePost} bind:this={composerFormEl}>
