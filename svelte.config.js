@@ -17,7 +17,19 @@ const config = {
 				"style-src": ["self", "unsafe-inline"],
 				// blob: は画像プレビュー、data: はアイコン類、
 				// supabase.co はストレージ画像、googleusercontent は OAuth アバター
-				"img-src": ["self", "data:", "blob:", "https://*.supabase.co", "https://lh3.googleusercontent.com"],
+				// OAuth のアイコン（Google / X / Discord）。本番の初期設定はアイコンの URL をそのまま保存するため。
+				// develop ではアイコンを Storage に取り込むので（#328）、リリース後は取り込みスクリプトの実行で外せる
+				"img-src": [
+					"self",
+					"data:",
+					"blob:",
+					"https://*.supabase.co",
+					"https://lh3.googleusercontent.com",
+					"https://pbs.twimg.com",
+					// プロフィール画像を設定していない X アカウントの既定のアイコン
+					"https://abs.twimg.com",
+					"https://cdn.discordapp.com",
+				],
 				// Zen Maru Gothic（UnoCSS presetWebFonts → Google Fonts）
 				"font-src": ["self", "data:", "https://fonts.gstatic.com"],
 				// Supabase REST / Auth / Storage と Realtime WebSocket
