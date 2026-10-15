@@ -44,10 +44,7 @@ let { trending, animeTrending = [] }: Props = $props();
 
 <div class="trending-panel-footer-links">
 	<a href="/terms" class="trending-panel-footer-link">利用規約</a>
-	<span aria-hidden="true">·</span>
 	<a href="/privacy-policy" class="trending-panel-footer-link">プライバシーポリシー</a>
-	<span aria-hidden="true">·</span>
 	<a href="/data-sources" class="trending-panel-footer-link">データ出典</a>
-	<span aria-hidden="true">·</span>
 	<a href="/contact" class="trending-panel-footer-link">お問い合わせ</a>
 </div>

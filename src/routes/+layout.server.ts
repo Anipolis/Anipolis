@@ -9,8 +9,9 @@ import {
 } from "$lib/server/queries";
 import type { StoredAccount } from "$lib/types";
 
-// 初回オンボーディング誘導を免除するパス（オンボーディング画面自身と認証フロー）
-const ONBOARDING_EXEMPT_PREFIXES = ["/onboarding", "/auth"];
+// 初回オンボーディング誘導を免除するパス（オンボーディング画面自身と認証フロー、
+// 登録前にも読めるべき規約・ポリシー・出典・お問い合わせ）
+const ONBOARDING_EXEMPT_PREFIXES = ["/onboarding", "/auth", "/terms", "/privacy-policy", "/data-sources", "/contact"];
 
 function isOnboardingExempt(pathname: string): boolean {
 	return ONBOARDING_EXEMPT_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
