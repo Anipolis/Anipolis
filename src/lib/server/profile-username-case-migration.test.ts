@@ -20,4 +20,16 @@ describe("profile username case migration (161)", () => {
 		expect(update).toBeGreaterThan(0);
 		expect(index).toBeGreaterThan(update);
 	});
+
+	it("162: ID は小文字だけを許し、メンションは表記を小文字にして照合する", () => {
+		const m162 = readFileSync(
+			new URL("../../../supabase/migrations/162_profile_username_lowercase_enforced.sql", import.meta.url),
+			"utf8",
+		);
+		expect(m162).toContain("CHECK (username = lower(username))");
+		expect(m162).toContain("SELECT DISTINCT lower((regexp_matches(NEW.content, '@([A-Za-z0-9_]+)', 'g'))[1])");
+		expect(m162).toContain("WHERE lower(username) = mentioned_username;");
+		// 141 で入れたブロック関係の検査は残す
+		expect(m162).toContain("NOT public.is_blocked_between(NEW.user_id, mentioned_user_id)");
+	});
 });
