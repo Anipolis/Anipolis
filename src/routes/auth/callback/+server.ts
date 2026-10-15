@@ -1,7 +1,8 @@
 import { redirect } from "@sveltejs/kit";
 import { env } from "$env/dynamic/private";
+import { admitWithInviteCode } from "$lib/server/beta-admission";
 import { grantBetaAccess, isBetaGateEnabled, isBetaMember, verifyGuildMembership } from "$lib/server/discord";
-import { clearInviteCodeCookie, getInviteCodeCookie, redeemInviteCode } from "$lib/server/invites";
+import { getInviteCodeCookie } from "$lib/server/invites";
 import { PASSWORD_RESET_PATH } from "$lib/utils/password-reset";
 import { sanitizeInternalRedirect } from "$lib/utils/url";
 import type { RequestHandler } from "./$types";
@@ -108,25 +109,11 @@ export const GET: RequestHandler = async ({ url, cookies, locals: { supabase } }
 	// ゲート無効時は招待コードを無駄に消費しないようスキップする。
 	if (isBetaGateEnabled() && !betaGranted) {
 		const inviteCode = getInviteCodeCookie(cookies);
-		if (inviteCode) {
-			const redeemResult = await redeemInviteCode(supabase, inviteCode);
-			if (redeemResult.success) {
-				const { error: grantError } = await grantBetaAccess(user.id);
-				if (grantError) {
-					// 償還は user_id 単位で冪等（再ログインで再試行すれば付与だけやり直せる）
-					console.error("grantBetaAccess failed after invite redemption:", { userId: user.id });
-					errorCode = "grant_failed";
-				} else {
-					betaGranted = true;
-					clearInviteCodeCookie(cookies);
-				}
-			} else {
-				errorCode = redeemResult.detail === "INVITE_EXHAUSTED" ? "invite_exhausted" : "invalid_invite";
-				// 無効・失効が確定したコードを残すと、再ログインのたびに同じエラーを踏む
-				clearInviteCodeCookie(cookies);
-			}
-		} else if (!discordIdentity) {
-			errorCode = "invite_required";
+		// Discord で入ってきてコードも無い場合は「サーバー未参加」（not_member）のまま
+		if (inviteCode || !discordIdentity) {
+			const admission = await admitWithInviteCode(supabase, cookies, user.id, inviteCode);
+			if (admission.granted) betaGranted = true;
+			else errorCode = admission.errorCode;
 		}
 	}
 
