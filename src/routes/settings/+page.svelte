@@ -61,9 +61,19 @@ const items = $derived.by((): Item[] => {
 			});
 		}
 		list.push({
+			label: "利用規約",
+			description: "本サービスの利用条件を確認できます",
+			href: "/terms",
+		});
+		list.push({
 			label: "プライバシーポリシー",
 			description: "個人情報の取扱いについて確認できます",
 			href: "/privacy-policy",
+		});
+		list.push({
+			label: "お問い合わせ",
+			description: "運営への連絡先を確認できます",
+			href: "/contact",
 		});
 		return list;
 	}
