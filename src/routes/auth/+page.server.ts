@@ -76,6 +76,10 @@ export const load: PageServerLoad = async ({ url, cookies, locals: { supabase, s
 		inviteCode,
 		inviteCodeValid,
 		error: url.searchParams.get("error"),
+		// OAuth の失敗理由（/auth/callback が付ける）。URL から来るので符号の形のものだけ見せる
+		errorReason: /^[a-z0-9_]{1,40}$/.test(url.searchParams.get("reason") ?? "")
+			? url.searchParams.get("reason")
+			: null,
 	};
 };
 
