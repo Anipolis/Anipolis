@@ -279,6 +279,8 @@ export const actions: Actions = {
 				data: {
 					user_name: username,
 					full_name: displayName || username,
+					// 確認のリンクを別のブラウザで開いても招待コードを使えるよう、アカウントにも残す（/auth/confirm）
+					...(isBetaGateEnabled() && inviteCodeInput ? { invite_code: inviteCodeInput } : {}),
 				},
 			},
 		});
