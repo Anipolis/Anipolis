@@ -18,8 +18,9 @@ $effect(() => {
 	syncInviteCodeState(inviteCodeState, data.inviteCode, page.url.searchParams.get("invite"));
 });
 
-function handleInviteCodeInput(event: Event): void {
-	inviteCodeState.value = (event.currentTarget as HTMLInputElement).value;
+// 招待コード欄の入力。bind:value にして、ハイドレーション前に打った値も取り込む（#417）
+function setInviteCodeInput(value: string): void {
+	inviteCodeState.value = value;
 	inviteCodeState.dirty = true;
 }
 
@@ -167,8 +168,7 @@ async function handlePasskeyLogin(): Promise<void> {
 							type="text"
 							class="field-input"
 							autocomplete="off"
-							value={inviteCodeState.value}
-							oninput={handleInviteCodeInput}
+							bind:value={() => inviteCodeState.value, setInviteCodeInput}
 							placeholder="招待してくれた方から届いたコードを入力してください"
 							required
 						>
@@ -211,8 +211,7 @@ async function handlePasskeyLogin(): Promise<void> {
 							type="text"
 							class="field-input"
 							autocomplete="off"
-							value={inviteCodeState.value}
-							oninput={handleInviteCodeInput}
+							bind:value={() => inviteCodeState.value, setInviteCodeInput}
 							placeholder="招待リンクから来た場合は自動入力されます"
 						>
 						<p class="field-hint">
@@ -258,7 +257,7 @@ async function handlePasskeyLogin(): Promise<void> {
 								type="email"
 								class="field-input"
 								autocomplete="email"
-								value={form?.mode === 'login' ? form.email ?? '' : ''}
+								defaultValue={form?.mode === 'login' ? form.email ?? '' : ''}
 								required
 							>
 						</div>
@@ -293,7 +292,7 @@ async function handlePasskeyLogin(): Promise<void> {
 								type="email"
 								class="field-input"
 								autocomplete="email"
-								value={form?.mode === 'register' ? form.email ?? '' : ''}
+								defaultValue={form?.mode === 'register' ? form.email ?? '' : ''}
 								required
 							>
 						</div>
@@ -311,7 +310,7 @@ async function handlePasskeyLogin(): Promise<void> {
 									autocomplete="username"
 									pattern={"[a-zA-Z0-9_]{3,20}"}
 									maxlength="20"
-									value={form?.mode === 'register' ? form.username ?? '' : ''}
+									defaultValue={form?.mode === 'register' ? form.username ?? '' : ''}
 									required
 								>
 							</div>
@@ -330,7 +329,7 @@ async function handlePasskeyLogin(): Promise<void> {
 								type="text"
 								class="field-input"
 								maxlength="50"
-								value={form?.mode === 'register' ? form.display_name ?? '' : ''}
+								defaultValue={form?.mode === 'register' ? form.display_name ?? '' : ''}
 								placeholder="あとから変更できます"
 							>
 						</div>
