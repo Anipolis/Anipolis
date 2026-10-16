@@ -1,6 +1,7 @@
 <script lang="ts">
 import { enhance } from "$app/forms";
 import { page } from "$app/state";
+import InfoTip from "$lib/components/InfoTip.svelte";
 import SettingsBackLink from "$lib/components/SettingsBackLink.svelte";
 import { formatRelativeTime } from "$lib/utils/format";
 import type { PageProps } from "./$types";
@@ -8,6 +9,8 @@ import type { PageProps } from "./$types";
 let { data, form }: PageProps = $props();
 
 let creating = $state(false);
+// 管理者以外は、DB 側(create_invite)で使用回数10回・有効期限30日・有効なコード3つまでに制限される
+const isAdmin = $derived(Boolean(data.profile?.is_admin));
 
 function inviteUrl(code: string): string {
 	return `${page.url.origin}/auth?invite=${code}`;
@@ -38,12 +41,17 @@ async function copyLink(code: string) {
 		<div class="settings-card">
 			<SettingsBackLink />
 			<div class="settings-header-row">
-				<h1 class="settings-title">招待</h1>
+				<h1 class="settings-title with-info-tip">
+					招待
+					<InfoTip label="招待">
+						<p>招待リンクを作って、友だちを招待できます。</p>
+						<p>1つのリンクは、決めた回数まで使えます。</p>
+						{#if !isAdmin}
+							<p>使えるリンクは、同時に3つまでです。</p>
+						{/if}
+					</InfoTip>
+				</h1>
 			</div>
-
-			<p class="auth-info-text">
-				招待コード（リンク）を発行して、クローズドβに他のユーザーを招待できます。1つのコードは指定した回数まで使えます。
-			</p>
 
 			{#if form && "inviteMessage" in form && !("inviteSuccess" in form)}
 				<div class="flash-error" role="alert">{form.inviteMessage}</div>
@@ -85,7 +93,13 @@ async function copyLink(code: string) {
 				<div class="field">
 					<label for="invite-expires-at" class="field-label">有効期限（任意）</label>
 					<input id="invite-expires-at" name="expires_at" type="date" class="field-input">
-					<p class="field-hint">未指定の場合は30日後に自動的に失効します</p>
+					<p class="field-hint">
+						{#if isAdmin}
+							未指定の場合は無期限になります
+						{:else}
+							未指定の場合や30日より先の日付を指定した場合は、作成から30日後に失効します
+						{/if}
+					</p>
 				</div>
 				<button type="submit" class="btn btn-primary auth-wide-button" disabled={creating}>
 					{creating ? '発行中…' : '招待コードを発行'}

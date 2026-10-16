@@ -7,6 +7,7 @@ import { page } from "$app/state";
 import { trapFocus } from "$lib/actions/trapFocus";
 import { isCoverHiddenWithoutCopyright } from "$lib/anime-cover";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
+import InfoTip from "$lib/components/InfoTip.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import { episodeRoomEntryState, formatAiringTime, isEpisodeRoomEntryLive } from "$lib/episode-room";
@@ -724,7 +725,13 @@ $effect(() => {
 			<!-- Score hero -->
 			<div class="stats-grid">
 				<div class="stat-card stat-card--score">
-					<span class="stat-card-label">スコア</span>
+					<span class="stat-card-label with-info-tip">
+						スコア
+						<InfoTip label="スコアとリスト登録">
+							<p>スコアは、公開マイリストで付けられた点数（1〜10）の平均です。</p>
+							<p>リスト登録は、この作品を公開マイリストに入れている人の数です。</p>
+						</InfoTip>
+					</span>
 					{#if data.anime.avg_score != null && (data.anime.score_count ?? 0) > 0}
 						<span class="stat-card-value">★ {data.anime.avg_score.toFixed(2)}</span>
 						<span class="stat-card-sub">{data.anime.score_count}件の評価</span>

@@ -4,6 +4,7 @@ import { untrack } from "svelte";
 import { enhance } from "$app/forms";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
+import InfoTip from "$lib/components/InfoTip.svelte";
 import SettingsBackLink from "$lib/components/SettingsBackLink.svelte";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import type { AnimeMute, EventMute } from "$lib/types";
@@ -179,7 +180,16 @@ const activeTab = $derived.by((): "word" | "anime" => {
 
 				<form method="POST" action="?/addMute" use:enhance={muteSubmit} class="mute-add-form">
 					<div class="field" style="margin-bottom: 0;">
-						<label for="word" class="field-label">ミュートするワード</label>
+						<div class="with-info-tip">
+							<label for="word" class="field-label">ミュートするワード</label>
+							<InfoTip label="ワードミュート">
+								<p>この言葉を含む投稿を表示しません。</p>
+								<p>
+									引用した投稿・作品名・ハッシュタグも対象なので、作品名を登録するとその作品の実況ルームの投稿も隠れます。
+								</p>
+								<p>大文字と小文字は区別しません。</p>
+							</InfoTip>
+						</div>
 						<input
 							id="word"
 							name="word"
@@ -192,10 +202,6 @@ const activeTab = $derived.by((): "word" | "anime" => {
 						>
 						{#if form && "field" in form && form["field"] === "word"}
 							<p class="field-error-msg">{form.message}</p>
-						{:else}
-							<p class="field-hint">
-								英数本文、正規表現、作品名、ハッシュタグに含まれる語を非表示にします。
-							</p>
 						{/if}
 					</div>
 					<button type="submit" class="btn btn-primary" disabled={adding}>
@@ -231,9 +237,16 @@ const activeTab = $derived.by((): "word" | "anime" => {
 				{/if}
 
 				<section class="settings-section">
-					<p class="settings-section-desc">
-						ネタバレ防止のため、ミュートしたルーム（リアタイ・イベント）の投稿をタイムラインで非表示にします。
-					</p>
+					<div class="settings-section-desc">
+						ミュートしたルームの投稿を、タイムラインに表示しません。
+						<InfoTip label="ルームミュート">
+							<p>
+								期間は、ここで設定したときはその日から、カレンダーで設定したときは放送日から数えます。
+							</p>
+							<p>「毎週繰り返す」にすると、毎週の放送日から同じ日数だけミュートします。</p>
+							<p>ルームの中ではミュート中も投稿が見え、通知も届きます。</p>
+						</InfoTip>
+					</div>
 
 					{#if data.virtualAnime}
 						{@const v = data.virtualAnime}

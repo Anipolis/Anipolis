@@ -2,6 +2,7 @@
 import { page } from "$app/state";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import type { Anime, TrendingHashtag } from "$lib/types";
+import InfoTip from "./InfoTip.svelte";
 
 interface Props {
 	trending: TrendingHashtag[];
@@ -15,7 +16,14 @@ const showFooterLinks = $derived(!page.data.user);
 </script>
 
 <section class="trending-panel">
-	<div class="trending-header">トレンド</div>
+	<div class="trending-header with-info-tip">
+		トレンド
+		<InfoTip label="トレンド">
+			<p>この24時間でよく使われたハッシュタグです。</p>
+			<p>実況ルームの投稿も、その作品やイベントのハッシュタグとして数えます。</p>
+			<p>鍵アカウントの投稿は数えません。</p>
+		</InfoTip>
+	</div>
 
 	{#if trending.length === 0}
 		<div class="trending-empty">まだトレンドがありません</div>
@@ -29,7 +37,10 @@ const showFooterLinks = $derived(!page.data.user);
 		{/each}
 	{/if}
 
-	<div class="trending-subheader">アニメトレンド</div>
+	<div class="trending-subheader with-info-tip">
+		アニメトレンド
+		<InfoTip label="アニメトレンド" text="この7日間でマイリストへの登録が多かった作品です。" />
+	</div>
 
 	{#if animeTrending.length === 0}
 		<div class="trending-empty">まだアニメトレンドがありません</div>

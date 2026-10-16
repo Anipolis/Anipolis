@@ -1110,7 +1110,9 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 				<label>
 					<span>ルームリンク</span>
 					<input class="input" type="text" name="hashtag" required maxlength="50" placeholder="Anipolis視聴">
-					<span class="event-field-hint">トレンド集計に使われるタグ名です</span>
+					<span class="event-field-hint"
+						>このルームの投稿に付くハッシュタグです（トレンド集計にも使われます）</span
+					>
 				</label>
 				<div class="event-anime-field">
 					<span id="event-anime-field-label" class="event-form-label">対象アニメ</span>

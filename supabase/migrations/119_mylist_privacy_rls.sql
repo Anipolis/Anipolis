@@ -6,9 +6,11 @@
 -- 「本人 OR（対象プロフィールを閲覧可能 AND リスト公開中）」に変更する。
 --
 -- ランキングビュー（anime_popularity / anime_trending / anime_top_rated）は
--- security_invoker を指定していない通常ビュー＝ビュー所有者（postgres）の
--- 権限で実行され RLS の影響を受けないため、非公開リストも含む集計は
--- 従来どおり動作する（行レベル情報は返さないので安全）。
+-- 101 で security_invoker = true になっているため、このポリシーが集計にも効く。
+-- 非公開リストや、閲覧できない鍵アカウントのリストは登録数・スコアに含まれず、
+-- 集計値は閲覧者ごとに変わりうる。
+-- （当初「security_invoker なしの通常ビューなので非公開リストも集計に含まれる」と
+--   書いていたが誤り。2026-10-05 に本番の pg_class.reloptions で確認して訂正）
 
 DROP POLICY IF EXISTS "user_anime_list: 誰でも読める" ON public.user_anime_list;
 CREATE POLICY "user_anime_list: 本人または公開リストのみ読める"

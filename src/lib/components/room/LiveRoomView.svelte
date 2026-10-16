@@ -949,6 +949,10 @@ function formatCompactDate(iso: string) {
 					<!-- JavaScript が無いときの送信結果や、ほかの操作（投稿の削除など）の失敗 -->
 					<p class="form-error">{form.message}</p>
 				{/if}
+				{#if isEpisodeRoom}
+					<!-- スマホは投稿欄が1行の帯なので、注意は帯の上に出す（PC は投稿ボタンの横） -->
+					<p class="composer-note composer-note--mobile">タイムラインにも表示されます</p>
+				{/if}
 				<form method="POST" action="?/createPost" use:enhance={handleCreatePost} bind:this={composerFormEl}>
 					<div class="composer-body">
 						<textarea
@@ -956,7 +960,7 @@ function formatCompactDate(iso: string) {
 							class="composer-textarea room-composer-textarea"
 							name="content"
 							placeholder={isEpisodeRoom
-								? `${roomNameLabel}の実況・感想を投稿（タイムラインにも表示されます）`
+								? `${roomNameLabel}の感想を投稿`
 								: isMobileViewport
 									? "いまの感想を投稿..."
 									: "いまの感想を投稿... (Shift+Enterで改行)"}
@@ -977,6 +981,9 @@ function formatCompactDate(iso: string) {
 							}}
 						></textarea>
 						<div class="composer-footer">
+							{#if isEpisodeRoom}
+								<span class="composer-note">タイムラインにも表示されます</span>
+							{/if}
 							{#if charCount >= maxLen - 40}
 								<span class="char-count {overLimit ? 'char-count--over' : ''}"
 									>{charCount}/{maxLen}</span
@@ -1224,6 +1231,16 @@ function formatCompactDate(iso: string) {
 {/if}
 
 <style>
+.composer-note {
+	margin-right: auto;
+	font-size: 12px;
+	color: var(--color-text-muted);
+}
+
+.composer-note--mobile {
+	display: none;
+}
+
 .room-summary-card {
 	background: var(--color-surface);
 	border: 1px solid var(--color-border);
@@ -1796,6 +1813,17 @@ function formatCompactDate(iso: string) {
 		margin-top: 0;
 		padding-top: 0;
 		border-top: 0;
+	}
+
+	.room-page-container .composer-footer .composer-note {
+		display: none;
+	}
+
+	.room-page-container .composer-note--mobile {
+		display: block;
+		margin: 0 0 4px;
+		font-size: 11px;
+		line-height: 1.4;
 	}
 
 	.room-page-container .composer-footer .char-count {

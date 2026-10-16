@@ -4,6 +4,7 @@ import { beforeNavigate, goto } from "$app/navigation";
 import { navigating } from "$app/state";
 import { ANIME_GENRE_FILTER_HELP, ANIME_GENRE_GROUPS, ANIME_GENRES, ANIME_SOURCE_OPTIONS } from "$lib/anime-vocabulary";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
+import InfoTip from "$lib/components/InfoTip.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
 import { createDebouncedCommit } from "$lib/debounced-commit";
 import { isSamePageRefresh } from "$lib/navigation-skeleton";
@@ -468,18 +469,18 @@ function isAiringToday(anime: AnimeListItem): boolean {
 			>
 				<div class="filter-drawer-inner">
 					<div class="filter-drawer-grid">
-						<!-- ⓘ で見える説明に置き換えるまで、読み上げだけで絞り込みの仕様を伝える -->
-						<p id="genre-filter-help-desktop" class="sr-only">{ANIME_GENRE_FILTER_HELP}</p>
-						{#each ANIME_GENRE_GROUPS as group (group.key)}
+						{#each ANIME_GENRE_GROUPS as group, index (group.key)}
 							<section class="filter-drawer-column filter-drawer-column--genres">
-								<h2 id="genre-filter-desktop-{group.key}" class="filter-drawer-heading">
-									{group.label}
+								<h2 class="filter-drawer-heading with-info-tip">
+									<span id="genre-filter-desktop-{group.key}">{group.label}</span>
+									{#if index === 0}
+										<InfoTip label="タグの絞り込み" text={ANIME_GENRE_FILTER_HELP} />
+									{/if}
 								</h2>
 								<div
 									class="drawer-genre-grid"
 									role="group"
 									aria-labelledby="genre-filter-desktop-{group.key}"
-									aria-describedby="genre-filter-help-desktop"
 								>
 									{#each group.tags as tag (tag.ja)}
 										<button
@@ -649,6 +650,16 @@ function isAiringToday(anime: AnimeListItem): boolean {
 					>＋登録</a
 				>
 			{/if}
+			<span class="tab-nav-info">
+				<InfoTip label="タブの並び順">
+					<p>人気: マイリストへの登録数が多い順</p>
+					<p>トレンド: 直近7日間にマイリストへ登録された数が多い順</p>
+					<p>高評価: スコアの平均が高い順</p>
+					<p>放送中: 本日放送の作品を先頭に、新しいシーズン順</p>
+					<p>放送予定: これから放送が始まる作品</p>
+					<p>登録数とスコアは、公開されているマイリストから数えています。</p>
+				</InfoTip>
+			</span>
 		</nav>
 
 		{#if data.search}
@@ -923,18 +934,15 @@ function isAiringToday(anime: AnimeListItem): boolean {
 				</div>
 
 				<div class="filter-sheet-body">
-					<p id="genre-filter-help-mobile" class="sr-only">{ANIME_GENRE_FILTER_HELP}</p>
-					{#each ANIME_GENRE_GROUPS as group (group.key)}
+					{#each ANIME_GENRE_GROUPS as group, index (group.key)}
 						<section class="filter-sheet-section">
-							<h3 id="genre-filter-mobile-{group.key}" class="filter-sheet-section-label">
-								{group.label}
+							<h3 class="filter-sheet-section-label with-info-tip">
+								<span id="genre-filter-mobile-{group.key}">{group.label}</span>
+								{#if index === 0}
+									<InfoTip label="タグの絞り込み" text={ANIME_GENRE_FILTER_HELP} />
+								{/if}
 							</h3>
-							<div
-								class="genre-chips"
-								role="group"
-								aria-labelledby="genre-filter-mobile-{group.key}"
-								aria-describedby="genre-filter-help-mobile"
-							>
+							<div class="genre-chips" role="group" aria-labelledby="genre-filter-mobile-{group.key}">
 								{#each group.tags as tag (tag.ja)}
 									<button
 										type="button"
@@ -1387,6 +1395,10 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	gap: 4px;
 	margin-bottom: 20px;
 	flex-wrap: wrap;
+}
+.tab-nav-info {
+	display: inline-flex;
+	align-self: center;
 }
 .tab-btn {
 	padding: 6px 14px;

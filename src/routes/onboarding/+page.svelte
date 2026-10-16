@@ -85,9 +85,7 @@ onDestroy(clearSelectedAvatarFile);
 				<h1 class="settings-title">ようこそ！プロフィールを設定しましょう</h1>
 			</div>
 
-			<p class="field-hint" style="margin-bottom: 1.25rem;">
-				ログイン情報からそのまま使える候補だけ初期値にしています。必要に応じて変更してください。
-			</p>
+			<p class="field-hint" style="margin-bottom: 1.25rem;">あとから設定で変更できます。</p>
 
 			{#if form && "message" in form && !("field" in form)}
 				<div class="flash-error" role="alert">{form.message}</div>
@@ -101,7 +99,9 @@ onDestroy(clearSelectedAvatarFile);
 					<UserAvatar src={selectedAvatarUrl} username={displayName || username} size="lg" />
 					<div class="onboarding-avatar-copy">
 						<div class="field-label">プロフィール画像</div>
-						<p class="field-hint">ログイン元のアイコン候補を使うか、Anipolis用の画像に変更できます。</p>
+						<p class="field-hint">
+							ログインに使ったサービスのアイコンを使うか、画像をアップロードできます。
+						</p>
 						<div class="onboarding-avatar-actions">
 							<label class="btn btn-outline onboarding-avatar-file">
 								画像を変更
@@ -160,9 +160,7 @@ onDestroy(clearSelectedAvatarFile);
 					{#if form && "field" in form && form.field === "username"}
 						<p class="field-error-msg">{form.message}</p>
 					{:else}
-						<p class="field-hint">
-							3〜20文字の半角英数字・アンダースコアのみ使用できます。候補が空の場合はAnipolis用に入力してください。
-						</p>
+						<p class="field-hint">3〜20文字の半角英数字と _（アンダースコア）が使えます。</p>
 					{/if}
 				</div>
 
