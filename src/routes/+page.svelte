@@ -115,7 +115,7 @@ $effect(() => {
 </script>
 
 <svelte:head>
-	<title>Anipolis - タイムライン</title>
+	<title>タイムライン - Anipolis</title>
 	<meta property="og:title" content="Anipolis">
 	<meta
 		property="og:description"

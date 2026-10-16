@@ -454,12 +454,12 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 }
 </script>
 
-<svelte:head> <title>放送スケジュール - Anipolis</title> </svelte:head>
+<svelte:head> <title>カレンダー - Anipolis</title> </svelte:head>
 
 <div class="schedule-page">
 	<header class="schedule-header">
 		<div>
-			<h1>放送スケジュール</h1>
+			<h1>カレンダー</h1>
 		</div>
 		<div class="schedule-actions">
 			<div class="week-nav">
@@ -474,7 +474,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 						前週
 					</span>
 				{/if}
-				<h1 class="mobile-schedule-title">放送スケジュール</h1>
+				<h1 class="mobile-schedule-title">カレンダー</h1>
 				{#if data.canGoNext}
 					<a class="week-nav-btn" href="/schedule?week={data.nextWeek}" aria-label="次の週">
 						翌週

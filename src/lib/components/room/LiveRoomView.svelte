@@ -1210,7 +1210,7 @@ function formatCompactDate(iso: string) {
 							退出する
 						</button>
 						<a href="/schedule" class="room-summary-back shrink-0 text-xs transition-colors">
-							← 週間スケジュールへ戻る
+							← カレンダーへ戻る
 						</a>
 					</div>
 				</div>
