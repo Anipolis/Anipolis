@@ -1,8 +1,8 @@
 <script lang="ts">
 import type { SubmitFunction } from "@sveltejs/kit";
-import { tick } from "svelte";
+import { onDestroy, tick } from "svelte";
 import { enhance } from "$app/forms";
-import { goto } from "$app/navigation";
+import { beforeNavigate, goto } from "$app/navigation";
 import { page } from "$app/state";
 import PasswordInput from "$lib/components/PasswordInput.svelte";
 import { signInWithPasskey } from "$lib/passkey";
@@ -72,23 +72,45 @@ async function focusAfterFailure(kind: SubmitKind): Promise<void> {
  * ログインできてリダイレクトするときは、認証の状態を確実に反映するためページごと移る
  */
 function enhanceAuth(kind: SubmitKind): SubmitFunction {
-	return ({ cancel }) => {
+	return ({ cancel, controller }) => {
 		if (submitting) {
 			cancel();
 			return;
 		}
 		submitting = kind;
-		return async ({ result, update }) => {
+		pendingSubmit = controller;
+		return async ({ result, update, formElement }) => {
+			pendingSubmit = null;
 			if (result.type === "redirect") {
 				window.location.assign(result.location);
 				return;
 			}
 			await update({ reset: result.type === "success" });
 			submitting = null;
+			if (result.type === "success") {
+				// reset は初期値（前回失敗したときの入力が入った defaultValue）に戻すので、明示的に空にする。
+				// 確認メールの送信の成功表示と一緒に、失敗したときの古いアドレスが出ないように（#445 Codex）
+				for (const input of formElement.querySelectorAll<HTMLInputElement>('input:not([type="hidden"])')) {
+					input.defaultValue = "";
+					input.value = "";
+				}
+			}
 			if (result.type === "failure") await focusAfterFailure(kind);
 		};
 	};
 }
+
+// 送信中にサイト内の別の画面（タブ・「パスワードをお忘れですか？」・キャンセル）へ移ったら、送信を取り消す。
+// 後から応答が返ってきて移動先を上書きしたり、取り消したはずの追加を完了したりしないように（#445 Codex）
+let pendingSubmit: AbortController | null = null;
+function abortPendingSubmit(): void {
+	if (!pendingSubmit) return;
+	pendingSubmit.abort();
+	pendingSubmit = null;
+	submitting = null;
+}
+beforeNavigate(abortPendingSubmit);
+onDestroy(abortPendingSubmit);
 
 /** 外部サービスのログイン（外へリダイレクトするのでページ全体の送信のまま）。押したら他のボタンを止める */
 function startOAuth(kind: SubmitKind, event: SubmitEvent): void {
