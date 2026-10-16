@@ -1,5 +1,9 @@
 import { mount, tick, unmount } from "svelte";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// ログイン画面のフォームは use:enhance を使う（#419）。happy-dom では form.method が取れず enhance が投げるので差し替える
+vi.mock("$app/forms", () => ({ enhance: () => ({ destroy() {} }) }));
+
 import AuthPage from "./+page.svelte";
 import type { PageProps } from "./$types";
 

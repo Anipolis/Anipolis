@@ -46,7 +46,7 @@ const submitRequest: SubmitFunction = () => {
 				でログインしているアカウントにはパスワードがないため、各サービスのボタンからログインしてください。
 			</p>
 
-			<form method="POST" action="?/request" class="auth-form" use:enhance={submitRequest}>
+			<form method="POST" action="?/request" class="auth-form" novalidate use:enhance={submitRequest}>
 				<div class="field">
 					<label for="forgot-email" class="field-label">メールアドレス</label>
 					<input

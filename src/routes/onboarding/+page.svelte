@@ -93,7 +93,7 @@ onDestroy(clearSelectedAvatarFile);
 				<div class="flash-error" role="alert">{form.message}</div>
 			{/if}
 
-			<form method="POST" action="?/save" enctype="multipart/form-data" use:enhance={onSubmit}>
+			<form method="POST" action="?/save" enctype="multipart/form-data" novalidate use:enhance={onSubmit}>
 				<input type="hidden" name="next" value={data.next}>
 				<input type="hidden" name="avatar_choice" value={avatarChoice}>
 
