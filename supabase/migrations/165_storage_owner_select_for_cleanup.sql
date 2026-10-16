@@ -8,6 +8,11 @@
 --
 -- 公開バケットなので、表示（公開 URL）に SELECT ポリシーは要らない。誰でも一覧できる
 -- ポリシーは作らず、本人（カバーは管理者）だけが読めるようにする。
+-- migration どおりに作った環境には 020・081 の「誰でも読める」ポリシーがあり、OR で効いて
+-- 誰でも一覧できてしまうので消す（本番・ステージングにはもともと無いので変化なし）。
+
+DROP POLICY IF EXISTS "anime-covers are publicly accessible" ON storage.objects;
+DROP POLICY IF EXISTS "profile headers are publicly accessible" ON storage.objects;
 
 DROP POLICY IF EXISTS "users can read their own profile header" ON storage.objects;
 CREATE POLICY "users can read their own profile header"
