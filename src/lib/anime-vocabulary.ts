@@ -117,7 +117,7 @@ export const GENRE_JA_BY_EN: Record<string, string> = Object.fromEntries(
 
 // ⓘ などで絞り込みの仕様を説明するときの文言。画面ごとに書き分けず、ここを参照する
 export const ANIME_GENRE_FILTER_HELP =
-	"同じ種類のタグはいずれかに当てはまる作品、種類をまたぐとすべてに当てはまる作品を表示します";
+	"同じ種類のタグを複数選ぶと「どれか」、違う種類をまたぐと「すべて」に当てはまる作品を表示します。";
 
 const GENRE_GROUP_KEY_BY_NAME = new Map(
 	ANIME_GENRE_GROUPS.flatMap((group) =>

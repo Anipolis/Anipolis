@@ -145,6 +145,6 @@ function handleToggle(event: ToggleEvent) {
 	margin: 0;
 }
 .info-tip-popover :global(p + p) {
-	margin-top: 6px;
+	margin-top: 10px;
 }
 </style>

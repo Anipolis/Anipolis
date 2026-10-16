@@ -728,10 +728,8 @@ $effect(() => {
 					<span class="stat-card-label with-info-tip">
 						スコア
 						<InfoTip label="スコアとリスト登録">
-							<p>スコアは、公開されているマイリストで付けられたスコア（1〜10）の平均です。</p>
-							<p>
-								リスト登録は、公開されているマイリストにこの作品を登録しているユーザーの数です（視聴ステータスは問いません）。
-							</p>
+							<p>スコアは、公開マイリストで付けられた点数（1〜10）の平均です。</p>
+							<p>リスト登録は、この作品を公開マイリストに入れている人の数です。</p>
 						</InfoTip>
 					</span>
 					{#if data.anime.avg_score != null && (data.anime.score_count ?? 0) > 0}

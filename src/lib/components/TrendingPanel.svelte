@@ -18,10 +18,11 @@ const showFooterLinks = $derived(!page.data.user);
 <section class="trending-panel">
 	<div class="trending-header with-info-tip">
 		トレンド
-		<InfoTip
-			label="トレンド"
-			text="直近24時間に投稿されたハッシュタグの件数順です。実況ルームの投稿は、その作品やイベントのハッシュタグとして数えます。鍵アカウントの投稿は含みません。"
-		/>
+		<InfoTip label="トレンド">
+			<p>この24時間でよく使われたハッシュタグです。</p>
+			<p>実況ルームの投稿も、その作品やイベントのハッシュタグとして数えます。</p>
+			<p>鍵アカウントの投稿は数えません。</p>
+		</InfoTip>
 	</div>
 
 	{#if trending.length === 0}
@@ -38,7 +39,7 @@ const showFooterLinks = $derived(!page.data.user);
 
 	<div class="trending-subheader with-info-tip">
 		アニメトレンド
-		<InfoTip label="アニメトレンド" text="直近7日間にマイリストへ登録された数が多い作品です。" />
+		<InfoTip label="アニメトレンド" text="この7日間でマイリストへの登録が多かった作品です。" />
 	</div>
 
 	{#if animeTrending.length === 0}

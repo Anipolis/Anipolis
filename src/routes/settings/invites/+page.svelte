@@ -44,11 +44,10 @@ async function copyLink(code: string) {
 				<h1 class="settings-title with-info-tip">
 					招待
 					<InfoTip label="招待">
-						<p>
-							招待コード（リンク）を発行して、クローズドβに他のユーザーを招待できます。1つのコードは指定した回数まで使えます。
-						</p>
+						<p>招待リンクを作って、友だちを招待できます。</p>
+						<p>1つのリンクは、決めた回数まで使えます。</p>
 						{#if !isAdmin}
-							<p>まだ使える招待コードは、同時に3つまで発行できます。</p>
+							<p>使えるリンクは、同時に3つまでです。</p>
 						{/if}
 					</InfoTip>
 				</h1>

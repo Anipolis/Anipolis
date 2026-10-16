@@ -65,15 +65,8 @@ const settingsSubmit: SubmitFunction = () => {
 					<h2 class="settings-section-title with-info-tip">
 						放送前通知のタイミング
 						<InfoTip label="放送前通知">
-							<p>
-								スケジュールページでベル登録したアニメの放送やイベントの開始が近づくと、アプリ内通知をお届けし、カレンダーのアイコンに未読マークを表示します。
-							</p>
-							<p>
-								複数選択した場合はそれぞれのタイミングで通知します。同じルームの通知は1件にまとめて更新されます。
-							</p>
-							<p>
-								通知は通知一覧の「ルーム」タブに届きます。アプリを開いている間は定期的に更新され、「ルーム」タブを開くと既読になります。
-							</p>
+							<p>お知らせは、通知の「ルーム」タブに届きます。</p>
+							<p>複数選ぶと、それぞれの時間にお知らせします。</p>
 						</InfoTip>
 					</h2>
 					<span class="autosave-status" class:visible={saving || justSaved} aria-live="polite">
@@ -84,6 +77,7 @@ const settingsSubmit: SubmitFunction = () => {
 						{/if}
 					</span>
 				</div>
+				<p class="settings-section-desc">カレンダーでベルを付けた番組が始まる前にお知らせします。</p>
 				<form
 					method="POST"
 					action="?/updateNotificationSettings"
@@ -93,7 +87,7 @@ const settingsSubmit: SubmitFunction = () => {
 					<div class="toggle-row">
 						<span class="toggle-row-text">
 							<strong>1分前</strong>
-							<small>放送の1分前にアプリ内通知</small>
+							<small>放送の1分前にお知らせ</small>
 						</span>
 						<ToggleSwitch
 							name="notify_1min"
@@ -106,7 +100,7 @@ const settingsSubmit: SubmitFunction = () => {
 					<div class="toggle-row">
 						<span class="toggle-row-text">
 							<strong>5分前</strong>
-							<small>放送の5分前にアプリ内通知</small>
+							<small>放送の5分前にお知らせ</small>
 						</span>
 						<ToggleSwitch
 							name="notify_5min"
@@ -119,7 +113,7 @@ const settingsSubmit: SubmitFunction = () => {
 					<div class="toggle-row">
 						<span class="toggle-row-text">
 							<strong>30分前</strong>
-							<small>放送の30分前にアプリ内通知</small>
+							<small>放送の30分前にお知らせ</small>
 						</span>
 						<ToggleSwitch
 							name="notify_30min"
@@ -136,6 +130,12 @@ const settingsSubmit: SubmitFunction = () => {
 </div>
 
 <style>
+.settings-section-desc {
+	color: color-mix(in srgb, var(--color-text) 72%, transparent);
+	font-size: 0.82rem;
+	line-height: 1.6;
+	margin: 0 0 8px;
+}
 .settings-section {
 	padding-top: 18px;
 	margin-top: 18px;
