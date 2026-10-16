@@ -301,7 +301,10 @@ Use these commands from the repository root:
 ```bash
 mise install          # Install configured Node, pnpm, and Biome versions
 pnpm install         # Install dependencies
-pnpm dev             # Start the SvelteKit dev server
+pnpm dev             # Start the dev server against the staging Supabase (.env.staging; see docs/staging.md)
+pnpm dev:prod        # Start the dev server against the production Supabase (.env)
+pnpm staging:seed    # Create test accounts/posts in staging
+pnpm staging:db-push # Dry-run migrations against staging (-- --apply to apply)
 pnpm build           # Production build
 pnpm preview         # Preview the production build
 pnpm supabase:version # Show the installed Supabase CLI version
@@ -326,6 +329,7 @@ Notes:
 
 - Never expose secrets from `.env`, logs, Supabase service-role keys, or deployment config.
 - Never commit `.env`.
+- Do manual QA (test accounts, posts, uploads) against the staging Supabase (`pnpm dev`, `pnpm staging:seed`), not production. Apply new migrations to staging first (`pnpm staging:db-push -- --apply`). See `docs/staging.md`.
 - Do not print environment variables unless the user explicitly asks and the values are non-secret.
 - Avoid destructive commands. Ask before large deletions, schema resets, history rewrites, or data migrations that could affect remote Supabase.
 - Do not add dependencies unless they are necessary, well-scoped, and consistent with the existing stack.
