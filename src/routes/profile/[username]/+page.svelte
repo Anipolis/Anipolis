@@ -924,6 +924,9 @@ const grouped = $derived(
 	display: flex;
 	border-bottom: 1px solid var(--color-border);
 	margin: 16px 0 0;
+	/* 入りきらない幅では横スクロールで見せる（タブの文字は折り返さない、#429） */
+	overflow-x: auto;
+	scrollbar-width: none;
 }
 
 .profile-tab {
@@ -940,6 +943,14 @@ const grouped = $derived(
 	display: flex;
 	align-items: center;
 	gap: 6px;
+	flex-shrink: 0;
+	white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+	.profile-tab {
+		padding: 10px 12px;
+	}
 }
 
 .profile-tab:hover {
