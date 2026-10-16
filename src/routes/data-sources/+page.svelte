@@ -5,23 +5,21 @@ import {
 	ANIME_OFFLINE_REPOSITORY_URL,
 	ANIPOLIS_TRANSFORMATION_URL,
 } from "$lib/anime-offline-database";
+import LegalDocument from "$lib/components/LegalDocument.svelte";
 import { WIKIDATA_CC0_URL, WIKIDATA_TRANSFORMATION_URL } from "$lib/wikidata-anime-titles";
 import { WIKIDATA_STUDIO_TRANSFORMATION_URL } from "$lib/wikidata-studio-names";
 </script>
 
 <svelte:head>
-	<title>出典・権利 | Anipolis</title>
 	<meta name="description" content="Anipolisの作品情報の出典、ライセンス、画像と権利表記、権利者の方への窓口">
 </svelte:head>
 
-<main class="data-sources-page">
-	<header>
-		<p class="eyebrow">SOURCES &amp; RIGHTS</p>
-		<h1>出典・権利</h1>
-		<p class="lead">
-			Anipolisが表示する作品情報の参照元と、画像・権利表記の扱い、権利者の方へのご案内をまとめています。
-		</p>
-	</header>
+<!-- 利用規約・お問い合わせと同じ見た目にする（#439）。タイトルは LegalDocument が付ける -->
+<LegalDocument title="出典・権利">
+	<h1>出典・権利</h1>
+	<p class="lead">
+		Anipolisが表示する作品情報の参照元と、画像・権利表記の扱い、権利者の方へのご案内をまとめています。
+	</p>
 
 	<section>
 		<h2>作品情報の参照元</h2>
@@ -131,54 +129,11 @@ import { WIKIDATA_STUDIO_TRANSFORMATION_URL } from "$lib/wikidata-studio-names";
 			</p>
 		</details>
 	</section>
-</main>
+</LegalDocument>
 
 <style>
-.data-sources-page {
-	width: min(760px, calc(100% - 32px));
-	margin: 0 auto;
-	padding: 48px 0 80px;
-	color: var(--text);
-}
-header,
-section {
-	padding: 24px 0;
-	border-bottom: 1px solid var(--border);
-}
-.eyebrow {
-	margin: 0 0 8px;
-	color: var(--accent);
-	font-size: 0.75rem;
-	font-weight: 700;
-	letter-spacing: 0.12em;
-}
-h1,
-h2 {
-	margin: 0 0 16px;
-}
-h1 {
-	font-size: clamp(1.8rem, 5vw, 2.5rem);
-}
-h2 {
-	font-size: 1.15rem;
-}
-p,
-li {
-	line-height: 1.8;
-}
 .lead {
 	color: var(--text-muted);
-	font-size: 1.02rem;
-}
-a {
-	color: var(--accent);
-}
-ul {
-	margin: 0;
-	padding-left: 1.25rem;
-}
-li + li {
-	margin-top: 8px;
 }
 table {
 	width: 100%;

@@ -600,8 +600,8 @@ function isActive(path: string): boolean {
 			href="/schedule"
 			class="sidebar-btn"
 			class:active={isActive('/schedule') || isActive('/events')}
-			aria-label="放送スケジュール"
-			title="放送スケジュール"
+			aria-label="カレンダー"
+			title="カレンダー"
 		>
 			<svg
 				width="22"
