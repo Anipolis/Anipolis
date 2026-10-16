@@ -181,9 +181,20 @@ async function seed() {
 	console.log(`  実況のあるルーム: /rooms/anime/${room.anime_id}/ep/${room.episode_number}`);
 }
 
-if (process.argv.includes("--reset")) await reset();
-if (await findUserIdByEmail(emailOf(USERS[0]))) {
+/** 招待コードは最後に作るので、全員そろっていて招待コードもあれば最後まで作り終えている */
+async function isComplete(): Promise<boolean> {
+	for (const user of USERS) if (!(await findUserIdByEmail(emailOf(user)))) return false;
+	const { data } = await admin.from("invites").select("code").eq("code", INVITE_CODE).maybeSingle();
+	return data != null;
+}
+
+if (process.argv.includes("--reset")) {
+	await reset();
+	await seed();
+} else if (await isComplete()) {
 	console.log("作成済みです。作り直すときは pnpm staging:seed -- --reset");
 } else {
+	// 前回が途中で失敗していたら、残った分を消してから作り直す
+	await reset();
 	await seed();
 }

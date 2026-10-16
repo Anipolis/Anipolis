@@ -1,15 +1,18 @@
 <script lang="ts">
 import { dev } from "$app/environment";
 import { env } from "$env/dynamic/public";
+import { supabaseTarget } from "$lib/supabase-target";
 
 // 開発サーバーで、いまどの DB につながっているかを常に見せる（本番には出ない）。
 // pnpm dev は .env.staging を読むのでステージング、pnpm dev:prod は本番 DB。
-const isStaging = env["PUBLIC_ANIPOLIS_ENV"] === "staging";
+// 目印だけでなく実際の接続先 URL で判定する（.env.staging に本番の値を書いてしまっても緑にしない）
+const target = supabaseTarget(env["PUBLIC_SUPABASE_URL"], env["PUBLIC_ANIPOLIS_ENV"]);
+const LABELS = { staging: "ステージング", production: "本番 DB", unknown: "接続先不明" } as const;
 </script>
 
 {#if dev}
-	<div class="dev-env-badge" class:dev-env-badge--prod={!isStaging} aria-hidden="true">
-		{isStaging ? "ステージング" : "本番 DB"}
+	<div class="dev-env-badge" class:dev-env-badge--warn={target !== "staging"} aria-hidden="true">
+		{LABELS[target]}
 	</div>
 {/if}
 
@@ -30,7 +33,7 @@ const isStaging = env["PUBLIC_ANIPOLIS_ENV"] === "staging";
 	pointer-events: none;
 	opacity: 0.85;
 }
-.dev-env-badge--prod {
+.dev-env-badge--warn {
 	background: #dc2626;
 }
 </style>

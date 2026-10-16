@@ -3,6 +3,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { PRODUCTION_SUPABASE_REF, supabaseProjectRef } from "../../src/lib/supabase-target.ts";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 
@@ -14,10 +15,6 @@ function parseEnvFile(path: string): Record<string, string> {
 		if (match) env[match[1]] = match[2];
 	}
 	return env;
-}
-
-function projectRef(url: string | undefined): string | null {
-	return url ? (/^https:\/\/([a-z0-9]+)\.supabase\.co/.exec(url)?.[1] ?? null) : null;
 }
 
 export type StagingEnv = {
@@ -36,10 +33,10 @@ export function loadStagingEnv(): StagingEnv {
 	if (staging.PUBLIC_ANIPOLIS_ENV !== "staging") {
 		throw new Error(".env.staging が無いか、PUBLIC_ANIPOLIS_ENV=staging が書かれていません");
 	}
-	const ref = projectRef(staging.PUBLIC_SUPABASE_URL);
+	const ref = supabaseProjectRef(staging.PUBLIC_SUPABASE_URL);
 	if (!ref) throw new Error(".env.staging の PUBLIC_SUPABASE_URL が https://<ref>.supabase.co の形ではありません");
-	const productionRef = projectRef(production.PUBLIC_SUPABASE_URL);
-	if (productionRef && productionRef === ref) {
+	const productionRef = supabaseProjectRef(production.PUBLIC_SUPABASE_URL);
+	if (ref === PRODUCTION_SUPABASE_REF || (productionRef && productionRef === ref)) {
 		throw new Error(".env.staging が本番のプロジェクトを指しています。中止します");
 	}
 	const dbUrl = staging.STAGING_DB_URL ?? "";
