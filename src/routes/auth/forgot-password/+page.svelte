@@ -9,9 +9,18 @@ let sending = $state(false);
 
 const submitRequest: SubmitFunction = () => {
 	sending = true;
-	return async ({ update }) => {
+	return async ({ result, update, formElement }) => {
 		sending = false;
 		await update({ reset: true });
+		// 成功したら入力欄を空にする。reset は初期値（前回失敗したときのアドレスが入った defaultValue）に
+		// 戻すため、失敗の後に別のアドレスで成功すると古いアドレスが表示されてしまう（#440）
+		if (result.type === "success") {
+			const email = formElement.querySelector<HTMLInputElement>('input[name="email"]');
+			if (email) {
+				email.defaultValue = "";
+				email.value = "";
+			}
+		}
 	};
 };
 </script>
