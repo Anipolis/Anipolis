@@ -1,6 +1,10 @@
 <script lang="ts">
-import { goto } from "$app/navigation";
+import type { SubmitFunction } from "@sveltejs/kit";
+import { onDestroy, tick } from "svelte";
+import { enhance } from "$app/forms";
+import { beforeNavigate, goto } from "$app/navigation";
 import { page } from "$app/state";
+import PasswordInput from "$lib/components/PasswordInput.svelte";
 import { signInWithPasskey } from "$lib/passkey";
 import type { PageProps } from "./$types";
 import { type InviteCodeState, syncInviteCodeState } from "./invite-code";
@@ -32,6 +36,91 @@ const hasInviteAccess = $derived(!data.betaGateEnabled || data.inviteCodeValid);
 let passkeyPending = $state(false);
 let passkeyError = $state("");
 
+// 送信中のフォーム（ボタンを押せなくして「…中」を出す。二重送信を防ぐ、#419）
+type SubmitKind = "login" | "register" | "invite" | "add_account" | "discord" | "google" | "twitter";
+let submitting = $state<SubmitKind | null>(null);
+let loginPasswordInput = $state<HTMLInputElement | null>(null);
+let registerPasswordInput = $state<HTMLInputElement | null>(null);
+
+/** 失敗したときに直してほしい欄へフォーカスを戻す（エラーは上か欄の下に出ている） */
+async function focusAfterFailure(kind: SubmitKind): Promise<void> {
+	await tick();
+	const field = form && "field" in form ? form.field : null;
+	const byId = (id: string) => document.getElementById(id) as HTMLInputElement | null;
+	let target: HTMLInputElement | null = null;
+	if (kind === "login") {
+		const email = byId("login-email");
+		target = email && !email.value ? email : loginPasswordInput;
+	} else if (kind === "register") {
+		target =
+			field === "username"
+				? byId("register-username")
+				: field === "password"
+					? registerPasswordInput
+					: byId("register-email");
+	} else if (kind === "invite") {
+		target = byId("invite-code-gate");
+	} else if (kind === "add_account") {
+		target = byId("add-email");
+	}
+	target?.focus();
+	target?.select?.();
+}
+
+/**
+ * メールのフォームの送信（use:enhance）。ページ全体を読み込み直さず、送信中の表示と失敗時のフォーカスを扱う。
+ * ログインできてリダイレクトするときは、認証の状態を確実に反映するためページごと移る
+ */
+function enhanceAuth(kind: SubmitKind): SubmitFunction {
+	return ({ cancel, controller }) => {
+		if (submitting) {
+			cancel();
+			return;
+		}
+		submitting = kind;
+		pendingSubmit = controller;
+		return async ({ result, update, formElement }) => {
+			pendingSubmit = null;
+			if (result.type === "redirect") {
+				window.location.assign(result.location);
+				return;
+			}
+			await update({ reset: result.type === "success" });
+			submitting = null;
+			if (result.type === "success") {
+				// reset は初期値（前回失敗したときの入力が入った defaultValue）に戻すので、明示的に空にする。
+				// 確認メールの送信の成功表示と一緒に、失敗したときの古いアドレスが出ないように（#445 Codex）
+				for (const input of formElement.querySelectorAll<HTMLInputElement>('input:not([type="hidden"])')) {
+					input.defaultValue = "";
+					input.value = "";
+				}
+			}
+			if (result.type === "failure") await focusAfterFailure(kind);
+		};
+	};
+}
+
+// 送信中にサイト内の別の画面（タブ・「パスワードをお忘れですか？」・キャンセル）へ移ったら、送信を取り消す。
+// 後から応答が返ってきて移動先を上書きしたり、取り消したはずの追加を完了したりしないように（#445 Codex）
+let pendingSubmit: AbortController | null = null;
+function abortPendingSubmit(): void {
+	if (!pendingSubmit) return;
+	pendingSubmit.abort();
+	pendingSubmit = null;
+	submitting = null;
+}
+beforeNavigate(abortPendingSubmit);
+onDestroy(abortPendingSubmit);
+
+/** 外部サービスのログイン（外へリダイレクトするのでページ全体の送信のまま）。押したら他のボタンを止める */
+function startOAuth(kind: SubmitKind, event: SubmitEvent): void {
+	if (submitting) {
+		event.preventDefault();
+		return;
+	}
+	submitting = kind;
+}
+
 async function handlePasskeyLogin(): Promise<void> {
 	passkeyPending = true;
 	passkeyError = "";
@@ -53,15 +142,19 @@ async function handlePasskeyLogin(): Promise<void> {
 	</title>
 </svelte:head>
 
+<svelte:window
+	onpageshow={() => {
+		submitting = null;
+	}}
+/>
+
 <div class="page-container auth-page">
 	<main class="auth-panel">
 		<div class="settings-card">
-			<div class="settings-header-row">
-				<h1 class="settings-title">
-					{activeMode === 'register' ? 'アカウント作成' : activeMode === 'add_account' ? 'アカウントを追加' : 'ログイン'}
-				</h1>
-				<a href="/" class="btn btn-ghost">戻る</a>
-			</div>
+			<!-- 見出しはタブと同じ言葉になるので、画面には出さず読み上げ用に残す（#425）。アカウントの追加はタブが無いので見せる -->
+			<h1 class="settings-title" class:sr-only={activeMode !== 'add_account'}>
+				{activeMode === 'register' ? 'アカウント作成' : activeMode === 'add_account' ? 'アカウントを追加' : 'ログイン'}
+			</h1>
 
 			{#if activeMode !== 'add_account'}
 				<div class="auth-tabs" aria-label="認証メニュー">
@@ -120,7 +213,13 @@ async function handlePasskeyLogin(): Promise<void> {
 
 			{#if activeMode === 'add_account'}
 				<p class="auth-info-text">別のAnipolisアカウントのメールアドレスとパスワードを入力してください。</p>
-				<form method="POST" action="?/addAccount&mode=add_account" class="auth-form">
+				<form
+					method="POST"
+					action="?/addAccount&mode=add_account"
+					class="auth-form"
+					novalidate
+					use:enhance={enhanceAuth('add_account')}
+				>
 					<div class="field">
 						<label for="add-email" class="field-label">メールアドレス</label>
 						<input
@@ -134,30 +233,24 @@ async function handlePasskeyLogin(): Promise<void> {
 					</div>
 					<div class="field">
 						<label for="add-password" class="field-label">パスワード</label>
-						<input
-							id="add-password"
-							name="password"
-							type="password"
-							class="field-input"
-							autocomplete="current-password"
-							required
-						>
+						<PasswordInput id="add-password" name="password" autocomplete="current-password" required />
 					</div>
-					<button type="submit" class="btn btn-primary auth-wide-button">アカウントを追加</button>
+					<button type="submit" class="btn btn-primary auth-wide-button" disabled={submitting !== null}>
+						{submitting === 'add_account' ? '確認中...' : 'アカウントを追加'}
+					</button>
 					<a href="/" class="btn btn-ghost auth-wide-button" style="text-align:center">キャンセル</a>
 				</form>
 			{:else if activeMode === 'register' && !hasInviteAccess}
 				<p class="auth-info-text">
-					このサービスは現在、クローズドβテスト中です。招待コードを入力するか、Discordサーバーのメンバーとしてログインしてください。
-					既にアカウントをお持ちの場合は<a href="/auth?mode=login&next={encodeURIComponent(next)}"
-						>ログイン</a
-					>へ。
+					現在はクローズドβです。招待コードを入力するか、Discordサーバーのメンバーとしてログインしてください。
 				</p>
 
 				<form
 					method="POST"
 					action="?/applyInvite&mode=register&next={encodeURIComponent(next)}"
 					class="auth-form"
+					novalidate
+					use:enhance={enhanceAuth('invite')}
 				>
 					<input type="hidden" name="next" value={next}>
 					<div class="field">
@@ -169,40 +262,34 @@ async function handlePasskeyLogin(): Promise<void> {
 							class="field-input"
 							autocomplete="off"
 							bind:value={() => inviteCodeState.value, setInviteCodeInput}
-							placeholder="招待してくれた方から届いたコードを入力してください"
+							placeholder="例: A1B2C3D4E5"
+							aria-describedby="invite-code-gate-hint"
 							required
 						>
+						<p id="invite-code-gate-hint" class="field-hint">
+							招待してくれた方から届いたコードを入力してください。
+						</p>
 					</div>
-					<button type="submit" class="btn btn-primary auth-wide-button">招待コードを確認</button>
+					<button type="submit" class="btn btn-primary auth-wide-button" disabled={submitting !== null}>
+						{submitting === 'invite' ? '確認中...' : '招待コードを確認'}
+					</button>
 				</form>
 
 				<div class="auth-divider"><span>または</span></div>
 
-				<form method="POST" action="?/discord" class="auth-oauth-form">
+				<form
+					method="POST"
+					action="?/discord"
+					class="auth-oauth-form"
+					onsubmit={(event) => startOAuth('discord', event)}
+				>
 					<input type="hidden" name="next" value={next}>
 					<input type="hidden" name="invite_code" value={inviteCodeState.value}>
-					<button type="submit" class="btn btn-outline auth-wide-button">
-						Discordサーバーのメンバーとして続ける
+					<button type="submit" class="btn btn-outline auth-wide-button" disabled={submitting !== null}>
+						{submitting === 'discord' ? 'Discordへ移動中...' : 'Discordサーバーのメンバーとして続ける'}
 					</button>
 				</form>
 			{:else}
-				{#if activeMode === 'login' && data.passkeyEnabled}
-					{#if passkeyError}
-						<div class="flash-error" role="alert">{passkeyError}</div>
-					{/if}
-					<button
-						type="button"
-						class="btn btn-outline auth-wide-button"
-						onclick={handlePasskeyLogin}
-						disabled={passkeyPending}
-					>
-						<span class="i-lucide-key-round" aria-hidden="true"></span>
-						{passkeyPending ? '確認中...' : 'パスキーでログイン'}
-					</button>
-
-					<div class="auth-divider"><span>または</span></div>
-				{/if}
-
 				{#if data.betaGateEnabled && (activeMode !== 'login' || (form && 'needInvite' in form && form.needInvite) || ['not_member', 'invite_required', 'invalid_invite', 'invite_exhausted'].includes(data.error ?? ''))}
 					<div class="field">
 						<label for="invite-code" class="field-label">招待コード</label>
@@ -212,7 +299,7 @@ async function handlePasskeyLogin(): Promise<void> {
 							class="field-input"
 							autocomplete="off"
 							bind:value={() => inviteCodeState.value, setInviteCodeInput}
-							placeholder="招待リンクから来た場合は自動入力されます"
+							placeholder="例: A1B2C3D4E5"
 						>
 						<p class="field-hint">
 							招待リンクをお持ちでない場合は、招待してくれた方から届いたコードを入力してください。
@@ -220,32 +307,53 @@ async function handlePasskeyLogin(): Promise<void> {
 					</div>
 				{/if}
 
-				<form method="POST" action="?/discord" class="auth-oauth-form">
-					<input type="hidden" name="next" value={next}>
-					<input type="hidden" name="invite_code" value={inviteCodeState.value}>
-					<button type="submit" class="btn btn-primary auth-wide-button">Discordで続ける</button>
-				</form>
+				<!-- 外部サービスでのログインは1つのまとまりにし、その下に「または」を1回だけ置いてメールアドレスへ続ける（#421） -->
+				<div class="auth-providers">
+					{#if activeMode === 'login' && data.passkeyEnabled}
+						{#if passkeyError}
+							<div class="flash-error" role="alert">{passkeyError}</div>
+						{/if}
+						<button
+							type="button"
+							class="btn btn-outline auth-wide-button"
+							onclick={handlePasskeyLogin}
+							disabled={passkeyPending || submitting !== null}
+						>
+							<span class="i-lucide-key-round" aria-hidden="true"></span>
+							{passkeyPending ? '確認中...' : 'パスキーでログイン'}
+						</button>
+					{/if}
 
-				<div class="auth-divider"><span>または</span></div>
+					{#each [{ kind: 'discord', label: 'Discord' }, { kind: 'google', label: 'Google' }, { kind: 'twitter', label: 'X' }] as provider (provider.kind)}
+						<form
+							method="POST"
+							action="?/{provider.kind}"
+							class="auth-oauth-form"
+							onsubmit={(event) => startOAuth(provider.kind as SubmitKind, event)}
+						>
+							<input type="hidden" name="next" value={next}>
+							<input type="hidden" name="invite_code" value={inviteCodeState.value}>
+							<button
+								type="submit"
+								class="btn btn-outline auth-wide-button"
+								disabled={submitting !== null}
+							>
+								{submitting === provider.kind ? `${provider.label}へ移動中...` : `${provider.label}で続ける`}
+							</button>
+						</form>
+					{/each}
+				</div>
 
-				<form method="POST" action="?/google" class="auth-oauth-form">
-					<input type="hidden" name="next" value={next}>
-					<input type="hidden" name="invite_code" value={inviteCodeState.value}>
-					<button type="submit" class="btn btn-outline auth-wide-button">Googleで続ける</button>
-				</form>
-
-				<div class="auth-divider"><span>または</span></div>
-
-				<form method="POST" action="?/twitter" class="auth-oauth-form">
-					<input type="hidden" name="next" value={next}>
-					<input type="hidden" name="invite_code" value={inviteCodeState.value}>
-					<button type="submit" class="btn btn-outline auth-wide-button">Xで続ける</button>
-				</form>
-
-				<div class="auth-divider"><span>または</span></div>
+				<div class="auth-divider"><span>またはメールアドレスで</span></div>
 
 				{#if activeMode === 'login'}
-					<form method="POST" action="?/login" class="auth-form">
+					<form
+						method="POST"
+						action="?/login"
+						class="auth-form"
+						novalidate
+						use:enhance={enhanceAuth('login')}
+					>
 						<input type="hidden" name="next" value={next}>
 						<input type="hidden" name="invite_code" value={inviteCodeState.value}>
 
@@ -264,23 +372,30 @@ async function handlePasskeyLogin(): Promise<void> {
 
 						<div class="field">
 							<label for="login-password" class="field-label">パスワード</label>
-							<input
+							<PasswordInput
 								id="login-password"
 								name="password"
-								type="password"
-								class="field-input"
 								autocomplete="current-password"
 								required
-							>
+								bind:input={loginPasswordInput}
+							/>
 							<p class="field-hint auth-forgot-link">
 								<a href="/auth/forgot-password">パスワードをお忘れですか？</a>
 							</p>
 						</div>
 
-						<button type="submit" class="btn btn-primary auth-wide-button">ログイン</button>
+						<button type="submit" class="btn btn-primary auth-wide-button" disabled={submitting !== null}>
+							{submitting === 'login' ? 'ログイン中...' : 'ログイン'}
+						</button>
 					</form>
 				{:else}
-					<form method="POST" action="?/register" class="auth-form">
+					<form
+						method="POST"
+						action="?/register"
+						class="auth-form"
+						novalidate
+						use:enhance={enhanceAuth('register')}
+					>
 						<input type="hidden" name="next" value={next}>
 						<input type="hidden" name="invite_code" value={inviteCodeState.value}>
 
@@ -336,16 +451,15 @@ async function handlePasskeyLogin(): Promise<void> {
 
 						<div class="field">
 							<label for="register-password" class="field-label">パスワード</label>
-							<input
+							<PasswordInput
 								id="register-password"
 								name="password"
-								type="password"
-								class="field-input"
-								class:field-error={form && 'field' in form && form.field === 'password'}
 								autocomplete="new-password"
-								minlength="6"
+								minlength={6}
 								required
-							>
+								invalid={Boolean(form && 'field' in form && form.field === 'password')}
+								bind:input={registerPasswordInput}
+							/>
 							{#if form && 'field' in form && form.field === 'password'}
 								<p class="field-error-msg">{form.message}</p>
 							{:else}
@@ -353,7 +467,9 @@ async function handlePasskeyLogin(): Promise<void> {
 							{/if}
 						</div>
 
-						<button type="submit" class="btn btn-primary auth-wide-button">アカウントを作成</button>
+						<button type="submit" class="btn btn-primary auth-wide-button" disabled={submitting !== null}>
+							{submitting === 'register' ? '作成中...' : 'アカウントを作成'}
+						</button>
 					</form>
 				{/if}
 			{/if}
@@ -422,6 +538,14 @@ async function handlePasskeyLogin(): Promise<void> {
 	justify-content: center;
 }
 
+/* 外部サービスのボタンのまとまり（#421） */
+.auth-providers {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	margin-top: 4px;
+}
+
 .auth-divider {
 	display: flex;
 	align-items: center;
@@ -455,13 +579,18 @@ async function handlePasskeyLogin(): Promise<void> {
 
 .auth-consent a {
 	color: var(--accent);
+	/* 行の高さを変えずにタップ領域を広げる（#428） */
+	padding-block: 6px;
 }
 
 .auth-forgot-link {
 	text-align: right;
 }
 
+/* 単独のリンクは押しやすい高さにする（WCAG 2.2 の 24px 以上、#428） */
 .auth-forgot-link a {
+	display: inline-block;
+	padding: 8px 0;
 	color: var(--fg-muted);
 	text-decoration: underline;
 }
