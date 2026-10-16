@@ -237,7 +237,7 @@ const activeTab = $derived.by((): "word" | "anime" => {
 				{/if}
 
 				<section class="settings-section">
-					<p class="settings-section-desc">
+					<div class="settings-section-desc">
 						ミュートしたルームの投稿を、タイムラインに表示しません。
 						<InfoTip label="ルームミュート">
 							<p>
@@ -246,7 +246,7 @@ const activeTab = $derived.by((): "word" | "anime" => {
 							<p>「毎週繰り返す」にすると、毎週の放送日から同じ日数だけミュートします。</p>
 							<p>ルームの中ではミュート中も投稿が見え、通知も届きます。</p>
 						</InfoTip>
-					</p>
+					</div>
 
 					{#if data.virtualAnime}
 						{@const v = data.virtualAnime}

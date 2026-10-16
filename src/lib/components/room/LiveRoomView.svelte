@@ -949,6 +949,10 @@ function formatCompactDate(iso: string) {
 					<!-- JavaScript が無いときの送信結果や、ほかの操作（投稿の削除など）の失敗 -->
 					<p class="form-error">{form.message}</p>
 				{/if}
+				{#if isEpisodeRoom}
+					<!-- スマホは投稿欄が1行の帯なので、注意は帯の上に出す（PC は投稿ボタンの横） -->
+					<p class="composer-note composer-note--mobile">タイムラインにも表示されます</p>
+				{/if}
 				<form method="POST" action="?/createPost" use:enhance={handleCreatePost} bind:this={composerFormEl}>
 					<div class="composer-body">
 						<textarea
@@ -1231,6 +1235,10 @@ function formatCompactDate(iso: string) {
 	margin-right: auto;
 	font-size: 12px;
 	color: var(--color-text-muted);
+}
+
+.composer-note--mobile {
+	display: none;
 }
 
 .room-summary-card {
@@ -1809,6 +1817,13 @@ function formatCompactDate(iso: string) {
 
 	.room-page-container .composer-footer .composer-note {
 		display: none;
+	}
+
+	.room-page-container .composer-note--mobile {
+		display: block;
+		margin: 0 0 4px;
+		font-size: 11px;
+		line-height: 1.4;
 	}
 
 	.room-page-container .composer-footer .char-count {
