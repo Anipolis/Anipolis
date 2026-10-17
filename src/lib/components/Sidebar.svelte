@@ -153,10 +153,16 @@ function isActive(path: string): boolean {
 			<line x1="3" y1="18" x2="21" y2="18" />
 		</svg>
 	</button>
-	<a href="/" class="mobile-header-logo" aria-label="Anipolis ホーム">
+	<!-- 初期設定の途中（minimal）は、押すと入力が消えて初期設定に戻されるだけなのでリンクにしない -->
+	<svelte:element
+		this={minimal ? "span" : "a"}
+		href={minimal ? undefined : "/"}
+		class="mobile-header-logo"
+		aria-label={minimal ? undefined : "Anipolis ホーム"}
+	>
 		<span class="anipolis-logo-icon size-22" aria-hidden="true"></span>
 		<span>Anipolis</span>
-	</a>
+	</svelte:element>
 	<div class="mobile-header-actions">
 		{#if session && !minimal}
 			<button
@@ -232,10 +238,17 @@ function isActive(path: string): boolean {
 <!-- Mobile drawer -->
 <div class="mobile-drawer" class:open={drawerOpen} role="dialog" aria-modal="true" aria-label="ナビゲーション">
 	<div class="mobile-drawer-header">
-		<a href="/" class="mobile-drawer-logo" onclick={closeDrawer}>
-			<span class="anipolis-logo-icon size-22" aria-hidden="true"></span>
-			<span>Anipolis</span>
-		</a>
+		{#if minimal}
+			<span class="mobile-drawer-logo">
+				<span class="anipolis-logo-icon size-22" aria-hidden="true"></span>
+				<span>Anipolis</span>
+			</span>
+		{:else}
+			<a href="/" class="mobile-drawer-logo" onclick={closeDrawer}>
+				<span class="anipolis-logo-icon size-22" aria-hidden="true"></span>
+				<span>Anipolis</span>
+			</a>
+		{/if}
 		<!-- svelte-ignore a11y_consider_explicit_label -->
 		<button type="button" class="mobile-drawer-close" onclick={closeDrawer} aria-label="メニューを閉じる">
 			<svg
@@ -508,10 +521,16 @@ function isActive(path: string): boolean {
 </div>
 
 <aside class="icon-sidebar">
-	<a href="/" class="sidebar-logo" aria-label="Anipolis ホーム" title="Anipolis">
+	<svelte:element
+		this={minimal ? "span" : "a"}
+		href={minimal ? undefined : "/"}
+		class="sidebar-logo"
+		aria-label={minimal ? undefined : "Anipolis ホーム"}
+		title="Anipolis"
+	>
 		<span class="anipolis-logo-icon size-28" aria-hidden="true"></span>
 		<span class="sidebar-logo-text">Anipolis</span>
-	</a>
+	</svelte:element>
 
 	{#if !minimal}
 		<nav class="sidebar-nav" aria-label="メインナビゲーション">
