@@ -11,6 +11,9 @@ interface Props {
 
 let { trending, animeTrending = [] }: Props = $props();
 
+// 直近7日間に1件も登録が無い作品は、話題になっていないのに並ぶと「トレンド」に見えないので出さない（#437）
+const activeAnimeTrending = $derived(animeTrending.filter((anime) => (anime.recent_count ?? 0) > 0));
+
 // ログイン中は設定タブから辿れるので、未ログイン時だけ規約系リンクを出す
 const showFooterLinks = $derived(!page.data.user);
 </script>
@@ -42,10 +45,10 @@ const showFooterLinks = $derived(!page.data.user);
 		<InfoTip label="アニメトレンド" text="この7日間でマイリストへの登録が多かった作品です。" />
 	</div>
 
-	{#if animeTrending.length === 0}
+	{#if activeAnimeTrending.length === 0}
 		<div class="trending-empty">まだアニメトレンドがありません</div>
 	{:else}
-		{#each animeTrending as anime, index}
+		{#each activeAnimeTrending as anime, index}
 			<a href="/anime/{anime.id}" class="trending-item anime-trending-item">
 				<span class="trending-rank">{index + 1}</span>
 				{#if anime.cover_url}
