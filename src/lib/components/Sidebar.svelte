@@ -19,6 +19,8 @@ interface Props {
 	unreadBroadcastNotificationCount?: number;
 	pendingReportsCount?: number;
 	extraAccounts?: StoredAccount[];
+	/** 初期設定の途中など。ロゴ・テーマ切り替え・アカウント（ログアウト）だけを出し、画面へのリンクは出さない */
+	minimal?: boolean;
 }
 
 let {
@@ -29,6 +31,7 @@ let {
 	unreadBroadcastNotificationCount = 0,
 	pendingReportsCount = 0,
 	extraAccounts = [],
+	minimal = false,
 }: Props = $props();
 
 let theme = $state(
@@ -155,7 +158,7 @@ function isActive(path: string): boolean {
 		<span>Anipolis</span>
 	</a>
 	<div class="mobile-header-actions">
-		{#if session}
+		{#if session && !minimal}
 			<button
 				type="button"
 				class="mobile-live-room-btn"
@@ -252,18 +255,43 @@ function isActive(path: string): boolean {
 		</button>
 	</div>
 
-	<nav class="mobile-drawer-nav">
-		{#if session}
-			<a href="/anime" class="mobile-drawer-btn" class:active={isActive('/anime')} onclick={closeDrawer}>
-				<AnimeIcon size={20} />
-				アニメ
-			</a>
+	{#if !minimal}
+		<nav class="mobile-drawer-nav">
+			{#if session}
+				<a href="/anime" class="mobile-drawer-btn" class:active={isActive('/anime')} onclick={closeDrawer}>
+					<AnimeIcon size={20} />
+					アニメ
+				</a>
 
-			{#if profile}
+				{#if profile}
+					<a
+						href="/profile/{profile.username}"
+						class="mobile-drawer-btn"
+						class:active={isActive('/profile')}
+						onclick={closeDrawer}
+					>
+						<svg
+							width="20"
+							height="20"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+						>
+							<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+							<circle cx="12" cy="7" r="4" />
+						</svg>
+						プロフィール
+					</a>
+				{/if}
+
 				<a
-					href="/profile/{profile.username}"
+					href="/exchange"
 					class="mobile-drawer-btn"
-					class:active={isActive('/profile')}
+					class:active={isActive('/exchange')}
 					onclick={closeDrawer}
 				>
 					<svg
@@ -277,72 +305,20 @@ function isActive(path: string): boolean {
 						stroke-linejoin="round"
 						aria-hidden="true"
 					>
-						<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-						<circle cx="12" cy="7" r="4" />
+						<path d="m16 3 4 4-4 4" />
+						<path d="M20 7H4" />
+						<path d="m8 21-4-4 4-4" />
+						<path d="M4 17h16" />
 					</svg>
-					プロフィール
+					トレード
 				</a>
-			{/if}
 
-			<a href="/exchange" class="mobile-drawer-btn" class:active={isActive('/exchange')} onclick={closeDrawer}>
-				<svg
-					width="20"
-					height="20"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
+				<a
+					href="/bookmarks"
+					class="mobile-drawer-btn"
+					class:active={isActive('/bookmarks')}
+					onclick={closeDrawer}
 				>
-					<path d="m16 3 4 4-4 4" />
-					<path d="M20 7H4" />
-					<path d="m8 21-4-4 4-4" />
-					<path d="M4 17h16" />
-				</svg>
-				トレード
-			</a>
-
-			<a href="/bookmarks" class="mobile-drawer-btn" class:active={isActive('/bookmarks')} onclick={closeDrawer}>
-				<svg
-					width="20"
-					height="20"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-				</svg>
-				ブックマーク
-			</a>
-
-			<a href="/settings" class="mobile-drawer-btn" class:active={isActive('/settings')} onclick={closeDrawer}>
-				<svg
-					width="20"
-					height="20"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<circle cx="12" cy="12" r="3" />
-					<path
-						d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
-					/>
-				</svg>
-				設定
-			</a>
-
-			{#if profile?.is_admin}
-				<a href="/admin" class="mobile-drawer-btn" class:active={isActive('/admin')} onclick={closeDrawer}>
 					<svg
 						width="20"
 						height="20"
@@ -354,18 +330,62 @@ function isActive(path: string): boolean {
 						stroke-linejoin="round"
 						aria-hidden="true"
 					>
-						<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+						<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
 					</svg>
-					Admin
-					{#if pendingReportsCount > 0}
-						<span class="mobile-drawer-badge"
-							>{pendingReportsCount > 99 ? '99+' : pendingReportsCount}</span
-						>
-					{/if}
+					ブックマーク
 				</a>
+
+				<a
+					href="/settings"
+					class="mobile-drawer-btn"
+					class:active={isActive('/settings')}
+					onclick={closeDrawer}
+				>
+					<svg
+						width="20"
+						height="20"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<circle cx="12" cy="12" r="3" />
+						<path
+							d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+						/>
+					</svg>
+					設定
+				</a>
+
+				{#if profile?.is_admin}
+					<a href="/admin" class="mobile-drawer-btn" class:active={isActive('/admin')} onclick={closeDrawer}>
+						<svg
+							width="20"
+							height="20"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+						>
+							<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+						</svg>
+						Admin
+						{#if pendingReportsCount > 0}
+							<span class="mobile-drawer-badge"
+								>{pendingReportsCount > 99 ? '99+' : pendingReportsCount}</span
+							>
+						{/if}
+					</a>
+				{/if}
 			{/if}
-		{/if}
-	</nav>
+		</nav>
+	{/if}
 
 	{#if session}
 		<div class="mobile-drawer-footer">
@@ -493,27 +513,9 @@ function isActive(path: string): boolean {
 		<span class="sidebar-logo-text">Anipolis</span>
 	</a>
 
-	<nav class="sidebar-nav" aria-label="メインナビゲーション">
-		<a href="/" class="sidebar-btn" class:active={isActive('/')} aria-label="ホーム" title="ホーム">
-			<svg
-				width="22"
-				height="22"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-				aria-hidden="true"
-			>
-				<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-				<polyline points="9 22 9 12 15 12 15 22" />
-			</svg>
-			<span class="sidebar-btn-label">ホーム</span>
-		</a>
-
-		{#if session}
-			<a href="/search" class="sidebar-btn" class:active={isActive('/search')} aria-label="検索" title="検索">
+	{#if !minimal}
+		<nav class="sidebar-nav" aria-label="メインナビゲーション">
+			<a href="/" class="sidebar-btn" class:active={isActive('/')} aria-label="ホーム" title="ホーム">
 				<svg
 					width="22"
 					height="22"
@@ -525,177 +527,14 @@ function isActive(path: string): boolean {
 					stroke-linejoin="round"
 					aria-hidden="true"
 				>
-					<circle cx="11" cy="11" r="8" />
-					<path d="m21 21-4.35-4.35" />
+					<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+					<polyline points="9 22 9 12 15 12 15 22" />
 				</svg>
-				<span class="sidebar-btn-label">検索</span>
-			</a>
-		{/if}
-
-		{#if session}
-			<a
-				href="/notifications"
-				class="sidebar-btn"
-				class:active={isActive('/notifications')}
-				aria-label="通知"
-				title="通知"
-			>
-				<svg
-					width="22"
-					height="22"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-					<path d="M13.73 21a2 2 0 0 1-3.46 0" />
-				</svg>
-				{#if notificationCount > 0}
-					<span class="sidebar-badge">{notificationCount > 99 ? '99+' : notificationCount}</span>
-				{/if}
-				<span class="sidebar-btn-label">通知</span>
-			</a>
-		{/if}
-
-		<a href="/anime" class="sidebar-btn" class:active={isActive('/anime')} aria-label="アニメ" title="アニメ">
-			<AnimeIcon />
-			<span class="sidebar-btn-label">アニメ</span>
-		</a>
-
-		{#if session}
-			<a
-				href="/mylist"
-				class="sidebar-btn"
-				class:active={isActive('/mylist')}
-				aria-label="マイリスト"
-				title="マイリスト"
-			>
-				<svg
-					width="22"
-					height="22"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<path d="M4 6h.01" />
-					<path d="M4 12h.01" />
-					<path d="M4 18h.01" />
-					<path d="M8 6h12" />
-					<path d="M8 12h12" />
-					<path d="M8 18h12" />
-				</svg>
-				<span class="sidebar-btn-label">マイリスト</span>
-			</a>
-		{/if}
-
-		<a
-			href="/schedule"
-			class="sidebar-btn"
-			class:active={isActive('/schedule') || isActive('/events')}
-			aria-label="カレンダー"
-			title="カレンダー"
-		>
-			<svg
-				width="22"
-				height="22"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-				aria-hidden="true"
-			>
-				<rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
-				<path d="M16 2l-4 5-4-5" />
-			</svg>
-			{#if unreadBroadcastNotificationCount > 0}
-				<span class="sidebar-indicator" aria-label="未読の放送通知があります"></span>
-			{/if}
-			<span class="sidebar-btn-label">カレンダー</span>
-		</a>
-
-		{#if session}
-			<a
-				href="/exchange"
-				class="sidebar-btn"
-				class:active={isActive('/exchange')}
-				aria-label="トレード"
-				title="トレード"
-			>
-				<svg
-					width="22"
-					height="22"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-					class="icon-lines"
-				>
-					<path d="m16 3 4 4-4 4" />
-					<path d="M20 7H4" />
-					<path d="m8 21-4-4 4-4" />
-					<path d="M4 17h16" />
-				</svg>
-				<span class="sidebar-btn-label">トレード</span>
+				<span class="sidebar-btn-label">ホーム</span>
 			</a>
 
-			<a
-				href="/bookmarks"
-				class="sidebar-btn"
-				class:active={isActive('/bookmarks')}
-				aria-label="ブックマーク"
-				title="ブックマーク"
-			>
-				<svg
-					width="22"
-					height="22"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-				</svg>
-				<span class="sidebar-btn-label">ブックマーク</span>
-			</a>
-
-			<a href="/settings" class="sidebar-btn" class:active={isActive('/settings')} aria-label="設定" title="設定">
-				<svg
-					width="22"
-					height="22"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<circle cx="12" cy="12" r="3" />
-					<path
-						d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
-					/>
-				</svg>
-				<span class="sidebar-btn-label">設定</span>
-			</a>
-
-			{#if profile?.is_admin}
-				<a href="/admin" class="sidebar-btn" class:active={isActive('/admin')} aria-label="Admin" title="Admin">
+			{#if session}
+				<a href="/search" class="sidebar-btn" class:active={isActive('/search')} aria-label="検索" title="検索">
 					<svg
 						width="22"
 						height="22"
@@ -707,16 +546,211 @@ function isActive(path: string): boolean {
 						stroke-linejoin="round"
 						aria-hidden="true"
 					>
-						<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+						<circle cx="11" cy="11" r="8" />
+						<path d="m21 21-4.35-4.35" />
 					</svg>
-					{#if pendingReportsCount > 0}
-						<span class="sidebar-badge">{pendingReportsCount > 99 ? '99+' : pendingReportsCount}</span>
-					{/if}
-					<span class="sidebar-btn-label">Admin</span>
+					<span class="sidebar-btn-label">検索</span>
 				</a>
 			{/if}
-		{/if}
-	</nav>
+
+			{#if session}
+				<a
+					href="/notifications"
+					class="sidebar-btn"
+					class:active={isActive('/notifications')}
+					aria-label="通知"
+					title="通知"
+				>
+					<svg
+						width="22"
+						height="22"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+						<path d="M13.73 21a2 2 0 0 1-3.46 0" />
+					</svg>
+					{#if notificationCount > 0}
+						<span class="sidebar-badge">{notificationCount > 99 ? '99+' : notificationCount}</span>
+					{/if}
+					<span class="sidebar-btn-label">通知</span>
+				</a>
+			{/if}
+
+			<a href="/anime" class="sidebar-btn" class:active={isActive('/anime')} aria-label="アニメ" title="アニメ">
+				<AnimeIcon />
+				<span class="sidebar-btn-label">アニメ</span>
+			</a>
+
+			{#if session}
+				<a
+					href="/mylist"
+					class="sidebar-btn"
+					class:active={isActive('/mylist')}
+					aria-label="マイリスト"
+					title="マイリスト"
+				>
+					<svg
+						width="22"
+						height="22"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<path d="M4 6h.01" />
+						<path d="M4 12h.01" />
+						<path d="M4 18h.01" />
+						<path d="M8 6h12" />
+						<path d="M8 12h12" />
+						<path d="M8 18h12" />
+					</svg>
+					<span class="sidebar-btn-label">マイリスト</span>
+				</a>
+			{/if}
+
+			<a
+				href="/schedule"
+				class="sidebar-btn"
+				class:active={isActive('/schedule') || isActive('/events')}
+				aria-label="カレンダー"
+				title="カレンダー"
+			>
+				<svg
+					width="22"
+					height="22"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
+					<rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+					<path d="M16 2l-4 5-4-5" />
+				</svg>
+				{#if unreadBroadcastNotificationCount > 0}
+					<span class="sidebar-indicator" aria-label="未読の放送通知があります"></span>
+				{/if}
+				<span class="sidebar-btn-label">カレンダー</span>
+			</a>
+
+			{#if session}
+				<a
+					href="/exchange"
+					class="sidebar-btn"
+					class:active={isActive('/exchange')}
+					aria-label="トレード"
+					title="トレード"
+				>
+					<svg
+						width="22"
+						height="22"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+						class="icon-lines"
+					>
+						<path d="m16 3 4 4-4 4" />
+						<path d="M20 7H4" />
+						<path d="m8 21-4-4 4-4" />
+						<path d="M4 17h16" />
+					</svg>
+					<span class="sidebar-btn-label">トレード</span>
+				</a>
+
+				<a
+					href="/bookmarks"
+					class="sidebar-btn"
+					class:active={isActive('/bookmarks')}
+					aria-label="ブックマーク"
+					title="ブックマーク"
+				>
+					<svg
+						width="22"
+						height="22"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+					</svg>
+					<span class="sidebar-btn-label">ブックマーク</span>
+				</a>
+
+				<a
+					href="/settings"
+					class="sidebar-btn"
+					class:active={isActive('/settings')}
+					aria-label="設定"
+					title="設定"
+				>
+					<svg
+						width="22"
+						height="22"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<circle cx="12" cy="12" r="3" />
+						<path
+							d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+						/>
+					</svg>
+					<span class="sidebar-btn-label">設定</span>
+				</a>
+
+				{#if profile?.is_admin}
+					<a
+						href="/admin"
+						class="sidebar-btn"
+						class:active={isActive('/admin')}
+						aria-label="Admin"
+						title="Admin"
+					>
+						<svg
+							width="22"
+							height="22"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+						>
+							<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+						</svg>
+						{#if pendingReportsCount > 0}
+							<span class="sidebar-badge">{pendingReportsCount > 99 ? '99+' : pendingReportsCount}</span>
+						{/if}
+						<span class="sidebar-btn-label">Admin</span>
+					</a>
+				{/if}
+			{/if}
+		</nav>
+	{/if}
 
 	<div class="sidebar-bottom">
 		<button

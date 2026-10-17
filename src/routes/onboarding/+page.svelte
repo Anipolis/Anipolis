@@ -100,7 +100,11 @@ onDestroy(clearSelectedAvatarFile);
 					<div class="onboarding-avatar-copy">
 						<div class="field-label">プロフィール画像</div>
 						<p class="field-hint">
-							ログインに使ったサービスのアイコンを使うか、画像をアップロードできます。
+							{#if data.avatarUrl}
+								ログインに使ったサービスのアイコンを使うか、画像をアップロードできます。
+							{:else}
+								画像をアップロードできます。設定しなくても始められます。
+							{/if}
 						</p>
 						<div class="onboarding-avatar-actions">
 							<label class="btn btn-outline onboarding-avatar-file">
@@ -124,9 +128,12 @@ onDestroy(clearSelectedAvatarFile);
 									候補を使う
 								</button>
 							{/if}
-							<button type="button" class="btn btn-ghost" disabled={submitting} onclick={clearAvatar}>
-								使わない
-							</button>
+							<!-- 何も選んでいないときの「使わない」は押す意味が無いので、選んだあとだけ出す -->
+							{#if avatarChoice !== "none"}
+								<button type="button" class="btn btn-ghost" disabled={submitting} onclick={clearAvatar}>
+									使わない
+								</button>
+							{/if}
 						</div>
 						{#if form && "field" in form && form.field === "avatar"}
 							<p class="field-error-msg">{form.message}</p>
