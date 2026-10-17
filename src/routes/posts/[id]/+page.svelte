@@ -132,6 +132,9 @@ $effect(() => {
 			{:else}
 				<div class="auth-gate">
 					<p>返信するにはログインが必要です</p>
+					<a href={`/auth?next=${encodeURIComponent(page.url.pathname)}`} class="btn btn-primary"
+						>ログインして返信する</a
+					>
 				</div>
 			{/if}
 

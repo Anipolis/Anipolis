@@ -1,6 +1,6 @@
-import { redirect } from "@sveltejs/kit";
 import type { NotificationCategory } from "$lib/server/actions";
 import { getAnimeRankingTrending, getNotifications, getUnreadNotificationCountsByCategory } from "$lib/server/queries";
+import { redirectToLogin } from "$lib/server/require-login";
 import type { PageServerLoad } from "./$types";
 
 const NORMAL_TYPES = [
@@ -23,7 +23,7 @@ function resolveTab(value: string | null): NotificationCategory {
 
 export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession }, url, parent }) => {
 	const { user } = await safeGetSession();
-	if (!user) redirect(302, "/");
+	if (!user) redirectToLogin(url);
 
 	await parent();
 

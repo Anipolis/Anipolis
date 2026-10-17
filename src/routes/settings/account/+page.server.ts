@@ -1,6 +1,7 @@
-import { fail, redirect } from "@sveltejs/kit";
+import { fail } from "@sveltejs/kit";
 import { hasPasswordProvider } from "$lib/server/auth";
 import { USERNAME_HELD_ERROR_MESSAGE, USERNAME_HELD_USER_MESSAGE } from "$lib/server/queries";
+import { redirectToLogin } from "$lib/server/require-login";
 import type { Actions, PageServerLoad } from "./$types";
 
 async function verifyCurrentPassword(
@@ -22,9 +23,9 @@ async function verifyCurrentPassword(
 	return null;
 }
 
-export const load: PageServerLoad = async ({ locals: { safeGetSession } }) => {
+export const load: PageServerLoad = async ({ url, locals: { safeGetSession } }) => {
 	const { session, user } = await safeGetSession();
-	if (!user) redirect(303, "/");
+	if (!user) redirectToLogin(url);
 	return { hasEmailProvider: hasPasswordProvider(user, session) };
 };
 

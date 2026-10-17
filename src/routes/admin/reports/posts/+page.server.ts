@@ -1,11 +1,12 @@
 import { fail, redirect } from "@sveltejs/kit";
 import { adminDeletePostAction, adminTogglePostVisibilityAction, updateReportStatusAction } from "$lib/server/actions";
 import { getAdminReportsByTargetType, isAdminUser } from "$lib/server/queries";
+import { redirectToLogin } from "$lib/server/require-login";
 import type { Actions, PageServerLoad } from "./$types";
 
-export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession } }) => {
+export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
-	if (!user) redirect(302, "/");
+	if (!user) redirectToLogin(url);
 
 	const isAdmin = await isAdminUser(supabase, user.id);
 	if (!isAdmin) redirect(302, "/");

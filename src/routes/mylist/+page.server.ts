@@ -1,11 +1,12 @@
 import { fail, redirect } from "@sveltejs/kit";
 import { removeUserAnimeEntry, upsertUserAnimeEntry } from "$lib/server/actions";
 import { getAnimeRankingTrending, getUserAnimeList } from "$lib/server/queries";
+import { redirectToLogin } from "$lib/server/require-login";
 import type { Actions, PageServerLoad } from "./$types";
 
-export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession } }) => {
+export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
-	if (!user) redirect(302, "/");
+	if (!user) redirectToLogin(url);
 
 	const { data: profile } = await supabase
 		.from("profiles")

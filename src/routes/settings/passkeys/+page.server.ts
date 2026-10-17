@@ -1,4 +1,4 @@
-import { error, fail, redirect } from "@sveltejs/kit";
+import { error, fail } from "@sveltejs/kit";
 import { hasPasswordProvider } from "$lib/server/auth";
 import {
 	deletePasskey,
@@ -8,6 +8,7 @@ import {
 	PASSKEY_REAUTH_WINDOW_MS,
 } from "$lib/server/passkey";
 import { isRateLimited } from "$lib/server/rate-limit";
+import { redirectToLogin } from "$lib/server/require-login";
 import type { Actions, PageServerLoad } from "./$types";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -22,7 +23,7 @@ const REAUTH_PROVIDERS = [
 
 export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {
 	const { user, session } = await safeGetSession();
-	if (!user) redirect(303, "/");
+	if (!user) redirectToLogin(url);
 	if (!isPasskeyEnabled()) error(404, "Not Found");
 
 	const linkedProviders = new Set(user.identities?.map((identity) => identity.provider));

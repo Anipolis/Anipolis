@@ -1,11 +1,12 @@
-import { fail, redirect } from "@sveltejs/kit";
+import { fail } from "@sveltejs/kit";
 import { approveFollowRequestAction, rejectFollowRequestAction } from "$lib/server/actions";
 import { getPendingFollowRequests } from "$lib/server/queries";
+import { redirectToLogin } from "$lib/server/require-login";
 import type { Actions, PageServerLoad } from "./$types";
 
-export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession } }) => {
+export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
-	if (!user) redirect(302, "/");
+	if (!user) redirectToLogin(url);
 
 	const requests = await getPendingFollowRequests(supabase, user.id).catch((err) => {
 		console.error("[follow-requests] error:", err);

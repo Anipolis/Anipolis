@@ -1,11 +1,12 @@
-import { error, fail } from "@sveltejs/kit";
+import { fail } from "@sveltejs/kit";
 import { deletePostAction, toggleBookmarkAction, toggleLikeAction, toggleRepostAction } from "$lib/server/actions";
 import { getAnimeRankingTrending, getBookmarkedPosts } from "$lib/server/queries";
+import { redirectToLogin } from "$lib/server/require-login";
 import type { Actions, PageServerLoad } from "./$types";
 
-export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession } }) => {
+export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
-	if (!user) error(401, "ログインが必要です");
+	if (!user) redirectToLogin(url);
 
 	const [posts, trendingResult, animeTrending] = await Promise.all([
 		getBookmarkedPosts(supabase, user.id),
