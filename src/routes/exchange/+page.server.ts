@@ -1,11 +1,12 @@
-import { fail, redirect } from "@sveltejs/kit";
+import { fail } from "@sveltejs/kit";
 import { cancelAnimeExchangeAction, exchangeAnimeAction } from "$lib/server/actions";
 import { getAnimeExchangeEntries, getAnimeRankingTrending, getTrendingHashtags } from "$lib/server/queries";
+import { redirectToLogin } from "$lib/server/require-login";
 import type { Actions, PageServerLoad } from "./$types";
 
-export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession } }) => {
+export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
-	if (!user) throw redirect(302, "/");
+	if (!user) redirectToLogin(url);
 
 	const [exchanges, waitingExchanges, trendingResult, animeTrending] = await Promise.all([
 		getAnimeExchangeEntries(supabase, user.id),
