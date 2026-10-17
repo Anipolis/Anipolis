@@ -1446,8 +1446,10 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 }
 .slot-meta-row {
 	display: flex;
+	/* 列が狭いと「LIVE」の札が右端で切れて「LIV」になるので、入りきらなければ次の行に回す（#433） */
+	flex-wrap: wrap;
 	align-items: center;
-	gap: 4px;
+	gap: 2px 4px;
 	padding-right: 28px;
 }
 .slot-meta-row--suspension {
