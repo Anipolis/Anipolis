@@ -147,6 +147,40 @@ export function buildTimelineNextCursor<T>(
 	return last ? toCursor(last) : null;
 }
 
+type TimelinePageResult<T> = { posts: T[]; error: unknown | null; nextCursor: TimelineCursor | null };
+
+/**
+ * ミュート・ブロックで間引いた結果が少ないページは、続きを取り足して埋める。
+ * 50 件取っても数件しか残らないと、ミュートの多い人ほど「さらに読み込む」を何度も押すことになるため。
+ * 取り足すのは minVisible 件に届くまで、最大 maxExtraFetches 回。続きの目印は最後に取った分のものを返す。
+ * 取り足しで失敗したら、それまでの分と、その時点の目印を返す（続きは次のページで読める）。
+ */
+export async function fillTimelinePage<T extends { id: string }>(
+	fetchPage: (cursor: TimelineCursor | undefined) => Promise<TimelinePageResult<T>>,
+	cursor: TimelineCursor | undefined,
+	options: { minVisible?: number; maxExtraFetches?: number } = {},
+): Promise<TimelinePageResult<T>> {
+	const { minVisible = 20, maxExtraFetches = 3 } = options;
+	const first = await fetchPage(cursor);
+	if (first.error) return first;
+
+	const posts = [...first.posts];
+	const seen = new Set(posts.map((post) => post.id));
+	let nextCursor = first.nextCursor;
+	for (let extra = 0; extra < maxExtraFetches && posts.length < minVisible && nextCursor; extra++) {
+		const more = await fetchPage(nextCursor);
+		if (more.error) break;
+		// フォロー中タブでは、同じ投稿が別の人のリポストとして続きに出ることがある
+		for (const post of more.posts) {
+			if (seen.has(post.id)) continue;
+			seen.add(post.id);
+			posts.push(post);
+		}
+		nextCursor = more.nextCursor;
+	}
+	return { posts, error: null, nextCursor };
+}
+
 /**
  * リクエストスコープのミュート設定キャッシュ。
  *
