@@ -260,6 +260,7 @@ $effect(() => {
 	<main class="feed-column mylist-page">
 		<div class="mylist-container">
 			<header class="mylist-header">
+				<h1 class="mylist-title">マイリスト</h1>
 				<div class="mylist-title-row">
 					<div class="header-actions">
 						<!-- 表示切り替え -->
@@ -537,6 +538,13 @@ $effect(() => {
 
 .mylist-header {
 	margin-bottom: 28px;
+}
+
+/* ほかの画面（通知など）と同じく、ページの見出しを出す（#438） */
+.mylist-title {
+	font-size: 1.25rem;
+	font-weight: 700;
+	margin: 0 0 12px;
 }
 
 .mylist-title-row {

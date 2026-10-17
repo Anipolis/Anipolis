@@ -2026,18 +2026,10 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	.day-tab-date {
 		font-size: 0.72rem;
 	}
+	/* 同じ時刻の番組も縦に並べ、時刻の順に1列で追えるようにする（2列だと1本の時刻と混ざって読みにくい #438） */
 	.anime-time-group {
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
 		gap: 4px;
 		width: 100%;
-		max-width: 388px;
-	}
-	.anime-time-group > .anime-slot-wrap:nth-child(odd) .room-alert-menu,
-	.anime-time-group > .event-slot-wrap:nth-child(odd) .room-alert-menu {
-		left: 4px;
-		right: auto;
-		width: min(240px, calc(100vw - 32px));
 	}
 	.anime-slot {
 		height: 98px;
