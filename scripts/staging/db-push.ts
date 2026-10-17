@@ -3,6 +3,7 @@
 //   pnpm staging:db-push -- --apply … 実際に流す
 
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { loadStagingEnv } from "./env.ts";
@@ -11,12 +12,20 @@ const env = loadStagingEnv();
 if (!env.dbUrl) throw new Error(".env.staging に STAGING_DB_URL がありません");
 
 const apply = process.argv.includes("--apply");
-// パスワードの記号がシェルで崩れないよう、シェルを通さずに CLI を直接起動する
-const cli = join(dirname(createRequire(import.meta.url).resolve("supabase/package.json")), "dist", "supabase.js");
-const args = [cli, "db", "push", "--db-url", env.dbUrl, ...(apply ? ["--yes"] : ["--dry-run"])];
+// パスワードの記号がシェルで崩れないよう、シェルを通さずに CLI を直接起動する。
+// 実行ファイルの場所は CLI の版で変わる（dist/supabase.js のときと bin/supabase のときがある）ので、
+// パッケージの bin の定義から探す。JS なら node で、そうでなければそのまま起動する
+const manifestPath = createRequire(import.meta.url).resolve("supabase/package.json");
+const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as { bin?: string | Record<string, string> };
+const binPath = typeof manifest.bin === "string" ? manifest.bin : manifest.bin?.["supabase"];
+if (!binPath) throw new Error("supabase パッケージに実行ファイルの定義（bin）がありません");
+const bin = join(dirname(manifestPath), binPath);
+const pushArgs = ["db", "push", "--db-url", env.dbUrl, ...(apply ? ["--yes"] : ["--dry-run"])];
+const [command, args] = /\.[cm]?js$/.test(bin) ? [process.execPath, [bin, ...pushArgs]] : [bin, pushArgs];
 console.log(`ステージング（${env.ref}）に migration を${apply ? "流します" : "流す前の確認をします（dry-run）"}`);
 
-const result = spawnSync(process.execPath, args, { stdio: ["inherit", "pipe", "pipe"], encoding: "utf8" });
+const result = spawnSync(command, args, { stdio: ["inherit", "pipe", "pipe"], encoding: "utf8" });
+if (result.error) throw result.error;
 // 接続文字列（パスワード入り）がエラーに出ても表示しない
 const mask = (text: string) =>
 	text.replaceAll(env.dbUrl, "<STAGING_DB_URL>").replace(/postgres(?:ql)?:\/\/\S+/g, "<db-url>");

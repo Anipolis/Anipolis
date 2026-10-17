@@ -61,11 +61,15 @@ async function reset() {
 		if (!id) continue;
 		// プロフィール以下（投稿・フォロー・マイリストなど）は外部キーの CASCADE で消える
 		const { error } = await admin.auth.admin.deleteUser(id);
-		if (error) throw error;
-		await admin.from("released_usernames").delete().eq("username", user.username);
+		if (error) throw new Error(`${user.username} の削除: ${error.message}`);
+		await must(
+			`${user.username} の保留ユーザー名の削除`,
+			admin.from("released_usernames").delete().eq("username", user.username),
+		);
 		console.log(`消しました: ${user.username}`);
 	}
-	await admin.from("invites").delete().eq("code", INVITE_CODE);
+	// 消し損ねると、作り直したときに招待コードの作成が重複で失敗するので、失敗はそのまま止める
+	await must("招待コードの削除", admin.from("invites").delete().eq("code", INVITE_CODE));
 }
 
 async function must<T>(
