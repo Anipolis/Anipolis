@@ -1035,8 +1035,9 @@ function formatCompactDate(iso: string) {
 						>
 						<span class="room-connection-updated">最終更新 {lastUpdateLabel}</span>
 					</span>
-					<!-- つながっている間は押す必要が無いので、切れた・再接続中のときだけ出す（#432） -->
-					{#if connectionNeedsAttention || reconnecting}
+					<!-- リアルタイムでつながっている間は押す必要が無いので出さない（#432）。定期取得（polling）に
+					     落ちたときはリアルタイムに戻せるよう出す（目立たせるのは要対応のときだけ） -->
+					{#if connectionNeedsAttention || reconnecting || connectionPhase === "polling"}
 						<button
 							type="button"
 							class="room-connection-reconnect"
