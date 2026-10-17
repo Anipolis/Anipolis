@@ -17,6 +17,8 @@ pnpm install
 pnpm dev
 ```
 
+`.env.staging` があれば確認用の Supabase（ステージング）につながる。無ければ `.env` の値で動く。詳しくは [docs/staging.md](docs/staging.md)。
+
 ## ビルド
 
 ```sh

@@ -3,6 +3,7 @@ import { onMount, untrack } from "svelte";
 import { invalidate } from "$app/navigation";
 import { navigating, page } from "$app/state";
 import AccountBoundary from "$lib/components/AccountBoundary.svelte";
+import DevEnvBadge from "$lib/components/DevEnvBadge.svelte";
 import MobileBottomNav from "$lib/components/MobileBottomNav.svelte";
 import MobileSwipeNavigation from "$lib/components/MobileSwipeNavigation.svelte";
 import RouteNavigationSkeleton from "$lib/components/RouteNavigationSkeleton.svelte";
@@ -148,6 +149,7 @@ function handleFabClick() {
 </div>
 
 <MobileBottomNav session={data.session} {unreadNotificationCount} />
+<DevEnvBadge />
 <MobileSwipeNavigation session={data.session} />
 
 <!-- FAB: compose post (mobile only) -->
