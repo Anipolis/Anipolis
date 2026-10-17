@@ -703,7 +703,7 @@ $effect(() => {
 				{/if}
 				{#if displayResources.length}
 					<div class="resource-links">
-						<div class="resource-links-title">Resources</div>
+						<div class="resource-links-title">関連リンク</div>
 						<div class="links-list">
 							{#each displayResources as resource (resource.url)}
 								<a
@@ -737,6 +737,7 @@ $effect(() => {
 						<span class="stat-card-sub">{data.anime.score_count}件の評価</span>
 					{:else}
 						<span class="stat-card-value">—</span>
+						<span class="stat-card-sub">まだ評価がありません</span>
 					{/if}
 				</div>
 				{#if data.anime.list_count}
@@ -1992,7 +1993,8 @@ $effect(() => {
 
 .anime-cover {
 	width: 100%;
-	aspect-ratio: 1 / 1.414;
+	/* カバーの規格（400×566）。縦横比の違う画像でも枠の下に余白が出ないよう、画像は枠いっぱいに合わせる */
+	aspect-ratio: 400 / 566;
 	border-radius: 14px;
 	overflow: hidden;
 	background: var(--color-surface);
@@ -2001,6 +2003,8 @@ $effect(() => {
 }
 .anime-cover img {
 	width: 100%;
+	height: 100%;
+	object-fit: cover;
 	display: block;
 	-webkit-backface-visibility: hidden;
 	backface-visibility: hidden;
@@ -2126,6 +2130,8 @@ $effect(() => {
 .resource-link {
 	border-color: var(--border);
 	color: var(--text-muted);
+	/* 「しょぼいカレンダー」などが折り返すとボタンの形が崩れるので、1行に保つ */
+	white-space: nowrap;
 }
 .resource-link:hover {
 	background: var(--hover-bg);
@@ -2143,7 +2149,16 @@ $effect(() => {
 	font-size: 0.72rem;
 	font-weight: 600;
 	letter-spacing: 0.04em;
-	text-transform: uppercase;
+}
+/* スマホ幅では表紙の下の狭い列に入るので、余白と字間を詰めて「しょぼいカレンダー」も1行で収める */
+@media (max-width: 768px) {
+	.resource-links {
+		padding: 0;
+	}
+	.resource-link {
+		padding: 2px 6px;
+		letter-spacing: 0;
+	}
 }
 .copyright {
 	font-size: 0.72rem;
