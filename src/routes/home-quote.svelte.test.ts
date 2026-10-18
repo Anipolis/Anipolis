@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const navigation = vi.hoisted(() => ({
 	goto: vi.fn(async () => {}),
 	replaceState: vi.fn(),
+	pushState: vi.fn(),
 }));
 
 vi.mock("$app/navigation", () => navigation);
@@ -11,15 +12,22 @@ vi.mock("$app/forms", () => ({ enhance: () => ({ destroy() {} }) }));
 vi.mock("$app/state", () => ({
 	page: {
 		get url() {
-			return new URL(window.location.href);
+			return locationState.url;
 		},
-		state: {},
+		get state() {
+			return locationState.state;
+		},
 		data: {},
 	},
 	navigating: { type: null, from: null, to: null },
 }));
 
 import HomePage from "./+page.svelte";
+
+const locationState = $state<{ url: URL; state: App.PageState }>({
+	url: new URL("http://localhost/"),
+	state: {},
+});
 
 const QUOTED_ANIME = {
 	id: "5",
@@ -49,6 +57,8 @@ function pageData(initialAnime: typeof QUOTED_ANIME | null, delayMs = 0, userId 
 		user: { id: userId },
 		tab: "all",
 		before: null,
+		beforeId: null,
+		alternateTimeline: Promise.resolve({ posts: [], nextCursor: null }),
 		timeline: Promise.resolve({ posts: [], nextCursor: null }),
 		// 実際の再読み込みはストリーミングで数百 ms 保留になる。即時解決だと待機表示を経由しないので遅らせる
 		pageExtras:
@@ -76,6 +86,15 @@ describe("home page quote flow (#294)", () => {
 		navigation.goto.mockClear();
 		navigation.replaceState.mockClear();
 		window.history.replaceState({}, "", "/?quote_anime=5#compose");
+		locationState.url = new URL(window.location.href);
+		locationState.state = {};
+		navigation.pushState.mockReset();
+		navigation.pushState.mockImplementation((url: URL, state: App.PageState) => {
+			// SvelteKit と同じくブラウザの URL と page.state だけを更新する。
+			// page.url まで更新すると、実際には切り替わらない不具合を見逃す。
+			window.history.pushState(state, "", url);
+			locationState.state = state;
+		});
 		vi.stubGlobal(
 			"ResizeObserver",
 			class {
@@ -87,6 +106,49 @@ describe("home page quote flow (#294)", () => {
 
 	afterEach(() => {
 		vi.unstubAllGlobals();
+	});
+
+	it("switches between retained timelines without navigation or another loading state", async () => {
+		const props = $state({ data: pageData(null) });
+		const target = document.createElement("div");
+		document.body.appendChild(target);
+		const component = mount(HomePage, { target, props: props as never });
+		await settle();
+		const links = target.querySelectorAll<HTMLAnchorElement>(".timeline-tab");
+		const tabBar = target.querySelector(".timeline-tabs");
+		const panels = [...target.querySelectorAll(".home-timeline")];
+		expect(tabBar?.classList.contains("following-active")).toBe(false);
+		const visibleText = () => target.querySelector(".home-timeline:not([hidden])")?.textContent;
+
+		links[1]?.click();
+		await settle();
+		expect(new URL(window.location.href).searchParams.get("tab")).toBe("following");
+		expect(locationState.url.searchParams.get("tab")).toBeNull();
+		expect(links[1]?.getAttribute("aria-current")).toBe("page");
+		expect(tabBar?.classList.contains("following-active")).toBe(true);
+		expect(visibleText()).toContain("フォロー中のユーザーの投稿がありません");
+		links[0]?.click();
+		await settle();
+		expect(visibleText()).toContain("まだ投稿がありません");
+		expect(tabBar?.classList.contains("following-active")).toBe(false);
+		// アニメーションのために一覧を作り直さない（楽観更新もそのまま残す）。
+		expect(target.querySelectorAll(".home-timeline")[0]).toBe(panels[0]);
+		expect(target.querySelectorAll(".home-timeline")[1]).toBe(panels[1]);
+		expect(target.querySelector(".posts-loading-spinner")).toBeNull();
+		expect(navigation.goto).not.toHaveBeenCalled();
+		expect(navigation.pushState).toHaveBeenCalledTimes(2);
+
+		// shallow な戻る・進むでは page.state から選択を復元する。
+		locationState.state = { homeTimelineTab: "following" };
+		await settle();
+		expect(links[1]?.getAttribute("aria-current")).toBe("page");
+		expect(visibleText()).toContain("フォロー中のユーザーの投稿がありません");
+		locationState.state = {};
+		await settle();
+		expect(links[0]?.getAttribute("aria-current")).toBe("page");
+		expect(visibleText()).toContain("まだ投稿がありません");
+		await unmount(component);
+		target.remove();
 	});
 
 	it("keeps the quoted anime in the composer after the page data is reloaded without it", async () => {

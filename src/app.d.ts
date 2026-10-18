@@ -17,6 +17,9 @@ declare global {
 		interface Platform {
 			ctx?: { waitUntil(promise: Promise<unknown>): void };
 		}
+		interface PageState {
+			homeTimelineTab?: "all" | "following";
+		}
 		interface PageData {
 			session?: Session | null;
 			user?: User | null;

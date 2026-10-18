@@ -1,5 +1,6 @@
 <script lang="ts">
-import { replaceState } from "$app/navigation";
+import { pushState, replaceState } from "$app/navigation";
+import { page } from "$app/state";
 import { trapFocus } from "$lib/actions/trapFocus";
 import LiveRoomsPanel from "$lib/components/LiveRoomsPanel.svelte";
 import PostCardSkeleton from "$lib/components/PostCardSkeleton.svelte";
@@ -16,14 +17,49 @@ const SKELETON_COUNT = 12;
 
 let { data }: PageProps = $props();
 
-// data.timeline は deferred Promise。load が再実行されて新しい Promise になっても、
-// 解決するまでは前回の一覧を表示し続ける（スケルトンは初回だけ、#100）。
-// タブや「さらに読み込む」のカーソルが変わったときは別の一覧なので保持しない
-const timeline = createLatestResolved(
-	() => data.timeline,
-	// アカウント切替（invalidateAll でページは作り直されない）でも前のアカウントの一覧を見せない
-	() => `${data.user?.id ?? ""}:${data.tab}:${data.before ?? ""}`,
+// 各タブを別々に保持する。非表示側もマウントしたままなので、リアクションの
+// 楽観更新や読み込み済みの一覧を切替のたびに失わない。
+type HomeTab = "all" | "following";
+const tabs: HomeTab[] = ["all", "following"];
+// pushState は page.url を更新しない。shallow routing の選択状態は page.state で管理する。
+const activeTab = $derived<HomeTab>(
+	data.user && (page.state.homeTimelineTab ?? data.tab) === "following" ? "following" : "all",
 );
+function tabSource(tab: HomeTab) {
+	return data.tab === tab
+		? data.timeline
+		: (data.alternateTimeline ?? Promise.resolve({ posts: [], nextCursor: null }));
+}
+function tabKey(tab: HomeTab) {
+	return `${data.user?.id ?? ""}:${data.tab === tab ? `${data.before ?? ""}:${data.beforeId ?? ""}` : ""}`;
+}
+const timelines = {
+	all: createLatestResolved(
+		() => tabSource("all"),
+		() => tabKey("all"),
+	),
+	following: createLatestResolved(
+		() => tabSource("following"),
+		() => tabKey("following"),
+	),
+};
+
+function switchTab(event: MouseEvent, tab: HomeTab) {
+	// 新しいタブで開くなど、通常のリンク操作は妨げない。
+	if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+	event.preventDefault();
+	if (activeTab === tab) return;
+	const url = new URL(window.location.href);
+	if (tab === "following") url.searchParams.set("tab", tab);
+	else url.searchParams.delete("tab");
+	url.searchParams.delete("before");
+	url.searchParams.delete("before_id");
+	if (data.tab === tab && data.before && data.beforeId) {
+		url.searchParams.set("before", data.before);
+		url.searchParams.set("before_id", data.beforeId);
+	}
+	pushState(url, { ...page.state, homeTimelineTab: tab });
+}
 
 // data.pageExtras（投稿フォームの初期値・サイド情報）も deferred Promise。
 // {#await} で包むと load の再実行で Promise が差し替わるたびに待機表示へ戻り、投稿フォームが
@@ -64,8 +100,8 @@ function handleModalKeydown(e: KeyboardEvent) {
 	closeModal();
 }
 
-function loadMoreHref(lastCreatedAt: string, lastPostId: string): string {
-	const base = data.tab === "following" ? "/?tab=following" : "/";
+function loadMoreHref(tab: HomeTab, lastCreatedAt: string, lastPostId: string): string {
+	const base = tab === "following" ? "/?tab=following" : "/";
 	const separator = base.includes("?") ? "&" : "?";
 	return `${base}${separator}before=${encodeURIComponent(lastCreatedAt)}&before_id=${encodeURIComponent(lastPostId)}`;
 }
@@ -106,7 +142,7 @@ $effect(() => {
 		url.searchParams.delete("quote_anime");
 		url.searchParams.delete("share_exchange");
 		url.hash = "";
-		replaceState(url.toString(), {});
+		replaceState(url.toString(), page.state);
 	});
 	return () => {
 		active = false;
@@ -209,67 +245,91 @@ $effect(() => {
 		{/if}
 
 		{#if data.user}
-			<div class="timeline-tabs">
-				<a href="/" class="timeline-tab" class:active={data.tab === 'all'}> 全体 </a>
-				<a href="/?tab=following" class="timeline-tab" class:active={data.tab === 'following'}> フォロー中 </a>
+			<div
+				class="timeline-tabs"
+				class:following-active={activeTab === 'following'}
+				data-sveltekit-preload-data="off"
+			>
+				<a
+					href="/"
+					class="timeline-tab"
+					class:active={activeTab === 'all'}
+					aria-current={activeTab === 'all' ? 'page' : undefined}
+					onclick={(event) => switchTab(event, "all")}
+				>
+					全体
+				</a>
+				<a
+					href="/?tab=following"
+					class="timeline-tab"
+					class:active={activeTab === 'following'}
+					aria-current={activeTab === 'following' ? 'page' : undefined}
+					onclick={(event) => switchTab(event, "following")}
+				>
+					フォロー中
+				</a>
 			</div>
 		{/if}
 
-		<!--
-			data.timeline は deferred Promise（{ posts, nextCursor }）。
-			- 初回の待機中: スピナー + スケルトンカードを表示してレイアウトシフトを最小化
-			- 解決後: 実際の投稿カードに差し替え。再取得中は前回の一覧を保持する
-			- エラー時: 再読み込みを促すメッセージ
-		-->
-		{#if timeline.error}
-			<div class="home-deferred-error" role="alert" data-deferred-error="true">
-				投稿を読み込めませんでした。<a href={data.tab === "following" ? "/?tab=following" : "/"}>再読み込み</a>
-			</div>
-		{:else if timeline.value === null}
-			<div class="posts-loading-spinner" aria-label="投稿を読み込み中">
-				<div class="spinner" aria-hidden="true"></div>
-				<span>読み込み中…</span>
-			</div>
-			{#each { length: SKELETON_COUNT } as _, i (i)}
-				<PostCardSkeleton />
-			{/each}
-		{:else}
-			{@const posts = timeline.value.posts}
-			{@const nextCursor = timeline.value.nextCursor}
-			{#if data.before}
-				<a href={data.tab === "following" ? "/?tab=following" : "/"} class="timeline-back-link"
-					>← 新しい投稿に戻る</a
-				>
-			{/if}
-			{#if posts.length === 0 && !nextCursor}
-				<div class="empty-state">
-					{#if data.tab === 'following'}
-						<p>フォロー中のユーザーの投稿がありません。<br>気になるユーザーをフォローしてみましょう！</p>
-					{:else}
-						<p>まだ投稿がありません。最初の投稿をしてみましょう！</p>
-					{/if}
-				</div>
-			{:else}
-				{#if posts.length === 0}
-					<!-- 取得した分がすべてミュートで除外された。空状態ではなく続きの導線を出す（#35） -->
-					<div class="empty-state">
-						<p>このページの投稿はミュート設定によりすべて非表示です。</p>
+		{#each tabs as tab (tab)}
+			{@const timeline = timelines[tab]}
+			{@const before = data.tab === tab ? data.before : null}
+			<div class="home-timeline" hidden={activeTab !== tab}>
+				{#if timeline.error}
+					<div class="home-deferred-error" role="alert" data-deferred-error="true">
+						投稿を読み込めませんでした。<a href={tab === "following" ? "/?tab=following" : "/"}
+							>再読み込み</a
+						>
 					</div>
+				{:else if timeline.value === null}
+					<div class="posts-loading-spinner" aria-label="投稿を読み込み中">
+						<div class="spinner" aria-hidden="true"></div>
+						<span>読み込み中…</span>
+					</div>
+					{#each { length: SKELETON_COUNT } as _, i (i)}
+						<PostCardSkeleton />
+					{/each}
+				{:else}
+					{@const posts = timeline.value.posts}
+					{@const nextCursor = timeline.value.nextCursor}
+					{#if before}
+						<a href={tab === "following" ? "/?tab=following" : "/"} class="timeline-back-link"
+							>← 新しい投稿に戻る</a
+						>
+					{/if}
+					{#if posts.length === 0 && !nextCursor}
+						<div class="empty-state">
+							{#if tab === 'following'}
+								<p>
+									フォロー中のユーザーの投稿がありません。<br>気になるユーザーをフォローしてみましょう！
+								</p>
+							{:else}
+								<p>まだ投稿がありません。最初の投稿をしてみましょう！</p>
+							{/if}
+						</div>
+					{:else}
+						{#if posts.length === 0}
+							<!-- 取得した分がすべてミュートで除外された。空状態ではなく続きの導線を出す（#35） -->
+							<div class="empty-state">
+								<p>このページの投稿はミュート設定によりすべて非表示です。</p>
+							</div>
+						{/if}
+						{#each posts as post, index (post.id)}
+							<PostRow
+								{post}
+								currentUserId={data.user?.id ?? null}
+								continuation={isPostContinuation(post, posts[index - 1])}
+							/>
+						{/each}
+						{#if nextCursor}
+							<a href={loadMoreHref(tab, nextCursor.createdAt, nextCursor.id)} class="load-more-btn">
+								さらに読み込む
+							</a>
+						{/if}
+					{/if}
 				{/if}
-				{#each posts as post, index (post.id)}
-					<PostRow
-						{post}
-						currentUserId={data.user?.id ?? null}
-						continuation={isPostContinuation(post, posts[index - 1])}
-					/>
-				{/each}
-				{#if nextCursor}
-					<a href={loadMoreHref(nextCursor.createdAt, nextCursor.id)} class="load-more-btn">
-						さらに読み込む
-					</a>
-				{/if}
-			{/if}
-		{/if}
+			</div>
+		{/each}
 	</main>
 
 	<aside class="sidebar-column home-sidebar-column" bind:this={homeSidebarSlot}>
@@ -358,6 +418,51 @@ $effect(() => {
 {/if}
 
 <style>
+/* 選択バーだけを動かし、一覧の DOM とリアクション状態は保持する。 */
+.timeline-tabs {
+	position: relative;
+}
+.timeline-tabs::after {
+	content: "";
+	position: absolute;
+	bottom: -1px;
+	left: 0;
+	width: 50%;
+	height: 3px;
+	border-radius: 3px;
+	background: var(--color-accent);
+	pointer-events: none;
+	transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.timeline-tabs.following-active::after {
+	transform: translateX(100%);
+}
+.timeline-tabs .timeline-tab.active {
+	border-bottom-color: transparent;
+}
+
+/* hidden の解除で毎回再生する。transform は固定配置の投稿モーダルに影響するため使わない。 */
+.home-timeline:not([hidden]) {
+	animation: home-timeline-reveal 180ms ease-out;
+}
+@keyframes home-timeline-reveal {
+	from {
+		opacity: 0.45;
+	}
+	to {
+		opacity: 1;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.timeline-tabs::after,
+	.timeline-tabs .timeline-tab {
+		transition: none;
+	}
+	.home-timeline:not([hidden]) {
+		animation: none;
+	}
+}
+
 .home-welcome {
 	display: flex;
 	align-items: center;

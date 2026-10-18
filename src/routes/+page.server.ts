@@ -41,8 +41,8 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	// ミュートで減ったページが「続きなし」になり、古い投稿へ進めなくなる（#35）。
 	type TimelinePage = { posts: Post[]; nextCursor: TimelineCursor | null };
 	// 1ページ分（除外前 50 件）を取る。交換シェアの列で失敗したら、その列なしで取り直す
-	const fetchTimelineBatch = async (cursor: TimelineCursor | undefined) => {
-		if (tab === "following" && user) {
+	const fetchTimelineBatch = async (targetTab: "all" | "following", cursor: TimelineCursor | undefined) => {
+		if (targetTab === "following" && user) {
 			let lastError: unknown = null;
 			for (const select of [POSTS_SELECT_WITH_EXCHANGE, POSTS_SELECT_BASE]) {
 				const result = await getFollowingTimelinePosts(supabase, user.id, {
@@ -72,9 +72,9 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		if (baseFallback.error) console.error("home posts query failed:", baseFallback.error);
 		return baseFallback;
 	};
-	const fetchTimeline = async (): Promise<TimelinePage> => {
-		// ミュートで数件しか残らないページは、続きを取り足して埋める
-		const page = await fillTimelinePage(fetchTimelineBatch, before);
+	const fetchTimeline = async (targetTab: "all" | "following", cursor?: TimelineCursor): Promise<TimelinePage> => {
+		// ミュートで数件しか残らないページは、タブごとに続きを取り足して埋める
+		const page = await fillTimelinePage((nextCursor) => fetchTimelineBatch(targetTab, nextCursor), cursor);
 		return { posts: page.posts, nextCursor: page.nextCursor };
 	};
 
@@ -123,12 +123,16 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	);
 
 	return {
-		timeline: fetchTimeline(),
+		timeline: fetchTimeline(tab, before),
+		// 両タブをストリーミングで先読みし、切替自体では load を再実行しない。
+		// 未ログインではフォロー一覧を取得しない。カーソルは表示中のタブだけに適用する。
+		alternateTimeline: user ? fetchTimeline(tab === "all" ? "following" : "all") : null,
 		pageExtras,
 		profile,
 		user,
 		tab,
 		before: before?.createdAt ?? null,
+		beforeId: before?.id ?? null,
 	};
 };
 
