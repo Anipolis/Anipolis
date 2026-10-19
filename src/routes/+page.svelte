@@ -11,6 +11,7 @@ import TimelineLiveRun from "$lib/components/TimelineLiveRun.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import WelcomeCard from "$lib/components/WelcomeCard.svelte";
 import { createLatestResolved } from "$lib/latest-resolved.svelte";
+import { getSidebar } from "$lib/sidebar.svelte";
 import { composeOpen } from "$lib/stores/compose";
 import { groupLiveRuns } from "$lib/utils/live-runs";
 import type { PageProps } from "./$types";
@@ -23,6 +24,7 @@ const NO_ACTIVITY = { items: [], nextCursor: null };
 const TAB_HREFS = { all: "/", following: "/?tab=following", activity: "/?tab=activity" } as const;
 
 let { data }: PageProps = $props();
+const sidebar = getSidebar();
 
 // 各タブを別々に保持する。非表示側もマウントしたままなので、リアクションの
 // 楽観更新や読み込み済みの一覧を切替のたびに失わない。
@@ -193,7 +195,7 @@ $effect(() => {
 						initialContent={extras.initialContent}
 						initialExchangeId={extras.initialExchangeId}
 						initialExchangeShare={extras.initialExchangeShare}
-						watchingAnime={extras.watchingAnime}
+						watchingAnime={sidebar?.value?.watchingAnime ?? []}
 					/>
 				{:else if pageExtras.error}
 					<div class="home-deferred-error" role="alert" data-deferred-error="true">
@@ -409,13 +411,12 @@ $effect(() => {
 
 	<aside class="sidebar-column home-sidebar-column" bind:this={homeSidebarSlot}>
 		<div class="home-sidebar-fixed scrollbar-thin-muted" class:home-sidebar-fixed-ready={homeSidebarReady}>
-			{#if pageExtras.value}
-				{@const extras = pageExtras.value}
+			{#if sidebar?.value}
 				{#if data.user}
-					<LiveRoomsPanel rooms={extras.liveRooms} />
+					<LiveRoomsPanel rooms={sidebar.value.liveRooms} />
 				{/if}
-				<TrendingPanel trending={extras.trending} animeTrending={extras.animeTrending} />
-			{:else if pageExtras.error}
+				<TrendingPanel />
+			{:else if sidebar?.error}
 				<div class="home-deferred-error" role="alert" data-deferred-error="true">
 					サイド情報を読み込めませんでした。
 				</div>
@@ -477,7 +478,7 @@ $effect(() => {
 					initialContent={extras.initialContent}
 					initialExchangeId={extras.initialExchangeId}
 					initialExchangeShare={extras.initialExchangeShare}
-					watchingAnime={extras.watchingAnime}
+					watchingAnime={sidebar?.value?.watchingAnime ?? []}
 					onsubmitsuccess={closeModal}
 					focusOnMount
 					draftKey={data.profile.id}

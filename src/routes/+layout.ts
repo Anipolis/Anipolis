@@ -29,5 +29,6 @@ export const load: LayoutLoad = async ({ data, depends, fetch }) => {
 		unreadBroadcastNotificationCount: data.unreadBroadcastNotificationCount ?? Promise.resolve(0),
 		pendingReportsCount: data.pendingReportsCount ?? Promise.resolve(0),
 		extraAccounts: data.extraAccounts ?? [],
+		sidebar: data.sidebar,
 	};
 };

@@ -1,5 +1,5 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
-import type { Anime, Post, RoomAiring, TrendingHashtag } from "$lib/types";
+import type { Anime, Post, RoomAiring } from "$lib/types";
 
 /**
  * LiveRoomView が期待するデータ形状。
@@ -37,8 +37,6 @@ export type LiveRoomData = {
 		older_cursor?: { createdAt: string; id: string } | null;
 	};
 	posts: Post[];
-	trending: TrendingHashtag[];
-	animeTrending: Anime[];
 	user: User | null;
 	roomExperiment: {
 		enabled: boolean;

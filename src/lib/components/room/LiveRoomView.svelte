@@ -1230,7 +1230,7 @@ function formatCompactDate(iso: string) {
 			</div>
 		</div>
 
-		<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
+		<TrendingPanel />
 	</aside>
 </div>
 

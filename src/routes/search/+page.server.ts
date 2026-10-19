@@ -11,7 +11,6 @@ import { buildPostCardSelect } from "$lib/server/post-selects";
 import {
 	buildTitleSearchFilter,
 	enrichPostsWithCounts,
-	getAnimeRankingTrending,
 	getBlockedUserIds,
 	quoteOrFilterValue,
 } from "$lib/server/queries";
@@ -26,11 +25,8 @@ const POSTS_SELECT = buildPostCardSelect();
 export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 	const query = url.searchParams.get("q")?.trim() ?? "";
-	const trendingPromise = supabase.rpc("get_trending_hashtags", { limit_count: 10 });
-	const animeTrendingPromise = getAnimeRankingTrending(supabase, 5);
 
 	if (!query) {
-		const [trendingResult, animeTrending] = await Promise.all([trendingPromise, animeTrendingPromise]);
 		return {
 			query: "",
 			posts: [],
@@ -38,8 +34,6 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 			postsFailed: false,
 			usersFailed: false,
 			user,
-			trending: trendingResult.data ?? [],
-			animeTrending,
 		};
 	}
 
@@ -60,7 +54,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 			.limit(30),
 	);
 
-	const [postsResult, usersResult, trendingResult, animeTrending] = await Promise.all([
+	const [postsResult, usersResult] = await Promise.all([
 		postsPromise,
 		accountPattern
 			? supabase
@@ -71,8 +65,6 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 					)
 					.limit(10)
 			: Promise.resolve({ data: [], error: null }),
-		trendingPromise,
-		animeTrendingPromise,
 	]);
 
 	// 投稿・ユーザーの片方だけ読めなかったときは、読めた方を出しつつ、失敗した方を「見つからない」と見せない（#262）
@@ -96,8 +88,6 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		postsFailed: Boolean(postsResult.error),
 		usersFailed: Boolean(usersResult.error),
 		user,
-		trending: trendingResult.data ?? [],
-		animeTrending,
 	};
 };
 

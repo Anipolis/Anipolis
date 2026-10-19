@@ -10,7 +10,6 @@ import {
 import { buildBroadcastEpisodeLog } from "$lib/server/broadcast-episode-log";
 import {
 	getAnime,
-	getAnimeRankingTrending,
 	getBroadcastRoomOverride,
 	getBroadcastRoomOverridesForAnime,
 	getBroadcastRoomPosts,
@@ -127,10 +126,8 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 	// 400 になるため、実験・退室アンケートは無効化する（experimentRunId も付けない）
 	const isSyntheticSession = session.id === SYNTHETIC_ROOM_SESSION_ID;
 	const roomExperimentSupabase = user && !isSyntheticSession ? createRoomExperimentServiceClient() : null;
-	const [posts, trending, animeTrending, roomExperimentRun, roomExitSurveyLoadState] = await Promise.all([
+	const [posts, roomExperimentRun, roomExitSurveyLoadState] = await Promise.all([
 		getBroadcastRoomPosts(supabase, session.id, user?.id ?? null, { limit: 100, ascending: true }),
-		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
-		getAnimeRankingTrending(supabase, 5),
 		roomExperimentSupabase ? getActiveExperimentRun(roomExperimentSupabase, anime.id) : Promise.resolve(null),
 		getRoomExitSurveyLoadState(supabase, user?.id, session.id),
 	]);
@@ -149,8 +146,6 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 			title: episodeNumber != null ? `${anime.title} ${episodeNumber}話` : `${anime.title} 放送ルーム`,
 		},
 		posts,
-		trending: trending.data ?? [],
-		animeTrending,
 		user,
 		roomExperiment: {
 			enabled: Boolean(user && roomExperimentRun),

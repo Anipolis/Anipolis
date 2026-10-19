@@ -14,7 +14,6 @@ import {
 import {
 	checkIsFollowing,
 	fillTimelinePage,
-	getAnimeRankingTrending,
 	getBookmarkedPostsPage,
 	getFavoriteAnime,
 	getFollowCounts,
@@ -24,7 +23,6 @@ import {
 	getProfileImagePostsPage,
 	getProfilePostCount,
 	getProfileTimelinePage,
-	getTrendingHashtags,
 	getUserActivityPage,
 	getUserAnimeList,
 	isBlockedByMe,
@@ -117,32 +115,27 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 		return { items: page.posts, nextCursor: page.nextCursor };
 	};
 
-	const [activeList, postCount, followCounts, trendingResult, animeTrending, animeList, favoriteAnime, activity] =
-		await Promise.all([
-			loadActiveList(),
+	const [activeList, postCount, followCounts, animeList, favoriteAnime, activity] = await Promise.all([
+		loadActiveList(),
 
-			canViewContent ? getProfilePostCount(supabase, profile.id) : Promise.resolve(0),
+		canViewContent ? getProfilePostCount(supabase, profile.id) : Promise.resolve(0),
 
-			getFollowCounts(supabase, profile.id),
+		getFollowCounts(supabase, profile.id),
 
-			getTrendingHashtags(supabase, 10),
+		// マイリストのタブを開いているときは、読めなければ失敗として扱う（空のリストと見せない、#262）。
+		// ほかのタブでは件数の表示に使うだけなので、読めなくてもプロフィールは出す
+		canViewList
+			? activeTab === "list"
+				? getUserAnimeList(supabase, profile.id)
+				: getUserAnimeList(supabase, profile.id).catch(() => [])
+			: Promise.resolve([]),
 
-			getAnimeRankingTrending(supabase, 5),
+		// ベスト作品（#361）。投稿と同じ相手に見せる。読めなくてもプロフィールは出すが、失敗は null で
+		// 「未登録（[]）」と分ける。空と取り違えて編集・保存すると、保存済みの選択を消してしまう
+		canViewContent ? getFavoriteAnime(supabase, profile.id).catch((): null => null) : Promise.resolve([]),
 
-			// マイリストのタブを開いているときは、読めなければ失敗として扱う（空のリストと見せない、#262）。
-			// ほかのタブでは件数の表示に使うだけなので、読めなくてもプロフィールは出す
-			canViewList
-				? activeTab === "list"
-					? getUserAnimeList(supabase, profile.id)
-					: getUserAnimeList(supabase, profile.id).catch(() => [])
-				: Promise.resolve([]),
-
-			// ベスト作品（#361）。投稿と同じ相手に見せる。読めなくてもプロフィールは出すが、失敗は null で
-			// 「未登録（[]）」と分ける。空と取り違えて編集・保存すると、保存済みの選択を消してしまう
-			canViewContent ? getFavoriteAnime(supabase, profile.id).catch((): null => null) : Promise.resolve([]),
-
-			loadActivity(),
-		]);
+		loadActivity(),
+	]);
 
 	// 他の人のマイリストのカードでは、右のマスに見ている人自身のマイリストを出す。
 	// 読めなければ null にしてボタンを出さない（未登録と取り違えて二重に登録させない）
@@ -167,8 +160,6 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 		isFollowing,
 		followRequestStatus,
 		isBlocked,
-		trending: trendingResult,
-		animeTrending,
 		animeList,
 		viewerEntries,
 		favoriteAnime,

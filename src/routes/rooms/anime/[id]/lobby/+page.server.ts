@@ -6,12 +6,7 @@ import {
 	toggleLikeAction,
 	toggleRepostAction,
 } from "$lib/server/actions";
-import {
-	getAnime,
-	getAnimeRankingTrending,
-	getBroadcastRoomPosts,
-	getGlobalAnimeLobbySession,
-} from "$lib/server/queries";
+import { getAnime, getBroadcastRoomPosts, getGlobalAnimeLobbySession } from "$lib/server/queries";
 import { roomHashtag, stripTrailingRoomHashtag } from "$lib/server/room-hashtag";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -24,11 +19,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 	if (!session) throw error(404, "総合ロビーが見つかりません");
 
 	const hashtag = roomHashtag(anime);
-	const [posts, trending, animeTrending] = await Promise.all([
-		getBroadcastRoomPosts(supabase, session.id, user?.id ?? null, { limit: 100, ascending: true }),
-		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
-		getAnimeRankingTrending(supabase, 5),
-	]);
+	const posts = await getBroadcastRoomPosts(supabase, session.id, user?.id ?? null, { limit: 100, ascending: true });
 
 	return {
 		anime,
@@ -44,8 +35,6 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 			title: `${anime.title} 総合ロビー`,
 		},
 		posts,
-		trending: trending.data ?? [],
-		animeTrending,
 		user,
 		roomExperiment: {
 			enabled: false,

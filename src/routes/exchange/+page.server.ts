@@ -1,6 +1,6 @@
 import { fail } from "@sveltejs/kit";
 import { cancelAnimeExchangeAction, exchangeAnimeAction } from "$lib/server/actions";
-import { getAnimeExchangeEntries, getAnimeRankingTrending, getTrendingHashtags } from "$lib/server/queries";
+import { getAnimeExchangeEntries } from "$lib/server/queries";
 import { redirectToLogin } from "$lib/server/require-login";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -8,11 +8,9 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	const { user } = await safeGetSession();
 	if (!user) redirectToLogin(url);
 
-	const [exchanges, waitingExchanges, trendingResult, animeTrending] = await Promise.all([
+	const [exchanges, waitingExchanges] = await Promise.all([
 		getAnimeExchangeEntries(supabase, user.id),
 		getAnimeExchangeEntries(supabase, user.id, 1, "waiting"),
-		getTrendingHashtags(supabase, 10),
-		getAnimeRankingTrending(supabase, 5),
 	]);
 	const waitingExchange = exchanges.find((entry) => entry.status === "waiting") ?? waitingExchanges[0] ?? null;
 
@@ -21,8 +19,6 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		exchanges,
 		waitingExchange,
 		latestMatchedExchange: exchanges.find((entry) => entry.status === "matched" && entry.received_anime) ?? null,
-		trending: trendingResult,
-		animeTrending,
 	};
 };
 

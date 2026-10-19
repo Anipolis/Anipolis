@@ -1,7 +1,7 @@
 ﻿import { fail } from "@sveltejs/kit";
 import { deletePostAction, toggleBookmarkAction, toggleLikeAction, toggleRepostAction } from "$lib/server/actions";
 import { buildPostCardSelect } from "$lib/server/post-selects";
-import { enrichPostsWithCounts, getAnimeRankingTrending } from "$lib/server/queries";
+import { enrichPostsWithCounts } from "$lib/server/queries";
 import type { RawPost } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -13,7 +13,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 
 	const { data: hashtag } = await supabase.from("hashtags").select("id").eq("name", tag).maybeSingle();
 
-	const [postsResult, trendingResult, animeTrending] = await Promise.all([
+	const [postsResult] = await Promise.all([
 		(async () => {
 			const { data: links } = hashtag
 				? await supabase.from("post_hashtags").select("post_id").eq("hashtag_id", hashtag.id)
@@ -61,9 +61,6 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 					.slice(0, 50),
 			};
 		})(),
-
-		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
-		getAnimeRankingTrending(supabase, 5),
 	]);
 
 	const posts = await enrichPostsWithCounts(
@@ -72,7 +69,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 		user?.id ?? null,
 	);
 
-	return { tag, posts, trending: trendingResult.data ?? [], animeTrending };
+	return { tag, posts };
 };
 
 export const actions: Actions = {

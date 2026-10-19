@@ -8,7 +8,7 @@ import {
 	toggleRepostAction,
 } from "$lib/server/actions";
 import { buildPostCardSelect } from "$lib/server/post-selects";
-import { enrichPostsWithCounts, getAnimeRankingTrending } from "$lib/server/queries";
+import { enrichPostsWithCounts } from "$lib/server/queries";
 import type { Post, RawPost } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -21,11 +21,6 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 
 	if (!rawPost) error(404, "投稿が見つかりません");
 	const post = rawPost as unknown as RawPost;
-
-	const [trendingResult, animeTrending] = await Promise.all([
-		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
-		getAnimeRankingTrending(supabase, 5),
-	]);
 
 	const enrichedDataPromise = (async () => {
 		const [rawParentRes, rawRepliesRes] = await Promise.all([
@@ -61,8 +56,6 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 	return {
 		enrichedData: enrichedDataPromise,
 		currentUserId: user?.id ?? null,
-		trending: trendingResult.data ?? [],
-		animeTrending,
 		post: { content: post.content },
 		// SNS のカード（OGP）は後から画像を取り直すことがあるので、期限付き URL ではなく
 		// 閲覧権限を確かめて転送する固定リンクを出す（#316）

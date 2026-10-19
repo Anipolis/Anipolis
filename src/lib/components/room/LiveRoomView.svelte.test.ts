@@ -30,8 +30,6 @@ it("sends with Enter but preserves IME confirmation and Shift+Enter", async () =
 			title: "テスト",
 		},
 		posts: [],
-		trending: [],
-		animeTrending: [],
 		user: {
 			id: "test",
 			aud: "authenticated",
