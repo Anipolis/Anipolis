@@ -49,7 +49,7 @@ let queryInput = $derived(data.query);
 		<!-- スマホのトレンドは検索語が無いときだけ。検索したら結果を検索欄のすぐ下に出す（#430）。PC は右の列に出る -->
 		{#if !data.query}
 			<div class="mobile-search-trending">
-				<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
+				<TrendingPanel />
 			</div>
 		{/if}
 
@@ -91,7 +91,7 @@ let queryInput = $derived(data.query);
 	</main>
 
 	<aside class="sidebar-column">
-		<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
+		<TrendingPanel />
 	</aside>
 </div>
 

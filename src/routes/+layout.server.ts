@@ -4,6 +4,7 @@ import { getExtraAccounts, setExtraAccounts } from "$lib/server/multi-account";
 import {
 	getPendingReportsCount,
 	getProfileById,
+	getSidebarData,
 	getUnreadBroadcastNotificationCount,
 	getUnreadNotificationCount,
 } from "$lib/server/queries";
@@ -17,12 +18,20 @@ function isOnboardingExempt(pathname: string): boolean {
 	return ONBOARDING_EXEMPT_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
-export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, cookies, url, route, depends }) => {
+export const load: ServerLoad = async ({
+	locals: { supabase, safeGetSession },
+	cookies,
+	url,
+	route,
+	depends,
+	untrack,
+}) => {
 	// クライアント側で認証状態が変わった（例：メール確認リンク着地時のハッシュ
 	// トークン検出）ときに invalidate("supabase:auth") でこの load ごと再実行し、
 	// session / profile を再取得できるようにする。宣言がないと +layout.ts しか
 	// 再実行されず、ここで計算した古い session が使い回されてしまう。
 	depends("supabase:auth");
+	depends("app:sidebar");
 	const { session, user } = await safeGetSession();
 
 	const { data: profile, error: profileError } = user
@@ -91,7 +100,9 @@ export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, c
 	const unreadNotificationCount = user ? getUnreadNotificationCount(supabase, user.id) : 0;
 	const unreadBroadcastNotificationCount = user ? getUnreadBroadcastNotificationCount(supabase, user.id) : 0;
 	const pendingReportsCount = profile?.is_admin ? getPendingReportsCount(supabase) : 0;
-	const stream = route.id !== null;
+	// route.id は初回レスポンスのストリーミング可否にのみ使用する。
+	// 追跡すると全ページ遷移でこの共通 load（サイド情報を含む）が再実行される。
+	const stream = untrack(() => route.id !== null);
 	return {
 		session,
 		user,
@@ -103,5 +114,6 @@ export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, c
 			: await unreadBroadcastNotificationCount,
 		pendingReportsCount: stream ? pendingReportsCount : await pendingReportsCount,
 		extraAccounts,
+		sidebar: stream ? getSidebarData(supabase, user?.id ?? null) : await getSidebarData(supabase, user?.id ?? null),
 	};
 };

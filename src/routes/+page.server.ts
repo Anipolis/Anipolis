@@ -10,11 +10,8 @@ import { buildPostCardSelect } from "$lib/server/post-selects";
 import {
 	fillTimelinePage,
 	getAnimeExchangeShareForUser,
-	getAnimeRankingTrending,
 	getFollowingTimelinePosts,
 	getHomeTimelinePosts,
-	getOpenBroadcastRoomSessions,
-	getUserAnimeList,
 	type TimelineCursor,
 } from "$lib/server/queries";
 import type { AnimeExchangeShare, Post } from "$lib/types";
@@ -81,10 +78,8 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	const buildExchangeInitialContent = (_exchangeShare: AnimeExchangeShare | null) =>
 		"#アニメトレード でおすすめが届きました！";
 
-	const fetchSidebarExtras = () =>
+	const fetchComposerExtras = () =>
 		Promise.all([
-			supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
-			getAnimeRankingTrending(supabase, 5),
 			quoteAnimeId
 				? supabase
 						.from("anime")
@@ -95,32 +90,17 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 			user && shareExchangeId
 				? getAnimeExchangeShareForUser(supabase, user.id, shareExchangeId)
 				: Promise.resolve(null),
-			user ? getUserAnimeList(supabase, user.id, "watching") : Promise.resolve([]),
-			user ? getOpenBroadcastRoomSessions(supabase, { kind: "episode" }) : Promise.resolve([]),
 		] as const);
 
 	// 遷移の初期レスポンスではページ枠だけを返し、タイムラインと右カラムは
 	// ストリーミングで後から解決する。サイドバーからの遷移で、複数の
 	// Supabase クエリが終わるまで前画面に留まらないための境界である。
-	const pageExtras = fetchSidebarExtras().then(
-		([trendingResult, animeTrending, quoteAnimeResult, exchangeShare, watchingAnime, liveRooms]) => ({
-			trending: trendingResult.data ?? [],
-			animeTrending,
-			liveRooms,
-			initialAnime: quoteAnimeResult.data
-				? { ...quoteAnimeResult.data, id: String(quoteAnimeResult.data.id) }
-				: null,
-			initialExchangeId: exchangeShare ? shareExchangeId : null,
-			initialExchangeShare: exchangeShare,
-			initialContent: exchangeShare ? buildExchangeInitialContent(exchangeShare) : "",
-			watchingAnime: watchingAnime.slice(0, 5).map((a) => ({
-				id: a.id,
-				title: a.title,
-				title_en: a.title_en ?? null,
-				cover_url: a.cover_url ?? null,
-			})),
-		}),
-	);
+	const pageExtras = fetchComposerExtras().then(([quoteAnimeResult, exchangeShare]) => ({
+		initialAnime: quoteAnimeResult.data ? { ...quoteAnimeResult.data, id: String(quoteAnimeResult.data.id) } : null,
+		initialExchangeId: exchangeShare ? shareExchangeId : null,
+		initialExchangeShare: exchangeShare,
+		initialContent: exchangeShare ? buildExchangeInitialContent(exchangeShare) : "",
+	}));
 
 	return {
 		timeline: fetchTimeline(tab, before),

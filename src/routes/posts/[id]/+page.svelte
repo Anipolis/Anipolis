@@ -151,6 +151,6 @@ $effect(() => {
 	</main>
 
 	<aside class="sidebar-column">
-		<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
+		<TrendingPanel />
 	</aside>
 </div>

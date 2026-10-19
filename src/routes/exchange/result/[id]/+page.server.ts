@@ -1,6 +1,5 @@
 import { error } from "@sveltejs/kit";
 import { toValidExchangeSubjectiveTags } from "$lib/exchange-tags";
-import { getAnimeRankingTrending } from "$lib/server/queries";
 import type { AnimeExchangeShare } from "$lib/types";
 import type { PageServerLoad } from "./$types";
 
@@ -56,7 +55,7 @@ function toExchangeShareAnime(value: unknown): AnimeExchangeShare["offered_anime
 }
 
 export const load: PageServerLoad = async ({ params, locals: { supabase } }) => {
-	const [postResult, trendingResult, animeTrending] = await Promise.all([
+	const [postResult] = await Promise.all([
 		supabase
 			.from("posts")
 			.select(`
@@ -71,8 +70,6 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		`)
 			.eq("id", params.id)
 			.maybeSingle(),
-		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
-		getAnimeRankingTrending(supabase, 5),
 	]);
 	const post = postResult.data;
 
@@ -90,7 +87,5 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 			display_name: profile?.display_name ?? null,
 			avatar_url: profile?.avatar_url ?? null,
 		},
-		trending: trendingResult.data ?? [],
-		animeTrending,
 	};
 };

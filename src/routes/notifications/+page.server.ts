@@ -1,6 +1,6 @@
 import { redirect } from "@sveltejs/kit";
 import type { NotificationCategory } from "$lib/server/actions";
-import { getAnimeRankingTrending, getNotifications, getUnreadNotificationCountsByCategory } from "$lib/server/queries";
+import { getNotifications, getUnreadNotificationCountsByCategory } from "$lib/server/queries";
 import type { PageServerLoad } from "./$types";
 
 const NORMAL_TYPES = [
@@ -37,18 +37,14 @@ export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession 
 	// （非表示タブの分まで毎回50件×2カテゴリを取得しない）。未読バッジはカウント
 	// クエリ（getUnreadNotificationCountsByCategory）だけで賄える。
 	const typesByTab = { normal: NORMAL_TYPES, room: ROOM_TYPES, mylist: MYLIST_TYPES } as const;
-	const [activeList, unreadCounts, trendingResult, animeTrending] = await Promise.all([
+	const [activeList, unreadCounts] = await Promise.all([
 		getNotifications(supabase, user.id, 50, typesByTab[tab]),
 		getUnreadNotificationCountsByCategory(supabase, user.id),
-		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
-		getAnimeRankingTrending(supabase, 5),
 	]);
 
 	return {
 		tab,
 		notifications: { normal: [], room: [], mylist: [], [tab]: activeList },
 		unreadCounts,
-		trending: trendingResult.data ?? [],
-		animeTrending,
 	};
 };

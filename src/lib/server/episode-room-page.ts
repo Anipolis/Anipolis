@@ -1,7 +1,7 @@
 import { fail } from "@sveltejs/kit";
 import { airingOnAirAt } from "$lib/episode-room";
 import { insertPostWithHashtags } from "$lib/server/actions";
-import { getAnimeRankingTrending, getEpisodeRoomAirings, getEpisodeRoomPosts } from "$lib/server/queries";
+import { getEpisodeRoomAirings, getEpisodeRoomPosts } from "$lib/server/queries";
 import { roomHashtag, stripTrailingRoomHashtag } from "$lib/server/room-hashtag";
 import type { Anime, EpisodeRoom } from "$lib/types";
 
@@ -38,12 +38,10 @@ export async function buildEpisodeRoomPageData(input: {
 	// 読み始める位置: ?airing= はその放送枠の開場から、放送中は最新から、それ以外はルームの最初から
 	const from = initialAiring ? "start" : liveAiring ? "latest" : "start";
 	const since = initialAiring?.posting_opens_at;
-	const [postPage, trending, animeTrending, olderExists] = await Promise.all([
+	const [postPage, olderExists] = await Promise.all([
 		room
 			? getEpisodeRoomPosts(supabase, room.id, user?.id ?? null, { limit: 100, from, since })
 			: Promise.resolve({ posts: [], hasMore: false, oldestCursor: null }),
-		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
-		getAnimeRankingTrending(supabase, 5),
 		// 放送枠から読み始めたとき、それより前の投稿があるか（「前の投稿を読み込む」を出すか）
 		room && since
 			? supabase
@@ -87,8 +85,6 @@ export async function buildEpisodeRoomPageData(input: {
 			older_cursor: postPage.oldestCursor,
 		},
 		posts,
-		trending: trending.data ?? [],
-		animeTrending,
 		user,
 		// 実験・退室アンケートは放送枠（セッション）単位の仕組みなので、話数ルームでは使わない
 		roomExperiment: { enabled: false },

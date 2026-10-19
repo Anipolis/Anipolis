@@ -35,8 +35,6 @@ const roomData = $derived({
 		title: "星をめぐる旅 / 第7話",
 	},
 	posts,
-	trending: [],
-	animeTrending: [],
 	user: {
 		id: "preview-user-0",
 		app_metadata: {},

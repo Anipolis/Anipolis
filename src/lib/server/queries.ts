@@ -3389,6 +3389,17 @@ export async function getAnimeRankingTrending(
 	return animes.map((a) => ({ ...a, recent_count: countMap.get(a.id) ?? 0 }));
 }
 
+/** 共通レイアウトの存続中は使い回すサイド情報。ユーザー別の値も必ず同じリクエストの RLS で読む。 */
+export async function getSidebarData(supabase: SupabaseClient<Database>, userId: string | null) {
+	const [trending, animeTrending, watchingAnime, liveRooms] = await Promise.all([
+		getTrendingHashtags(supabase, 10),
+		getAnimeRankingTrending(supabase, 5),
+		userId ? getUserAnimeList(supabase, userId, "watching") : Promise.resolve([]),
+		userId ? getOpenBroadcastRoomSessions(supabase, { kind: "episode" }) : Promise.resolve([]),
+	]);
+	return { trending, animeTrending, watchingAnime: watchingAnime.slice(0, 5), liveRooms };
+}
+
 export async function getTrendingHashtags(supabase: SupabaseClient<Database>, limit = 10) {
 	const { data, error } = await supabase.rpc("get_trending_hashtags", { limit_count: limit });
 	if (error) {

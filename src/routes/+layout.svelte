@@ -9,6 +9,7 @@ import MobileSwipeNavigation from "$lib/components/MobileSwipeNavigation.svelte"
 import RouteNavigationSkeleton from "$lib/components/RouteNavigationSkeleton.svelte";
 import Sidebar from "$lib/components/Sidebar.svelte";
 import { navigationSkeletonPath } from "$lib/navigation-skeleton";
+import { provideSidebar } from "$lib/sidebar.svelte";
 import { composeOpen } from "$lib/stores/compose";
 import { notificationCountsRefresh } from "$lib/stores/notifications";
 import type { LayoutProps } from "./$types";
@@ -20,6 +21,10 @@ import "@fontsource/zen-maru-gothic/900.css";
 import "../app.css";
 
 let { data, children }: LayoutProps = $props();
+provideSidebar(
+	() => data.sidebar,
+	() => data.user?.id ?? "",
+);
 let unreadNotificationCount = $state(0);
 let unreadBroadcastNotificationCount = $state(0);
 let pendingReportsCount = $state(0);

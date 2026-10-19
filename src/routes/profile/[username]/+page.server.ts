@@ -10,12 +10,10 @@ import {
 } from "$lib/server/actions";
 import {
 	checkIsFollowing,
-	getAnimeRankingTrending,
 	getFollowCounts,
 	getFollowRequestStatus,
 	getLikedPosts,
 	getProfileTimelinePosts,
-	getTrendingHashtags,
 	getUserAnimeList,
 	isBlockedByMe,
 } from "$lib/server/queries";
@@ -45,7 +43,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 	const canViewContent = isOwn || !profile.is_private || isFollowing;
 	const activeTab = url.searchParams.get("tab") ?? "posts";
 
-	const [posts, followCounts, trendingResult, animeTrending, animeList] = await Promise.all([
+	const [posts, followCounts, animeList] = await Promise.all([
 		canViewContent
 			? getProfileTimelinePosts(
 					supabase,
@@ -60,10 +58,6 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 			: Promise.resolve([]),
 
 		getFollowCounts(supabase, profile.id),
-
-		getTrendingHashtags(supabase, 10),
-
-		getAnimeRankingTrending(supabase, 5),
 
 		canViewContent && (isOwn || profile.list_is_public)
 			? getUserAnimeList(supabase, profile.id)
@@ -86,8 +80,6 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 		isFollowing,
 		followRequestStatus,
 		isBlocked,
-		trending: trendingResult,
-		animeTrending,
 		animeList,
 		user,
 	};

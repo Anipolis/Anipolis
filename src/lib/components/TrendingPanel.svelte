@@ -1,15 +1,19 @@
 <script lang="ts">
 import { page } from "$app/state";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
+import { getSidebar } from "$lib/sidebar.svelte";
 import type { Anime, TrendingHashtag } from "$lib/types";
 import InfoTip from "./InfoTip.svelte";
 
 interface Props {
-	trending: TrendingHashtag[];
+	trending?: TrendingHashtag[];
 	animeTrending?: Anime[];
 }
 
-let { trending, animeTrending = [] }: Props = $props();
+let { trending: initialTrending, animeTrending: initialAnimeTrending }: Props = $props();
+const sidebar = getSidebar();
+const trending = $derived(initialTrending ?? sidebar?.value?.trending ?? []);
+const animeTrending = $derived(initialAnimeTrending ?? sidebar?.value?.animeTrending ?? []);
 
 // ログイン中は設定タブから辿れるので、未ログイン時だけ規約系リンクを出す
 const showFooterLinks = $derived(!page.data.user);
@@ -25,42 +29,50 @@ const showFooterLinks = $derived(!page.data.user);
 		</InfoTip>
 	</div>
 
-	{#if trending.length === 0}
-		<div class="trending-empty">まだトレンドがありません</div>
+	{#if initialTrending === undefined && sidebar && !sidebar.value}
+		{#if sidebar.error}
+			<div class="trending-empty" role="alert">サイド情報を読み込めませんでした。</div>
+		{:else}
+			<div class="trending-empty" role="status">トレンドを読み込み中…</div>
+		{/if}
 	{:else}
-		{#each trending as tag, index}
-			<a href="/hashtag/{tag.name}" class="trending-item">
-				<span class="trending-rank">{index + 1}</span>
-				<span class="trending-name">#{tag.name}</span>
-				<span class="trending-count">{tag.post_count.toLocaleString('ja-JP')}件</span>
-			</a>
-		{/each}
-	{/if}
+		{#if trending.length === 0}
+			<div class="trending-empty">まだトレンドがありません</div>
+		{:else}
+			{#each trending as tag, index}
+				<a href="/hashtag/{tag.name}" class="trending-item">
+					<span class="trending-rank">{index + 1}</span>
+					<span class="trending-name">#{tag.name}</span>
+					<span class="trending-count">{tag.post_count.toLocaleString('ja-JP')}件</span>
+				</a>
+			{/each}
+		{/if}
 
-	<div class="trending-subheader with-info-tip">
-		アニメトレンド
-		<InfoTip label="アニメトレンド" text="この7日間でマイリストへの登録が多かった作品です。" />
-	</div>
+		<div class="trending-subheader with-info-tip">
+			アニメトレンド
+			<InfoTip label="アニメトレンド" text="この7日間でマイリストへの登録が多かった作品です。" />
+		</div>
 
-	{#if animeTrending.length === 0}
-		<div class="trending-empty">まだアニメトレンドがありません</div>
-	{:else}
-		{#each animeTrending as anime, index}
-			<a href="/anime/{anime.id}" class="trending-item anime-trending-item">
-				<span class="trending-rank">{index + 1}</span>
-				{#if anime.cover_url}
-					<img
-						class="anime-trending-cover"
-						src={coverThumbSrc(anime.cover_url)}
-						{@attach coverThumbFallback(anime.cover_url)}
-						alt=""
-						loading="lazy"
-					>
-				{/if}
-				<span class="anime-trending-title">{anime.title}</span>
-				<span class="trending-count">{(anime.recent_count ?? 0).toLocaleString('ja-JP')}件</span>
-			</a>
-		{/each}
+		{#if animeTrending.length === 0}
+			<div class="trending-empty">まだアニメトレンドがありません</div>
+		{:else}
+			{#each animeTrending as anime, index}
+				<a href="/anime/{anime.id}" class="trending-item anime-trending-item">
+					<span class="trending-rank">{index + 1}</span>
+					{#if anime.cover_url}
+						<img
+							class="anime-trending-cover"
+							src={coverThumbSrc(anime.cover_url)}
+							{@attach coverThumbFallback(anime.cover_url)}
+							alt=""
+							loading="lazy"
+						>
+					{/if}
+					<span class="anime-trending-title">{anime.title}</span>
+					<span class="trending-count">{(anime.recent_count ?? 0).toLocaleString('ja-JP')}件</span>
+				</a>
+			{/each}
+		{/if}
 	{/if}
 </section>
 
