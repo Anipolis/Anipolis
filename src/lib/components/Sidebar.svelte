@@ -124,6 +124,43 @@ async function handleSwitch(userId: string) {
 	}
 }
 
+let sidebarElement = $state<HTMLElement>();
+
+$effect(() => {
+	const sidebar = sidebarElement;
+	const navigation = sidebar?.querySelector(".sidebar-nav");
+	if (!sidebar || !navigation) return;
+
+	function updateSelection() {
+		if (!sidebar || !navigation) return;
+		const button = navigation.querySelector<HTMLElement>(".sidebar-btn.active");
+		if (!button) {
+			sidebar.removeAttribute("data-selection");
+			return;
+		}
+		sidebar.style.setProperty("--sidebar-selection-x", `${button.offsetLeft}px`);
+		sidebar.style.setProperty("--sidebar-selection-y", `${button.offsetTop}px`);
+		sidebar.style.setProperty("--sidebar-selection-width", `${button.offsetWidth}px`);
+		sidebar.style.setProperty("--sidebar-selection-height", `${button.offsetHeight}px`);
+		sidebar.setAttribute("data-selection", "true");
+	}
+
+	const resizeObserver = new ResizeObserver(updateSelection);
+	resizeObserver.observe(navigation);
+	const mutationObserver = new MutationObserver(updateSelection);
+	mutationObserver.observe(navigation, {
+		childList: true,
+		subtree: true,
+		attributes: true,
+		attributeFilter: ["class"],
+	});
+	updateSelection();
+	return () => {
+		resizeObserver.disconnect();
+		mutationObserver.disconnect();
+	};
+});
+
 function isActive(path: string): boolean {
 	if (path === "/") return activePath === "/";
 	return activePath.startsWith(path);
@@ -220,11 +257,9 @@ function isActive(path: string): boolean {
 />
 
 <!-- Mobile drawer backdrop -->
-{#if drawerOpen}
-	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div class="mobile-drawer-backdrop" onclick={closeDrawer}></div>
-{/if}
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div class="mobile-drawer-backdrop" class:open={drawerOpen} onclick={closeDrawer} aria-hidden="true"></div>
 
 <!-- Mobile drawer -->
 <div class="mobile-drawer" class:open={drawerOpen} role="dialog" aria-modal="true" aria-label="ナビゲーション">
@@ -487,7 +522,7 @@ function isActive(path: string): boolean {
 	{/if}
 </div>
 
-<aside class="icon-sidebar">
+<aside class="icon-sidebar" bind:this={sidebarElement}>
 	<a href="/" class="sidebar-logo" aria-label="Anipolis ホーム" title="Anipolis">
 		<span class="anipolis-logo-icon size-28" aria-hidden="true"></span>
 		<span class="sidebar-logo-text">Anipolis</span>
@@ -1001,6 +1036,16 @@ function isActive(path: string): boolean {
 	inset: 0;
 	background: rgba(0, 0, 0, 0.5);
 	z-index: 170;
+	opacity: 0;
+	visibility: hidden;
+	transition:
+		opacity 220ms ease,
+		visibility 220ms;
+}
+
+.mobile-drawer-backdrop.open {
+	opacity: 1;
+	visibility: visible;
 }
 
 .mobile-drawer {
@@ -1015,12 +1060,16 @@ function isActive(path: string): boolean {
 	display: flex;
 	flex-direction: column;
 	transform: translateX(-100%);
-	transition: transform 0.25s ease;
+	visibility: hidden;
+	transition:
+		transform 260ms cubic-bezier(0.22, 1, 0.36, 1),
+		visibility 260ms;
 	overflow-y: auto;
 }
 
 .mobile-drawer.open {
 	transform: translateX(0);
+	visibility: visible;
 }
 
 .mobile-drawer-header {
@@ -1074,7 +1123,14 @@ function isActive(path: string): boolean {
 	font-family: inherit;
 	text-align: left;
 	width: 100%;
-	transition: background 0.12s;
+	transition:
+		background 160ms ease,
+		color 160ms ease,
+		transform 180ms ease;
+}
+
+.mobile-drawer-btn:active {
+	transform: translateX(3px);
 }
 
 .mobile-drawer-btn:hover {
@@ -1188,6 +1244,20 @@ function isActive(path: string): boolean {
 	}
 }
 
+@media (prefers-reduced-motion: reduce) {
+	.mobile-drawer,
+	.mobile-drawer-backdrop,
+	.mobile-drawer-btn,
+	.mobile-drawer-account-check,
+	.account-menu-item {
+		transition: none;
+	}
+
+	.mobile-drawer-btn:active {
+		transform: none;
+	}
+}
+
 /* --- Existing styles below --- */
 .sidebar-switch-error {
 	font-size: 0.78rem;
@@ -1217,6 +1287,25 @@ function isActive(path: string): boolean {
 	border-radius: 18px;
 	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 	overflow: hidden;
+	transform-origin: bottom left;
+	animation: account-menu-enter 160ms ease-out;
+}
+
+@keyframes account-menu-enter {
+	from {
+		opacity: 0;
+		transform: translateY(6px) scale(0.98);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0) scale(1);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.account-menu {
+		animation: none;
+	}
 }
 
 .account-menu-divider {
