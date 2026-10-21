@@ -37,7 +37,9 @@ function callUpdateUsername(fields: Record<string, string>) {
 			safeGetSession: async () => ({ user: USER, session: null }),
 		},
 	};
-	return actions.updateUsername(event as unknown as Parameters<typeof actions.updateUsername>[0]);
+	const updateUsername = actions["updateUsername"];
+	if (!updateUsername) throw new Error("updateUsername action is missing");
+	return updateUsername(event as unknown as Parameters<typeof updateUsername>[0]);
 }
 
 beforeEach(() => {
