@@ -808,14 +808,15 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 													{:else}
 														<div class="slot-cover slot-cover--placeholder"></div>
 													{/if}
+													<!-- 時刻の行に置くと列の幅で切れ、折り返すと高さ固定の枠で本文が切れるので、表紙に重ねる（#433） -->
+													{#if isLive}
+														<span class="slot-live-badge">LIVE</span>
+													{/if}
 												</div>
 												<div class="slot-info">
 													<div class="slot-meta-row">
 														{#if broadcastTime}
 															<span class="slot-time">{broadcastTime.slice(0, 5)}</span>
-														{/if}
-														{#if isLive}
-															<span class="slot-live-badge">LIVE</span>
 														{/if}
 													</div>
 													<span class="slot-title">{anime.title}</span>
@@ -1484,8 +1485,9 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	overflow: hidden;
 }
 .slot-live-badge {
-	margin-left: auto;
-	flex-shrink: 0;
+	position: absolute;
+	top: 3px;
+	left: 3px;
 	font-size: 0.58rem;
 	font-weight: 800;
 	color: #fff;

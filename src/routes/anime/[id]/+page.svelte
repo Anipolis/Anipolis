@@ -1613,10 +1613,13 @@ $effect(() => {
 												href={latestEpisodeRoom.href ?? undefined}
 												class="room-log-item room-log-item--latest"
 											>
-												<span class="room-log-latest-label">
-													<span class="i-lucide-zap" aria-hidden="true"></span>
-													Latest
-												</span>
+												<!-- 放送中は右上の「LIVE」と重なって隠れるので、「Latest」は出さない（#433） -->
+												{#if !liveEpisodeRoomKeys.has(latestEpisodeRoom.key)}
+													<span class="room-log-latest-label">
+														<span class="i-lucide-zap" aria-hidden="true"></span>
+														Latest
+													</span>
+												{/if}
 												<span class="room-log-ep">{latestEpisodeRoom.label}</span>
 												<span class="room-log-ep-compact">{latestEpisodeRoom.label}</span>
 												{#if liveEpisodeRoomKeys.has(latestEpisodeRoom.key)}
@@ -1678,10 +1681,13 @@ $effect(() => {
 												href="/rooms/anime/{data.anime.id}/{latestRoomLog.date}"
 												class="room-log-item room-log-item--latest"
 											>
-												<span class="room-log-latest-label">
-													<span class="i-lucide-zap" aria-hidden="true"></span>
-													Latest
-												</span>
+												<!-- 放送中は「LIVE」だけを出す（#433） -->
+												{#if !liveRoomDates.has(latestRoomLog.date)}
+													<span class="room-log-latest-label">
+														<span class="i-lucide-zap" aria-hidden="true"></span>
+														Latest
+													</span>
+												{/if}
 												<span class="room-log-ep"
 													>{formatBroadcastEpisodeSlot(latestRoomLog)}</span
 												>
