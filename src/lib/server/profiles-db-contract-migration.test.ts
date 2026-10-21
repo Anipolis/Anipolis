@@ -17,17 +17,8 @@ describe("profiles db contract migration (169, #236)", () => {
 		);
 	});
 
-	it("authenticated が直接更新できるのは本人の操作で変える列だけ（username・is_admin などは含めない）", () => {
-		expect(migration).toContain("REVOKE UPDATE ON public.profiles FROM anon, authenticated;");
-		const grant = migration.match(/GRANT UPDATE \(([^)]+)\) ON public\.profiles TO authenticated;/);
-		expect(grant?.[1]?.split(",").map((column) => column.trim())).toEqual([
-			"display_name",
-			"bio",
-			"avatar_url",
-			"header_url",
-			"list_is_public",
-			"is_private",
-		]);
+	it("更新できる列を絞る変更は含めない（本番のアプリの切り替え後に別の migration で行う）", () => {
+		expect(migration).not.toMatch(/REVOKE|GRANT/);
 	});
 
 	it("メールの登録で送られた表示名は 50 文字に切ってから入れる", () => {

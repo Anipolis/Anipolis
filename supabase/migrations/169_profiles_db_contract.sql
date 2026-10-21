@@ -1,30 +1,25 @@
 -- ============================================================
--- 169_profiles_db_contract: プロフィールの入力の決まりと更新できる列を DB で守る（#236）
+-- 169_profiles_db_contract: プロフィールの入力の決まりを DB で守る（#236）
 -- ============================================================
 -- profiles の UPDATE ポリシーは「自分の行」しか見ず、authenticated は全列を更新できた。画面側の検査
--- （ユーザー名の形・表示名と自己紹介の文字数・ユーザー名変更時の現在のパスワード）は、Supabase の
--- REST API を直接呼ぶと素通りできた。
+-- （ユーザー名の形・表示名と自己紹介の文字数）は、Supabase の REST API を直接呼ぶと素通りできた。
 --
 --   1. CHECK 制約: 画面と同じ決まりを DB にも置く
 --        username      ^[a-z0-9_]{3,20}$（小文字は 162 で強制済み）
 --        display_name  50 文字以内
 --        bio           160 文字以内
 --      本番の既存データに違反は無い（2026-10-21 確認: 65 件、表示名は最長 21 文字・自己紹介は最長 5 文字）
---   2. 列の UPDATE 権限: authenticated が直接更新できるのは、アプリが本人の操作で書き換える列だけにする
---        display_name, bio, avatar_url, header_url, list_is_public, is_private
---      username は、現在のパスワードを確かめた後にサーバーが service role で書き換える
---      （src/routes/settings/account/+page.server.ts）。is_admin・setup_completed・created_at なども直接は変えられない。
---      新規作成（INSERT）の権限は今どおり（初期設定で username を決めて作るため。CHECK と 161 のトリガーが守る）
---   3. handle_new_user: メールの登録で送られた表示名（full_name / name）は利用者が自由に送れるので、
+--   2. handle_new_user: メールの登録で送られた表示名（full_name / name）は利用者が自由に送れるので、
 --      50 文字に切ってから入れる（切らないと CHECK に引っかかって登録ごと失敗する）。それ以外は 161 の版のまま
+--
+-- 更新できる列を絞る（username を直接変えられなくする）変更は、アプリの username の書き換えを
+-- service role に移した版が本番に出てから適用する別の migration に分けた（今の本番のアプリは、
+-- 利用者の権限で username を更新しているため）。
 
 ALTER TABLE public.profiles
     ADD CONSTRAINT profiles_username_format CHECK (username ~ '^[a-z0-9_]{3,20}$'),
     ADD CONSTRAINT profiles_display_name_length CHECK (display_name IS NULL OR char_length(display_name) <= 50),
     ADD CONSTRAINT profiles_bio_length CHECK (bio IS NULL OR char_length(bio) <= 160);
-
-REVOKE UPDATE ON public.profiles FROM anon, authenticated;
-GRANT UPDATE (display_name, bio, avatar_url, header_url, list_is_public, is_private) ON public.profiles TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger
