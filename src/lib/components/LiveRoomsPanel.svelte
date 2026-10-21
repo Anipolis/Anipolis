@@ -1,4 +1,5 @@
 <script lang="ts">
+import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import type { OpenBroadcastRoomSummary } from "$lib/types";
 import LiveRoomPickerModal from "./LiveRoomPickerModal.svelte";
 
@@ -29,7 +30,12 @@ function closePicker() {
 	{:else if singleRoom}
 		<a href="/rooms/anime/{singleRoom.anime_id}/{singleRoom.room_date}" class="trending-item live-room-entry">
 			{#if singleRoom.anime?.cover_url}
-				<img src={singleRoom.anime.cover_url} alt={singleRoom.anime.title} class="anime-search-thumb">
+				<img
+					src={coverThumbSrc(singleRoom.anime.cover_url)}
+					{@attach coverThumbFallback(singleRoom.anime.cover_url)}
+					alt={singleRoom.anime.title}
+					class="anime-search-thumb"
+				>
 			{:else}
 				<div class="anime-search-thumb anime-search-thumb-empty"></div>
 			{/if}

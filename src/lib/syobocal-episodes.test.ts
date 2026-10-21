@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+	confirmedFinalEpisodeCount,
 	detectEpisodeAnomalies,
 	detectEpisodeAnomaliesByGroup,
 	isAppliedEpisodeAnomaly,
@@ -177,5 +178,81 @@ describe("isEpisodeSuppressedSnapshot", () => {
 		);
 		expect(isEpisodeSuppressedSnapshot({})).toBe(false);
 		expect(isEpisodeSuppressedSnapshot(null)).toBe(false);
+	});
+});
+
+describe("confirmedFinalEpisodeCount", () => {
+	// 2026-10-06 から毎週火曜 23:00 JST に count 話を並べる
+	function weekly(count: number, numbered: (episode: number) => number | null = (episode) => episode) {
+		return Array.from({ length: count }, (_, index) => ({
+			scheduledAt: new Date(Date.UTC(2026, 9, 6, 14) + index * 7 * 86_400_000).toISOString(),
+			episodeNumber: numbered(index + 1),
+		}));
+	}
+	const endedInDecember = { endYear: 2026, endMonth: 12, validTo: null };
+
+	it("confirms the total once the end month has passed and episodes 1..N are all present", () => {
+		expect(confirmedFinalEpisodeCount(weekly(12), endedInDecember, new Date("2027-01-05T00:00:00Z"))).toBe(12);
+	});
+
+	it("does not treat the registered maximum of an airing show as the total", () => {
+		// 終了月未登録（長期作品で1クール分だけ登録済み等）
+		const unknownEnd = { endYear: null, endMonth: null, validTo: null };
+		expect(confirmedFinalEpisodeCount(weekly(12), unknownEnd, new Date("2027-03-01T00:00:00Z"))).toBeNull();
+		// 未来のセッションが残っている
+		expect(confirmedFinalEpisodeCount(weekly(12), endedInDecember, new Date("2026-12-01T00:00:00Z"))).toBeNull();
+	});
+
+	it("waits a week after the last broadcast while still in the end month", () => {
+		// 第12話は 2026-12-22。同月内は最終回の未登録に備えて8日待つ
+		expect(confirmedFinalEpisodeCount(weekly(12), endedInDecember, new Date("2026-12-25T00:00:00Z"))).toBeNull();
+		expect(confirmedFinalEpisodeCount(weekly(12), endedInDecember, new Date("2026-12-31T00:00:00Z"))).toBe(12);
+	});
+
+	it("rejects continuation numbering and gaps", () => {
+		const now = new Date("2027-01-05T00:00:00Z");
+		// 通期 TID の第2クール（13話始まり）
+		expect(
+			confirmedFinalEpisodeCount(
+				weekly(12, (episode) => episode + 12),
+				endedInDecember,
+				now,
+			),
+		).toBeNull();
+		// 異常で番号を外した回がある
+		expect(
+			confirmedFinalEpisodeCount(
+				weekly(12, (episode) => (episode === 5 ? null : episode)),
+				endedInDecember,
+				now,
+			),
+		).toBeNull();
+		expect(confirmedFinalEpisodeCount([], endedInDecember, now)).toBeNull();
+	});
+
+	it("does not drop an unnumbered broadcast after the last numbered episode", () => {
+		const now = new Date("2027-01-05T00:00:00Z");
+		// 最終回だけ Count 未登録／異常で番号を外した → 1..11 が揃っていても「全11話」にしない
+		expect(
+			confirmedFinalEpisodeCount(
+				weekly(12, (episode) => (episode === 12 ? null : episode)),
+				endedInDecember,
+				now,
+			),
+		).toBeNull();
+		// 途中の番号無し放送（総集編）は総話数に含めずに確定する
+		expect(
+			confirmedFinalEpisodeCount(
+				weekly(13, (episode) => (episode === 7 ? null : episode > 7 ? episode - 1 : episode)),
+				endedInDecember,
+				now,
+			),
+		).toBe(12);
+	});
+
+	it("uses the mapping's valid_to when a shared TID is split between titles", () => {
+		const firstCour = { endYear: null, endMonth: null, validTo: "2026-12-31" };
+		expect(confirmedFinalEpisodeCount(weekly(12), firstCour, new Date("2027-01-02T00:00:00Z"))).toBe(12);
+		expect(confirmedFinalEpisodeCount(weekly(12), firstCour, new Date("2026-12-30T00:00:00Z"))).toBeNull();
 	});
 });

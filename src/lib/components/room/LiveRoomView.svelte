@@ -1,20 +1,27 @@
 <script lang="ts">
-import type { SupabaseClient, User } from "@supabase/supabase-js";
 import type { SubmitFunction } from "@sveltejs/kit";
 import type { Snippet } from "svelte";
 import { onDestroy, onMount, tick, untrack } from "svelte";
 import { enhance } from "$app/forms";
 import { goto } from "$app/navigation";
+import { autosize } from "$lib/actions/autosize";
+import { timelineScroll } from "$lib/actions/timelineScroll";
 import ExitSurveyModal from "$lib/components/ExitSurveyModal.svelte";
 import LiveRoomPostCard from "$lib/components/LiveRoomPostCard.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
-import type {
-	Anime,
-	Post,
-	RoomExitSurveyComparisonWithX,
-	RoomExitSurveyNextParticipation,
-	TrendingHashtag,
-} from "$lib/types";
+import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
+import {
+	applyPostStates,
+	comparePostsAsc,
+	cursorOfLast,
+	fetchRoomPostPages,
+	mergeRoomPosts,
+	type RoomPostCursor,
+	type RoomPostPage,
+} from "$lib/room-live-sync";
+import type { Post, RoomExitSurveyComparisonWithX, RoomExitSurveyNextParticipation } from "$lib/types";
+import type { LiveRoomActionData, LiveRoomData } from "$lib/types/live-room";
+import { isPostContinuation } from "$lib/utils/post-presentation";
 import {
 	createRoomConnectionState,
 	deriveRoomConnectionPhase,
@@ -22,62 +29,13 @@ import {
 	ROOM_CONNECTION_PHASE_LABELS,
 	ROOM_CONNECTION_PHASE_TONES,
 	ROOM_LIVE_FETCH_TIMEOUT_MS,
+	ROOM_LIVE_MAX_PAGES,
 	ROOM_LIVE_POLL_INTERVAL_MS,
+	ROOM_STATE_MAX_IDS,
 	type RoomConnectionEvent,
 	reduceRoomConnection,
 	shouldOfferManualReconnect,
 } from "$lib/utils/room-connection";
-
-/**
- * LiveRoomView が期待するデータ形状。
- * 放送ルーム（/rooms/anime/[id]/[date], lobby）とイベントルーム（/events/[id]）の
- * どちらのローダーもこの形状に合わせて返す。
- * anime はイベントにアニメが紐づいていない場合 null になりうる。
- */
-type RoomRealtimeClient = Pick<SupabaseClient, "channel" | "removeChannel">;
-
-export type LiveRoomData = {
-	supabase: RoomRealtimeClient;
-	anime: Anime | null;
-	room: {
-		session_id: string;
-		date: string;
-		kind: "episode" | "global" | "event";
-		hashtag: string;
-		scheduled_at: string;
-		posting_opens_at: string;
-		posting_closes_at: string;
-		duration_minutes: number | null;
-		title: string;
-	};
-	posts: Post[];
-	trending: TrendingHashtag[];
-	animeTrending: Anime[];
-	user: User | null;
-	roomExperiment: {
-		enabled: boolean;
-		sessionId?: string | undefined;
-	};
-	roomExitSurvey: {
-		experimentRunId: string | null;
-		alreadyAnswered: boolean;
-		postCount: number;
-		surveyVersion: string;
-	};
-};
-
-export type LiveRoomActionData =
-	| {
-			message?: string;
-			success?: boolean;
-			postId?: string;
-			deleted?: boolean;
-			liked?: boolean;
-			bookmarked?: boolean;
-			reposted?: boolean;
-	  }
-	| null
-	| undefined;
 
 let { data, form, headerActions }: { data: LiveRoomData; form: LiveRoomActionData; headerActions?: Snippet } = $props();
 
@@ -110,7 +68,7 @@ let postListEl: HTMLDivElement | null = $state(null);
 let mounted = $state(false);
 let isMobileViewport = $state(false);
 let postOrder = $state<PostOrder>("oldest");
-let lastPostCount = $state(0);
+let knownPostIds = new Set<string>();
 let isFollowingLatest = $state(true);
 let unreadNewPostCount = $state(0);
 let enteredAt = Date.now();
@@ -119,7 +77,7 @@ let surveyOpen = $state(false);
 let surveyHandled = $state(false);
 let surveySubmitting = $state(false);
 let surveyErrorMessage: string | null = $state(null);
-let programmaticScrollTimer: ReturnType<typeof setTimeout> | undefined;
+
 let previousVirtualKeyboardOverlaysContent: boolean | undefined;
 let removeRoomKeyboardListeners: (() => void) | undefined;
 
@@ -140,6 +98,11 @@ const overLimit = $derived(charCount > maxLen);
 const surveyPostCount = $derived(data.roomExitSurvey.postCount + localSurveyPostCount);
 // ライブ更新で受信した投稿（load 由来の data.posts とは別に保持し、ID でマージする）
 let extraPosts = $state<Post[]>([]);
+// 新着取得の境界。表示中の投稿ではなく、取得した行の境界で進める（#320）
+let liveCursor: RoomPostCursor | null = null;
+// 再確認で見えなくなった投稿（削除・管理者非表示・ブロック）と、更新された返信数（#324）
+let hiddenPostIds = $state<Set<string>>(new Set());
+let replyCountOverrides = $state<Map<string, number>>(new Map());
 let roomExperimentVisitId: string | null = null;
 let roomExperimentHeartbeatTimer: ReturnType<typeof setInterval> | undefined;
 let roomExperimentExitSent = false;
@@ -149,20 +112,10 @@ function getRoomExperimentVisitStorageKey(sessionId: string) {
 	return `room-experiment-visit:${sessionId}`;
 }
 
-const allPosts = $derived.by(() => {
-	if (extraPosts.length === 0) return data.posts;
-	const seen = new Set(data.posts.map((p) => p.id));
-	const fresh = extraPosts.filter((p) => !seen.has(p.id));
-	if (fresh.length === 0) return data.posts;
-	return [...data.posts, ...fresh].sort(
-		(a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-	);
-});
+const allPosts = $derived(mergeRoomPosts(data.posts, extraPosts, hiddenPostIds, replyCountOverrides));
 
 const displayedPosts = $derived(
-	postOrder === "oldest"
-		? allPosts
-		: [...allPosts].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+	postOrder === "oldest" ? allPosts : [...allPosts].sort((a, b) => comparePostsAsc(b, a)),
 );
 
 let fetchingLive = false;
@@ -476,39 +429,81 @@ function liveDiffQueryParam() {
 	return data.room.kind === "event" ? "event_id" : "session_id";
 }
 
+/** 差分 API を1ページ分叩く。非成功応答・例外・タイムアウトは null */
+async function fetchRoomPostPage(cursor: RoomPostCursor | null): Promise<RoomPostPage | null> {
+	const params = new URLSearchParams({ [liveDiffQueryParam()]: data.room.session_id });
+	if (cursor) {
+		params.set("after_created_at", cursor.createdAt);
+		params.set("after_id", cursor.id);
+	}
+	try {
+		// ハングした fetch が fetchingLive を握り続けてポーリングを塞がないようタイムアウトを付ける
+		const res = await fetch(`/api/rooms/posts?${params}`, {
+			signal: AbortSignal.timeout(ROOM_LIVE_FETCH_TIMEOUT_MS),
+		});
+		if (!res.ok) return null;
+		return (await res.json()) as RoomPostPage;
+	} catch {
+		return null;
+	}
+}
+
 /**
- * 最後に受信した投稿以降の差分を取得して extraPosts に追加する。
- * 成否は接続状態に反映し、非成功応答・例外・タイムアウトを「更新失敗」として画面に伝える。
- * since は最後の投稿の created_at より後(gt)を返すため、復旧後も ID の重複チェックと合わせて
- * 取りこぼし・二重表示なく追いつける。
+ * 取得済みの境界より後ろの新着を古い順に取り、extraPosts に追加する（#320）。
+ * 続きがある間はページを追うので、バックグラウンドから戻って未受信が100件を超えていても取りこぼさない。
+ * 成否は接続状態に反映し、失敗したらそこまでの境界を残して次回その続きから取る。
  */
 async function fetchNewPosts() {
 	if (fetchingLive) return;
 	fetchingLive = true;
 	dispatchConnection({ type: "fetch_start" });
 	try {
-		const last = allPosts[allPosts.length - 1];
-		const params = new URLSearchParams({ [liveDiffQueryParam()]: data.room.session_id });
-		if (last) params.set("since", last.created_at);
-		// ハングした fetch が fetchingLive を握り続けてポーリングを塞がないようタイムアウトを付ける
-		const res = await fetch(`/api/rooms/posts?${params}`, {
-			signal: AbortSignal.timeout(ROOM_LIVE_FETCH_TIMEOUT_MS),
-		});
-		if (!res.ok) {
-			dispatchConnection({ type: "fetch_failure", at: Date.now() });
-			return;
-		}
-		const body = (await res.json()) as { posts: Post[] };
-		dispatchConnection({ type: "fetch_success", at: Date.now() });
-		if (body.posts.length === 0) return;
+		const result = await fetchRoomPostPages(
+			fetchRoomPostPage,
+			liveCursor ?? cursorOfLast(allPosts),
+			ROOM_LIVE_MAX_PAGES,
+		);
+		liveCursor = result.cursor;
 		const seen = new Set(allPosts.map((p) => p.id));
-		const fresh = body.posts.filter((p) => !seen.has(p.id));
+		const fresh = result.posts.filter((p) => !seen.has(p.id) && !hiddenPostIds.has(p.id));
 		if (fresh.length > 0) extraPosts = [...extraPosts, ...fresh];
-	} catch {
-		// ネットワークエラーは次回の受信/ポーリングで回復する。状態には失敗として残す
-		dispatchConnection({ type: "fetch_failure", at: Date.now() });
+		dispatchConnection(
+			result.ok ? { type: "fetch_success", at: Date.now() } : { type: "fetch_failure", at: Date.now() },
+		);
 	} finally {
 		fetchingLive = false;
+	}
+}
+
+let resyncingStates = false;
+
+/**
+ * 表示中の投稿が今も見えるかと返信数を確かめ直す（#324 #347）。
+ * Realtime は INSERT しか購読しておらず、削除・管理者非表示・返信の追加は届かないため、
+ * ポーリングと同じ間隔、および load のやり直し（自分で削除した直後など）のたびに確かめる。
+ */
+async function resyncPostStates() {
+	if (resyncingStates || allPosts.length === 0) return;
+	resyncingStates = true;
+	try {
+		// 新しい側から上限件数まで（古い投稿の変化は見落としても影響が小さい）
+		const ids = allPosts.slice(-ROOM_STATE_MAX_IDS).map((p) => p.id);
+		const res = await fetch("/api/rooms/posts/state", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ ids }),
+			signal: AbortSignal.timeout(ROOM_LIVE_FETCH_TIMEOUT_MS),
+		});
+		if (!res.ok) return;
+		const { visible } = (await res.json()) as { visible: Record<string, number> };
+		const next = applyPostStates(ids, visible, hiddenPostIds, replyCountOverrides);
+		if (!next.changed) return;
+		hiddenPostIds = next.hidden;
+		replyCountOverrides = next.replyCounts;
+	} catch {
+		// 次回のポーリングで確かめ直す
+	} finally {
+		resyncingStates = false;
 	}
 }
 
@@ -520,6 +515,7 @@ async function handleManualReconnect() {
 		dispatchConnection({ type: "reconnect" });
 		realtimeGeneration += 1;
 		await fetchNewPosts();
+		void resyncPostStates();
 	} finally {
 		reconnecting = false;
 	}
@@ -528,7 +524,10 @@ async function handleManualReconnect() {
 function handleOnline() {
 	dispatchConnection({ type: "online" });
 	// 回線復帰時は Realtime の再参加を待たずに差分を取りに行く
-	if (status === "open") void fetchNewPosts();
+	if (status === "open") {
+		void fetchNewPosts();
+		void resyncPostStates();
+	}
 }
 
 function handleOffline() {
@@ -537,7 +536,10 @@ function handleOffline() {
 
 function handleVisibilityChange() {
 	// バックグラウンドから戻ったとき、止まっていたポーリングを待たずに追いつく
-	if (document.visibilityState === "visible" && status === "open") void fetchNewPosts();
+	if (document.visibilityState === "visible" && status === "open") {
+		void fetchNewPosts();
+		void resyncPostStates();
+	}
 }
 
 const status = $derived.by<RoomStatus>(() => {
@@ -558,7 +560,7 @@ onMount(() => {
 	}
 	removeRoomKeyboardListeners = installRoomKeyboardOffsetTracking();
 	mounted = true;
-	lastPostCount = data.posts.length;
+	knownPostIds = new Set(allPosts.map((post) => post.id));
 	intervalId = setInterval(() => {
 		now = Date.now();
 	}, 1000);
@@ -585,7 +587,7 @@ onDestroy(() => {
 		virtualKeyboard.overlaysContent = previousVirtualKeyboardOverlaysContent;
 	}
 	clearInterval(intervalId);
-	if (programmaticScrollTimer) clearTimeout(programmaticScrollTimer);
+
 	clearRoomExperimentHeartbeatTimer();
 	if (typeof window !== "undefined") {
 		window.removeEventListener("pointerdown", handleWindowPointerDown, true);
@@ -625,20 +627,24 @@ function installRoomKeyboardOffsetTracking() {
 	};
 }
 
+// load をやり直したら（自分で投稿を削除した直後など）、表示中の投稿を確かめ直す（#347）。
+// ライブ受信分は load の結果に含まれないので、削除してもそのままでは画面に残るため
+$effect(() => {
+	void data.posts;
+	if (!mounted) return;
+	untrack(() => void resyncPostStates());
+});
+
 $effect(() => {
 	if (!mounted || status !== "open") return;
-	if (allPosts.length === lastPostCount) return;
-	const newPostCount = allPosts.length - lastPostCount;
-	const shouldFollow = isFollowingLatest || isNearLatestEdge();
-	lastPostCount = allPosts.length;
-	if (allPosts.length === 0) return;
-	if (shouldFollow) {
-		isFollowingLatest = true;
+	const freshCount = allPosts.filter((post) => !knownPostIds.has(post.id)).length;
+	knownPostIds = new Set(allPosts.map((post) => post.id));
+	if (freshCount === 0) return;
+	if (isFollowingLatest) {
 		unreadNewPostCount = 0;
-		void focusLatestPost(postOrder, "smooth").then(() => focusComposerTextarea({ preventScroll: true }));
+		void focusLatestPost();
 	} else {
-		unreadNewPostCount += Math.max(1, newPostCount);
-		void focusComposerTextarea({ preventScroll: true });
+		unreadNewPostCount += freshCount;
 	}
 });
 
@@ -673,7 +679,10 @@ $effect(() => {
 			if (!active) return;
 			dispatchConnection({ type: "realtime", status: subscribeStatus });
 		});
-	const pollId = setInterval(() => void fetchNewPosts(), ROOM_LIVE_POLL_INTERVAL_MS);
+	const pollId = setInterval(() => {
+		void fetchNewPosts();
+		void resyncPostStates();
+	}, ROOM_LIVE_POLL_INTERVAL_MS);
 	// 入室直後に一度取得して「最終更新」を確定させる(購読完了までの取りこぼしも拾う)。
 	// allPosts 等を effect の依存にしないよう untrack で呼ぶ
 	untrack(() => void fetchNewPosts());
@@ -694,26 +703,15 @@ function isNearLatestEdge(order: PostOrder = postOrder) {
 
 function handlePostListScroll() {
 	if (!mounted || status !== "open") return;
-	if (programmaticScrollTimer) return;
 	const nearLatest = isNearLatestEdge();
 	isFollowingLatest = nearLatest;
 	if (nearLatest) unreadNewPostCount = 0;
 }
 
-async function focusLatestPost(order: PostOrder = postOrder, behavior: ScrollBehavior = "auto") {
+async function focusLatestPost(order: PostOrder = postOrder) {
 	await tick();
-	requestAnimationFrame(() => {
-		if (!postListEl) return;
-		if (programmaticScrollTimer) clearTimeout(programmaticScrollTimer);
-		programmaticScrollTimer = setTimeout(() => {
-			programmaticScrollTimer = undefined;
-			isFollowingLatest = true;
-		}, 450);
-		postListEl.scrollTo({
-			top: order === "oldest" ? postListEl.scrollHeight : 0,
-			behavior,
-		});
-	});
+	if (!postListEl || !isFollowingLatest) return;
+	postListEl.scrollTo({ top: order === "oldest" ? postListEl.scrollHeight : 0, behavior: "instant" });
 }
 
 function setPostOrder(order: PostOrder) {
@@ -726,7 +724,7 @@ function setPostOrder(order: PostOrder) {
 function resumeLatestFollow() {
 	isFollowingLatest = true;
 	unreadNewPostCount = 0;
-	if (allPosts.length > 0) void focusLatestPost(postOrder, "smooth");
+	if (allPosts.length > 0) void focusLatestPost(postOrder);
 }
 
 function formatHMS(ms: number) {
@@ -805,7 +803,9 @@ function formatCompactDate(iso: string) {
 							class="composer-textarea room-composer-textarea"
 							name="content"
 							placeholder={isMobileViewport ? "いまの感想を投稿..." : "いまの感想を投稿... (Shift+Enterで改行)"}
-							rows={isMobileViewport ? 1 : 3}
+							rows="1"
+							aria-label="実況の投稿内容"
+							use:autosize={postContent}
 							enterkeyhint="send"
 							bind:value={postContent}
 							maxlength={maxLen}
@@ -813,14 +813,18 @@ function formatCompactDate(iso: string) {
 								keepComposerFocused = true;
 							}}
 							onkeydown={(e) => {
-								if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+								if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
 									e.preventDefault();
 									submitComposer();
 								}
 							}}
 						></textarea>
 						<div class="composer-footer">
-							<span class="char-count {overLimit ? 'char-count--over' : ''}">{charCount}/{maxLen}</span>
+							{#if charCount >= maxLen - 40}
+								<span class="char-count {overLimit ? 'char-count--over' : ''}"
+									>{charCount}/{maxLen}</span
+								>
+							{/if}
 							<button
 								type="submit"
 								class="btn btn-primary btn-sm"
@@ -899,21 +903,33 @@ function formatCompactDate(iso: string) {
 		</div>
 
 		<div class="room-post-list-shell">
-			<div class="room-post-list scrollbar-thin-muted" bind:this={postListEl} onscroll={handlePostListScroll}>
-				{#if allPosts.length === 0}
-					<div class="card anime-room-empty">まだ投稿はありません。最初の感想を残しましょう。</div>
-				{:else}
-					{#each displayedPosts as post (post.id)}
-						<div class="anime-room-post">
-							<LiveRoomPostCard
-								{post}
-								currentUserId={data.user?.id ?? null}
-								broadcastStartAt={data.room.scheduled_at}
-								timelineTimeMode={isGlobalLobby}
-							/>
-						</div>
-					{/each}
-				{/if}
+			<!-- svelte-ignore a11y_no_noninteractive_tabindex (The scroll region supports keyboard scrolling.) -->
+			<div
+				class="room-post-list scrollbar-thin-muted"
+				role="region"
+				aria-label="実況タイムライン"
+				tabindex="0"
+				bind:this={postListEl}
+				onscroll={handlePostListScroll}
+				use:timelineScroll={{ following: isFollowingLatest, newestFirst: postOrder === "newest" }}
+			>
+				<div class="room-post-list-content">
+					{#if allPosts.length === 0}
+						<div class="card anime-room-empty">まだ投稿はありません。最初の感想を残しましょう。</div>
+					{:else}
+						{#each displayedPosts as post, index (post.id)}
+							<div class="anime-room-post" data-post-id={post.id}>
+								<LiveRoomPostCard
+									{post}
+									continuation={isPostContinuation(post, displayedPosts[index - 1])}
+									currentUserId={data.user?.id ?? null}
+									broadcastStartAt={data.room.scheduled_at}
+									timelineTimeMode={isGlobalLobby}
+								/>
+							</div>
+						{/each}
+					{/if}
+				</div>
 			</div>
 
 			{#if showLatestJumpButton}
@@ -929,7 +945,9 @@ function formatCompactDate(iso: string) {
 						<span class="i-lucide-arrow-up latest-jump-icon" aria-hidden="true"></span>
 					{/if}
 					{#if unreadNewPostCount > 0}
-						<span class="new-posts-count">{unreadNewPostCount}</span>
+						<span class="new-posts-count">新着 {unreadNewPostCount}件</span>
+					{:else}
+						<span>最新へ</span>
 					{/if}
 				</button>
 			{/if}
@@ -937,13 +955,14 @@ function formatCompactDate(iso: string) {
 	</div>
 
 	<aside class="sidebar-column scrollbar-thin-muted">
-		<div class="room-summary-card mb-4 rounded-xl border p-4 shadow-sm">
+		<div class="room-summary-card mb-4 p-4">
 			<div class="flex items-start">
 				{#if data.anime}
 					<a href="/anime/{data.anime.id}" class="shrink-0" aria-label="アニメ詳細を開く">
 						{#if data.anime.cover_url}
 							<img
-								src={data.anime.cover_url}
+								src={coverThumbSrc(data.anime.cover_url)}
+								{@attach coverThumbFallback(data.anime.cover_url)}
 								alt={data.anime.title}
 								class="block w-16 rounded-lg shadow-md"
 							>
@@ -1099,12 +1118,12 @@ function formatCompactDate(iso: string) {
 	overflow: hidden;
 	padding-right: max(24px, env(safe-area-inset-right));
 	padding-bottom: 24px;
-	padding-left: max(16px, calc((100% - (var(--content-max) + 48px)) / 2 + 16px));
+	padding-left: 20px;
 }
 
 .room-page-container > .feed-column {
 	display: flex;
-	flex: 0 0 var(--feed-width);
+	flex: 1 1 var(--feed-width);
 	height: 100%;
 	min-height: 0;
 	overflow: hidden;
@@ -1112,7 +1131,7 @@ function formatCompactDate(iso: string) {
 }
 
 .room-page-container > .sidebar-column {
-	flex: 1 1 var(--sidebar-width);
+	flex: 0 0 var(--sidebar-width);
 	max-height: 100%;
 	overflow-x: hidden;
 	overflow-y: auto;
@@ -1142,6 +1161,7 @@ function formatCompactDate(iso: string) {
 	overflow-x: hidden;
 	overflow-y: auto;
 	overscroll-behavior: contain;
+	overflow-anchor: none;
 }
 
 .new-posts-badge {
@@ -1159,6 +1179,7 @@ function formatCompactDate(iso: string) {
 	padding: 8px 12px;
 	border: 1px solid color-mix(in srgb, var(--color-primary) 28%, transparent);
 	border-radius: 999px;
+	corner-shape: round;
 	background: color-mix(in srgb, var(--color-surface) 92%, var(--color-primary));
 	box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
 	color: var(--color-primary);
@@ -1180,6 +1201,7 @@ function formatCompactDate(iso: string) {
 	place-items: center;
 	padding: 0 6px;
 	border-radius: 999px;
+	corner-shape: round;
 	background: var(--color-primary);
 	color: white;
 	font-size: 12px;
@@ -1235,6 +1257,7 @@ function formatCompactDate(iso: string) {
 	height: 8px;
 	flex-shrink: 0;
 	border-radius: 999px;
+	corner-shape: round;
 	background: var(--color-text-muted);
 }
 
@@ -1274,6 +1297,7 @@ function formatCompactDate(iso: string) {
 	padding: 4px 8px;
 	border: 1px solid var(--color-border);
 	border-radius: 999px;
+	corner-shape: round;
 	background: var(--color-surface);
 	color: var(--color-text-muted);
 	font: inherit;
@@ -1362,16 +1386,17 @@ function formatCompactDate(iso: string) {
 	color: white;
 }
 
-/* ── モバイル用コンパクトバー (サイドバー非表示時のみ表示) ── */
+/* Shared room context remains above the reaction log at every viewport. */
 .room-mobile-bar {
-	display: none;
+	display: flex;
 	flex-direction: column;
 	gap: 6px;
 	padding: 10px 12px;
 	margin-bottom: 12px;
-	background: var(--color-surface);
-	border: 1px solid var(--color-border);
-	border-radius: var(--radius);
+	background: transparent;
+	border: 0;
+	border-bottom: 1px solid var(--color-border);
+	border-radius: 0;
 	overflow: hidden;
 }
 .header-top-row,
@@ -1478,7 +1503,7 @@ function formatCompactDate(iso: string) {
 		margin-top: 8px;
 		margin-bottom: 0;
 		padding: 8px 10px;
-		border-radius: 14px;
+		border-radius: 6px;
 		transform: translateY(calc(0px - max(env(keyboard-inset-height, 0px), var(--room-keyboard-offset, 0px))));
 		transition: transform 160ms ease;
 		will-change: transform;
@@ -1553,6 +1578,51 @@ function formatCompactDate(iso: string) {
 	.room-page-container {
 		padding-right: 6px;
 		padding-left: 6px;
+	}
+}
+
+.room-page-container .composer {
+	padding: 10px 12px;
+	border: 0;
+	border-top: 1px solid var(--color-border);
+	border-radius: 0;
+	background: var(--color-bg);
+	margin: 0;
+}
+.room-page-container .composer-body {
+	align-items: flex-end;
+	gap: 8px;
+}
+.room-page-container .composer-textarea {
+	min-height: 36px;
+	max-height: 144px;
+	padding: 6px 0;
+	height: auto;
+	font-size: 15px;
+	line-height: 24px;
+}
+.room-page-container .composer-footer {
+	margin: 0;
+	padding: 0;
+	border: 0;
+	gap: 8px;
+}
+.room-page-container .composer-footer .btn {
+	min-height: 36px;
+}
+.room-mobile-bar {
+	display: flex;
+	padding: 12px;
+	border-bottom: 1px solid var(--color-border);
+}
+.room-summary-card {
+	box-shadow: none;
+	border: 0;
+	border-radius: 0;
+}
+@media (min-width: 961px) and (max-width: 1160px) {
+	.room-page-container > .sidebar-column {
+		display: none;
 	}
 }
 </style>

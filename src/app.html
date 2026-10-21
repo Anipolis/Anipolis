@@ -4,17 +4,34 @@
 		<meta charset="utf-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1">
 		<meta name="text-scale" content="scale">
-		<link rel="icon" href="%sveltekit.assets%/anipolis-logo.png" type="image/png">
+		<link
+			rel="icon"
+			href="%sveltekit.assets%/anipolis-logo-light.png"
+			type="image/png"
+			media="(prefers-color-scheme: light)"
+		>
+		<link
+			rel="icon"
+			href="%sveltekit.assets%/anipolis-logo-dark.png"
+			type="image/png"
+			media="(prefers-color-scheme: dark)"
+		>
 		<meta name="description" content="アニメファンのためのSNS。視聴中のアニメを記録して、感想を投稿・共有しよう。">
 		<meta name="robots" content="index, follow">
 		<script nonce="%sveltekit.nonce%">
 		(() => {
-			var t = localStorage.getItem("theme");
-			if (t === "light" || t === "dark") {
-				document.documentElement.setAttribute("data-theme", t);
-			} else if (window.matchMedia("(prefers-color-scheme: light)").matches) {
+			// ---- Theme detection ----
+			const theme = localStorage.getItem("theme");
+			if (theme === "light" || theme === "dark") {
+				document.documentElement.setAttribute("data-theme", theme);
+			} else if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+				document.documentElement.setAttribute("data-theme", "dark");
+			} else {
+				// Set default theme to light
 				document.documentElement.setAttribute("data-theme", "light");
 			}
+
+			// ---- Room scroll lock ----
 			if (window.location.pathname.indexOf("/rooms/anime/") === 0) {
 				document.documentElement.classList.add("room-scroll-lock");
 			}
@@ -24,7 +41,9 @@
 	</head>
 
 	<body data-sveltekit-preload-data="hover">
+		<!-- Skip link: lets keyboard / screen reader users jump past the nav to #main-content. Hidden until focused. -->
 		<a href="#main-content" class="skip-to-main">メインコンテンツへスキップ</a>
+
 		<div style="display: contents">%sveltekit.body%</div>
 	</body>
 </html>

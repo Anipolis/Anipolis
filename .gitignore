@@ -1,14 +1,11 @@
 # macOS dummy files
 .DS_Store
 
-# Node dependencies
+# Node.js dependencies
 node_modules/
 
 # SvelteKit artifacts
 .svelte-kit/
-
-# Local agent session state
-.omc/
 
 # Wrangler caches
 .wrangler/

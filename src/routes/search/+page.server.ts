@@ -12,6 +12,7 @@ import {
 	buildTitleSearchFilter,
 	enrichPostsWithCounts,
 	getAnimeRankingTrending,
+	getBlockedUserIds,
 	quoteOrFilterValue,
 } from "$lib/server/queries";
 import type { Database } from "$lib/supabase/database.types";
@@ -70,10 +71,14 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		user?.id ?? null,
 	);
 
+	// ブロック相手は検索結果にも出さない（投稿側は enrichPostsWithCounts が除外する）
+	const blockedUserIds = await getBlockedUserIds(supabase, user?.id ?? null);
+	const users = (usersResult.data ?? []).filter((candidate) => !blockedUserIds.has(candidate.id));
+
 	return {
 		query,
 		posts,
-		users: usersResult.data ?? [],
+		users,
 		user,
 		trending: trendingResult.data ?? [],
 		animeTrending,

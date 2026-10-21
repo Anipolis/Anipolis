@@ -100,7 +100,7 @@ let {
 	position: relative;
 	padding: 18px;
 	border: 1px solid rgba(255, 255, 255, 0.16);
-	border-radius: 8px;
+	border-radius: 12px;
 	background:
 		radial-gradient(circle at 82% 18%, rgba(52, 211, 153, 0.2), transparent 30%),
 		linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04));
@@ -169,6 +169,7 @@ let {
 	width: 46px;
 	height: 46px;
 	border-radius: 50%;
+	corner-shape: round;
 	border: 1px solid rgba(255, 255, 255, 0.18);
 	background: rgba(255, 255, 255, 0.12);
 	color: var(--color-accent);

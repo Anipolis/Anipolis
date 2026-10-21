@@ -23,10 +23,26 @@ Wikidata ───────────────┤                       
 
 `import:mal` は `api.myanimelist.net/v2` から事実メタデータ（タイトル・話数・種別・放送日・制作会社・ジャンル）を
 取得し `source = mal` として保存する。同じMALデータのスクレイピング経由であるJikanより一段上、確認済み日本語
-ソース（しょぼいカレンダー・Wikidata）より下に位置づける。あらすじ・スコア・画像は規約上の配慮から取り込まない。
+ソース（しょぼいカレンダー・Wikidata）より下に位置づける。あらすじ・スコア・画像は規約上の配慮から取り込まない
+（カバー画像は後述の `import:jikan-covers` で別に扱う）。
 MALが提供しないフィールド（公式URL・リソース・カバー画像）は正規化データにキー自体を含めず、Jikan値を
 nullで遮蔽しない。`mal` レコードはJikanと同様に内部利用限定で、ODbL派生データAPIには含めない。
 利用には `MAL_CLIENT_ID` が必要。解決対象シーズンの決定には関与しない（ODbL ∪ Jikanのまま）。
+
+## カバー画像（import:jikan-covers）
+
+カバーの無い作品（既定は TV と Movie）について、Jikan の `images.jpg.large_image_url`（MAL CDN）を取得し、
+元のサイズのまま AVIF（品質50、長辺600px超のみ縮小）と幅160pxのサムネイルに変換して `anime-covers` に保存する。
+オブジェクト名は `mal-<MAL ID>-<元画像sha256先頭12桁>.avif` で上書きしない（長期キャッシュ可）。
+
+- 出典は `anime_cover_assets` に記録する（取得元画像URL・API URL・sha256・元/保存サイズ・取得日時・公開日時）。
+  削除依頼や出典単位の取り下げはこの表から辿る。
+- 縦横比0.62〜0.80かつ幅200px以上の縦長画像だけ `approved`。正方形・横長・小さい画像は `needs_review` で公開しない。
+- `--publish` を付けたときだけ、承認済みかつ未公開のものを `anime.cover_url` に書く（既にカバーがある作品は上書きしない）。
+  取り込み元はどれも `cover_url` に null しか持たないため、resolver では legacy（既存行）の値として保持される。
+- manual レコードに `cover_url` キーがある作品は、resolver で manual の値が優先されて消えるため対象外にする。
+- 公開 Jikan が 504 のときは `JIKAN_BASE_URL` でセルフホストの jikan-rest を使う。画像URLは
+  `.jikan-import-cache/cover-image-urls.json` に30日キャッシュし、`import:jikan` のチェックポイントにある分も流用する。
 
 ## フィールド優先規則
 

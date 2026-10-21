@@ -14,6 +14,7 @@ vi.mock("$app/state", () => ({
 			return new URL(window.location.href);
 		},
 		state: {},
+		data: {},
 	},
 	navigating: { type: null, from: null, to: null },
 }));

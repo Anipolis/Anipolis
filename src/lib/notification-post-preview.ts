@@ -1,3 +1,4 @@
+import { contentWarningLabel } from "./content-warning";
 import type { Notification } from "./types";
 
 /** 通知に添える投稿プレビューの表示内容 */
@@ -22,9 +23,14 @@ type NotificationPostFields = Pick<
 	| "post_has_anime_quote"
 	| "post_has_quoted_post"
 	| "post_has_exchange_share"
+	| "post_cw_anime_id"
+	| "post_cw_anime_title"
 >;
 
-type NotificationPostAttachments = Omit<NotificationPostFields, "post_id" | "post_available" | "post_content">;
+type NotificationPostAttachments = Omit<
+	NotificationPostFields,
+	"post_id" | "post_available" | "post_content" | "post_cw_anime_id" | "post_cw_anime_title"
+>;
 
 /** 本文を通知プレビュー用に切り詰める */
 export function truncatePostContent(content: string, max = NOTIFICATION_POST_PREVIEW_LENGTH): string {
@@ -55,6 +61,7 @@ export function emptyPostContextLabel(post: NotificationPostAttachments): string
  * - post_id が無い通知（フォロー等）は何も出さない
  * - post_id はあるが投稿行を取得できない場合は「削除された投稿」としてリンクを出さない
  *   （削除済みのほか、管理者が非表示にした投稿も RLS で取得できずここに入る）
+ * - CW（ネタバレ注意）付きの投稿は、本文の代わりに警告ラベルでリンクする（#319）
  * - 本文があればその抜粋、無ければ画像・作品引用などの文脈ラベルでリンクする
  */
 export function notificationPostPreview(notif: NotificationPostFields): NotificationPostPreview {
@@ -62,6 +69,15 @@ export function notificationPostPreview(notif: NotificationPostFields): Notifica
 	if (!notif.post_available) return { kind: "deleted", text: DELETED_POST_LABEL };
 
 	const href = `/posts/${notif.post_id}`;
+	if (notif.post_cw_anime_id != null) {
+		const cwAnime = notif.post_cw_anime_title ? { title: notif.post_cw_anime_title } : null;
+		return {
+			kind: "link",
+			href,
+			text: contentWarningLabel({ cw_anime_id: notif.post_cw_anime_id, cw_anime: cwAnime }),
+			placeholder: true,
+		};
+	}
 	const content = truncatePostContent(notif.post_content);
 	if (content) return { kind: "link", href, text: content, placeholder: false };
 	return { kind: "link", href, text: emptyPostContextLabel(notif), placeholder: true };

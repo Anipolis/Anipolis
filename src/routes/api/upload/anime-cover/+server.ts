@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { error, json } from "@sveltejs/kit";
 import { env } from "$env/dynamic/private";
 import { PUBLIC_SUPABASE_URL } from "$env/static/public";
+import { ANIME_COVER_BUCKET, coverThumbObjectName } from "$lib/anime-cover";
 import { upsertManualSourceRecord } from "$lib/server/anime-admin";
 import { isAdminUser } from "$lib/server/queries";
 import { MULTIPART_OVERHEAD_BYTES, readFormDataWithLimit, validateImageBuffer } from "$lib/server/upload";
@@ -60,7 +61,7 @@ export const POST: RequestHandler = async ({ request, locals: { supabase, safeGe
 		.from("anime")
 		.update({ cover_url: publicUrl })
 		.eq("id", animeId)
-		.select("id,mal_id")
+		.select("id,mal_id,cover_url")
 		.single();
 
 	if (updateError || !updatedRow) {
@@ -85,5 +86,15 @@ export const POST: RequestHandler = async ({ request, locals: { supabase, safeGe
 		}
 	}
 
-	return json({ url: publicUrl });
+	// サムネイルは同じ作品 ID の名前で作られるため、差し替え前の画像のまま残さない。
+	// 次回の generate:cover-thumbnails で作り直すまでは表示側が原寸へフォールバックする。
+	const { error: thumbDeleteError } = await adminClient.storage
+		.from(ANIME_COVER_BUCKET)
+		.remove([coverThumbObjectName(path)]);
+	if (thumbDeleteError) {
+		console.error("anime cover thumbnail cleanup error (path=%s):", path, thumbDeleteError);
+	}
+
+	// © の無い作品は保存しても cover_url が隠れる（migration 136）。表示されない理由を画面で示す
+	return json({ url: publicUrl, visible: (updatedRow as { cover_url: string | null }).cover_url !== null });
 };

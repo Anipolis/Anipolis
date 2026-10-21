@@ -147,6 +147,25 @@ Auth rules:
 - Server actions must derive identity from `safeGetSession()` or trusted server context. Never trust client-provided `user_id`.
 - RLS should enforce ownership and visibility. App checks are still useful for UX but are not the security boundary.
 
+## Code Review Rules
+
+Write review findings in Japanese. Report actionable defects introduced or exposed by the PR, with the triggering conditions, user impact, and the affected code path. Check the relevant callers and latest migrations before reporting; distinguish reproduced behavior from inference. Assign severity from actual impact, without promoting minor issues to fit a reporting threshold. Leave formatting and other mechanical checks to CI.
+
+### Authorization and content visibility
+
+- Treat direct Supabase REST/RPC calls as reachable by clients. App validation alone must not protect ownership, block restrictions, or write limits. Check RLS, SQL NULL behavior, and SECURITY DEFINER privileges; an RLS-filtered empty result is not proof that a forbidden relationship does not exist. Rate limits must use trusted time and atomic accounting that cannot be reset by deleting posts.
+- Preserve private-account, block, BAN, and moderation visibility across posts, quotes, notifications, images, and caches. Before service-role signing or deletion, verify the image path's ownership as well as the referring post's visibility: a user-controlled image URL in a readable post is not authorization for that object. Explicit owner/admin access and the documented lifetime of already-issued signed URLs are valid exceptions. CW-protected text must remain concealed in previews and overlays until the viewer chooses to reveal it.
+
+### Deletion and schema changes
+
+- Follow foreign-key cascades and Storage pagination when reviewing account deletion or cleanup. Preserve records intended to survive their author's departure (including third-party invite redemptions and pending reports), handle nullable authors in queries and UI, and do not continue account deletion after incomplete Storage cleanup. An image's creation time alone does not prove that it is unused: cleanup must respect valid drafts and the enforced image-use lifetime.
+- Check migration compatibility with the stated deployment order and all callers, including direct RPC access. Keep quoted-post hydration separate from the inline self-FK join described above unless the schema/cache change is explicitly verified. For SQL behavior, prefer isolated DB checks where available; do not apply production migrations or delete real accounts/files to validate a review. State which behavior remains unverified.
+
+### Async state and complete results
+
+- Late responses must not restore a discarded draft, cleared room/CW selection, superseded search, or previous account's state. Trace invalidation on explicit user changes and unmount; use cancellation or generation checks where needed. Check whether an existing keyed component already resets state before reporting a missing reset. A failed refresh must not be interpreted as proof that displayed posts were deleted or became invisible.
+- Respect RPC batch limits and paginate complete datasets when the operation requires all rows. Sorting and filtering must happen over the intended candidate set before page boundaries, with stable tie-breaking; do not rank only a truncated subset. Partial count failures must not silently become zero counts or false reaction states, and new replies must remain reachable after an already-open thread refreshes.
+
 ## Coding Standards
 
 TypeScript:
@@ -288,19 +307,18 @@ pnpm preview         # Preview the production build
 pnpm supabase:version # Show the installed Supabase CLI version
 pnpm supabase:migrations # Compare local and remote migration history
 pnpm supabase:types  # Regenerate src/lib/supabase/database.types.ts from the linked project
-pnpm check:biome     # Biome check with --write
+pnpm check:biome     # Read-only Biome check
 pnpm check:svelte    # svelte-kit sync + svelte-check
 pnpm check:types     # tsc --noEmit
-pnpm check           # Biome + Svelte check + tsc; run before finishing
+pnpm check           # Biome + Svelte check + tsc + anime-view type check
 pnpm test:unit       # Vitest unit tests with coverage
 pnpm test            # Unit test suite
 ```
 
 Notes:
 
-- `pnpm check` runs `biome check --write`, then `svelte-check`, then `tsc --noEmit`.
-- Because Biome writes fixes, expect formatting changes if files violate formatter rules.
-- There is no separate format script in `package.json`; formatting is currently folded into `check:biome`.
+- `pnpm check` checks source files without auto-fixing them; SvelteKit sync may regenerate local framework artifacts. `package.json` is the source of truth for the command sequence.
+- Use `pnpm lint:fix` or `pnpm format` explicitly when source formatting changes are intended.
 - First-time setup requires `pnpm exec supabase login` and `pnpm exec supabase link --project-ref <project-ref>`.
 - Migrations are applied with the Supabase CLI (`pnpm exec supabase db push --dry-run`, then `db push`); Dashboard SQL Editor application is no longer used. See the "Supabase / Migrations" section of CLAUDE.md for the rules (unique numbers, no `--include-all`, avoiding `CREATE INDEX CONCURRENTLY`, verifying real remote state before `migration repair`, and `supabase/migrations_archive/`).
 

@@ -19,7 +19,7 @@ import {
 import type { AnimeExchangeShare, Post } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
-const POSTS_SELECT_WITH_EXCHANGE_AND_CW = buildPostCardSelect({ exchangeShare: true, cwAnime: true });
+// どちらも CW を含む。CW を外したフォールバックはネタバレ本文を出してしまうので用意しない（#317）
 const POSTS_SELECT_WITH_EXCHANGE = buildPostCardSelect({ exchangeShare: true });
 const POSTS_SELECT_BASE = buildPostCardSelect({ exchangeShare: false });
 
@@ -41,7 +41,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	type TimelinePage = { posts: Post[]; nextCursor: TimelineCursor | null };
 	const fetchTimeline = async (): Promise<TimelinePage> => {
 		if (tab === "following" && user) {
-			for (const select of [POSTS_SELECT_WITH_EXCHANGE_AND_CW, POSTS_SELECT_WITH_EXCHANGE, POSTS_SELECT_BASE]) {
+			for (const select of [POSTS_SELECT_WITH_EXCHANGE, POSTS_SELECT_BASE]) {
 				const result = await getFollowingTimelinePosts(supabase, user.id, {
 					select,
 					limit: 50,
@@ -54,21 +54,12 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		}
 
 		const result = await getHomeTimelinePosts(supabase, user?.id ?? null, {
-			select: POSTS_SELECT_WITH_EXCHANGE_AND_CW,
+			select: POSTS_SELECT_WITH_EXCHANGE,
 			limit: 50,
 			...(before ? { cursor: before } : {}),
 		});
 		if (!result.error) {
 			return { posts: result.posts, nextCursor: result.nextCursor };
-		}
-
-		const exchangeFallback = await getHomeTimelinePosts(supabase, user?.id ?? null, {
-			select: POSTS_SELECT_WITH_EXCHANGE,
-			limit: 50,
-			...(before ? { cursor: before } : {}),
-		});
-		if (!exchangeFallback.error) {
-			return { posts: exchangeFallback.posts, nextCursor: exchangeFallback.nextCursor };
 		}
 
 		const baseFallback = await getHomeTimelinePosts(supabase, user?.id ?? null, {

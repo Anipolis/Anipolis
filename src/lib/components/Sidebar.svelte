@@ -1093,7 +1093,7 @@ function isActive(path: string): boolean {
 	font-size: 11px;
 	font-weight: 700;
 	padding: 1px 6px;
-	border-radius: 10px;
+	border-radius: 14px;
 	min-width: 18px;
 	text-align: center;
 }
@@ -1117,7 +1117,7 @@ function isActive(path: string): boolean {
 	margin: 4px 8px;
 	padding: 12px;
 	border: 1px solid transparent;
-	border-radius: 8px;
+	border-radius: 12px;
 	background: transparent;
 }
 
@@ -1214,7 +1214,7 @@ function isActive(path: string): boolean {
 	min-width: 220px;
 	background: var(--surface, #1e293b);
 	border: 1px solid var(--border, #334155);
-	border-radius: 12px;
+	border-radius: 18px;
 	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 	overflow: hidden;
 }

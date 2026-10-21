@@ -1,22 +1,29 @@
-﻿<script lang="ts">
+<script lang="ts">
 import type { SubmitFunction } from "@sveltejs/kit";
-import { onMount } from "svelte";
+import { onDestroy, onMount } from "svelte";
 import { enhance } from "$app/forms";
 import { replaceState } from "$app/navigation";
 import { page } from "$app/state";
+import { autosize } from "$lib/actions/autosize";
 import { trapFocus } from "$lib/actions/trapFocus";
 import {
 	type ComposeDraft,
+	clearComposeContext,
 	clearComposeDraft,
 	getBrowserDraftStorage,
 	isDraftEmpty,
+	loadComposeContext,
 	loadComposeDraft,
+	saveComposeContext,
 	saveComposeDraft,
 } from "$lib/compose-draft";
+import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
+import { postImageMediaUrl } from "$lib/post-image-url";
 import type { AnimeExchangeShare, OpenBroadcastRoomSummary } from "$lib/types";
 import { animeQuoteChipLabel, cwChipLabel } from "$lib/utils/composer-chips";
 import { charCountClass } from "$lib/utils/format";
 import { applyMention, findMentionQuery, mentionOptionId, resolveMentionKey } from "$lib/utils/mention-suggest";
+import { createSearchGate } from "$lib/utils/search-gate";
 import AnimeExchangeResult from "./AnimeExchangeResult.svelte";
 import { classifyComposerSubmitResult } from "./post-composer-submit";
 import UserAvatar from "./UserAvatar.svelte";
@@ -106,6 +113,12 @@ let textareaEl = $state<HTMLTextAreaElement | null>(null);
 let mentionResults = $state<UserResult[]>([]);
 let mentionDropdownOpen = $state(false);
 let mentionDebounce = $state<ReturnType<typeof setTimeout> | null>(null);
+// 検索ごとの新旧の管理（#329）。古い応答が新しい結果を上書きしたり、閉じた候補を開き直したりしないようにする
+const animeSearchGate = createSearchGate();
+const cwSearchGate = createSearchGate();
+const mentionSearchGate = createSearchGate();
+// ルームの復元（受付中かの確認）の新旧。確認中に破棄・選び直しがあったら、後から届いた結果を反映しない
+const roomRestoreGate = createSearchGate();
 /** キーボードで選択中の候補 index。-1 は未選択 */
 let mentionActiveIndex = $state(-1);
 // 同じページに複数の PostComposer が乗る（デスクトップ用とモバイルモーダル）ので id は個別に振る
@@ -187,21 +200,47 @@ async function handleFileChange(e: Event) {
 	input.value = "";
 }
 
+/**
+ * 投稿に使わないと決まった画像を Storage から消す（#330）。画像は選んだ時点で保存されるため。
+ * サーバーは投稿に使われている画像を消さない。失敗しても投稿欄の操作は止めない（放置分は定期の掃除で回収する）
+ */
+function deleteUploadedImages(urls: string[]) {
+	for (const url of urls) {
+		void fetch("/api/upload", {
+			method: "DELETE",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ url }),
+		}).catch(() => {});
+	}
+}
+
 function removeImage(index: number) {
+	const removed = imageUrls[index];
 	imageUrls = imageUrls.filter((_, i) => i !== index);
+	if (removed) deleteUploadedImages([removed]);
+}
+
+function cancelAnimeSearch() {
+	if (searchDebounce) clearTimeout(searchDebounce);
+	searchDebounce = null;
+	animeSearchGate.cancel();
+	animeSearching = false;
 }
 
 function openAnimeSearch() {
+	cancelAnimeSearch();
 	animeSearchOpen = true;
 	animeQuery = "";
 	animeResults = [];
 }
 
 function closeAnimeSearch() {
+	cancelAnimeSearch();
 	animeSearchOpen = false;
 }
 
 function selectAnime(anime: AnimeResult) {
+	cancelAnimeSearch();
 	selectedAnime = anime;
 	animeSearchOpen = false;
 	animeQuery = "";
@@ -212,7 +251,15 @@ function clearAnime() {
 	selectedAnime = null;
 }
 
+function cancelCwSearch() {
+	if (cwSearchDebounce) clearTimeout(cwSearchDebounce);
+	cwSearchDebounce = null;
+	cwSearchGate.cancel();
+	cwSearching = false;
+}
+
 function openCwSearch() {
+	cancelCwSearch();
 	cwSearchOpen = true;
 	cwQuery = "";
 	cwResults = [];
@@ -248,14 +295,46 @@ function restoreDraft(key: string) {
 
 /** 明示的な破棄操作。フォームを空にして保存済みの下書きも消す。 */
 function discardDraft() {
+	roomRestoreGate.cancel();
+	deleteUploadedImages(imageUrls);
 	content = "";
 	imageUrls = [];
 	selectedAnime = null;
 	selectedCwAnime = null;
 	selectedRoom = null;
 	clearExchangeShare();
-	if (draftKey) clearComposeDraft(getBrowserDraftStorage(), draftKey);
+	if (draftKey) {
+		clearComposeDraft(getBrowserDraftStorage(), draftKey);
+		clearComposeContext(getBrowserDraftStorage(), draftKey);
+	}
 	textareaEl?.focus();
+}
+
+/**
+ * CW とルームの指定を「直前の投稿の文脈」として保存する（#331）。連投しやすいよう投稿後も引き継ぐが、
+ * スマホは投稿のたびにモーダルごと閉じるので、次に開いたときに戻せるよう投稿欄の外に残す。
+ */
+function persistComposeContext() {
+	if (!draftKey) return;
+	saveComposeContext(getBrowserDraftStorage(), draftKey, { cwAnime: selectedCwAnime, room: selectedRoom });
+}
+
+/** 期限内の CW と、まだ受付中のルームだけを戻す（下書きや引用リンクで既に入っていれば上書きしない） */
+async function restoreComposeContext(key: string) {
+	const context = loadComposeContext(getBrowserDraftStorage(), key);
+	if (!selectedCwAnime && context.cwAnime) selectedCwAnime = context.cwAnime;
+	if (selectedRoom || !context.room) return;
+	const roomId = context.room.id;
+	const request = roomRestoreGate.start();
+	try {
+		const res = await fetch("/api/rooms/open", { signal: request.signal });
+		const rooms = res.ok ? ((await res.json()) as OpenBroadcastRoomSummary[]) : [];
+		const open = rooms.find((room) => room.id === roomId);
+		// 確認中に破棄・ルームの選び直し・アンマウントがあれば反映しない
+		if (open && !selectedRoom && request.isCurrent()) selectedRoom = open;
+	} catch {
+		// 確かめられなければ戻さない（受付が終わったルームに投稿させない）
+	}
 }
 
 // 復元が終わってから入力の変化を追って保存する（復元前に空の状態で上書きしないため）。
@@ -265,20 +344,35 @@ $effect(() => {
 	saveComposeDraft(getBrowserDraftStorage(), draftKey, currentDraft());
 });
 
+// 閉じた投稿欄に、保留中の検索の応答を反映しない（#329）
+onDestroy(() => {
+	roomRestoreGate.cancel();
+	cancelAnimeSearch();
+	cancelCwSearch();
+	cancelMentionSearch();
+});
+
 onMount(() => {
 	// 初期値の反映（上の $effect）より後に走る宣言順なので、引用リンクの値が先に入る
-	if (draftKey) restoreDraft(draftKey);
+	if (draftKey) {
+		restoreDraft(draftKey);
+		void restoreComposeContext(draftKey);
+	}
 	if (focusOnMount) textareaEl?.focus();
 });
 function closeCwSearch() {
+	cancelCwSearch();
 	cwSearchOpen = false;
 }
 function selectCwAnime(anime: AnimeResult) {
+	cancelCwSearch();
 	selectedCwAnime = anime;
 	cwSearchOpen = false;
+	persistComposeContext();
 }
 function clearCwAnime() {
 	selectedCwAnime = null;
+	persistComposeContext();
 }
 
 async function openRoomSearch() {
@@ -298,27 +392,36 @@ function closeRoomModal() {
 	roomModalOpen = false;
 }
 function selectRoom(room: OpenBroadcastRoomSummary) {
+	roomRestoreGate.cancel();
 	selectedRoom = room;
 	roomModalOpen = false;
+	persistComposeContext();
 }
 function clearRoom() {
+	roomRestoreGate.cancel();
 	selectedRoom = null;
+	persistComposeContext();
 }
 function handleCwQueryInput() {
-	if (cwSearchDebounce) clearTimeout(cwSearchDebounce);
+	cancelCwSearch();
 	if (cwQuery.trim().length === 0) {
 		cwResults = [];
 		return;
 	}
 	cwSearchDebounce = setTimeout(async () => {
+		const request = cwSearchGate.start();
 		cwSearching = true;
 		try {
-			const res = await fetch(`/api/anime/search?q=${encodeURIComponent(cwQuery.trim())}`);
-			cwResults = res.ok ? await res.json() : [];
+			const res = await fetch(`/api/anime/search?q=${encodeURIComponent(cwQuery.trim())}`, {
+				signal: request.signal,
+			});
+			const results = res.ok ? await res.json() : [];
+			if (request.isCurrent()) cwResults = results;
 		} catch {
-			cwResults = [];
+			if (request.isCurrent()) cwResults = [];
+		} finally {
+			if (request.isCurrent()) cwSearching = false;
 		}
-		cwSearching = false;
 	}, 300);
 }
 
@@ -334,20 +437,25 @@ function clearExchangeShare() {
 }
 
 function handleAnimeQueryInput() {
-	if (searchDebounce) clearTimeout(searchDebounce);
+	cancelAnimeSearch();
 	if (animeQuery.trim().length === 0) {
 		animeResults = [];
 		return;
 	}
 	searchDebounce = setTimeout(async () => {
+		const request = animeSearchGate.start();
 		animeSearching = true;
 		try {
-			const res = await fetch(`/api/anime/search?q=${encodeURIComponent(animeQuery.trim())}`);
-			animeResults = res.ok ? await res.json() : [];
+			const res = await fetch(`/api/anime/search?q=${encodeURIComponent(animeQuery.trim())}`, {
+				signal: request.signal,
+			});
+			const results = res.ok ? await res.json() : [];
+			if (request.isCurrent()) animeResults = results;
 		} catch {
-			animeResults = [];
+			if (request.isCurrent()) animeResults = [];
+		} finally {
+			if (request.isCurrent()) animeSearching = false;
 		}
-		animeSearching = false;
 	}, 300);
 }
 
@@ -356,33 +464,45 @@ function closeMentionDropdown() {
 	mentionActiveIndex = -1;
 }
 
-function handleContentInput() {
-	if (!textareaEl) return;
-	const val = textareaEl.value;
-	const cursor = textareaEl.selectionStart ?? val.length;
-	const q = findMentionQuery(val, cursor);
+/** 保留中のメンション検索を止めて候補を閉じる。後から届いた応答で開き直さない（#329） */
+function cancelMentionSearch() {
+	if (mentionDebounce) clearTimeout(mentionDebounce);
+	mentionDebounce = null;
+	mentionSearchGate.cancel();
+	closeMentionDropdown();
+}
 
-	if (q !== null) {
-		if (mentionDebounce) clearTimeout(mentionDebounce);
-		mentionDebounce = setTimeout(async () => {
-			if (q.length === 0) {
-				closeMentionDropdown();
-				return;
-			}
-			try {
-				const res = await fetch(`/api/users/search?q=${encodeURIComponent(q)}`);
-				mentionResults = res.ok ? await res.json() : [];
-				mentionDropdownOpen = mentionResults.length > 0;
-				// 候補が入れ替わったら先頭を選択状態にして、Enter/Tab ですぐ確定できるようにする
-				mentionActiveIndex = mentionDropdownOpen ? 0 : -1;
-			} catch {
-				mentionResults = [];
-				closeMentionDropdown();
-			}
-		}, 200);
-	} else {
-		closeMentionDropdown();
+/** 今のカーソル位置のメンションの検索語（無ければ null） */
+function currentMentionQuery(): string | null {
+	if (!textareaEl) return null;
+	const val = textareaEl.value;
+	return findMentionQuery(val, textareaEl.selectionStart ?? val.length);
+}
+
+function handleContentInput() {
+	const q = currentMentionQuery();
+	if (q === null || q.length === 0) {
+		cancelMentionSearch();
+		return;
 	}
+	if (mentionDebounce) clearTimeout(mentionDebounce);
+	mentionDebounce = setTimeout(async () => {
+		const request = mentionSearchGate.start();
+		try {
+			const res = await fetch(`/api/users/search?q=${encodeURIComponent(q)}`, { signal: request.signal });
+			const results = res.ok ? await res.json() : [];
+			// 応答が届くまでに入力が変わっていたら（@ を消した・別の語にした）候補を開かない
+			if (!request.isCurrent() || currentMentionQuery() !== q) return;
+			mentionResults = results;
+			mentionDropdownOpen = mentionResults.length > 0;
+			// 候補が入れ替わったら先頭を選択状態にして、Enter/Tab ですぐ確定できるようにする
+			mentionActiveIndex = mentionDropdownOpen ? 0 : -1;
+		} catch {
+			if (!request.isCurrent()) return;
+			mentionResults = [];
+			closeMentionDropdown();
+		}
+	}, 200);
 }
 
 /**
@@ -402,7 +522,7 @@ function handleContentKeydown(e: KeyboardEvent) {
 	if (action.type === "close") {
 		// 外側のモーダルの Escape（閉じる）まで届かせない
 		e.stopPropagation();
-		closeMentionDropdown();
+		cancelMentionSearch();
 		return;
 	}
 	if (action.type === "move") {
@@ -426,7 +546,7 @@ function selectMention(user: UserResult) {
 	const cursor = textareaEl.selectionStart ?? val.length;
 	const applied = applyMention(val, cursor, user.username);
 	content = applied.text;
-	closeMentionDropdown();
+	cancelMentionSearch();
 	mentionResults = [];
 	setTimeout(() => {
 		textareaEl?.focus();
@@ -442,7 +562,11 @@ function handleOverlayEscape(e: KeyboardEvent, close: () => void) {
 	close();
 }
 
-const handleSubmit: SubmitFunction = () => {
+const handleSubmit: SubmitFunction = ({ cancel }) => {
+	if (!canSubmit) {
+		cancel();
+		return;
+	}
 	submitting = true;
 	errorMessage = "";
 	return async ({ result, update }) => {
@@ -458,6 +582,8 @@ const handleSubmit: SubmitFunction = () => {
 			await update();
 			return;
 		}
+		// CW とルームは連投しやすいよう残し、次に開いたときにも戻せるよう保存し直す（#331）
+		persistComposeContext();
 		content = "";
 		imageUrls = [];
 		selectedAnime = null;
@@ -468,17 +594,18 @@ const handleSubmit: SubmitFunction = () => {
 };
 </script>
 
-<div class="composer">
+<div class="composer compact-composer">
 	<div class="composer-body">
-		<UserAvatar src={avatarUrl} {username} size="md" />
+		<UserAvatar src={avatarUrl} {username} size="sm" />
 		<form method="POST" action="?/createPost" use:enhance={handleSubmit} class="composer-form">
-			<div style="position:relative;">
+			<div class="composer-input">
 				<textarea
 					bind:this={textareaEl}
 					name="content"
 					class="composer-textarea"
-					placeholder="どのアニメ見てる？"
-					rows="3"
+					placeholder="ひとこと…"
+					rows="1"
+					use:autosize={content}
 					bind:value={content}
 					maxlength={MAX_LENGTH + 10}
 					oninput={handleContentInput}
@@ -520,6 +647,63 @@ const handleSubmit: SubmitFunction = () => {
 						{/each}
 					</div>
 				{/if}
+			</div>
+
+			<!-- 追加機能（画像・アニメ引用・CW・実況ルーム）のタイル -->
+			<div class="composer-tools" role="group" aria-label="投稿の追加機能">
+				<button
+					type="button"
+					class="composer-tool-tile"
+					disabled={imageUrls.length >= MAX_IMAGES || uploading}
+					onclick={() => fileInput?.click()}
+					aria-label="画像を添付"
+					title="画像を添付（最大{MAX_IMAGES}枚）"
+				>
+					<span class={uploading ? "i-lucide-loader-circle" : "i-lucide-image"} aria-hidden="true"></span>
+				</button>
+
+				<input
+					bind:this={fileInput}
+					type="file"
+					accept="image/jpeg,image/png,image/gif,image/webp"
+					multiple
+					style="display:none"
+					onchange={handleFileChange}
+				>
+
+				<button
+					type="button"
+					class="composer-tool-tile"
+					class:active={selectedAnime !== null}
+					disabled={selectedAnime !== null}
+					onclick={openAnimeSearch}
+					aria-label="アニメを引用"
+					title="アニメを引用"
+				>
+					<span class="i-lucide-clapperboard" aria-hidden="true"></span>
+				</button>
+
+				<button
+					type="button"
+					class="composer-tool-tile"
+					class:active={selectedCwAnime !== null}
+					onclick={openCwSearch}
+					aria-label="ネタバレCWを設定"
+					title="ネタバレCW（コンテンツ警告）を設定"
+				>
+					<span class="i-lucide-eye-off" aria-hidden="true"></span>
+				</button>
+
+				<button
+					type="button"
+					class="composer-tool-tile"
+					class:active={selectedRoom !== null}
+					onclick={openRoomSearch}
+					aria-label="実況ルームにリンク"
+					title="実況ルームにリンク"
+				>
+					<span class="i-lucide-door-open" aria-hidden="true"></span>
+				</button>
 			</div>
 
 			{#if selectedAnime || selectedCwAnime || selectedRoom}
@@ -629,7 +813,8 @@ const handleSubmit: SubmitFunction = () => {
 				<div class="composer-image-previews">
 					{#each imageUrls as url, i}
 						<div class="composer-image-preview">
-							<img src={url} alt="添付画像 {i + 1}">
+							<!-- 投稿画像は非公開なので、閲覧権限を確かめて転送する固定リンクで表示する（#316） -->
+							<img src={postImageMediaUrl(url)} alt="添付画像 {i + 1}">
 							<button
 								type="button"
 								class="composer-image-remove"
@@ -651,133 +836,13 @@ const handleSubmit: SubmitFunction = () => {
 			{/if}
 
 			<div class="composer-footer">
-				<!-- 画像添付ボタン -->
-				<button
-					type="button"
-					class="composer-image-btn"
-					disabled={imageUrls.length >= MAX_IMAGES || uploading}
-					onclick={() => fileInput?.click()}
-					aria-label="画像を添付"
-					title="画像を添付（最大{MAX_IMAGES}枚）"
-				>
-					{#if uploading}
-						<svg
-							width="18"
-							height="18"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							aria-hidden="true"
-						>
-							<path
-								d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"
-							/>
-						</svg>
-					{:else}
-						<svg
-							width="18"
-							height="18"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							aria-hidden="true"
-						>
-							<rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-							<circle cx="8.5" cy="8.5" r="1.5" />
-							<polyline points="21 15 16 10 5 21" />
-						</svg>
-					{/if}
-				</button>
-
-				<input
-					bind:this={fileInput}
-					type="file"
-					accept="image/jpeg,image/png,image/gif,image/webp"
-					multiple
-					style="display:none"
-					onchange={handleFileChange}
-				>
-
-				<!-- アニメ引用ボタン -->
-				<button
-					type="button"
-					class="composer-image-btn"
-					class:active={selectedAnime !== null}
-					disabled={selectedAnime !== null}
-					onclick={openAnimeSearch}
-					aria-label="アニメを引用"
-					title="アニメを引用"
-				>
-					<svg
-						width="18"
-						height="18"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						aria-hidden="true"
-					>
-						<rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18" />
-						<line x1="7" y1="2" x2="7" y2="22" />
-						<line x1="17" y1="2" x2="17" y2="22" />
-						<line x1="2" y1="12" x2="22" y2="12" />
-						<line x1="2" y1="7" x2="7" y2="7" />
-						<line x1="2" y1="17" x2="7" y2="17" />
-						<line x1="17" y1="17" x2="22" y2="17" />
-						<line x1="17" y1="7" x2="22" y2="7" />
-					</svg>
-				</button>
-
-				<!-- CWボタン -->
-				<button
-					type="button"
-					class="composer-image-btn"
-					class:active={selectedCwAnime !== null}
-					onclick={openCwSearch}
-					aria-label="ネタバレCWを設定"
-					title="ネタバレCW（コンテンツ警告）を設定"
-				>
-					<svg
-						width="18"
-						height="18"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						aria-hidden="true"
-					>
-						<path
-							d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
-						/>
-						<line x1="1" y1="1" x2="23" y2="23" />
-					</svg>
-				</button>
-
-				<!-- 実況ルームリンクボタン -->
-				<button
-					type="button"
-					class="composer-image-btn"
-					class:active={selectedRoom !== null}
-					onclick={openRoomSearch}
-					aria-label="実況ルームにリンク"
-					title="実況ルームにリンク"
-				>
-					<span class="i-lucide-door-open" style="width:18px;height:18px;" aria-hidden="true"></span>
-				</button>
-
 				{#if draftKey && hasDraft}
 					<!-- 下書きの破棄は明示操作にする（閉じるだけでは消えない）: GitLab #2 -->
 					<button type="button" class="composer-draft-discard" onclick={discardDraft}>下書きを破棄</button>
 				{/if}
-				<span class="char-count {countClass}">{remaining}</span>
+				{#if remaining <= 40}
+					<span class="char-count {countClass}" aria-label="残り文字数">{remaining}</span>
+				{/if}
 				<button type="submit" class="btn btn-primary" disabled={!canSubmit}>
 					{submitting ? '投稿中…' : '投稿'}
 				</button>
@@ -825,7 +890,8 @@ const handleSubmit: SubmitFunction = () => {
 						<button type="button" class="anime-search-item" onclick={() => selectAnime(anime)}>
 							{#if anime.cover_url}
 								<img
-									src={anime.cover_url}
+									src={coverThumbSrc(anime.cover_url)}
+									{@attach coverThumbFallback(anime.cover_url)}
 									alt={anime.title}
 									class="anime-search-thumb"
 									loading="lazy"
@@ -884,7 +950,12 @@ const handleSubmit: SubmitFunction = () => {
 					{#each (cwQuery.trim() ? cwResults : watchingAnime) as anime}
 						<button type="button" class="anime-search-item" onclick={() => selectCwAnime(anime)}>
 							{#if anime.cover_url}
-								<img src={anime.cover_url} alt={anime.title} class="anime-search-thumb">
+								<img
+									src={coverThumbSrc(anime.cover_url)}
+									{@attach coverThumbFallback(anime.cover_url)}
+									alt={anime.title}
+									class="anime-search-thumb"
+								>
 							{:else}
 								<div class="anime-search-thumb anime-search-thumb-empty"></div>
 							{/if}
@@ -930,7 +1001,12 @@ const handleSubmit: SubmitFunction = () => {
 					{#each openRooms as room (room.id)}
 						<button type="button" class="anime-search-item" onclick={() => selectRoom(room)}>
 							{#if room.anime?.cover_url}
-								<img src={room.anime.cover_url} alt={room.anime.title} class="anime-search-thumb">
+								<img
+									src={coverThumbSrc(room.anime.cover_url)}
+									{@attach coverThumbFallback(room.anime.cover_url)}
+									alt={room.anime.title}
+									class="anime-search-thumb"
+								>
 							{:else}
 								<div class="anime-search-thumb anime-search-thumb-empty"></div>
 							{/if}
@@ -951,6 +1027,105 @@ const handleSubmit: SubmitFunction = () => {
 {/if}
 
 <style>
+.compact-composer {
+	padding: 14px;
+	margin: 0 0 12px;
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius);
+	background: var(--color-surface);
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+	transition:
+		border-color 0.15s,
+		box-shadow 0.15s;
+}
+.compact-composer .composer-body {
+	align-items: flex-start;
+	gap: 10px;
+}
+.compact-composer .composer-body :global(.avatar) {
+	width: 28px;
+	height: 28px;
+	margin-top: 5px;
+}
+.compact-composer .composer-form {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	column-gap: 8px;
+	align-items: start;
+}
+.compact-composer .composer-form > :not(.composer-input):not(.composer-footer) {
+	grid-column: 1 / -1;
+}
+.composer-input {
+	position: relative;
+	grid-column: 1;
+	grid-row: 1;
+}
+.compact-composer .composer-textarea {
+	display: block;
+	min-height: 96px;
+	max-height: 280px;
+	padding: 6px 0;
+	line-height: 26px;
+	font-size: 16px;
+	overflow-y: auto;
+}
+.compact-composer:focus-within {
+	border-color: var(--color-accent);
+	box-shadow: 0 2px 8px color-mix(in srgb, var(--color-accent) 18%, transparent);
+}
+.compact-composer .composer-footer {
+	grid-column: 2;
+	grid-row: 1;
+	position: relative;
+	border: 0;
+	padding: 0;
+	margin: 0;
+	gap: 6px;
+}
+.compact-composer .composer-footer .btn {
+	min-height: 36px;
+	padding: 6px 14px;
+	border-radius: 6px;
+	font-size: 13px;
+}
+.composer-tools {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-top: 6px;
+}
+.composer-tool-tile {
+	display: grid;
+	place-items: center;
+	width: 32px;
+	height: 32px;
+	border: 0;
+	border-radius: var(--radius-sm);
+	background: transparent;
+	color: var(--color-text-muted);
+	cursor: pointer;
+	transition:
+		background 0.15s,
+		color 0.15s;
+}
+.composer-tool-tile > span {
+	width: 18px;
+	height: 18px;
+}
+.composer-tool-tile:hover:not(:disabled),
+.composer-tool-tile:focus-visible {
+	background: var(--accent-muted);
+	color: var(--color-accent);
+}
+.composer-tool-tile.active {
+	color: var(--color-accent);
+}
+.composer-tool-tile:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
 .mention-dropdown {
 	position: absolute;
 	top: 100%;
@@ -958,7 +1133,7 @@ const handleSubmit: SubmitFunction = () => {
 	right: 0;
 	background: var(--color-surface);
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 	z-index: 50;
 	max-height: 200px;
@@ -1007,7 +1182,7 @@ const handleSubmit: SubmitFunction = () => {
 	margin-top: 10px;
 	padding: 10px;
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-bg);
 }
 .composer-exchange-preview .composer-anime-remove {

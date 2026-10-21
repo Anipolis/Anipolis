@@ -15,6 +15,8 @@ function fields(overrides: Partial<Parameters<typeof notificationPostPreview>[0]
 		post_has_anime_quote: false,
 		post_has_quoted_post: false,
 		post_has_exchange_share: false,
+		post_cw_anime_id: null,
+		post_cw_anime_title: null,
 		...overrides,
 	};
 }
@@ -91,5 +93,29 @@ describe("notificationPostPreview", () => {
 	it("treats whitespace-only content as empty", () => {
 		const preview = notificationPostPreview(fields({ post_content: " \n ", post_has_anime_quote: true }));
 		expect(preview).toMatchObject({ kind: "link", text: "作品引用の投稿", placeholder: true });
+	});
+});
+
+describe("notificationPostPreview の CW（#319）", () => {
+	it("CW 付きの投稿は本文の代わりに警告ラベルでリンクする", () => {
+		const preview = notificationPostPreview(
+			fields({ post_content: "最終回で主人公が…", post_cw_anime_id: "42", post_cw_anime_title: "星をめぐる旅" }),
+		);
+		expect(preview).toEqual({
+			kind: "link",
+			href: "/posts/post-1",
+			text: "『星をめぐる旅』のネタバレを含む投稿",
+			placeholder: true,
+		});
+	});
+
+	it("作品名が取れなくても CW の ID があれば本文を出さない", () => {
+		const preview = notificationPostPreview(fields({ post_content: "最終回で主人公が…", post_cw_anime_id: "42" }));
+		expect(preview).toMatchObject({ text: "ネタバレを含む投稿", placeholder: true });
+	});
+
+	it("削除済みの投稿は CW より先に削除表示にする", () => {
+		const preview = notificationPostPreview(fields({ post_available: false, post_cw_anime_id: "42" }));
+		expect(preview).toEqual({ kind: "deleted", text: DELETED_POST_LABEL });
 	});
 });

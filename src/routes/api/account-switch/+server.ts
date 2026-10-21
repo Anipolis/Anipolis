@@ -25,8 +25,7 @@ export const POST: RequestHandler = async ({ request, cookies, locals: { supabas
 	if (!targetAccount) error(404, "ACCOUNT_NOT_IN_COOKIE");
 
 	// Cookie 偽造対策: DB でリンクの存在を確認
-	// biome-ignore lint/suspicious/noExplicitAny: linked_accounts not yet in auto-generated DB types
-	const { data: link } = await (supabase as any)
+	const { data: link } = await supabase
 		.from("linked_accounts")
 		.select("owner_user_id")
 		.eq("owner_user_id", currentUser.id)

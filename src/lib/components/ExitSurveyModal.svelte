@@ -256,7 +256,7 @@ function submit() {
 	max-height: min(88dvh, 760px);
 	flex-direction: column;
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-surface);
 	box-shadow: 0 24px 64px rgb(0 0 0 / 0.34);
 	color: var(--color-text);
@@ -310,7 +310,7 @@ function submit() {
 	min-width: 0;
 	min-height: 38px;
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-bg);
 	color: var(--color-text);
 	font-weight: 800;
@@ -351,7 +351,7 @@ function submit() {
 	gap: 9px;
 	min-height: 36px;
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-bg);
 	padding: 8px 10px;
 	font-size: 14px;
@@ -368,7 +368,7 @@ function submit() {
 	min-height: 78px;
 	resize: vertical;
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-bg);
 	color: var(--color-text);
 	padding: 10px 12px;
@@ -379,7 +379,7 @@ function submit() {
 .survey-error {
 	margin: 0 22px 14px;
 	border: 1px solid var(--color-danger);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: color-mix(in srgb, var(--color-danger) 10%, var(--color-surface));
 	color: var(--color-text);
 	padding: 10px 12px;
@@ -402,7 +402,7 @@ function submit() {
 	align-items: center;
 	justify-content: center;
 	min-height: 40px;
-	border-radius: 8px;
+	border-radius: 12px;
 	padding: 0 14px;
 	font-weight: 800;
 }

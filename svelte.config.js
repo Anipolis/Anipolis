@@ -30,8 +30,8 @@ const config = {
 					"https://abs.twimg.com",
 					"https://cdn.discordapp.com",
 				],
-				// Zen Maru Gothic（UnoCSS presetWebFonts → Google Fonts）
-				"font-src": ["self", "data:", "https://fonts.gstatic.com"],
+				// Zen Maru Gothic は @fontsource でセルフホスト
+				"font-src": ["self", "data:"],
 				// Supabase REST / Auth / Storage と Realtime WebSocket
 				"connect-src": ["self", "https://*.supabase.co", "wss://*.supabase.co"],
 				"object-src": ["none"],

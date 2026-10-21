@@ -10,6 +10,8 @@ import {
 	validateInviteCode,
 } from "$lib/server/invites";
 import { getExtraAccounts, setExtraAccounts } from "$lib/server/multi-account";
+import { isPasskeyEnabled } from "$lib/server/passkey";
+import { isUsernameAvailable } from "$lib/server/queries";
 import { getClientKey, isRateLimited } from "$lib/server/rate-limit";
 import { createServiceRoleClient } from "$lib/server/supabase-admin";
 import { sanitizeInternalRedirect } from "$lib/utils/url";
@@ -75,11 +77,14 @@ export const load: PageServerLoad = async ({ url, cookies, locals: { supabase, s
 		betaGateEnabled,
 		inviteCode,
 		inviteCodeValid,
+		passkeyEnabled: isPasskeyEnabled(),
 		error: url.searchParams.get("error"),
 		// OAuth の失敗理由（/auth/callback が付ける）。URL から来るので符号の形のものだけ見せる
 		errorReason: /^[a-z0-9_]{1,40}$/.test(url.searchParams.get("reason") ?? "")
 			? url.searchParams.get("reason")
 			: null,
+		// 退会完了後のリダイレクト先（/settings/account/delete）
+		accountDeleted: url.searchParams.get("deleted") === "1",
 	};
 };
 
@@ -247,18 +252,13 @@ export const actions: Actions = {
 			}
 		}
 
-		const { data: existingProfile } = await supabase
-			.from("profiles")
-			.select("id")
-			.eq("username", username)
-			.maybeSingle();
-
-		if (existingProfile) {
+		// 使用中の名前に加えて、退会から30日以内の名前も使えない（#363）
+		if (!(await isUsernameAvailable(supabase, username))) {
 			return fail(400, {
 				mode: "register",
 				...values,
 				field: "username",
-				message: "このユーザー名はすでに使われています",
+				message: "このユーザー名は使えません（使用中か、退会から30日以内のユーザー名です）",
 			});
 		}
 
@@ -347,8 +347,7 @@ export const actions: Actions = {
 		}
 
 		// 既存リンク数チェック（追加アカウントは最大2）
-		// biome-ignore lint/suspicious/noExplicitAny: linked_accounts not yet in auto-generated DB types
-		const { count } = await (supabase as any)
+		const { count } = await supabase
 			.from("linked_accounts")
 			.select("*", { count: "exact", head: true })
 			.eq("owner_user_id", ownerUser.id);
@@ -387,8 +386,7 @@ export const actions: Actions = {
 
 		// 既にリンク済みかチェック（B のセッションで owner=A のリンクは見えないので service role 使用）
 		const serviceClient = createServiceRoleClient();
-		// biome-ignore lint/suspicious/noExplicitAny: linked_accounts not yet in auto-generated DB types
-		const { data: existingLink } = await (serviceClient as any)
+		const { data: existingLink } = await serviceClient
 			.from("linked_accounts")
 			.select("owner_user_id")
 			.eq("owner_user_id", ownerUser.id)

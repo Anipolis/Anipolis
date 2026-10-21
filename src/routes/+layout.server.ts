@@ -55,8 +55,7 @@ export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, c
 
 		if (nonSelfExtraAccounts.length > 0) {
 			const linkedUserIds = [...new Set(nonSelfExtraAccounts.map((account) => account.userId))];
-			// biome-ignore lint/suspicious/noExplicitAny: linked_accounts not yet in auto-generated DB types
-			const { data: links, error: linksError } = await (supabase as any)
+			const { data: links, error: linksError } = await supabase
 				.from("linked_accounts")
 				.select("linked_user_id")
 				.eq("owner_user_id", user.id)

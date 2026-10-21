@@ -4,6 +4,7 @@ import { onMount } from "svelte";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
 import { trapFocus } from "$lib/actions/trapFocus";
+import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import type { RoomExitSurveyComparisonWithX, RoomExitSurveyNextParticipation } from "$lib/types";
 import type { PageProps } from "./$types";
 
@@ -182,7 +183,12 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 					<div class="search-row">
 						<div class="anime-summary">
 							{#if anime.cover_url}
-								<img src={anime.cover_url} alt="" class="anime-cover">
+								<img
+									src={coverThumbSrc(anime.cover_url)}
+									{@attach coverThumbFallback(anime.cover_url)}
+									alt=""
+									class="anime-cover"
+								>
 							{:else}
 								<div class="anime-cover anime-cover--empty"></div>
 							{/if}
@@ -237,7 +243,12 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 									</div>
 								{:else}
 									{#if run.anime_cover_url}
-										<img src={run.anime_cover_url} alt="" class="anime-cover">
+										<img
+											src={coverThumbSrc(run.anime_cover_url)}
+											{@attach coverThumbFallback(run.anime_cover_url)}
+											alt=""
+											class="anime-cover"
+										>
 									{:else}
 										<div class="anime-cover anime-cover--empty"></div>
 									{/if}
@@ -472,7 +483,7 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 .note-box {
 	margin-top: 16px;
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-surface);
 	overflow: hidden;
 }
@@ -503,7 +514,7 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 	justify-content: center;
 	min-height: 36px;
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-bg);
 	color: var(--color-text-muted);
 	padding: 0 14px;
@@ -522,6 +533,7 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 	display: inline-block;
 	margin-left: 6px;
 	border-radius: 999px;
+	corner-shape: round;
 	background: color-mix(in srgb, var(--color-accent) 18%, var(--color-surface));
 	color: var(--color-accent);
 	padding: 1px 8px;
@@ -544,7 +556,7 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 .input {
 	width: 100%;
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-bg);
 	color: var(--color-text);
 	padding: 10px 12px;
@@ -557,7 +569,7 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 	justify-content: center;
 	min-height: 40px;
 	border: 1px solid var(--color-accent);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-accent);
 	color: white;
 	padding: 0 14px;
@@ -650,7 +662,7 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 
 .run-panel {
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	overflow: hidden;
 }
 
@@ -719,7 +731,7 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 	margin-bottom: 12px;
 	background: var(--color-border);
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	overflow: hidden;
 }
 
@@ -752,7 +764,7 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 .survey-distributions > div,
 .survey-comments {
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	padding: 12px;
 }
 
@@ -845,7 +857,7 @@ th {
 
 .form-message {
 	border: 1px solid var(--color-accent);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface));
 	padding: 12px 14px;
 	font-weight: 700;
@@ -869,7 +881,7 @@ th {
 .modal {
 	width: min(420px, 100%);
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-surface);
 	padding: 20px;
 	box-shadow: 0 24px 60px rgb(0 0 0 / 0.35);

@@ -1,11 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { error, fail } from "@sveltejs/kit";
+import { computeMutedUntil } from "$lib/anime-mute-schedule";
 import {
 	MAX_EXCHANGE_SUBJECTIVE_TAGS,
 	toExchangeSubjectiveTags,
 	validateExchangeSubjectiveTags,
 } from "$lib/exchange-tags";
-import { getEvent, isAdminUser } from "$lib/server/queries";
+import { isPostImageUsable } from "$lib/post-image-lifetime";
+import { fetchOAuthAvatar } from "$lib/server/oauth-avatar";
+import { getEvent, isAdminUser, USERNAME_HELD_ERROR_MESSAGE, USERNAME_HELD_USER_MESSAGE } from "$lib/server/queries";
 import { createServiceRoleClient } from "$lib/server/supabase-admin";
 import {
 	MULTIPART_OVERHEAD_BYTES,
@@ -19,6 +22,9 @@ import { eventScheduledAtIsoFromBroadcastInput } from "$lib/utils/event-time";
 import { extractHashtags } from "$lib/utils/hashtag";
 
 const MAX_POST_IMAGES = 4;
+/** 147 のトリガーが投稿の回数制限で返す SQLSTATE（PostgREST は HTTP 429 にする） */
+export const POST_RATE_LIMIT_ERROR_CODE = "PT429";
+export const POST_RATE_LIMIT_MESSAGE = "投稿が多すぎます。1分ほど待ってから、もう一度投稿してください";
 const reportStatuses = new Set(["open", "reviewing", "resolved", "rejected"]);
 const moderationStatuses = new Set(["active", "restricted", "banned"]);
 const animeExchangeErrorMessages = {
@@ -161,6 +167,67 @@ export async function ensureAccountCanWrite(supabase: SupabaseClient<Database>, 
 }
 
 /**
+ * ブロック関係があれば fail(403) を返す。無ければ null。
+ *
+ * DB 側（141 のポリシーと can_view_profile_content）でも止まるが、
+ * そこで弾かれた場合のメッセージは「できませんでした」になってしまう。
+ * 理由の分かる応答を返すために、書き込み前にアプリ側でも確認する。
+ */
+export async function ensureNotBlocked(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+	targetUserId: string | null | undefined,
+) {
+	if (!targetUserId || targetUserId === userId) return null;
+	const { data, error } = await supabase.rpc("is_blocked_between", {
+		user_a: userId,
+		user_b: targetUserId,
+	});
+	if (error) {
+		console.error("ensureNotBlocked error:", error);
+		return null;
+	}
+	if (data === true) return fail(403, { message: "ブロックしているユーザー、またはブロックされているユーザーです" });
+	return null;
+}
+
+export async function blockUserAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
+	const form = await request.formData();
+	const targetId = (form.get("target_id") as string | null)?.trim() ?? "";
+	if (!targetId) return fail(400, { message: "ユーザーIDが不正です" });
+	if (targetId === userId) return fail(400, { message: "自分自身をブロックできません" });
+
+	const { data: target } = await supabase.from("profiles").select("id").eq("id", targetId).maybeSingle();
+	if (!target) return fail(404, { message: "ユーザーが見つかりません" });
+
+	// フォロー・フォロー申請・未読通知の解除は 141 のトリガーが同じトランザクションで行う
+	const { error } = await supabase
+		.from("user_blocks")
+		.upsert(
+			{ blocker_id: userId, blocked_id: targetId },
+			{ onConflict: "blocker_id,blocked_id", ignoreDuplicates: true },
+		);
+	if (error) {
+		console.error("blockUserAction error:", error);
+		return fail(403, { message: "ブロックできませんでした" });
+	}
+	return { blocked: true };
+}
+
+export async function unblockUserAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
+	const form = await request.formData();
+	const targetId = (form.get("target_id") as string | null)?.trim() ?? "";
+	if (!targetId) return fail(400, { message: "ユーザーIDが不正です" });
+
+	const { error } = await supabase.from("user_blocks").delete().eq("blocker_id", userId).eq("blocked_id", targetId);
+	if (error) {
+		console.error("unblockUserAction error:", error);
+		return fail(500, { message: "ブロック解除に失敗しました" });
+	}
+	return { blocked: false };
+}
+
+/**
  * API ルート（+server.ts）用: 利用制限・BAN中なら error() を投げる。
  * form action 用の ensureAccountCanWrite と同じ判定を、HTTP エラーとして返す。
  */
@@ -208,6 +275,10 @@ export async function insertPostWithHashtags(
 		if (!storagePath?.startsWith(`${userId}/`)) {
 			return fail(400, { message: "添付画像のURLが不正です" });
 		}
+		// 投稿していない画像の使用期限（アップロードから7日）。過ぎた画像は回収されうるので受け付けない（#330）
+		if (!isPostImageUsable(storagePath)) {
+			return fail(400, { message: "添付画像の有効期限が切れました。画像をもう一度添付してください" });
+		}
 	}
 
 	if (parentId) {
@@ -236,6 +307,11 @@ export async function insertPostWithHashtags(
 
 	const { data: post, error: postError } = await supabase.from("posts").insert(postPayload).select("id").single();
 
+	// 回数制限（147 のトリガー）。経路を問わず DB で数え、PostgREST は SQLSTATE PT429 を返す（#321）。
+	// 書きかけを残して再送できるよう、エラーではなく 429 の失敗として返す
+	if (postError?.code === POST_RATE_LIMIT_ERROR_CODE) {
+		return fail(429, { message: POST_RATE_LIMIT_MESSAGE });
+	}
 	if (postError || !post) {
 		console.error("post insert error:", postError);
 		return fail(500, {
@@ -309,6 +385,32 @@ async function removePostImages(supabase: SupabaseClient<Database>, imageUrls: s
 /**
  * いいねのトグル — 既にいいね済みなら削除、未いいねなら挿入
  */
+/**
+ * リアクション（いいね・ブックマーク・リポスト）の押した後の状態。"on" / "off" 以外（古いクライアント）は null。
+ * 指定があればサーバーは反転ではなくこの状態に合わせる。表示が古い（件数の取得に失敗して未反応と
+ * 表示されていた等）まま押しても、意図と逆の操作（解除）にならないようにするため（#383 の Codex レビュー）。
+ */
+function readReactionIntent(form: FormData): "on" | "off" | null {
+	const intent = form.get("intent");
+	return intent === "on" || intent === "off" ? intent : null;
+}
+
+/**
+ * 操作後のいいね数・リポスト数（get_post_counts）。取れなければ undefined（呼び出し側は推測で表示する）。
+ * 表示していた件数が取得の失敗で 0 だった投稿でも、押したあとに正しい件数を確定させるため（#388 Codex）。
+ */
+async function readReactionCount(
+	supabase: SupabaseClient<Database>,
+	postId: string,
+	userId: string,
+	column: "like_count" | "repost_count",
+): Promise<number | undefined> {
+	const { data, error } = await supabase.rpc("get_post_counts", { p_post_ids: [postId], p_user_id: userId });
+	if (error) return undefined;
+	const value = data?.[0]?.[column];
+	return typeof value === "number" ? value : undefined;
+}
+
 export async function toggleLikeAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
 	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
 	if (moderationFailure) return moderationFailure;
@@ -317,30 +419,39 @@ export async function toggleLikeAction(request: Request, supabase: SupabaseClien
 	const postId = (form.get("post_id") as string | null)?.trim() ?? "";
 	if (!postId) return fail(400, { message: "投稿IDが不正です" });
 
-	const { data: existing } = await supabase
+	const { data: existing, error: lookupError } = await supabase
 		.from("likes")
 		.select("post_id")
 		.eq("post_id", postId)
 		.eq("user_id", userId)
 		.maybeSingle();
+	// 照会に失敗したら、今の状態が分からないので何もせず失敗を返す（成功扱いにすると表示と実際がずれる）
+	if (lookupError) return fail(500, { message: "いいねの状態を確認できませんでした" });
 
-	if (existing) {
+	const intent = readReactionIntent(form);
+	if (existing && intent === "on")
+		return { liked: true, count: await readReactionCount(supabase, postId, userId, "like_count") };
+
+	// intent=off は照会の結果に関わらず本人の行を消す。投稿が非公開化・ブロック等で見えなくなると
+	// 照会（SELECT の RLS）では行が見えないが、DELETE は本人の行を消せるため（#388 Codex）
+	if (existing || intent === "off") {
 		const { error: deleteError } = await supabase
 			.from("likes")
 			.delete()
 			.eq("post_id", postId)
 			.eq("user_id", userId);
 		if (deleteError) return fail(500, { message: "いいねの解除に失敗しました" });
-		return { liked: false };
+		return { liked: false, count: await readReactionCount(supabase, postId, userId, "like_count") };
 	}
 
 	const { error } = await supabase.from("likes").insert({ post_id: postId, user_id: userId });
-	if (error) return fail(403, { message: "この投稿にいいねできません" });
-	return { liked: true };
+	// 一意制約の違反は「見えないが既にいいね済み」。付いている状態として返す
+	if (error && error.code !== "23505") return fail(403, { message: "この投稿にいいねできません" });
+	return { liked: true, count: await readReactionCount(supabase, postId, userId, "like_count") };
 }
 
 /**
- * ブックマークのトグル — 既にブックマーク済みなら削除、未ブックマークなら挿入
+ * ブックマークのトグル — 既にブックマーク済みなら削除、未ブックマークなら挿入（intent があればその状態に合わせる）
  */
 export async function toggleBookmarkAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
 	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
@@ -350,14 +461,21 @@ export async function toggleBookmarkAction(request: Request, supabase: SupabaseC
 	const postId = (form.get("post_id") as string | null)?.trim() ?? "";
 	if (!postId) return fail(400, { message: "投稿IDが不正です" });
 
-	const { data: existing } = await supabase
+	const { data: existing, error: lookupError } = await supabase
 		.from("bookmarks")
 		.select("post_id")
 		.eq("post_id", postId)
 		.eq("user_id", userId)
 		.maybeSingle();
+	// 照会に失敗したら、今の状態が分からないので何もせず失敗を返す（成功扱いにすると表示と実際がずれる）
+	if (lookupError) return fail(500, { message: "ブックマークの状態を確認できませんでした" });
 
-	if (existing) {
+	const intent = readReactionIntent(form);
+	if (existing && intent === "on") return { bookmarked: true };
+
+	// intent=off は照会の結果に関わらず本人の行を消す。投稿が非公開化・ブロック等で見えなくなると
+	// 照会（SELECT の RLS）では行が見えないが、DELETE は本人の行を消せるため（#388 Codex）
+	if (existing || intent === "off") {
 		const { error: deleteError } = await supabase
 			.from("bookmarks")
 			.delete()
@@ -368,7 +486,7 @@ export async function toggleBookmarkAction(request: Request, supabase: SupabaseC
 	}
 
 	const { error } = await supabase.from("bookmarks").insert({ post_id: postId, user_id: userId });
-	if (error) return fail(403, { message: "この投稿をブックマークできません" });
+	if (error && error.code !== "23505") return fail(403, { message: "この投稿をブックマークできません" });
 	return { bookmarked: true };
 }
 
@@ -380,26 +498,35 @@ export async function toggleRepostAction(request: Request, supabase: SupabaseCli
 	const postId = (form.get("post_id") as string | null)?.trim() ?? "";
 	if (!postId) return fail(400, { message: "投稿IDが不正です" });
 
-	const { data: existing } = await supabase
+	const { data: existing, error: lookupError } = await supabase
 		.from("reposts")
 		.select("post_id")
 		.eq("post_id", postId)
 		.eq("user_id", userId)
 		.maybeSingle();
+	// 照会に失敗したら、今の状態が分からないので何もせず失敗を返す（成功扱いにすると表示と実際がずれる）
+	if (lookupError) return fail(500, { message: "リポストの状態を確認できませんでした" });
 
-	if (existing) {
+	const intent = readReactionIntent(form);
+	if (existing && intent === "on") {
+		return { reposted: true, count: await readReactionCount(supabase, postId, userId, "repost_count") };
+	}
+
+	// intent=off は照会の結果に関わらず本人の行を消す。投稿が非公開化・ブロック等で見えなくなると
+	// 照会（SELECT の RLS）では行が見えないが、DELETE は本人の行を消せるため（#388 Codex）
+	if (existing || intent === "off") {
 		const { error: deleteError } = await supabase
 			.from("reposts")
 			.delete()
 			.eq("post_id", postId)
 			.eq("user_id", userId);
 		if (deleteError) return fail(500, { message: "リポストの解除に失敗しました" });
-		return { reposted: false };
+		return { reposted: false, count: await readReactionCount(supabase, postId, userId, "repost_count") };
 	}
 
 	const { error } = await supabase.from("reposts").insert({ post_id: postId, user_id: userId });
-	if (error) return fail(403, { message: "この投稿をリポストできません" });
-	return { reposted: true };
+	if (error && error.code !== "23505") return fail(403, { message: "この投稿をリポストできません" });
+	return { reposted: true, count: await readReactionCount(supabase, postId, userId, "repost_count") };
 }
 
 /**
@@ -807,6 +934,19 @@ export async function toggleFollowAction(request: Request, supabase: SupabaseCli
 	if (!targetId) return fail(400, { message: "ユーザーIDが不正です" });
 	if (targetId === userId) return fail(400, { message: "自分自身をフォローできません" });
 
+	const { data: existingFollow } = await supabase
+		.from("follows")
+		.select("follower_id")
+		.eq("follower_id", userId)
+		.eq("following_id", targetId)
+		.maybeSingle();
+
+	// ブロック後もフォロー解除はできるようにする（解除は相手との関係を減らす操作）
+	if (!existingFollow) {
+		const blockFailure = await ensureNotBlocked(supabase, userId, targetId);
+		if (blockFailure) return blockFailure;
+	}
+
 	const { data: existing } = await supabase
 		.from("follows")
 		.select("follower_id")
@@ -902,6 +1042,24 @@ export async function rejectFollowRequestAction(request: Request, supabase: Supa
 	return { rejected: true };
 }
 
+export const MYLIST_SCORE_INVALID_MESSAGE = "スコアは1〜10の整数で指定してください";
+
+/**
+ * マイリストのスコアを解釈する（#355）。空（未送信・空文字）は「スコアなし」として null。
+ * それ以外は 1〜10 の整数だけを受け付ける（DB は smallint CHECK (score BETWEEN 1 AND 10)）。
+ * 以前は parseFloat して 0 より大きいかだけを見ていたため、小数や範囲外が DB で落ちて
+ * 原因の分からない 500 になっていた。0 は「なし」ではなく範囲外として扱う。
+ */
+export function parseMylistScore(raw: FormDataEntryValue | null): { ok: true; score: number | null } | { ok: false } {
+	if (raw == null) return { ok: true, score: null };
+	if (typeof raw !== "string") return { ok: false };
+	const value = raw.trim();
+	if (value === "") return { ok: true, score: null };
+	if (!/^\d{1,2}$/.test(value)) return { ok: false };
+	const score = Number(value);
+	return score >= 1 && score <= 10 ? { ok: true, score } : { ok: false };
+}
+
 export async function upsertUserAnimeEntry(supabase: SupabaseClient<Database>, request: Request, userId: string) {
 	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
 	if (moderationFailure) return moderationFailure;
@@ -909,14 +1067,15 @@ export async function upsertUserAnimeEntry(supabase: SupabaseClient<Database>, r
 	const form = await request.formData();
 	const animeId = parsePositiveInt(form.get("anime_id") as string | null);
 	const status = (form.get("status") as string | null)?.trim() as AnimeStatus | null;
-	const scoreRaw = form.get("score") as string | null;
+	const scoreRaw = form.get("score");
 	const progressRaw = form.get("progress") as string | null;
 
 	if (!animeId) return fail(400, { message: "アニメIDが不正です" });
 	if (!status) return fail(400, { message: "ステータスを選択してください" });
 
-	const parsedScore = scoreRaw ? parseFloat(scoreRaw) : null;
-	const score = parsedScore != null && Number.isFinite(parsedScore) && parsedScore > 0 ? parsedScore : null;
+	const parsedScore = parseMylistScore(scoreRaw);
+	if (!parsedScore.ok) return fail(400, { message: MYLIST_SCORE_INVALID_MESSAGE });
+	const score = parsedScore.score;
 	const progress = progressRaw ? parseInt(progressRaw, 10) : 0;
 
 	const { error } = await supabase
@@ -962,6 +1121,11 @@ export async function recommendAnimeAction(supabase: SupabaseClient<Database>, r
 
 	const { data: recipient } = await supabase.from("profiles").select("id").eq("id", recipientId).maybeSingle();
 	if (!recipient) return fail(404, { recommendMessage: "ユーザーが見つかりません" });
+
+	const blockFailure = await ensureNotBlocked(supabase, userId, recipientId);
+	if (blockFailure) {
+		return fail(403, { recommendMessage: "このユーザーにはおすすめを送れません" });
+	}
 
 	const { error } = await supabase.from("anime_recommendations").insert({
 		recommender_id: userId,
@@ -1171,7 +1335,35 @@ type ProfileSetupResult =
 
 type ProfileSetupOptions = {
 	oauthAvatarUrl?: string | null;
+	/** テスト用。OAuth 画像の取得に使う */
+	fetchFn?: typeof fetch;
 };
+
+/** 検証済みの画像を本人の profile-avatars に置き、公開 URL と置き換える古いファイルを返す */
+async function storeOnboardingAvatar(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+	bytes: ArrayBuffer,
+	validated: { mime: string; ext: string },
+): Promise<{ url: string; path: string; stalePaths: string[] } | { error: string }> {
+	const { data: existingFiles } = await supabase.storage.from("profile-avatars").list(userId);
+	const path = `${userId}/avatar_${Date.now()}.${validated.ext}`;
+	const { error } = await supabase.storage
+		.from("profile-avatars")
+		.upload(path, bytes, { contentType: validated.mime, upsert: true });
+	if (error) {
+		console.error("onboarding avatar upload error:", error);
+		return { error: "画像のアップロードに失敗しました" };
+	}
+
+	const {
+		data: { publicUrl },
+	} = supabase.storage.from("profile-avatars").getPublicUrl(path);
+	const stalePaths = (existingFiles ?? [])
+		.map((file) => `${userId}/${file.name}`)
+		.filter((existingPath) => existingPath !== path);
+	return { url: publicUrl, path, stalePaths };
+}
 
 async function uploadOnboardingAvatar(
 	supabase: SupabaseClient<Database>,
@@ -1191,37 +1383,30 @@ async function uploadOnboardingAvatar(
 		return { error: "対応していないファイル形式です（JPEG/PNG/WebP）" };
 	}
 
-	const { data: existingFiles } = await supabase.storage.from("profile-avatars").list(userId);
-	const path = `${userId}/avatar_${Date.now()}.${validated.ext}`;
-	const { error } = await supabase.storage
-		.from("profile-avatars")
-		.upload(path, arrayBuffer, { contentType: validated.mime, upsert: true });
-	if (error) {
-		console.error("onboarding avatar upload error:", error);
-		return { error: "画像のアップロードに失敗しました" };
-	}
+	return storeOnboardingAvatar(supabase, userId, arrayBuffer, validated);
+}
 
-	const {
-		data: { publicUrl },
-	} = supabase.storage.from("profile-avatars").getPublicUrl(path);
-	const stalePaths = (existingFiles ?? [])
-		.map((file) => `${userId}/${file.name}`)
-		.filter((existingPath) => existingPath !== path);
-	return { url: publicUrl, path, stalePaths };
+type ProfileSetupFormReadFailure = "too_large" | "invalid";
+
+/**
+ * プロフィール作成フォームを上限付きで読む（#327）。
+ * request.formData() を先に呼ぶと、巨大な multipart を全部メモリへ展開した後でしかサイズを検査できない。
+ * ルートは next などを取り出すためにフォームを読むので、最初の読み込みをこれにする。
+ */
+export function readProfileSetupForm(request: Request): Promise<FormData | ProfileSetupFormReadFailure> {
+	return readFormDataWithLimit(request, ONBOARDING_MAX_AVATAR_SIZE + MULTIPART_OVERHEAD_BYTES);
 }
 
 /** 初回オンボーディング：ユーザーが確認した公開プロフィールを初めて作成する */
 export async function completeProfileSetupAction(
-	requestOrForm: Request | FormData,
+	requestOrForm: Request | FormData | ProfileSetupFormReadFailure,
 	supabase: SupabaseClient<Database>,
 	userId: string,
 	options: ProfileSetupOptions = {},
 ): Promise<ProfileSetupResult> {
-	// アバターファイルを含むフォームのため、サイズ検証前の全量バッファを避けて上限付きで読む
-	const parsedForm =
-		requestOrForm instanceof FormData
-			? requestOrForm
-			: await readFormDataWithLimit(requestOrForm, ONBOARDING_MAX_AVATAR_SIZE + MULTIPART_OVERHEAD_BYTES);
+	// アバターファイルを含むフォームのため、サイズ検証前の全量バッファを避けて上限付きで読む。
+	// ルートが readProfileSetupForm で先に読んだ結果（読み込み失敗を含む）もそのまま受け取る
+	const parsedForm = requestOrForm instanceof Request ? await readProfileSetupForm(requestOrForm) : requestOrForm;
 	if (parsedForm === "too_large") {
 		return {
 			error: "画像は2MB以内にしてください",
@@ -1269,7 +1454,20 @@ export async function completeProfileSetupAction(
 	let uploadedAvatarPath: string | null = null;
 	let staleAvatarPaths: string[] = [];
 	if (avatarChoice === "oauth") {
-		avatarUrl = options.oauthAvatarUrl ?? null;
+		// 外部 URL は保存せず、自前の Storage に取り込む（#328）。取得できなければ画像なしで作成し、
+		// プロバイダー側の一時的な不調でプロフィール作成自体を止めない（後から設定で変えられる）
+		const fetched = await fetchOAuthAvatar(options.oauthAvatarUrl, options.fetchFn);
+		if (fetched) {
+			const stored = await storeOnboardingAvatar(supabase, userId, fetched.bytes, fetched);
+			if ("error" in stored) {
+				return { error: stored.error, status: 500, field: "avatar", values };
+			}
+			avatarUrl = stored.url;
+			uploadedAvatarPath = stored.path;
+			staleAvatarPaths = stored.stalePaths;
+		} else {
+			console.warn("onboarding: OAuth avatar could not be imported; continuing without avatar");
+		}
 	} else if (avatarChoice === "upload") {
 		if (!(avatarFileEntry instanceof File) || avatarFileEntry.size === 0) {
 			return { error: "プロフィール画像を選択してください", status: 400, field: "avatar", values };
@@ -1298,6 +1496,9 @@ export async function completeProfileSetupAction(
 			await supabase.storage.from("profile-avatars").remove([uploadedAvatarPath]);
 		}
 		if (error.code === "23505") {
+			if (error.message.includes(USERNAME_HELD_ERROR_MESSAGE)) {
+				return { error: USERNAME_HELD_USER_MESSAGE, status: 400, field: "username", values };
+			}
 			if (error.message.includes("username")) {
 				return { error: "このユーザー名はすでに使用されています", status: 400, field: "username", values };
 			}
@@ -1428,8 +1629,8 @@ export async function upsertAnimeMute(
 
 	let mutedUntil: string | null = null;
 	if (muteType === "period" && periodDays != null && !isRepeat) {
-		const base = roomDate ? new Date(`${roomDate}T00:00:00`) : new Date();
-		mutedUntil = new Date(base.getTime() + periodDays * 24 * 60 * 60 * 1000).toISOString();
+		// 起点はルームの放送日の始まり（JST 04:00）。サーバーの時刻帯に依存させない（#326）
+		mutedUntil = computeMutedUntil(roomDate, periodDays).toISOString();
 	}
 
 	const record = {
@@ -1441,8 +1642,7 @@ export async function upsertAnimeMute(
 		muted_until: mutedUntil,
 		updated_at: new Date().toISOString(),
 	};
-	// biome-ignore lint/suspicious/noExplicitAny: anime_mutes not yet in auto-generated DB types
-	const { error } = await (supabase as any).from("anime_mutes").upsert(record, { onConflict: "user_id,anime_id" });
+	const { error } = await supabase.from("anime_mutes").upsert(record, { onConflict: "user_id,anime_id" });
 	if (error) {
 		console.error("anime mute upsert error:", error);
 		return fail(500, { message: "ミュート設定に失敗しました" });
@@ -1451,12 +1651,7 @@ export async function upsertAnimeMute(
 }
 
 export async function removeAnimeMute(supabase: SupabaseClient<Database>, userId: string, animeId: string) {
-	// biome-ignore lint/suspicious/noExplicitAny: anime_mutes not yet in auto-generated DB types
-	const { error } = await (supabase as any)
-		.from("anime_mutes")
-		.delete()
-		.eq("user_id", userId)
-		.eq("anime_id", Number(animeId));
+	const { error } = await supabase.from("anime_mutes").delete().eq("user_id", userId).eq("anime_id", Number(animeId));
 	if (error) return fail(500, { message: "ミュート解除に失敗しました" });
 	return { roomMuteSuccess: true };
 }
@@ -1528,15 +1723,13 @@ export async function toggleEventNotificationSubscription(
 	return { subscribed: true };
 }
 
-// linked_accounts は自動生成型未収録のためテーブル名のみ型アサーション使用
 export async function linkAccounts(
 	serviceClient: SupabaseClient<Database>,
 	userIdA: string,
 	userIdB: string,
 	displayOrderForA: number,
 ): Promise<{ error: string | null }> {
-	// biome-ignore lint/suspicious/noExplicitAny: linked_accounts not yet in auto-generated DB types
-	const { error } = await (serviceClient as SupabaseClient<any>).from("linked_accounts").upsert([
+	const { error } = await serviceClient.from("linked_accounts").upsert([
 		{ owner_user_id: userIdA, linked_user_id: userIdB, display_order: displayOrderForA },
 		{ owner_user_id: userIdB, linked_user_id: userIdA, display_order: 0 },
 	]);
@@ -1570,10 +1763,10 @@ export async function createInviteAction(request: Request, supabase: SupabaseCli
 		expiresAtIso = parsed.toISOString();
 	}
 
-	// biome-ignore lint/suspicious/noExplicitAny: invite RPCs not yet in auto-generated DB types
-	const { data, error } = await (supabase as any).rpc("create_invite", {
+	// 期限なしは引数を省略する（RPC 側の既定 NULL = 無期限）
+	const { data, error } = await supabase.rpc("create_invite", {
 		p_max_uses: maxUses,
-		p_expires_at: expiresAtIso,
+		...(expiresAtIso ? { p_expires_at: expiresAtIso } : {}),
 	});
 
 	if (error) {
@@ -1603,8 +1796,7 @@ export async function revokeInviteAction(request: Request, supabase: SupabaseCli
 	const inviteId = (form.get("invite_id") as string | null)?.trim() ?? "";
 	if (!inviteId) return fail(400, { inviteMessage: "招待IDが不正です" });
 
-	// biome-ignore lint/suspicious/noExplicitAny: invite RPCs not yet in auto-generated DB types
-	const { error } = await (supabase as any).rpc("revoke_invite", { p_invite_id: inviteId });
+	const { error } = await supabase.rpc("revoke_invite", { p_invite_id: inviteId });
 	if (error) {
 		console.error("revoke_invite error:", { userId, error });
 		// 42501 = RPC 側の権限チェック（発行者本人・管理者以外）による拒否
