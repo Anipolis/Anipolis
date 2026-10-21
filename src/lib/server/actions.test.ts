@@ -26,7 +26,7 @@ function maybeSingleChain(response: unknown): TableChain {
 function createInsertPostClient(
 	roomAnime: { title: string | null; official_hashtag: string[] | null } | null,
 	eventHashtag: string | null = null,
-	insertError: { code: string; message: string } | null = null,
+	insertError: { code: string; message: string; hint?: string } | null = null,
 ) {
 	const insertedPosts: unknown[] = [];
 	const hashtagUpsert = vi.fn(async () => ({ error: null }));
@@ -96,6 +96,17 @@ describe("insertPostWithHashtags", () => {
 		const result = await insertPostWithHashtags(client, "user-1", "連投 #タグ");
 
 		expect(result).toMatchObject({ status: 429, data: { message: POST_RATE_LIMIT_MESSAGE } });
+		expect(hashtagUpsert).not.toHaveBeenCalled();
+	});
+
+	it("DB の検査（22023）で拒否されたら、HINT の文言を 400 の失敗として返す（#238）", async () => {
+		const { client, hashtagUpsert } = createInsertPostClient(null, null, {
+			code: "22023",
+			message: "event_post_closed",
+			hint: "このイベントの投稿受付は終了しました",
+		});
+		const result = await insertPostWithHashtags(client, "user-1", "終了後 #タグ");
+		expect(result).toMatchObject({ status: 400, data: { message: "このイベントの投稿受付は終了しました" } });
 		expect(hashtagUpsert).not.toHaveBeenCalled();
 	});
 
