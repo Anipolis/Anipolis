@@ -2,7 +2,13 @@
 import type { Snippet } from "svelte";
 import { goto } from "$app/navigation";
 import type { Post } from "$lib/types";
-import { formatBroadcastRelativeTime, formatPostClock, formatPostDateTime, formatPostTime } from "$lib/utils/format";
+import {
+	formatBroadcastRelativeTime,
+	formatPostClock,
+	formatPostDateTime,
+	formatPostDay,
+	formatRelativeTime,
+} from "$lib/utils/format";
 import { getPostDisplayContent, getPostRoomContext } from "$lib/utils/post-presentation";
 import LikeButton from "./post/LikeButton.svelte";
 import PostActionBar from "./post/PostActionBar.svelte";
@@ -52,7 +58,10 @@ const controller = new PostController(
 const displayName = $derived(post.display_name || post.username);
 const content = $derived(getPostDisplayContent(post));
 const roomContext = $derived(getPostRoomContext(post));
-const postTime = $derived(formatPostTime(post.created_at));
+// 投稿時刻: タイムラインは「3分前」のような相対時刻を名前の横に。実況画面（insideRoom）は時刻をアイコンの列（左端）に
+// そろえて出し、名前の横には日付（今日・昨日・10/21）を出す
+const headTime = $derived(insideRoom ? formatPostDay(post.created_at) : formatRelativeTime(post.created_at));
+const showGutterTime = $derived(joinPrevious || insideRoom);
 const postDateTime = $derived(formatPostDateTime(post.created_at));
 // まとまりの続きの行は、空のいいねを並べると圧迫感があるので、ホバー・フォーカス・操作中だけ出す。
 // いいねが付いている・自分がいいねした投稿は常に出す
@@ -117,7 +126,7 @@ function handleKeydown(event: KeyboardEvent) {
 			</a>
 			<a href="/profile/{post.username}" class="post-row-name" title={displayName}>{displayName}</a>
 			<a href="/posts/{post.id}" class="post-row-time" title={postDateTime}
-				><time datetime={post.created_at}>{postTime}</time></a
+				><time datetime={post.created_at}>{headTime}</time></a
 			>
 		{/if}
 		{#if post.repost_context}
@@ -139,8 +148,8 @@ function handleKeydown(event: KeyboardEvent) {
 	</div>
 
 	<div class="post-row-main">
-		{#if joinPrevious}
-			<!-- まとまりの続きの行は、アイコンの位置に時刻を出す -->
+		{#if showGutterTime}
+			<!-- 実況画面と、まとまりの続きの行は、アイコンの列に時刻を出す -->
 			<a href="/posts/{post.id}" class="post-row-gutter-time" title={postDateTime}
 				><time datetime={post.created_at}>{formatPostClock(post.created_at)}</time></a
 			>

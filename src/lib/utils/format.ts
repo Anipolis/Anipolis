@@ -52,16 +52,18 @@ function jstParts(value: string | Date) {
 	};
 }
 
-/** 投稿の時刻（JST）。今日なら「21:03」、今年なら「10/21 21:03」、それより前は「2025/10/21」 */
-export function formatPostTime(value: string | Date, now: Date = new Date()): string {
+/** 投稿の日付（JST）。実況画面で名前の横に出す。今日なら「今日」、前日なら「昨日」、今年なら「10/21」、それより前は「2025/10/21」 */
+export function formatPostDay(value: string | Date, now: Date = new Date()): string {
 	const post = jstParts(value);
-	const today = jstParts(now);
-	if (post.year === today.year && post.month === today.month && post.day === today.day) return post.clock;
-	if (post.year === today.year) return `${post.month}/${post.day} ${post.clock}`;
+	const sameDay = (other: ReturnType<typeof jstParts>) =>
+		post.year === other.year && post.month === other.month && post.day === other.day;
+	if (sameDay(jstParts(now))) return "今日";
+	if (sameDay(jstParts(new Date(now.getTime() - 24 * 60 * 60 * 1000)))) return "昨日";
+	if (post.year === jstParts(now).year) return `${post.month}/${post.day}`;
 	return `${post.year}/${post.month}/${post.day}`;
 }
 
-/** 投稿の時刻だけ（JST の「21:03」）。連投のまとまりの続きの行に出す */
+/** 投稿の時刻だけ（JST の「21:03」）。実況画面でアイコンの列（左端）に出す */
 export function formatPostClock(value: string | Date): string {
 	return jstParts(value).clock;
 }
