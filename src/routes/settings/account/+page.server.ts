@@ -2,6 +2,7 @@ import { fail } from "@sveltejs/kit";
 import { hasPasswordProvider } from "$lib/server/auth";
 import { USERNAME_HELD_ERROR_MESSAGE, USERNAME_HELD_USER_MESSAGE } from "$lib/server/queries";
 import { redirectToLogin } from "$lib/server/require-login";
+import { createServiceRoleClient } from "$lib/server/supabase-admin";
 import type { Actions, PageServerLoad } from "./$types";
 
 async function verifyCurrentPassword(
@@ -51,7 +52,9 @@ export const actions: Actions = {
 			return fail(400, { field: "current_password", message: passwordError });
 		}
 
-		const { error } = await supabase.from("profiles").update({ username }).eq("id", user.id);
+		// username は利用者の権限では直接更新できない（169）。現在のパスワードを確かめた後に service role で書き換える。
+		// 形式（profiles_username_format）と退会者の ID の保留（enforce_username_not_held）は DB でも検査する
+		const { error } = await createServiceRoleClient().from("profiles").update({ username }).eq("id", user.id);
 
 		if (error) {
 			if (error.code === "23505") {
