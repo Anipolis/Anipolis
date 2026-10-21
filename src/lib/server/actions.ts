@@ -6,6 +6,7 @@ import {
 	toExchangeSubjectiveTags,
 	validateExchangeSubjectiveTags,
 } from "$lib/exchange-tags";
+import { normalizePostContent } from "$lib/post-content";
 import { isPostImageUsable } from "$lib/post-image-lifetime";
 import { ownedPostImagePath } from "$lib/post-image-url";
 import { fetchOAuthAvatar } from "$lib/server/oauth-avatar";
@@ -244,7 +245,7 @@ export async function requireAccountCanWrite(supabase: SupabaseClient<Database>,
 export async function insertPostWithHashtags(
 	supabase: SupabaseClient<Database>,
 	userId: string,
-	content: string,
+	rawContent: string,
 	parentId: string | null = null,
 	imageUrls: string[] = [],
 	animeId: string | null = null,
@@ -259,6 +260,12 @@ export async function insertPostWithHashtags(
 	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
 	if (moderationFailure) return moderationFailure;
 
+	// 表示されない制御文字を取り除いてから「本文あり」を判定する（#245）。制御文字だけの本文は、
+	// 作品つきのルームの投稿などでも空の投稿として保存されないよう、本文が無いものとして断る
+	const content = normalizePostContent(rawContent);
+	if (rawContent.trim() && !content) {
+		return fail(400, { message: "本文に表示できる文字がありません" });
+	}
 	if (!content && imageUrls.length === 0 && !animeId && !exchangeShare) {
 		return fail(400, { message: "本文、画像、アニメ引用、またはトレード結果を追加してください" });
 	}
