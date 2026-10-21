@@ -6,6 +6,8 @@ import type { PageProps } from "./$types";
 let { data }: PageProps = $props();
 </script>
 
+<svelte:head><title>ブックマーク - Anipolis</title></svelte:head>
+
 <div class="page-container">
 	<main class="feed-column bookmarks-page">
 		<header class="bookmarks-header">

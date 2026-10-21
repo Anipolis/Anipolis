@@ -2,6 +2,7 @@
 import type { SubmitFunction } from "@sveltejs/kit";
 import { untrack } from "svelte";
 import { enhance } from "$app/forms";
+import InfoTip from "$lib/components/InfoTip.svelte";
 import SettingsBackLink from "$lib/components/SettingsBackLink.svelte";
 import ToggleSwitch from "$lib/components/ToggleSwitch.svelte";
 import type { PageProps } from "./$types";
@@ -64,8 +65,15 @@ const privacySubmit: SubmitFunction = () => {
 			<form method="POST" action="?/updatePrivacy" use:enhance={privacySubmit} bind:this={formEl}>
 				<div class="toggle-row">
 					<span class="toggle-row-text">
-						<strong>鍵アカウントにする</strong>
-						<small>承認した人だけ、マイリストなどをフォロワーだけに表示します。</small>
+						<span class="with-info-tip">
+							<strong>鍵アカウントにする</strong>
+							<InfoTip label="鍵アカウント">
+								<p>フォローは承認制になります。</p>
+								<p>マイリストを非公開にしているときは、フォロワーにも表示されません。</p>
+								<p>鍵アカウントの投稿は、トレンドに数えません。</p>
+							</InfoTip>
+						</span>
+						<small>承認したフォロワーだけが、あなたの投稿やマイリストを見られます。</small>
 					</span>
 					<ToggleSwitch
 						name="is_private"

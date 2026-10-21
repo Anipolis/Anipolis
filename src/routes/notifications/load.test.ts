@@ -47,7 +47,10 @@ describe("notifications page load", () => {
 		expect(markCategoryNotificationsRead).not.toHaveBeenCalled();
 	});
 
-	it("redirects anonymous users", async () => {
-		await expect(load(makeEvent(null, null))).rejects.toMatchObject({ status: 302, location: "/" });
+	it("未ログインならログイン画面へ送り、ログイン後に通知へ戻す", async () => {
+		await expect(load(makeEvent(null, null))).rejects.toMatchObject({
+			status: 303,
+			location: "/auth?next=%2Fnotifications",
+		});
 	});
 });

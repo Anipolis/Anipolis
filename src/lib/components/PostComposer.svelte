@@ -660,6 +660,7 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 					title="画像を添付（最大{MAX_IMAGES}枚）"
 				>
 					<span class={uploading ? "i-lucide-loader-circle" : "i-lucide-image"} aria-hidden="true"></span>
+					<span class="composer-tool-label">画像</span>
 				</button>
 
 				<input
@@ -681,6 +682,7 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 					title="アニメを引用"
 				>
 					<span class="i-lucide-clapperboard" aria-hidden="true"></span>
+					<span class="composer-tool-label">アニメ</span>
 				</button>
 
 				<button
@@ -692,6 +694,7 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 					title="ネタバレCW（コンテンツ警告）を設定"
 				>
 					<span class="i-lucide-eye-off" aria-hidden="true"></span>
+					<span class="composer-tool-label">ネタバレ</span>
 				</button>
 
 				<button
@@ -703,6 +706,7 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 					title="実況ルームにリンク"
 				>
 					<span class="i-lucide-door-open" aria-hidden="true"></span>
+					<span class="composer-tool-label">ルーム</span>
 				</button>
 			</div>
 
@@ -1096,10 +1100,14 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 	margin-top: 6px;
 }
 .composer-tool-tile {
-	display: grid;
-	place-items: center;
-	width: 32px;
+	/* アイコンだけだと意味が伝わりにくい（スマホはホバーの説明も出ない）ので、短い文字を添える（#437） */
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
 	height: 32px;
+	padding: 0 8px;
+	font-size: 12px;
+	font-weight: 600;
 	border: 0;
 	border-radius: var(--radius-sm);
 	background: transparent;
@@ -1109,9 +1117,27 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 		background 0.15s,
 		color 0.15s;
 }
-.composer-tool-tile > span {
+.composer-tool-tile > span:not(.composer-tool-label) {
 	width: 18px;
 	height: 18px;
+	flex-shrink: 0;
+}
+.composer-tool-label {
+	white-space: nowrap;
+}
+/* スマホ幅ではアバターの横の狭い幅に4つ並べるので、余白とアイコンを詰めて1行に収める */
+@media (max-width: 480px) {
+	.composer-tools {
+		gap: 2px;
+	}
+	.composer-tool-tile {
+		gap: 3px;
+		padding: 0 4px;
+	}
+	.composer-tool-tile > span:not(.composer-tool-label) {
+		width: 16px;
+		height: 16px;
+	}
 }
 .composer-tool-tile:hover:not(:disabled),
 .composer-tool-tile:focus-visible {

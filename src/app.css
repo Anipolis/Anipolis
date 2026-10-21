@@ -1430,9 +1430,15 @@ textarea {
 
 .profile-stats {
 	display: flex;
-	gap: 20px;
+	/* 狭い幅では項目ごとに次の行へ回す（項目の中は折り返さない。日本語が1文字ずつ折り返すため、#429） */
+	flex-wrap: wrap;
+	gap: 4px 20px;
 	margin-top: 12px;
 	font-size: 14px;
+}
+
+.profile-stat {
+	white-space: nowrap;
 }
 
 .profile-stat strong {
@@ -1603,6 +1609,13 @@ textarea {
 	margin-bottom: 0;
 }
 
+/* 見出しやラベルの横に ⓘ(InfoTip)を並べる */
+.with-info-tip {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
 .settings-avatar-row {
 	display: flex;
 	align-items: center;
@@ -1744,6 +1757,14 @@ textarea {
 	font-weight: 600;
 	margin-bottom: 6px;
 	color: var(--color-text);
+}
+
+.with-info-tip:has(> .field-label) {
+	margin-bottom: 6px;
+}
+
+.with-info-tip > .field-label {
+	margin-bottom: 0;
 }
 
 .field-required {
@@ -3515,7 +3536,7 @@ form + .repost-menu-item {
 	}
 
 	.profile-stats {
-		gap: 16px;
+		column-gap: 16px;
 	}
 
 	/* Feed column fills full width (960px rule already handles this for the right sidebar-column,

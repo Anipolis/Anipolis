@@ -454,12 +454,12 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 }
 </script>
 
-<svelte:head> <title>放送スケジュール - Anipolis</title> </svelte:head>
+<svelte:head> <title>カレンダー - Anipolis</title> </svelte:head>
 
 <div class="schedule-page">
 	<header class="schedule-header">
 		<div>
-			<h1>放送スケジュール</h1>
+			<h1>カレンダー</h1>
 		</div>
 		<div class="schedule-actions">
 			<div class="week-nav">
@@ -474,7 +474,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 						前週
 					</span>
 				{/if}
-				<h1 class="mobile-schedule-title">放送スケジュール</h1>
+				<h1 class="mobile-schedule-title">カレンダー</h1>
 				{#if data.canGoNext}
 					<a class="week-nav-btn" href="/schedule?week={data.nextWeek}" aria-label="次の週">
 						翌週
@@ -808,14 +808,15 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 													{:else}
 														<div class="slot-cover slot-cover--placeholder"></div>
 													{/if}
+													<!-- 時刻の行に置くと列の幅で切れ、折り返すと高さ固定の枠で本文が切れるので、表紙に重ねる（#433） -->
+													{#if isLive}
+														<span class="slot-live-badge">LIVE</span>
+													{/if}
 												</div>
 												<div class="slot-info">
 													<div class="slot-meta-row">
 														{#if broadcastTime}
 															<span class="slot-time">{broadcastTime.slice(0, 5)}</span>
-														{/if}
-														{#if isLive}
-															<span class="slot-live-badge">LIVE</span>
 														{/if}
 													</div>
 													<span class="slot-title">{anime.title}</span>
@@ -1110,7 +1111,9 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 				<label>
 					<span>ルームリンク</span>
 					<input class="input" type="text" name="hashtag" required maxlength="50" placeholder="Anipolis視聴">
-					<span class="event-field-hint">トレンド集計に使われるタグ名です</span>
+					<span class="event-field-hint"
+						>このルームの投稿に付くハッシュタグです（トレンド集計にも使われます）</span
+					>
 				</label>
 				<div class="event-anime-field">
 					<span id="event-anime-field-label" class="event-form-label">対象アニメ</span>
@@ -1482,8 +1485,9 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	overflow: hidden;
 }
 .slot-live-badge {
-	margin-left: auto;
-	flex-shrink: 0;
+	position: absolute;
+	top: 3px;
+	left: 3px;
 	font-size: 0.58rem;
 	font-weight: 800;
 	color: #fff;
@@ -2024,18 +2028,10 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	.day-tab-date {
 		font-size: 0.72rem;
 	}
+	/* 同じ時刻の番組も縦に並べ、時刻の順に1列で追えるようにする（2列だと1本の時刻と混ざって読みにくい #438） */
 	.anime-time-group {
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
 		gap: 4px;
 		width: 100%;
-		max-width: 388px;
-	}
-	.anime-time-group > .anime-slot-wrap:nth-child(odd) .room-alert-menu,
-	.anime-time-group > .event-slot-wrap:nth-child(odd) .room-alert-menu {
-		left: 4px;
-		right: auto;
-		width: min(240px, calc(100vw - 32px));
 	}
 	.anime-slot {
 		height: 98px;

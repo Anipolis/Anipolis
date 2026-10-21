@@ -85,15 +85,13 @@ onDestroy(clearSelectedAvatarFile);
 				<h1 class="settings-title">ようこそ！プロフィールを設定しましょう</h1>
 			</div>
 
-			<p class="field-hint" style="margin-bottom: 1.25rem;">
-				ログイン情報からそのまま使える候補だけ初期値にしています。必要に応じて変更してください。
-			</p>
+			<p class="field-hint" style="margin-bottom: 1.25rem;">あとから設定で変更できます。</p>
 
 			{#if form && "message" in form && !("field" in form)}
 				<div class="flash-error" role="alert">{form.message}</div>
 			{/if}
 
-			<form method="POST" action="?/save" enctype="multipart/form-data" use:enhance={onSubmit}>
+			<form method="POST" action="?/save" enctype="multipart/form-data" novalidate use:enhance={onSubmit}>
 				<input type="hidden" name="next" value={data.next}>
 				<input type="hidden" name="avatar_choice" value={avatarChoice}>
 
@@ -101,7 +99,13 @@ onDestroy(clearSelectedAvatarFile);
 					<UserAvatar src={selectedAvatarUrl} username={displayName || username} size="lg" />
 					<div class="onboarding-avatar-copy">
 						<div class="field-label">プロフィール画像</div>
-						<p class="field-hint">ログイン元のアイコン候補を使うか、Anipolis用の画像に変更できます。</p>
+						<p class="field-hint">
+							{#if data.avatarUrl}
+								ログインに使ったサービスのアイコンを使うか、画像をアップロードできます。
+							{:else}
+								画像をアップロードできます。設定しなくても始められます。
+							{/if}
+						</p>
 						<div class="onboarding-avatar-actions">
 							<label class="btn btn-outline onboarding-avatar-file">
 								画像を変更
@@ -124,9 +128,12 @@ onDestroy(clearSelectedAvatarFile);
 									候補を使う
 								</button>
 							{/if}
-							<button type="button" class="btn btn-ghost" disabled={submitting} onclick={clearAvatar}>
-								使わない
-							</button>
+							<!-- 何も選んでいないときの「使わない」は押す意味が無いので、選んだあとだけ出す -->
+							{#if avatarChoice !== "none"}
+								<button type="button" class="btn btn-ghost" disabled={submitting} onclick={clearAvatar}>
+									使わない
+								</button>
+							{/if}
 						</div>
 						{#if form && "field" in form && form.field === "avatar"}
 							<p class="field-error-msg">{form.message}</p>
@@ -160,9 +167,7 @@ onDestroy(clearSelectedAvatarFile);
 					{#if form && "field" in form && form.field === "username"}
 						<p class="field-error-msg">{form.message}</p>
 					{:else}
-						<p class="field-hint">
-							3〜20文字の半角英数字・アンダースコアのみ使用できます。候補が空の場合はAnipolis用に入力してください。
-						</p>
+						<p class="field-hint">3〜20文字の半角英数字と _（アンダースコア）が使えます。</p>
 					{/if}
 				</div>
 

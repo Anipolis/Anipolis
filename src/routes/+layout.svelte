@@ -3,6 +3,7 @@ import { onMount, untrack } from "svelte";
 import { invalidate } from "$app/navigation";
 import { navigating, page } from "$app/state";
 import AccountBoundary from "$lib/components/AccountBoundary.svelte";
+import DevEnvBadge from "$lib/components/DevEnvBadge.svelte";
 import MobileBottomNav from "$lib/components/MobileBottomNav.svelte";
 import MobileSwipeNavigation from "$lib/components/MobileSwipeNavigation.svelte";
 import RouteNavigationSkeleton from "$lib/components/RouteNavigationSkeleton.svelte";
@@ -23,6 +24,8 @@ let unreadNotificationCount = $state(0);
 let unreadBroadcastNotificationCount = $state(0);
 let pendingReportsCount = $state(0);
 const roomScrollLocked = $derived(page.url.pathname.startsWith("/rooms/anime/"));
+// 初期設定の途中は、押しても初期設定に戻されるだけの画面リンク（サイドバー・下のナビ）を出さない（#423）
+const minimalChrome = $derived(page.url.pathname.startsWith("/onboarding"));
 // 別ページへ移る遷移だけ遷移先のスケルトンに差し替える。クエリだけが変わる遷移
 // （検索語・フィルター・タブ・ページ番号）でページをアンマウントすると入力欄やドロワーの
 // 状態が失われ、1 文字ずつしか入力できなくなる（#292）
@@ -136,6 +139,7 @@ function handleFabClick() {
 		{unreadBroadcastNotificationCount}
 		{pendingReportsCount}
 		extraAccounts={data.extraAccounts}
+		minimal={minimalChrome}
 	/>
 	<main class="app-main" id="main-content" tabindex="-1">
 		{#if showNavigationSkeleton && navigationTargetPath}
@@ -147,7 +151,10 @@ function handleFabClick() {
 	</main>
 </div>
 
-<MobileBottomNav session={data.session} {unreadNotificationCount} />
+{#if !minimalChrome}
+	<MobileBottomNav session={data.session} {unreadNotificationCount} />
+{/if}
+<DevEnvBadge />
 <MobileSwipeNavigation session={data.session} />
 
 <!-- FAB: compose post (mobile only) -->

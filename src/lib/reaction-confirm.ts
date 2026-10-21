@@ -31,6 +31,12 @@ export function confirmReaction(
 	const flag = RESULT_FLAG[kind];
 	const value = result.type === "success" ? (result.data as Record<string, unknown> | undefined)?.[flag] : undefined;
 	const active = typeof value === "boolean" ? value : !before.wasActive;
+	// サーバーが操作後の件数を返していればそれを使う（表示していた件数が取得の失敗で 0 だった場合も正しくなる）
+	const serverCount =
+		result.type === "success" ? (result.data as Record<string, unknown> | undefined)?.["count"] : undefined;
+	if (typeof serverCount === "number" && Number.isFinite(serverCount)) {
+		return { active, count: Math.max(0, serverCount) };
+	}
 	// 例: いいね済み(5件)で解除 → 4件。未いいね(5件)で押したがサーバーは「既にいいね済み」→ 5件のまま
 	const count = before.countBefore + (active ? 1 : 0) - (before.wasActive ? 1 : 0);
 	return { active, count: Math.max(0, count) };

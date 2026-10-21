@@ -9,7 +9,10 @@
 		"node": ">=22.14.0"
 	},
 	"scripts": {
-		"dev": "vite dev",
+		"dev": "vite dev --mode staging",
+		"dev:prod": "vite dev",
+		"staging:db-push": "node --experimental-strip-types scripts/staging/db-push.ts",
+		"staging:seed": "node --experimental-strip-types scripts/staging/seed.ts",
 		"build": "vite build",
 		"deploy": "vite build && wrangler pages deploy .svelte-kit/cloudflare --project-name anipolis --commit-dirty=true",
 		"preview": "vite preview",
@@ -31,6 +34,7 @@
 		"import:jikan-covers": "node --env-file-if-exists=.env --experimental-strip-types scripts/import-jikan-covers.ts",
 		"import:oauth-avatars": "node --env-file-if-exists=.env --experimental-strip-types scripts/import-oauth-avatars.ts",
 		"sweep:orphan-post-images": "node --env-file-if-exists=.env --experimental-strip-types scripts/sweep-orphan-post-images.ts",
+		"cleanup:deleted-account-files": "node --env-file-if-exists=.env --experimental-strip-types scripts/cleanup-deleted-account-files.ts",
 		"import:mal": "node --env-file-if-exists=.env --experimental-strip-types scripts/import-mal-season.ts",
 		"import:anime-offline": "node --env-file-if-exists=.env --experimental-strip-types scripts/import-anime-offline-database.ts",
 		"import:wikidata-titles": "node --env-file-if-exists=.env --experimental-strip-types scripts/import-wikidata-anime-titles.ts",

@@ -5,6 +5,10 @@ import UserAvatar from "$lib/components/UserAvatar.svelte";
 import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();
+
+// 検索欄の値。URL の検索語から作り直し、入力で書き換える。bind:value にして、ハイドレーション前に
+// 打った文字も取り込む（一方向の value= だと読み込み直後の入力を空で上書きする、#417）
+let queryInput = $derived(data.query);
 </script>
 
 <svelte:head> <title>{data.query ? `「${data.query}」の検索結果` : '検索'} - Anipolis</title> </svelte:head>
@@ -35,16 +39,19 @@ let { data }: PageProps = $props();
 					name="q"
 					class="global-search-input"
 					placeholder="投稿やユーザーを検索"
-					value={data.query}
+					bind:value={queryInput}
 					aria-label="検索"
 				>
 			</div>
 			<button type="submit" class="global-search-button">検索</button>
 		</form>
 
-		<div class="mobile-search-trending">
-			<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
-		</div>
+		<!-- スマホのトレンドは検索語が無いときだけ。検索したら結果を検索欄のすぐ下に出す（#430）。PC は右の列に出る -->
+		{#if !data.query}
+			<div class="mobile-search-trending">
+				<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
+			</div>
+		{/if}
 
 		{#if !data.query}
 			<div class="empty-state">

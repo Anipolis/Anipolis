@@ -1,8 +1,8 @@
-<svelte:head> <title>週間スケジュールへ移動中 - Anipolis</title> </svelte:head>
+<svelte:head> <title>カレンダーへ移動中 - Anipolis</title> </svelte:head>
 
 <div class="calendar-redirect">
-	<p>カレンダーは週間スケジュールに統合されました。</p>
-	<a href="/schedule" class="btn btn-primary">週間スケジュールを開く</a>
+	<p>カレンダーの場所が変わりました。</p>
+	<a href="/schedule" class="btn btn-primary">カレンダーを開く</a>
 </div>
 
 <style>

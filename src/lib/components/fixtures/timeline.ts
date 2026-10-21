@@ -39,6 +39,7 @@ export function makeTimelinePosts(count = 40): Post[] {
 			bookmarked_by_me: false,
 			anime_id: "42",
 			broadcast_room_session_id: "preview-room",
+			episode_room_id: null,
 			event_room: null,
 			anime_quote: {
 				id: "42",

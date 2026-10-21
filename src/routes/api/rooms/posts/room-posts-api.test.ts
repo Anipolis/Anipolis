@@ -2,12 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("$lib/server/queries", () => ({
 	getRoomPostsAfter: vi.fn(async () => ({ posts: [], nextCursor: null, hasMore: false })),
+	getRoomPostsBefore: vi.fn(async () => ({ posts: [], nextCursor: null, hasMore: false })),
 	getVisiblePostReplyCounts: vi.fn(
 		async (_supabase: unknown, ids: string[]) => new Map(ids.slice(1).map((id) => [id, 2])),
 	),
 }));
 
-import { getRoomPostsAfter, getVisiblePostReplyCounts } from "$lib/server/queries";
+import { getRoomPostsAfter, getRoomPostsBefore, getVisiblePostReplyCounts } from "$lib/server/queries";
 import { ROOM_STATE_MAX_IDS } from "$lib/utils/room-connection";
 import { GET } from "./+server";
 import { POST } from "./state/+server";
@@ -37,9 +38,49 @@ function postState(body: unknown) {
 
 beforeEach(() => {
 	vi.mocked(getRoomPostsAfter).mockClear();
+	vi.mocked(getRoomPostsBefore).mockClear();
 });
 
 describe("GET /api/rooms/posts（#320）", () => {
+	it("話数ルーム（episode_room_id）の差分も取れる", async () => {
+		const res = await get(`episode_room_id=${SESSION}`);
+		expect(res.status).toBe(200);
+		expect(getRoomPostsAfter).toHaveBeenCalledWith(
+			expect.anything(),
+			{ kind: "episode_room", id: SESSION },
+			null,
+			null,
+			100,
+		);
+	});
+
+	it("before_* で境界より前（古い側）を読み足す", async () => {
+		const res = await get(
+			`episode_room_id=${SESSION}&before_created_at=2026-10-13T12:00:00.000Z&before_id=${POST_ID}`,
+		);
+		expect(res.status).toBe(200);
+		expect(getRoomPostsBefore).toHaveBeenCalledWith(
+			expect.anything(),
+			{ kind: "episode_room", id: SESSION },
+			null,
+			{ createdAt: "2026-10-13T12:00:00.000Z", id: POST_ID },
+			100,
+		);
+		expect(getRoomPostsAfter).not.toHaveBeenCalled();
+		// 前後の境界は同時に指定できない
+		const both = await get(
+			`episode_room_id=${SESSION}&before_created_at=2026-10-13T12:00:00.000Z&before_id=${POST_ID}&after_created_at=2026-10-13T12:00:00.000Z&after_id=${POST_ID}`,
+		);
+		expect(both.status).toBe(400);
+	});
+
+	it("ルームの指定はちょうど一つ", async () => {
+		expect((await get("")).status).toBe(400);
+		expect((await get(`session_id=${SESSION}&episode_room_id=${SESSION}`)).status).toBe(400);
+		expect((await get("episode_room_id=not-a-uuid")).status).toBe(400);
+		expect(getRoomPostsAfter).not.toHaveBeenCalled();
+	});
+
 	it("取得済みの境界（created_at と id）より後ろから取る", async () => {
 		const res = await get(`session_id=${SESSION}&after_created_at=2026-10-13T12:00:00.000Z&after_id=${POST_ID}`);
 		expect(res.status).toBe(200);

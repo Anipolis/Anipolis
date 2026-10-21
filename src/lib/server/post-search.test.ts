@@ -26,7 +26,7 @@ describe("buildPostSearchFilter", () => {
 
 	it("adds quoted posts of the matched anime, excluding room, event and spoiler posts", () => {
 		expect(buildPostSearchFilter("レイアース", [42, 7])).toBe(
-			'content.ilike."%レイアース%",and(anime_id.in.(42,7),broadcast_room_session_id.is.null,event_id.is.null,cw_anime_id.is.null)',
+			'content.ilike."%レイアース%",and(anime_id.in.(42,7),broadcast_room_session_id.is.null,episode_room_id.is.null,event_id.is.null,cw_anime_id.is.null)',
 		);
 	});
 

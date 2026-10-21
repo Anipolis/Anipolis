@@ -1,4 +1,5 @@
-import { error, fail } from "@sveltejs/kit";
+import { error, fail, redirect } from "@sveltejs/kit";
+import { episodeRoomPath } from "$lib/episode-room";
 import {
 	deletePostAction,
 	insertPostWithHashtags,
@@ -15,12 +16,14 @@ import {
 	getBroadcastRoomPosts,
 	getBroadcastRoomScheduleSnapshotsForAnime,
 	getBroadcastRoomSession,
+	getEpisodeRoomById,
 } from "$lib/server/queries";
 import { getRoomExitSurveyLoadState, ROOM_EXIT_SURVEY_VERSION } from "$lib/server/room-exit-survey";
 import {
 	createRoomExperimentServiceClient,
 	getActiveRoomExperimentRunForAnime as getActiveExperimentRun,
 } from "$lib/server/room-experiments";
+import { roomHashtag, stripTrailingRoomHashtag } from "$lib/server/room-hashtag";
 import type { Anime, BroadcastRoomOverride, BroadcastRoomSession } from "$lib/types";
 import {
 	animeIsScheduledForRoomDate,
@@ -73,31 +76,6 @@ function synthesizeClosedRoomSession(
 	};
 }
 
-function fallbackRoomHashtag(title: string) {
-	return title.replace(/\s+/g, "").replace(/[^\p{L}\p{N}_]/gu, "");
-}
-
-function normalizeHashtag(value: string) {
-	return value.trim().replace(/^#+/, "").toLowerCase();
-}
-
-function roomHashtag(anime: Anime) {
-	const officialHashtag = anime.official_hashtag?.map(normalizeHashtag).find((tag) => tag.length > 0);
-	return officialHashtag ?? fallbackRoomHashtag(anime.title);
-}
-
-function stripTrailingRoomHashtag(content: string, hashtag: string) {
-	const tag = normalizeHashtag(hashtag);
-	if (!tag) return content.trim();
-	const trimmed = content.trim();
-	const normalized = trimmed.toLowerCase();
-	const suffix = `#${tag}`;
-	if (!normalized.endsWith(suffix)) return trimmed;
-	const before = trimmed.slice(0, trimmed.length - suffix.length);
-	if (before.length > 0 && !/\s$/.test(before)) return trimmed;
-	return before.trimEnd();
-}
-
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 	const anime = await getAnime(supabase, params.id, user?.id ?? null);
@@ -123,6 +101,14 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 		session = synthesizeClosedRoomSession(anime, params.date, override ?? null);
 	}
 	if (!session) throw error(404, "放送ルームが見つかりません");
+
+	// 話数ルーム（153）に属する放送枠は、話数ルームのその放送枠の位置へ移す
+	if (session.episode_room_id) {
+		const episodeRoom = await getEpisodeRoomById(supabase, session.episode_room_id);
+		if (episodeRoom?.kind === "episode" && episodeRoom.episode_number != null) {
+			redirect(302, episodeRoomPath(anime.id, episodeRoom.episode_number, session.id));
+		}
+	}
 
 	const hashtag = roomHashtag(anime);
 	// 話数はしょぼい番組表由来の値が第一。番号の無いセッション（同期開始前の

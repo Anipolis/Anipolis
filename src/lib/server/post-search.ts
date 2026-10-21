@@ -34,7 +34,7 @@ export function buildPostSearchFilter(query: string, animeIds: readonly number[]
 	const content = `content.ilike.${quoteFilterValue(`%${escapeIlikePattern(query)}%`)}`;
 	const ids = [...new Set(animeIds.filter((id) => Number.isSafeInteger(id) && id > 0))];
 	if (ids.length === 0) return content;
-	return `${content},and(anime_id.in.(${ids.join(",")}),broadcast_room_session_id.is.null,event_id.is.null,cw_anime_id.is.null)`;
+	return `${content},and(anime_id.in.(${ids.join(",")}),broadcast_room_session_id.is.null,episode_room_id.is.null,event_id.is.null,cw_anime_id.is.null)`;
 }
 
 /** 一致した作品のうち、投稿検索に使う ID（多すぎるときは使わない） */

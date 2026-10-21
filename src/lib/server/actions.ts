@@ -256,6 +256,7 @@ export async function insertPostWithHashtags(
 	cwAnimeId: string | null = null,
 	additionalHashtags: string[] = [],
 	eventId: string | null = null,
+	episodeRoomId: string | null = null,
 ) {
 	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
 	if (moderationFailure) return moderationFailure;
@@ -302,6 +303,8 @@ export async function insertPostWithHashtags(
 		quoted_post_id: quotedPostId || null,
 		broadcast_room_session_id: broadcastRoomSessionId,
 		event_id: eventId,
+		// 話数ルーム（153）。放送枠の時間内なら DB のトリガーが放送枠も補う
+		episode_room_id: episodeRoomId,
 	};
 	const postPayload = exchangeShare ? { ...basePost, exchange_share: exchangeShare as unknown as Json } : basePost;
 
@@ -385,6 +388,32 @@ async function removePostImages(supabase: SupabaseClient<Database>, imageUrls: s
 /**
  * いいねのトグル — 既にいいね済みなら削除、未いいねなら挿入
  */
+/**
+ * リアクション（いいね・ブックマーク・リポスト）の押した後の状態。"on" / "off" 以外（古いクライアント）は null。
+ * 指定があればサーバーは反転ではなくこの状態に合わせる。表示が古い（件数の取得に失敗して未反応と
+ * 表示されていた等）まま押しても、意図と逆の操作（解除）にならないようにするため（#383 の Codex レビュー）。
+ */
+function readReactionIntent(form: FormData): "on" | "off" | null {
+	const intent = form.get("intent");
+	return intent === "on" || intent === "off" ? intent : null;
+}
+
+/**
+ * 操作後のいいね数・リポスト数（get_post_counts）。取れなければ undefined（呼び出し側は推測で表示する）。
+ * 表示していた件数が取得の失敗で 0 だった投稿でも、押したあとに正しい件数を確定させるため（#388 Codex）。
+ */
+async function readReactionCount(
+	supabase: SupabaseClient<Database>,
+	postId: string,
+	userId: string,
+	column: "like_count" | "repost_count",
+): Promise<number | undefined> {
+	const { data, error } = await supabase.rpc("get_post_counts", { p_post_ids: [postId], p_user_id: userId });
+	if (error) return undefined;
+	const value = data?.[0]?.[column];
+	return typeof value === "number" ? value : undefined;
+}
+
 export async function toggleLikeAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
 	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
 	if (moderationFailure) return moderationFailure;
@@ -393,30 +422,39 @@ export async function toggleLikeAction(request: Request, supabase: SupabaseClien
 	const postId = (form.get("post_id") as string | null)?.trim() ?? "";
 	if (!postId) return fail(400, { message: "投稿IDが不正です" });
 
-	const { data: existing } = await supabase
+	const { data: existing, error: lookupError } = await supabase
 		.from("likes")
 		.select("post_id")
 		.eq("post_id", postId)
 		.eq("user_id", userId)
 		.maybeSingle();
+	// 照会に失敗したら、今の状態が分からないので何もせず失敗を返す（成功扱いにすると表示と実際がずれる）
+	if (lookupError) return fail(500, { message: "いいねの状態を確認できませんでした" });
 
-	if (existing) {
+	const intent = readReactionIntent(form);
+	if (existing && intent === "on")
+		return { liked: true, count: await readReactionCount(supabase, postId, userId, "like_count") };
+
+	// intent=off は照会の結果に関わらず本人の行を消す。投稿が非公開化・ブロック等で見えなくなると
+	// 照会（SELECT の RLS）では行が見えないが、DELETE は本人の行を消せるため（#388 Codex）
+	if (existing || intent === "off") {
 		const { error: deleteError } = await supabase
 			.from("likes")
 			.delete()
 			.eq("post_id", postId)
 			.eq("user_id", userId);
 		if (deleteError) return fail(500, { message: "いいねの解除に失敗しました" });
-		return { liked: false };
+		return { liked: false, count: await readReactionCount(supabase, postId, userId, "like_count") };
 	}
 
 	const { error } = await supabase.from("likes").insert({ post_id: postId, user_id: userId });
-	if (error) return fail(403, { message: "この投稿にいいねできません" });
-	return { liked: true };
+	// 一意制約の違反は「見えないが既にいいね済み」。付いている状態として返す
+	if (error && error.code !== "23505") return fail(403, { message: "この投稿にいいねできません" });
+	return { liked: true, count: await readReactionCount(supabase, postId, userId, "like_count") };
 }
 
 /**
- * ブックマークのトグル — 既にブックマーク済みなら削除、未ブックマークなら挿入
+ * ブックマークのトグル — 既にブックマーク済みなら削除、未ブックマークなら挿入（intent があればその状態に合わせる）
  */
 export async function toggleBookmarkAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
 	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
@@ -426,14 +464,21 @@ export async function toggleBookmarkAction(request: Request, supabase: SupabaseC
 	const postId = (form.get("post_id") as string | null)?.trim() ?? "";
 	if (!postId) return fail(400, { message: "投稿IDが不正です" });
 
-	const { data: existing } = await supabase
+	const { data: existing, error: lookupError } = await supabase
 		.from("bookmarks")
 		.select("post_id")
 		.eq("post_id", postId)
 		.eq("user_id", userId)
 		.maybeSingle();
+	// 照会に失敗したら、今の状態が分からないので何もせず失敗を返す（成功扱いにすると表示と実際がずれる）
+	if (lookupError) return fail(500, { message: "ブックマークの状態を確認できませんでした" });
 
-	if (existing) {
+	const intent = readReactionIntent(form);
+	if (existing && intent === "on") return { bookmarked: true };
+
+	// intent=off は照会の結果に関わらず本人の行を消す。投稿が非公開化・ブロック等で見えなくなると
+	// 照会（SELECT の RLS）では行が見えないが、DELETE は本人の行を消せるため（#388 Codex）
+	if (existing || intent === "off") {
 		const { error: deleteError } = await supabase
 			.from("bookmarks")
 			.delete()
@@ -444,7 +489,7 @@ export async function toggleBookmarkAction(request: Request, supabase: SupabaseC
 	}
 
 	const { error } = await supabase.from("bookmarks").insert({ post_id: postId, user_id: userId });
-	if (error) return fail(403, { message: "この投稿をブックマークできません" });
+	if (error && error.code !== "23505") return fail(403, { message: "この投稿をブックマークできません" });
 	return { bookmarked: true };
 }
 
@@ -456,26 +501,35 @@ export async function toggleRepostAction(request: Request, supabase: SupabaseCli
 	const postId = (form.get("post_id") as string | null)?.trim() ?? "";
 	if (!postId) return fail(400, { message: "投稿IDが不正です" });
 
-	const { data: existing } = await supabase
+	const { data: existing, error: lookupError } = await supabase
 		.from("reposts")
 		.select("post_id")
 		.eq("post_id", postId)
 		.eq("user_id", userId)
 		.maybeSingle();
+	// 照会に失敗したら、今の状態が分からないので何もせず失敗を返す（成功扱いにすると表示と実際がずれる）
+	if (lookupError) return fail(500, { message: "リポストの状態を確認できませんでした" });
 
-	if (existing) {
+	const intent = readReactionIntent(form);
+	if (existing && intent === "on") {
+		return { reposted: true, count: await readReactionCount(supabase, postId, userId, "repost_count") };
+	}
+
+	// intent=off は照会の結果に関わらず本人の行を消す。投稿が非公開化・ブロック等で見えなくなると
+	// 照会（SELECT の RLS）では行が見えないが、DELETE は本人の行を消せるため（#388 Codex）
+	if (existing || intent === "off") {
 		const { error: deleteError } = await supabase
 			.from("reposts")
 			.delete()
 			.eq("post_id", postId)
 			.eq("user_id", userId);
 		if (deleteError) return fail(500, { message: "リポストの解除に失敗しました" });
-		return { reposted: false };
+		return { reposted: false, count: await readReactionCount(supabase, postId, userId, "repost_count") };
 	}
 
 	const { error } = await supabase.from("reposts").insert({ post_id: postId, user_id: userId });
-	if (error) return fail(403, { message: "この投稿をリポストできません" });
-	return { reposted: true };
+	if (error && error.code !== "23505") return fail(403, { message: "この投稿をリポストできません" });
+	return { reposted: true, count: await readReactionCount(supabase, postId, userId, "repost_count") };
 }
 
 /**

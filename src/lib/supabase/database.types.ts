@@ -77,6 +77,30 @@ export type Database = {
 					},
 				];
 			};
+			account_storage_cleanups: {
+				Row: {
+					attempts: number;
+					last_attempt_at: string | null;
+					last_error: string | null;
+					requested_at: string;
+					user_id: string;
+				};
+				Insert: {
+					attempts?: number;
+					last_attempt_at?: string | null;
+					last_error?: string | null;
+					requested_at?: string;
+					user_id: string;
+				};
+				Update: {
+					attempts?: number;
+					last_attempt_at?: string | null;
+					last_error?: string | null;
+					requested_at?: string;
+					user_id?: string;
+				};
+				Relationships: [];
+			};
 			admin_audit_logs: {
 				Row: {
 					action: string;
@@ -130,6 +154,7 @@ export type Database = {
 					cover_url: string | null;
 					created_at: string | null;
 					episode_count: string | null;
+					episode_total: number | null;
 					genre: string[] | null;
 					genre_en: string[] | null;
 					hidden_by_admin: boolean;
@@ -169,6 +194,7 @@ export type Database = {
 					cover_url?: string | null;
 					created_at?: string | null;
 					episode_count?: string | null;
+					episode_total?: number | null;
 					genre?: string[] | null;
 					genre_en?: string[] | null;
 					hidden_by_admin?: boolean;
@@ -208,6 +234,7 @@ export type Database = {
 					cover_url?: string | null;
 					created_at?: string | null;
 					episode_count?: string | null;
+					episode_total?: number | null;
 					genre?: string[] | null;
 					genre_en?: string[] | null;
 					hidden_by_admin?: boolean;
@@ -1333,11 +1360,14 @@ export type Database = {
 			};
 			broadcast_room_sessions: {
 				Row: {
+					airing_kind: string;
 					anime_id: number;
 					created_at: string;
 					duration_minutes: number;
 					episode_number: number | null;
+					episode_room_id: string | null;
 					episode_title: string | null;
+					event_id: string | null;
 					id: string;
 					posting_closes_at: string;
 					posting_opens_at: string;
@@ -1355,11 +1385,14 @@ export type Database = {
 					source_title_id: number | null;
 				};
 				Insert: {
+					airing_kind?: string;
 					anime_id: number;
 					created_at?: string;
 					duration_minutes: number;
 					episode_number?: number | null;
+					episode_room_id?: string | null;
 					episode_title?: string | null;
+					event_id?: string | null;
 					id?: string;
 					posting_closes_at: string;
 					posting_opens_at: string;
@@ -1377,11 +1410,14 @@ export type Database = {
 					source_title_id?: number | null;
 				};
 				Update: {
+					airing_kind?: string;
 					anime_id?: number;
 					created_at?: string;
 					duration_minutes?: number;
 					episode_number?: number | null;
+					episode_room_id?: string | null;
 					episode_title?: string | null;
+					event_id?: string | null;
 					id?: string;
 					posting_closes_at?: string;
 					posting_opens_at?: string;
@@ -1446,6 +1482,116 @@ export type Database = {
 						columns: ["anime_id"];
 						isOneToOne: false;
 						referencedRelation: "anime_with_computed_broadcast_status";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "broadcast_room_sessions_episode_room_id_fkey";
+						columns: ["episode_room_id"];
+						isOneToOne: false;
+						referencedRelation: "episode_rooms";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "broadcast_room_sessions_event_id_fkey";
+						columns: ["event_id"];
+						isOneToOne: false;
+						referencedRelation: "events";
+						referencedColumns: ["id"];
+					},
+				];
+			};
+			episode_rooms: {
+				Row: {
+					anime_id: number;
+					created_at: string;
+					episode_number: number | null;
+					id: string;
+					kind: string;
+					label: string | null;
+					merged_into: string | null;
+					opens_at: string | null;
+					opens_at_locked: boolean;
+					special_key: string | null;
+				};
+				Insert: {
+					anime_id: number;
+					created_at?: string;
+					episode_number?: number | null;
+					id?: string;
+					kind: string;
+					label?: string | null;
+					merged_into?: string | null;
+					opens_at?: string | null;
+					opens_at_locked?: boolean;
+					special_key?: string | null;
+				};
+				Update: {
+					anime_id?: number;
+					created_at?: string;
+					episode_number?: number | null;
+					id?: string;
+					kind?: string;
+					label?: string | null;
+					merged_into?: string | null;
+					opens_at?: string | null;
+					opens_at_locked?: boolean;
+					special_key?: string | null;
+				};
+				Relationships: [
+					{
+						foreignKeyName: "episode_rooms_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "episode_rooms_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_genre_ranked";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "episode_rooms_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_sortable";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "episode_rooms_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_popularity";
+						referencedColumns: ["anime_id"];
+					},
+					{
+						foreignKeyName: "episode_rooms_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_top_rated";
+						referencedColumns: ["anime_id"];
+					},
+					{
+						foreignKeyName: "episode_rooms_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_trending";
+						referencedColumns: ["anime_id"];
+					},
+					{
+						foreignKeyName: "episode_rooms_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_with_computed_broadcast_status";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "episode_rooms_merged_into_fkey";
+						columns: ["merged_into"];
+						isOneToOne: false;
+						referencedRelation: "episode_rooms";
 						referencedColumns: ["id"];
 					},
 				];
@@ -2199,6 +2345,7 @@ export type Database = {
 					content: string;
 					created_at: string;
 					cw_anime_id: number | null;
+					episode_room_id: string | null;
 					event_id: string | null;
 					exchange_share: Json | null;
 					hidden_by_admin: boolean;
@@ -2214,6 +2361,7 @@ export type Database = {
 					content: string;
 					created_at?: string;
 					cw_anime_id?: number | null;
+					episode_room_id?: string | null;
 					event_id?: string | null;
 					exchange_share?: Json | null;
 					hidden_by_admin?: boolean;
@@ -2229,6 +2377,7 @@ export type Database = {
 					content?: string;
 					created_at?: string;
 					cw_anime_id?: number | null;
+					episode_room_id?: string | null;
 					event_id?: string | null;
 					exchange_share?: Json | null;
 					hidden_by_admin?: boolean;
@@ -2342,6 +2491,13 @@ export type Database = {
 						columns: ["cw_anime_id"];
 						isOneToOne: false;
 						referencedRelation: "anime_with_computed_broadcast_status";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "posts_episode_room_id_fkey";
+						columns: ["episode_room_id"];
+						isOneToOne: false;
+						referencedRelation: "episode_rooms";
 						referencedColumns: ["id"];
 					},
 					{
@@ -3307,6 +3463,7 @@ export type Database = {
 					cover_url: string | null;
 					created_at: string | null;
 					episode_count: string | null;
+					episode_total: number | null;
 					genre: string[] | null;
 					genre_en: string[] | null;
 					genre_match: number | null;
@@ -3357,6 +3514,7 @@ export type Database = {
 					cover_url: string | null;
 					created_at: string | null;
 					episode_count: string | null;
+					episode_total: number | null;
 					genre: string[] | null;
 					genre_en: string[] | null;
 					hidden_by_admin: boolean | null;
@@ -3427,6 +3585,7 @@ export type Database = {
 					cover_url: string | null;
 					created_at: string | null;
 					episode_count: string | null;
+					episode_total: number | null;
 					genre: string[] | null;
 					genre_en: string[] | null;
 					hidden_by_admin: boolean | null;
@@ -3467,6 +3626,7 @@ export type Database = {
 					cover_url?: string | null;
 					created_at?: string | null;
 					episode_count?: string | null;
+					episode_total?: number | null;
 					genre?: string[] | null;
 					genre_en?: string[] | null;
 					hidden_by_admin?: boolean | null;
@@ -3507,6 +3667,7 @@ export type Database = {
 					cover_url?: string | null;
 					created_at?: string | null;
 					episode_count?: string | null;
+					episode_total?: number | null;
 					genre?: string[] | null;
 					genre_en?: string[] | null;
 					hidden_by_admin?: boolean | null;
@@ -3554,6 +3715,7 @@ export type Database = {
 					cover_url: string | null;
 					created_at: string | null;
 					episode_count: string | null;
+					episode_total: number | null;
 					genre: string[] | null;
 					genre_en: string[] | null;
 					genre_match: number | null;
@@ -3640,11 +3802,14 @@ export type Database = {
 			ensure_broadcast_room_session: {
 				Args: { p_anime_id: number; p_room_date: string };
 				Returns: {
+					airing_kind: string;
 					anime_id: number;
 					created_at: string;
 					duration_minutes: number;
 					episode_number: number | null;
+					episode_room_id: string | null;
 					episode_title: string | null;
+					event_id: string | null;
 					id: string;
 					posting_closes_at: string;
 					posting_opens_at: string;
@@ -3668,14 +3833,21 @@ export type Database = {
 					isSetofReturn: true;
 				};
 			};
+			ensure_episode_room: {
+				Args: { p_anime_id: number; p_episode_number: number };
+				Returns: string;
+			};
 			ensure_global_anime_lobby_session: {
 				Args: { p_anime_id: number };
 				Returns: {
+					airing_kind: string;
 					anime_id: number;
 					created_at: string;
 					duration_minutes: number;
 					episode_number: number | null;
+					episode_room_id: string | null;
 					episode_title: string | null;
+					event_id: string | null;
 					id: string;
 					posting_closes_at: string;
 					posting_opens_at: string;
@@ -3758,6 +3930,10 @@ export type Database = {
 				Args: { target_post_id: string };
 				Returns: boolean;
 			};
+			is_broadcast_room_session_cancelled: {
+				Args: { p_anime_id: number; p_room_date: string };
+				Returns: boolean;
+			};
 			is_current_user_admin: { Args: never; Returns: boolean };
 			is_profile_active_for_writes: {
 				Args: { profile_id: string };
@@ -3766,11 +3942,27 @@ export type Database = {
 			is_profile_banned: { Args: { profile_id: string }; Returns: boolean };
 			is_username_available: { Args: { p_username: string }; Returns: boolean };
 			is_username_held: { Args: { p_username: string }; Returns: boolean };
+			merge_episode_rooms: {
+				Args: { p_source: string; p_target: string };
+				Returns: number;
+			};
 			purge_released_usernames: { Args: never; Returns: number };
 			redeem_invite: { Args: { p_code: string }; Returns: undefined };
+			refresh_episode_room_opens_at: {
+				Args: { p_room_id: string };
+				Returns: undefined;
+			};
 			revoke_invite: { Args: { p_invite_id: string }; Returns: undefined };
 			show_limit: { Args: never; Returns: number };
 			show_trgm: { Args: { "": string }; Returns: string[] };
+			unlock_episode_room_opens_at: {
+				Args: { p_room_id: string };
+				Returns: undefined;
+			};
+			upsert_episode_room_for_airing: {
+				Args: { p_anime_id: number; p_episode_number: number };
+				Returns: string;
+			};
 		};
 		Enums: {
 			[_ in never]: never;
