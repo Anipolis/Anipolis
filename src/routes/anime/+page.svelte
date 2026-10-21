@@ -467,113 +467,115 @@ function isAiringToday(anime: AnimeListItem): boolean {
 				class:filter-drawer-panel--open={filterDrawerOpen}
 				aria-hidden={!filterDrawerOpen}
 			>
-				<div class="filter-drawer-inner">
-					<div class="filter-drawer-grid">
-						{#each ANIME_GENRE_GROUPS as group, index (group.key)}
-							<section class="filter-drawer-column filter-drawer-column--genres">
-								<h2 class="filter-drawer-heading with-info-tip">
-									<span id="genre-filter-desktop-{group.key}">{group.label}</span>
-									{#if index === 0}
-										<InfoTip label="タグの絞り込み" text={ANIME_GENRE_FILTER_HELP} />
-									{/if}
-								</h2>
-								<div
-									class="drawer-genre-grid"
-									role="group"
-									aria-labelledby="genre-filter-desktop-{group.key}"
-								>
-									{#each group.tags as tag (tag.ja)}
+				<div class="filter-drawer-scroll">
+					<div class="filter-drawer-inner">
+						<div class="filter-drawer-grid">
+							{#each ANIME_GENRE_GROUPS as group, index (group.key)}
+								<section class="filter-drawer-column filter-drawer-column--genres">
+									<h2 class="filter-drawer-heading with-info-tip">
+										<span id="genre-filter-desktop-{group.key}">{group.label}</span>
+										{#if index === 0}
+											<InfoTip label="タグの絞り込み" text={ANIME_GENRE_FILTER_HELP} />
+										{/if}
+									</h2>
+									<div
+										class="drawer-genre-grid"
+										role="group"
+										aria-labelledby="genre-filter-desktop-{group.key}"
+									>
+										{#each group.tags as tag (tag.ja)}
+											<button
+												type="button"
+												class="genre-chip drawer-genre-chip"
+												class:genre-chip--active={filterState.genres.includes(tag.ja)}
+												aria-pressed={filterState.genres.includes(tag.ja)}
+												onclick={() => toggleSidebarGenre(tag.ja)}
+											>
+												{tag.ja}
+											</button>
+										{/each}
+									</div>
+								</section>
+							{/each}
+
+							<section class="filter-drawer-column">
+								<h2 class="filter-drawer-heading">放送年</h2>
+								<label class="sr-only" for="desktop-anime-year">放送年</label>
+								<div class="filter-year-wrap">
+									<input
+										id="desktop-anime-year"
+										type="number"
+										min="1900"
+										max="2100"
+										class="filter-input"
+										placeholder="例: 2025"
+										bind:value={() => filterState.year, (year) => updateFilterStateDebounced({ year: year == null ? "" : String(year) })}
+									>
+									<button
+										type="button"
+										class="filter-year-today-btn"
+										onclick={() => updateFilterState({ year: String(new Date().getFullYear()) })}
+									>
+										今年
+									</button>
+								</div>
+							</section>
+
+							<section class="filter-drawer-column">
+								<h2 class="filter-drawer-heading">放送シーズン</h2>
+								<div class="season-chips">
+									{#each SEASON_CHIPS as s}
 										<button
 											type="button"
-											class="genre-chip drawer-genre-chip"
-											class:genre-chip--active={filterState.genres.includes(tag.ja)}
-											aria-pressed={filterState.genres.includes(tag.ja)}
-											onclick={() => toggleSidebarGenre(tag.ja)}
+											class="season-chip"
+											class:season-chip--active={filterState.seasons.includes(s)}
+											aria-pressed={filterState.seasons.includes(s)}
+											onclick={() => toggleSidebarSeason(s)}
 										>
-											{tag.ja}
+											{s}
 										</button>
 									{/each}
 								</div>
 							</section>
-						{/each}
 
-						<section class="filter-drawer-column">
-							<h2 class="filter-drawer-heading">放送年</h2>
-							<label class="sr-only" for="desktop-anime-year">放送年</label>
-							<div class="filter-year-wrap">
+							<section class="filter-drawer-column">
+								<h2 class="filter-drawer-heading">スタジオ</h2>
+								<label class="sr-only" for="desktop-anime-studio">スタジオ</label>
 								<input
-									id="desktop-anime-year"
-									type="number"
-									min="1900"
-									max="2100"
+									id="desktop-anime-studio"
+									type="text"
 									class="filter-input"
-									placeholder="例: 2025"
-									bind:value={() => filterState.year, (year) => updateFilterStateDebounced({ year: year == null ? "" : String(year) })}
+									placeholder="スタジオ名"
+									bind:value={() => filterState.studio, (studio) => updateFilterStateDebounced({ studio })}
 								>
+							</section>
+
+							<section class="filter-drawer-column">
+								<h2 class="filter-drawer-heading">原作</h2>
+								<label class="sr-only" for="desktop-anime-source">原作</label>
+								<select
+									id="desktop-anime-source"
+									class="filter-select"
+									value={filterState.source}
+									onchange={(e) => updateFilterState({ source: e.currentTarget.value })}
+								>
+									<option value="">すべて</option>
+									{#each SOURCE_OPTIONS as source}
+										<option value={source}>{source}</option>
+									{/each}
+								</select>
+							</section>
+
+							<div class="filter-drawer-column filter-drawer-column--clear">
 								<button
 									type="button"
-									class="filter-year-today-btn"
-									onclick={() => updateFilterState({ year: String(new Date().getFullYear()) })}
+									class="filter-drawer-clear"
+									onclick={clearSidebarFilters}
+									disabled={!hasActiveFilters}
 								>
-									今年
+									フィルターをクリア
 								</button>
 							</div>
-						</section>
-
-						<section class="filter-drawer-column">
-							<h2 class="filter-drawer-heading">放送シーズン</h2>
-							<div class="season-chips">
-								{#each SEASON_CHIPS as s}
-									<button
-										type="button"
-										class="season-chip"
-										class:season-chip--active={filterState.seasons.includes(s)}
-										aria-pressed={filterState.seasons.includes(s)}
-										onclick={() => toggleSidebarSeason(s)}
-									>
-										{s}
-									</button>
-								{/each}
-							</div>
-						</section>
-
-						<section class="filter-drawer-column">
-							<h2 class="filter-drawer-heading">スタジオ</h2>
-							<label class="sr-only" for="desktop-anime-studio">スタジオ</label>
-							<input
-								id="desktop-anime-studio"
-								type="text"
-								class="filter-input"
-								placeholder="スタジオ名"
-								bind:value={() => filterState.studio, (studio) => updateFilterStateDebounced({ studio })}
-							>
-						</section>
-
-						<section class="filter-drawer-column">
-							<h2 class="filter-drawer-heading">原作</h2>
-							<label class="sr-only" for="desktop-anime-source">原作</label>
-							<select
-								id="desktop-anime-source"
-								class="filter-select"
-								value={filterState.source}
-								onchange={(e) => updateFilterState({ source: e.currentTarget.value })}
-							>
-								<option value="">すべて</option>
-								{#each SOURCE_OPTIONS as source}
-									<option value={source}>{source}</option>
-								{/each}
-							</select>
-						</section>
-
-						<div class="filter-drawer-column filter-drawer-column--clear">
-							<button
-								type="button"
-								class="filter-drawer-clear"
-								onclick={clearSidebarFilters}
-								disabled={!hasActiveFilters}
-							>
-								フィルターをクリア
-							</button>
 						</div>
 					</div>
 				</div>
@@ -1096,22 +1098,30 @@ function isAiringToday(anime: AnimeListItem): boolean {
 .filter-drawer-chevron--open {
 	transform: rotate(180deg);
 }
+/* 開閉は外側の行の高さ（0fr → 1fr）で見える範囲だけを広げる。中のスクロール領域は最初から最終的な高さなので、
+   スクロールバーが開く途中で出たり消えたりせず、中身の横幅も変わらない */
 .filter-drawer-panel {
-	max-height: 0;
+	display: grid;
+	grid-template-rows: 0fr;
 	opacity: 0;
 	overflow: hidden;
 	transform: translateY(-6px);
 	transition:
-		max-height 0.3s ease,
+		grid-template-rows 0.3s ease,
 		opacity 0.25s ease,
 		transform 0.3s ease,
 		margin-top 0.3s ease;
 }
 .filter-drawer-panel--open {
-	max-height: min(70dvh, 640px);
+	grid-template-rows: 1fr;
 	opacity: 1;
 	transform: translateY(0);
 	margin-top: 10px;
+}
+.filter-drawer-scroll {
+	align-self: start;
+	min-height: 0;
+	max-height: min(70dvh, 640px);
 	overflow-y: auto;
 }
 .filter-drawer-inner {
