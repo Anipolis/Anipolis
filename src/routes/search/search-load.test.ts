@@ -15,12 +15,13 @@ import { load } from "./+page.server";
 type Call = { table: string; method: string; args: unknown[] };
 type TableResult = { data: unknown; error: { message: string } | null };
 
-function fakeSupabase(anime: TableResult) {
+function fakeSupabase(anime: TableResult, overrides: Record<string, TableResult> = {}) {
 	const calls: Call[] = [];
 	const results: Record<string, TableResult> = {
 		anime,
 		posts: { data: [{ id: "p1", content: "", anime_id: 17644 }], error: null },
 		profiles: { data: [], error: null },
+		...overrides,
 	};
 	const from = vi.fn((table: string) => {
 		const result = results[table];
@@ -38,8 +39,8 @@ function fakeSupabase(anime: TableResult) {
 	return { client: { from, rpc }, calls };
 }
 
-async function runLoad(q: string, anime: TableResult) {
-	const { client, calls } = fakeSupabase(anime);
+async function runLoad(q: string, anime: TableResult, overrides: Record<string, TableResult> = {}) {
+	const { client, calls } = fakeSupabase(anime, overrides);
 	const url = new URL(`http://localhost/search?q=${encodeURIComponent(q)}`);
 	const event = {
 		url,
@@ -83,6 +84,26 @@ describe("search page load: posts quoting the matched anime", () => {
 		const { data, postsFilter } = await runLoad("レイアース", { data: null, error: { message: "boom" } });
 
 		expect(postsFilter).toBe('content.ilike."%レイアース%"');
+		expect(data.posts).toHaveLength(1);
+	});
+});
+
+describe("search page load: failures are not shown as empty results（#262）", () => {
+	const failed = { data: null, error: { message: "statement timeout" } };
+
+	it("投稿の検索だけ失敗したら、投稿は失敗として返し、ユーザーは出す", async () => {
+		const users = { data: [{ id: "u1", username: "alice", display_name: null, avatar_url: null }], error: null };
+		const { data } = await runLoad("alice", ids(), { posts: failed, profiles: users });
+		expect(data["postsFailed"]).toBe(true);
+		expect(data["usersFailed"]).toBe(false);
+		expect(data.posts).toEqual([]);
+		expect(data["users"]).toHaveLength(1);
+	});
+
+	it("ユーザーの検索だけ失敗したら、投稿は出し、ユーザーは失敗として返す", async () => {
+		const { data } = await runLoad("alice", ids(), { profiles: failed });
+		expect(data["postsFailed"]).toBe(false);
+		expect(data["usersFailed"]).toBe(true);
 		expect(data.posts).toHaveLength(1);
 	});
 });
