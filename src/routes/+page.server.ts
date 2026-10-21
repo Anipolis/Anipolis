@@ -17,6 +17,7 @@ import {
 	getUserAnimeList,
 	type TimelineCursor,
 } from "$lib/server/queries";
+import { failQuery } from "$lib/server/query-failure";
 import { parseTimelineCursor } from "$lib/timeline-cursor";
 import type { AnimeExchangeShare, Post } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
@@ -72,6 +73,8 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	const fetchTimeline = async (): Promise<TimelinePage> => {
 		// ミュートで数件しか残らないページは、続きを取り足して埋める
 		const page = await fillTimelinePage(fetchTimelineBatch, before);
+		// 取得の失敗を「投稿がありません」と見せない。Promise を失敗させ、画面の再読み込みの表示に任せる（#262）
+		if (page.error) failQuery(`homeTimeline:${tab}`, page.error);
 		return { posts: page.posts, nextCursor: page.nextCursor };
 	};
 
@@ -92,7 +95,8 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 			user && shareExchangeId
 				? getAnimeExchangeShareForUser(supabase, user.id, shareExchangeId)
 				: Promise.resolve(null),
-			user ? getUserAnimeList(supabase, user.id, "watching") : Promise.resolve([]),
+			// 視聴中の作品は投稿欄の補助。読めなくても投稿欄は出す（失敗は failQuery がログに残す）
+			user ? getUserAnimeList(supabase, user.id, "watching").catch(() => []) : Promise.resolve([]),
 			user ? getOpenBroadcastRoomSessions(supabase, { kind: "episode" }) : Promise.resolve([]),
 		] as const);
 

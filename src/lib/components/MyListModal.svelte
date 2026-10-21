@@ -35,7 +35,9 @@ const statusOptions: { value: AnimeStatus; label: string }[] = [
 	{ value: "dropped", label: "断念" },
 ];
 
-let selectedStatus = $state<AnimeStatus>("plan_to_watch");
+// 未登録の作品は、どの視聴ステータスも選んでいない状態で開く（「視聴予定」が選ばれていると、
+// 視聴予定に分類した作品なのか、まだ分類していないのかが分からないため）
+let selectedStatus = $state<AnimeStatus | null>(null);
 let score = $state<number | null>(null);
 let progress = $state(0);
 let submitting = $state(false);
@@ -84,7 +86,7 @@ const handleSubmit: SubmitFunction = () => {
 
 function resetFromEntry(key: string) {
 	initializedFor = key;
-	selectedStatus = entry?.status ?? "plan_to_watch";
+	selectedStatus = entry?.status ?? null;
 	score = entry?.score != null && entry.score > 0 ? Math.round(entry.score) : null;
 	progress = clampProgress(entry?.progress ?? 0);
 	errorMessage = "";
@@ -137,7 +139,7 @@ $effect(() => {
 
 			<form method="POST" {action} use:enhance={handleSubmit}>
 				<input type="hidden" name="anime_id" value={animeId}>
-				<input type="hidden" name="status" value={selectedStatus}>
+				<input type="hidden" name="status" value={selectedStatus ?? ""}>
 				<input type="hidden" name="score" value={score ?? ""}>
 				<input type="hidden" name="progress" value={progress}>
 
@@ -216,13 +218,15 @@ $effect(() => {
 
 				{#if errorMessage}
 					<p class="form-error" role="alert">{errorMessage}</p>
+				{:else if selectedStatus === null}
+					<p class="status-hint">視聴ステータスを選んでください</p>
 				{/if}
 
 				<footer class="modal-footer">
 					<button type="button" class="cancel-button" disabled={submitting} onclick={onclose}>
 						キャンセル
 					</button>
-					<button type="submit" class="save-button" disabled={submitting}>
+					<button type="submit" class="save-button" disabled={submitting || selectedStatus === null}>
 						{submitting ? "保存中…" : "✓ 保存する"}
 					</button>
 				</footer>
@@ -232,6 +236,11 @@ $effect(() => {
 {/if}
 
 <style>
+.status-hint {
+	margin: 14px 0 0;
+	color: var(--color-text-muted);
+	font-size: 0.82rem;
+}
 .modal-backdrop {
 	position: fixed;
 	inset: 0;

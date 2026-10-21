@@ -792,7 +792,13 @@ $effect(() => {
 							stroke-linejoin="round"
 							aria-hidden="true"
 						>
-							<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+							<!-- サイドバーのマイリストと同じリストのアイコン（しおり形はブックマークと紛らわしいため） -->
+							<path d="M4 6h.01" />
+							<path d="M4 12h.01" />
+							<path d="M4 18h.01" />
+							<path d="M8 6h12" />
+							<path d="M8 12h12" />
+							<path d="M8 18h12" />
 						</svg>
 						<span>マイリスト</span>
 					</button>
@@ -1653,24 +1659,6 @@ $effect(() => {
 									{/each}
 								</ol>
 							</section>
-							{#if data.episodesWithoutRoom.length > 0}
-								<section class="room-log-section">
-									<h2 class="room-log-heading">話数ルームに入っていない放送日</h2>
-									<ol class="room-log-list">
-										{#each data.episodesWithoutRoom as ep (ep.date)}
-											<li>
-												<a href="/rooms/anime/{data.anime.id}/{ep.date}" class="room-log-item">
-													<span class="room-log-ep">{formatBroadcastEpisodeSlot(ep)}</span>
-													<span class="room-log-ep-compact"
-														>{formatBroadcastEpisodeNumber(ep)}</span
-													>
-													<span class="room-log-date">{ep.date}</span>
-												</a>
-											</li>
-										{/each}
-									</ol>
-								</section>
-							{/if}
 						{:else if data.episodes.length > 0}
 							<section class="room-log-section">
 								<h2 class="room-log-heading">ルームログ</h2>

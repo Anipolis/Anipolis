@@ -60,7 +60,14 @@ let queryInput = $derived(data.query);
 		{:else}
 			<h2 class="search-result-title">「{data.query}」の検索結果</h2>
 
-			{#if data.users.length > 0}
+			{#if data.usersFailed}
+				<div class="search-section">
+					<h3>ユーザー</h3>
+					<p class="flash-error" role="alert">
+						ユーザーを検索できませんでした。時間をおいてもう一度検索してください
+					</p>
+				</div>
+			{:else if data.users.length > 0}
 				<div class="search-section">
 					<h3>ユーザー</h3>
 					{#each data.users as user}
@@ -77,7 +84,11 @@ let queryInput = $derived(data.query);
 
 			<div class="search-section">
 				<h3>投稿</h3>
-				{#if data.posts.length === 0}
+				{#if data.postsFailed}
+					<p class="flash-error" role="alert">
+						投稿を検索できませんでした。時間をおいてもう一度検索してください
+					</p>
+				{:else if data.posts.length === 0}
 					<div class="empty-state">
 						<p>「{data.query}」の投稿は見つかりませんでした</p>
 					</div>
