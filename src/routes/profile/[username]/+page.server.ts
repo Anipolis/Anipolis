@@ -10,16 +10,23 @@ import {
 } from "$lib/server/actions";
 import {
 	checkIsFollowing,
+	fillTimelinePage,
 	getAnimeRankingTrending,
 	getFollowCounts,
 	getFollowRequestStatus,
-	getLikedPosts,
-	getProfileTimelinePosts,
+	getLikedPostsPage,
+	getProfileImagePostsPage,
+	getProfilePostCount,
+	getProfileTimelinePage,
 	getTrendingHashtags,
 	getUserAnimeList,
 	isBlockedByMe,
 } from "$lib/server/queries";
+import { parseTimelineCursor, type TimelineCursor } from "$lib/timeline-cursor";
+import type { Post } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
+
+const EMPTY_PAGE: { posts: Post[]; nextCursor: TimelineCursor | null } = { posts: [], nextCursor: null };
 
 export const load: PageServerLoad = async ({ params, url, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
@@ -43,21 +50,45 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 	]);
 	const followRequestStatus = isFollowing ? ("none" as const) : rawFollowRequestStatus;
 	const canViewContent = isOwn || !profile.is_private || isFollowing;
-	const activeTab = url.searchParams.get("tab") ?? "posts";
+	// 画面のタブの決め方（+page.svelte の activeTab）と合わせる。開いているタブの一覧だけを読む
+	const requestedTab = url.searchParams.get("tab");
+	const activeTab =
+		requestedTab === "images" || requestedTab === "list" || requestedTab === "likes" ? requestedTab : "posts";
+	const cursor = parseTimelineCursor(url.searchParams);
+	const viewerId = user?.id ?? null;
 
-	const [posts, followCounts, trendingResult, animeTrending, animeList] = await Promise.all([
-		canViewContent
-			? getProfileTimelinePosts(
-					supabase,
-					{
-						id: profile.id,
-						username: profile.username,
-						display_name: profile.display_name,
-						avatar_url: profile.avatar_url,
-					},
-					user?.id ?? null,
-				)
-			: Promise.resolve([]),
+	const loadActiveList = async (): Promise<{ posts: Post[]; nextCursor: TimelineCursor | null }> => {
+		if (!canViewContent) return EMPTY_PAGE;
+		let page: { posts: Post[]; error: unknown | null; nextCursor: TimelineCursor | null };
+		if (activeTab === "posts") {
+			const repostContext = {
+				id: profile.id,
+				username: profile.username,
+				display_name: profile.display_name,
+				avatar_url: profile.avatar_url,
+			};
+			page = await fillTimelinePage(
+				(next) => getProfileTimelinePage(supabase, repostContext, viewerId, { cursor: next }),
+				cursor,
+			);
+		} else if (activeTab === "images") {
+			page = await fillTimelinePage(
+				(next) => getProfileImagePostsPage(supabase, profile.id, viewerId, { cursor: next }),
+				cursor,
+			);
+		} else if (activeTab === "likes" && isOwn) {
+			page = await getLikedPostsPage(supabase, profile.id, viewerId, cursor);
+		} else {
+			return EMPTY_PAGE;
+		}
+		if (page.error) console.error(`[profile] ${activeTab} query failed:`, page.error);
+		return { posts: page.posts, nextCursor: page.nextCursor };
+	};
+
+	const [activeList, postCount, followCounts, trendingResult, animeTrending, animeList] = await Promise.all([
+		loadActiveList(),
+
+		canViewContent ? getProfilePostCount(supabase, profile.id) : Promise.resolve(0),
 
 		getFollowCounts(supabase, profile.id),
 
@@ -70,16 +101,12 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 			: Promise.resolve([]),
 	]);
 
-	const likedPosts =
-		isOwn && activeTab === "likes" ? await getLikedPosts(supabase, profile.id, user?.id ?? null) : [];
-
-	const imagePosts = posts.filter((post) => post.image_urls.length > 0);
-
 	return {
 		profile: profileWithHeader,
-		posts,
-		imagePosts,
-		likedPosts,
+		// 開いているタブ（投稿・画像・いいね）の一覧と、その続きの目印
+		listPosts: activeList.posts,
+		listNextCursor: activeList.nextCursor,
+		postCount,
 		isOwn,
 		canViewContent,
 		followCounts,

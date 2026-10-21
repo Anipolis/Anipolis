@@ -17,6 +17,7 @@ import {
 	getUserAnimeList,
 	type TimelineCursor,
 } from "$lib/server/queries";
+import { parseTimelineCursor } from "$lib/timeline-cursor";
 import type { AnimeExchangeShare, Post } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -31,12 +32,8 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	const tab = url.searchParams.get("tab") === "following" && user ? "following" : "all";
 	const quoteAnimeId = url.searchParams.get("quote_anime");
 	const shareExchangeId = url.searchParams.get("share_exchange");
-	const beforeParam = url.searchParams.get("before") ?? undefined;
-	const beforeIdParam = url.searchParams.get("before_id") ?? undefined;
-	const before =
-		beforeParam && beforeIdParam && /^\d{4}-\d{2}-\d{2}T/.test(beforeParam)
-			? { createdAt: beforeParam, id: beforeIdParam }
-			: undefined;
+	// before / before_id は PostgREST のフィルタに埋め込むので、形を厳密に確かめる（#243）
+	const before = parseTimelineCursor(url.searchParams);
 	// 続きの有無（nextCursor）はミュート除外前の取得行から決める。除外後の件数で判定すると
 	// ミュートで減ったページが「続きなし」になり、古い投稿へ進めなくなる（#35）。
 	type TimelinePage = { posts: Post[]; nextCursor: TimelineCursor | null };
