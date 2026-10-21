@@ -5,8 +5,10 @@ import { page } from "$app/state";
 import PostCardSkeleton from "$lib/components/PostCardSkeleton.svelte";
 import PostDetail from "$lib/components/PostDetail.svelte";
 import PostRow from "$lib/components/PostRow.svelte";
+import { classifyComposerSubmitResult } from "$lib/components/post-composer-submit";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
+import { createLatestResolved } from "$lib/latest-resolved.svelte";
 import { charCountClass } from "$lib/utils/format";
 import type { PageProps } from "./$types";
 
@@ -15,7 +17,16 @@ let { data, form }: PageProps = $props();
 const MAX_LENGTH = 280;
 let content = $state("");
 let submitting = $state(false);
+let replyError = $state<string | null>(null);
 let pageTitle = $state("投稿 - Anipolis");
+
+// data.enrichedData は deferred Promise。返信の送信・削除のあとの再取得で新しい Promise になっても、
+// 解決するまでは前回のスレッドを表示し続ける（スケルトンは初回だけ、#296）。
+// 別の投稿に移ったときは別のスレッドなので保持しない
+const thread = createLatestResolved(
+	() => data.enrichedData,
+	() => page.params["id"] ?? "",
+);
 
 const remaining = $derived(MAX_LENGTH - content.length);
 const countClass = $derived(charCountClass(content.length, MAX_LENGTH));
@@ -23,22 +34,26 @@ const canSubmit = $derived(content.trim().length > 0 && content.length <= MAX_LE
 
 const handleReply: SubmitFunction = () => {
 	submitting = true;
+	replyError = null;
 	return async ({ result, update }) => {
-		if (result.type === "success") {
-			content = "";
-		}
 		submitting = false;
+		const outcome = classifyComposerSubmitResult(result);
+		if (outcome.kind === "retry") {
+			// failure / error では書きかけの返信を残し、理由を出して再送できるようにする。
+			// update() は呼ばない: error 結果の既定処理はエラーページの描画で、返信が消える（#296）
+			replyError = outcome.message;
+			return;
+		}
+		if (outcome.kind === "success") content = "";
 		await update();
 	};
 };
 
-// Update title once data resolves
+// スレッドが読めたら、投稿者の名前をタイトルに入れる（読めなかったときは既定のまま）
 $effect(() => {
-	const promise = data.enrichedData;
-	promise.then((enriched: { post?: { display_name?: string | null; username?: string | null } }) => {
-		const name = enriched.post?.display_name || enriched.post?.username;
-		if (name) pageTitle = `${name}の投稿 - Anipolis`;
-	});
+	const post = thread.value?.post as { display_name?: string | null; username?: string | null } | undefined;
+	const name = post?.display_name || post?.username;
+	if (name) pageTitle = `${name}の投稿 - Anipolis`;
 });
 </script>
 
@@ -72,7 +87,12 @@ $effect(() => {
 			</svg>
 		</a>
 
-		{#await data.enrichedData}
+		{#if thread.value === null && thread.error}
+			<div class="empty-state" role="alert">
+				<p>投稿を読み込めませんでした</p>
+				<button type="button" class="btn" onclick={() => location.reload()}>再読み込み</button>
+			</div>
+		{:else if thread.value === null}
 			<div class="posts-loading-spinner" aria-label="読み込み中">
 				<div class="spinner" aria-hidden="true"></div>
 				<span>読み込み中…</span>
@@ -80,7 +100,8 @@ $effect(() => {
 			{#each { length: 3 } as _, i (i)}
 				<PostCardSkeleton />
 			{/each}
-		{:then enriched}
+		{:else}
+			{@const enriched = thread.value}
 			<!-- 親投稿（このポストがリプライの場合） -->
 			{#if enriched.parentPost}
 				<div class="thread-parent">
@@ -105,7 +126,9 @@ $effect(() => {
 					<form method="POST" action="?/reply" use:enhance={handleReply} style="flex: 1;">
 						<div class="reply-hint">@{enriched.post?.username} に返信</div>
 
-						{#if form && 'message' in form}
+						{#if replyError}
+							<p class="flash-error" role="alert" style="margin-bottom: 8px;">{replyError}</p>
+						{:else if form && 'message' in form}
 							<p class="flash-error" role="alert" style="margin-bottom: 8px;">{form.message}</p>
 						{/if}
 
@@ -150,7 +173,7 @@ $effect(() => {
 					<p>まだ返信がありません</p>
 				</div>
 			{/if}
-		{/await}
+		{/if}
 	</main>
 
 	<aside class="sidebar-column">
