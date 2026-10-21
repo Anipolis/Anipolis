@@ -794,6 +794,15 @@ function airingHeadingBefore(post: Post, previous: Post | undefined): RoomAiring
 	return previous && airingOfPost(previous)?.id === airing.id ? null : airing;
 }
 
+/**
+ * 話数ルームを時系列順で見ているときだけ、同じ人の連投（isPostContinuation）を Discord のように 1 つにまとめる。
+ * 放送枠の見出しをまたぐ投稿はまとめない
+ */
+function joinsPrevious(post: Post | undefined, previous: Post | undefined): boolean {
+	if (!isEpisodeRoom || postOrder !== "oldest" || !post || !previous) return false;
+	return !airingHeadingBefore(post, previous) && isPostContinuation(post, previous);
+}
+
 /** 放送枠の最初の投稿までスクロールする。null や投稿の無い放送枠なら先頭（放送中の枠なら最新）へ */
 async function scrollToAiring(airing: RoomAiring | null) {
 	await tick();
@@ -1117,7 +1126,8 @@ function formatCompactDate(iso: string) {
 							<div class="anime-room-post" data-post-id={post.id}>
 								<LiveRoomPostCard
 									{post}
-									continuation={!heading && isPostContinuation(post, displayedPosts[index - 1])}
+									joinPrevious={joinsPrevious(post, displayedPosts[index - 1])}
+									joinNext={joinsPrevious(displayedPosts[index + 1], post)}
 									currentUserId={data.user?.id ?? null}
 									broadcastStartAt={postAiring?.scheduled_at ?? data.room.scheduled_at}
 									timelineTimeMode={isGlobalLobby || (isEpisodeRoom && !postAiring)}
