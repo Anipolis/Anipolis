@@ -329,6 +329,10 @@ function handleKeydown(event: KeyboardEvent) {
 	color: var(--color-text-secondary);
 	text-decoration: underline;
 }
+/* 連投の時刻はほとんど同じなので、知りたいときだけ（ホバー・フォーカス・操作中）出す。タッチでは行をタップすると出る */
+.post-row:not(:hover):not(:focus-within):not(.post-row--selected) .post-row-gutter-time {
+	visibility: hidden;
+}
 .post-row-menu {
 	flex-shrink: 0;
 	margin-left: auto;

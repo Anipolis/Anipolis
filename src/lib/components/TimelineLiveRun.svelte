@@ -1,7 +1,6 @@
 <script lang="ts">
 import { comparePostsAsc } from "$lib/room-live-sync";
 import type { Post } from "$lib/types";
-import { formatPostClock } from "$lib/utils/format";
 import type { PostRoomContext } from "$lib/utils/post-presentation";
 import PostRow from "./PostRow.svelte";
 
@@ -21,11 +20,8 @@ let expanded = $state(false);
 const chronological = $derived([...posts].sort(comparePostsAsc));
 const first = $derived(chronological[0] as Post);
 const rest = $derived(chronological.slice(1));
-// 時刻（21:03）は当日の実況を追うためのもの。いちばん新しい投稿から 1 日過ぎたまとまりでは出さない
+// 左端の時刻（21:03、ホバー・フォーカス時だけ出る）は当日の実況を追うためのもの。いちばん新しい投稿から 1 日過ぎたまとまりでは出さない
 const recent = $derived(Date.now() - Date.parse((chronological.at(-1) ?? first).created_at) < 24 * 60 * 60 * 1000);
-const timeRange = $derived(
-	`${formatPostClock(first.created_at)}〜${formatPostClock((chronological.at(-1) ?? first).created_at)}`,
-);
 </script>
 
 <div class="live-run">
@@ -42,9 +38,6 @@ const timeRange = $derived(
 			<span class={expanded ? "i-lucide-chevron-up" : "i-lucide-chevron-down"} aria-hidden="true"></span>
 			<span>{expanded ? "たたむ" : `続きの実況 ${rest.length} 件`}</span>
 		</button>
-		{#if recent}
-			<span class="live-run-range">{timeRange}</span>
-		{/if}
 		{#if room}
 			<a href={room.href} class="live-run-room" title={room.title}>
 				<span class="i-lucide-door-open" aria-hidden="true"></span>
@@ -79,11 +72,6 @@ const timeRange = $derived(
 	font-weight: 700;
 	text-decoration: none;
 	cursor: pointer;
-}
-.live-run-range {
-	color: var(--color-text-muted);
-	font-size: 11px;
-	font-variant-numeric: tabular-nums;
 }
 .live-run-room {
 	margin-left: auto;
