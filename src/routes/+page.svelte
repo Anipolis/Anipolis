@@ -8,7 +8,6 @@ import PostRow from "$lib/components/PostRow.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import { createLatestResolved } from "$lib/latest-resolved.svelte";
 import { composeOpen } from "$lib/stores/compose";
-import { isPostContinuation } from "$lib/utils/post-presentation";
 import type { PageProps } from "./$types";
 
 /** スケルトンの枚数（タイムラインの典型的な表示密度に合わせた仮枠） */
@@ -256,12 +255,8 @@ $effect(() => {
 						<p>このページの投稿はミュート設定によりすべて非表示です。</p>
 					</div>
 				{/if}
-				{#each posts as post, index (post.id)}
-					<PostRow
-						{post}
-						currentUserId={data.user?.id ?? null}
-						continuation={isPostContinuation(post, posts[index - 1])}
-					/>
+				{#each posts as post (post.id)}
+					<PostRow {post} currentUserId={data.user?.id ?? null} />
 				{/each}
 				{#if nextCursor}
 					<a href={loadMoreHref(nextCursor.createdAt, nextCursor.id)} class="load-more-btn">

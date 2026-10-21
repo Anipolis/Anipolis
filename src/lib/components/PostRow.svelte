@@ -17,8 +17,12 @@ import UserAvatar from "./UserAvatar.svelte";
 interface Props {
 	post: Post;
 	currentUserId?: string | null;
-	/** Same author as the previous row: the avatar is hidden until hover. */
-	continuation?: boolean;
+	/**
+	 * 同じ人の連投を Discord のように 1 つにまとめる（話数ルームの時系列順だけ）。
+	 * joinPrevious: 前の行の続き（アイコンと名前を出さない）。joinNext: 次の行が続き（境界線を出さない）
+	 */
+	joinPrevious?: boolean;
+	joinNext?: boolean;
 	/** Inside a live room, which already shows the room and anime context. */
 	insideRoom?: boolean;
 	broadcastStartAt?: string | null;
@@ -31,7 +35,8 @@ interface Props {
 let {
 	post,
 	currentUserId = null,
-	continuation = false,
+	joinPrevious = false,
+	joinNext = false,
 	insideRoom = false,
 	broadcastStartAt = null,
 	onExpand,
@@ -80,7 +85,8 @@ function handleKeydown(event: KeyboardEvent) {
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <article
 	class="post-row"
-	class:post-row--continuation={continuation}
+	class:post-row--join-previous={joinPrevious}
+	class:post-row--join-next={joinNext}
 	class:post-row--selected={actionsOpen}
 	class:post-row--deleting={controller.deleting}
 	class:post-row--modal-open={controller.modalOpen}
@@ -99,10 +105,12 @@ function handleKeydown(event: KeyboardEvent) {
 	{/if}
 
 	<div class="post-row-head">
-		<a href="/profile/{post.username}" class="post-row-avatar" aria-label={displayName}>
-			<UserAvatar src={post.avatar_url} username={post.username} size="sm" />
-		</a>
-		<a href="/profile/{post.username}" class="post-row-name" title={displayName}>{displayName}</a>
+		{#if !joinPrevious}
+			<a href="/profile/{post.username}" class="post-row-avatar" aria-label={displayName}>
+				<UserAvatar src={post.avatar_url} username={post.username} size="sm" />
+			</a>
+			<a href="/profile/{post.username}" class="post-row-name" title={displayName}>{displayName}</a>
+		{/if}
 		{#if post.repost_context}
 			<a href="/profile/{post.repost_context.username}" class="post-row-repost">
 				<span class="i-lucide-repeat-2" aria-hidden="true"></span>
@@ -412,23 +420,36 @@ function handleKeydown(event: KeyboardEvent) {
 	white-space: nowrap;
 }
 
-.post-row--continuation:not(:hover):not(:focus-within):not(.post-row--selected) .post-row-avatar {
-	opacity: 0;
+/* 連投のまとまり（Discord 風）: 続きの行はアイコンと名前を出さず、本文だけを前の行に寄せる */
+.post-row--join-next {
+	padding-bottom: 2px;
+	border-bottom-color: transparent;
 }
-.post-row--continuation::before {
-	content: "·";
+.post-row--join-previous {
+	min-height: 0;
+	padding-top: 2px;
+}
+/* 操作メニューは行の右上に浮かせ、ホバー・フォーカス・操作中だけ出す（タッチでは行をタップすると操作行が開く） */
+.post-row--join-previous .post-row-head {
 	position: absolute;
-	top: 8px;
-	left: var(--post-row-pad-x);
-	width: var(--post-row-avatar);
-	color: var(--color-text-muted);
-	line-height: var(--post-row-avatar);
-	text-align: center;
+	top: -12px;
+	/* 右端のいいね欄（56px）と重ならないよう、その左に出す */
+	right: calc(var(--post-row-pad-x) + 64px);
+	z-index: 1;
+	height: auto;
+	opacity: 0;
+	pointer-events: none;
 }
-.post-row--continuation:hover::before,
-.post-row--continuation:focus-within::before,
-.post-row--selected::before {
-	display: none;
+.post-row--join-previous:hover .post-row-head,
+.post-row--join-previous:focus-within .post-row-head,
+.post-row--join-previous.post-row--selected .post-row-head {
+	opacity: 1;
+	pointer-events: auto;
+}
+.post-row--join-previous .post-row-menu {
+	border: 1px solid var(--color-border);
+	background: var(--color-surface);
+	box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12);
 }
 
 /* Keep 40px touch targets without pushing the head and text lines apart. */
