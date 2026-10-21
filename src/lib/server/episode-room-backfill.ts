@@ -15,7 +15,8 @@ import type { Anime, BroadcastRoomOverride } from "$lib/types";
  *   特番ルームに入れて理由を残す（管理者があとから話数ルームに統合できる）
  * - ただし、しょぼい同期の前に曜日と時刻から機械的に作った古い枠（schedule_source が無い）で、投稿の受付も
  *   締め切ったものは、特番ルームを作らずそのままにする（leave）。実際には放送の無かった週の枠であることが多く、
- *   「M月D日の特番」という中身の無いルームが並ぶだけになるため。締め切った枠には投稿が入らないので表示にも出ない
+ *   「M月D日の特番」という中身の無いルームが並ぶだけになるため。締め切った枠にはもう投稿が入らない。
+ *   投稿が残っている枠は、ルームログからたどれるように特番ルームに入れる
  */
 
 export type BackfillAnime = Pick<
@@ -43,6 +44,8 @@ export type BackfillSession = {
 	schedule_source: string | null;
 	/** 取り込みの検査で話数が疑わしいとして、話数を空にした枠（source_snapshot.episode_anomaly.applied） */
 	episode_anomaly_applied: boolean;
+	/** この枠に投稿が 1 件以上あるか（あれば leave にせず特番ルームに入れて、ルームログからたどれるようにする） */
+	has_posts: boolean;
 };
 
 export type BackfillPlan = {
@@ -52,7 +55,7 @@ export type BackfillPlan = {
 	special: { sessionId: string; date: string; reason: string }[];
 	/** 休止日なので触らない枠 */
 	cancelled: { sessionId: string; date: string }[];
-	/** 締め切った古い枠で、話数を推定できないのでそのままにする枠 */
+	/** 締め切った古い枠で、話数を推定できず投稿も無いのでそのままにする枠 */
 	leave: { sessionId: string; date: string; reason: string }[];
 };
 
@@ -72,7 +75,7 @@ export function planEpisodeRoomBackfill(
 	const nowIso = now.toISOString();
 	const toSpecial = (session: BackfillSession, reason: string) => {
 		const closed = session.posting_closes_at !== null && session.posting_closes_at <= nowIso;
-		if (session.schedule_source === null && closed) {
+		if (session.schedule_source === null && closed && !session.has_posts) {
 			plan.leave.push({ sessionId: session.id, date: session.room_date.slice(0, 10), reason });
 		} else {
 			plan.special.push({ sessionId: session.id, date: session.room_date.slice(0, 10), reason });
