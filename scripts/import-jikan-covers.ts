@@ -5,6 +5,8 @@
 //   pnpm import:jikan-covers -- --season 2024-winter                     # 保存と記録（未公開）
 //   pnpm import:jikan-covers -- --publish                                # 保存・記録・公開
 //   pnpm import:jikan-covers -- --anime-id 714 --anime-id 715 --publish  # 作品を指定（種別・シーズンは問わない）
+//   pnpm import:jikan-covers -- --types ONA --since 2020 --with-copyright --publish
+//     # 2020 年以降の ONA のうち、権利表記（©）のある作品だけ（© の無い作品のカバーはトリガーで隠れるので取り込まない）
 //
 // 対象: mal_id があり、カバーが無く、非表示でない作品（既定は TV と Movie）。
 // 管理者が登録・編集した作品で manual レコードに cover_url があるもの（null を含む）は、
@@ -222,6 +224,7 @@ async function loadCandidates(
 	seasons: string[],
 	animeIds: number[],
 	dryRun: boolean,
+	filters: { sinceYear?: number; withCopyright: boolean },
 ) {
 	const animeRows = await fetchAll<{ id: number; mal_id: number; type: string | null; season: string | null }>(
 		(from, to) => {
@@ -234,10 +237,14 @@ async function loadCandidates(
 				.eq("hidden_by_admin", false)
 				.order("id")
 				.range(from, to);
+			// 権利表記の無い作品のカバーは表示されない（139 のトリガー）ので、指定があれば取り込まない
+			if (filters.withCopyright) query = query.not("copyright", "is", null).neq("copyright", "");
 			// 作品指定のときは種別・シーズンで絞らない
 			if (animeIds.length > 0) return query.in("id", animeIds);
 			query = query.in("type", types);
 			if (seasons.length > 0) query = query.in("season", seasons);
+			// season は "2024-winter" の形なので、文字列の比較で年の境目を切れる
+			if (filters.sinceYear !== undefined) query = query.gte("season", String(filters.sinceYear));
 			return query;
 		},
 	);
@@ -351,6 +358,8 @@ async function main() {
 			"anime-id": { type: "string", multiple: true },
 			types: { type: "string" },
 			limit: { type: "string" },
+			since: { type: "string" },
+			"with-copyright": { type: "boolean", default: false },
 			"dry-run": { type: "boolean", default: false },
 			publish: { type: "boolean", default: false },
 			out: { type: "string" },
@@ -364,16 +373,20 @@ async function main() {
 	}
 	const animeIds = (values["anime-id"] ?? []).map((id) => parsePositiveInteger(id, "--anime-id"));
 	const limit = values.limit ? parsePositiveInteger(values.limit, "--limit") : undefined;
+	const sinceYear = values.since ? parsePositiveInteger(values.since, "--since") : undefined;
+	const withCopyright = values["with-copyright"];
 
 	const supabase = getSupabaseClient();
 	const {
 		candidates: allCandidates,
 		skippedManual,
 		skippedImported,
-	} = await loadCandidates(supabase, types, seasons, animeIds, dryRun);
+	} = await loadCandidates(supabase, types, seasons, animeIds, dryRun, { sinceYear, withCopyright });
 	const candidates = limit ? allCandidates.slice(0, limit) : allCandidates;
 	console.log(
-		`${allCandidates.length} candidates (${animeIds.length > 0 ? `anime ${animeIds.join("/")}` : types.join("/")}), processing ${candidates.length}${dryRun ? " (dry run)" : ""}. ` +
+		`${allCandidates.length} candidates (${animeIds.length > 0 ? `anime ${animeIds.join("/")}` : types.join("/")}` +
+			`${sinceYear !== undefined ? `, since ${sinceYear}` : ""}${withCopyright ? ", with copyright" : ""}), ` +
+			`processing ${candidates.length}${dryRun ? " (dry run)" : ""}. ` +
 			`Skipped: ${skippedImported} already imported, ${skippedManual} with a manual cover_url.`,
 	);
 
