@@ -5,7 +5,7 @@ import { getEpisodeRoomLog } from "./queries";
 
 type Result = { data: unknown; error: { message: string } | null };
 
-const CHAIN = ["select", "eq", "in", "is", "not", "order", "range"] as const;
+const CHAIN = ["select", "eq", "in", "is", "not", "order", "range", "limit"] as const;
 
 /** テーブルごとに、呼ばれた順に結果を返す（broadcast_room_sessions は「話数ルームの枠」→「つながっていない枠」の順） */
 function fakeSupabase(tables: Record<string, Result[]>) {
@@ -47,6 +47,34 @@ describe("getEpisodeRoomLog: 話数ルームに入っていない放送日", () 
 
 		expect(log?.unroomedDates).toEqual(["2026-04-09"]);
 		expect(postQueries).toEqual([["broadcast_room_session_id", ["s1", "s2", "s3"]]]);
+	});
+
+	it("1 回の取得が 1 つの枠の投稿で上限まで埋まっても、残りの枠を取り直して見落とさない（max_rows = 1000）", async () => {
+		const fullPage = Array.from({ length: 1000 }, () => ({ broadcast_room_session_id: "s1" }));
+		const { client, postQueries } = fakeSupabase({
+			episode_rooms: [{ data: [], error: null }],
+			broadcast_room_sessions: [
+				{ data: [], error: null },
+				{
+					data: [unroomed("s1", "2026-04-02"), unroomed("s2", "2026-04-09"), unroomed("s3", "2026-04-16")],
+					error: null,
+				},
+			],
+			posts: [
+				{ data: fullPage, error: null },
+				{ data: [{ broadcast_room_session_id: "s3" }], error: null },
+			],
+			broadcast_room_overrides: [{ data: [], error: null }],
+		});
+
+		const log = await getEpisodeRoomLog(client, 54);
+
+		expect(log?.unroomedDates).toEqual(["2026-04-02", "2026-04-16"]);
+		// 2 回目は、まだ投稿の見つかっていない枠だけを調べる
+		expect(postQueries).toEqual([
+			["broadcast_room_session_id", ["s1", "s2", "s3"]],
+			["broadcast_room_session_id", ["s2", "s3"]],
+		]);
 	});
 
 	it("つながっていない枠が無ければ、投稿を調べない", async () => {

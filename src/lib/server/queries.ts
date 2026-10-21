@@ -1248,21 +1248,29 @@ export async function getEpisodeRoomLog(
 		unroomedSessions.push(...(data ?? []));
 		if ((data ?? []).length < PAGE) break;
 	}
+	// 閲覧者に見える投稿だけを数える（見えない投稿しか無い日は、開いても何も無いので出さない）。
+	// 1 回の取得は PAGE 行（本番の max_rows）で打ち切られるので、ある枠の投稿だけで埋まると他の枠を見落とす。
+	// まだ投稿の見つかっていない枠だけを対象に取り直す。見つかった枠は毎回外れるので、必ず終わる
 	const sessionsWithPosts = new Set<string>();
 	const UNROOMED_POST_CHECK_CHUNK = 100;
 	for (let start = 0; start < unroomedSessions.length; start += UNROOMED_POST_CHECK_CHUNK) {
-		const ids = unroomedSessions.slice(start, start + UNROOMED_POST_CHECK_CHUNK).map((session) => session.id);
-		// 閲覧者に見える投稿だけを数える（見えない投稿しか無い日は、開いても何も無いので出さない）
-		const { data, error } = await supabase
-			.from("posts")
-			.select("broadcast_room_session_id")
-			.in("broadcast_room_session_id", ids);
-		if (error) {
-			console.error("getEpisodeRoomLog unroomed posts error:", error);
-			return null;
-		}
-		for (const row of data ?? []) {
-			if (row.broadcast_room_session_id) sessionsWithPosts.add(row.broadcast_room_session_id);
+		let pending = unroomedSessions.slice(start, start + UNROOMED_POST_CHECK_CHUNK).map((session) => session.id);
+		while (pending.length > 0) {
+			const { data, error } = await supabase
+				.from("posts")
+				.select("broadcast_room_session_id")
+				.in("broadcast_room_session_id", pending)
+				.limit(PAGE);
+			if (error) {
+				console.error("getEpisodeRoomLog unroomed posts error:", error);
+				return null;
+			}
+			const rows = data ?? [];
+			for (const row of rows) {
+				if (row.broadcast_room_session_id) sessionsWithPosts.add(row.broadcast_room_session_id);
+			}
+			if (rows.length < PAGE) break;
+			pending = pending.filter((id) => !sessionsWithPosts.has(id));
 		}
 	}
 	const unroomedDates = unroomedSessions
