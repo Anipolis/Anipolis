@@ -1228,8 +1228,10 @@ export async function getEpisodeRoomLog(
 		}
 		if ((data ?? []).length < PAGE) break;
 	}
-	// 話数ルームに入っていない実在の放送枠（話数が付いていない）の放送日。作品ページで日付のルームログとして残す
-	const unroomedDates: string[] = [];
+	// 話数ルームに入っていない実在の放送枠（話数が付いていない）のうち、投稿のある枠の放送日。
+	// 作品ページで日付のルームログとして残すのは、その投稿を見失わないためだけ。投稿の無い枠まで出すと、
+	// 話数ルームの一覧と同じ話数が二重に並ぶ（話数は表示のために推定しているだけで、枠には保存されていない）
+	const unroomedSessions: { id: string; room_date: string }[] = [];
 	for (let from = 0; ; from += PAGE) {
 		const { data, error } = await supabase
 			.from("broadcast_room_sessions")
@@ -1243,9 +1245,37 @@ export async function getEpisodeRoomLog(
 			console.error("getEpisodeRoomLog unroomed sessions error:", error);
 			return null;
 		}
-		unroomedDates.push(...(data ?? []).map((row) => row.room_date));
+		unroomedSessions.push(...(data ?? []));
 		if ((data ?? []).length < PAGE) break;
 	}
+	// 閲覧者に見える投稿だけを数える（見えない投稿しか無い日は、開いても何も無いので出さない）。
+	// 1 回の取得は PAGE 行（本番の max_rows）で打ち切られるので、ある枠の投稿だけで埋まると他の枠を見落とす。
+	// まだ投稿の見つかっていない枠だけを対象に取り直す。見つかった枠は毎回外れるので、必ず終わる
+	const sessionsWithPosts = new Set<string>();
+	const UNROOMED_POST_CHECK_CHUNK = 100;
+	for (let start = 0; start < unroomedSessions.length; start += UNROOMED_POST_CHECK_CHUNK) {
+		let pending = unroomedSessions.slice(start, start + UNROOMED_POST_CHECK_CHUNK).map((session) => session.id);
+		while (pending.length > 0) {
+			const { data, error } = await supabase
+				.from("posts")
+				.select("broadcast_room_session_id")
+				.in("broadcast_room_session_id", pending)
+				.limit(PAGE);
+			if (error) {
+				console.error("getEpisodeRoomLog unroomed posts error:", error);
+				return null;
+			}
+			const rows = data ?? [];
+			for (const row of rows) {
+				if (row.broadcast_room_session_id) sessionsWithPosts.add(row.broadcast_room_session_id);
+			}
+			if (rows.length < PAGE) break;
+			pending = pending.filter((id) => !sessionsWithPosts.has(id));
+		}
+	}
+	const unroomedDates = unroomedSessions
+		.filter((session) => sessionsWithPosts.has(session.id))
+		.map((session) => session.room_date);
 	const cancelled = await getCancelledRoomDates(supabase, animeId);
 	if (!cancelled) return null;
 	return {

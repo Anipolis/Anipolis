@@ -54,7 +54,8 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 				openableUpTo: openableEpisodeLimit({ anime, ...roomLog, now: Date.now() }),
 			})
 		: [];
-	// 話数ルームに入っていない実在の放送枠（話数が付いていない）の放送日。日付のルームログとして別に出す
+	// 話数ルームに入っていない実在の放送枠（話数が付いていない）のうち、投稿のある枠の放送日。
+	// 投稿を見失わないためだけに、日付のルームログとして別に出す（投稿の無い枠は出さない）
 	const unroomedDates = new Set(roomLog?.unroomedDates ?? []);
 
 	// 各話ルームの履歴タイムライン（実在セッション+同期前の合成補完+アンカー逆算）
