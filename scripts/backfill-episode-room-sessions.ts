@@ -33,6 +33,24 @@ async function fetchAll<T>(build: (from: number, to: number) => PromiseLike<{ da
 	}
 }
 
+/** 投稿が 1 件以上ある放送枠の id */
+async function sessionsWithPosts(sessionIds: readonly string[]) {
+	const found = new Set<string>();
+	for (let index = 0; index < sessionIds.length; index += 100) {
+		const chunk = sessionIds.slice(index, index + 100);
+		const rows = await fetchAll<{ broadcast_room_session_id: string }>((from, to) =>
+			supabase
+				.from("posts")
+				.select("broadcast_room_session_id")
+				.in("broadcast_room_session_id", chunk)
+				.order("id")
+				.range(from, to),
+		);
+		for (const row of rows) found.add(row.broadcast_room_session_id);
+	}
+	return found;
+}
+
 const unroomed = await fetchAll<{ anime_id: number }>((from, to) =>
 	supabase
 		.from("broadcast_room_sessions")
@@ -60,17 +78,18 @@ for (const animeId of animeIds) {
 		.eq("id", animeId)
 		.single();
 	if (animeError || !animeRow) throw animeError ?? new Error(`anime ${animeId} not found`);
-	const sessionRows = await fetchAll<Omit<BackfillSession, "episode_anomaly_applied"> & { source_snapshot: unknown }>(
-		(from, to) =>
-			supabase
-				.from("broadcast_room_sessions")
-				.select(
-					"id, room_date, episode_number, episode_title, episode_room_id, posting_opens_at, posting_closes_at, schedule_source, source_snapshot",
-				)
-				.eq("anime_id", animeId)
-				.eq("room_kind", "episode")
-				.order("room_date")
-				.range(from, to),
+	const sessionRows = await fetchAll<
+		Omit<BackfillSession, "episode_anomaly_applied" | "has_posts"> & { source_snapshot: unknown }
+	>((from, to) =>
+		supabase
+			.from("broadcast_room_sessions")
+			.select(
+				"id, room_date, episode_number, episode_title, episode_room_id, posting_opens_at, posting_closes_at, schedule_source, source_snapshot",
+			)
+			.eq("anime_id", animeId)
+			.eq("room_kind", "episode")
+			.order("room_date")
+			.range(from, to),
 	);
 	const { data: overrides, error: overridesError } = await supabase
 		.from("broadcast_room_overrides")
@@ -79,13 +98,16 @@ for (const animeId of animeIds) {
 	if (overridesError) throw overridesError;
 
 	const anime = { ...animeRow, id: String(animeRow.id) } as unknown as BackfillAnime;
-	// 取り込みの検査で話数が疑わしいとして話数を空にした枠（import-syobocal が source_snapshot.episode_anomaly に残す）
+	// 投稿の残っている、つながっていない枠（締め切った古い枠でも、そのままにせず特番ルームに入れる）
+	const withPosts = await sessionsWithPosts(
+		sessionRows.filter((row) => row.episode_room_id === null).map((row) => row.id),
+	);
 	// 取り込みの検査で話数が疑わしいとして話数を空にした枠（import-syobocal が source_snapshot.episode_anomaly に残す）
 	const anomalyBySession = new Map<string, Record<string, unknown>>();
 	const sessions: BackfillSession[] = sessionRows.map(({ source_snapshot, ...row }) => {
 		const anomaly = (source_snapshot as { episode_anomaly?: Record<string, unknown> } | null)?.episode_anomaly;
 		if (anomaly) anomalyBySession.set(row.id, anomaly);
-		return { ...row, episode_anomaly_applied: anomaly?.["applied"] === true };
+		return { ...row, episode_anomaly_applied: anomaly?.["applied"] === true, has_posts: withPosts.has(row.id) };
 	});
 	const plan: BackfillPlan = planEpisodeRoomBackfill(anime, sessions, (overrides ?? []) as BroadcastRoomOverride[]);
 	const numbers = plan.assign.map((item) => item.episodeNumber);
