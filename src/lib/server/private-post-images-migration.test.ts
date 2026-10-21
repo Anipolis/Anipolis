@@ -2,11 +2,11 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const migration = readFileSync(
-	new URL("../../../supabase/migrations/157_private_post_images.sql", import.meta.url),
+	new URL("../../../supabase/migrations/166_private_post_images.sql", import.meta.url),
 	"utf8",
 );
 
-describe("private post images migration (157, #316)", () => {
+describe("private post images migration (166, #316)", () => {
 	it("post-images を非公開にし、誰でも読める読み取りポリシーを外す", () => {
 		expect(migration).toContain("UPDATE storage.buckets SET public = false WHERE id = 'post-images'");
 		expect(migration).toContain('DROP POLICY IF EXISTS "post-images are publicly accessible" ON storage.objects');
