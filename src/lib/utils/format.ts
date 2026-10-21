@@ -37,3 +37,37 @@ export function charCountClass(length: number, max: number): string {
 	if (ratio >= 0.9) return "warning";
 	return "";
 }
+
+const POST_TIME_JST_OFFSET_MS = 9 * 60 * 60 * 1000;
+
+/** JST の年月日と時刻。サーバー（UTC）とブラウザで表示が食い違わないよう、TZ に依存せず計算する */
+function jstParts(value: string | Date) {
+	const date = new Date(new Date(value).getTime() + POST_TIME_JST_OFFSET_MS);
+	return {
+		year: date.getUTCFullYear(),
+		month: date.getUTCMonth() + 1,
+		day: date.getUTCDate(),
+		clock: `${String(date.getUTCHours()).padStart(2, "0")}:${String(date.getUTCMinutes()).padStart(2, "0")}`,
+		seconds: String(date.getUTCSeconds()).padStart(2, "0"),
+	};
+}
+
+/** 投稿の時刻（JST）。今日なら「21:03」、今年なら「10/21 21:03」、それより前は「2025/10/21」 */
+export function formatPostTime(value: string | Date, now: Date = new Date()): string {
+	const post = jstParts(value);
+	const today = jstParts(now);
+	if (post.year === today.year && post.month === today.month && post.day === today.day) return post.clock;
+	if (post.year === today.year) return `${post.month}/${post.day} ${post.clock}`;
+	return `${post.year}/${post.month}/${post.day}`;
+}
+
+/** 投稿の時刻だけ（JST の「21:03」）。連投のまとまりの続きの行に出す */
+export function formatPostClock(value: string | Date): string {
+	return jstParts(value).clock;
+}
+
+/** 投稿の日時（JST の「2026/10/21 21:03:05」）。時刻の title に出す */
+export function formatPostDateTime(value: string | Date): string {
+	const post = jstParts(value);
+	return `${post.year}/${post.month}/${post.day} ${post.clock}:${post.seconds}`;
+}

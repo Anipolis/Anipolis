@@ -1,11 +1,14 @@
 <script lang="ts">
+import { comparePostsAsc } from "$lib/room-live-sync";
 import type { Post } from "$lib/types";
+import { formatPostClock } from "$lib/utils/format";
 import type { PostRoomContext } from "$lib/utils/post-presentation";
 import PostRow from "./PostRow.svelte";
 
 /**
  * タイムラインで、同じ人の同じルームへの実況が続いたまとまり（groupLiveRuns）。
- * 最初の 1 件だけを出してたたみ、開くと残りを Discord のように続けて出す
+ * タイムラインは新しい順だが、まとまりの中は話数ルームと同じ時系列順（上が古い）にして実況として読めるようにする。
+ * 最初の 1 件（いちばん古い投稿）だけを出してたたみ、開くと続きを Discord のように下へ続けて出す
  */
 interface Props {
 	posts: Post[];
@@ -14,8 +17,13 @@ interface Props {
 }
 let { posts, room, currentUserId = null }: Props = $props();
 let expanded = $state(false);
-const first = $derived(posts[0] as Post);
-const rest = $derived(posts.slice(1));
+// タイムラインの並び（新しい順）に関係なく、投稿時刻の古い順に並べる
+const chronological = $derived([...posts].sort(comparePostsAsc));
+const first = $derived(chronological[0] as Post);
+const rest = $derived(chronological.slice(1));
+const timeRange = $derived(
+	`${formatPostClock(first.created_at)}〜${formatPostClock((chronological.at(-1) ?? first).created_at)}`,
+);
 </script>
 
 <div class="live-run">
@@ -29,8 +37,9 @@ const rest = $derived(posts.slice(1));
 	<div class="live-run-bar">
 		<button type="button" class="live-run-toggle" aria-expanded={expanded} onclick={() => (expanded = !expanded)}>
 			<span class={expanded ? "i-lucide-chevron-up" : "i-lucide-chevron-down"} aria-hidden="true"></span>
-			<span>{expanded ? "たたむ" : `ほか ${rest.length} 件の実況`}</span>
+			<span>{expanded ? "たたむ" : `続きの実況 ${rest.length} 件`}</span>
 		</button>
+		<span class="live-run-range">{timeRange}</span>
 		{#if room}
 			<a href={room.href} class="live-run-room" title={room.title}>
 				<span class="i-lucide-door-open" aria-hidden="true"></span>
@@ -66,8 +75,13 @@ const rest = $derived(posts.slice(1));
 	text-decoration: none;
 	cursor: pointer;
 }
+.live-run-range {
+	color: var(--color-text-muted);
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+}
 .live-run-room {
-	margin-left: 0;
+	margin-left: auto;
 	font-weight: 600;
 }
 .live-run-toggle:hover,

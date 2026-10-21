@@ -2,7 +2,7 @@
 import type { Snippet } from "svelte";
 import { goto } from "$app/navigation";
 import type { Post } from "$lib/types";
-import { formatBroadcastRelativeTime } from "$lib/utils/format";
+import { formatBroadcastRelativeTime, formatPostClock, formatPostDateTime, formatPostTime } from "$lib/utils/format";
 import { getPostDisplayContent, getPostRoomContext } from "$lib/utils/post-presentation";
 import LikeButton from "./post/LikeButton.svelte";
 import PostActionBar from "./post/PostActionBar.svelte";
@@ -52,6 +52,11 @@ const controller = new PostController(
 const displayName = $derived(post.display_name || post.username);
 const content = $derived(getPostDisplayContent(post));
 const roomContext = $derived(getPostRoomContext(post));
+const postTime = $derived(formatPostTime(post.created_at));
+const postDateTime = $derived(formatPostDateTime(post.created_at));
+// まとまりの続きの行は、空のいいねを並べると圧迫感があるので、ホバー・フォーカス・操作中だけ出す。
+// いいねが付いている・自分がいいねした投稿は常に出す
+const quietLike = $derived(joinPrevious && controller.likeCount === 0 && !controller.likedByMe);
 const broadcastRelativeTime = $derived(
 	broadcastStartAt ? formatBroadcastRelativeTime(post.created_at, broadcastStartAt) : null,
 );
@@ -87,6 +92,7 @@ function handleKeydown(event: KeyboardEvent) {
 	class="post-row"
 	class:post-row--join-previous={joinPrevious}
 	class:post-row--join-next={joinNext}
+	class:post-row--quiet-like={quietLike}
 	class:post-row--selected={actionsOpen}
 	class:post-row--deleting={controller.deleting}
 	class:post-row--modal-open={controller.modalOpen}
@@ -110,6 +116,9 @@ function handleKeydown(event: KeyboardEvent) {
 				<UserAvatar src={post.avatar_url} username={post.username} size="sm" />
 			</a>
 			<a href="/profile/{post.username}" class="post-row-name" title={displayName}>{displayName}</a>
+			<a href="/posts/{post.id}" class="post-row-time" title={postDateTime}
+				><time datetime={post.created_at}>{postTime}</time></a
+			>
 		{/if}
 		{#if post.repost_context}
 			<a href="/profile/{post.repost_context.username}" class="post-row-repost">
@@ -130,6 +139,12 @@ function handleKeydown(event: KeyboardEvent) {
 	</div>
 
 	<div class="post-row-main">
+		{#if joinPrevious}
+			<!-- まとまりの続きの行は、アイコンの位置に時刻を出す -->
+			<a href="/posts/{post.id}" class="post-row-gutter-time" title={postDateTime}
+				><time datetime={post.created_at}>{formatPostClock(post.created_at)}</time></a
+			>
+		{/if}
 		<div class="post-row-body">
 			<!-- CW 中は本文と画像・引用・トレード結果をまとめて隠す（#318） -->
 			<PostCwGuard {post}>
@@ -163,12 +178,10 @@ function handleKeydown(event: KeyboardEvent) {
 	{/if}
 
 	{#if actionsOpen}
-		<div class="post-row-indent">
+		<!-- 操作（返信・リポスト・ブックマーク）と、放送開始からの時間・削除／通報を 1 行にまとめる。日時は名前の横に出している -->
+		<div class="post-row-indent post-row-actions">
 			<PostActionBar {controller} id="post-actions-{post.id}" />
 			<div class="post-row-details">
-				<a href="/posts/{post.id}" class="post-time"
-					><time datetime={post.created_at}>{new Date(post.created_at).toLocaleString("ja-JP")}</time></a
-				>
 				{#if broadcastRelativeTime}
 					<span class="post-time">放送開始から {broadcastRelativeTime}</span>
 				{/if}
@@ -267,6 +280,40 @@ function handleKeydown(event: KeyboardEvent) {
 	text-decoration: none;
 }
 .post-row-name:hover {
+	color: var(--color-text-secondary);
+	text-decoration: underline;
+}
+.post-row-time {
+	flex-shrink: 0;
+	color: var(--color-text-muted);
+	font-size: 12px;
+	line-height: 18px;
+	font-variant-numeric: tabular-nums;
+	text-decoration: none;
+	white-space: nowrap;
+}
+.post-row-time::before {
+	content: "·";
+	margin-right: 6px;
+}
+.post-row-time:hover {
+	color: var(--color-text-secondary);
+	text-decoration: underline;
+}
+.post-row-gutter-time {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: var(--post-row-avatar);
+	color: var(--color-text-muted);
+	font-size: 10px;
+	line-height: 24px;
+	font-variant-numeric: tabular-nums;
+	text-align: center;
+	text-decoration: none;
+	white-space: nowrap;
+}
+.post-row-gutter-time:hover {
 	color: var(--color-text-secondary);
 	text-decoration: underline;
 }
@@ -381,12 +428,18 @@ function handleKeydown(event: KeyboardEvent) {
 	gap: 20px;
 	padding-top: 6px;
 }
-.post-row-details {
+.post-row-actions {
 	display: flex;
 	align-items: center;
 	flex-wrap: wrap;
-	gap: 12px;
-	padding-bottom: 6px;
+	column-gap: 12px;
+}
+.post-row-details {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-left: auto;
+	padding-top: 6px;
 }
 .post-row-details .post-time {
 	font-size: 11px;
@@ -446,6 +499,11 @@ function handleKeydown(event: KeyboardEvent) {
 	opacity: 1;
 	pointer-events: auto;
 }
+/* 場所は残したまま隠す（本文の幅が変わらないように） */
+.post-row--quiet-like:not(:hover):not(:focus-within):not(.post-row--selected) .post-row-main
+	:global(.post-footer-like) {
+	visibility: hidden;
+}
 .post-row--join-previous .post-row-menu {
 	border: 1px solid var(--color-border);
 	background: var(--color-surface);
@@ -457,9 +515,11 @@ function handleKeydown(event: KeyboardEvent) {
 	.post-row-main :global(.post-like-btn),
 	.post-row-menu {
 		height: 40px;
-		margin: -6px 0;
+		/* 上下だけ詰める（左右を 0 にすると、メニューの右寄せ margin-left: auto が消える） */
+		margin-block: -6px;
 	}
 	.post-row-main :global(.post-like-btn) {
+		margin-left: 0;
 		width: 40px;
 		margin-right: -4px;
 		padding: 6.5px;
