@@ -6,6 +6,7 @@ import {
 	toExchangeSubjectiveTags,
 	validateExchangeSubjectiveTags,
 } from "$lib/exchange-tags";
+import { normalizePostContent } from "$lib/post-content";
 import { isPostImageUsable } from "$lib/post-image-lifetime";
 import { ownedPostImagePath } from "$lib/post-image-url";
 import { fetchOAuthAvatar } from "$lib/server/oauth-avatar";
@@ -20,6 +21,8 @@ import { extractHashtags } from "$lib/utils/hashtag";
 const MAX_POST_IMAGES = 4;
 /** 147 のトリガーが投稿の回数制限で返す SQLSTATE（PostgREST は HTTP 429 にする） */
 export const POST_RATE_LIMIT_ERROR_CODE = "PT429";
+/** 投稿の DB の検査で拒否されたときの SQLSTATE（invalid_parameter_value）。HINT が利用者向けの文言 */
+export const POST_REJECTED_ERROR_CODE = "22023";
 export const POST_RATE_LIMIT_MESSAGE = "投稿が多すぎます。1分ほど待ってから、もう一度投稿してください";
 const reportStatuses = new Set(["open", "reviewing", "resolved", "rejected"]);
 const moderationStatuses = new Set(["active", "restricted", "banned"]);
@@ -242,7 +245,7 @@ export async function requireAccountCanWrite(supabase: SupabaseClient<Database>,
 export async function insertPostWithHashtags(
 	supabase: SupabaseClient<Database>,
 	userId: string,
-	content: string,
+	rawContent: string,
 	parentId: string | null = null,
 	imageUrls: string[] = [],
 	animeId: string | null = null,
@@ -257,6 +260,12 @@ export async function insertPostWithHashtags(
 	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
 	if (moderationFailure) return moderationFailure;
 
+	// 表示されない制御文字を取り除いてから「本文あり」を判定する（#245）。制御文字だけの本文は、
+	// 作品つきのルームの投稿などでも空の投稿として保存されないよう、本文が無いものとして断る
+	const content = normalizePostContent(rawContent);
+	if (rawContent.trim() && !content) {
+		return fail(400, { message: "本文に表示できる文字がありません" });
+	}
 	if (!content && imageUrls.length === 0 && !animeId && !exchangeShare) {
 		return fail(400, { message: "本文、画像、アニメ引用、またはトレード結果を追加してください" });
 	}
@@ -311,6 +320,10 @@ export async function insertPostWithHashtags(
 	// 書きかけを残して再送できるよう、エラーではなく 429 の失敗として返す
 	if (postError?.code === POST_RATE_LIMIT_ERROR_CODE) {
 		return fail(429, { message: POST_RATE_LIMIT_MESSAGE });
+	}
+	// DB の検査（167 の画像・171 のイベントルーム）は 22023 で拒否し、HINT に画面に出す文言を入れている
+	if (postError?.code === POST_REJECTED_ERROR_CODE) {
+		return fail(400, { message: postError.hint || "この内容では投稿できません" });
 	}
 	if (postError || !post) {
 		console.error("post insert error:", postError);

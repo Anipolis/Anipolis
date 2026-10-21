@@ -1939,13 +1939,22 @@ type CountQuery = {
 // （pool_dummy_01〜50）が profiles に存在するため、ユーザー数の集計から
 // username パターンで除外する。
 const DUMMY_USERNAME_PATTERN = "pool_dummy_%";
+// 本番の動作確認用アカウント（2026-10-21 作成、鍵アカウント）。利用者として数えない
+const QA_USERNAMES = ["qa_tester"] as const;
+
+/** 管理画面のユーザー数の集計から、ダミー・確認用のアカウントを外す */
+export function excludeNonRealUsers<T extends { not: (column: string, operator: string, value: string) => T }>(
+	query: T,
+): T {
+	return query.not("username", "like", DUMMY_USERNAME_PATTERN).not("username", "in", `(${QA_USERNAMES.join(",")})`);
+}
 
 function countRealUsers(
 	supabase: SupabaseClient<Database>,
 	apply?: (query: CountQuery) => CountQuery,
 ): Promise<number> {
 	return countRows(supabase, "profiles", (query) => {
-		const filtered = query.not("username", "like", DUMMY_USERNAME_PATTERN);
+		const filtered = excludeNonRealUsers(query);
 		return apply ? apply(filtered) : filtered;
 	});
 }

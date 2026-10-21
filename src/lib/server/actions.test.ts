@@ -26,7 +26,7 @@ function maybeSingleChain(response: unknown): TableChain {
 function createInsertPostClient(
 	roomAnime: { title: string | null; official_hashtag: string[] | null } | null,
 	eventHashtag: string | null = null,
-	insertError: { code: string; message: string } | null = null,
+	insertError: { code: string; message: string; hint?: string } | null = null,
 ) {
 	const insertedPosts: unknown[] = [];
 	const hashtagUpsert = vi.fn(async () => ({ error: null }));
@@ -97,6 +97,30 @@ describe("insertPostWithHashtags", () => {
 
 		expect(result).toMatchObject({ status: 429, data: { message: POST_RATE_LIMIT_MESSAGE } });
 		expect(hashtagUpsert).not.toHaveBeenCalled();
+	});
+
+	it("DB の検査（22023）で拒否されたら、HINT の文言を 400 の失敗として返す（#238）", async () => {
+		const { client, hashtagUpsert } = createInsertPostClient(null, null, {
+			code: "22023",
+			message: "event_post_closed",
+			hint: "このイベントの投稿受付は終了しました",
+		});
+		const result = await insertPostWithHashtags(client, "user-1", "終了後 #タグ");
+		expect(result).toMatchObject({ status: 400, data: { message: "このイベントの投稿受付は終了しました" } });
+		expect(hashtagUpsert).not.toHaveBeenCalled();
+	});
+
+	it("制御文字だけの本文は、作品つきの投稿でも保存しない（#245）", async () => {
+		const { client, insertedPosts } = createInsertPostClient(null);
+		const result = await insertPostWithHashtags(client, "user-1", "\u0017\n\u0017", null, [], "123");
+		expect(result).toMatchObject({ status: 400, data: { message: "本文に表示できる文字がありません" } });
+		expect(insertedPosts).toEqual([]);
+	});
+
+	it("本文の制御文字は取り除いて保存する（#245）", async () => {
+		const { client, insertedPosts } = createInsertPostClient(null);
+		await insertPostWithHashtags(client, "user-1", "ア\u0017ニメ\n見た");
+		expect(insertedPosts).toContainEqual(expect.objectContaining({ content: "アニメ\n見た" }));
 	});
 
 	it("それ以外の保存失敗は従来どおり 500", async () => {
