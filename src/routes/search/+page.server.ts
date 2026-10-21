@@ -15,6 +15,7 @@ import {
 	getBlockedUserIds,
 	quoteOrFilterValue,
 } from "$lib/server/queries";
+import { logQueryFailure } from "$lib/server/query-failure";
 import type { Database } from "$lib/supabase/database.types";
 import type { RawPost } from "$lib/types";
 import { buildIlikeContainsPattern, normalizeAccountQuery } from "$lib/utils/search";
@@ -30,7 +31,16 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 
 	if (!query) {
 		const [trendingResult, animeTrending] = await Promise.all([trendingPromise, animeTrendingPromise]);
-		return { query: "", posts: [], users: [], user, trending: trendingResult.data ?? [], animeTrending };
+		return {
+			query: "",
+			posts: [],
+			users: [],
+			postsFailed: false,
+			usersFailed: false,
+			user,
+			trending: trendingResult.data ?? [],
+			animeTrending,
+		};
 	}
 
 	// ユーザー検索は "@name" の @ を外して照合する（投稿検索は入力どおり: メンションを含む本文が引ける）
@@ -65,6 +75,10 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		animeTrendingPromise,
 	]);
 
+	// 投稿・ユーザーの片方だけ読めなかったときは、読めた方を出しつつ、失敗した方を「見つからない」と見せない（#262）
+	if (postsResult.error) logQueryFailure("searchPosts", postsResult.error);
+	if (usersResult.error) logQueryFailure("searchUsers", usersResult.error);
+
 	const posts = await enrichPostsWithCounts(
 		supabase,
 		(postsResult.data ?? []) as unknown as RawPost[],
@@ -79,6 +93,8 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		query,
 		posts,
 		users,
+		postsFailed: Boolean(postsResult.error),
+		usersFailed: Boolean(usersResult.error),
 		user,
 		trending: trendingResult.data ?? [],
 		animeTrending,

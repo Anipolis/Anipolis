@@ -96,8 +96,12 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 
 		getAnimeRankingTrending(supabase, 5),
 
+		// マイリストのタブを開いているときは、読めなければ失敗として扱う（空のリストと見せない、#262）。
+		// ほかのタブでは件数の表示に使うだけなので、読めなくてもプロフィールは出す
 		canViewContent && (isOwn || profile.list_is_public)
-			? getUserAnimeList(supabase, profile.id)
+			? activeTab === "list"
+				? getUserAnimeList(supabase, profile.id)
+				: getUserAnimeList(supabase, profile.id).catch(() => [])
 			: Promise.resolve([]),
 	]);
 

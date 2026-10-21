@@ -6,6 +6,7 @@ import { toValidExchangeSubjectiveTags } from "$lib/exchange-tags";
 import { isOwnPostImage, postImageMediaUrl } from "$lib/post-image-url";
 import { signPostImageUrls } from "$lib/server/post-image-signing";
 import { buildPostCardSelect, POST_CW_ANIME_SELECT } from "$lib/server/post-selects";
+import { failQuery, logQueryFailure } from "$lib/server/query-failure";
 import type { Database } from "$lib/supabase/database.types";
 import { isEpisodeSuppressedSnapshot } from "$lib/syobocal-episodes";
 import { compareTimelineDesc, type TimelineCursor, timelineCursorFilter } from "$lib/timeline-cursor";
@@ -693,7 +694,9 @@ export async function getNotifications(
 
 	const { data, error } = await query;
 
-	if (error || !data) return [];
+	// 取得の失敗を「通知はありません」と見せない（#262）
+	if (error) failQuery("getNotifications", error);
+	if (!data) return [];
 
 	return (data as unknown as NotificationRow[]).map((row) => {
 		const actor = Array.isArray(row.actor) ? row.actor[0] : row.actor;
@@ -878,6 +881,8 @@ export async function getUpcomingEvents(supabase: SupabaseClient<Database>, limi
 		.order("scheduled_at", { ascending: true })
 		.limit(limit);
 
+	// サイドバーなどの補助の情報: 読めなくてもページは出すが、失敗はログに残す（#262）
+	if (error) logQueryFailure("getUpcomingEvents", error);
 	if (error || !data) return [];
 	return data.map(toEvent);
 }
@@ -897,7 +902,9 @@ export async function getEvent(supabase: SupabaseClient<Database>, eventId: stri
 		.eq("id", eventId)
 		.maybeSingle();
 
-	if (error || !data) return null;
+	// 一時的な DB の障害を「イベントが見つかりません（404）」にしない（#262）
+	if (error) failQuery("getEvent", error);
+	if (!data) return null;
 	return toEvent(data);
 }
 
@@ -917,6 +924,8 @@ export async function getEventsForAnime(supabase: SupabaseClient<Database>, anim
 		.eq("anime_id", animeId)
 		.order("scheduled_at", { ascending: false });
 
+	// サイドバーなどの補助の情報: 読めなくてもページは出すが、失敗はログに残す（#262）
+	if (error) logQueryFailure("getEventsForAnime", error);
 	if (error || !data) return [];
 	return data.map(toEvent);
 }
@@ -3364,6 +3373,8 @@ export async function getAnimeRankingPopularity(
 		.order("list_count", { ascending: false })
 		.order("anime_id", { ascending: true })
 		.range(offset, offset + limit - 1);
+	// サイドバーなどの補助の情報: 読めなくてもページは出すが、失敗はログに残す（#262）
+	if (error) logQueryFailure("getAnimeRankingPopularity", error);
 	if (error || !data || data.length === 0) return [];
 
 	const rankedIds = data.map((row) => String(row.anime_id));
@@ -3386,6 +3397,8 @@ export async function getAnimeRankingTrending(
 		.order("recent_count", { ascending: false })
 		.order("anime_id", { ascending: true })
 		.range(offset, offset + limit - 1);
+	// サイドバーなどの補助の情報: 読めなくてもページは出すが、失敗はログに残す（#262）
+	if (error) logQueryFailure("getAnimeRankingTrending", error);
 	if (error || !data || data.length === 0) return [];
 
 	const rankedIds = data.map((row) => String(row.anime_id));
@@ -3419,6 +3432,8 @@ export async function getAnimeRankingTopRated(
 		.order("score_count", { ascending: false })
 		.order("anime_id", { ascending: true })
 		.range(offset, offset + limit - 1);
+	// サイドバーなどの補助の情報: 読めなくてもページは出すが、失敗はログに残す（#262）
+	if (error) logQueryFailure("getAnimeRankingTopRated", error);
 	if (error || !data || data.length === 0) return [];
 
 	const rankedIds = data.map((row) => String(row.anime_id));
@@ -3471,7 +3486,9 @@ export async function getUserAnimeList(
 	if (range) query = query.range(range.offset, range.offset + range.limit - 1);
 
 	const { data, error } = await query;
-	if (error || !data) return [];
+	// 取得の失敗を「マイリストが空」と見せない（#262）。補助の表示では呼び出し側が catch する
+	if (error) failQuery("getUserAnimeList", error);
+	if (!data) return [];
 
 	return (data as unknown as UserAnimeListWithAnimeRow[])
 		.filter((row): row is UserAnimeListWithAnimeRow & { anime: Record<string, unknown> } => row.anime !== null)
