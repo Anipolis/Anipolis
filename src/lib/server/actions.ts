@@ -20,6 +20,8 @@ import { extractHashtags } from "$lib/utils/hashtag";
 const MAX_POST_IMAGES = 4;
 /** 147 のトリガーが投稿の回数制限で返す SQLSTATE（PostgREST は HTTP 429 にする） */
 export const POST_RATE_LIMIT_ERROR_CODE = "PT429";
+/** 投稿の DB の検査で拒否されたときの SQLSTATE（invalid_parameter_value）。HINT が利用者向けの文言 */
+export const POST_REJECTED_ERROR_CODE = "22023";
 export const POST_RATE_LIMIT_MESSAGE = "投稿が多すぎます。1分ほど待ってから、もう一度投稿してください";
 const reportStatuses = new Set(["open", "reviewing", "resolved", "rejected"]);
 const moderationStatuses = new Set(["active", "restricted", "banned"]);
@@ -311,6 +313,10 @@ export async function insertPostWithHashtags(
 	// 書きかけを残して再送できるよう、エラーではなく 429 の失敗として返す
 	if (postError?.code === POST_RATE_LIMIT_ERROR_CODE) {
 		return fail(429, { message: POST_RATE_LIMIT_MESSAGE });
+	}
+	// DB の検査（167 の画像・171 のイベントルーム）は 22023 で拒否し、HINT に画面に出す文言を入れている
+	if (postError?.code === POST_REJECTED_ERROR_CODE) {
+		return fail(400, { message: postError.hint || "この内容では投稿できません" });
 	}
 	if (postError || !post) {
 		console.error("post insert error:", postError);
