@@ -1035,22 +1035,26 @@ function formatCompactDate(iso: string) {
 						>
 						<span class="room-connection-updated">最終更新 {lastUpdateLabel}</span>
 					</span>
-					<button
-						type="button"
-						class="room-connection-reconnect"
-						class:room-connection-reconnect--attention={connectionNeedsAttention}
-						onclick={handleManualReconnect}
-						disabled={reconnecting}
-						aria-label="再接続して最新の投稿を取得"
-						title="再接続して最新の投稿を取得"
-					>
-						<span
-							class="i-lucide-refresh-cw"
-							class:room-connection-spin={reconnecting}
-							aria-hidden="true"
-						></span>
-						<span>{reconnecting ? "再接続中" : "再接続"}</span>
-					</button>
+					<!-- リアルタイムでつながっている間は押す必要が無いので出さない（#432）。定期取得（polling）に
+					     落ちたときはリアルタイムに戻せるよう出す（目立たせるのは要対応のときだけ） -->
+					{#if connectionNeedsAttention || reconnecting || connectionPhase === "polling"}
+						<button
+							type="button"
+							class="room-connection-reconnect"
+							class:room-connection-reconnect--attention={connectionNeedsAttention}
+							onclick={handleManualReconnect}
+							disabled={reconnecting}
+							aria-label="再接続して最新の投稿を取得"
+							title="再接続して最新の投稿を取得"
+						>
+							<span
+								class="i-lucide-refresh-cw"
+								class:room-connection-spin={reconnecting}
+								aria-hidden="true"
+							></span>
+							<span>{reconnecting ? "再接続中" : "再接続"}</span>
+						</button>
+					{/if}
 				</div>
 			{/if}
 		</div>
@@ -1124,7 +1128,8 @@ function formatCompactDate(iso: string) {
 				</div>
 			</div>
 
-			{#if liveAiring}
+			<!-- 投稿が無いと飛び先が無く、空の表示に重なるだけなので出さない（#432） -->
+			{#if liveAiring && allPosts.length > 0}
 				<button type="button" class="room-live-start-button" onclick={() => void jumpToLiveStart()}>
 					<span class="i-lucide-radio" aria-hidden="true"></span>
 					<span>ライブ開始地点へ</span>
@@ -1202,13 +1207,6 @@ function formatCompactDate(iso: string) {
 					</div>
 					<div class="mt-2 flex items-center justify-end gap-2">
 						{@render headerActions?.()}
-						<button
-							type="button"
-							class="room-summary-exit shrink-0 text-xs transition-colors"
-							onclick={handleExitRoom}
-						>
-							退出する
-						</button>
 						<a href="/schedule" class="room-summary-back shrink-0 text-xs transition-colors">
 							← カレンダーへ戻る
 						</a>
@@ -1252,11 +1250,18 @@ function formatCompactDate(iso: string) {
 }
 
 .room-summary-title {
-	display: inline-flex;
-	align-items: center;
+	/* 右パネルは幅が狭く、1行だと「作品名 ❯ 第」で切れるので2行まで折り返す（#432） */
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	line-clamp: 2;
 	min-width: 0;
 	overflow: hidden;
+	overflow-wrap: anywhere;
 	color: var(--color-text);
+}
+.room-summary-title :is(.anime-title-link, .room-name-label) {
+	white-space: normal;
 }
 
 .room-name-label {
@@ -1299,25 +1304,12 @@ function formatCompactDate(iso: string) {
 	color: var(--color-text-secondary);
 }
 
-.room-summary-muted,
-.room-summary-exit {
+.room-summary-muted {
 	color: var(--color-text-muted);
-}
-
-.room-summary-exit {
-	border: 0;
-	background: transparent;
-	padding: 0;
-	font: inherit;
-	cursor: pointer;
 }
 
 .room-summary-back {
 	display: none;
-}
-
-.room-summary-exit:hover {
-	color: var(--color-accent-hover);
 }
 
 .room-page-container {
