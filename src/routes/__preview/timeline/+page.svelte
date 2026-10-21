@@ -29,7 +29,7 @@ let posts = $state(
 	}),
 );
 let room = $state(false);
-// 話数ルームとして出す（時系列順で同じ人の連投がまとまる）。ロビー（global）ではまとまらないので、既定は話数ルーム
+// 話数ルームとして出す（放送枠の見出しなど、話数ルームだけの表示を確かめる）
 let episodeRoom = $state(true);
 let dark = $state(false);
 let submitted = $state(0);

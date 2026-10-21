@@ -795,11 +795,11 @@ function airingHeadingBefore(post: Post, previous: Post | undefined): RoomAiring
 }
 
 /**
- * 話数ルームを時系列順で見ているときだけ、同じ人の連投（isPostContinuation）を Discord のように 1 つにまとめる。
- * 放送枠の見出しをまたぐ投稿はまとめない
+ * 時系列順で見ているときは、どのルーム（話数ルーム・ロビー・イベント）でも同じ人の連投（isPostContinuation）を
+ * Discord のように 1 つにまとめる。新しい順ではまとめない。放送枠の見出しをまたぐ投稿もまとめない
  */
 function joinsPrevious(post: Post | undefined, previous: Post | undefined): boolean {
-	if (!isEpisodeRoom || postOrder !== "oldest" || !post || !previous) return false;
+	if (postOrder !== "oldest" || !post || !previous) return false;
 	return !airingHeadingBefore(post, previous) && isPostContinuation(post, previous);
 }
 
