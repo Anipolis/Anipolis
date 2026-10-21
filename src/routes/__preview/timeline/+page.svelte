@@ -9,13 +9,23 @@ import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import type { LiveRoomData } from "$lib/types/live-room";
 import { groupLiveRuns } from "$lib/utils/live-runs";
 
-// 4〜9 件目を同じ人の連投にして、ホームで実況のまとまり（groupLiveRuns）を確かめられるようにする
+// 4〜9 件目を同じ人の連投にして、ホームで実況のまとまり（groupLiveRuns）を確かめられるようにする。
+// 「○分前」や当日だけ出す時刻を確かめられるよう、いちばん新しい投稿が 5 分前になるよう時刻をずらす
+const basePosts = makeTimelinePosts();
+const shiftMs = Date.now() - 5 * 60 * 1000 - Date.parse(basePosts.at(-1)?.created_at ?? new Date().toISOString());
 let posts = $state(
-	makeTimelinePosts().map((post, index, all) => {
+	basePosts.map((post, index, all) => {
 		const runner = all[4];
+		const created_at = new Date(Date.parse(post.created_at) + shiftMs).toISOString();
 		return runner && index >= 4 && index <= 9
-			? { ...post, user_id: runner.user_id, username: runner.username, display_name: runner.display_name }
-			: post;
+			? {
+					...post,
+					created_at,
+					user_id: runner.user_id,
+					username: runner.username,
+					display_name: runner.display_name,
+				}
+			: { ...post, created_at };
 	}),
 );
 let room = $state(false);
@@ -123,7 +133,7 @@ $effect(() => {
 	<div class="page-container">
 		<div class="feed-column">
 			<PostComposer username="viewer_0" avatarUrl={null} />
-			{#each groupLiveRuns(posts) as item (item.kind === "run" ? item.key : item.post.id)}
+			{#each groupLiveRuns([...posts].reverse()) as item (item.kind === "run" ? item.key : item.post.id)}
 				{#if item.kind === "run"}
 					<TimelineLiveRun posts={item.posts} room={item.room} currentUserId="preview-user-0" />
 				{:else}

@@ -21,17 +21,20 @@ let expanded = $state(false);
 const chronological = $derived([...posts].sort(comparePostsAsc));
 const first = $derived(chronological[0] as Post);
 const rest = $derived(chronological.slice(1));
+// 時刻（21:03）は当日の実況を追うためのもの。いちばん新しい投稿から 1 日過ぎたまとまりでは出さない
+const recent = $derived(Date.now() - Date.parse((chronological.at(-1) ?? first).created_at) < 24 * 60 * 60 * 1000);
 const timeRange = $derived(
 	`${formatPostClock(first.created_at)}〜${formatPostClock((chronological.at(-1) ?? first).created_at)}`,
 );
 </script>
 
 <div class="live-run">
-	<PostRow post={first} {currentUserId} joinNext />
+	<!-- 開いたときは、最初の投稿も「○分前」に加えて左端に時刻を出し、続きの行とそろえる -->
+	<PostRow post={first} {currentUserId} joinNext gutterTime={expanded && recent} />
 	{#if expanded}
 		{#each rest as post (post.id)}
 			<!-- ルームは最初の行に出ているので、続きの行では出さない -->
-			<PostRow {post} {currentUserId} joinPrevious joinNext insideRoom />
+			<PostRow {post} {currentUserId} joinPrevious joinNext insideRoom gutterTime={recent} />
 		{/each}
 	{/if}
 	<div class="live-run-bar">
@@ -39,7 +42,9 @@ const timeRange = $derived(
 			<span class={expanded ? "i-lucide-chevron-up" : "i-lucide-chevron-down"} aria-hidden="true"></span>
 			<span>{expanded ? "たたむ" : `続きの実況 ${rest.length} 件`}</span>
 		</button>
-		<span class="live-run-range">{timeRange}</span>
+		{#if recent}
+			<span class="live-run-range">{timeRange}</span>
+		{/if}
 		{#if room}
 			<a href={room.href} class="live-run-room" title={room.title}>
 				<span class="i-lucide-door-open" aria-hidden="true"></span>
