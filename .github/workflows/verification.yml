@@ -31,7 +31,10 @@ jobs:
       - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 24.14.1
+          # 2026-10-21 のセキュリティリリース。Cloudflare Pages のビルドは出たばかりの 24.22.1 を入れられないので、
+          # .node-version（Pages が読む）はメジャー版の 24 にしてあり、CI だけ版を明示する。
+          # Pages が扱えるようになったら .node-version も 24.22.1 にし、ここは node-version-file に戻す
+          node-version: 24.22.1
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
