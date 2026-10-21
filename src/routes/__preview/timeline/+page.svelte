@@ -4,10 +4,20 @@ import { makeTimelinePosts } from "$lib/components/fixtures/timeline";
 import PostComposer from "$lib/components/PostComposer.svelte";
 import PostRow from "$lib/components/PostRow.svelte";
 import LiveRoomView from "$lib/components/room/LiveRoomView.svelte";
+import TimelineLiveRun from "$lib/components/TimelineLiveRun.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import type { LiveRoomData } from "$lib/types/live-room";
+import { groupLiveRuns } from "$lib/utils/live-runs";
 
-let posts = $state(makeTimelinePosts());
+// 4〜9 件目を同じ人の連投にして、ホームで実況のまとまり（groupLiveRuns）を確かめられるようにする
+let posts = $state(
+	makeTimelinePosts().map((post, index, all) => {
+		const runner = all[4];
+		return runner && index >= 4 && index <= 9
+			? { ...post, user_id: runner.user_id, username: runner.username, display_name: runner.display_name }
+			: post;
+	}),
+);
 let room = $state(false);
 // 話数ルームとして出す（時系列順で同じ人の連投がまとまる）
 let episodeRoom = $state(false);
@@ -113,8 +123,12 @@ $effect(() => {
 	<div class="page-container">
 		<div class="feed-column">
 			<PostComposer username="viewer_0" avatarUrl={null} />
-			{#each posts as post (post.id)}
-				<PostRow {post} currentUserId="preview-user-0" />
+			{#each groupLiveRuns(posts) as item (item.kind === "run" ? item.key : item.post.id)}
+				{#if item.kind === "run"}
+					<TimelineLiveRun posts={item.posts} room={item.room} currentUserId="preview-user-0" />
+				{:else}
+					<PostRow post={item.post} currentUserId="preview-user-0" />
+				{/if}
 			{/each}
 		</div>
 		<aside class="sidebar-column">
