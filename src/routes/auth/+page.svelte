@@ -18,8 +18,9 @@ $effect(() => {
 	syncInviteCodeState(inviteCodeState, data.inviteCode, page.url.searchParams.get("invite"));
 });
 
-function handleInviteCodeInput(event: Event): void {
-	inviteCodeState.value = (event.currentTarget as HTMLInputElement).value;
+// 招待コード欄の入力。bind:value にして、ハイドレーション前に打った値も取り込む（#417）
+function setInviteCodeInput(value: string): void {
+	inviteCodeState.value = value;
 	inviteCodeState.dirty = true;
 }
 
@@ -101,6 +102,20 @@ async function handlePasskeyLogin(): Promise<void> {
 				<div class="flash-error" role="alert">
 					アクセス許可の付与に失敗しました。しばらく待ってから再度ログインしてください。
 				</div>
+			{:else if data.error === 'confirm_failed'}
+				<div class="flash-error" role="alert">
+					確認のリンクが無効か、有効期限が切れています。もう一度ログインするか、登録し直してください。
+					{#if data.errorReason}
+						（理由: {data.errorReason}）
+					{/if}
+				</div>
+			{:else if data.error === 'oauth_failed'}
+				<div class="flash-error" role="alert">
+					ログインを完了できませんでした。時間をおいて、もう一度お試しください。
+					{#if data.errorReason}
+						（理由: {data.errorReason}）
+					{/if}
+				</div>
 			{/if}
 
 			{#if activeMode === 'add_account'}
@@ -153,8 +168,7 @@ async function handlePasskeyLogin(): Promise<void> {
 							type="text"
 							class="field-input"
 							autocomplete="off"
-							value={inviteCodeState.value}
-							oninput={handleInviteCodeInput}
+							bind:value={() => inviteCodeState.value, setInviteCodeInput}
 							placeholder="招待してくれた方から届いたコードを入力してください"
 							required
 						>
@@ -197,8 +211,7 @@ async function handlePasskeyLogin(): Promise<void> {
 							type="text"
 							class="field-input"
 							autocomplete="off"
-							value={inviteCodeState.value}
-							oninput={handleInviteCodeInput}
+							bind:value={() => inviteCodeState.value, setInviteCodeInput}
 							placeholder="招待リンクから来た場合は自動入力されます"
 						>
 						<p class="field-hint">
@@ -244,7 +257,7 @@ async function handlePasskeyLogin(): Promise<void> {
 								type="email"
 								class="field-input"
 								autocomplete="email"
-								value={form?.mode === 'login' ? form.email ?? '' : ''}
+								defaultValue={form?.mode === 'login' ? form.email ?? '' : ''}
 								required
 							>
 						</div>
@@ -279,7 +292,7 @@ async function handlePasskeyLogin(): Promise<void> {
 								type="email"
 								class="field-input"
 								autocomplete="email"
-								value={form?.mode === 'register' ? form.email ?? '' : ''}
+								defaultValue={form?.mode === 'register' ? form.email ?? '' : ''}
 								required
 							>
 						</div>
@@ -297,7 +310,7 @@ async function handlePasskeyLogin(): Promise<void> {
 									autocomplete="username"
 									pattern={"[a-zA-Z0-9_]{3,20}"}
 									maxlength="20"
-									value={form?.mode === 'register' ? form.username ?? '' : ''}
+									defaultValue={form?.mode === 'register' ? form.username ?? '' : ''}
 									required
 								>
 							</div>
@@ -316,7 +329,7 @@ async function handlePasskeyLogin(): Promise<void> {
 								type="text"
 								class="field-input"
 								maxlength="50"
-								value={form?.mode === 'register' ? form.display_name ?? '' : ''}
+								defaultValue={form?.mode === 'register' ? form.display_name ?? '' : ''}
 								placeholder="あとから変更できます"
 							>
 						</div>
@@ -451,5 +464,16 @@ async function handlePasskeyLogin(): Promise<void> {
 .auth-forgot-link a {
 	color: var(--fg-muted);
 	text-decoration: underline;
+}
+
+.auth-consent {
+	margin: 20px 0 0;
+	color: var(--fg-muted);
+	font-size: 0.8rem;
+	line-height: 1.6;
+	text-align: center;
+}
+.auth-consent a {
+	color: var(--accent);
 }
 </style>
