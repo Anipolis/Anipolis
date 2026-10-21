@@ -83,6 +83,10 @@ function handleClick(e: MouseEvent) {
 		onExpand();
 		return;
 	}
+	if (joinPrevious) {
+		toggleActions();
+		return;
+	}
 	goto(`/posts/${post.id}`);
 }
 
@@ -118,12 +122,22 @@ function handleKeydown(event: KeyboardEvent) {
 			aria-expanded={expanded}
 			onclick={onExpand}
 		></button>
+	{:else if joinPrevious}
+		<!-- まとまりの続きの行には「…」を出さないので、行を押すと操作を開く -->
+		<button
+			type="button"
+			class="post-row-hitarea"
+			aria-label="投稿の操作"
+			aria-expanded={actionsOpen}
+			aria-controls="post-actions-{post.id}"
+			onclick={toggleActions}
+		></button>
 	{:else}
 		<a href="/posts/{post.id}" class="post-row-hitarea" aria-label="投稿詳細を開く"></a>
 	{/if}
 
-	<div class="post-row-head">
-		{#if !joinPrevious}
+	{#if !joinPrevious}
+		<div class="post-row-head">
 			<a href="/profile/{post.username}" class="post-row-avatar" aria-label={displayName}>
 				<UserAvatar src={post.avatar_url} username={post.username} size="sm" />
 			</a>
@@ -131,24 +145,24 @@ function handleKeydown(event: KeyboardEvent) {
 			<a href="/posts/{post.id}" class="post-row-time" title={postDateTime}
 				><time datetime={post.created_at}>{headTime}</time></a
 			>
-		{/if}
-		{#if post.repost_context}
-			<a href="/profile/{post.repost_context.username}" class="post-row-repost">
-				<span class="i-lucide-repeat-2" aria-hidden="true"></span>
-				<span>{post.repost_context.display_name || post.repost_context.username}がリポスト</span>
-			</a>
-		{/if}
-		<button
-			type="button"
-			class="post-row-menu"
-			aria-label="投稿の操作"
-			aria-expanded={actionsOpen}
-			aria-controls="post-actions-{post.id}"
-			onclick={toggleActions}
-		>
-			<span class="i-lucide-ellipsis" aria-hidden="true"></span>
-		</button>
-	</div>
+			{#if post.repost_context}
+				<a href="/profile/{post.repost_context.username}" class="post-row-repost">
+					<span class="i-lucide-repeat-2" aria-hidden="true"></span>
+					<span>{post.repost_context.display_name || post.repost_context.username}がリポスト</span>
+				</a>
+			{/if}
+			<button
+				type="button"
+				class="post-row-menu"
+				aria-label="投稿の操作"
+				aria-expanded={actionsOpen}
+				aria-controls="post-actions-{post.id}"
+				onclick={toggleActions}
+			>
+				<span class="i-lucide-ellipsis" aria-hidden="true"></span>
+			</button>
+		</div>
+	{/if}
 
 	<div class="post-row-main">
 		{#if showGutterTime}
@@ -498,32 +512,10 @@ function handleKeydown(event: KeyboardEvent) {
 	min-height: 0;
 	padding-top: 2px;
 }
-/* 操作メニューは行の右上に浮かせ、ホバー・フォーカス・操作中だけ出す（タッチでは行をタップすると操作行が開く） */
-.post-row--join-previous .post-row-head {
-	position: absolute;
-	top: -12px;
-	/* 右端のいいね欄（56px）と重ならないよう、その左に出す */
-	right: calc(var(--post-row-pad-x) + 64px);
-	z-index: 1;
-	height: auto;
-	opacity: 0;
-	pointer-events: none;
-}
-.post-row--join-previous:hover .post-row-head,
-.post-row--join-previous:focus-within .post-row-head,
-.post-row--join-previous.post-row--selected .post-row-head {
-	opacity: 1;
-	pointer-events: auto;
-}
 /* 場所は残したまま隠す（本文の幅が変わらないように） */
 .post-row--quiet-like:not(:hover):not(:focus-within):not(.post-row--selected) .post-row-main
 	:global(.post-footer-like) {
 	visibility: hidden;
-}
-.post-row--join-previous .post-row-menu {
-	border: 1px solid var(--color-border);
-	background: var(--color-surface);
-	box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12);
 }
 
 /* Keep 40px touch targets without pushing the head and text lines apart. */
