@@ -415,6 +415,14 @@ form {
 	font-size: 1rem;
 	font-weight: 750;
 	text-align: center;
+	/* ブラウザ標準の上下矢印は出さない（−/＋ボタンがあり、矢印の分だけ数字が左に寄るため） */
+	appearance: textfield;
+	-moz-appearance: textfield;
+}
+.stepper input::-webkit-inner-spin-button,
+.stepper input::-webkit-outer-spin-button {
+	-webkit-appearance: none;
+	margin: 0;
 }
 .stepper input:focus {
 	border-color: var(--color-accent);
