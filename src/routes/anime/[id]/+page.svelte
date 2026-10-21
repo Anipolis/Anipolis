@@ -792,7 +792,13 @@ $effect(() => {
 							stroke-linejoin="round"
 							aria-hidden="true"
 						>
-							<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+							<!-- サイドバーのマイリストと同じリストのアイコン（しおり形はブックマークと紛らわしいため） -->
+							<path d="M4 6h.01" />
+							<path d="M4 12h.01" />
+							<path d="M4 18h.01" />
+							<path d="M8 6h12" />
+							<path d="M8 12h12" />
+							<path d="M8 18h12" />
 						</svg>
 						<span>マイリスト</span>
 					</button>
