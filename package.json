@@ -33,6 +33,7 @@
 		"import:jikan": "node --env-file-if-exists=.env --experimental-strip-types scripts/import-jikan-season.ts",
 		"import:jikan-covers": "node --env-file-if-exists=.env --experimental-strip-types scripts/import-jikan-covers.ts",
 		"import:oauth-avatars": "node --env-file-if-exists=.env --experimental-strip-types scripts/import-oauth-avatars.ts",
+		"backfill:episode-room-sessions": "node --env-file-if-exists=.env --import ./scripts/loaders/register-lib-alias.mjs --experimental-strip-types scripts/backfill-episode-room-sessions.ts",
 		"sweep:orphan-post-images": "node --env-file-if-exists=.env --experimental-strip-types scripts/sweep-orphan-post-images.ts",
 		"cleanup:deleted-account-files": "node --env-file-if-exists=.env --experimental-strip-types scripts/cleanup-deleted-account-files.ts",
 		"import:mal": "node --env-file-if-exists=.env --experimental-strip-types scripts/import-mal-season.ts",
