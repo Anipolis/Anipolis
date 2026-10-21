@@ -54,19 +54,12 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 				openableUpTo: openableEpisodeLimit({ anime, ...roomLog, now: Date.now() }),
 			})
 		: [];
-	// 話数ルームに入っていない実在の放送枠（話数が付いていない）のうち、投稿のある枠の放送日。
-	// 投稿を見失わないためだけに、日付のルームログとして別に出す（投稿の無い枠は出さない）
-	const unroomedDates = new Set(roomLog?.unroomedDates ?? []);
-
 	// 各話ルームの履歴タイムライン（実在セッション+同期前の合成補完+アンカー逆算）
 	// の構築は buildBroadcastEpisodeLog に集約。未開場セッションは逆算のアンカー
 	// としてだけ使い、ログには開場済み（opened）の日付のみ載せる。
 	const episodes = buildBroadcastEpisodeLog(anime, scheduleSnapshots, broadcastOverrides)
 		.filter((slot) => slot.opened)
 		.sort((left, right) => right.date.localeCompare(left.date));
-	// 推定で話数が付いていても、実際の放送枠がルームに入っていなければ残す（日付のルームと投稿を見失わないように）。
-	// 放送枠の無い（推定だけの）日付は投稿が無いので出さない
-	const episodesWithoutRoom = episodeRooms.length > 0 ? episodes.filter((slot) => unroomedDates.has(slot.date)) : [];
 
 	// 管理タブ用: 話数ルームの一覧（開く時刻の固定・統合を含む）
 	const adminEpisodeRooms = isAdmin ? await getAdminEpisodeRooms(supabase, Number(anime.id)) : [];
@@ -80,7 +73,6 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 		syobocalUrl,
 		episodes,
 		episodeRooms,
-		episodesWithoutRoom,
 		adminEpisodeRooms,
 		broadcastOverrides,
 		events,

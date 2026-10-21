@@ -1653,24 +1653,6 @@ $effect(() => {
 									{/each}
 								</ol>
 							</section>
-							{#if data.episodesWithoutRoom.length > 0}
-								<section class="room-log-section">
-									<h2 class="room-log-heading">話数ルームに入っていない放送日</h2>
-									<ol class="room-log-list">
-										{#each data.episodesWithoutRoom as ep (ep.date)}
-											<li>
-												<a href="/rooms/anime/{data.anime.id}/{ep.date}" class="room-log-item">
-													<span class="room-log-ep">{formatBroadcastEpisodeSlot(ep)}</span>
-													<span class="room-log-ep-compact"
-														>{formatBroadcastEpisodeNumber(ep)}</span
-													>
-													<span class="room-log-date">{ep.date}</span>
-												</a>
-											</li>
-										{/each}
-									</ol>
-								</section>
-							{/if}
 						{:else if data.episodes.length > 0}
 							<section class="room-log-section">
 								<h2 class="room-log-heading">ルームログ</h2>
