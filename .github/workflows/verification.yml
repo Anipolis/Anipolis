@@ -34,6 +34,8 @@ jobs:
           # Node.js の版はリポジトリ直下の .node-version で決める（Cloudflare Pages のビルドも同じファイルを読む）。
           # メジャー版だけを書き、その中の最新（セキュリティ修正の入った版）を使う
           node-version-file: .node-version
+          # ランナーにキャッシュ済みの古い 24.x で済ませず、配布されている最新の 24.x を使う
+          check-latest: true
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
