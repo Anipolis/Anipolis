@@ -7,8 +7,10 @@ import { page } from "$app/state";
 import { trapFocus } from "$lib/actions/trapFocus";
 import { isCoverHiddenWithoutCopyright } from "$lib/anime-cover";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
+import InfoTip from "$lib/components/InfoTip.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
+import { episodeRoomEntryState, formatAiringTime, isEpisodeRoomEntryLive } from "$lib/episode-room";
 import type { BroadcastRoomOverride } from "$lib/types";
 import {
 	type BroadcastOverrideKind,
@@ -64,6 +66,12 @@ const otherRelations = $derived(
 const animeListHref = $derived(getAnimeListHref());
 const sortedRoomLogs = $derived([...data.episodes].sort((a, b) => a.date.localeCompare(b.date)));
 const latestRoomLog = $derived(sortedRoomLogs.at(-1));
+// 話数ルームの「Latest」: 放送中の作品で、投稿できる最も新しい話
+const latestEpisodeRoom = $derived(
+	[...data.episodeRooms]
+		.reverse()
+		.find((entry) => entry.kind === "episode" && episodeRoomEntryState(entry, episodeRoomNow) === "open"),
+);
 const isAnimeAiring = $derived(data.anime.computed_broadcast_status === "airing");
 
 const broadcastLabels: Record<string, string> = {
@@ -164,8 +172,10 @@ let hideRecommendFormResult = $state(false);
 const recommendFormMessage = $derived(hideRecommendFormResult ? "" : (form?.recommendMessage ?? ""));
 const recommendFormSuccess = $derived(!hideRecommendFormResult && Boolean(form?.recommendSuccess));
 // svelte-ignore state_referenced_locally
-let adminEditOpen = $state(Boolean(form?.success || form?.message));
-let activeAdminTab = $state<"basic" | "overrides">("basic");
+let adminEditOpen = $state(Boolean(form?.success || form?.message || (form && "roomMessage" in form)));
+// 話数ルームの管理操作の結果を返したときは、そのタブを開いておく（最初の値だけを使う）
+// svelte-ignore state_referenced_locally
+let activeAdminTab = $state<"basic" | "overrides" | "rooms">(form && "roomMessage" in form ? "rooms" : "basic");
 let activeRoomTab = $state<"log" | "event">("log");
 let overrideFormOpen = $state(false);
 let selectedOverrideKind = $state<BroadcastOverrideKind>("cancelled");
@@ -285,6 +295,9 @@ let recommendSubmitting = $state(false);
 let recommendFeedback = $state("");
 let recommendError = $state("");
 let liveRoomDates = $state(new Set<string>());
+let liveEpisodeRoomKeys = $state(new Set<string>());
+// 一覧の状態（投稿できる／未放送）を開く時刻で計算し直すための現在時刻（30秒ごとに更新）
+let episodeRoomNow = $state(Date.now());
 
 function handleRecipientInput() {
 	selectedRecipient = null;
@@ -396,6 +409,11 @@ function refreshLiveRoomDates() {
 		if (isRoomLive(now, episode.date)) next.add(episode.date);
 	}
 	liveRoomDates = next;
+	const nowMs = now.getTime();
+	episodeRoomNow = nowMs;
+	liveEpisodeRoomKeys = new Set(
+		data.episodeRooms.filter((entry) => isEpisodeRoomEntryLive(entry, nowMs)).map((entry) => entry.key),
+	);
 }
 
 $effect(() => {
@@ -685,7 +703,7 @@ $effect(() => {
 				{/if}
 				{#if displayResources.length}
 					<div class="resource-links">
-						<div class="resource-links-title">Resources</div>
+						<div class="resource-links-title">関連リンク</div>
 						<div class="links-list">
 							{#each displayResources as resource (resource.url)}
 								<a
@@ -707,12 +725,19 @@ $effect(() => {
 			<!-- Score hero -->
 			<div class="stats-grid">
 				<div class="stat-card stat-card--score">
-					<span class="stat-card-label">スコア</span>
+					<span class="stat-card-label with-info-tip">
+						スコア
+						<InfoTip label="スコアとリスト登録">
+							<p>スコアは、公開マイリストで付けられた点数（1〜10）の平均です。</p>
+							<p>リスト登録は、この作品を公開マイリストに入れている人の数です。</p>
+						</InfoTip>
+					</span>
 					{#if data.anime.avg_score != null && (data.anime.score_count ?? 0) > 0}
 						<span class="stat-card-value">★ {data.anime.avg_score.toFixed(2)}</span>
 						<span class="stat-card-sub">{data.anime.score_count}件の評価</span>
 					{:else}
 						<span class="stat-card-value">—</span>
+						<span class="stat-card-sub">まだ評価がありません</span>
 					{/if}
 				</div>
 				{#if data.anime.list_count}
@@ -876,12 +901,225 @@ $effect(() => {
 								<span class="i-lucide-calendar-cog" aria-hidden="true"></span>
 								イレギュラー放送設定
 							</button>
+							<button
+								type="button"
+								class="admin-tab"
+								class:admin-tab--active={activeAdminTab === "rooms"}
+								role="tab"
+								aria-selected={activeAdminTab === "rooms"}
+								onclick={() => {
+									activeAdminTab = "rooms";
+								}}
+							>
+								<span class="i-lucide-messages-square" aria-hidden="true"></span>
+								話数ルーム
+							</button>
 						</div>
 
 						{#if activeAdminTab === "basic"}
 							<div class="admin-edit-form">
 								<AnimeRegisterForm {form} mode="edit" anime={data.anime} action="?/updateAnime" />
 							</div>
+						{:else if activeAdminTab === "rooms"}
+							<section class="broadcast-override-section">
+								<div>
+									<h2 class="broadcast-override-heading">話数ルーム</h2>
+									<p class="broadcast-override-hint">
+										特番ルームの設置、話のルームを開く時刻の設定（週1配信の ONA
+										など）、再放送・イベントの放送枠の追加、二重にできたルームの統合ができます。
+									</p>
+								</div>
+								{#if form && "roomMessage" in form && form.roomMessage}
+									<p class="episode-room-admin-message" role="status">{form.roomMessage}</p>
+								{/if}
+
+								<div class="broadcast-override-table-wrap">
+									<table class="broadcast-override-table">
+										<thead>
+											<tr>
+												<th>ルーム</th>
+												<th>開く時刻</th>
+												<th>状態</th>
+											</tr>
+										</thead>
+										<tbody>
+											{#if data.adminEpisodeRooms.length > 0}
+												{#each data.adminEpisodeRooms as room (room.id)}
+													<tr>
+														<td>
+															{room.kind === "special"
+																? `特番：${room.label ?? room.special_key}（${room.special_key}）`
+																: `第${room.episode_number}話`}
+														</td>
+														<td>
+															{room.opens_at ? formatAiringTime(room.opens_at) : "未定"}
+															{#if room.opens_at_locked}
+																<span class="broadcast-override-tag">固定</span>
+															{/if}
+														</td>
+														<td>
+															{#if room.merged_into}
+																統合済み
+															{:else if room.opens_at && Date.parse(room.opens_at) <= Date.now()}
+																投稿できる
+															{:else}
+																未放送
+															{/if}
+														</td>
+													</tr>
+												{/each}
+											{:else}
+												<tr>
+													<td colspan="3">まだ話数ルームはありません</td>
+												</tr>
+											{/if}
+										</tbody>
+									</table>
+								</div>
+
+								<form
+									method="POST"
+									action="?/addSpecialRoom"
+									use:enhance
+									class="broadcast-override-form"
+								>
+									<h3 class="episode-room-admin-heading">特番ルームを設置</h3>
+									<div class="broadcast-override-field">
+										<label for="special-room-key">URL の名前（英小文字・数字・ハイフン）</label>
+										<input
+											id="special-room-key"
+											name="special_key"
+											required
+											pattern={"[a-z0-9][a-z0-9-]{0,39}"}
+											placeholder="recap-1"
+										>
+									</div>
+									<div class="broadcast-override-field">
+										<label for="special-room-label">表示名</label>
+										<input
+											id="special-room-label"
+											name="label"
+											required
+											maxlength="60"
+											placeholder="総集編"
+										>
+									</div>
+									<div class="broadcast-override-field">
+										<label for="special-room-opens">開く時刻（日本時間・空なら未定）</label>
+										<input id="special-room-opens" type="datetime-local" name="opens_at">
+									</div>
+									<button type="submit" class="btn btn-primary btn-sm">設置する</button>
+								</form>
+
+								<form
+									method="POST"
+									action="?/setEpisodeRoomOpensAt"
+									use:enhance
+									class="broadcast-override-form"
+								>
+									<h3 class="episode-room-admin-heading">話のルームを開く時刻を設定</h3>
+									<div class="broadcast-override-field">
+										<label for="room-opens-episode">話数</label>
+										<input
+											id="room-opens-episode"
+											type="number"
+											name="episode_number"
+											min="1"
+											max="9999"
+											required
+										>
+									</div>
+									<div class="broadcast-override-field">
+										<label for="room-opens-at">開く時刻（日本時間・空にすると固定を外す）</label>
+										<input id="room-opens-at" type="datetime-local" name="opens_at">
+									</div>
+									<button type="submit" class="btn btn-primary btn-sm">設定する</button>
+								</form>
+
+								<form
+									method="POST"
+									action="?/addEpisodeAiring"
+									use:enhance
+									class="broadcast-override-form"
+								>
+									<h3 class="episode-room-admin-heading">再放送・イベントの放送枠を追加</h3>
+									<div class="broadcast-override-field">
+										<label for="airing-episode">話数</label>
+										<input
+											id="airing-episode"
+											type="number"
+											name="episode_number"
+											min="1"
+											max="9999"
+											required
+										>
+									</div>
+									<div class="broadcast-override-field">
+										<label for="airing-kind">種類</label>
+										<select id="airing-kind" name="airing_kind">
+											<option value="rerun">再放送</option>
+											<option value="event">イベント（上映会など）</option>
+										</select>
+									</div>
+									<div class="broadcast-override-field">
+										<label for="airing-at">放送開始（日本時間）</label>
+										<input id="airing-at" type="datetime-local" name="scheduled_at" required>
+									</div>
+									<div class="broadcast-override-field">
+										<label for="airing-duration">放送時間（分）</label>
+										<input
+											id="airing-duration"
+											type="number"
+											name="duration_minutes"
+											min="1"
+											max="1440"
+											value="30"
+										>
+									</div>
+									<div class="broadcast-override-field">
+										<label for="airing-channel">放送局・配信先（任意）</label>
+										<input id="airing-channel" name="channel_name" maxlength="60">
+									</div>
+									<button type="submit" class="btn btn-primary btn-sm">追加する</button>
+								</form>
+
+								<form
+									method="POST"
+									action="?/mergeEpisodeRooms"
+									use:enhance
+									class="broadcast-override-form"
+								>
+									<h3 class="episode-room-admin-heading">ルームを統合</h3>
+									<p class="broadcast-override-hint">
+										話数のずれで同じ話のルームが二重にできたときに使います。統合元の投稿は統合先へ移り、統合元の
+										URL
+										は統合先へ転送されます。放送枠のあるルームは、先に放送枠の話数を直してください。
+									</p>
+									<div class="broadcast-override-field">
+										<label for="merge-from">統合元の話数</label>
+										<input
+											id="merge-from"
+											type="number"
+											name="from_episode"
+											min="1"
+											max="9999"
+											required
+										>
+									</div>
+									<div class="broadcast-override-field">
+										<label for="merge-to">統合先の話数</label>
+										<input
+											id="merge-to"
+											type="number"
+											name="to_episode"
+											min="1"
+											max="9999"
+											required
+										>
+									</div>
+									<button type="submit" class="btn btn-sm">統合する</button>
+								</form>
+							</section>
 						{:else}
 							<section class="broadcast-override-section">
 								<div>
@@ -1365,6 +1603,74 @@ $effect(() => {
 									</span>
 								</a>
 							</section>
+						{:else if data.episodeRooms.length > 0}
+							<section class="room-log-section">
+								<h2 class="room-log-heading">話数ルーム</h2>
+								<ol class="room-log-list">
+									{#if isAnimeAiring && latestEpisodeRoom}
+										<li class="room-log-latest-slot">
+											<a
+												href={latestEpisodeRoom.href ?? undefined}
+												class="room-log-item room-log-item--latest"
+											>
+												<!-- 放送中は右上の「LIVE」と重なって隠れるので、「Latest」は出さない（#433） -->
+												{#if !liveEpisodeRoomKeys.has(latestEpisodeRoom.key)}
+													<span class="room-log-latest-label">
+														<span class="i-lucide-zap" aria-hidden="true"></span>
+														Latest
+													</span>
+												{/if}
+												<span class="room-log-ep">{latestEpisodeRoom.label}</span>
+												<span class="room-log-ep-compact">{latestEpisodeRoom.label}</span>
+												{#if liveEpisodeRoomKeys.has(latestEpisodeRoom.key)}
+													<span class="room-log-live-badge">LIVE</span>
+												{/if}
+												<span class="room-log-date"
+													>{latestEpisodeRoom.firstAiredOn ?? ""}</span
+												>
+											</a>
+										</li>
+									{/if}
+									{#each data.episodeRooms as entry (entry.key)}
+										{@const entryState = episodeRoomEntryState(entry, episodeRoomNow)}
+										<li>
+											<svelte:element
+												this={entry.href ? "a" : "span"}
+												href={entry.href ?? undefined}
+												class="room-log-item"
+												class:room-log-item--unaired={entryState !== "open"}
+											>
+												<span class="room-log-ep">{entry.label}</span>
+												<span class="room-log-ep-compact">{entry.label}</span>
+												{#if liveEpisodeRoomKeys.has(entry.key)}
+													<span class="room-log-live-badge">LIVE</span>
+												{:else if entryState !== "open"}
+													<span class="room-log-unaired-label">未放送</span>
+												{/if}
+												<span class="room-log-date">{entry.firstAiredOn ?? ""}</span>
+											</svelte:element>
+										</li>
+									{/each}
+								</ol>
+							</section>
+							{#if data.episodesWithoutRoom.length > 0}
+								<section class="room-log-section">
+									<h2 class="room-log-heading">話数ルームに入っていない放送日</h2>
+									<ol class="room-log-list">
+										{#each data.episodesWithoutRoom as ep (ep.date)}
+											<li>
+												<a href="/rooms/anime/{data.anime.id}/{ep.date}" class="room-log-item">
+													<span class="room-log-ep">{formatBroadcastEpisodeSlot(ep)}</span>
+													<span class="room-log-ep-compact"
+														>{formatBroadcastEpisodeNumber(ep)}</span
+													>
+													<span class="room-log-date">{ep.date}</span>
+												</a>
+											</li>
+										{/each}
+									</ol>
+								</section>
+							{/if}
 						{:else if data.episodes.length > 0}
 							<section class="room-log-section">
 								<h2 class="room-log-heading">ルームログ</h2>
@@ -1375,10 +1681,13 @@ $effect(() => {
 												href="/rooms/anime/{data.anime.id}/{latestRoomLog.date}"
 												class="room-log-item room-log-item--latest"
 											>
-												<span class="room-log-latest-label">
-													<span class="i-lucide-zap" aria-hidden="true"></span>
-													Latest
-												</span>
+												<!-- 放送中は「LIVE」だけを出す（#433） -->
+												{#if !liveRoomDates.has(latestRoomLog.date)}
+													<span class="room-log-latest-label">
+														<span class="i-lucide-zap" aria-hidden="true"></span>
+														Latest
+													</span>
+												{/if}
 												<span class="room-log-ep"
 													>{formatBroadcastEpisodeSlot(latestRoomLog)}</span
 												>
@@ -1690,7 +1999,8 @@ $effect(() => {
 
 .anime-cover {
 	width: 100%;
-	aspect-ratio: 1 / 1.414;
+	/* カバーの規格（400×566）。縦横比の違う画像でも枠の下に余白が出ないよう、画像は枠いっぱいに合わせる */
+	aspect-ratio: 400 / 566;
 	border-radius: 14px;
 	overflow: hidden;
 	background: var(--color-surface);
@@ -1699,6 +2009,8 @@ $effect(() => {
 }
 .anime-cover img {
 	width: 100%;
+	height: 100%;
+	object-fit: cover;
 	display: block;
 	-webkit-backface-visibility: hidden;
 	backface-visibility: hidden;
@@ -1824,6 +2136,8 @@ $effect(() => {
 .resource-link {
 	border-color: var(--border);
 	color: var(--text-muted);
+	/* 「しょぼいカレンダー」などが折り返すとボタンの形が崩れるので、1行に保つ */
+	white-space: nowrap;
 }
 .resource-link:hover {
 	background: var(--hover-bg);
@@ -1841,7 +2155,16 @@ $effect(() => {
 	font-size: 0.72rem;
 	font-weight: 600;
 	letter-spacing: 0.04em;
-	text-transform: uppercase;
+}
+/* スマホ幅では表紙の下の狭い列に入るので、余白と字間を詰めて「しょぼいカレンダー」も1行で収める */
+@media (max-width: 768px) {
+	.resource-links {
+		padding: 0;
+	}
+	.resource-link {
+		padding: 2px 6px;
+		letter-spacing: 0;
+	}
 }
 .copyright {
 	font-size: 0.72rem;
@@ -2106,6 +2429,18 @@ $effect(() => {
 	min-width: 0;
 }
 
+.episode-room-admin-heading {
+	font-size: 0.9rem;
+	font-weight: 600;
+	margin: 0;
+}
+.episode-room-admin-message {
+	margin: 0;
+	padding: 8px 12px;
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+	font-size: 0.85rem;
+}
 .broadcast-override-section {
 	display: flex;
 	flex-direction: column;
@@ -3057,6 +3392,15 @@ a.relation-card:hover {
 }
 
 /* Room log */
+.room-log-item--unaired {
+	opacity: 0.6;
+}
+
+.room-log-unaired-label {
+	font-size: 11px;
+	color: var(--color-text-secondary);
+}
+
 .room-log-section {
 	display: flex;
 	flex-direction: column;

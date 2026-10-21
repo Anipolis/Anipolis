@@ -42,7 +42,17 @@ export const load: PageServerLoad = async ({ url, cookies, locals: { supabase, s
 	// login/register はログイン済みならリダイレクト
 	// ベータ資格を持つログインユーザーのみリダイレクトする。
 	// 未資格ユーザーは /auth に留め、not_member メッセージを表示できるようにする（ループ防止）。
-	if (mode !== "add_account" && user && isBetaMember(user)) redirect(303, next);
+	if (mode !== "add_account" && user && isBetaMember(user)) {
+		// ログインしたまま OAuth でログインし直して失敗した（パスキーの再認証など）。/auth に留めても
+		// ここで戻されて理由が見えないので、元の画面（next）に理由を付けて返す
+		if (url.searchParams.get("error") === "oauth_failed") {
+			const target = new URL(next, url.origin);
+			const reason = url.searchParams.get("reason") ?? "";
+			target.searchParams.set("oauth_error", /^[a-z0-9_]{1,40}$/.test(reason) ? reason : "unknown");
+			redirect(303, `${target.pathname}${target.search}`);
+		}
+		redirect(303, next);
+	}
 
 	// 招待リンク（/auth?invite=CODE）を踏んだ場合は、OAuth の往復を挟んでも
 	// 持ち越せるよう署名付き Cookie にも保存しておく（手入力欄のプリフィルにも使う）。

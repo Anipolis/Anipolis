@@ -15,7 +15,7 @@ let { data, form }: PageProps = $props();
 const MAX_LENGTH = 280;
 let content = $state("");
 let submitting = $state(false);
-let pageTitle = $state("投稿 — Anipolis");
+let pageTitle = $state("投稿 - Anipolis");
 
 const remaining = $derived(MAX_LENGTH - content.length);
 const countClass = $derived(charCountClass(content.length, MAX_LENGTH));
@@ -37,7 +37,7 @@ $effect(() => {
 	const promise = data.enrichedData;
 	promise.then((enriched: { post?: { display_name?: string | null; username?: string | null } }) => {
 		const name = enriched.post?.display_name || enriched.post?.username;
-		if (name) pageTitle = `${name}の投稿 — Anipolis`;
+		if (name) pageTitle = `${name}の投稿 - Anipolis`;
 	});
 });
 </script>
@@ -132,6 +132,9 @@ $effect(() => {
 			{:else}
 				<div class="auth-gate">
 					<p>返信するにはログインが必要です</p>
+					<a href={`/auth?next=${encodeURIComponent(page.url.pathname)}`} class="btn btn-primary"
+						>ログインして返信する</a
+					>
 				</div>
 			{/if}
 

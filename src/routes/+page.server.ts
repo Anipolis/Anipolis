@@ -8,6 +8,7 @@ import {
 } from "$lib/server/actions";
 import { buildPostCardSelect } from "$lib/server/post-selects";
 import {
+	fillTimelinePage,
 	getAnimeExchangeShareForUser,
 	getAnimeRankingTrending,
 	getFollowingTimelinePosts,
@@ -16,6 +17,7 @@ import {
 	getUserAnimeList,
 	type TimelineCursor,
 } from "$lib/server/queries";
+import { parseTimelineCursor } from "$lib/timeline-cursor";
 import type { AnimeExchangeShare, Post } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -30,45 +32,47 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	const tab = url.searchParams.get("tab") === "following" && user ? "following" : "all";
 	const quoteAnimeId = url.searchParams.get("quote_anime");
 	const shareExchangeId = url.searchParams.get("share_exchange");
-	const beforeParam = url.searchParams.get("before") ?? undefined;
-	const beforeIdParam = url.searchParams.get("before_id") ?? undefined;
-	const before =
-		beforeParam && beforeIdParam && /^\d{4}-\d{2}-\d{2}T/.test(beforeParam)
-			? { createdAt: beforeParam, id: beforeIdParam }
-			: undefined;
+	// before / before_id は PostgREST のフィルタに埋め込むので、形を厳密に確かめる（#243）
+	const before = parseTimelineCursor(url.searchParams);
 	// 続きの有無（nextCursor）はミュート除外前の取得行から決める。除外後の件数で判定すると
 	// ミュートで減ったページが「続きなし」になり、古い投稿へ進めなくなる（#35）。
 	type TimelinePage = { posts: Post[]; nextCursor: TimelineCursor | null };
-	const fetchTimeline = async (): Promise<TimelinePage> => {
+	// 1ページ分（除外前 50 件）を取る。交換シェアの列で失敗したら、その列なしで取り直す
+	const fetchTimelineBatch = async (cursor: TimelineCursor | undefined) => {
 		if (tab === "following" && user) {
+			let lastError: unknown = null;
 			for (const select of [POSTS_SELECT_WITH_EXCHANGE, POSTS_SELECT_BASE]) {
 				const result = await getFollowingTimelinePosts(supabase, user.id, {
 					select,
 					limit: 50,
-					...(before ? { before: before.createdAt, beforeId: before.id } : {}),
+					...(cursor ? { before: cursor.createdAt, beforeId: cursor.id } : {}),
 				});
-				if (!result.error) return { posts: result.posts, nextCursor: result.nextCursor };
+				if (!result.error) return result;
+				lastError = result.error;
 			}
 			console.error("following timeline posts query failed for all select fallbacks");
-			return { posts: [], nextCursor: null };
+			return { posts: [], error: lastError, nextCursor: null };
 		}
 
 		const result = await getHomeTimelinePosts(supabase, user?.id ?? null, {
 			select: POSTS_SELECT_WITH_EXCHANGE,
 			limit: 50,
-			...(before ? { cursor: before } : {}),
+			...(cursor ? { cursor } : {}),
 		});
-		if (!result.error) {
-			return { posts: result.posts, nextCursor: result.nextCursor };
-		}
+		if (!result.error) return result;
 
 		const baseFallback = await getHomeTimelinePosts(supabase, user?.id ?? null, {
 			select: POSTS_SELECT_BASE,
 			limit: 50,
-			...(before ? { cursor: before } : {}),
+			...(cursor ? { cursor } : {}),
 		});
 		if (baseFallback.error) console.error("home posts query failed:", baseFallback.error);
-		return { posts: baseFallback.posts, nextCursor: baseFallback.nextCursor };
+		return baseFallback;
+	};
+	const fetchTimeline = async (): Promise<TimelinePage> => {
+		// ミュートで数件しか残らないページは、続きを取り足して埋める
+		const page = await fillTimelinePage(fetchTimelineBatch, before);
+		return { posts: page.posts, nextCursor: page.nextCursor };
 	};
 
 	const buildExchangeInitialContent = (_exchangeShare: AnimeExchangeShare | null) =>

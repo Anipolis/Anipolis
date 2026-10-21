@@ -8,7 +8,7 @@ const { profile } = $derived(data);
 const displayName = $derived(profile.display_name ?? profile.username);
 </script>
 
-<svelte:head> <title>{displayName} のフォロー中 · Anipolis</title> </svelte:head>
+<svelte:head> <title>{displayName}のフォロー中 - Anipolis</title> </svelte:head>
 
 <div class="page-container">
 	<main class="feed-column">

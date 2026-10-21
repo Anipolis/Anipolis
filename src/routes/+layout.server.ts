@@ -17,7 +17,7 @@ function isOnboardingExempt(pathname: string): boolean {
 	return ONBOARDING_EXEMPT_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
-export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, cookies, url, depends }) => {
+export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, cookies, url, route, depends }) => {
 	// クライアント側で認証状態が変わった（例：メール確認リンク着地時のハッシュ
 	// トークン検出）ときに invalidate("supabase:auth") でこの load ごと再実行し、
 	// session / profile を再取得できるようにする。宣言がないと +layout.ts しか
@@ -85,16 +85,23 @@ export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, c
 	// これらのカウント取得を待たずに開始できるようにする。
 	// バッジ表示はページコンテンツより後から描画されてよい副次情報のため
 	// ストリーミングが適切。
+	// ただしストリーミングの応答はステータスを付けられず、エラーのページも 200 になる。
+	// 未ログインはカウントが無いので Promise にせず、存在しない URL（route.id が無い）は待ってから返して、
+	// 404 などが正しく返るようにする（ログイン中にページの load が 404 にした場合は 200 のまま）
+	const unreadNotificationCount = user ? getUnreadNotificationCount(supabase, user.id) : 0;
+	const unreadBroadcastNotificationCount = user ? getUnreadBroadcastNotificationCount(supabase, user.id) : 0;
+	const pendingReportsCount = profile?.is_admin ? getPendingReportsCount(supabase) : 0;
+	const stream = route.id !== null;
 	return {
 		session,
 		user,
 		profile,
 		cookies: filteredCookies,
-		unreadNotificationCount: user ? getUnreadNotificationCount(supabase, user.id) : Promise.resolve(0),
-		unreadBroadcastNotificationCount: user
-			? getUnreadBroadcastNotificationCount(supabase, user.id)
-			: Promise.resolve(0),
-		pendingReportsCount: profile?.is_admin ? getPendingReportsCount(supabase) : Promise.resolve(0),
+		unreadNotificationCount: stream ? unreadNotificationCount : await unreadNotificationCount,
+		unreadBroadcastNotificationCount: stream
+			? unreadBroadcastNotificationCount
+			: await unreadBroadcastNotificationCount,
+		pendingReportsCount: stream ? pendingReportsCount : await pendingReportsCount,
 		extraAccounts,
 	};
 };

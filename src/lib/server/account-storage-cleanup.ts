@@ -19,26 +19,37 @@ export const USER_OWNED_BUCKETS = ["post-images", "profile-avatars", "profile-he
 /** 1回の列挙・削除で扱う件数。SDK の既定は 100 件で、それ以降は明示しないと返らない */
 export const STORAGE_LIST_PAGE_SIZE = 1000;
 
-/** フォルダをたどる深さの上限（想定外の入れ子で止まらなくならないように） */
-const MAX_FOLDER_DEPTH = 8;
+/**
+ * 1回の列挙でたどるファイル・フォルダの数の上限（バケットごと）。深さではなく量で区切る（#391）。
+ * Storage のポリシー（128）は先頭が本人 ID なら深さに制限なく書き込みを許すので、深さで打ち切ると
+ * 深いパスに置かれたファイルがいつまでも消せない。上限に達したら、そこまでに見つけた分を消して列挙し直す
+ */
+const MAX_LISTED_ENTRIES = 10_000;
+
+/** 1回の後始末で「列挙して消す」を繰り返す回数の上限（ファイルが非常に多い場合は次回の再試行で続ける） */
+const MAX_REMOVE_ROUNDS = 5;
 
 /**
- * prefix 配下のファイルのパスを、サブフォルダもたどってすべて集める。失敗したら null。
- * Storage のポリシー（128）は先頭が本人 ID なら `<user_id>/<subdir>/<file>` への直接アップロードも許すので、
+ * prefix 配下のファイルのパスを、サブフォルダもたどって集める。失敗したら null。
  * 直下だけを消すとサブフォルダの中身が残る（#388 Codex）。
+ *   * フォルダは深さ優先でたどる（1ページ読むごとに、見つけたフォルダへ先に降りる）。Storage のフォルダは
+ *     中にファイルがあるときだけ存在するので、降りれば必ずファイルに届く
+ *   * たどった項目が maxEntries を超えたら complete: false でそこまでの分を返す。ただしファイルが1件も
+ *     見つかっていないうちは打ち切らない。フォルダだけで上限を使い切ると、消すものが無いまま毎回同じ
+ *     ところで止まり、いつまでも先へ進まないため（#397 Codex）
  */
-async function listFilesRecursively(
+export async function listUserStorageFiles(
 	admin: SupabaseClient<Database>,
 	bucket: string,
-	prefix: string,
-	depth = 0,
-): Promise<string[] | null> {
-	if (depth > MAX_FOLDER_DEPTH) {
-		console.error(`account storage cleanup: ${bucket}/${prefix} is nested too deeply`);
-		return null;
-	}
+	root: string,
+	maxEntries = MAX_LISTED_ENTRIES,
+): Promise<{ paths: string[]; complete: boolean } | null> {
 	const paths: string[] = [];
-	for (let offset = 0; ; offset += STORAGE_LIST_PAGE_SIZE) {
+	// 次に読むフォルダとその位置。末尾から取り出す（深さ優先）
+	const stack: { prefix: string; offset: number }[] = [{ prefix: root, offset: 0 }];
+	let listed = 0;
+	for (let frame = stack.pop(); frame; frame = stack.pop()) {
+		const { prefix, offset } = frame;
 		const { data: entries, error } = await admin.storage
 			.from(bucket)
 			.list(prefix, { limit: STORAGE_LIST_PAGE_SIZE, offset, sortBy: { column: "name", order: "asc" } });
@@ -46,47 +57,57 @@ async function listFilesRecursively(
 			console.error(`account storage cleanup: list ${bucket}/${prefix} failed:`, error);
 			return null;
 		}
-		for (const entry of entries ?? []) {
+		const page = entries ?? [];
+		// 同じフォルダの続きのページは、このページで見つけたフォルダを読み終えてから
+		if (page.length >= STORAGE_LIST_PAGE_SIZE) stack.push({ prefix, offset: offset + STORAGE_LIST_PAGE_SIZE });
+		const folders: string[] = [];
+		for (const entry of page) {
+			listed += 1;
 			const path = `${prefix}/${entry.name}`;
 			// id が null の項目はフォルダ（Storage の疑似フォルダ）
-			if (entry.id === null) {
-				const nested = await listFilesRecursively(admin, bucket, path, depth + 1);
-				if (nested === null) return null;
-				paths.push(...nested);
-			} else {
-				paths.push(path);
-			}
+			if (entry.id === null) folders.push(path);
+			else paths.push(path);
 		}
-		if ((entries ?? []).length < STORAGE_LIST_PAGE_SIZE) return paths;
+		for (const folder of folders.reverse()) stack.push({ prefix: folder, offset: 0 });
+		if (listed > maxEntries && paths.length > 0 && stack.length > 0) return { paths, complete: false };
 	}
+	return { paths, complete: true };
 }
 
-/** `<user_id>/` 配下のファイルをサブフォルダも含めてすべて消し、消した件数を返す。失敗したら null */
+/** `<user_id>/` 配下のファイルをサブフォルダも含めてすべて消し、消した件数を返す。失敗・未完了なら null */
 async function removeAllUserFiles(
 	admin: SupabaseClient<Database>,
 	bucket: (typeof USER_OWNED_BUCKETS)[number],
 	userId: string,
 ): Promise<number | null> {
-	const paths = await listFilesRecursively(admin, bucket, userId);
-	if (paths === null) return null;
 	let removed = 0;
-	for (let start = 0; start < paths.length; start += STORAGE_LIST_PAGE_SIZE) {
-		const chunk = paths.slice(start, start + STORAGE_LIST_PAGE_SIZE);
-		const { data: deleted, error } = await admin.storage.from(bucket).remove(chunk);
-		if (error) {
-			console.error(`account storage cleanup: remove ${bucket} failed:`, error);
+	for (let round = 0; ; round += 1) {
+		// 列挙し直して、消し終えたか確かめる（消したはずのファイルが残っていれば失敗として記録を残す）
+		const listing = await listUserStorageFiles(admin, bucket, userId);
+		if (listing === null) return null;
+		if (listing.complete && listing.paths.length === 0) return removed;
+		if (round >= MAX_REMOVE_ROUNDS || listing.paths.length === 0) {
+			console.error(`account storage cleanup: files remain in ${bucket} for ${userId}`);
 			return null;
 		}
-		removed += deleted?.length ?? 0;
+
+		let deletedThisRound = 0;
+		for (let start = 0; start < listing.paths.length; start += STORAGE_LIST_PAGE_SIZE) {
+			const chunk = listing.paths.slice(start, start + STORAGE_LIST_PAGE_SIZE);
+			const { data: deleted, error } = await admin.storage.from(bucket).remove(chunk);
+			if (error) {
+				console.error(`account storage cleanup: remove ${bucket} failed:`, error);
+				return null;
+			}
+			deletedThisRound += deleted?.length ?? 0;
+		}
+		// 消しても減らないなら繰り返さない（同じ列挙と削除を空回りさせない）
+		if (deletedThisRound === 0) {
+			console.error(`account storage cleanup: ${listing.paths.length} files could not be removed from ${bucket}`);
+			return null;
+		}
+		removed += deletedThisRound;
 	}
-	// 消し終えたか確かめる（消したはずのファイルが残っていれば失敗として記録を残す）
-	const rest = await listFilesRecursively(admin, bucket, userId);
-	if (rest === null) return null;
-	if (rest.length > 0) {
-		console.error(`account storage cleanup: ${rest.length} files remain in ${bucket} for ${userId}`);
-		return null;
-	}
-	return removed;
 }
 
 /** 消す予定として記録する。記録できなければ false（退会を始めない） */

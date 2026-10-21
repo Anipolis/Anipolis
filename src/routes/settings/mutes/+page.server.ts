@@ -1,4 +1,4 @@
-import { fail, redirect } from "@sveltejs/kit";
+import { fail } from "@sveltejs/kit";
 import {
 	parsePositiveInt,
 	removeAnimeMuteAction,
@@ -6,11 +6,12 @@ import {
 	updateAnimeMuteAction,
 } from "$lib/server/actions";
 import { getAnimeMuteCandidate, getAnimeMutes, getEventMutes, getMutedWordRows } from "$lib/server/queries";
+import { redirectToLogin } from "$lib/server/require-login";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
-	if (!user) redirect(303, "/");
+	if (!user) redirectToLogin(url);
 
 	const [mutedWords, mutes, eventMutes] = await Promise.all([
 		getMutedWordRows(supabase, user.id),

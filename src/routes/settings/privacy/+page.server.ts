@@ -1,9 +1,10 @@
-import { fail, redirect } from "@sveltejs/kit";
+import { fail } from "@sveltejs/kit";
+import { redirectToLogin } from "$lib/server/require-login";
 import type { Actions, PageServerLoad } from "./$types";
 
-export const load: PageServerLoad = async ({ locals: { safeGetSession } }) => {
+export const load: PageServerLoad = async ({ url, locals: { safeGetSession } }) => {
 	const { user } = await safeGetSession();
-	if (!user) redirect(303, "/");
+	if (!user) redirectToLogin(url);
 	return {};
 };
 

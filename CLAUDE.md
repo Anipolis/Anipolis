@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-pnpm dev          # Start dev server
+pnpm dev          # Start dev server (staging Supabase via .env.staging; pnpm dev:prod for production) — see docs/staging.md
 pnpm build        # Production build
 pnpm check        # Biome + Svelte + TypeScript + anime-view checks — run before committing
 pnpm test         # Vitest unit tests with coverage

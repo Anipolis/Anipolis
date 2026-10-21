@@ -8,11 +8,12 @@ import {
 	resolveCopyrightReviewAction,
 } from "$lib/server/copyright-reviews";
 import { isAdminUser } from "$lib/server/queries";
+import { redirectToLogin } from "$lib/server/require-login";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
-	if (!user) redirect(302, "/");
+	if (!user) redirectToLogin(url);
 
 	const isAdmin = await isAdminUser(supabase, user.id);
 	if (!isAdmin) redirect(302, "/");

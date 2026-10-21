@@ -6,6 +6,7 @@ import { beforeNavigate, invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
 import AnimeEditRow from "$lib/components/AnimeEditRow.svelte";
 import AnimeStatusSection from "$lib/components/AnimeStatusSection.svelte";
+import InfoTip from "$lib/components/InfoTip.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import {
 	createSaveQueue,
@@ -248,10 +249,18 @@ $effect(() => {
 
 <svelte:head> <title>マイリスト - Anipolis</title> </svelte:head>
 
+{#snippet visibilityHelp()}
+	<p>公開: プロフィールの「マイリスト」タブで誰でも見られます（鍵アカウントならフォロワーだけ）。</p>
+	<p>作品を視聴予定・視聴中・完了にすると、フォロワーにお知らせが届きます。</p>
+	<p>非公開: 自分だけが見られます。フォロワーへのお知らせも届きません。</p>
+	<p>非公開のマイリストは、作品のスコアやランキングに数えません。</p>
+{/snippet}
+
 <div class="page-container">
 	<main class="feed-column mylist-page">
 		<div class="mylist-container">
 			<header class="mylist-header">
+				<h1 class="mylist-title">マイリスト</h1>
 				<div class="mylist-title-row">
 					<div class="header-actions">
 						<!-- 表示切り替え -->
@@ -321,7 +330,6 @@ $effect(() => {
 								class:saving={visibilityState === 'saving'}
 								disabled={visibilityState === 'saving'}
 								aria-busy={visibilityState === 'saving'}
-								aria-describedby="visibility-help"
 								title={isPublic ? '非公開にする' : '公開する'}
 							>
 								{#if visibilityState === 'saving'}
@@ -364,6 +372,7 @@ $effect(() => {
 								{/if}
 							</button>
 						</form>
+						<InfoTip label="マイリストの公開設定">{@render visibilityHelp()}</InfoTip>
 					</div>
 				</div>
 
@@ -384,7 +393,6 @@ $effect(() => {
 								disabled={isPublic || visibilityState === 'saving'}
 								aria-label="マイリストを公開する"
 								aria-pressed={isPublic}
-								aria-describedby="visibility-help"
 							>
 								公開
 							</button>
@@ -395,11 +403,11 @@ $effect(() => {
 								disabled={!isPublic || visibilityState === 'saving'}
 								aria-label="マイリストを非公開にする"
 								aria-pressed={!isPublic}
-								aria-describedby="visibility-help"
 							>
 								非公開
 							</button>
 						</form>
+						<InfoTip label="マイリストの公開設定">{@render visibilityHelp()}</InfoTip>
 
 						<div class="mobile-view-toggle" aria-label="表示モード">
 							<button
@@ -428,34 +436,25 @@ $effect(() => {
 					</div>
 				</div>
 
-				<!-- 公開範囲の説明・切替の結果・未保存の案内 -->
-				<div class="mylist-notices">
-					<p id="visibility-help" class="visibility-help">
-						{#if visibilityState === 'saving'}
-							公開設定を切り替えています…
-						{:else if isPublic}
-							<strong>公開中:</strong>
-							プロフィールの「マイリスト」タブで他のユーザーも閲覧できます（非公開アカウントの場合はフォロワーのみ）。
-						{:else}
-							<strong>非公開:</strong>
-							マイリストは自分だけが閲覧できます。プロフィールのタブにはロック表示が付きます。
+				<!-- 公開設定の切替結果・未保存の案内 -->
+				{#if visibilityState === 'failed' || unsavedCount > 0}
+					<div class="mylist-notices">
+						{#if visibilityState === 'failed'}
+							<p class="visibility-error" role="alert">
+								<span class="i-lucide-triangle-alert" aria-hidden="true"></span>
+								<span>
+									{visibilityError ?? VISIBILITY_ERROR_MESSAGE}。現在は「{isPublic ? '公開中' : '非公開'}」のままです。
+								</span>
+								<button type="button" class="retry-btn" onclick={retryVisibility}>再試行</button>
+							</p>
 						{/if}
-					</p>
-					{#if visibilityState === 'failed'}
-						<p class="visibility-error" role="alert">
-							<span class="i-lucide-triangle-alert" aria-hidden="true"></span>
-							<span>
-								{visibilityError ?? VISIBILITY_ERROR_MESSAGE}。現在は「{isPublic ? '公開中' : '非公開'}」のままです。
-							</span>
-							<button type="button" class="retry-btn" onclick={retryVisibility}>再試行</button>
-						</p>
-					{/if}
-					{#if unsavedCount > 0}
-						<p class="unsaved-note" role="status" aria-live="polite">
-							未保存の変更が{unsavedCount}件あります。画面を移動すると保存待ちの変更は自動で送信されますが、失敗した変更は再試行するまで保存されません。
-						</p>
-					{/if}
-				</div>
+						{#if unsavedCount > 0}
+							<p class="unsaved-note" role="status" aria-live="polite">
+								未保存の変更が{unsavedCount}件あります。画面を移動すると保存待ちの変更は自動で送信されますが、失敗した変更は再試行するまで保存されません。
+							</p>
+						{/if}
+					</div>
+				{/if}
 			</header>
 
 			<!-- モバイル用ステータスタブバー -->
@@ -539,6 +538,13 @@ $effect(() => {
 
 .mylist-header {
 	margin-bottom: 28px;
+}
+
+/* ほかの画面（通知など）と同じく、ページの見出しを出す（#438） */
+.mylist-title {
+	font-size: 1.25rem;
+	font-weight: 700;
+	margin: 0 0 12px;
 }
 
 .mylist-title-row {
@@ -648,28 +654,18 @@ $effect(() => {
 	}
 }
 
-/* 公開範囲の説明・切替結果・未保存の案内 */
+/* 公開設定の切替結果・未保存の案内 */
 .mylist-notices {
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
 }
 
-.visibility-help,
 .visibility-error,
 .unsaved-note {
 	margin: 0;
 	font-size: 0.78rem;
 	line-height: 1.5;
-}
-
-.visibility-help {
-	color: var(--color-text-muted);
-}
-
-.visibility-help strong {
-	color: var(--color-text);
-	font-weight: 600;
 }
 
 .visibility-error {

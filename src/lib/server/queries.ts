@@ -8,6 +8,7 @@ import { signPostImageUrls } from "$lib/server/post-image-signing";
 import { buildPostCardSelect, POST_CW_ANIME_SELECT } from "$lib/server/post-selects";
 import type { Database } from "$lib/supabase/database.types";
 import { isEpisodeSuppressedSnapshot } from "$lib/syobocal-episodes";
+import { compareTimelineDesc, type TimelineCursor, timelineCursorFilter } from "$lib/timeline-cursor";
 import type {
 	Anime,
 	AnimeExchangeItem,
@@ -20,6 +21,7 @@ import type {
 	BroadcastRoomOverride,
 	BroadcastRoomSession,
 	BroadcastStatus,
+	EpisodeRoom,
 	Event,
 	EventMute,
 	Notification,
@@ -28,6 +30,7 @@ import type {
 	RawPost,
 	ReactionType,
 	ReactionUser,
+	RoomAiring,
 	UserAnimeEntry,
 } from "$lib/types";
 import { toPost } from "$lib/types";
@@ -124,10 +127,7 @@ function normalizeAverageScore(score: number | null | undefined, count: number |
 /** 投稿一覧系クエリで共通の SELECT 句 */
 const POST_LIST_SELECT = buildPostCardSelect();
 
-export type TimelineCursor = {
-	createdAt: string;
-	id: string;
-};
+export type { TimelineCursor };
 
 /**
  * 次ページのカーソルを、ミュート除外の前に DB から受け取った行から作る。
@@ -145,6 +145,40 @@ export function buildTimelineNextCursor<T>(
 	return last ? toCursor(last) : null;
 }
 
+type TimelinePageResult<T> = { posts: T[]; error: unknown | null; nextCursor: TimelineCursor | null };
+
+/**
+ * ミュート・ブロックで間引いた結果が少ないページは、続きを取り足して埋める。
+ * 50 件取っても数件しか残らないと、ミュートの多い人ほど「さらに読み込む」を何度も押すことになるため。
+ * 取り足すのは minVisible 件に届くまで、最大 maxExtraFetches 回。続きの目印は最後に取った分のものを返す。
+ * 取り足しで失敗したら、それまでの分と、その時点の目印を返す（続きは次のページで読める）。
+ */
+export async function fillTimelinePage<T extends { id: string }>(
+	fetchPage: (cursor: TimelineCursor | undefined) => Promise<TimelinePageResult<T>>,
+	cursor: TimelineCursor | undefined,
+	options: { minVisible?: number; maxExtraFetches?: number } = {},
+): Promise<TimelinePageResult<T>> {
+	const { minVisible = 20, maxExtraFetches = 3 } = options;
+	const first = await fetchPage(cursor);
+	if (first.error) return first;
+
+	const posts = [...first.posts];
+	const seen = new Set(posts.map((post) => post.id));
+	let nextCursor = first.nextCursor;
+	for (let extra = 0; extra < maxExtraFetches && posts.length < minVisible && nextCursor; extra++) {
+		const more = await fetchPage(nextCursor);
+		if (more.error) break;
+		// フォロー中タブでは、同じ投稿が別の人のリポストとして続きに出ることがある
+		for (const post of more.posts) {
+			if (seen.has(post.id)) continue;
+			seen.add(post.id);
+			posts.push(post);
+		}
+		nextCursor = more.nextCursor;
+	}
+	return { posts, error: null, nextCursor };
+}
+
 /**
  * リクエストスコープのミュート設定キャッシュ。
  *
@@ -153,7 +187,7 @@ export function buildTimelineNextCursor<T>(
  * WeakMap なのでクライアントが GC されればエントリも自動的に解放される。
  *
  * ユーザーのミュート設定はリクエスト内で不変なのに、`enrichPostsWithCounts` が
- * 複数回呼ばれるルート（プロフィール: posts / imagePosts / likes で最大3回）では
+ * 複数回呼ばれるルート（続きを取り足す fillTimelinePage、リポスト元の読み込みなど）では
  * 毎回 muted_words / anime_mutes を取得し直していた。これをメモ化して 1 回にまとめる。
  */
 const muteSettingsCache = new WeakMap<
@@ -390,9 +424,12 @@ export async function enrichPostsWithCounts(
 			!blockedUserIds.has(post.user_id) &&
 			!(mutedWords.length > 0 && containsMutedWord(post, mutedWords)) &&
 			!(
-				post.broadcast_room_session_id &&
-				post.anime_id != null &&
-				mutedRoomAnimeIds.has(String(post.anime_id))
+				// 実況の投稿（放送枠、または放送時間外の話数ルーム）は作品ミュートで隠す
+				(
+					(post.broadcast_room_session_id || post.episode_room_id) &&
+					post.anime_id != null &&
+					mutedRoomAnimeIds.has(String(post.anime_id))
+				)
 			) &&
 			!(post.event_id != null && mutedEventIds.has(String(post.event_id))),
 	);
@@ -421,7 +458,7 @@ export async function enrichPostsWithCounts(
 		}
 	}
 
-	// 投稿画像は非公開（149）。ここに来るのは RLS で読めた投稿だけなので、その投稿者自身の画像にだけ
+	// 投稿画像は非公開（166）。ここに来るのは RLS で読めた投稿だけなので、その投稿者自身の画像にだけ
 	// 期限付きの URL を発行して差し替える（#316）。他人の画像を参照している投稿からは出さない
 	const imageUrls = visibleRawPosts.flatMap((raw) =>
 		(raw.image_urls ?? []).filter((url) => isOwnPostImage(url, raw.user_id)),
@@ -971,8 +1008,277 @@ export async function getEventRoomPosts(
 	});
 }
 
-/** ルームの種類と ID（放送ルームはセッション ID、イベントルームはイベント ID） */
-export type RoomRef = { kind: "broadcast" | "event"; id: string };
+const EPISODE_ROOM_SELECT = "id, anime_id, kind, episode_number, special_key, label, opens_at, merged_into";
+
+/** 話数ルームを話数で引く（153）。無ければ null */
+export async function getEpisodeRoomByNumber(
+	supabase: SupabaseClient<Database>,
+	animeId: number,
+	episodeNumber: number,
+): Promise<EpisodeRoom | null> {
+	const { data, error } = await supabase
+		.from("episode_rooms")
+		.select(EPISODE_ROOM_SELECT)
+		.eq("anime_id", animeId)
+		.eq("kind", "episode")
+		.eq("episode_number", episodeNumber)
+		.maybeSingle();
+	if (error) console.error("getEpisodeRoomByNumber error:", error);
+	return (data as EpisodeRoom | null) ?? null;
+}
+
+/** 管理タブ用: 作品の話数ルーム（開く時刻の固定・統合を含む）。話数順、特番は後ろ */
+export async function getAdminEpisodeRooms(supabase: SupabaseClient<Database>, animeId: number) {
+	// 長期作品で 1000 件を超えても切れないよう、安定した順でページを追って全件を取る
+	const PAGE = 1000;
+	const rooms: {
+		id: string;
+		kind: string;
+		episode_number: number | null;
+		special_key: string | null;
+		label: string | null;
+		opens_at: string | null;
+		opens_at_locked: boolean;
+		merged_into: string | null;
+	}[] = [];
+	for (let from = 0; ; from += PAGE) {
+		const { data, error } = await supabase
+			.from("episode_rooms")
+			.select("id, kind, episode_number, special_key, label, opens_at, opens_at_locked, merged_into")
+			.eq("anime_id", animeId)
+			.order("kind", { ascending: true })
+			.order("episode_number", { ascending: true, nullsFirst: false })
+			.order("id", { ascending: true })
+			.range(from, from + PAGE - 1);
+		if (error) {
+			console.error("getAdminEpisodeRooms error:", error);
+			break;
+		}
+		rooms.push(...(data ?? []));
+		if ((data ?? []).length < PAGE) break;
+	}
+	return rooms;
+}
+
+/** 特番ルーム（kind = special）を URL の名前で引く。無ければ null */
+export async function getSpecialEpisodeRoom(
+	supabase: SupabaseClient<Database>,
+	animeId: number,
+	specialKey: string,
+): Promise<EpisodeRoom | null> {
+	if (!/^[a-z0-9][a-z0-9-]{0,39}$/.test(specialKey)) return null;
+	const { data, error } = await supabase
+		.from("episode_rooms")
+		.select(EPISODE_ROOM_SELECT)
+		.eq("anime_id", animeId)
+		.eq("kind", "special")
+		.eq("special_key", specialKey)
+		.maybeSingle();
+	if (error) console.error("getSpecialEpisodeRoom error:", error);
+	return (data as EpisodeRoom | null) ?? null;
+}
+
+export async function getEpisodeRoomById(
+	supabase: SupabaseClient<Database>,
+	roomId: string,
+): Promise<EpisodeRoom | null> {
+	const { data, error } = await supabase
+		.from("episode_rooms")
+		.select(EPISODE_ROOM_SELECT)
+		.eq("id", roomId)
+		.maybeSingle();
+	if (error) console.error("getEpisodeRoomById error:", error);
+	return (data as EpisodeRoom | null) ?? null;
+}
+
+/**
+ * 放送枠のない話数ルームを、開いてよければ作って返す（153 の ensure_episode_room）。
+ * 開けない話（未放送・範囲外・話数のない作品）は null。
+ */
+export async function ensureEpisodeRoom(
+	supabase: SupabaseClient<Database>,
+	animeId: number,
+	episodeNumber: number,
+): Promise<EpisodeRoom | null> {
+	const { data: roomId, error } = await supabase.rpc("ensure_episode_room", {
+		p_anime_id: animeId,
+		p_episode_number: episodeNumber,
+	});
+	if (error) {
+		console.error("ensureEpisodeRoom error:", error);
+		return null;
+	}
+	return roomId ? getEpisodeRoomById(supabase, roomId) : null;
+}
+
+/** 管理者が休止にした放送日（broadcast_room_overrides.is_cancelled）。話数ルームの放送枠から除く（156） */
+async function getCancelledRoomDates(supabase: SupabaseClient<Database>, animeId: number): Promise<Set<string> | null> {
+	const { data, error } = await supabase
+		.from("broadcast_room_overrides")
+		.select("room_date")
+		.eq("anime_id", animeId)
+		.eq("is_cancelled", true);
+	if (error) {
+		console.error("getCancelledRoomDates error:", error);
+		return null;
+	}
+	return new Set((data ?? []).map((row) => row.room_date));
+}
+
+/** 話数ルームの放送枠（初回・再放送・イベント）を開場の早い順に */
+export async function getEpisodeRoomAirings(supabase: SupabaseClient<Database>, roomId: string): Promise<RoomAiring[]> {
+	const { data, error } = await supabase
+		.from("broadcast_room_sessions")
+		.select(
+			"id, anime_id, room_date, scheduled_at, duration_minutes, posting_opens_at, posting_closes_at, airing_kind, source_channel_name",
+		)
+		.eq("episode_room_id", roomId)
+		.order("posting_opens_at", { ascending: true });
+	if (error) {
+		console.error("getEpisodeRoomAirings error:", error);
+		return [];
+	}
+	// 休止した放送日の枠は見出し・放送中の判定に使わない。休止日を取れなければ、休止した枠を放送中と
+	// 見せないよう放送枠を出さない（見出しと「ライブ開始地点へ」が出ないだけで、投稿は読める）
+	const animeId = data?.[0]?.anime_id;
+	const cancelled = animeId != null ? await getCancelledRoomDates(supabase, animeId) : new Set<string>();
+	if (!cancelled) return [];
+	return (data ?? [])
+		.filter((row) => !cancelled.has(row.room_date))
+		.map((row) => ({
+			id: row.id,
+			scheduled_at: row.scheduled_at,
+			ends_at: new Date(Date.parse(row.scheduled_at) + row.duration_minutes * 60_000).toISOString(),
+			posting_opens_at: row.posting_opens_at,
+			posting_closes_at: row.posting_closes_at,
+			airing_kind: (["first", "rerun", "event"].includes(row.airing_kind)
+				? row.airing_kind
+				: "first") as RoomAiring["airing_kind"],
+			channel_name: row.source_channel_name,
+		}));
+}
+
+/** 作品ページの話数ルーム一覧用の放送枠（どの放送日の枠かも持つ） */
+export type EpisodeRoomLogAiring = RoomAiring & { episode_room_id: string; room_date: string };
+
+/**
+ * 作品ページの話数ルーム一覧用: 作品の話数ルームと、それぞれの放送枠。
+ * PostgREST の上限（本番 1000 件）で切れないよう、どちらもページを追って全件を取る。
+ * 取得に失敗したら null（呼び出し側は今の日付のルームログに戻す。空データと区別するため）
+ */
+export async function getEpisodeRoomLog(
+	supabase: SupabaseClient<Database>,
+	animeId: number,
+): Promise<{ rooms: EpisodeRoom[]; airings: EpisodeRoomLogAiring[]; unroomedDates: string[] } | null> {
+	const PAGE = 1000;
+	const rooms: EpisodeRoom[] = [];
+	for (let from = 0; ; from += PAGE) {
+		const { data, error } = await supabase
+			.from("episode_rooms")
+			.select(EPISODE_ROOM_SELECT)
+			.eq("anime_id", animeId)
+			.order("id")
+			.range(from, from + PAGE - 1);
+		if (error) {
+			console.error("getEpisodeRoomLog rooms error:", error);
+			return null;
+		}
+		rooms.push(...((data ?? []) as EpisodeRoom[]));
+		if ((data ?? []).length < PAGE) break;
+	}
+	const airings: EpisodeRoomLogAiring[] = [];
+	for (let from = 0; ; from += PAGE) {
+		const { data, error } = await supabase
+			.from("broadcast_room_sessions")
+			.select(
+				"id, episode_room_id, room_date, scheduled_at, duration_minutes, posting_opens_at, posting_closes_at, airing_kind, source_channel_name",
+			)
+			.eq("anime_id", animeId)
+			.not("episode_room_id", "is", null)
+			.order("id")
+			.range(from, from + PAGE - 1);
+		if (error) {
+			console.error("getEpisodeRoomLog airings error:", error);
+			return null;
+		}
+		for (const row of data ?? []) {
+			if (!row.episode_room_id) continue;
+			airings.push({
+				id: row.id,
+				episode_room_id: row.episode_room_id,
+				room_date: row.room_date,
+				scheduled_at: row.scheduled_at,
+				ends_at: new Date(Date.parse(row.scheduled_at) + row.duration_minutes * 60_000).toISOString(),
+				posting_opens_at: row.posting_opens_at,
+				posting_closes_at: row.posting_closes_at,
+				airing_kind: (["first", "rerun", "event"].includes(row.airing_kind)
+					? row.airing_kind
+					: "first") as RoomAiring["airing_kind"],
+				channel_name: row.source_channel_name,
+			});
+		}
+		if ((data ?? []).length < PAGE) break;
+	}
+	// 話数ルームに入っていない実在の放送枠（話数が付いていない）の放送日。作品ページで日付のルームログとして残す
+	const unroomedDates: string[] = [];
+	for (let from = 0; ; from += PAGE) {
+		const { data, error } = await supabase
+			.from("broadcast_room_sessions")
+			.select("id, room_date")
+			.eq("anime_id", animeId)
+			.eq("room_kind", "episode")
+			.is("episode_room_id", null)
+			.order("id")
+			.range(from, from + PAGE - 1);
+		if (error) {
+			console.error("getEpisodeRoomLog unroomed sessions error:", error);
+			return null;
+		}
+		unroomedDates.push(...(data ?? []).map((row) => row.room_date));
+		if ((data ?? []).length < PAGE) break;
+	}
+	const cancelled = await getCancelledRoomDates(supabase, animeId);
+	if (!cancelled) return null;
+	return {
+		rooms,
+		// 休止した放送日の枠は初回放送日・LIVE の判定に使わない
+		airings: airings.filter((airing) => !cancelled.has(airing.room_date)),
+		unroomedDates: unroomedDates.filter((date) => !cancelled.has(date)),
+	};
+}
+
+/**
+ * 話数ルームの投稿。from = "start" は最初の投稿から古い順に、"latest" は新しい側の limit 件を古い順に返す。
+ * 放送中は最新を、それ以外はルームの最初から読ませる（続きはライブ更新の差分 API が後ろへ読み足す）。
+ */
+export async function getEpisodeRoomPosts(
+	supabase: SupabaseClient<Database>,
+	roomId: string,
+	userId: string | null,
+	options: { limit?: number; from?: "start" | "latest"; since?: string | undefined } = {},
+): Promise<{ posts: Post[]; hasMore: boolean; oldestCursor: TimelineCursor | null }> {
+	const { limit = 100, from = "start", since } = options;
+	// since があれば、その時刻（放送枠の開場など）以降を古い順に
+	const ascending = from === "start" || since != null;
+	let query = supabase.from("posts").select(POST_LIST_SELECT).eq("episode_room_id", roomId).is("parent_id", null);
+	if (since) query = query.gte("created_at", since);
+	const { data: rawPosts } = await query.order("created_at", { ascending }).order("id", { ascending }).limit(limit);
+	const ordered = ascending ? (rawPosts ?? []) : [...(rawPosts ?? [])].reverse();
+	// ルーム内ではそのルームのミュートを適用しない（明示的に入室しているため）
+	const posts = await enrichPostsWithCounts(supabase, ordered as unknown as RawPost[], userId, {
+		includeMutedRoomPosts: true,
+	});
+	// 続きの有無と前へ読み足す境界は、ミュートワード・ブロックで除外する前の取得行で決める（除外で打ち切らない）
+	const oldest = ordered[0] as unknown as RawPost | undefined;
+	return {
+		posts,
+		hasMore: (rawPosts ?? []).length === limit,
+		oldestCursor: oldest ? { createdAt: oldest.created_at, id: oldest.id } : null,
+	};
+}
+
+/** ルームの種類と ID（放送ルームはセッション ID、イベントルームはイベント ID、話数ルームはルーム ID） */
+export type RoomRef = { kind: "broadcast" | "event" | "episode_room"; id: string };
 
 /** 取得済みの境界（created_at と id）より後ろだけに絞る。同じ created_at の投稿を落とさないよう id でも比べる */
 function afterCursorFilter(cursor: TimelineCursor): string {
@@ -994,7 +1300,12 @@ export async function getRoomPostsAfter(
 	limit = 100,
 ): Promise<{ posts: Post[]; nextCursor: TimelineCursor | null; hasMore: boolean } | null> {
 	let query = supabase.from("posts").select(POST_LIST_SELECT).is("parent_id", null);
-	query = room.kind === "event" ? query.eq("event_id", room.id) : query.eq("broadcast_room_session_id", room.id);
+	query =
+		room.kind === "event"
+			? query.eq("event_id", room.id)
+			: room.kind === "episode_room"
+				? query.eq("episode_room_id", room.id)
+				: query.eq("broadcast_room_session_id", room.id);
 	if (cursor) query = query.or(afterCursorFilter(cursor));
 	const { data, error } = await query
 		.order("created_at", { ascending: true })
@@ -1011,6 +1322,49 @@ export async function getRoomPostsAfter(
 	return {
 		posts,
 		nextCursor: last ? { createdAt: last.created_at, id: last.id } : cursor,
+		hasMore: rawPosts.length === limit,
+	};
+}
+
+/** 境界（created_at と id）より前だけに絞る */
+function beforeCursorFilter(cursor: TimelineCursor): string {
+	return `created_at.lt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.lt.${cursor.id})`;
+}
+
+/**
+ * ルームの古い側を、境界（cursor）より前から新しい順に limit 件取り、古い順に並べて返す。
+ * 話数ルームは最新の100件や放送枠の途中から読み始めるので、それより前を読み足すのに使う。
+ * nextCursor は取得した中で最も古い行（次はそれより前を取る）。
+ */
+export async function getRoomPostsBefore(
+	supabase: SupabaseClient<Database>,
+	room: RoomRef,
+	userId: string | null,
+	cursor: TimelineCursor,
+	limit = 100,
+): Promise<{ posts: Post[]; nextCursor: TimelineCursor | null; hasMore: boolean } | null> {
+	let query = supabase.from("posts").select(POST_LIST_SELECT).is("parent_id", null);
+	query =
+		room.kind === "event"
+			? query.eq("event_id", room.id)
+			: room.kind === "episode_room"
+				? query.eq("episode_room_id", room.id)
+				: query.eq("broadcast_room_session_id", room.id);
+	const { data, error } = await query
+		.or(beforeCursorFilter(cursor))
+		.order("created_at", { ascending: false })
+		.order("id", { ascending: false })
+		.limit(limit);
+	if (error) {
+		console.error("getRoomPostsBefore error:", error);
+		return null;
+	}
+	const rawPosts = [...((data ?? []) as unknown as RawPost[])].reverse();
+	const oldest = rawPosts[0];
+	const posts = await enrichPostsWithCounts(supabase, rawPosts, userId, { includeMutedRoomPosts: true });
+	return {
+		posts,
+		nextCursor: oldest ? { createdAt: oldest.created_at, id: oldest.id } : cursor,
 		hasMore: rawPosts.length === limit,
 	};
 }
@@ -1659,24 +2013,6 @@ export async function getFollowingProfiles(
 	return (data ?? []) as ProfileSummary[];
 }
 
-export async function getBookmarkedPosts(supabase: SupabaseClient<Database>, userId: string): Promise<Post[]> {
-	const { data: bookmarkRows } = await supabase
-		.from("bookmarks")
-		.select("post_id")
-		.eq("user_id", userId)
-		.order("created_at", { ascending: false })
-		.limit(50);
-	const postIds = (bookmarkRows ?? []).map((r) => r["post_id"]);
-	if (postIds.length === 0) return [];
-	const { data: rawPosts } = await supabase.from("posts").select(POST_LIST_SELECT).in("id", postIds);
-	// ブックマーク保存順を維持するため postIds の順序に並べ直す
-	const orderMap = new Map(postIds.map((id, i) => [id, i]));
-	const sorted = ((rawPosts ?? []) as unknown as RawPost[]).sort(
-		(a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0),
-	);
-	return enrichPostsWithCounts(supabase, sorted, userId);
-}
-
 type ProfileRepostContext = {
 	id: string;
 	username: string;
@@ -1777,183 +2113,199 @@ export async function getFollowingTimelinePosts(
 	return { posts: await enrichPostsWithCounts(supabase, rawTimelinePosts, currentUserId), error: null, nextCursor };
 }
 
-export async function getTimelinePostsWithReposts(
+/** プロフィールの一覧（投稿・画像・いいね）とブックマークの 1 ページの件数 */
+const LIST_PAGE_SIZE = 50;
+
+type ProfileTimelineCandidate = TimelineCursor & { own: RawPost | null };
+
+/**
+ * 自分の投稿とリポストの 2 つの流れを（時刻, ID）の降順で 1 本にし、先頭 limit 件をこのページにする（#250）。
+ * 続きの目印は、表示から外す前（見えない投稿・自分の投稿のリポストを除く前）の並びの limit 件目。
+ * DB の並びと同じ規則なので、次のページは両方の流れをその目印より前から取り直せば、重複も欠落もない。
+ */
+export function mergeProfileTimelineCandidates(
+	ownPosts: readonly RawPost[],
+	reposts: readonly { post_id: string; created_at: string }[],
+	limit: number,
+): { page: ProfileTimelineCandidate[]; nextCursor: TimelineCursor | null } {
+	const candidates: ProfileTimelineCandidate[] = [
+		...ownPosts.map((post) => ({ createdAt: post.created_at, id: post.id, own: post })),
+		...reposts.map((row) => ({ createdAt: row.created_at, id: row.post_id, own: null })),
+	].sort(compareTimelineDesc);
+	const page = candidates.slice(0, limit);
+	const last = page[page.length - 1];
+	return { page, nextCursor: candidates.length >= limit && last ? { createdAt: last.createdAt, id: last.id } : null };
+}
+
+/** プロフィールの投稿タブの 1 ページ（本人の投稿＋リポスト、返信は含めない） */
+export async function getProfileTimelinePage(
 	supabase: SupabaseClient<Database>,
-	profiles: ProfileRepostContext[],
+	profile: ProfileRepostContext,
 	currentUserId: string | null,
-	options: { limit?: number; select?: string; before?: string; beforeId?: string } = {},
-): Promise<TimelinePostsWithRepostsResult> {
-	if (profiles.length === 0) return { posts: [], error: null };
+	options: { cursor?: TimelineCursor | undefined; limit?: number } = {},
+): Promise<TimelinePageResult<Post>> {
+	const limit = options.limit ?? LIST_PAGE_SIZE;
+	const { cursor } = options;
 
-	const limit = options.limit ?? 50;
-	const select = options.select ?? POST_LIST_SELECT;
-	const profileIds = profiles.map((profile) => profile.id);
-	const firstProfileId = profileIds[0];
-	if (!firstProfileId) return { posts: [], error: null };
-	const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
-
-	const buildProfileFilter = <
-		T extends {
-			eq: (column: string, value: string) => T;
-			in: (column: string, values: string[]) => T;
-			lt: (column: string, value: string) => T;
-			or: (filters: string) => T;
-		},
-	>(
-		query: T,
-		cursorIdColumn: string,
-	) => {
-		let q = profileIds.length === 1 ? query.eq("user_id", firstProfileId) : query.in("user_id", profileIds);
-		if (options.before && options.beforeId) {
-			q = q.or(
-				`created_at.lt.${options.before},and(created_at.eq.${options.before},${cursorIdColumn}.lt.${options.beforeId})`,
-			);
-		} else if (options.before) {
-			q = q.lt("created_at", options.before);
-		}
-		return q;
-	};
-
-	const ownPostsQuery = buildProfileFilter(
-		supabase
-			.from("posts")
-			.select(select)
-			.is("parent_id", null)
-			.order("created_at", { ascending: false })
-			.order("id", { ascending: false })
-			.limit(limit),
-		"id",
-	);
-	const repostRowsQuery = buildProfileFilter(
-		supabase
-			.from("reposts")
-			.select("post_id, user_id, created_at")
-			.order("created_at", { ascending: false })
-			.order("post_id", { ascending: false })
-			.limit(limit),
-		"post_id",
-	);
+	let ownPostsQuery = supabase
+		.from("posts")
+		.select(POST_LIST_SELECT)
+		.eq("user_id", profile.id)
+		.is("parent_id", null)
+		.order("created_at", { ascending: false })
+		.order("id", { ascending: false })
+		.limit(limit);
+	let repostRowsQuery = supabase
+		.from("reposts")
+		.select("post_id, created_at")
+		.eq("user_id", profile.id)
+		.order("created_at", { ascending: false })
+		.order("post_id", { ascending: false })
+		.limit(limit);
+	if (cursor) {
+		ownPostsQuery = ownPostsQuery.or(timelineCursorFilter(cursor, "id"));
+		repostRowsQuery = repostRowsQuery.or(timelineCursorFilter(cursor, "post_id"));
+	}
 
 	const [ownPostsResult, repostRowsResult] = await Promise.all([ownPostsQuery, repostRowsQuery]);
+	if (ownPostsResult.error) return { posts: [], error: ownPostsResult.error, nextCursor: null };
+	if (repostRowsResult.error) return { posts: [], error: repostRowsResult.error, nextCursor: null };
 
-	if (ownPostsResult.error) {
-		return { posts: [], error: ownPostsResult.error };
-	}
-	if (repostRowsResult.error) {
-		return { posts: [], error: repostRowsResult.error };
-	}
+	const { page, nextCursor } = mergeProfileTimelineCandidates(
+		(ownPostsResult.data ?? []) as unknown as RawPost[],
+		repostRowsResult.data ?? [],
+		limit,
+	);
 
-	const ownPosts = (ownPostsResult.data ?? []) as unknown as RawPost[];
-	const ownPostIds = new Set(ownPosts.map((post) => post.id));
-	const repostRows = repostRowsResult.data ?? [];
-	const repostPostIds = [
-		...new Set(
-			repostRows.filter((row) => profiles.length > 1 || !ownPostIds.has(row.post_id)).map((row) => row.post_id),
-		),
-	];
-
+	const repostPostIds = page.filter((item) => item.own === null).map((item) => item.id);
 	const repostedPostsResult =
 		repostPostIds.length > 0
-			? await supabase.from("posts").select(select).in("id", repostPostIds)
+			? await supabase.from("posts").select(POST_LIST_SELECT).in("id", repostPostIds)
 			: { data: [] as unknown[], error: null };
-
-	if (repostedPostsResult.error) {
-		return { posts: [], error: repostedPostsResult.error };
-	}
-
+	if (repostedPostsResult.error) return { posts: [], error: repostedPostsResult.error, nextCursor: null };
 	const repostedPostById = new Map(
 		((repostedPostsResult.data ?? []) as unknown as RawPost[]).map((post) => [post.id, post]),
 	);
 
-	const timelineItems = [
-		...ownPosts.map((post) => ({
-			kind: "post" as const,
-			sortAt: post.created_at,
-			post,
-		})),
-		...repostRows
-			.map((row) => {
-				const post = repostedPostById.get(row.post_id);
-				const repostProfile = profileById.get(row.user_id);
-				if (!post || !repostProfile) return null;
-				return {
-					kind: "repost" as const,
-					sortAt: row.created_at,
-					post,
-					repostedAt: row.created_at,
-					profile: repostProfile,
-				};
-			})
-			.filter(
-				(
-					item,
-				): item is {
-					kind: "repost";
-					sortAt: string;
-					post: RawPost;
-					repostedAt: string;
-					profile: ProfileRepostContext;
-				} => item !== null,
-			),
-	].sort((a, b) => new Date(b.sortAt).getTime() - new Date(a.sortAt).getTime());
-
-	// 同一投稿の重複（自分の投稿 + 他プロフィールによるリポスト等）は先勝ちで除外する
-	const seenPostIds = new Set<string>();
-	const dedupedItems = timelineItems.filter((item) => {
-		if (seenPostIds.has(item.post.id)) return false;
-		seenPostIds.add(item.post.id);
-		return true;
+	const rawTimelinePosts = page.flatMap((item): RawPost[] => {
+		if (item.own) return [{ ...item.own, repost_context: null }];
+		const post = repostedPostById.get(item.id);
+		// 見えない投稿（鍵・非表示・削除）と、自分の投稿のリポスト（元の投稿が自分の時刻に出る）は出さない
+		if (!post || post.user_id === profile.id) return [];
+		return [
+			{
+				...post,
+				repost_context: {
+					user_id: profile.id,
+					username: profile.username,
+					display_name: profile.display_name,
+					avatar_url: profile.avatar_url,
+					created_at: item.createdAt,
+				},
+			},
+		];
 	});
 
-	const rawTimelinePosts = dedupedItems.slice(0, limit).map((item) => ({
-		...item.post,
-		repost_context:
-			item.kind === "repost"
-				? {
-						user_id: item.profile.id,
-						username: item.profile.username,
-						display_name: item.profile.display_name,
-						avatar_url: item.profile.avatar_url,
-						created_at: item.repostedAt,
-					}
-				: null,
-	}));
-
-	return { posts: await enrichPostsWithCounts(supabase, rawTimelinePosts, currentUserId), error: null };
+	return { posts: await enrichPostsWithCounts(supabase, rawTimelinePosts, currentUserId), error: null, nextCursor };
 }
 
-export async function getProfileTimelinePosts(
-	supabase: SupabaseClient<Database>,
-	profile: ProfileRepostContext,
-	currentUserId: string | null,
-	limit = 50,
-): Promise<Post[]> {
-	const result = await getTimelinePostsWithReposts(supabase, [profile], currentUserId, { limit });
-	if (result.error) {
-		console.error("[profile] timeline posts query failed:", result.error);
-	}
-	return result.posts;
-}
-
-export async function getLikedPosts(
+/** プロフィールの画像タブの 1 ページ（本人の画像付きの投稿。返信は含めない）。画像の有無は DB で絞る（#250） */
+export async function getProfileImagePostsPage(
 	supabase: SupabaseClient<Database>,
 	profileId: string,
 	currentUserId: string | null,
-): Promise<Post[]> {
-	const { data: likeRows } = await supabase
-		.from("likes")
-		.select("post_id")
-		.eq("user_id", profileId)
-		.order("created_at", { ascending: false })
-		.limit(50);
-	const postIds = (likeRows ?? []).map((r) => r.post_id);
-	if (postIds.length === 0) return [];
-	const { data: rawPosts } = await supabase
+	options: { cursor?: TimelineCursor | undefined; limit?: number } = {},
+): Promise<TimelinePageResult<Post>> {
+	const limit = options.limit ?? LIST_PAGE_SIZE;
+	let query = supabase
 		.from("posts")
 		.select(POST_LIST_SELECT)
-		.in("id", postIds)
-		.order("created_at", { ascending: false });
-	return enrichPostsWithCounts(supabase, (rawPosts ?? []) as unknown as RawPost[], currentUserId);
+		.eq("user_id", profileId)
+		.is("parent_id", null)
+		.not("image_urls", "is", null)
+		// 空の配列は image_urls=neq.{} で外す（.neq は配列の値を {} に書き出さないので filter で渡す）
+		.filter("image_urls", "neq", "{}")
+		.order("created_at", { ascending: false })
+		.order("id", { ascending: false })
+		.limit(limit);
+	if (options.cursor) query = query.or(timelineCursorFilter(options.cursor, "id"));
+
+	const { data, error } = await query;
+	if (error) return { posts: [], error, nextCursor: null };
+	const rows = (data ?? []) as unknown as RawPost[];
+	const nextCursor = buildTimelineNextCursor(rows, limit, (row) => ({ createdAt: row.created_at, id: row.id }));
+	return { posts: await enrichPostsWithCounts(supabase, rows, currentUserId), error: null, nextCursor };
+}
+
+/**
+ * ブックマーク・いいねした投稿の 1 ページ（#243）。ブックマーク・いいねした日時の降順
+ * （投稿の作成日時ではない）。続きの目印もその日時と post_id で作る。
+ */
+async function getReactedPostsPage(
+	supabase: SupabaseClient<Database>,
+	table: "bookmarks" | "likes",
+	ownerId: string,
+	currentUserId: string | null,
+	cursor: TimelineCursor | undefined,
+	limit = LIST_PAGE_SIZE,
+): Promise<TimelinePageResult<Post>> {
+	// bookmarks と likes は同じ形（user_id, post_id, created_at）なので、型は likes として扱う
+	let query = supabase
+		.from(table as "likes")
+		.select("post_id, created_at")
+		.eq("user_id", ownerId)
+		.order("created_at", { ascending: false })
+		.order("post_id", { ascending: false })
+		.limit(limit);
+	if (cursor) query = query.or(timelineCursorFilter(cursor, "post_id"));
+
+	const { data: reactionRows, error } = await query;
+	if (error) return { posts: [], error, nextCursor: null };
+	const rows = reactionRows ?? [];
+	const nextCursor = buildTimelineNextCursor(rows, limit, (row) => ({ createdAt: row.created_at, id: row.post_id }));
+	const postIds = rows.map((row) => row.post_id);
+	if (postIds.length === 0) return { posts: [], error: null, nextCursor };
+
+	const { data: rawPosts, error: postsError } = await supabase
+		.from("posts")
+		.select(POST_LIST_SELECT)
+		.in("id", postIds);
+	if (postsError) return { posts: [], error: postsError, nextCursor: null };
+	// in() は順序を保たないので、ブックマーク・いいねした順に並べ直す（見えない投稿はここで抜ける）
+	const order = new Map(postIds.map((id, index) => [id, index]));
+	const sorted = ((rawPosts ?? []) as unknown as RawPost[]).sort(
+		(a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0),
+	);
+	return { posts: await enrichPostsWithCounts(supabase, sorted, currentUserId), error: null, nextCursor };
+}
+
+/** ブックマークした投稿（本人だけが見る）。見えなくなった投稿で目減りしたページは取り足す */
+export async function getBookmarkedPostsPage(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+	cursor?: TimelineCursor,
+): Promise<TimelinePageResult<Post>> {
+	return fillTimelinePage((next) => getReactedPostsPage(supabase, "bookmarks", userId, userId, next), cursor);
+}
+
+/** いいねした投稿（プロフィールのいいねタブ、本人だけ）。見えなくなった投稿で目減りしたページは取り足す */
+export async function getLikedPostsPage(
+	supabase: SupabaseClient<Database>,
+	profileId: string,
+	currentUserId: string | null,
+	cursor?: TimelineCursor,
+): Promise<TimelinePageResult<Post>> {
+	return fillTimelinePage((next) => getReactedPostsPage(supabase, "likes", profileId, currentUserId, next), cursor);
+}
+
+/** プロフィールの投稿数（読み込んだ件数ではなく、閲覧者に見える本人の投稿の数。返信を含む） */
+export async function getProfilePostCount(supabase: SupabaseClient<Database>, profileId: string): Promise<number> {
+	const { count, error } = await supabase
+		.from("posts")
+		.select("id", { count: "exact", head: true })
+		.eq("user_id", profileId);
+	if (error) console.error("[profile] post count query failed:", error);
+	return count ?? 0;
 }
 
 export async function getPostReactionUsers(
@@ -3411,6 +3763,7 @@ function toAnime(raw: Record<string, unknown>): Anime {
 		cover_source_url: (raw["cover_source_url"] as string | null) ?? null,
 		season: (raw["season"] as string | null) ?? null,
 		episode_count: (raw["episode_count"] as string | null) || null,
+		episode_total: typeof raw["episode_total"] === "number" ? raw["episode_total"] : null,
 		type: (raw["type"] as string | null) ?? null,
 		status: (raw["status"] as string | null) ?? null,
 		computed_broadcast_status: toBroadcastStatus(raw),

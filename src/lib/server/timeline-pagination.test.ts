@@ -1,7 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
 import type { Database } from "$lib/supabase/database.types";
-import { buildTimelineNextCursor, getFollowingTimelinePosts, getHomeTimelinePosts, getRoomPostsAfter } from "./queries";
+import {
+	buildTimelineNextCursor,
+	fillTimelinePage,
+	getFollowingTimelinePosts,
+	getHomeTimelinePosts,
+	getRoomPostsAfter,
+	type TimelineCursor,
+} from "./queries";
 
 type TableResult = { data: unknown; error: { message: string } | null };
 
@@ -253,5 +260,80 @@ describe("getRoomPostsAfter（#320）", () => {
 		const cursor = { createdAt: "2026-09-28T10:05:00.000Z", id: "post-05" };
 		const page = await getRoomPostsAfter(client, { kind: "broadcast", id: "session-1" }, null, cursor, 100);
 		expect(page).toEqual({ posts: [], nextCursor: cursor, hasMore: false });
+	});
+});
+
+describe("fillTimelinePage", () => {
+	const cursorOf = (n: number): TimelineCursor => ({
+		createdAt: `2026-10-17T00:00:${String(n).padStart(2, "0")}Z`,
+		id: `c${n}`,
+	});
+	const postsOf = (...ids: string[]) => ids.map((id) => ({ id }));
+
+	it("ミュートで少なくなったページは、続きを取り足して埋める", async () => {
+		const batches = [
+			{ posts: postsOf("a", "b"), error: null, nextCursor: cursorOf(1) },
+			{ posts: postsOf("c"), error: null, nextCursor: cursorOf(2) },
+			{ posts: postsOf("d", "e"), error: null, nextCursor: cursorOf(3) },
+		];
+		const fetchPage = vi.fn(
+			async (_cursor: TimelineCursor | undefined) =>
+				batches.shift() ?? { posts: [], error: null, nextCursor: null },
+		);
+		const page = await fillTimelinePage(fetchPage, undefined, { minVisible: 4, maxExtraFetches: 3 });
+		expect(page.posts.map((p) => p.id)).toEqual(["a", "b", "c", "d", "e"]);
+		// 取り足しは最後に取った分の目印から続ける
+		expect(fetchPage.mock.calls.map(([cursor]) => cursor)).toEqual([undefined, cursorOf(1), cursorOf(2)]);
+		expect(page.nextCursor).toEqual(cursorOf(3));
+	});
+
+	it("足りていれば取り足さない", async () => {
+		const fetchPage = vi.fn(async () => ({ posts: postsOf("a", "b", "c"), error: null, nextCursor: cursorOf(1) }));
+		const page = await fillTimelinePage(fetchPage, undefined, { minVisible: 3 });
+		expect(fetchPage).toHaveBeenCalledTimes(1);
+		expect(page.nextCursor).toEqual(cursorOf(1));
+	});
+
+	it("続きが無ければ止まり、取り足しは上限の回数まで", async () => {
+		const noMore = vi.fn(async () => ({ posts: postsOf("a"), error: null, nextCursor: null }));
+		expect((await fillTimelinePage(noMore, undefined)).posts).toHaveLength(1);
+		expect(noMore).toHaveBeenCalledTimes(1);
+
+		let n = 0;
+		const endless = vi.fn(async () => ({ posts: [], error: null, nextCursor: cursorOf(++n) }));
+		const page = await fillTimelinePage(endless, undefined, { maxExtraFetches: 3 });
+		expect(endless).toHaveBeenCalledTimes(4);
+		// 全部ミュートでも、続きの目印は残して先へ進めるようにする
+		expect(page).toEqual({ posts: [], error: null, nextCursor: cursorOf(4) });
+	});
+
+	it("同じ投稿（別の人のリポスト）は二重に入れない", async () => {
+		const batches = [
+			{ posts: postsOf("a"), error: null, nextCursor: cursorOf(1) },
+			{ posts: postsOf("a", "b"), error: null, nextCursor: null },
+		];
+		const page = await fillTimelinePage(
+			async () => batches.shift() ?? { posts: [], error: null, nextCursor: null },
+			undefined,
+		);
+		expect(page.posts.map((p) => p.id)).toEqual(["a", "b"]);
+	});
+
+	it("最初の取得の失敗はそのまま返し、取り足しの失敗ではそこまでの分を返す", async () => {
+		const failFirst = await fillTimelinePage(
+			async () => ({ posts: [], error: new Error("x"), nextCursor: null }),
+			undefined,
+		);
+		expect(failFirst.error).toBeInstanceOf(Error);
+
+		const batches = [
+			{ posts: postsOf("a"), error: null, nextCursor: cursorOf(1) },
+			{ posts: [], error: new Error("y"), nextCursor: null },
+		];
+		const page = await fillTimelinePage(
+			async () => batches.shift() ?? { posts: [], error: null, nextCursor: null },
+			undefined,
+		);
+		expect(page).toEqual({ posts: postsOf("a"), error: null, nextCursor: cursorOf(1) });
 	});
 });

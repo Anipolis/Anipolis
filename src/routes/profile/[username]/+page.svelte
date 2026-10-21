@@ -8,12 +8,15 @@ import AnimeStatusSection from "$lib/components/AnimeStatusSection.svelte";
 import PostRow from "$lib/components/PostRow.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
+import { timelineCursorHref } from "$lib/timeline-cursor";
 import type { Anime, AnimeStatus } from "$lib/types";
 import type { PageProps } from "./$types";
 
 let { data, form }: PageProps = $props();
 
-const { profile, posts, imagePosts, isOwn, canViewContent } = $derived(data);
+const { profile, isOwn, canViewContent } = $derived(data);
+// 開いているタブ（投稿・画像・いいね）の一覧。サーバーは開いているタブの分だけを読む（#250）
+const listPosts = $derived(data.listPosts);
 const displayName = $derived(profile.display_name ?? profile.username);
 const profileSocialImage = $derived(profile.header_url ?? profile.avatar_url);
 
@@ -467,7 +470,7 @@ const grouped = $derived(
 					{/if}
 					<div class="profile-stats">
 						<span class="profile-stat">
-							<strong>{posts.length}</strong>
+							<strong>{data.postCount}</strong>
 							<span>投稿</span>
 						</span>
 						<a href="/profile/{profile.username}/followers" class="profile-stat profile-stat--link">
@@ -741,14 +744,17 @@ const grouped = $derived(
 				<div class="empty-state profile-private-state">
 					<p>このアカウントの投稿はフォロワーだけが見ることができます</p>
 				</div>
-			{:else if posts.length === 0}
+			{:else if listPosts.length === 0 && !data.listNextCursor}
 				<div class="empty-state">
 					<p>まだ投稿がありません</p>
 				</div>
 			{:else}
-				{#each posts as post (post.id)}
+				{#each listPosts as post (post.id)}
 					<PostRow {post} currentUserId={data.user?.id ?? null} />
 				{/each}
+				{#if data.listNextCursor}
+					<a href={timelineCursorHref(page.url, data.listNextCursor)} class="load-more-btn">さらに読み込む</a>
+				{/if}
 			{/if}
 		{/if}
 
@@ -758,14 +764,17 @@ const grouped = $derived(
 				<div class="empty-state profile-private-state">
 					<p>このアカウントの画像投稿はフォロワーだけが見ることができます</p>
 				</div>
-			{:else if imagePosts.length === 0}
+			{:else if listPosts.length === 0 && !data.listNextCursor}
 				<div class="empty-state">
 					<p>画像付きの投稿がありません</p>
 				</div>
 			{:else}
-				{#each imagePosts as post (post.id)}
+				{#each listPosts as post (post.id)}
 					<PostRow {post} currentUserId={data.user?.id ?? null} />
 				{/each}
+				{#if data.listNextCursor}
+					<a href={timelineCursorHref(page.url, data.listNextCursor)} class="load-more-btn">さらに読み込む</a>
+				{/if}
 			{/if}
 		{/if}
 
@@ -824,14 +833,17 @@ const grouped = $derived(
 				<div class="empty-state profile-private-state">
 					<p>他のユーザーのいいねは表示できません</p>
 				</div>
-			{:else if data.likedPosts.length === 0}
+			{:else if listPosts.length === 0 && !data.listNextCursor}
 				<div class="empty-state">
 					<p>いいねした投稿がありません</p>
 				</div>
 			{:else}
-				{#each data.likedPosts as post (post.id)}
+				{#each listPosts as post (post.id)}
 					<PostRow {post} currentUserId={data.user?.id ?? null} />
 				{/each}
+				{#if data.listNextCursor}
+					<a href={timelineCursorHref(page.url, data.listNextCursor)} class="load-more-btn">さらに読み込む</a>
+				{/if}
 			{/if}
 		{/if}
 	</main>
@@ -842,6 +854,20 @@ const grouped = $derived(
 </div>
 
 <style>
+.load-more-btn {
+	display: block;
+	padding: 14px 16px;
+	text-align: center;
+	font-size: 0.9rem;
+	font-weight: 500;
+	color: var(--color-accent);
+	text-decoration: none;
+	border-top: 1px solid var(--color-border);
+	transition: background 0.12s;
+}
+.load-more-btn:hover {
+	background: color-mix(in srgb, var(--color-accent) 6%, transparent);
+}
 .profile-stat--link {
 	text-decoration: none;
 	color: inherit;
@@ -924,6 +950,9 @@ const grouped = $derived(
 	display: flex;
 	border-bottom: 1px solid var(--color-border);
 	margin: 16px 0 0;
+	/* 入りきらない幅では横スクロールで見せる（タブの文字は折り返さない、#429） */
+	overflow-x: auto;
+	scrollbar-width: none;
 }
 
 .profile-tab {
@@ -940,6 +969,14 @@ const grouped = $derived(
 	display: flex;
 	align-items: center;
 	gap: 6px;
+	flex-shrink: 0;
+	white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+	.profile-tab {
+		padding: 10px 12px;
+	}
 }
 
 .profile-tab:hover {

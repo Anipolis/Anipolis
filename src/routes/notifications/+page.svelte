@@ -1,5 +1,6 @@
 <script lang="ts">
 import { untrack } from "svelte";
+import InfoTip from "$lib/components/InfoTip.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
@@ -102,7 +103,14 @@ function emptyMessage(tab: TabId): string {
 <div class="page-container">
 	<main class="feed-column notifications-column">
 		<header class="notifications-header">
-			<h1>通知</h1>
+			<h1 class="with-info-tip">
+				通知
+				<InfoTip label="通知のタブ">
+					<p>通常: いいね・リポスト・返信・メンション・フォロー・作品のおすすめ・トレードの成立</p>
+					<p>ルーム: カレンダーでベルを付けた番組が始まる前のお知らせ</p>
+					<p>マイリスト: フォロー中の人が作品をマイリストに入れたお知らせ</p>
+				</InfoTip>
+			</h1>
 		</header>
 
 		<nav class="notif-tab-bar" aria-label="通知カテゴリ">

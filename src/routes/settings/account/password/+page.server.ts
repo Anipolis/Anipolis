@@ -1,4 +1,4 @@
-import { fail, redirect } from "@sveltejs/kit";
+import { fail } from "@sveltejs/kit";
 import { hasPasswordProvider } from "$lib/server/auth";
 import {
 	isInvalidNonceError,
@@ -7,13 +7,14 @@ import {
 	normalizeNonce,
 } from "$lib/server/password-change";
 import { isRateLimited } from "$lib/server/rate-limit";
+import { redirectToLogin } from "$lib/server/require-login";
 import type { Actions, PageServerLoad } from "./$types";
 
 const MIN_PASSWORD_LENGTH = 6;
 
-export const load: PageServerLoad = async ({ locals: { safeGetSession } }) => {
+export const load: PageServerLoad = async ({ url, locals: { safeGetSession } }) => {
 	const { session, user } = await safeGetSession();
-	if (!user) redirect(303, "/");
+	if (!user) redirectToLogin(url);
 
 	return { hasEmailProvider: hasPasswordProvider(user, session) };
 };

@@ -7,15 +7,11 @@ import {
 	validateExchangeSubjectiveTags,
 } from "$lib/exchange-tags";
 import { isPostImageUsable } from "$lib/post-image-lifetime";
+import { ownedPostImagePath } from "$lib/post-image-url";
 import { fetchOAuthAvatar } from "$lib/server/oauth-avatar";
 import { getEvent, isAdminUser, USERNAME_HELD_ERROR_MESSAGE, USERNAME_HELD_USER_MESSAGE } from "$lib/server/queries";
 import { createServiceRoleClient } from "$lib/server/supabase-admin";
-import {
-	MULTIPART_OVERHEAD_BYTES,
-	publicUrlToStoragePath,
-	readFormDataWithLimit,
-	validateImageBuffer,
-} from "$lib/server/upload";
+import { MULTIPART_OVERHEAD_BYTES, readFormDataWithLimit, validateImageBuffer } from "$lib/server/upload";
 import type { Database, Json } from "$lib/supabase/database.types";
 import type { AnimeExchangeShare, AnimeStatus, BroadcastRoomMuteDuration } from "$lib/types";
 import { eventScheduledAtIsoFromBroadcastInput } from "$lib/utils/event-time";
@@ -256,6 +252,7 @@ export async function insertPostWithHashtags(
 	cwAnimeId: string | null = null,
 	additionalHashtags: string[] = [],
 	eventId: string | null = null,
+	episodeRoomId: string | null = null,
 ) {
 	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
 	if (moderationFailure) return moderationFailure;
@@ -271,8 +268,9 @@ export async function insertPostWithHashtags(
 		return fail(400, { message: `画像は${MAX_POST_IMAGES}枚まで添付できます` });
 	}
 	for (const imageUrl of imageUrls) {
-		const storagePath = typeof imageUrl === "string" ? publicUrlToStoragePath(imageUrl, "post-images") : null;
-		if (!storagePath?.startsWith(`${userId}/`)) {
+		// デコード後のパスで <自分の id>/<ファイル名> の形かを見る（%2e%2e で他人のフォルダを指させない。#235）
+		const storagePath = typeof imageUrl === "string" ? ownedPostImagePath(imageUrl, userId) : null;
+		if (!storagePath) {
 			return fail(400, { message: "添付画像のURLが不正です" });
 		}
 		// 投稿していない画像の使用期限（アップロードから7日）。過ぎた画像は回収されうるので受け付けない（#330）
@@ -302,6 +300,8 @@ export async function insertPostWithHashtags(
 		quoted_post_id: quotedPostId || null,
 		broadcast_room_session_id: broadcastRoomSessionId,
 		event_id: eventId,
+		// 話数ルーム（153）。放送枠の時間内なら DB のトリガーが放送枠も補う
+		episode_room_id: episodeRoomId,
 	};
 	const postPayload = exchangeShare ? { ...basePost, exchange_share: exchangeShare as unknown as Json } : basePost;
 
@@ -367,15 +367,23 @@ export async function deletePostAction(request: Request, supabase: SupabaseClien
 
 	if (error) return fail(500, { message: "削除に失敗しました" });
 
-	await removePostImages(supabase, post?.image_urls ?? []);
+	await removePostImages(supabase, post?.image_urls ?? [], userId);
 
 	return { deleted: true };
 }
 
-/** 投稿に添付されていた画像をストレージから削除する（ベストエフォート） */
-async function removePostImages(supabase: SupabaseClient<Database>, imageUrls: string[]): Promise<void> {
+/**
+ * 投稿に添付されていた画像をストレージから削除する（ベストエフォート）。
+ * 消すのは投稿者自身のフォルダの画像だけ（#235）。管理者削除は service role で動くので、
+ * 投稿に他人の画像の URL が入っていても、その画像を巻き込んで消さないよう投稿者と照らし合わせる。
+ */
+async function removePostImages(
+	supabase: SupabaseClient<Database>,
+	imageUrls: string[],
+	ownerId: string,
+): Promise<void> {
 	const paths = imageUrls
-		.map((url) => publicUrlToStoragePath(url, "post-images"))
+		.map((url) => ownedPostImagePath(url, ownerId))
 		.filter((path): path is string => path !== null);
 	if (paths.length === 0) return;
 	const { error } = await supabase.storage.from("post-images").remove(paths);
@@ -676,13 +684,13 @@ export async function adminDeletePostAction(request: Request, supabase: Supabase
 	if (!postId) return fail(400, { message: "投稿IDが不正です" });
 
 	// 添付画像のクリーンアップ用に削除前へ控える
-	const { data: post } = await supabase.from("posts").select("image_urls").eq("id", postId).maybeSingle();
+	const { data: post } = await supabase.from("posts").select("image_urls, user_id").eq("id", postId).maybeSingle();
 
 	const { error } = await supabase.from("posts").delete().eq("id", postId);
 	if (error) return fail(500, { message: "投稿の削除に失敗しました" });
 
 	// 他ユーザーのフォルダはストレージ RLS で消せないため service role で削除する
-	await removePostImages(createServiceRoleClient(), post?.image_urls ?? []);
+	if (post) await removePostImages(createServiceRoleClient(), post.image_urls ?? [], post.user_id);
 
 	await supabase.from("admin_audit_logs").insert({
 		admin_id: adminId,
