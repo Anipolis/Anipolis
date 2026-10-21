@@ -31,7 +31,8 @@ jobs:
       - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          # Node.js の版はリポジトリ直下の .node-version で決める（Cloudflare Pages のビルドも同じファイルを読む）
+          # Node.js の版はリポジトリ直下の .node-version で決める（Cloudflare Pages のビルドも同じファイルを読む）。
+          # メジャー版だけを書き、その中の最新（セキュリティ修正の入った版）を使う
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
