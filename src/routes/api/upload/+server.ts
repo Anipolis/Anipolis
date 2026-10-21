@@ -1,12 +1,8 @@
 import { error, json } from "@sveltejs/kit";
+import { ownedPostImagePath } from "$lib/post-image-url";
 import { requireAccountCanWrite } from "$lib/server/actions";
 import { createServiceRoleClient } from "$lib/server/supabase-admin";
-import {
-	MULTIPART_OVERHEAD_BYTES,
-	publicUrlToStoragePath,
-	readFormDataWithLimit,
-	validateImageBuffer,
-} from "$lib/server/upload";
+import { MULTIPART_OVERHEAD_BYTES, readFormDataWithLimit, validateImageBuffer } from "$lib/server/upload";
 import type { RequestHandler } from "./$types";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
@@ -63,8 +59,8 @@ export const DELETE: RequestHandler = async ({ request, locals: { supabase, safe
 
 	const body = (await request.json().catch(() => null)) as { url?: unknown } | null;
 	const url = typeof body?.url === "string" ? body.url : null;
-	const path = url ? publicUrlToStoragePath(url, "post-images") : null;
-	if (!url || !path?.startsWith(`${user.id}/`)) error(400, "画像のURLが不正です");
+	const path = url ? ownedPostImagePath(url, user.id) : null;
+	if (!url || !path) error(400, "画像のURLが不正です");
 
 	const { data: usedBy, error: referenceError } = await createServiceRoleClient()
 		.from("posts")
