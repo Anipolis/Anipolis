@@ -279,7 +279,7 @@ async function handlePasskeyLogin(): Promise<void> {
 
 				<form
 					method="POST"
-					action="?/discord"
+					action="?/discord&next={encodeURIComponent(next)}"
 					class="auth-oauth-form"
 					onsubmit={(event) => startOAuth('discord', event)}
 				>
@@ -327,7 +327,7 @@ async function handlePasskeyLogin(): Promise<void> {
 					{#each [{ kind: 'discord', label: 'Discord' }, { kind: 'google', label: 'Google' }, { kind: 'twitter', label: 'X' }] as provider (provider.kind)}
 						<form
 							method="POST"
-							action="?/{provider.kind}"
+							action="?/{provider.kind}&next={encodeURIComponent(next)}"
 							class="auth-oauth-form"
 							onsubmit={(event) => startOAuth(provider.kind as SubmitKind, event)}
 						>
@@ -349,7 +349,7 @@ async function handlePasskeyLogin(): Promise<void> {
 				{#if activeMode === 'login'}
 					<form
 						method="POST"
-						action="?/login"
+						action="?/login&next={encodeURIComponent(next)}"
 						class="auth-form"
 						novalidate
 						use:enhance={enhanceAuth('login')}
@@ -391,7 +391,7 @@ async function handlePasskeyLogin(): Promise<void> {
 				{:else}
 					<form
 						method="POST"
-						action="?/register"
+						action="?/register&next={encodeURIComponent(next)}"
 						class="auth-form"
 						novalidate
 						use:enhance={enhanceAuth('register')}
