@@ -112,7 +112,7 @@ export function planEpisodeRoomBackfill(
 			(slot?.start !== null && slot?.start === slot?.end ? (slot?.start ?? null) : null);
 		if (number !== null) numberByDate.set(date, number);
 	}
-	fillBracketedGaps(sessions, cancelledDates, numberByDate);
+	fillBracketedGaps(sessions, cancelledDates, overrides, numberByDate);
 	// 別の日の、話数の付いた枠（しょぼい由来など）が使っている話数。推定と重なったら推定のほうを疑う
 	const numberedElsewhere = new Map<number, string>();
 	for (const session of sessions) {
@@ -159,23 +159,28 @@ export function planEpisodeRoomBackfill(
  * 推定（buildBroadcastEpisodeLog）は最初のアンカーより前を逆算するだけで、アンカーとアンカーの間の穴は埋めない。
  * 話数が疑わしいとして話数を空にした本編の回は、たいてい話数の分かる回に挟まれているので、ここで埋める。
  * 前後を話数の分かる回に挟まれた「話数の無い回」の並びが、話数の差とちょうど同じ数のときだけ順に振る
- * （例: 第2話と第4話の間に 1 回 → 第3話）。休止日と、副題だけの回（特番、話数の疑わしい回を除く）は並びに入れない。
+ * （例: 第2話と第4話の間に 1 回 → 第3話）。休止日と、特番・総集編の回は並びに入れない（話数のカウントも消費しない。
+ * 推定と同じ扱い）。特番・総集編とみなすのは、副題だけの回（話数の疑わしい回を除く）と、管理者の上書きでラベルが
+ * 付いた回・話数のカウントを進めない（episode_count_increment = 0）回。
  * 数が合わない並び（休止の付け忘れ・特番の混入など）は推定しない。numberByDate を書き換える。
  */
 function fillBracketedGaps(
 	sessions: readonly BackfillSession[],
 	cancelledDates: ReadonlySet<string>,
+	overrides: readonly BroadcastRoomOverride[],
 	numberByDate: Map<string, number>,
 ) {
+	const overrideByDate = new Map(overrides.map((override) => [override.room_date, override]));
 	const ordered = sessions
 		.map((session) => ({ session, date: session.room_date.slice(0, 10) }))
 		.filter(({ session, date }) => {
 			if (cancelledDates.has(date)) return false;
-			const labelledSpecial =
-				numberByDate.get(date) === undefined &&
-				session.episode_title !== null &&
-				!session.episode_anomaly_applied;
-			return !labelledSpecial;
+			if (numberByDate.has(date)) return true;
+			const override = overrideByDate.get(date);
+			// 管理者が上書きで特番・総集編にした回は、副題の有無や話数の疑わしさに関係なく番号を振らない
+			if (override?.episode_label?.trim() || override?.episode_count_increment === 0) return false;
+			// 副題だけの回は特番（話数が疑わしいだけの本編の回は除く）
+			return !(session.episode_title !== null && !session.episode_anomaly_applied);
 		})
 		.sort((a, b) => a.date.localeCompare(b.date));
 

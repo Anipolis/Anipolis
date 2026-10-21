@@ -182,4 +182,32 @@ describe("planEpisodeRoomBackfill（#484）", () => {
 		expect(plan.assign).toEqual([]);
 		expect(plan.special.map((item) => item.date)).toEqual(["2026-04-23"]);
 	});
+
+	it("管理者が上書きで総集編・特番にした回は、話数の分かる回に挟まれていても番号を振らない（#485 Codex）", () => {
+		// 第2話と第4話の間に、副題なし・上書きのラベル「総集編」の回がある
+		const sessions = weekly(4, { numbered: { 0: 1, 1: 2, 3: 4 }, roomed: [0, 1, 3] });
+		const recap = {
+			...cancelled("2026-04-16"),
+			is_cancelled: false,
+			override_kind: "recap" as const,
+			episode_label: "総集編",
+		};
+		const plan = planEpisodeRoomBackfill(TV, sessions, [recap], NOW);
+		expect(plan.assign).toEqual([]);
+		expect(plan.special.map((item) => item.date)).toEqual(["2026-04-16"]);
+	});
+
+	it("話数のカウントを進めない上書き（episode_count_increment = 0）の回も、穴埋めの対象にしない", () => {
+		const sessions = weekly(4, { numbered: { 0: 1, 1: 2, 3: 4 }, roomed: [0, 1, 3] }).map((session, index) =>
+			index === 2 ? { ...session, episode_title: "副題", episode_anomaly_applied: true } : session,
+		);
+		const noCount = {
+			...cancelled("2026-04-16"),
+			is_cancelled: false,
+			override_kind: "custom" as const,
+			episode_count_increment: 0,
+		};
+		const plan = planEpisodeRoomBackfill(TV, sessions, [noCount], NOW);
+		expect(plan.assign).toEqual([]);
+	});
 });
