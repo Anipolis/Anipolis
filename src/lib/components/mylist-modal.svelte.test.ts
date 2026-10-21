@@ -55,9 +55,19 @@ describe("MyListModal の初期表示", () => {
 		expect(target.querySelector<HTMLInputElement>("input[name='score']")?.value).toBe("8");
 	});
 
-	it("未登録なら視聴予定を選択状態にする", () => {
+	it("未登録ならどのステータスも選ばず、選ぶまで保存できない", () => {
 		const target = renderModal({ open: true, entry: null });
+		const save = () => target.querySelector<HTMLButtonElement>("button.save-button");
+		expect(pressedStatus(target)).toBeUndefined();
+		expect(target.querySelector<HTMLInputElement>("input[name='status']")?.value).toBe("");
+		expect(save()?.disabled).toBe(true);
+		expect(target.querySelector(".status-hint")?.textContent).toBe("視聴ステータスを選んでください");
+
+		target.querySelector<HTMLButtonElement>(".status-grid button[data-status='plan_to_watch']")?.click();
+		flushSync();
 		expect(pressedStatus(target)).toBe("plan_to_watch");
+		expect(save()?.disabled).toBe(false);
+		expect(target.querySelector(".status-hint")).toBeNull();
 	});
 
 	it("開いている間は選び直したステータスを登録内容で上書きしない", () => {
