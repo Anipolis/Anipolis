@@ -1,7 +1,8 @@
 import { redirect } from "@sveltejs/kit";
 import { env } from "$env/dynamic/private";
+import { admitWithInviteCode } from "$lib/server/beta-admission";
 import { grantBetaAccess, isBetaGateEnabled, isBetaMember, verifyGuildMembership } from "$lib/server/discord";
-import { clearInviteCodeCookie, getInviteCodeCookie, redeemInviteCode } from "$lib/server/invites";
+import { getInviteCodeCookie } from "$lib/server/invites";
 import { PASSWORD_RESET_PATH } from "$lib/utils/password-reset";
 import { sanitizeInternalRedirect } from "$lib/utils/url";
 import type { RequestHandler } from "./$types";
@@ -17,6 +18,19 @@ import type { RequestHandler } from "./$types";
  * hooks のゲートは遷移を弾くだけでログアウトはさせず、セッションが残ると
  * 「ログインできてしまう」状態になるため、明示的に signOut する。
  */
+/**
+ * ログインに失敗したときの戻り先。理由は URL から来る値なので、英小文字・数字・_ の短い符号だけを通す。
+ * 遷移先（next）も引き継ぎ、やり直したときに元の画面へ戻れるようにする
+ */
+function oauthFailurePath(reason: string | null | undefined, next: string): string {
+	const params = new URLSearchParams({
+		error: "oauth_failed",
+		reason: reason && /^[a-z0-9_]{1,40}$/.test(reason) ? reason : "unknown",
+	});
+	if (next !== "/") params.set("next", next);
+	return `/auth?${params}`;
+}
+
 export const GET: RequestHandler = async ({ url, cookies, locals: { supabase } }) => {
 	// パスワード再設定リンク（type=recovery）は専用ページで検証する。
 	// ここで交換すると β ゲート未通過ユーザーの signOut が挟まり再設定できなくなるため、
@@ -28,10 +42,26 @@ export const GET: RequestHandler = async ({ url, cookies, locals: { supabase } }
 	const code = url.searchParams.get("code");
 	const safeNext = sanitizeInternalRedirect(url.searchParams.get("next"));
 
+	// プロバイダー（X など）や Supabase でログインが失敗すると、code の代わりに error が付いて戻ってくる。
+	// 黙ってトップへ戻すと理由が分からないので、ログに残して /auth に理由を出す
+	const providerError = url.searchParams.get("error");
+	if (providerError) {
+		const errorCode = url.searchParams.get("error_code");
+		console.error("OAuth callback returned an error:", {
+			error: providerError,
+			errorCode,
+			description: url.searchParams.get("error_description"),
+		});
+		redirect(303, oauthFailurePath(errorCode ?? providerError, safeNext));
+	}
+
 	if (!code) redirect(303, "/");
 
 	const { error } = await supabase.auth.exchangeCodeForSession(code);
-	if (error) redirect(303, "/");
+	if (error) {
+		console.error("OAuth code exchange failed:", error);
+		redirect(303, oauthFailurePath(error.code ?? "exchange_failed", safeNext));
+	}
 
 	const {
 		data: { user },
@@ -79,25 +109,11 @@ export const GET: RequestHandler = async ({ url, cookies, locals: { supabase } }
 	// ゲート無効時は招待コードを無駄に消費しないようスキップする。
 	if (isBetaGateEnabled() && !betaGranted) {
 		const inviteCode = getInviteCodeCookie(cookies);
-		if (inviteCode) {
-			const redeemResult = await redeemInviteCode(supabase, inviteCode);
-			if (redeemResult.success) {
-				const { error: grantError } = await grantBetaAccess(user.id);
-				if (grantError) {
-					// 償還は user_id 単位で冪等（再ログインで再試行すれば付与だけやり直せる）
-					console.error("grantBetaAccess failed after invite redemption:", { userId: user.id });
-					errorCode = "grant_failed";
-				} else {
-					betaGranted = true;
-					clearInviteCodeCookie(cookies);
-				}
-			} else {
-				errorCode = redeemResult.detail === "INVITE_EXHAUSTED" ? "invite_exhausted" : "invalid_invite";
-				// 無効・失効が確定したコードを残すと、再ログインのたびに同じエラーを踏む
-				clearInviteCodeCookie(cookies);
-			}
-		} else if (!discordIdentity) {
-			errorCode = "invite_required";
+		// Discord で入ってきてコードも無い場合は「サーバー未参加」（not_member）のまま
+		if (inviteCode || !discordIdentity) {
+			const admission = await admitWithInviteCode(supabase, cookies, user.id, inviteCode);
+			if (admission.granted) betaGranted = true;
+			else errorCode = admission.errorCode;
 		}
 	}
 

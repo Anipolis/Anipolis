@@ -79,6 +79,10 @@ export const load: PageServerLoad = async ({ url, cookies, locals: { supabase, s
 		inviteCodeValid,
 		passkeyEnabled: isPasskeyEnabled(),
 		error: url.searchParams.get("error"),
+		// OAuth の失敗理由（/auth/callback が付ける）。URL から来るので符号の形のものだけ見せる
+		errorReason: /^[a-z0-9_]{1,40}$/.test(url.searchParams.get("reason") ?? "")
+			? url.searchParams.get("reason")
+			: null,
 		// 退会完了後のリダイレクト先（/settings/account/delete）
 		accountDeleted: url.searchParams.get("deleted") === "1",
 	};
@@ -265,6 +269,8 @@ export const actions: Actions = {
 				data: {
 					user_name: username,
 					full_name: displayName || username,
+					// 確認のリンクを別のブラウザで開いても招待コードを使えるよう、アカウントにも残す（/auth/confirm）
+					...(isBetaGateEnabled() && inviteCodeInput ? { invite_code: inviteCodeInput } : {}),
 				},
 			},
 		});
