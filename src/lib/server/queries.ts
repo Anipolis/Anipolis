@@ -8,6 +8,7 @@ import { signPostImageUrls } from "$lib/server/post-image-signing";
 import { buildPostCardSelect, POST_CW_ANIME_SELECT } from "$lib/server/post-selects";
 import type { Database } from "$lib/supabase/database.types";
 import { isEpisodeSuppressedSnapshot } from "$lib/syobocal-episodes";
+import { compareTimelineDesc, type TimelineCursor, timelineCursorFilter } from "$lib/timeline-cursor";
 import type {
 	Anime,
 	AnimeExchangeItem,
@@ -126,10 +127,7 @@ function normalizeAverageScore(score: number | null | undefined, count: number |
 /** 投稿一覧系クエリで共通の SELECT 句 */
 const POST_LIST_SELECT = buildPostCardSelect();
 
-export type TimelineCursor = {
-	createdAt: string;
-	id: string;
-};
+export type { TimelineCursor };
 
 /**
  * 次ページのカーソルを、ミュート除外の前に DB から受け取った行から作る。
@@ -189,7 +187,7 @@ export async function fillTimelinePage<T extends { id: string }>(
  * WeakMap なのでクライアントが GC されればエントリも自動的に解放される。
  *
  * ユーザーのミュート設定はリクエスト内で不変なのに、`enrichPostsWithCounts` が
- * 複数回呼ばれるルート（プロフィール: posts / imagePosts / likes で最大3回）では
+ * 複数回呼ばれるルート（続きを取り足す fillTimelinePage、リポスト元の読み込みなど）では
  * 毎回 muted_words / anime_mutes を取得し直していた。これをメモ化して 1 回にまとめる。
  */
 const muteSettingsCache = new WeakMap<
@@ -2015,24 +2013,6 @@ export async function getFollowingProfiles(
 	return (data ?? []) as ProfileSummary[];
 }
 
-export async function getBookmarkedPosts(supabase: SupabaseClient<Database>, userId: string): Promise<Post[]> {
-	const { data: bookmarkRows } = await supabase
-		.from("bookmarks")
-		.select("post_id")
-		.eq("user_id", userId)
-		.order("created_at", { ascending: false })
-		.limit(50);
-	const postIds = (bookmarkRows ?? []).map((r) => r["post_id"]);
-	if (postIds.length === 0) return [];
-	const { data: rawPosts } = await supabase.from("posts").select(POST_LIST_SELECT).in("id", postIds);
-	// ブックマーク保存順を維持するため postIds の順序に並べ直す
-	const orderMap = new Map(postIds.map((id, i) => [id, i]));
-	const sorted = ((rawPosts ?? []) as unknown as RawPost[]).sort(
-		(a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0),
-	);
-	return enrichPostsWithCounts(supabase, sorted, userId);
-}
-
 type ProfileRepostContext = {
 	id: string;
 	username: string;
@@ -2133,183 +2113,199 @@ export async function getFollowingTimelinePosts(
 	return { posts: await enrichPostsWithCounts(supabase, rawTimelinePosts, currentUserId), error: null, nextCursor };
 }
 
-export async function getTimelinePostsWithReposts(
+/** プロフィールの一覧（投稿・画像・いいね）とブックマークの 1 ページの件数 */
+const LIST_PAGE_SIZE = 50;
+
+type ProfileTimelineCandidate = TimelineCursor & { own: RawPost | null };
+
+/**
+ * 自分の投稿とリポストの 2 つの流れを（時刻, ID）の降順で 1 本にし、先頭 limit 件をこのページにする（#250）。
+ * 続きの目印は、表示から外す前（見えない投稿・自分の投稿のリポストを除く前）の並びの limit 件目。
+ * DB の並びと同じ規則なので、次のページは両方の流れをその目印より前から取り直せば、重複も欠落もない。
+ */
+export function mergeProfileTimelineCandidates(
+	ownPosts: readonly RawPost[],
+	reposts: readonly { post_id: string; created_at: string }[],
+	limit: number,
+): { page: ProfileTimelineCandidate[]; nextCursor: TimelineCursor | null } {
+	const candidates: ProfileTimelineCandidate[] = [
+		...ownPosts.map((post) => ({ createdAt: post.created_at, id: post.id, own: post })),
+		...reposts.map((row) => ({ createdAt: row.created_at, id: row.post_id, own: null })),
+	].sort(compareTimelineDesc);
+	const page = candidates.slice(0, limit);
+	const last = page[page.length - 1];
+	return { page, nextCursor: candidates.length >= limit && last ? { createdAt: last.createdAt, id: last.id } : null };
+}
+
+/** プロフィールの投稿タブの 1 ページ（本人の投稿＋リポスト、返信は含めない） */
+export async function getProfileTimelinePage(
 	supabase: SupabaseClient<Database>,
-	profiles: ProfileRepostContext[],
+	profile: ProfileRepostContext,
 	currentUserId: string | null,
-	options: { limit?: number; select?: string; before?: string; beforeId?: string } = {},
-): Promise<TimelinePostsWithRepostsResult> {
-	if (profiles.length === 0) return { posts: [], error: null };
+	options: { cursor?: TimelineCursor | undefined; limit?: number } = {},
+): Promise<TimelinePageResult<Post>> {
+	const limit = options.limit ?? LIST_PAGE_SIZE;
+	const { cursor } = options;
 
-	const limit = options.limit ?? 50;
-	const select = options.select ?? POST_LIST_SELECT;
-	const profileIds = profiles.map((profile) => profile.id);
-	const firstProfileId = profileIds[0];
-	if (!firstProfileId) return { posts: [], error: null };
-	const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
-
-	const buildProfileFilter = <
-		T extends {
-			eq: (column: string, value: string) => T;
-			in: (column: string, values: string[]) => T;
-			lt: (column: string, value: string) => T;
-			or: (filters: string) => T;
-		},
-	>(
-		query: T,
-		cursorIdColumn: string,
-	) => {
-		let q = profileIds.length === 1 ? query.eq("user_id", firstProfileId) : query.in("user_id", profileIds);
-		if (options.before && options.beforeId) {
-			q = q.or(
-				`created_at.lt.${options.before},and(created_at.eq.${options.before},${cursorIdColumn}.lt.${options.beforeId})`,
-			);
-		} else if (options.before) {
-			q = q.lt("created_at", options.before);
-		}
-		return q;
-	};
-
-	const ownPostsQuery = buildProfileFilter(
-		supabase
-			.from("posts")
-			.select(select)
-			.is("parent_id", null)
-			.order("created_at", { ascending: false })
-			.order("id", { ascending: false })
-			.limit(limit),
-		"id",
-	);
-	const repostRowsQuery = buildProfileFilter(
-		supabase
-			.from("reposts")
-			.select("post_id, user_id, created_at")
-			.order("created_at", { ascending: false })
-			.order("post_id", { ascending: false })
-			.limit(limit),
-		"post_id",
-	);
+	let ownPostsQuery = supabase
+		.from("posts")
+		.select(POST_LIST_SELECT)
+		.eq("user_id", profile.id)
+		.is("parent_id", null)
+		.order("created_at", { ascending: false })
+		.order("id", { ascending: false })
+		.limit(limit);
+	let repostRowsQuery = supabase
+		.from("reposts")
+		.select("post_id, created_at")
+		.eq("user_id", profile.id)
+		.order("created_at", { ascending: false })
+		.order("post_id", { ascending: false })
+		.limit(limit);
+	if (cursor) {
+		ownPostsQuery = ownPostsQuery.or(timelineCursorFilter(cursor, "id"));
+		repostRowsQuery = repostRowsQuery.or(timelineCursorFilter(cursor, "post_id"));
+	}
 
 	const [ownPostsResult, repostRowsResult] = await Promise.all([ownPostsQuery, repostRowsQuery]);
+	if (ownPostsResult.error) return { posts: [], error: ownPostsResult.error, nextCursor: null };
+	if (repostRowsResult.error) return { posts: [], error: repostRowsResult.error, nextCursor: null };
 
-	if (ownPostsResult.error) {
-		return { posts: [], error: ownPostsResult.error };
-	}
-	if (repostRowsResult.error) {
-		return { posts: [], error: repostRowsResult.error };
-	}
+	const { page, nextCursor } = mergeProfileTimelineCandidates(
+		(ownPostsResult.data ?? []) as unknown as RawPost[],
+		repostRowsResult.data ?? [],
+		limit,
+	);
 
-	const ownPosts = (ownPostsResult.data ?? []) as unknown as RawPost[];
-	const ownPostIds = new Set(ownPosts.map((post) => post.id));
-	const repostRows = repostRowsResult.data ?? [];
-	const repostPostIds = [
-		...new Set(
-			repostRows.filter((row) => profiles.length > 1 || !ownPostIds.has(row.post_id)).map((row) => row.post_id),
-		),
-	];
-
+	const repostPostIds = page.filter((item) => item.own === null).map((item) => item.id);
 	const repostedPostsResult =
 		repostPostIds.length > 0
-			? await supabase.from("posts").select(select).in("id", repostPostIds)
+			? await supabase.from("posts").select(POST_LIST_SELECT).in("id", repostPostIds)
 			: { data: [] as unknown[], error: null };
-
-	if (repostedPostsResult.error) {
-		return { posts: [], error: repostedPostsResult.error };
-	}
-
+	if (repostedPostsResult.error) return { posts: [], error: repostedPostsResult.error, nextCursor: null };
 	const repostedPostById = new Map(
 		((repostedPostsResult.data ?? []) as unknown as RawPost[]).map((post) => [post.id, post]),
 	);
 
-	const timelineItems = [
-		...ownPosts.map((post) => ({
-			kind: "post" as const,
-			sortAt: post.created_at,
-			post,
-		})),
-		...repostRows
-			.map((row) => {
-				const post = repostedPostById.get(row.post_id);
-				const repostProfile = profileById.get(row.user_id);
-				if (!post || !repostProfile) return null;
-				return {
-					kind: "repost" as const,
-					sortAt: row.created_at,
-					post,
-					repostedAt: row.created_at,
-					profile: repostProfile,
-				};
-			})
-			.filter(
-				(
-					item,
-				): item is {
-					kind: "repost";
-					sortAt: string;
-					post: RawPost;
-					repostedAt: string;
-					profile: ProfileRepostContext;
-				} => item !== null,
-			),
-	].sort((a, b) => new Date(b.sortAt).getTime() - new Date(a.sortAt).getTime());
-
-	// 同一投稿の重複（自分の投稿 + 他プロフィールによるリポスト等）は先勝ちで除外する
-	const seenPostIds = new Set<string>();
-	const dedupedItems = timelineItems.filter((item) => {
-		if (seenPostIds.has(item.post.id)) return false;
-		seenPostIds.add(item.post.id);
-		return true;
+	const rawTimelinePosts = page.flatMap((item): RawPost[] => {
+		if (item.own) return [{ ...item.own, repost_context: null }];
+		const post = repostedPostById.get(item.id);
+		// 見えない投稿（鍵・非表示・削除）と、自分の投稿のリポスト（元の投稿が自分の時刻に出る）は出さない
+		if (!post || post.user_id === profile.id) return [];
+		return [
+			{
+				...post,
+				repost_context: {
+					user_id: profile.id,
+					username: profile.username,
+					display_name: profile.display_name,
+					avatar_url: profile.avatar_url,
+					created_at: item.createdAt,
+				},
+			},
+		];
 	});
 
-	const rawTimelinePosts = dedupedItems.slice(0, limit).map((item) => ({
-		...item.post,
-		repost_context:
-			item.kind === "repost"
-				? {
-						user_id: item.profile.id,
-						username: item.profile.username,
-						display_name: item.profile.display_name,
-						avatar_url: item.profile.avatar_url,
-						created_at: item.repostedAt,
-					}
-				: null,
-	}));
-
-	return { posts: await enrichPostsWithCounts(supabase, rawTimelinePosts, currentUserId), error: null };
+	return { posts: await enrichPostsWithCounts(supabase, rawTimelinePosts, currentUserId), error: null, nextCursor };
 }
 
-export async function getProfileTimelinePosts(
-	supabase: SupabaseClient<Database>,
-	profile: ProfileRepostContext,
-	currentUserId: string | null,
-	limit = 50,
-): Promise<Post[]> {
-	const result = await getTimelinePostsWithReposts(supabase, [profile], currentUserId, { limit });
-	if (result.error) {
-		console.error("[profile] timeline posts query failed:", result.error);
-	}
-	return result.posts;
-}
-
-export async function getLikedPosts(
+/** プロフィールの画像タブの 1 ページ（本人の画像付きの投稿。返信は含めない）。画像の有無は DB で絞る（#250） */
+export async function getProfileImagePostsPage(
 	supabase: SupabaseClient<Database>,
 	profileId: string,
 	currentUserId: string | null,
-): Promise<Post[]> {
-	const { data: likeRows } = await supabase
-		.from("likes")
-		.select("post_id")
-		.eq("user_id", profileId)
-		.order("created_at", { ascending: false })
-		.limit(50);
-	const postIds = (likeRows ?? []).map((r) => r.post_id);
-	if (postIds.length === 0) return [];
-	const { data: rawPosts } = await supabase
+	options: { cursor?: TimelineCursor | undefined; limit?: number } = {},
+): Promise<TimelinePageResult<Post>> {
+	const limit = options.limit ?? LIST_PAGE_SIZE;
+	let query = supabase
 		.from("posts")
 		.select(POST_LIST_SELECT)
-		.in("id", postIds)
-		.order("created_at", { ascending: false });
-	return enrichPostsWithCounts(supabase, (rawPosts ?? []) as unknown as RawPost[], currentUserId);
+		.eq("user_id", profileId)
+		.is("parent_id", null)
+		.not("image_urls", "is", null)
+		// 空の配列は image_urls=neq.{} で外す（.neq は配列の値を {} に書き出さないので filter で渡す）
+		.filter("image_urls", "neq", "{}")
+		.order("created_at", { ascending: false })
+		.order("id", { ascending: false })
+		.limit(limit);
+	if (options.cursor) query = query.or(timelineCursorFilter(options.cursor, "id"));
+
+	const { data, error } = await query;
+	if (error) return { posts: [], error, nextCursor: null };
+	const rows = (data ?? []) as unknown as RawPost[];
+	const nextCursor = buildTimelineNextCursor(rows, limit, (row) => ({ createdAt: row.created_at, id: row.id }));
+	return { posts: await enrichPostsWithCounts(supabase, rows, currentUserId), error: null, nextCursor };
+}
+
+/**
+ * ブックマーク・いいねした投稿の 1 ページ（#243）。ブックマーク・いいねした日時の降順
+ * （投稿の作成日時ではない）。続きの目印もその日時と post_id で作る。
+ */
+async function getReactedPostsPage(
+	supabase: SupabaseClient<Database>,
+	table: "bookmarks" | "likes",
+	ownerId: string,
+	currentUserId: string | null,
+	cursor: TimelineCursor | undefined,
+	limit = LIST_PAGE_SIZE,
+): Promise<TimelinePageResult<Post>> {
+	// bookmarks と likes は同じ形（user_id, post_id, created_at）なので、型は likes として扱う
+	let query = supabase
+		.from(table as "likes")
+		.select("post_id, created_at")
+		.eq("user_id", ownerId)
+		.order("created_at", { ascending: false })
+		.order("post_id", { ascending: false })
+		.limit(limit);
+	if (cursor) query = query.or(timelineCursorFilter(cursor, "post_id"));
+
+	const { data: reactionRows, error } = await query;
+	if (error) return { posts: [], error, nextCursor: null };
+	const rows = reactionRows ?? [];
+	const nextCursor = buildTimelineNextCursor(rows, limit, (row) => ({ createdAt: row.created_at, id: row.post_id }));
+	const postIds = rows.map((row) => row.post_id);
+	if (postIds.length === 0) return { posts: [], error: null, nextCursor };
+
+	const { data: rawPosts, error: postsError } = await supabase
+		.from("posts")
+		.select(POST_LIST_SELECT)
+		.in("id", postIds);
+	if (postsError) return { posts: [], error: postsError, nextCursor: null };
+	// in() は順序を保たないので、ブックマーク・いいねした順に並べ直す（見えない投稿はここで抜ける）
+	const order = new Map(postIds.map((id, index) => [id, index]));
+	const sorted = ((rawPosts ?? []) as unknown as RawPost[]).sort(
+		(a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0),
+	);
+	return { posts: await enrichPostsWithCounts(supabase, sorted, currentUserId), error: null, nextCursor };
+}
+
+/** ブックマークした投稿（本人だけが見る）。見えなくなった投稿で目減りしたページは取り足す */
+export async function getBookmarkedPostsPage(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+	cursor?: TimelineCursor,
+): Promise<TimelinePageResult<Post>> {
+	return fillTimelinePage((next) => getReactedPostsPage(supabase, "bookmarks", userId, userId, next), cursor);
+}
+
+/** いいねした投稿（プロフィールのいいねタブ、本人だけ）。見えなくなった投稿で目減りしたページは取り足す */
+export async function getLikedPostsPage(
+	supabase: SupabaseClient<Database>,
+	profileId: string,
+	currentUserId: string | null,
+	cursor?: TimelineCursor,
+): Promise<TimelinePageResult<Post>> {
+	return fillTimelinePage((next) => getReactedPostsPage(supabase, "likes", profileId, currentUserId, next), cursor);
+}
+
+/** プロフィールの投稿数（読み込んだ件数ではなく、閲覧者に見える本人の投稿の数。返信を含む） */
+export async function getProfilePostCount(supabase: SupabaseClient<Database>, profileId: string): Promise<number> {
+	const { count, error } = await supabase
+		.from("posts")
+		.select("id", { count: "exact", head: true })
+		.eq("user_id", profileId);
+	if (error) console.error("[profile] post count query failed:", error);
+	return count ?? 0;
 }
 
 export async function getPostReactionUsers(
