@@ -17,7 +17,9 @@ const channel = {
 	on() {
 		return this;
 	},
-	subscribe() {
+	// 本番と同じく、リアルタイムの購読がつながった状態にする（接続状態の表示が出ない普段の見た目）
+	subscribe(callback?: (status: "SUBSCRIBED") => void) {
+		callback?.("SUBSCRIBED");
 		return this;
 	},
 };

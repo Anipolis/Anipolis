@@ -9,6 +9,8 @@ import {
 	type RoomConnectionState,
 	reduceRoomConnection,
 	shouldOfferManualReconnect,
+	shouldShowRoomConnectionStatus,
+	shouldShowRoomLastUpdate,
 } from "./room-connection";
 
 function apply(events: RoomConnectionEvent[], initial = createRoomConnectionState()): RoomConnectionState {
@@ -115,6 +117,24 @@ describe("shouldOfferManualReconnect", () => {
 		expect(shouldOfferManualReconnect("stale")).toBe(true);
 		expect(shouldOfferManualReconnect("failed")).toBe(true);
 		expect(shouldOfferManualReconnect("offline")).toBe(true);
+	});
+});
+
+describe("shouldShowRoomConnectionStatus / shouldShowRoomLastUpdate", () => {
+	it("リアルタイムでつながっている普段は何も出さない", () => {
+		expect(shouldShowRoomConnectionStatus("connected")).toBe(false);
+		expect(shouldShowRoomConnectionStatus("connecting")).toBe(false);
+		for (const phase of ["polling", "reconnecting", "stale", "failed", "offline"] as const) {
+			expect(shouldShowRoomConnectionStatus(phase)).toBe(true);
+		}
+	});
+	it("最終更新は、更新が止まった・失敗した・オフラインのときだけ出す", () => {
+		for (const phase of ["connected", "connecting", "polling", "reconnecting"] as const) {
+			expect(shouldShowRoomLastUpdate(phase)).toBe(false);
+		}
+		for (const phase of ["stale", "failed", "offline"] as const) {
+			expect(shouldShowRoomLastUpdate(phase)).toBe(true);
+		}
 	});
 });
 
