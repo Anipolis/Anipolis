@@ -16,6 +16,8 @@ interface Props {
 }
 let { posts, room, currentUserId = null }: Props = $props();
 let expanded = $state(false);
+// 一度でも開いたか。開くまでは続きの行を作らない
+let opened = $state(false);
 // タイムラインの並び（新しい順）に関係なく、投稿時刻の古い順に並べる
 const chronological = $derived([...posts].sort(comparePostsAsc));
 const first = $derived(chronological[0] as Post);
@@ -27,14 +29,25 @@ const recent = $derived(Date.now() - Date.parse((chronological.at(-1) ?? first).
 <div class="live-run">
 	<!-- 開いたときは、最初の投稿も「○分前」に加えて左端に時刻を出し、続きの行とそろえる -->
 	<PostRow post={first} {currentUserId} joinNext gutterTime={expanded && recent} />
-	{#if expanded}
-		{#each rest as post (post.id)}
-			<!-- ルームは最初の行に出ているので、続きの行では出さない -->
-			<PostRow {post} {currentUserId} joinPrevious joinNext insideRoom gutterTime={recent} />
-		{/each}
+	<!-- 一度開いたら、たたんでも行を破棄せず隠すだけにする。破棄すると続きの行でのいいね・リポスト・ブックマークの結果が開き直したときに消える -->
+	{#if opened}
+		<div hidden={!expanded}>
+			{#each rest as post (post.id)}
+				<!-- ルームは最初の行に出ているので、続きの行では出さない -->
+				<PostRow {post} {currentUserId} joinPrevious joinNext insideRoom gutterTime={recent} />
+			{/each}
+		</div>
 	{/if}
 	<div class="live-run-bar">
-		<button type="button" class="live-run-toggle" aria-expanded={expanded} onclick={() => (expanded = !expanded)}>
+		<button
+			type="button"
+			class="live-run-toggle"
+			aria-expanded={expanded}
+			onclick={() => {
+				expanded = !expanded;
+				opened = true;
+			}}
+		>
 			<span class={expanded ? "i-lucide-chevron-up" : "i-lucide-chevron-down"} aria-hidden="true"></span>
 			<span>{expanded ? "たたむ" : `続きの実況 ${rest.length} 件`}</span>
 		</button>
