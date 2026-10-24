@@ -11,6 +11,9 @@ import { type InviteCodeState, syncInviteCodeState } from "./invite-code";
 
 let { data, form }: PageProps = $props();
 
+// クローズドβのコミュニティへの招待リンク。招待コードが無い人の入口にする
+const DISCORD_INVITE_URL = "https://discord.gg/QxQmg4EEgP";
+
 const activeMode = $derived((form?.mode ?? data.mode) as "login" | "register" | "add_account");
 const next = $derived((form && "next" in form && typeof form.next === "string" ? form.next : data.next) ?? "/");
 let inviteCodeState = $state<InviteCodeState>({ value: "", dirty: false, source: null, linkSource: "" });
@@ -31,6 +34,8 @@ function setInviteCodeInput(value: string): void {
 // クローズドβが有効かつ、まだ有効な招待コードを確認できていない間は
 // 招待コード入力とDiscordの二択のみを表示し、Google/X/メールは隠す。
 const hasInviteAccess = $derived(!data.betaGateEnabled || data.inviteCodeValid);
+// 確認済みの招待コードは入力欄にせず、確認できたことだけを 1 行で示す
+const inviteVerified = $derived(activeMode === "register" && data.betaGateEnabled && data.inviteCodeValid);
 
 // パスキーは登録済みの既存アカウント専用（新規作成はできない）なので、招待コードの有無に関係なく出す
 let passkeyPending = $state(false);
@@ -157,13 +162,21 @@ async function handlePasskeyLogin(): Promise<void> {
 			</h1>
 
 			{#if activeMode !== 'add_account'}
+				{#if data.betaGateEnabled}
+					<!-- 長い説明の代わりに、いまの状況だけをバッジで示す -->
+					<p class="auth-beta-badge">クローズドβ</p>
+				{/if}
 				<div class="auth-tabs" aria-label="認証メニュー">
-					<a href="/auth?mode=login&next={encodeURIComponent(next)}" class:active={activeMode === 'login'}
+					<a
+						href="/auth?mode=login&next={encodeURIComponent(next)}"
+						class:active={activeMode === 'login'}
+						aria-current={activeMode === 'login' ? 'page' : undefined}
 						>ログイン</a
 					>
 					<a
 						href="/auth?mode=register&next={encodeURIComponent(next)}"
 						class:active={activeMode === 'register'}
+						aria-current={activeMode === 'register' ? 'page' : undefined}
 						>アカウント作成</a
 					>
 				</div>
@@ -181,7 +194,12 @@ async function handlePasskeyLogin(): Promise<void> {
 
 			{#if data.error === 'not_member'}
 				<div class="flash-error" role="alert">
-					このサービスは現在、クローズドβテスト中です。Discordサーバーへの参加、または招待コードが必要です。
+					このサービスは現在、クローズドβテスト中です。<a
+						href={DISCORD_INVITE_URL}
+						target="_blank"
+						rel="noopener"
+						>Discordサーバーへの参加</a
+					>、または招待コードが必要です。
 				</div>
 			{:else if data.error === 'invite_required'}
 				<div class="flash-error" role="alert">
@@ -241,20 +259,20 @@ async function handlePasskeyLogin(): Promise<void> {
 					<a href="/" class="btn btn-ghost auth-wide-button" style="text-align:center">キャンセル</a>
 				</form>
 			{:else if activeMode === 'register' && !hasInviteAccess}
-				<p class="auth-info-text">
-					現在はクローズドβです。招待コードを入力するか、Discordサーバーのメンバーとしてログインしてください。
-				</p>
-
+				<!-- 説明文は置かず、入口ごとに小見出しを付けて分ける -->
 				<form
 					method="POST"
 					action="?/applyInvite&mode=register&next={encodeURIComponent(next)}"
 					class="auth-form"
+					aria-labelledby="auth-invite-heading"
 					novalidate
 					use:enhance={enhanceAuth('invite')}
 				>
+					<h2 id="auth-invite-heading" class="auth-section-title">招待コードをお持ちの方</h2>
 					<input type="hidden" name="next" value={next}>
 					<div class="field">
-						<label for="invite-code-gate" class="field-label">招待コード</label>
+						<!-- 小見出しと並ぶと紛らわしいので、ラベルは読み上げ用にだけ残し、画面では入力欄の中に薄く出す -->
+						<label for="invite-code-gate" class="sr-only">招待コード</label>
 						<input
 							id="invite-code-gate"
 							name="invite_code"
@@ -262,16 +280,17 @@ async function handlePasskeyLogin(): Promise<void> {
 							class="field-input"
 							autocomplete="off"
 							bind:value={() => inviteCodeState.value, setInviteCodeInput}
-							placeholder="例: A1B2C3D4E5"
-							aria-describedby="invite-code-gate-hint"
+							placeholder="招待コードを入力"
 							required
 						>
-						<p id="invite-code-gate-hint" class="field-hint">
-							招待してくれた方から届いたコードを入力してください。
-						</p>
 					</div>
-					<button type="submit" class="btn btn-primary auth-wide-button" disabled={submitting !== null}>
-						{submitting === 'invite' ? '確認中...' : '招待コードを確認'}
+					<!-- 空のまま押して空振りしないよう、1 文字以上入るまでは押せない見た目にする -->
+					<button
+						type="submit"
+						class="btn btn-primary auth-wide-button"
+						disabled={submitting !== null || inviteCodeState.value.trim() === ''}
+					>
+						{submitting === 'invite' ? '確認中...' : '次へ'}
 					</button>
 				</form>
 
@@ -281,16 +300,37 @@ async function handlePasskeyLogin(): Promise<void> {
 					method="POST"
 					action="?/discord&next={encodeURIComponent(next)}"
 					class="auth-oauth-form"
+					aria-labelledby="auth-discord-heading"
 					onsubmit={(event) => startOAuth('discord', event)}
 				>
+					<h2 id="auth-discord-heading" class="auth-section-title">Discordサーバーのメンバーの方</h2>
 					<input type="hidden" name="next" value={next}>
 					<input type="hidden" name="invite_code" value={inviteCodeState.value}>
 					<button type="submit" class="btn btn-outline auth-wide-button" disabled={submitting !== null}>
-						{submitting === 'discord' ? 'Discordへ移動中...' : 'Discordサーバーのメンバーとして続ける'}
+						{submitting === 'discord' ? 'Discordへ移動中...' : 'Discordで登録'}
 					</button>
 				</form>
+				<!-- 招待コードもサーバーへの参加も無い人が行き止まりにならないよう、サーバーへの入口を最後に控えめに出す -->
+				<div class="auth-join">
+					<p class="auth-join-title">招待コードをお持ちでない方</p>
+					<p>
+						<a href={DISCORD_INVITE_URL} target="_blank" rel="noopener"
+							>公式Discordサーバーに参加する<span class="i-lucide-external-link" aria-hidden="true"></span
+							><span class="sr-only">（新しいタブで開く）</span></a
+						>
+					</p>
+				</div>
+				<!-- 招待コードを確かめるだけの段階では同意を求めず、アカウントができる Discord の登録にだけ添える -->
+				{@render consent()}
 			{:else}
-				{#if data.betaGateEnabled && (activeMode !== 'login' || (form && 'needInvite' in form && form.needInvite) || ['not_member', 'invite_required', 'invalid_invite', 'invite_exhausted'].includes(data.error ?? ''))}
+				{#if inviteVerified}
+					<div class="auth-invite-verified">
+						<span class="i-lucide-circle-check" aria-hidden="true"></span>
+						<span class="auth-invite-verified-text"
+							>招待コード <strong>{inviteCodeState.value}</strong> を確認しました</span
+						>
+					</div>
+				{:else if data.betaGateEnabled && (activeMode !== 'login' || (form && 'needInvite' in form && form.needInvite) || ['not_member', 'invite_required', 'invalid_invite', 'invite_exhausted'].includes(data.error ?? ''))}
 					<div class="field">
 						<label for="invite-code" class="field-label">招待コード</label>
 						<input
@@ -474,15 +514,18 @@ async function handlePasskeyLogin(): Promise<void> {
 				{/if}
 			{/if}
 
-			{#if activeMode !== 'add_account'}
+			{#snippet consent()}
 				<p class="auth-consent">
-					続行すると、<a href="/terms" target="_blank" rel="noopener">利用規約</a>と<a
+					続行することで、<a href="/terms" target="_blank" rel="noopener">利用規約</a>および<a
 						href="/privacy-policy"
 						target="_blank"
 						rel="noopener"
 						>プライバシーポリシー</a
 					>に同意したものとみなされます。
 				</p>
+			{/snippet}
+			{#if activeMode !== 'add_account' && !(activeMode === 'register' && !hasInviteAccess)}
+				{@render consent()}
 			{/if}
 		</div>
 	</main>
@@ -521,9 +564,16 @@ async function handlePasskeyLogin(): Promise<void> {
 	text-decoration: none;
 }
 
-.auth-tabs a.active {
+.auth-tabs a:not(.active):hover {
 	color: var(--fg);
-	background: var(--surface-hover);
+	background: var(--bg-hover);
+}
+
+/* 選んでいるタブは色付きの背景と枠で示す（未定義の --surface-hover を参照していて背景が付いていなかった） */
+.auth-tabs a.active {
+	color: var(--accent);
+	background: var(--accent-muted);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
 .auth-form,
@@ -567,6 +617,102 @@ async function handlePasskeyLogin(): Promise<void> {
 	color: var(--fg-muted);
 	font-size: 0.88rem;
 	margin: 12px 0 18px;
+}
+
+.auth-beta-badge {
+	display: inline-block;
+	margin: 0;
+	padding: 2px 10px;
+	border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+	border-radius: 999px;
+	background: var(--accent-muted);
+	color: var(--accent);
+	font-size: 0.75rem;
+	font-weight: 700;
+	line-height: 1.6;
+}
+
+.auth-beta-badge + .auth-tabs {
+	margin-top: 12px;
+}
+
+.auth-section-title {
+	margin: 0;
+	color: var(--fg);
+	font-size: 0.85rem;
+	font-weight: 700;
+}
+
+.auth-invite-verified {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 16px;
+	padding: 10px 12px;
+	border: 1px solid color-mix(in srgb, var(--status-watching) 45%, transparent);
+	border-radius: 10px;
+	background: color-mix(in srgb, var(--status-watching) 10%, transparent);
+	color: var(--fg);
+	font-size: 0.85rem;
+}
+
+.auth-invite-verified .i-lucide-circle-check {
+	flex: none;
+	width: 16px;
+	height: 16px;
+	color: var(--status-watching);
+}
+
+.auth-invite-verified-text {
+	flex: 1;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.auth-form .btn-primary:disabled {
+	background: var(--bg-hover);
+	color: var(--fg-muted);
+	box-shadow: none;
+	cursor: not-allowed;
+}
+
+/* 例外的な案内なので、一段薄い背景のカードにしてフォームと分ける */
+.auth-join {
+	margin-top: 24px;
+	padding: 12px 16px;
+	border: 1px solid var(--border);
+	border-radius: 12px;
+	background: var(--bg-hover);
+	color: var(--fg-muted);
+	font-size: 0.8rem;
+	line-height: 1.7;
+	text-align: center;
+}
+
+.auth-join p {
+	margin: 0;
+}
+
+.auth-join-title {
+	font-weight: 700;
+}
+
+.auth-join a {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-weight: 700;
+}
+
+.auth-join a [class^="i-lucide"] {
+	width: 13px;
+	height: 13px;
+}
+
+.auth-join a,
+.flash-error a {
+	color: var(--accent);
+	padding-block: 6px;
 }
 
 .auth-consent {
