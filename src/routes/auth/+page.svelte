@@ -11,6 +11,9 @@ import { type InviteCodeState, syncInviteCodeState } from "./invite-code";
 
 let { data, form }: PageProps = $props();
 
+// クローズドβのコミュニティへの招待リンク。招待コードが無い人の入口にする
+const DISCORD_INVITE_URL = "https://discord.gg/QxQmg4EEgP";
+
 const activeMode = $derived((form?.mode ?? data.mode) as "login" | "register" | "add_account");
 const next = $derived((form && "next" in form && typeof form.next === "string" ? form.next : data.next) ?? "/");
 let inviteCodeState = $state<InviteCodeState>({ value: "", dirty: false, source: null, linkSource: "" });
@@ -185,7 +188,12 @@ async function handlePasskeyLogin(): Promise<void> {
 
 			{#if data.error === 'not_member'}
 				<div class="flash-error" role="alert">
-					このサービスは現在、クローズドβテスト中です。Discordサーバーへの参加、または招待コードが必要です。
+					このサービスは現在、クローズドβテスト中です。<a
+						href={DISCORD_INVITE_URL}
+						target="_blank"
+						rel="noopener"
+						>Discordサーバーへの参加</a
+					>、または招待コードが必要です。
 				</div>
 			{:else if data.error === 'invite_required'}
 				<div class="flash-error" role="alert">
@@ -293,6 +301,12 @@ async function handlePasskeyLogin(): Promise<void> {
 						{submitting === 'discord' ? 'Discordへ移動中...' : 'Discordサーバーのメンバーとして登録'}
 					</button>
 				</form>
+				<!-- 招待コードもサーバーへの参加も無い人が行き止まりにならないよう、サーバーへの入口を出す -->
+				<p class="auth-join-hint">
+					招待コードをお持ちでない方は、<a href={DISCORD_INVITE_URL} target="_blank" rel="noopener"
+						>Discordサーバーに参加</a
+					>すると、上のボタンから登録できます。
+				</p>
 				<!-- 招待コードを確かめるだけの段階では同意を求めず、アカウントができる Discord の登録にだけ添える -->
 				{@render consent()}
 			{:else}
@@ -583,6 +597,20 @@ async function handlePasskeyLogin(): Promise<void> {
 	color: var(--fg-muted);
 	font-size: 0.88rem;
 	margin: 12px 0 18px;
+}
+
+.auth-join-hint {
+	margin: 12px 0 0;
+	color: var(--fg-muted);
+	font-size: 0.8rem;
+	line-height: 1.6;
+	text-align: center;
+}
+
+.auth-join-hint a,
+.flash-error a {
+	color: var(--accent);
+	padding-block: 6px;
 }
 
 .auth-consent {
