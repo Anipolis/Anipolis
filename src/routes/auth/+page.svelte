@@ -282,7 +282,12 @@ async function handlePasskeyLogin(): Promise<void> {
 							required
 						>
 					</div>
-					<button type="submit" class="btn btn-primary auth-wide-button" disabled={submitting !== null}>
+					<!-- 空のまま押して空振りしないよう、1 文字以上入るまでは押せない見た目にする -->
+					<button
+						type="submit"
+						class="btn btn-primary auth-wide-button"
+						disabled={submitting !== null || inviteCodeState.value.trim() === ''}
+					>
 						{submitting === 'invite' ? '確認中...' : '次へ'}
 					</button>
 				</form>
@@ -629,10 +634,20 @@ async function handlePasskeyLogin(): Promise<void> {
 	font-weight: 700;
 }
 
+.auth-form .btn-primary:disabled {
+	background: var(--bg-hover);
+	color: var(--fg-muted);
+	box-shadow: none;
+	cursor: not-allowed;
+}
+
+/* 例外的な案内なので、一段薄い背景のカードにしてフォームと分ける */
 .auth-join {
 	margin-top: 24px;
-	padding-top: 16px;
-	border-top: 1px solid var(--border);
+	padding: 12px 16px;
+	border: 1px solid var(--border);
+	border-radius: 12px;
+	background: var(--bg-hover);
 	color: var(--fg-muted);
 	font-size: 0.8rem;
 	line-height: 1.7;
