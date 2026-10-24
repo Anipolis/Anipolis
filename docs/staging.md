@@ -65,11 +65,11 @@ migration を 001 から順に流しても本番と同じにはならない（�
 
 1. 本番から書き出す（読み取りだけ）
    - 定義: `pnpm exec supabase db dump --linked -f prod_schema.sql`
-   - `auth.users` のトリガーと Storage のポリシーは上の書き出しに入らないので、`-s auth` と `-s storage` でも書き出し、`CREATE TRIGGER "on_auth_user_created"` と `CREATE POLICY ... ON "storage"."objects"` の行だけを取り出す
+   - Storage のポリシーは上の書き出しに入らないので、`-s storage` でも書き出し、`CREATE POLICY ... ON "storage"."objects"` の行だけを取り出す（`auth.users` のトリガー `on_auth_user_created` は 176 で消したので、本番に残っていないことだけ確かめる）
    - 作品データ: `pnpm exec supabase db dump --linked --data-only --use-copy -s public -x public.<利用者のテーブル> ... -f catalog.sql`
      （写すのは anime・anime_*（exchange_entries / mutes / recommendations を除く）・studio_*・syobocal_*・broadcast_room_sessions・broadcast_room_overrides・episode_rooms・app_config。利用者のテーブルはすべて `-x` で外す）
-2. ステージングの public スキーマの中身・`on_auth_user_created`・Storage のポリシー・`supabase_migrations.schema_migrations` を消す
-3. 書き出した定義 → トリガーとポリシー → 作品データの順に `psql "$STAGING_DB_URL" -f ...` で流す（psql は `public.ecr.aws/supabase/postgres` のイメージに入っている）
+2. ステージングの public スキーマの中身・Storage のポリシー・`supabase_migrations.schema_migrations` を消す
+3. 書き出した定義 → ポリシー → 作品データの順に `psql "$STAGING_DB_URL" -f ...` で流す（psql は `public.ecr.aws/supabase/postgres` のイメージに入っている）
 4. 作品データの中で利用者を指す列を空にする（`anime_copyright_reviews.resolved_by`、`broadcast_room_sessions.event_id`）
 5. バケットを本番と同じ設定で作る（公開・容量上限・形式。Storage API の `createBucket`）
 6. 定期実行を登録する（`dispatch-broadcast-notifications` 毎分、`purge-released-usernames` 毎日 4:17。中身は migration 070・150）

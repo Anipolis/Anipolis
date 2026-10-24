@@ -17,8 +17,13 @@ function getMetadataString(metadata: Record<string, unknown>, key: string): stri
 	return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+// 初期値の案。メールアドレスの @ より前（taro.yamada など）も使えるよう、使えない文字を除いて 20 文字に切る
 function getUsernameCandidate(value: string | null | undefined): string {
-	const candidate = (value ?? "").trim().toLowerCase();
+	const candidate = (value ?? "")
+		.trim()
+		.toLowerCase()
+		.replace(/[^a-z0-9_]/g, "")
+		.slice(0, 20);
 	return USERNAME_PATTERN.test(candidate) ? candidate : "";
 }
 
