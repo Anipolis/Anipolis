@@ -57,12 +57,7 @@ async function focusAfterFailure(kind: SubmitKind): Promise<void> {
 		const email = byId("login-email");
 		target = email && !email.value ? email : loginPasswordInput;
 	} else if (kind === "register") {
-		target =
-			field === "username"
-				? byId("register-username")
-				: field === "password"
-					? registerPasswordInput
-					: byId("register-email");
+		target = field === "password" ? registerPasswordInput : byId("register-email");
 	} else if (kind === "invite") {
 		target = byId("invite-code-gate");
 	} else if (kind === "add_account") {
@@ -458,43 +453,7 @@ async function handlePasskeyLogin(): Promise<void> {
 							>
 						</div>
 
-						<div class="field">
-							<label for="register-username" class="field-label">ユーザー名</label>
-							<div class="field-input-prefix">
-								<span class="prefix">@</span>
-								<input
-									id="register-username"
-									name="username"
-									type="text"
-									class="field-input has-prefix"
-									class:field-error={form && 'field' in form && form.field === 'username'}
-									autocomplete="username"
-									pattern={"[a-zA-Z0-9_]{3,20}"}
-									maxlength="20"
-									defaultValue={form?.mode === 'register' ? form.username ?? '' : ''}
-									required
-								>
-							</div>
-							{#if form && 'field' in form && form.field === 'username'}
-								<p class="field-error-msg">{form.message}</p>
-							{:else}
-								<p class="field-hint">3〜20文字の半角英数字とアンダースコアが使えます。</p>
-							{/if}
-						</div>
-
-						<div class="field">
-							<label for="register-display-name" class="field-label">表示名</label>
-							<input
-								id="register-display-name"
-								name="display_name"
-								type="text"
-								class="field-input"
-								maxlength="50"
-								defaultValue={form?.mode === 'register' ? form.display_name ?? '' : ''}
-								placeholder="あとから変更できます"
-							>
-						</div>
-
+						<!-- ユーザー名・表示名・アイコンは登録後の初期設定画面で決める（176） -->
 						<div class="field">
 							<label for="register-password" class="field-label">パスワード</label>
 							<PasswordInput

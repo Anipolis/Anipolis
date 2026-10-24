@@ -11,7 +11,6 @@ import {
 } from "$lib/server/invites";
 import { getExtraAccounts, setExtraAccounts } from "$lib/server/multi-account";
 import { isPasskeyEnabled } from "$lib/server/passkey";
-import { isUsernameAvailable } from "$lib/server/queries";
 import { getClientKey, isRateLimited } from "$lib/server/rate-limit";
 import { createServiceRoleClient } from "$lib/server/supabase-admin";
 import { sanitizeInternalRedirect } from "$lib/utils/url";
@@ -21,10 +20,6 @@ const MIN_PASSWORD_LENGTH = 6;
 
 function getSafeNext(raw: FormDataEntryValue | string | null): string {
 	return sanitizeInternalRedirect(typeof raw === "string" ? raw : "/");
-}
-
-function normalizeUsername(value: FormDataEntryValue | null): string {
-	return (typeof value === "string" ? value : "").trim().toLowerCase();
 }
 
 function getInviteCodeInput(form: FormData): string {
@@ -208,27 +203,17 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const email = (form.get("email") as string | null)?.trim() ?? "";
 		const password = (form.get("password") as string | null) ?? "";
-		const username = normalizeUsername(form.get("username"));
-		const displayName = (form.get("display_name") as string | null)?.trim() ?? "";
 		const next = getSafeNext(form.get("next"));
 		const inviteCodeInput = getInviteCodeInput(form) || getInviteCodeCookie(cookies) || "";
 
-		const values = { email, username, display_name: displayName };
+		// ユーザー名・表示名・アイコンは、Discord などで登録した人と同じく登録後の初期設定画面で決める（176）
+		const values = { email };
 
-		if (!email || !password || !username) {
+		if (!email || !password) {
 			return fail(400, {
 				mode: "register",
 				...values,
-				message: "メールアドレス、パスワード、ユーザー名を入力してください",
-			});
-		}
-
-		if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
-			return fail(400, {
-				mode: "register",
-				...values,
-				field: "username",
-				message: "ユーザー名は3〜20文字の半角英数字とアンダースコアのみ使えます",
+				message: "メールアドレスとパスワードを入力してください",
 			});
 		}
 
@@ -262,23 +247,11 @@ export const actions: Actions = {
 			}
 		}
 
-		// 使用中の名前に加えて、退会から30日以内の名前も使えない（#363）
-		if (!(await isUsernameAvailable(supabase, username))) {
-			return fail(400, {
-				mode: "register",
-				...values,
-				field: "username",
-				message: "このユーザー名は使えません（使用中か、退会から30日以内のユーザー名です）",
-			});
-		}
-
 		const { data, error } = await supabase.auth.signUp({
 			email,
 			password,
 			options: {
 				data: {
-					user_name: username,
-					full_name: displayName || username,
 					// 確認のリンクを別のブラウザで開いても招待コードを使えるよう、アカウントにも残す（/auth/confirm）
 					...(isBetaGateEnabled() && inviteCodeInput ? { invite_code: inviteCodeInput } : {}),
 				},

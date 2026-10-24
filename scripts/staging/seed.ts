@@ -93,9 +93,15 @@ async function seed() {
 		});
 		if (error) throw new Error(`${user.username} の作成: ${error.message}`);
 		ids[user.key] = data.user.id;
+		// アカウントを作ってもプロフィールは自動ではできない（176）ので、ここで作る
 		await must(
 			`${user.username} のプロフィール`,
-			admin.from("profiles").update(user.profile).eq("id", data.user.id),
+			admin.from("profiles").insert({
+				id: data.user.id,
+				username: user.username,
+				display_name: user.displayName,
+				...user.profile,
+			}),
 		);
 	}
 
