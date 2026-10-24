@@ -139,7 +139,7 @@ export const ROOM_CONNECTION_PHASE_LABELS: Record<RoomConnectionPhase, string> =
 	connecting: "接続中…",
 	connected: "ライブ接続中",
 	reconnecting: "再接続中…",
-	polling: "定期更新中",
+	polling: "15秒ごとに更新中",
 	stale: "更新が止まっています",
 	failed: "更新に失敗しました",
 	offline: "オフライン",
@@ -158,6 +158,19 @@ export const ROOM_CONNECTION_PHASE_TONES: Record<RoomConnectionPhase, RoomConnec
 /** 手動の再接続ボタンを目立たせるべきフェーズか */
 export function shouldOfferManualReconnect(phase: RoomConnectionPhase): boolean {
 	return phase === "stale" || phase === "failed" || phase === "reconnecting" || phase === "offline";
+}
+
+/**
+ * 接続状態を表示するか。リアルタイムでつながっている（または接続を始めたばかりの）普段は何も出さない。
+ * 「ライブ接続中 / 最終更新 6秒前」のような表示は、リアルタイムなのに遅れているように見えるため
+ */
+export function shouldShowRoomConnectionStatus(phase: RoomConnectionPhase): boolean {
+	return phase !== "connected" && phase !== "connecting";
+}
+
+/** 「最終更新 x秒前」を出すか。更新が止まった・失敗した・オフラインのときだけ、いつから止まっているかの目安に出す */
+export function shouldShowRoomLastUpdate(phase: RoomConnectionPhase): boolean {
+	return phase === "stale" || phase === "failed" || phase === "offline";
 }
 
 /** 「最終更新 x秒前」用の相対時刻表示 */
