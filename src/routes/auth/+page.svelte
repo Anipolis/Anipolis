@@ -651,8 +651,11 @@ async function handlePasskeyLogin(): Promise<void> {
 	height: 18px;
 }
 
-/* X のロゴは黒か白でしか使えないので、ボタンの青ではなく本文の色にする */
+/* X のロゴは黒か白でしか使えないので、ボタンの青ではなく本文の色にする。
+   枠いっぱいに描かれていて他のロゴより大きく見えるため、少し小さくする */
 .auth-provider-icon.i-brand-x {
+	width: 15px;
+	height: 15px;
 	color: var(--fg);
 }
 
