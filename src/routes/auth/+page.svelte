@@ -306,7 +306,11 @@ async function handlePasskeyLogin(): Promise<void> {
 					<h2 id="auth-discord-heading" class="auth-section-title">Discordサーバーのメンバーの方</h2>
 					<input type="hidden" name="next" value={next}>
 					<input type="hidden" name="invite_code" value={inviteCodeState.value}>
-					<button type="submit" class="btn btn-outline auth-wide-button" disabled={submitting !== null}>
+					<button
+						type="submit"
+						class="btn btn-outline auth-wide-button auth-provider-button"
+						disabled={submitting !== null}
+					>
 						<span class="auth-provider-icon i-brand-discord" aria-hidden="true"></span>
 						{submitting === 'discord' ? 'Discordへ移動中...' : 'Discordで登録'}
 					</button>
@@ -376,7 +380,7 @@ async function handlePasskeyLogin(): Promise<void> {
 							<input type="hidden" name="invite_code" value={inviteCodeState.value}>
 							<button
 								type="submit"
-								class="btn btn-outline auth-wide-button"
+								class="btn btn-outline auth-wide-button auth-provider-button"
 								disabled={submitting !== null}
 							>
 								<span class="auth-provider-icon {provider.icon}" aria-hidden="true"></span>
@@ -645,18 +649,33 @@ async function handlePasskeyLogin(): Promise<void> {
 	font-weight: 700;
 }
 
-.auth-provider-icon {
-	flex: none;
-	width: 18px;
-	height: 18px;
+/* 外部サービスのボタンは枠を灰色・文字を本文の色にして、青をメインの操作（ログイン・作成）だけに残す */
+.auth-provider-button {
+	position: relative;
+	border-color: var(--color-border-hover);
+	color: var(--fg);
 }
 
-/* X のロゴは黒か白でしか使えないので、ボタンの青ではなく本文の色にする。
-   枠いっぱいに描かれていて他のロゴより大きく見えるため、少し小さくする */
+.auth-provider-button:hover:not(:disabled) {
+	background: var(--bg-hover);
+	color: var(--fg);
+}
+
+/* ロゴはボタンの左端に固定して縦一列にそろえ、文字だけを中央に置く */
+.auth-provider-icon {
+	position: absolute;
+	top: 50%;
+	left: 16px;
+	width: 18px;
+	height: 18px;
+	transform: translateY(-50%);
+}
+
+/* X のロゴは枠いっぱいに描かれていて他のロゴより大きく見えるため、少し小さくして 18px の幅の中央に置く */
 .auth-provider-icon.i-brand-x {
+	left: 17.5px;
 	width: 15px;
 	height: 15px;
-	color: var(--fg);
 }
 
 .auth-invite-verified {
