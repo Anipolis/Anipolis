@@ -4,13 +4,33 @@ import { makeTimelinePosts } from "$lib/components/fixtures/timeline";
 import PostComposer from "$lib/components/PostComposer.svelte";
 import PostRow from "$lib/components/PostRow.svelte";
 import LiveRoomView from "$lib/components/room/LiveRoomView.svelte";
+import TimelineLiveRun from "$lib/components/TimelineLiveRun.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import type { LiveRoomData } from "$lib/types/live-room";
+import { groupLiveRuns } from "$lib/utils/live-runs";
 
-let posts = $state(makeTimelinePosts());
+// 4〜9 件目を同じ人の連投にして、ホームで実況のまとまり（groupLiveRuns）を確かめられるようにする。
+// 「○分前」や当日だけ出す時刻を確かめられるよう、いちばん新しい投稿が 5 分前になるよう時刻をずらす
+const basePosts = makeTimelinePosts();
+const shiftMs = Date.now() - 5 * 60 * 1000 - Date.parse(basePosts.at(-1)?.created_at ?? new Date().toISOString());
+let posts = $state(
+	basePosts.map((post, index, all) => {
+		const runner = all[4];
+		const created_at = new Date(Date.parse(post.created_at) + shiftMs).toISOString();
+		return runner && index >= 4 && index <= 9
+			? {
+					...post,
+					created_at,
+					user_id: runner.user_id,
+					username: runner.username,
+					display_name: runner.display_name,
+				}
+			: { ...post, created_at };
+	}),
+);
 let room = $state(false);
-// 話数ルームとして出す（時系列順で同じ人の連投がまとまる）
-let episodeRoom = $state(false);
+// 話数ルームとして出す（放送枠の見出しなど、話数ルームだけの表示を確かめる）
+let episodeRoom = $state(true);
 let dark = $state(false);
 let submitted = $state(0);
 const channel = {
@@ -115,8 +135,12 @@ $effect(() => {
 	<div class="page-container">
 		<div class="feed-column">
 			<PostComposer username="viewer_0" avatarUrl={null} />
-			{#each posts as post (post.id)}
-				<PostRow {post} currentUserId="preview-user-0" />
+			{#each groupLiveRuns([...posts].reverse()) as item (item.kind === "run" ? item.key : item.post.id)}
+				{#if item.kind === "run"}
+					<TimelineLiveRun posts={item.posts} room={item.room} currentUserId="preview-user-0" />
+				{:else}
+					<PostRow post={item.post} currentUserId="preview-user-0" />
+				{/if}
 			{/each}
 		</div>
 		<aside class="sidebar-column">

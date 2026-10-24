@@ -2,7 +2,13 @@
 import type { Snippet } from "svelte";
 import { goto } from "$app/navigation";
 import type { Post } from "$lib/types";
-import { formatBroadcastRelativeTime } from "$lib/utils/format";
+import {
+	formatBroadcastRelativeTime,
+	formatPostClock,
+	formatPostDateTime,
+	formatPostDay,
+	formatRelativeTime,
+} from "$lib/utils/format";
 import { getPostDisplayContent, getPostRoomContext } from "$lib/utils/post-presentation";
 import LikeButton from "./post/LikeButton.svelte";
 import PostActionBar from "./post/PostActionBar.svelte";
@@ -23,6 +29,8 @@ interface Props {
 	 */
 	joinPrevious?: boolean;
 	joinNext?: boolean;
+	/** アイコンの列（左端）に時刻を出すか。省略時は実況画面とまとまりの続きの行で出す */
+	gutterTime?: boolean;
 	/** Inside a live room, which already shows the room and anime context. */
 	insideRoom?: boolean;
 	broadcastStartAt?: string | null;
@@ -37,6 +45,7 @@ let {
 	currentUserId = null,
 	joinPrevious = false,
 	joinNext = false,
+	gutterTime,
 	insideRoom = false,
 	broadcastStartAt = null,
 	onExpand,
@@ -52,6 +61,14 @@ const controller = new PostController(
 const displayName = $derived(post.display_name || post.username);
 const content = $derived(getPostDisplayContent(post));
 const roomContext = $derived(getPostRoomContext(post));
+// 投稿時刻: タイムラインは「3分前」のような相対時刻を名前の横に。実況画面（insideRoom）は時刻をアイコンの列（左端）に
+// そろえて出し、名前の横には日付（今日・昨日・10/21）を出す
+const headTime = $derived(insideRoom ? formatPostDay(post.created_at) : formatRelativeTime(post.created_at));
+const showGutterTime = $derived(gutterTime ?? (joinPrevious || insideRoom));
+const postDateTime = $derived(formatPostDateTime(post.created_at));
+// まとまりの続きの行は、空のいいねを並べると圧迫感があるので、ホバー・フォーカス・操作中だけ出す。
+// いいねが付いている・自分がいいねした投稿は常に出す
+const quietLike = $derived(joinPrevious && controller.likeCount === 0 && !controller.likedByMe);
 const broadcastRelativeTime = $derived(
 	broadcastStartAt ? formatBroadcastRelativeTime(post.created_at, broadcastStartAt) : null,
 );
@@ -64,6 +81,10 @@ function handleClick(e: MouseEvent) {
 	if (window.getSelection()?.toString()) return;
 	if (onExpand) {
 		onExpand();
+		return;
+	}
+	if (joinPrevious) {
+		toggleActions();
 		return;
 	}
 	goto(`/posts/${post.id}`);
@@ -87,6 +108,7 @@ function handleKeydown(event: KeyboardEvent) {
 	class="post-row"
 	class:post-row--join-previous={joinPrevious}
 	class:post-row--join-next={joinNext}
+	class:post-row--quiet-like={quietLike}
 	class:post-row--selected={actionsOpen}
 	class:post-row--deleting={controller.deleting}
 	class:post-row--modal-open={controller.modalOpen}
@@ -100,36 +122,55 @@ function handleKeydown(event: KeyboardEvent) {
 			aria-expanded={expanded}
 			onclick={onExpand}
 		></button>
-	{:else}
-		<a href="/posts/{post.id}" class="post-row-hitarea" aria-label="投稿詳細を開く"></a>
-	{/if}
-
-	<div class="post-row-head">
-		{#if !joinPrevious}
-			<a href="/profile/{post.username}" class="post-row-avatar" aria-label={displayName}>
-				<UserAvatar src={post.avatar_url} username={post.username} size="sm" />
-			</a>
-			<a href="/profile/{post.username}" class="post-row-name" title={displayName}>{displayName}</a>
-		{/if}
-		{#if post.repost_context}
-			<a href="/profile/{post.repost_context.username}" class="post-row-repost">
-				<span class="i-lucide-repeat-2" aria-hidden="true"></span>
-				<span>{post.repost_context.display_name || post.repost_context.username}がリポスト</span>
-			</a>
-		{/if}
+	{:else if joinPrevious}
+		<!-- まとまりの続きの行には「…」を出さないので、行を押すと操作を開く -->
 		<button
 			type="button"
-			class="post-row-menu"
+			class="post-row-hitarea"
 			aria-label="投稿の操作"
 			aria-expanded={actionsOpen}
 			aria-controls="post-actions-{post.id}"
 			onclick={toggleActions}
-		>
-			<span class="i-lucide-ellipsis" aria-hidden="true"></span>
-		</button>
-	</div>
+		></button>
+	{:else}
+		<a href="/posts/{post.id}" class="post-row-hitarea" aria-label="投稿詳細を開く"></a>
+	{/if}
+
+	{#if !joinPrevious}
+		<div class="post-row-head">
+			<a href="/profile/{post.username}" class="post-row-avatar" aria-label={displayName}>
+				<UserAvatar src={post.avatar_url} username={post.username} size="sm" />
+			</a>
+			<a href="/profile/{post.username}" class="post-row-name" title={displayName}>{displayName}</a>
+			<a href="/posts/{post.id}" class="post-row-time" title={postDateTime}
+				><time datetime={post.created_at}>{headTime}</time></a
+			>
+			{#if post.repost_context}
+				<a href="/profile/{post.repost_context.username}" class="post-row-repost">
+					<span class="i-lucide-repeat-2" aria-hidden="true"></span>
+					<span>{post.repost_context.display_name || post.repost_context.username}がリポスト</span>
+				</a>
+			{/if}
+			<button
+				type="button"
+				class="post-row-menu"
+				aria-label="投稿の操作"
+				aria-expanded={actionsOpen}
+				aria-controls="post-actions-{post.id}"
+				onclick={toggleActions}
+			>
+				<span class="i-lucide-ellipsis" aria-hidden="true"></span>
+			</button>
+		</div>
+	{/if}
 
 	<div class="post-row-main">
+		{#if showGutterTime}
+			<!-- 実況画面と、まとまりの続きの行は、アイコンの列に時刻を出す -->
+			<a href="/posts/{post.id}" class="post-row-gutter-time" title={postDateTime}
+				><time datetime={post.created_at}>{formatPostClock(post.created_at)}</time></a
+			>
+		{/if}
 		<div class="post-row-body">
 			<!-- CW 中は本文と画像・引用・トレード結果をまとめて隠す（#318） -->
 			<PostCwGuard {post}>
@@ -163,12 +204,10 @@ function handleKeydown(event: KeyboardEvent) {
 	{/if}
 
 	{#if actionsOpen}
-		<div class="post-row-indent">
+		<!-- 操作（返信・リポスト・ブックマーク）と、放送開始からの時間・削除／通報を 1 行にまとめる。日時は名前の横に出している -->
+		<div class="post-row-indent post-row-actions">
 			<PostActionBar {controller} id="post-actions-{post.id}" />
 			<div class="post-row-details">
-				<a href="/posts/{post.id}" class="post-time"
-					><time datetime={post.created_at}>{new Date(post.created_at).toLocaleString("ja-JP")}</time></a
-				>
 				{#if broadcastRelativeTime}
 					<span class="post-time">放送開始から {broadcastRelativeTime}</span>
 				{/if}
@@ -269,6 +308,44 @@ function handleKeydown(event: KeyboardEvent) {
 .post-row-name:hover {
 	color: var(--color-text-secondary);
 	text-decoration: underline;
+}
+.post-row-time {
+	flex-shrink: 0;
+	color: var(--color-text-muted);
+	font-size: 12px;
+	line-height: 18px;
+	font-variant-numeric: tabular-nums;
+	text-decoration: none;
+	white-space: nowrap;
+}
+.post-row-time::before {
+	content: "·";
+	margin-right: 6px;
+}
+.post-row-time:hover {
+	color: var(--color-text-secondary);
+	text-decoration: underline;
+}
+.post-row-gutter-time {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: var(--post-row-avatar);
+	color: var(--color-text-muted);
+	font-size: 10px;
+	line-height: 24px;
+	font-variant-numeric: tabular-nums;
+	text-align: center;
+	text-decoration: none;
+	white-space: nowrap;
+}
+.post-row-gutter-time:hover {
+	color: var(--color-text-secondary);
+	text-decoration: underline;
+}
+/* 連投の時刻はほとんど同じなので、知りたいときだけ（ホバー・フォーカス・操作中）出す。タッチでは行をタップすると出る */
+.post-row:not(:hover):not(:focus-within):not(.post-row--selected) .post-row-gutter-time {
+	visibility: hidden;
 }
 .post-row-menu {
 	flex-shrink: 0;
@@ -381,12 +458,18 @@ function handleKeydown(event: KeyboardEvent) {
 	gap: 20px;
 	padding-top: 6px;
 }
-.post-row-details {
+.post-row-actions {
 	display: flex;
 	align-items: center;
 	flex-wrap: wrap;
-	gap: 12px;
-	padding-bottom: 6px;
+	column-gap: 12px;
+}
+.post-row-details {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-left: auto;
+	padding-top: 6px;
 }
 .post-row-details .post-time {
 	font-size: 11px;
@@ -429,27 +512,10 @@ function handleKeydown(event: KeyboardEvent) {
 	min-height: 0;
 	padding-top: 2px;
 }
-/* 操作メニューは行の右上に浮かせ、ホバー・フォーカス・操作中だけ出す（タッチでは行をタップすると操作行が開く） */
-.post-row--join-previous .post-row-head {
-	position: absolute;
-	top: -12px;
-	/* 右端のいいね欄（56px）と重ならないよう、その左に出す */
-	right: calc(var(--post-row-pad-x) + 64px);
-	z-index: 1;
-	height: auto;
-	opacity: 0;
-	pointer-events: none;
-}
-.post-row--join-previous:hover .post-row-head,
-.post-row--join-previous:focus-within .post-row-head,
-.post-row--join-previous.post-row--selected .post-row-head {
-	opacity: 1;
-	pointer-events: auto;
-}
-.post-row--join-previous .post-row-menu {
-	border: 1px solid var(--color-border);
-	background: var(--color-surface);
-	box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12);
+/* 場所は残したまま隠す（本文の幅が変わらないように） */
+.post-row--quiet-like:not(:hover):not(:focus-within):not(.post-row--selected) .post-row-main
+	:global(.post-footer-like) {
+	visibility: hidden;
 }
 
 /* Keep 40px touch targets without pushing the head and text lines apart. */
@@ -457,9 +523,11 @@ function handleKeydown(event: KeyboardEvent) {
 	.post-row-main :global(.post-like-btn),
 	.post-row-menu {
 		height: 40px;
-		margin: -6px 0;
+		/* 上下だけ詰める（左右を 0 にすると、メニューの右寄せ margin-left: auto が消える） */
+		margin-block: -6px;
 	}
 	.post-row-main :global(.post-like-btn) {
+		margin-left: 0;
 		width: 40px;
 		margin-right: -4px;
 		padding: 6.5px;
