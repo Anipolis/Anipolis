@@ -269,7 +269,8 @@ async function handlePasskeyLogin(): Promise<void> {
 					<h2 id="auth-invite-heading" class="auth-section-title">招待コードをお持ちの方</h2>
 					<input type="hidden" name="next" value={next}>
 					<div class="field">
-						<label for="invite-code-gate" class="field-label">招待コード</label>
+						<!-- 小見出しと並ぶと紛らわしいので、ラベルは読み上げ用にだけ残し、画面では入力欄の中に薄く出す -->
+						<label for="invite-code-gate" class="sr-only">招待コード</label>
 						<input
 							id="invite-code-gate"
 							name="invite_code"
@@ -277,11 +278,9 @@ async function handlePasskeyLogin(): Promise<void> {
 							class="field-input"
 							autocomplete="off"
 							bind:value={() => inviteCodeState.value, setInviteCodeInput}
-							placeholder="例: A1B2C3D4E5"
-							aria-describedby="invite-code-gate-hint"
+							placeholder="招待コードを入力"
 							required
 						>
-						<p id="invite-code-gate-hint" class="field-hint">招待してくれた方から届いたコードです。</p>
 					</div>
 					<button type="submit" class="btn btn-primary auth-wide-button" disabled={submitting !== null}>
 						{submitting === 'invite' ? '確認中...' : '次へ'}
@@ -307,11 +306,11 @@ async function handlePasskeyLogin(): Promise<void> {
 				<!-- 招待コードもサーバーへの参加も無い人が行き止まりにならないよう、サーバーへの入口を最後に控えめに出す -->
 				<div class="auth-join">
 					<p class="auth-join-title">招待コードをお持ちでない方</p>
-					<p class="auth-join-text">
+					<p>
 						<a href={DISCORD_INVITE_URL} target="_blank" rel="noopener"
 							>公式Discordサーバーに参加する<span class="i-lucide-external-link" aria-hidden="true"></span
 							><span class="sr-only">（新しいタブで開く）</span></a
-						><br>参加後に「Discordで登録」へ
+						>
 					</p>
 				</div>
 				<!-- 招待コードを確かめるだけの段階では同意を求めず、アカウントができる Discord の登録にだけ添える -->
