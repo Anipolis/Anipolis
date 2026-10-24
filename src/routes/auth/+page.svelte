@@ -34,6 +34,19 @@ function setInviteCodeInput(value: string): void {
 // クローズドβが有効かつ、まだ有効な招待コードを確認できていない間は
 // 招待コード入力とDiscordの二択のみを表示し、Google/X/メールは隠す。
 const hasInviteAccess = $derived(!data.betaGateEnabled || data.inviteCodeValid);
+// 確認済みの招待コードは 1 行の表示にたたみ、「変更」を押したときだけ入力欄に戻す
+let editingInvite = $state(false);
+const inviteVerified = $derived(
+	activeMode === "register" && data.betaGateEnabled && data.inviteCodeValid && !editingInvite,
+);
+
+async function startEditingInvite(): Promise<void> {
+	editingInvite = true;
+	await tick();
+	const input = document.getElementById("invite-code") as HTMLInputElement | null;
+	input?.focus();
+	input?.select();
+}
 
 // パスキーは登録済みの既存アカウント専用（新規作成はできない）なので、招待コードの有無に関係なく出す
 let passkeyPending = $state(false);
@@ -321,7 +334,15 @@ async function handlePasskeyLogin(): Promise<void> {
 				<!-- 招待コードを確かめるだけの段階では同意を求めず、アカウントができる Discord の登録にだけ添える -->
 				{@render consent()}
 			{:else}
-				{#if data.betaGateEnabled && (activeMode !== 'login' || (form && 'needInvite' in form && form.needInvite) || ['not_member', 'invite_required', 'invalid_invite', 'invite_exhausted'].includes(data.error ?? ''))}
+				{#if inviteVerified}
+					<div class="auth-invite-verified">
+						<span class="i-lucide-circle-check" aria-hidden="true"></span>
+						<span class="auth-invite-verified-text"
+							>招待コード <strong>{inviteCodeState.value}</strong> を確認しました</span
+						>
+						<button type="button" class="auth-invite-change" onclick={startEditingInvite}>変更</button>
+					</div>
+				{:else if data.betaGateEnabled && (activeMode !== 'login' || (form && 'needInvite' in form && form.needInvite) || ['not_member', 'invite_required', 'invalid_invite', 'invite_exhausted'].includes(data.error ?? ''))}
 					<div class="field">
 						<label for="invite-code" class="field-label">招待コード</label>
 						<input
@@ -632,6 +653,48 @@ async function handlePasskeyLogin(): Promise<void> {
 	color: var(--fg);
 	font-size: 0.85rem;
 	font-weight: 700;
+}
+
+.auth-invite-verified {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 16px;
+	padding: 10px 12px;
+	border: 1px solid color-mix(in srgb, var(--status-watching) 45%, transparent);
+	border-radius: 10px;
+	background: color-mix(in srgb, var(--status-watching) 10%, transparent);
+	color: var(--fg);
+	font-size: 0.85rem;
+}
+
+.auth-invite-verified .i-lucide-circle-check {
+	flex: none;
+	width: 16px;
+	height: 16px;
+	color: var(--status-watching);
+}
+
+.auth-invite-verified-text {
+	flex: 1;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.auth-invite-change {
+	flex: none;
+	padding: 4px 8px;
+	border: 0;
+	border-radius: 6px;
+	background: none;
+	color: var(--accent);
+	font-size: 0.8rem;
+	font-weight: 700;
+	cursor: pointer;
+}
+
+.auth-invite-change:hover {
+	background: var(--accent-muted);
 }
 
 .auth-form .btn-primary:disabled {
