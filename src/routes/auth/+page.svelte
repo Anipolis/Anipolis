@@ -306,7 +306,12 @@ async function handlePasskeyLogin(): Promise<void> {
 					<h2 id="auth-discord-heading" class="auth-section-title">Discordサーバーのメンバーの方</h2>
 					<input type="hidden" name="next" value={next}>
 					<input type="hidden" name="invite_code" value={inviteCodeState.value}>
-					<button type="submit" class="btn btn-outline auth-wide-button" disabled={submitting !== null}>
+					<button
+						type="submit"
+						class="btn btn-outline auth-wide-button auth-provider-button"
+						disabled={submitting !== null}
+					>
+						<span class="auth-provider-icon i-brand-discord" aria-hidden="true"></span>
 						{submitting === 'discord' ? 'Discordへ移動中...' : 'Discordで登録'}
 					</button>
 				</form>
@@ -364,7 +369,7 @@ async function handlePasskeyLogin(): Promise<void> {
 						</button>
 					{/if}
 
-					{#each [{ kind: 'discord', label: 'Discord' }, { kind: 'google', label: 'Google' }, { kind: 'twitter', label: 'X' }] as provider (provider.kind)}
+					{#each [{ kind: 'discord', label: 'Discord', icon: 'i-brand-discord' }, { kind: 'google', label: 'Google', icon: 'i-brand-google' }, { kind: 'twitter', label: 'X', icon: 'i-brand-x' }] as provider (provider.kind)}
 						<form
 							method="POST"
 							action="?/{provider.kind}&next={encodeURIComponent(next)}"
@@ -375,9 +380,10 @@ async function handlePasskeyLogin(): Promise<void> {
 							<input type="hidden" name="invite_code" value={inviteCodeState.value}>
 							<button
 								type="submit"
-								class="btn btn-outline auth-wide-button"
+								class="btn btn-outline auth-wide-button auth-provider-button"
 								disabled={submitting !== null}
 							>
+								<span class="auth-provider-icon {provider.icon}" aria-hidden="true"></span>
 								{submitting === provider.kind ? `${provider.label}へ移動中...` : `${provider.label}で続ける`}
 							</button>
 						</form>
@@ -641,6 +647,35 @@ async function handlePasskeyLogin(): Promise<void> {
 	color: var(--fg);
 	font-size: 0.85rem;
 	font-weight: 700;
+}
+
+/* 外部サービスのボタンは枠を灰色・文字を本文の色にして、青をメインの操作（ログイン・作成）だけに残す */
+.auth-provider-button {
+	position: relative;
+	border-color: var(--color-border-hover);
+	color: var(--fg);
+}
+
+.auth-provider-button:hover:not(:disabled) {
+	background: var(--bg-hover);
+	color: var(--fg);
+}
+
+/* ロゴはボタンの左端に固定して縦一列にそろえ、文字だけを中央に置く */
+.auth-provider-icon {
+	position: absolute;
+	top: 50%;
+	left: 16px;
+	width: 18px;
+	height: 18px;
+	transform: translateY(-50%);
+}
+
+/* X のロゴは枠いっぱいに描かれていて他のロゴより大きく見えるため、少し小さくして 18px の幅の中央に置く */
+.auth-provider-icon.i-brand-x {
+	left: 17.5px;
+	width: 15px;
+	height: 15px;
 }
 
 .auth-invite-verified {
