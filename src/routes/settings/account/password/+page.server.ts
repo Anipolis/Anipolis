@@ -8,9 +8,8 @@ import {
 } from "$lib/server/password-change";
 import { isRateLimited } from "$lib/server/rate-limit";
 import { redirectToLogin } from "$lib/server/require-login";
+import { MIN_PASSWORD_LENGTH } from "$lib/utils/password-reset";
 import type { Actions, PageServerLoad } from "./$types";
-
-const MIN_PASSWORD_LENGTH = 6;
 
 export const load: PageServerLoad = async ({ url, locals: { safeGetSession } }) => {
 	const { session, user } = await safeGetSession();

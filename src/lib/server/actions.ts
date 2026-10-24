@@ -17,6 +17,7 @@ import type { Database, Json } from "$lib/supabase/database.types";
 import type { AnimeExchangeShare, AnimeStatus, BroadcastRoomMuteDuration } from "$lib/types";
 import { eventScheduledAtIsoFromBroadcastInput } from "$lib/utils/event-time";
 import { extractHashtags } from "$lib/utils/hashtag";
+import { MIN_PASSWORD_LENGTH } from "$lib/utils/password-reset";
 
 const MAX_POST_IMAGES = 4;
 /** 147 のトリガーが投稿の回数制限で返す SQLSTATE（PostgREST は HTTP 429 にする） */
@@ -1301,8 +1302,6 @@ export async function setPasswordAction(
 	const form = await request.formData();
 	const password = (form.get("password") as string | null) ?? "";
 	const confirm = (form.get("confirm") as string | null) ?? "";
-
-	const MIN_PASSWORD_LENGTH = 6;
 
 	if (password.length < MIN_PASSWORD_LENGTH) {
 		return {

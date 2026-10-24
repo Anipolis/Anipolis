@@ -49,7 +49,7 @@ describe("setPassword with secure password change", () => {
 	it("passes the nonce through to updateUser for users without a password provider", async () => {
 		const { event, supabase } = makeEvent(
 			"setPassword",
-			{ password: "abcdef1", confirm: "abcdef1", nonce: "１２３ 456" },
+			{ password: "abcdef12", confirm: "abcdef12", nonce: "１２３ 456" },
 			{},
 		);
 
@@ -58,7 +58,7 @@ describe("setPassword with secure password change", () => {
 		expect(result).toEqual({ success: true });
 		expect(supabase.auth.signInWithPassword).not.toHaveBeenCalled();
 		expect(supabase.auth.updateUser).toHaveBeenCalledWith({
-			password: "abcdef1",
+			password: "abcdef12",
 			nonce: "123456",
 			data: { has_password: true },
 		});
@@ -67,7 +67,7 @@ describe("setPassword with secure password change", () => {
 	it("asks for a confirmation code when Auth demands reauthentication", async () => {
 		const { event } = makeEvent(
 			"setPassword",
-			{ password: "abcdef1", confirm: "abcdef1" },
+			{ password: "abcdef12", confirm: "abcdef12" },
 			{
 				updateUser: {
 					error: { code: "reauthentication_needed", message: "Password update requires reauthentication" },
@@ -83,7 +83,7 @@ describe("setPassword with secure password change", () => {
 	it("reports an invalid or expired code without treating it as a generic failure", async () => {
 		const { event } = makeEvent(
 			"setPassword",
-			{ password: "abcdef1", confirm: "abcdef1", nonce: "000000" },
+			{ password: "abcdef12", confirm: "abcdef12", nonce: "000000" },
 			{ updateUser: { error: { code: "reauthentication_not_valid", message: "Invalid nonce" } } },
 		);
 
@@ -93,7 +93,7 @@ describe("setPassword with secure password change", () => {
 	});
 
 	it("rejects anonymous callers", async () => {
-		const { event } = makeEvent("setPassword", { password: "abcdef1", confirm: "abcdef1" }, {}, null);
+		const { event } = makeEvent("setPassword", { password: "abcdef12", confirm: "abcdef12" }, {}, null);
 		await expect(setPassword(event)).resolves.toMatchObject({ status: 401 });
 	});
 });
