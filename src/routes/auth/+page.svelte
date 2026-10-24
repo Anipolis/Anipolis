@@ -307,6 +307,7 @@ async function handlePasskeyLogin(): Promise<void> {
 					<input type="hidden" name="next" value={next}>
 					<input type="hidden" name="invite_code" value={inviteCodeState.value}>
 					<button type="submit" class="btn btn-outline auth-wide-button" disabled={submitting !== null}>
+						<span class="auth-provider-icon i-brand-discord" aria-hidden="true"></span>
 						{submitting === 'discord' ? 'Discordへ移動中...' : 'Discordで登録'}
 					</button>
 				</form>
@@ -364,7 +365,7 @@ async function handlePasskeyLogin(): Promise<void> {
 						</button>
 					{/if}
 
-					{#each [{ kind: 'discord', label: 'Discord' }, { kind: 'google', label: 'Google' }, { kind: 'twitter', label: 'X' }] as provider (provider.kind)}
+					{#each [{ kind: 'discord', label: 'Discord', icon: 'i-brand-discord' }, { kind: 'google', label: 'Google', icon: 'i-brand-google' }, { kind: 'twitter', label: 'X', icon: 'i-brand-x' }] as provider (provider.kind)}
 						<form
 							method="POST"
 							action="?/{provider.kind}&next={encodeURIComponent(next)}"
@@ -378,6 +379,7 @@ async function handlePasskeyLogin(): Promise<void> {
 								class="btn btn-outline auth-wide-button"
 								disabled={submitting !== null}
 							>
+								<span class="auth-provider-icon {provider.icon}" aria-hidden="true"></span>
 								{submitting === provider.kind ? `${provider.label}へ移動中...` : `${provider.label}で続ける`}
 							</button>
 						</form>
@@ -641,6 +643,17 @@ async function handlePasskeyLogin(): Promise<void> {
 	color: var(--fg);
 	font-size: 0.85rem;
 	font-weight: 700;
+}
+
+.auth-provider-icon {
+	flex: none;
+	width: 18px;
+	height: 18px;
+}
+
+/* X のロゴは黒か白でしか使えないので、ボタンの青ではなく本文の色にする */
+.auth-provider-icon.i-brand-x {
+	color: var(--fg);
 }
 
 .auth-invite-verified {
