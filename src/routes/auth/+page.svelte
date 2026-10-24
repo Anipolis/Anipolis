@@ -158,12 +158,16 @@ async function handlePasskeyLogin(): Promise<void> {
 
 			{#if activeMode !== 'add_account'}
 				<div class="auth-tabs" aria-label="認証メニュー">
-					<a href="/auth?mode=login&next={encodeURIComponent(next)}" class:active={activeMode === 'login'}
+					<a
+						href="/auth?mode=login&next={encodeURIComponent(next)}"
+						class:active={activeMode === 'login'}
+						aria-current={activeMode === 'login' ? 'page' : undefined}
 						>ログイン</a
 					>
 					<a
 						href="/auth?mode=register&next={encodeURIComponent(next)}"
 						class:active={activeMode === 'register'}
+						aria-current={activeMode === 'register' ? 'page' : undefined}
 						>アカウント作成</a
 					>
 				</div>
@@ -242,7 +246,7 @@ async function handlePasskeyLogin(): Promise<void> {
 				</form>
 			{:else if activeMode === 'register' && !hasInviteAccess}
 				<p class="auth-info-text">
-					現在はクローズドβです。招待コードを入力するか、Discordサーバーのメンバーとしてログインしてください。
+					現在はクローズドβです。招待コードをお持ちの方は入力して次へ進んでください。Discordサーバーのメンバーは、Discordでそのまま登録できます。
 				</p>
 
 				<form
@@ -271,7 +275,7 @@ async function handlePasskeyLogin(): Promise<void> {
 						</p>
 					</div>
 					<button type="submit" class="btn btn-primary auth-wide-button" disabled={submitting !== null}>
-						{submitting === 'invite' ? '確認中...' : '招待コードを確認'}
+						{submitting === 'invite' ? '確認中...' : 'コードを確認して次へ'}
 					</button>
 				</form>
 
@@ -286,9 +290,11 @@ async function handlePasskeyLogin(): Promise<void> {
 					<input type="hidden" name="next" value={next}>
 					<input type="hidden" name="invite_code" value={inviteCodeState.value}>
 					<button type="submit" class="btn btn-outline auth-wide-button" disabled={submitting !== null}>
-						{submitting === 'discord' ? 'Discordへ移動中...' : 'Discordサーバーのメンバーとして続ける'}
+						{submitting === 'discord' ? 'Discordへ移動中...' : 'Discordサーバーのメンバーとして登録'}
 					</button>
 				</form>
+				<!-- 招待コードを確かめるだけの段階では同意を求めず、アカウントができる Discord の登録にだけ添える -->
+				{@render consent()}
 			{:else}
 				{#if data.betaGateEnabled && (activeMode !== 'login' || (form && 'needInvite' in form && form.needInvite) || ['not_member', 'invite_required', 'invalid_invite', 'invite_exhausted'].includes(data.error ?? ''))}
 					<div class="field">
@@ -474,7 +480,7 @@ async function handlePasskeyLogin(): Promise<void> {
 				{/if}
 			{/if}
 
-			{#if activeMode !== 'add_account'}
+			{#snippet consent()}
 				<p class="auth-consent">
 					続行すると、<a href="/terms" target="_blank" rel="noopener">利用規約</a>と<a
 						href="/privacy-policy"
@@ -483,6 +489,9 @@ async function handlePasskeyLogin(): Promise<void> {
 						>プライバシーポリシー</a
 					>に同意したものとみなされます。
 				</p>
+			{/snippet}
+			{#if activeMode !== 'add_account' && !(activeMode === 'register' && !hasInviteAccess)}
+				{@render consent()}
 			{/if}
 		</div>
 	</main>
@@ -521,9 +530,16 @@ async function handlePasskeyLogin(): Promise<void> {
 	text-decoration: none;
 }
 
-.auth-tabs a.active {
+.auth-tabs a:not(.active):hover {
 	color: var(--fg);
-	background: var(--surface-hover);
+	background: var(--bg-hover);
+}
+
+/* 選んでいるタブは色付きの背景と枠で示す（未定義の --surface-hover を参照していて背景が付いていなかった） */
+.auth-tabs a.active {
+	color: var(--accent);
+	background: var(--accent-muted);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
 .auth-form,
