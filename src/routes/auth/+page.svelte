@@ -160,6 +160,10 @@ async function handlePasskeyLogin(): Promise<void> {
 			</h1>
 
 			{#if activeMode !== 'add_account'}
+				{#if data.betaGateEnabled}
+					<!-- 長い説明の代わりに、いまの状況だけをバッジで示す -->
+					<p class="auth-beta-badge">クローズドβ</p>
+				{/if}
 				<div class="auth-tabs" aria-label="認証メニュー">
 					<a
 						href="/auth?mode=login&next={encodeURIComponent(next)}"
@@ -253,17 +257,16 @@ async function handlePasskeyLogin(): Promise<void> {
 					<a href="/" class="btn btn-ghost auth-wide-button" style="text-align:center">キャンセル</a>
 				</form>
 			{:else if activeMode === 'register' && !hasInviteAccess}
-				<p class="auth-info-text">
-					現在はクローズドβです。招待コードをお持ちの方は入力して次へ進んでください。Discordサーバーのメンバーは、Discordでそのまま登録できます。
-				</p>
-
+				<!-- 説明文は置かず、入口ごとに小見出しを付けて分ける -->
 				<form
 					method="POST"
 					action="?/applyInvite&mode=register&next={encodeURIComponent(next)}"
 					class="auth-form"
+					aria-labelledby="auth-invite-heading"
 					novalidate
 					use:enhance={enhanceAuth('invite')}
 				>
+					<h2 id="auth-invite-heading" class="auth-section-title">招待コードをお持ちの方</h2>
 					<input type="hidden" name="next" value={next}>
 					<div class="field">
 						<label for="invite-code-gate" class="field-label">招待コード</label>
@@ -278,12 +281,10 @@ async function handlePasskeyLogin(): Promise<void> {
 							aria-describedby="invite-code-gate-hint"
 							required
 						>
-						<p id="invite-code-gate-hint" class="field-hint">
-							招待してくれた方から届いたコードを入力してください。
-						</p>
+						<p id="invite-code-gate-hint" class="field-hint">招待してくれた方から届いたコードです。</p>
 					</div>
 					<button type="submit" class="btn btn-primary auth-wide-button" disabled={submitting !== null}>
-						{submitting === 'invite' ? '確認中...' : 'コードを確認して次へ'}
+						{submitting === 'invite' ? '確認中...' : '次へ'}
 					</button>
 				</form>
 
@@ -293,20 +294,26 @@ async function handlePasskeyLogin(): Promise<void> {
 					method="POST"
 					action="?/discord&next={encodeURIComponent(next)}"
 					class="auth-oauth-form"
+					aria-labelledby="auth-discord-heading"
 					onsubmit={(event) => startOAuth('discord', event)}
 				>
+					<h2 id="auth-discord-heading" class="auth-section-title">Discordサーバーのメンバーの方</h2>
 					<input type="hidden" name="next" value={next}>
 					<input type="hidden" name="invite_code" value={inviteCodeState.value}>
 					<button type="submit" class="btn btn-outline auth-wide-button" disabled={submitting !== null}>
-						{submitting === 'discord' ? 'Discordへ移動中...' : 'Discordサーバーのメンバーとして登録'}
+						{submitting === 'discord' ? 'Discordへ移動中...' : 'Discordで登録'}
 					</button>
 				</form>
-				<!-- 招待コードもサーバーへの参加も無い人が行き止まりにならないよう、サーバーへの入口を出す -->
-				<p class="auth-join-hint">
-					招待コードをお持ちでない方は、<a href={DISCORD_INVITE_URL} target="_blank" rel="noopener"
-						>Discordサーバーに参加</a
-					>すると、上のボタンから登録できます。
-				</p>
+				<!-- 招待コードもサーバーへの参加も無い人が行き止まりにならないよう、サーバーへの入口を最後に控えめに出す -->
+				<div class="auth-join">
+					<p class="auth-join-title">招待コードをお持ちでない方</p>
+					<p class="auth-join-text">
+						<a href={DISCORD_INVITE_URL} target="_blank" rel="noopener"
+							>公式Discordサーバーに参加する<span class="i-lucide-external-link" aria-hidden="true"></span
+							><span class="sr-only">（新しいタブで開く）</span></a
+						><br>参加後に「Discordで登録」へ
+					</p>
+				</div>
 				<!-- 招待コードを確かめるだけの段階では同意を求めず、アカウントができる Discord の登録にだけ添える -->
 				{@render consent()}
 			{:else}
@@ -496,7 +503,7 @@ async function handlePasskeyLogin(): Promise<void> {
 
 			{#snippet consent()}
 				<p class="auth-consent">
-					続行すると、<a href="/terms" target="_blank" rel="noopener">利用規約</a>と<a
+					続行することで、<a href="/terms" target="_blank" rel="noopener">利用規約</a>および<a
 						href="/privacy-policy"
 						target="_blank"
 						rel="noopener"
@@ -599,15 +606,61 @@ async function handlePasskeyLogin(): Promise<void> {
 	margin: 12px 0 18px;
 }
 
-.auth-join-hint {
-	margin: 12px 0 0;
+.auth-beta-badge {
+	display: inline-block;
+	margin: 0;
+	padding: 2px 10px;
+	border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+	border-radius: 999px;
+	background: var(--accent-muted);
+	color: var(--accent);
+	font-size: 0.75rem;
+	font-weight: 700;
+	line-height: 1.6;
+}
+
+.auth-beta-badge + .auth-tabs {
+	margin-top: 12px;
+}
+
+.auth-section-title {
+	margin: 0;
+	color: var(--fg);
+	font-size: 0.85rem;
+	font-weight: 700;
+}
+
+.auth-join {
+	margin-top: 24px;
+	padding-top: 16px;
+	border-top: 1px solid var(--border);
 	color: var(--fg-muted);
 	font-size: 0.8rem;
-	line-height: 1.6;
+	line-height: 1.7;
 	text-align: center;
 }
 
-.auth-join-hint a,
+.auth-join p {
+	margin: 0;
+}
+
+.auth-join-title {
+	font-weight: 700;
+}
+
+.auth-join a {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-weight: 700;
+}
+
+.auth-join a [class^="i-lucide"] {
+	width: 13px;
+	height: 13px;
+}
+
+.auth-join a,
 .flash-error a {
 	color: var(--accent);
 	padding-block: 6px;
