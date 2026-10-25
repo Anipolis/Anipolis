@@ -22,6 +22,14 @@ $effect(() => {
 	if (shouldOpenEmail()) emailOpen = true;
 });
 
+/** 「ほかの方法で〜」: フォームを閉じて手段のボタンの並びに戻し、メールアドレスのボタンにフォーカスを戻す */
+async function closeEmail(event: MouseEvent): Promise<void> {
+	const details = (event.currentTarget as HTMLElement).closest("details");
+	emailOpen = false;
+	await tick();
+	details?.querySelector("summary")?.focus();
+}
+
 /** フォームを開いたら、メールアドレスの欄から入力できるようにする */
 function focusEmailField(event: Event): void {
 	const details = event.currentTarget as HTMLDetailsElement;
@@ -456,6 +464,11 @@ async function handlePasskeyLogin(): Promise<void> {
 							<span class="auth-provider-icon i-lucide-mail" aria-hidden="true"></span>
 							メールアドレス{actionWord}
 						</summary>
+						<!-- メールアドレスを選んだら他の手段のボタンは隠すので（CSS の :has）、戻る手段を置く -->
+						<button type="button" class="btn btn-ghost auth-email-back" onclick={closeEmail}>
+							<span class="i-lucide-arrow-left" aria-hidden="true"></span>
+							ほかの方法{actionWord}
+						</button>
 						{#if activeMode === 'login'}
 							<form
 								method="POST"
@@ -657,10 +670,20 @@ async function handlePasskeyLogin(): Promise<void> {
 	display: none;
 }
 
-.auth-email[open] {
-	margin-top: 8px;
-	padding-top: 18px;
-	border-top: 1px solid var(--border);
+/* メールアドレスを選んだら、他の手段（パスキー・外部サービス）のボタンは隠してフォームだけにする */
+.auth-providers:has(> .auth-email[open]) > :not(.auth-email) {
+	display: none;
+}
+
+.auth-email-back {
+	margin: -4px 0 12px -12px;
+	color: var(--fg-muted);
+	font-size: 0.85rem;
+}
+
+.auth-email-back [class^="i-lucide"] {
+	width: 16px;
+	height: 16px;
 }
 
 .auth-divider {
