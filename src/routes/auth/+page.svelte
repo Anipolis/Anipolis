@@ -2,10 +2,12 @@
 import type { SubmitFunction } from "@sveltejs/kit";
 import { onDestroy, tick, untrack } from "svelte";
 import { enhance } from "$app/forms";
-import { beforeNavigate, goto } from "$app/navigation";
+import { beforeNavigate, goto, preloadData, pushState, replaceState } from "$app/navigation";
 import { page } from "$app/state";
+import LegalOverlay from "$lib/components/LegalOverlay.svelte";
 import PasswordInput from "$lib/components/PasswordInput.svelte";
 import { signInWithPasskey } from "$lib/passkey";
+import { MIN_PASSWORD_LENGTH } from "$lib/utils/password-reset";
 import type { PageProps } from "./$types";
 import { type InviteCodeState, syncInviteCodeState } from "./invite-code";
 
@@ -24,6 +26,53 @@ $effect(() => {
 function focusEmailField(event: Event): void {
 	const details = event.currentTarget as HTMLDetailsElement;
 	if (details.open) details.querySelector<HTMLInputElement>('input[type="email"]')?.focus();
+}
+
+/**
+ * 規約・ポリシーはこの画面の上に重ねて出す（URL は /terms などに変える）。新しいタブで開くと「戻る」が使えず、
+ * 同じタブで移ると入力中の内容が消えるため。Ctrl＋クリックなどで新しいタブに開くときは邪魔しない
+ */
+const LEGAL_TITLES: Record<string, string> = { "/terms": "利用規約", "/privacy-policy": "プライバシーポリシー" };
+
+/**
+ * 規約・ポリシーへのリンクを押したとき。重ねた表示の中のリンク（利用規約の中のプライバシーポリシーなど）は、
+ * 履歴を増やさずに中身だけ差し替える（閉じたら 1 回の「戻る」で入力画面に戻れるように）
+ */
+async function openLegal(event: MouseEvent, link: HTMLAnchorElement): Promise<void> {
+	if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+	const href = link.getAttribute("href") ?? "";
+	const title = LEGAL_TITLES[href];
+	if (!title) return;
+	event.preventDefault();
+	const request = ++legalRequest;
+	const fromOverlay = Boolean(page.state.legal);
+	const result = await preloadData(href);
+	// 読み込みの間に閉じた・別の画面へ移った・もう一度押した、のどれかなら何もしない（閉じた表示が開き直らないように）
+	if (request !== legalRequest || fromOverlay !== Boolean(page.state.legal)) return;
+	if (result.type === "loaded" && result.status === 200 && typeof result.data["html"] === "string") {
+		const state = { legal: { title, html: result.data["html"] } };
+		if (fromOverlay) replaceState(href, state);
+		else pushState(href, state);
+	} else {
+		await goto(href);
+	}
+}
+
+// 規約の読み込みの世代。閉じる・別の画面へ移る・この画面を離れると進め、読み込み中の結果を捨てる
+let legalRequest = 0;
+const cancelLegalRequest = () => {
+	legalRequest++;
+};
+beforeNavigate(cancelLegalRequest);
+onDestroy(cancelLegalRequest);
+// ブラウザの「戻る」で閉じたとき（onclose を通らない）も捨てる
+$effect(() => {
+	if (!page.state.legal) untrack(cancelLegalRequest);
+});
+
+function closeLegal(): void {
+	cancelLegalRequest();
+	history.back();
 }
 
 // クローズドβのコミュニティへの招待リンク。招待コードが無い人の入口にする
@@ -484,7 +533,7 @@ async function handlePasskeyLogin(): Promise<void> {
 										id="register-password"
 										name="password"
 										autocomplete="new-password"
-										minlength={6}
+										minlength={MIN_PASSWORD_LENGTH}
 										required
 										invalid={Boolean(form && 'field' in form && form.field === 'password')}
 										bind:input={registerPasswordInput}
@@ -492,7 +541,7 @@ async function handlePasskeyLogin(): Promise<void> {
 									{#if form && 'field' in form && form.field === 'password'}
 										<p class="field-error-msg">{form.message}</p>
 									{:else}
-										<p class="field-hint">6文字以上で入力してください。</p>
+										<p class="field-hint">{MIN_PASSWORD_LENGTH}文字以上で入力してください。</p>
 									{/if}
 								</div>
 
@@ -511,10 +560,9 @@ async function handlePasskeyLogin(): Promise<void> {
 
 			{#snippet consent()}
 				<p class="auth-consent">
-					続行することで、<a href="/terms" target="_blank" rel="noopener">利用規約</a>および<a
-						href="/privacy-policy"
-						target="_blank"
-						rel="noopener"
+					続行することで、<a href="/terms" onclick={(event) => openLegal(event, event.currentTarget)}
+						>利用規約</a
+					>および<a href="/privacy-policy" onclick={(event) => openLegal(event, event.currentTarget)}
 						>プライバシーポリシー</a
 					>に同意したものとみなされます。
 				</p>
@@ -525,6 +573,11 @@ async function handlePasskeyLogin(): Promise<void> {
 		</div>
 	</main>
 </div>
+
+{#if page.state.legal}
+	<!-- 閉じるときは履歴を 1 つ戻して URL を /auth に戻す（ブラウザの「戻る」と同じ動き） -->
+	<LegalOverlay title={page.state.legal.title} html={page.state.legal.html} onclose={closeLegal} onlink={openLegal} />
+{/if}
 
 <style>
 .auth-page {

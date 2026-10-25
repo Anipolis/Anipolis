@@ -1,7 +1,7 @@
 <script lang="ts">
 import type { SubmitFunction } from "@sveltejs/kit";
 import { enhance } from "$app/forms";
-import { FORGOT_PASSWORD_PATH } from "$lib/utils/password-reset";
+import { FORGOT_PASSWORD_PATH, MIN_PASSWORD_LENGTH } from "$lib/utils/password-reset";
 import type { PageProps } from "./$types";
 
 let { data, form }: PageProps = $props();
@@ -76,7 +76,7 @@ const submitPassword: SubmitFunction = () => {
 								class="field-input password-input"
 								class:field-error={form && 'field' in form && form.field === 'password'}
 								autocomplete="new-password"
-								minlength="6"
+								minlength={MIN_PASSWORD_LENGTH}
 								required
 							>
 							<button
@@ -98,7 +98,7 @@ const submitPassword: SubmitFunction = () => {
 						{#if form && 'field' in form && form.field === 'password'}
 							<p class="field-error-msg">{form.message}</p>
 						{:else}
-							<p class="field-hint">6文字以上で入力してください。</p>
+							<p class="field-hint">{MIN_PASSWORD_LENGTH}文字以上で入力してください。</p>
 						{/if}
 					</div>
 
@@ -112,7 +112,7 @@ const submitPassword: SubmitFunction = () => {
 								class="field-input password-input"
 								class:field-error={form && 'field' in form && form.field === 'confirm'}
 								autocomplete="new-password"
-								minlength="6"
+								minlength={MIN_PASSWORD_LENGTH}
 								required
 							>
 							<button

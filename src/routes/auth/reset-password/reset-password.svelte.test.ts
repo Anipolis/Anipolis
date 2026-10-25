@@ -30,7 +30,7 @@ describe("reset password page", () => {
 
 		const form = target.querySelector<HTMLFormElement>('form[action="?/setPassword"]');
 		expect(form).not.toBeNull();
-		expect(form?.querySelector<HTMLInputElement>('input[name="password"]')?.minLength).toBe(6);
+		expect(form?.querySelector<HTMLInputElement>('input[name="password"]')?.minLength).toBe(8);
 		expect(form?.querySelector<HTMLInputElement>('input[name="confirm"]')).not.toBeNull();
 		expect(target.textContent).toContain("user@example.com");
 

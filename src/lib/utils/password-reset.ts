@@ -7,8 +7,11 @@
 export const FORGOT_PASSWORD_PATH = "/auth/forgot-password";
 export const PASSWORD_RESET_PATH = "/auth/reset-password";
 
-/** 登録時（/auth の register）と同じ最小文字数 */
-export const MIN_PASSWORD_LENGTH = 6;
+/**
+ * パスワードの最小文字数。登録（/auth）・再設定・変更・設定で共通。Supabase Auth の password_min_length と同じ値にする
+ * （ほかのサイトから漏れた短いパスワードの使い回しを防ぐため 6 → 8）
+ */
+export const MIN_PASSWORD_LENGTH = 8;
 
 /**
  * 申請フォームの応答文言。アカウントの有無にかかわらず常にこの1種類を返し、
