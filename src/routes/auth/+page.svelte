@@ -429,16 +429,17 @@ async function handlePasskeyLogin(): Promise<void> {
 						{/if}
 						<button
 							type="button"
-							class="btn btn-outline auth-wide-button"
+							class="btn btn-outline auth-wide-button auth-provider-button"
 							onclick={handlePasskeyLogin}
 							disabled={passkeyPending || submitting !== null}
 						>
 							<span class="i-lucide-key-round" aria-hidden="true"></span>
 							{passkeyPending ? '確認中...' : 'パスキーでログイン'}
+							{@render lastUsedBadge('passkey')}
 						</button>
 					{/if}
 
-					{#each [{ kind: 'discord', label: 'Discord', icon: 'i-brand-discord' }, { kind: 'google', label: 'Google', icon: 'i-brand-google' }, { kind: 'twitter', label: 'X', icon: 'i-brand-x' }] as provider (provider.kind)}
+					{#each [{ kind: 'discord', method: 'discord', label: 'Discord', icon: 'i-brand-discord' }, { kind: 'google', method: 'google', label: 'Google', icon: 'i-brand-google' }, { kind: 'twitter', method: 'x', label: 'X', icon: 'i-brand-x' }] as provider (provider.kind)}
 						<form
 							method="POST"
 							action="?/{provider.kind}&next={encodeURIComponent(next)}"
@@ -454,6 +455,7 @@ async function handlePasskeyLogin(): Promise<void> {
 							>
 								<span class="auth-provider-icon {provider.icon}" aria-hidden="true"></span>
 								{submitting === provider.kind ? `${provider.label}へ移動中...` : `${provider.label}${actionWord}`}
+								{@render lastUsedBadge(provider.method)}
 							</button>
 						</form>
 					{/each}
@@ -463,6 +465,7 @@ async function handlePasskeyLogin(): Promise<void> {
 						<summary class="btn btn-outline auth-wide-button auth-provider-button">
 							<span class="auth-provider-icon i-lucide-mail" aria-hidden="true"></span>
 							メールアドレス{actionWord}
+							{@render lastUsedBadge('email')}
 						</summary>
 						<!-- メールアドレスを選んだら他の手段のボタンは隠すので（CSS の :has）、戻る手段を置く -->
 						<button type="button" class="btn btn-ghost auth-email-back" onclick={closeEmail}>
@@ -571,6 +574,13 @@ async function handlePasskeyLogin(): Promise<void> {
 				</div>
 			{/if}
 
+			<!-- この端末で前回ログインに使った方法の印（ログインのタブだけ。並び順は変えない） -->
+			{#snippet lastUsedBadge(method: string)}
+				{#if activeMode === 'login' && data.lastLoginMethod === method}
+					<span class="auth-last-used">前回のログイン</span>
+				{/if}
+			{/snippet}
+
 			{#snippet consent()}
 				<p class="auth-consent">
 					続行することで、<a href="/terms" onclick={(event) => openLegal(event, event.currentTarget)}
@@ -668,6 +678,21 @@ async function handlePasskeyLogin(): Promise<void> {
 
 .auth-email[open] > summary {
 	display: none;
+}
+
+/* ボタンの右上の枠に重ねて出す（スマホ幅でも中央の文字とぶつからないように） */
+.auth-last-used {
+	position: absolute;
+	top: -9px;
+	right: 14px;
+	padding: 0 8px;
+	border-radius: 999px;
+	background: var(--accent);
+	color: var(--color-bg);
+	font-size: 0.68rem;
+	font-weight: 700;
+	line-height: 1.5;
+	pointer-events: none;
 }
 
 /* メールアドレスを選んだら、他の手段（パスキー・外部サービス）のボタンは隠してフォームだけにする */
