@@ -41,7 +41,7 @@ const submitPassword: SubmitFunction = () => {
 						ログイン画面から外部サービスのボタンでログインしてください。
 					{/if}
 				</p>
-				<a href="/auth?mode=login" class="btn btn-primary auth-wide-button">ログイン画面へ</a>
+				<a href="/auth?mode=login&method=email" class="btn btn-primary auth-wide-button">ログイン画面へ</a>
 			{:else if data.state !== 'ready'}
 				<div class="flash-error" role="alert">
 					{#if data.state === 'expired'}
