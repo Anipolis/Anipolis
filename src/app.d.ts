@@ -21,5 +21,10 @@ declare global {
 			session?: Session | null;
 			user?: User | null;
 		}
+		// shallow routing（pushState）で持たせる状態
+		interface PageState {
+			/** ログイン画面の上に重ねて出している規約・ポリシー */
+			legal?: { title: string; html: string };
+		}
 	}
 }

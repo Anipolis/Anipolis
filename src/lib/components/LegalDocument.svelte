@@ -1,6 +1,7 @@
 <script lang="ts">
 import type { Snippet } from "svelte";
 import { page } from "$app/state";
+import LegalBody from "./LegalBody.svelte";
 
 interface Props {
 	title: string;
@@ -28,11 +29,7 @@ const showSettingsLink = $derived(Boolean(page.data.user));
 				</a>
 			{/if}
 
-			{#if children}
-				{@render children()}
-			{:else if html}
-				{@html html}
-			{/if}
+			<LegalBody {html} {children} />
 		</div>
 	</main>
 </div>
@@ -40,63 +37,5 @@ const showSettingsLink = $derived(Boolean(page.data.user));
 <style>
 .back-link {
 	margin-bottom: 16px;
-}
-
-.legal-document :global(h1) {
-	font-size: 20px;
-	font-weight: 700;
-	margin-bottom: 24px;
-}
-
-.legal-document :global(h2) {
-	font-size: 1.15rem;
-	font-weight: 700;
-	margin: 32px 0 12px;
-}
-
-.legal-document :global(h3) {
-	font-size: 1rem;
-	font-weight: 700;
-	margin: 20px 0 8px;
-}
-
-.legal-document :global(p),
-.legal-document :global(ul),
-.legal-document :global(ol) {
-	margin: 0 0 12px;
-	line-height: 1.7;
-}
-
-.legal-document :global(ul),
-.legal-document :global(ol) {
-	padding-left: 1.4em;
-}
-
-.legal-document :global(li) {
-	margin-bottom: 4px;
-}
-
-.legal-document :global(a) {
-	color: var(--color-accent);
-}
-
-.legal-document :global(table) {
-	width: 100%;
-	border-collapse: collapse;
-	margin: 0 0 16px;
-	font-size: 0.92rem;
-}
-
-.legal-document :global(th),
-.legal-document :global(td) {
-	border: 1px solid var(--color-border);
-	padding: 8px 12px;
-	text-align: left;
-	vertical-align: top;
-}
-
-.legal-document :global(th) {
-	background: color-mix(in srgb, var(--color-accent) 6%, transparent);
-	white-space: nowrap;
 }
 </style>
