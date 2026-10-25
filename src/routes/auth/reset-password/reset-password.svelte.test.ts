@@ -67,7 +67,7 @@ describe("reset password page", () => {
 		expect(target.querySelector('form[action="?/setPassword"]')).toBeNull();
 		// テンプレート整形で改行が入るため、描画時と同じく空白を畳んでから比較する
 		expect(target.textContent?.replace(/\s+/g, " ")).toContain("Google / Discord でのログインに使われています");
-		expect(target.querySelector<HTMLAnchorElement>('a[href="/auth?mode=login"]')).not.toBeNull();
+		expect(target.querySelector<HTMLAnchorElement>('a[href="/auth?mode=login&method=email"]')).not.toBeNull();
 
 		await cleanup();
 	});

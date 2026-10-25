@@ -13,6 +13,29 @@ import { type InviteCodeState, syncInviteCodeState } from "./invite-code";
 
 let { data, form }: PageProps = $props();
 
+// メールのフォームを開いておくか。入力の間違いなどで戻ってきたとき・パスワードの再設定から戻ってきたとき（?method=email）は開いておく
+function shouldOpenEmail(): boolean {
+	return form?.mode === "login" || form?.mode === "register" || page.url.searchParams.get("method") === "email";
+}
+let emailOpen = $state(untrack(shouldOpenEmail));
+$effect(() => {
+	if (shouldOpenEmail()) emailOpen = true;
+});
+
+/** 「ほかの方法で〜」: フォームを閉じて手段のボタンの並びに戻し、メールアドレスのボタンにフォーカスを戻す */
+async function closeEmail(event: MouseEvent): Promise<void> {
+	const details = (event.currentTarget as HTMLElement).closest("details");
+	emailOpen = false;
+	await tick();
+	details?.querySelector("summary")?.focus();
+}
+
+/** フォームを開いたら、メールアドレスの欄から入力できるようにする */
+function focusEmailField(event: Event): void {
+	const details = event.currentTarget as HTMLDetailsElement;
+	if (details.open) details.querySelector<HTMLInputElement>('input[type="email"]')?.focus();
+}
+
 /**
  * 規約・ポリシーはこの画面の上に重ねて出す（URL は /terms などに変える）。新しいタブで開くと「戻る」が使えず、
  * 同じタブで移ると入力中の内容が消えるため。Ctrl＋クリックなどで新しいタブに開くときは邪魔しない
@@ -64,6 +87,8 @@ function closeLegal(): void {
 const DISCORD_INVITE_URL = "https://discord.gg/QxQmg4EEgP";
 
 const activeMode = $derived((form?.mode ?? data.mode) as "login" | "register" | "add_account");
+// ボタンの文言。「〜で続ける」ではどちらのタブか分かりにくいので、タブで言い分ける
+const actionWord = $derived(activeMode === "register" ? "で登録" : "でログイン");
 const next = $derived((form && "next" in form && typeof form.next === "string" ? form.next : data.next) ?? "/");
 let inviteCodeState = $state<InviteCodeState>({ value: "", dirty: false, source: null, linkSource: "" });
 
@@ -396,7 +421,7 @@ async function handlePasskeyLogin(): Promise<void> {
 					</div>
 				{/if}
 
-				<!-- 外部サービスでのログインは1つのまとまりにし、その下に「または」を1回だけ置いてメールアドレスへ続ける（#421） -->
+				<!-- ログインの手段（外部サービス・メールアドレス）は同じボタンの並びにする。「または」の区切りは置かない -->
 				<div class="auth-providers">
 					{#if activeMode === 'login' && data.passkeyEnabled}
 						{#if passkeyError}
@@ -428,104 +453,122 @@ async function handlePasskeyLogin(): Promise<void> {
 								disabled={submitting !== null}
 							>
 								<span class="auth-provider-icon {provider.icon}" aria-hidden="true"></span>
-								{submitting === provider.kind ? `${provider.label}へ移動中...` : `${provider.label}で続ける`}
+								{submitting === provider.kind ? `${provider.label}へ移動中...` : `${provider.label}${actionWord}`}
 							</button>
 						</form>
 					{/each}
+
+					<!-- メールアドレスも他と同じボタンにし、押したらその場でフォームを開く（JavaScript が無くても開ける） -->
+					<details class="auth-email" bind:open={emailOpen} ontoggle={focusEmailField}>
+						<summary class="btn btn-outline auth-wide-button auth-provider-button">
+							<span class="auth-provider-icon i-lucide-mail" aria-hidden="true"></span>
+							メールアドレス{actionWord}
+						</summary>
+						<!-- メールアドレスを選んだら他の手段のボタンは隠すので（CSS の :has）、戻る手段を置く -->
+						<button type="button" class="btn btn-ghost auth-email-back" onclick={closeEmail}>
+							<span class="i-lucide-arrow-left" aria-hidden="true"></span>
+							ほかの方法{actionWord}
+						</button>
+						{#if activeMode === 'login'}
+							<form
+								method="POST"
+								action="?/login&next={encodeURIComponent(next)}"
+								class="auth-form"
+								novalidate
+								use:enhance={enhanceAuth('login')}
+							>
+								<input type="hidden" name="next" value={next}>
+								<input type="hidden" name="invite_code" value={inviteCodeState.value}>
+
+								<div class="field">
+									<label for="login-email" class="field-label">メールアドレス</label>
+									<input
+										id="login-email"
+										name="email"
+										type="email"
+										class="field-input"
+										autocomplete="email"
+										defaultValue={form?.mode === 'login' ? form.email ?? '' : ''}
+										required
+									>
+								</div>
+
+								<div class="field">
+									<label for="login-password" class="field-label">パスワード</label>
+									<PasswordInput
+										id="login-password"
+										name="password"
+										autocomplete="current-password"
+										required
+										bind:input={loginPasswordInput}
+									/>
+									<p class="field-hint auth-forgot-link">
+										<a href="/auth/forgot-password">パスワードをお忘れですか？</a>
+									</p>
+								</div>
+
+								<button
+									type="submit"
+									class="btn btn-primary auth-wide-button"
+									disabled={submitting !== null}
+								>
+									{submitting === 'login' ? 'ログイン中...' : 'ログイン'}
+								</button>
+							</form>
+						{:else}
+							<form
+								method="POST"
+								action="?/register&next={encodeURIComponent(next)}"
+								class="auth-form"
+								novalidate
+								use:enhance={enhanceAuth('register')}
+							>
+								<input type="hidden" name="next" value={next}>
+								<input type="hidden" name="invite_code" value={inviteCodeState.value}>
+
+								<div class="field">
+									<label for="register-email" class="field-label">メールアドレス</label>
+									<input
+										id="register-email"
+										name="email"
+										type="email"
+										class="field-input"
+										autocomplete="email"
+										defaultValue={form?.mode === 'register' ? form.email ?? '' : ''}
+										required
+									>
+								</div>
+
+								<!-- ユーザー名・表示名・アイコンは登録後の初期設定画面で決める（176） -->
+								<div class="field">
+									<label for="register-password" class="field-label">パスワード</label>
+									<PasswordInput
+										id="register-password"
+										name="password"
+										autocomplete="new-password"
+										minlength={MIN_PASSWORD_LENGTH}
+										required
+										invalid={Boolean(form && 'field' in form && form.field === 'password')}
+										bind:input={registerPasswordInput}
+									/>
+									{#if form && 'field' in form && form.field === 'password'}
+										<p class="field-error-msg">{form.message}</p>
+									{:else}
+										<p class="field-hint">{MIN_PASSWORD_LENGTH}文字以上で入力してください。</p>
+									{/if}
+								</div>
+
+								<button
+									type="submit"
+									class="btn btn-primary auth-wide-button"
+									disabled={submitting !== null}
+								>
+									{submitting === 'register' ? '作成中...' : 'アカウントを作成'}
+								</button>
+							</form>
+						{/if}
+					</details>
 				</div>
-
-				<div class="auth-divider"><span>またはメールアドレスで</span></div>
-
-				{#if activeMode === 'login'}
-					<form
-						method="POST"
-						action="?/login&next={encodeURIComponent(next)}"
-						class="auth-form"
-						novalidate
-						use:enhance={enhanceAuth('login')}
-					>
-						<input type="hidden" name="next" value={next}>
-						<input type="hidden" name="invite_code" value={inviteCodeState.value}>
-
-						<div class="field">
-							<label for="login-email" class="field-label">メールアドレス</label>
-							<input
-								id="login-email"
-								name="email"
-								type="email"
-								class="field-input"
-								autocomplete="email"
-								defaultValue={form?.mode === 'login' ? form.email ?? '' : ''}
-								required
-							>
-						</div>
-
-						<div class="field">
-							<label for="login-password" class="field-label">パスワード</label>
-							<PasswordInput
-								id="login-password"
-								name="password"
-								autocomplete="current-password"
-								required
-								bind:input={loginPasswordInput}
-							/>
-							<p class="field-hint auth-forgot-link">
-								<a href="/auth/forgot-password">パスワードをお忘れですか？</a>
-							</p>
-						</div>
-
-						<button type="submit" class="btn btn-primary auth-wide-button" disabled={submitting !== null}>
-							{submitting === 'login' ? 'ログイン中...' : 'ログイン'}
-						</button>
-					</form>
-				{:else}
-					<form
-						method="POST"
-						action="?/register&next={encodeURIComponent(next)}"
-						class="auth-form"
-						novalidate
-						use:enhance={enhanceAuth('register')}
-					>
-						<input type="hidden" name="next" value={next}>
-						<input type="hidden" name="invite_code" value={inviteCodeState.value}>
-
-						<div class="field">
-							<label for="register-email" class="field-label">メールアドレス</label>
-							<input
-								id="register-email"
-								name="email"
-								type="email"
-								class="field-input"
-								autocomplete="email"
-								defaultValue={form?.mode === 'register' ? form.email ?? '' : ''}
-								required
-							>
-						</div>
-
-						<!-- ユーザー名・表示名・アイコンは登録後の初期設定画面で決める（176） -->
-						<div class="field">
-							<label for="register-password" class="field-label">パスワード</label>
-							<PasswordInput
-								id="register-password"
-								name="password"
-								autocomplete="new-password"
-								minlength={MIN_PASSWORD_LENGTH}
-								required
-								invalid={Boolean(form && 'field' in form && form.field === 'password')}
-								bind:input={registerPasswordInput}
-							/>
-							{#if form && 'field' in form && form.field === 'password'}
-								<p class="field-error-msg">{form.message}</p>
-							{:else}
-								<p class="field-hint">{MIN_PASSWORD_LENGTH}文字以上で入力してください。</p>
-							{/if}
-						</div>
-
-						<button type="submit" class="btn btn-primary auth-wide-button" disabled={submitting !== null}>
-							{submitting === 'register' ? '作成中...' : 'アカウントを作成'}
-						</button>
-					</form>
-				{/if}
 			{/if}
 
 			{#snippet consent()}
@@ -612,6 +655,35 @@ async function handlePasskeyLogin(): Promise<void> {
 	flex-direction: column;
 	gap: 10px;
 	margin-top: 4px;
+}
+
+/* メールアドレスのボタン（summary）は他のボタンと同じ見た目にし、開いたらフォームに置き換える */
+.auth-email > summary {
+	list-style: none;
+}
+
+.auth-email > summary::-webkit-details-marker {
+	display: none;
+}
+
+.auth-email[open] > summary {
+	display: none;
+}
+
+/* メールアドレスを選んだら、他の手段（パスキー・外部サービス）のボタンは隠してフォームだけにする */
+.auth-providers:has(> .auth-email[open]) > :not(.auth-email) {
+	display: none;
+}
+
+.auth-email-back {
+	margin: -4px 0 12px -12px;
+	color: var(--fg-muted);
+	font-size: 0.85rem;
+}
+
+.auth-email-back [class^="i-lucide"] {
+	width: 16px;
+	height: 16px;
 }
 
 .auth-divider {

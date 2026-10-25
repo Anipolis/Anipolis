@@ -32,7 +32,7 @@ const submitRequest: SubmitFunction = () => {
 		<div class="settings-card">
 			<div class="settings-header-row">
 				<h1 class="settings-title">パスワードの再設定</h1>
-				<a href="/auth?mode=login" class="btn btn-ghost">ログインへ戻る</a>
+				<a href="/auth?mode=login&method=email" class="btn btn-ghost">ログインへ戻る</a>
 			</div>
 
 			{#if form?.success}
