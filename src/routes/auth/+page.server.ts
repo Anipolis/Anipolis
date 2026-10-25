@@ -9,6 +9,7 @@ import {
 	setInviteCodeCookie,
 	validateInviteCode,
 } from "$lib/server/invites";
+import { getLastLoginMethod, setLastLoginMethod } from "$lib/server/last-login-method";
 import { getExtraAccounts, setExtraAccounts } from "$lib/server/multi-account";
 import { isPasskeyEnabled } from "$lib/server/passkey";
 import { getClientKey, isRateLimited } from "$lib/server/rate-limit";
@@ -82,6 +83,8 @@ export const load: PageServerLoad = async ({ url, cookies, locals: { supabase, s
 		inviteCode,
 		inviteCodeValid,
 		passkeyEnabled: isPasskeyEnabled(),
+		// この端末で前回ログインに使った方法（ボタンに「前回のログイン」と出す）
+		lastLoginMethod: getLastLoginMethod(cookies),
 		error: url.searchParams.get("error"),
 		// OAuth の失敗理由（/auth/callback が付ける）。URL から来るので符号の形のものだけ見せる
 		errorReason: /^[a-z0-9_]{1,40}$/.test(url.searchParams.get("reason") ?? "")
@@ -190,6 +193,7 @@ export const actions: Actions = {
 			clearInviteCodeCookie(cookies);
 		}
 
+		setLastLoginMethod(cookies, "email");
 		redirect(303, next);
 	},
 

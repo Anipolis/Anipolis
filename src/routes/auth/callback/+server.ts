@@ -3,6 +3,7 @@ import { env } from "$env/dynamic/private";
 import { admitWithInviteCode } from "$lib/server/beta-admission";
 import { grantBetaAccess, isBetaGateEnabled, isBetaMember, verifyGuildMembership } from "$lib/server/discord";
 import { getInviteCodeCookie } from "$lib/server/invites";
+import { detectOAuthLoginMethod, setLastLoginMethod } from "$lib/server/last-login-method";
 import { PASSWORD_RESET_PATH } from "$lib/utils/password-reset";
 import { sanitizeInternalRedirect } from "$lib/utils/url";
 import type { RequestHandler } from "./$types";
@@ -124,5 +125,7 @@ export const GET: RequestHandler = async ({ url, cookies, locals: { supabase } }
 		redirect(303, `/auth?error=${errorCode}`);
 	}
 
+	const method = detectOAuthLoginMethod(user);
+	if (method) setLastLoginMethod(cookies, method);
 	redirect(303, safeNext);
 };
