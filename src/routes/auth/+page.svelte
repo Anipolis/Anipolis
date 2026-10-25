@@ -7,6 +7,7 @@ import { page } from "$app/state";
 import LegalOverlay from "$lib/components/LegalOverlay.svelte";
 import PasswordInput from "$lib/components/PasswordInput.svelte";
 import { signInWithPasskey } from "$lib/passkey";
+import { MIN_PASSWORD_LENGTH } from "$lib/utils/password-reset";
 import type { PageProps } from "./$types";
 import { type InviteCodeState, syncInviteCodeState } from "./invite-code";
 
@@ -508,7 +509,7 @@ async function handlePasskeyLogin(): Promise<void> {
 								id="register-password"
 								name="password"
 								autocomplete="new-password"
-								minlength={6}
+								minlength={MIN_PASSWORD_LENGTH}
 								required
 								invalid={Boolean(form && 'field' in form && form.field === 'password')}
 								bind:input={registerPasswordInput}
@@ -516,7 +517,7 @@ async function handlePasskeyLogin(): Promise<void> {
 							{#if form && 'field' in form && form.field === 'password'}
 								<p class="field-error-msg">{form.message}</p>
 							{:else}
-								<p class="field-hint">6文字以上で入力してください。</p>
+								<p class="field-hint">{MIN_PASSWORD_LENGTH}文字以上で入力してください。</p>
 							{/if}
 						</div>
 

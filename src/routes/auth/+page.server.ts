@@ -13,10 +13,9 @@ import { getExtraAccounts, setExtraAccounts } from "$lib/server/multi-account";
 import { isPasskeyEnabled } from "$lib/server/passkey";
 import { getClientKey, isRateLimited } from "$lib/server/rate-limit";
 import { createServiceRoleClient } from "$lib/server/supabase-admin";
+import { MIN_PASSWORD_LENGTH } from "$lib/utils/password-reset";
 import { sanitizeInternalRedirect } from "$lib/utils/url";
 import type { Actions, PageServerLoad, RequestEvent } from "./$types";
-
-const MIN_PASSWORD_LENGTH = 6;
 
 function getSafeNext(raw: FormDataEntryValue | string | null): string {
 	return sanitizeInternalRedirect(typeof raw === "string" ? raw : "/");

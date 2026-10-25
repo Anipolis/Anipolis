@@ -54,6 +54,14 @@ const items = $derived.by((): Item[] => {
 				: "メールアドレスとパスワードでもログインできるようになります",
 			href: "/settings/account/password",
 		});
+		// 管理者の権限は二段階認証を済ませたログインでだけ使える（migration 177）。今は管理者だけに出す
+		if (data.profile?.is_admin) {
+			list.push({
+				label: "二段階認証",
+				description: "ログインのときに認証アプリのコードも確認します（管理画面を使うのに必要です）",
+				href: "/settings/security",
+			});
+		}
 		if (data.passkeyEnabled) {
 			list.push({
 				label: "パスキー",

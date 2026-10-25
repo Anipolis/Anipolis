@@ -4,6 +4,7 @@ import { groupGenreFilters, translateAnimeGenres } from "$lib/anime-vocabulary";
 import { computeBroadcastStatus } from "$lib/broadcast-status";
 import { toValidExchangeSubjectiveTags } from "$lib/exchange-tags";
 import { isOwnPostImage, postImageMediaUrl } from "$lib/post-image-url";
+import { getAssuranceLevel } from "$lib/server/mfa";
 import { signPostImageUrls } from "$lib/server/post-image-signing";
 import { buildPostCardSelect, POST_CW_ANIME_SELECT } from "$lib/server/post-selects";
 import { failQuery, logQueryFailure } from "$lib/server/query-failure";
@@ -1640,9 +1641,20 @@ export async function getPendingFollowRequestCount(
 	return count ?? 0;
 }
 
-export async function isAdminUser(supabase: SupabaseClient<Database>, userId: string): Promise<boolean> {
+/** 管理者のアカウントか（二段階認証を済ませたかは見ない）。管理画面の入口で設定へ案内するかの判定に使う */
+export async function isAdminAccount(supabase: SupabaseClient<Database>, userId: string): Promise<boolean> {
 	const { data } = await supabase.from("profiles").select("is_admin").eq("id", userId).maybeSingle();
 	return data?.is_admin === true;
+}
+
+/**
+ * 管理者として扱ってよいか。管理者のアカウントで、かつ今のログインが二段階認証済み（aal2）のときだけ true。
+ * DB の is_current_user_admin() と同じ決まり（migration 177）。service role で書き込む前の確認にも使うので、
+ * パスワードだけで入ったログインを管理者として通さない
+ */
+export async function isAdminUser(supabase: SupabaseClient<Database>, userId: string): Promise<boolean> {
+	const [admin, level] = await Promise.all([isAdminAccount(supabase, userId), getAssuranceLevel(supabase)]);
+	return admin && level.current === "aal2";
 }
 
 export type InviteRow = {
