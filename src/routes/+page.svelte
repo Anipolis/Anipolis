@@ -7,6 +7,7 @@ import PostComposer from "$lib/components/PostComposer.svelte";
 import PostRow from "$lib/components/PostRow.svelte";
 import TimelineLiveRun from "$lib/components/TimelineLiveRun.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
+import WelcomeCard from "$lib/components/WelcomeCard.svelte";
 import { createLatestResolved } from "$lib/latest-resolved.svelte";
 import { composeOpen } from "$lib/stores/compose";
 import { groupLiveRuns } from "$lib/utils/live-runs";
@@ -134,6 +135,7 @@ $effect(() => {
 					{@const extras = pageExtras.value}
 					<PostComposer
 						username={data.profile.username}
+						displayName={data.profile.display_name}
 						avatarUrl={data.profile.avatar_url}
 						initialAnime={extras.initialAnime}
 						initialContent={extras.initialContent}
@@ -207,6 +209,10 @@ $effect(() => {
 					</button>
 				</div>
 			</div>
+		{/if}
+
+		{#if data.user && pageExtras.value?.newcomer}
+			<WelcomeCard userId={data.user.id} />
 		{/if}
 
 		{#if data.user}
@@ -338,6 +344,7 @@ $effect(() => {
 				{@const extras = pageExtras.value}
 				<PostComposer
 					username={data.profile.username}
+					displayName={data.profile.display_name}
 					avatarUrl={data.profile.avatar_url}
 					initialAnime={extras.initialAnime}
 					initialContent={extras.initialContent}
