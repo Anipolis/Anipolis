@@ -10,12 +10,25 @@ let { data, form }: PageProps = $props();
 let username = $state(untrack(() => data.username ?? ""));
 let displayName = $state(untrack(() => data.displayName ?? ""));
 let submitting = $state(false);
-// 招待制になりGoogle/Discord/X等ログイン元の写真が意図せず適用されうるため、
-// デフォルトはアイコンなし（グレー）。ログイン元の画像は「候補を使う」で明示的に選んだ時のみ使う。
-let avatarChoice = $state<"oauth" | "upload" | "none">("none");
+// Discord・Google・X で登録した人は、そのサービスのアイコンを最初から選んだ状態にする。
+// プレビューで見えていて「削除」ですぐ外せるので、気づかないうちに使われることはない
+// （以前は意図せず使われるのを避けてアイコンなしにしていた。2026-07-28）
+let avatarChoice = $state<"oauth" | "upload" | "none">(untrack(() => (data.avatarUrl ? "oauth" : "none")));
 let avatarPreviewUrl = $state<string | null>(null);
 let avatarMessage = $state("");
 let avatarFileInput = $state<HTMLInputElement | null>(null);
+
+// ユーザー名のエラーは、送ったときの名前のままの間だけ出す（直したら消す）。
+// サーバーは前後の空白を除いて小文字にそろえた名前を返すので、比べる側も同じようにそろえる
+const usernameError = $derived(
+	form &&
+		"field" in form &&
+		form.field === "username" &&
+		"username" in form &&
+		form.username === username.trim().toLowerCase()
+		? form.message
+		: null,
+);
 
 const selectedAvatarUrl = $derived(
 	avatarChoice === "upload" ? avatarPreviewUrl : avatarChoice === "oauth" ? data.avatarUrl : null,
@@ -61,12 +74,6 @@ function updateAvatarFile(event: Event) {
 	avatarChoice = "upload";
 }
 
-function useOAuthAvatar() {
-	clearSelectedAvatarFile();
-	avatarChoice = data.avatarUrl ? "oauth" : "none";
-	avatarMessage = "";
-}
-
 function clearAvatar() {
 	clearSelectedAvatarFile();
 	avatarChoice = "none";
@@ -99,13 +106,6 @@ onDestroy(clearSelectedAvatarFile);
 					<UserAvatar src={selectedAvatarUrl} username={displayName || username} size="lg" />
 					<div class="onboarding-avatar-copy">
 						<div class="field-label">プロフィール画像</div>
-						<p class="field-hint">
-							{#if data.avatarUrl}
-								ログインに使ったサービスのアイコンを使うか、画像をアップロードできます。
-							{:else}
-								画像をアップロードできます。設定しなくても始められます。
-							{/if}
-						</p>
 						<div class="onboarding-avatar-actions">
 							<label class="btn btn-outline onboarding-avatar-file">
 								画像を変更
@@ -118,20 +118,10 @@ onDestroy(clearSelectedAvatarFile);
 									onchange={updateAvatarFile}
 								>
 							</label>
-							{#if data.avatarUrl}
-								<button
-									type="button"
-									class="btn btn-ghost"
-									disabled={submitting}
-									onclick={useOAuthAvatar}
-								>
-									候補を使う
-								</button>
-							{/if}
-							<!-- 何も選んでいないときの「使わない」は押す意味が無いので、選んだあとだけ出す -->
+							<!-- 画像が入っているときだけ出す。外すと頭文字のアイコンに戻る（外部サービスのアイコンも、アップロードした画像も同じ） -->
 							{#if avatarChoice !== "none"}
 								<button type="button" class="btn btn-ghost" disabled={submitting} onclick={clearAvatar}>
-									使わない
+									削除
 								</button>
 							{/if}
 						</div>
@@ -156,7 +146,8 @@ onDestroy(clearSelectedAvatarFile);
 							name="username"
 							type="text"
 							class="field-input has-prefix"
-							class:field-error={form && "field" in form && form.field === "username"}
+							class:field-error={usernameError !== null}
+							aria-invalid={usernameError !== null}
 							placeholder="animetaro"
 							maxlength="20"
 							pattern={"[a-zA-Z0-9_]{3,20}"}
@@ -164,8 +155,8 @@ onDestroy(clearSelectedAvatarFile);
 							bind:value={username}
 						>
 					</div>
-					{#if form && "field" in form && form.field === "username"}
-						<p class="field-error-msg">{form.message}</p>
+					{#if usernameError}
+						<p class="field-error-msg">{usernameError}</p>
 					{:else}
 						<p class="field-hint">3〜20文字の半角英数字と _（アンダースコア）が使えます。</p>
 					{/if}
@@ -191,7 +182,12 @@ onDestroy(clearSelectedAvatarFile);
 				</div>
 
 				<div class="settings-actions">
-					<button type="submit" class="btn btn-primary" disabled={submitting}>
+					<!-- ユーザー名は新しく決める欄で、ブラウザが自動入力しないので、空の間は押せなくする（ux-guidelines） -->
+					<button
+						type="submit"
+						class="btn btn-primary onboarding-submit"
+						disabled={submitting || username.trim() === ""}
+					>
 						{submitting ? "保存中..." : "はじめる"}
 					</button>
 				</div>
@@ -222,13 +218,36 @@ onDestroy(clearSelectedAvatarFile);
 	margin: 12px 0 6px;
 }
 
+/* 「画像を変更」は補助の操作なので灰色の枠にし、青は「はじめる」だけに残す（ux-guidelines） */
+.onboarding-avatar-file {
+	border-color: var(--color-border-hover);
+	color: var(--fg);
+}
+
+.onboarding-avatar-file:hover {
+	background: var(--bg-hover);
+}
+
 .onboarding-avatar-file input {
 	display: none;
+}
+
+.onboarding-submit:disabled {
+	background: var(--bg-hover);
+	color: var(--fg-muted);
+	box-shadow: none;
+	cursor: not-allowed;
 }
 
 @media (max-width: 560px) {
 	.onboarding-avatar-row {
 		align-items: flex-start;
+	}
+
+	/* スマホではログイン画面のボタンと同じく横幅いっぱいにする */
+	.onboarding-submit {
+		width: 100%;
+		justify-content: center;
 	}
 }
 </style>

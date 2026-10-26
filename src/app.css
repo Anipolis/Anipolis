@@ -1865,6 +1865,15 @@ textarea {
 	border-color: var(--color-danger);
 }
 
+/* エラー中の欄は、カーソルの枠も赤にする（赤い枠と青い枠が二重に見えないように） */
+.field-input-prefix:has(.field-error:focus-visible) {
+	outline-color: var(--color-danger);
+}
+
+.field-input.field-error:focus {
+	border-color: var(--color-danger);
+}
+
 .prefix {
 	padding: 0 10px;
 	color: var(--color-text-muted);
