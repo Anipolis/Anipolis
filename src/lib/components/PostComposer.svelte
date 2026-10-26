@@ -45,6 +45,8 @@ interface UserResult {
 
 interface Props {
 	username: string;
+	/** アイコンの頭文字に使う（サイドバーなどと同じく表示名から出す）。無ければユーザー名 */
+	displayName?: string | null;
 	avatarUrl: string | null | undefined;
 	initialAnime?: AnimeResult | null;
 	initialContent?: string;
@@ -62,6 +64,7 @@ interface Props {
 
 let {
 	username,
+	displayName = null,
 	avatarUrl,
 	initialAnime = null,
 	initialContent = "",
@@ -596,7 +599,7 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 
 <div class="composer compact-composer">
 	<div class="composer-body">
-		<UserAvatar src={avatarUrl} {username} size="sm" />
+		<UserAvatar src={avatarUrl} username={displayName || username} size="sm" />
 		<form method="POST" action="?/createPost" use:enhance={handleSubmit} class="composer-form">
 			<div class="composer-input">
 				<textarea

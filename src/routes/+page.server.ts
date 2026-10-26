@@ -98,13 +98,25 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 			// 視聴中の作品は投稿欄の補助。読めなくても投稿欄は出す（失敗は failQuery がログに残す）
 			user ? getUserAnimeList(supabase, user.id, "watching").catch(() => []) : Promise.resolve([]),
 			user ? getOpenBroadcastRoomSessions(supabase, { kind: "episode" }) : Promise.resolve([]),
+			user ? isNewcomer(user.id) : Promise.resolve(false),
 		] as const);
+
+	// まだ誰もフォローしておらず、マイリストも空の人（ホームで最初にやることを案内する）。読めなければ案内しない
+	async function isNewcomer(userId: string): Promise<boolean> {
+		const [following, list] = await Promise.all([
+			supabase.from("follows").select("following_id", { count: "exact", head: true }).eq("follower_id", userId),
+			supabase.from("user_anime_list").select("anime_id", { count: "exact", head: true }).eq("user_id", userId),
+		]);
+		if (following.error || list.error) return false;
+		return (following.count ?? 0) === 0 && (list.count ?? 0) === 0;
+	}
 
 	// 遷移の初期レスポンスではページ枠だけを返し、タイムラインと右カラムは
 	// ストリーミングで後から解決する。サイドバーからの遷移で、複数の
 	// Supabase クエリが終わるまで前画面に留まらないための境界である。
 	const pageExtras = fetchSidebarExtras().then(
-		([trendingResult, animeTrending, quoteAnimeResult, exchangeShare, watchingAnime, liveRooms]) => ({
+		([trendingResult, animeTrending, quoteAnimeResult, exchangeShare, watchingAnime, liveRooms, newcomer]) => ({
+			newcomer,
 			trending: trendingResult.data ?? [],
 			animeTrending,
 			liveRooms,
