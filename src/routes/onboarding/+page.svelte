@@ -18,9 +18,14 @@ let avatarPreviewUrl = $state<string | null>(null);
 let avatarMessage = $state("");
 let avatarFileInput = $state<HTMLInputElement | null>(null);
 
-// ユーザー名のエラーは、送ったときの名前のままの間だけ出す（直したら消す）
+// ユーザー名のエラーは、送ったときの名前のままの間だけ出す（直したら消す）。
+// サーバーは前後の空白を除いて小文字にそろえた名前を返すので、比べる側も同じようにそろえる
 const usernameError = $derived(
-	form && "field" in form && form.field === "username" && "username" in form && form.username === username
+	form &&
+		"field" in form &&
+		form.field === "username" &&
+		"username" in form &&
+		form.username === username.trim().toLowerCase()
 		? form.message
 		: null,
 );
