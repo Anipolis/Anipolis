@@ -17,23 +17,23 @@ function markFailed() {
 	failedSrc = src ?? null;
 }
 
-/** SSR の HTML で先に読み込みに失敗した画像は onerror が届かないので、マウント時にも確かめる */
+/**
+ * 読み込みの失敗を見張る。onerror={...} と書くと、SSR がハイドレーション前のイベントを拾うための
+ * インラインの onerror 属性を HTML に出し、CSP（script-src に unsafe-inline が無い）に止められて
+ * コンソールにエラーが出るので、マウント時に addEventListener で付ける。
+ * SSR の HTML で先に読み込みに失敗した画像には error が届かないので、マウント時にも確かめる
+ */
 // biome-ignore lint/correctness/noUnusedVariables: マークアップの {@attach} から使う
-function detectEarlyFailure(img: HTMLImageElement) {
+function watchFailure(img: HTMLImageElement) {
 	if (img.complete && img.naturalWidth === 0) markFailed();
+	img.addEventListener("error", markFailed);
+	return () => img.removeEventListener("error", markFailed);
 }
 </script>
 
 <div class="avatar avatar-{size}" aria-label={username}>
 	{#if showImage}
-		<img
-			{src}
-			alt={username}
-			referrerpolicy="no-referrer"
-			decoding="async"
-			onerror={markFailed}
-			{@attach detectEarlyFailure}
-		>
+		<img {src} alt={username} referrerpolicy="no-referrer" decoding="async" {@attach watchFailure}>
 	{:else}
 		{initial}
 	{/if}
