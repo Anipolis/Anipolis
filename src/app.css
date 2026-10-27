@@ -558,6 +558,19 @@ textarea {
 	text-decoration: none;
 }
 
+/* 補助の操作のボタン（灰色の枠・本文の色）。青（.btn-primary・.btn-outline）は、その画面でいちばん押してほしい操作だけに使う（ux-guidelines） */
+.btn-secondary {
+	background: transparent;
+	color: var(--color-text);
+	border: 1.5px solid var(--color-border-hover);
+}
+
+.btn-secondary:hover:not(:disabled) {
+	background: var(--color-surface-hover);
+	color: var(--color-text);
+	text-decoration: none;
+}
+
 .btn-ghost {
 	background: transparent;
 	color: var(--color-text-muted);

@@ -425,7 +425,7 @@ const grouped = $derived(
 						{#if isOwn}
 							<button
 								type="button"
-								class="btn btn-outline"
+								class="btn btn-secondary"
 								style="font-size: 13px;"
 								onclick={openProfileEditModal}
 							>
@@ -434,7 +434,7 @@ const grouped = $derived(
 						{:else if data.user}
 							{#if data.isBlocked}
 								<!-- ブロック中はフォローできない（RLS で拒否される）ので、操作の代わりに状態を示す -->
-								<span class="btn btn-outline" style="font-size: 13px;">ブロック中</span>
+								<span class="btn btn-secondary profile-blocked-label">ブロック中</span>
 							{:else}
 								<form
 									method="POST"
@@ -675,7 +675,7 @@ const grouped = $derived(
 										/>
 									</label>
 									<div class="profile-image-actions">
-										<label class="btn btn-outline profile-image-button">
+										<label class="btn btn-secondary profile-image-button">
 											{avatarUploading ? '処理中...' : editableAvatarUrl ? '画像を変更' : '画像を選択'}
 											<input
 												id="profile-avatar-input"
@@ -713,7 +713,7 @@ const grouped = $derived(
 									{/if}
 								</label>
 								<div class="profile-image-actions profile-header-actions-row">
-									<label class="btn btn-outline profile-image-button">
+									<label class="btn btn-secondary profile-image-button">
 										{headerUploading ? '処理中...' : editableHeaderUrl ? '画像を変更' : '画像を選択'}
 										<input
 											id="profile-header-input"
@@ -1328,17 +1328,21 @@ const grouped = $derived(
 	margin-top: 8px;
 }
 
-/* 画像のボタンは補助の操作なので灰色の枠にし、青は「保存する」だけに残す（ux-guidelines） */
+/* 「ブロック中」は押せない状態の表示なので、灰色の枠にして押せる見た目（カーソル・ホバー）を消す */
+.profile-blocked-label {
+	cursor: default;
+	font-size: 13px;
+}
+
+.profile-blocked-label:hover:not(:disabled) {
+	background: transparent;
+}
+
+/* 画像のボタンは補助の操作なので灰色の枠（.btn-secondary）にし、青は「保存する」だけに残す */
 .profile-image-button {
 	position: relative;
 	cursor: pointer;
 	font-size: 13px;
-	border-color: var(--color-border-hover);
-	color: var(--color-text);
-}
-
-.profile-image-button:hover {
-	background: var(--color-surface-hover);
 }
 
 .profile-image-button input {
