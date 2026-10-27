@@ -1207,6 +1207,10 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 .schedule-page {
 	--schedule-event-accent: #f97316;
 	max-width: 1480px;
+	/* 使える幅に合わせる。幅を決めないと、親（.app-main）の中で 7 日分の列（最小 132px × 7）の幅まで広がり、
+	   画面の幅 961〜1240px ほどで右側（土曜・「翌週」）が切れて見えなくなっていた。列は .schedule-grid の中で横にスクロールする */
+	width: 100%;
+	min-width: 0;
 	margin: 0 auto;
 	padding: 0 1rem 2rem;
 }
@@ -1398,7 +1402,9 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 }
 .slot-cover {
 	width: 100%;
-	height: auto;
+	/* 枠の高さに合わせて切り抜く（縦横比がふつうと違う画像で、下だけが切れていた） */
+	height: 100%;
+	object-fit: cover;
 	display: block;
 }
 .slot-cover--placeholder {
