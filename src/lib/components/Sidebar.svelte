@@ -1262,9 +1262,10 @@ function isActive(path: string): boolean {
 .account-menu {
 	position: absolute;
 	bottom: calc(100% + 8px);
+	/* サイドバー（幅 208px、はみ出しを隠す）の中に収める。最小幅 220px だと右端が切れていた */
 	left: 0;
+	right: 0;
 	z-index: 100;
-	min-width: 220px;
 	background: var(--surface, #1e293b);
 	border: 1px solid var(--border, #334155);
 	border-radius: 18px;
