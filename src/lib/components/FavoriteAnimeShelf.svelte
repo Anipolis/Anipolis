@@ -26,6 +26,10 @@ let errorMessage = $state("");
 let lastAddedId = $state<number | null>(null);
 let searchInput = $state<HTMLInputElement | null>(null);
 let editorCard = $state<HTMLDivElement | null>(null);
+// プロフィールの横一列。左右に続きがあるかで送りボタンを出し分ける
+let shelfRow = $state<HTMLOListElement | null>(null);
+let canScrollPrev = $state(false);
+let canScrollNext = $state(false);
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
 let searchController: AbortController | null = null;
 
@@ -33,6 +37,30 @@ const full = $derived(picks.length >= MAX_FAVORITE_ANIME);
 const pickedIds = $derived(new Set(picks.map((pick) => pick.id)));
 // 検索欄に文字がある間は、下の場所を検索結果に切り替える（一覧を押し広げて位置がずれないように）
 const showingResults = $derived(query.trim().length > 0);
+
+function updateShelfArrows() {
+	if (!shelfRow) return;
+	const { scrollLeft, scrollWidth, clientWidth } = shelfRow;
+	canScrollPrev = scrollLeft > 1;
+	canScrollNext = scrollLeft + clientWidth < scrollWidth - 1;
+}
+
+// 幅が変わったとき・作品が入れ替わったときも、送りボタンの出し分けを取り直す
+$effect(() => {
+	if (!shelfRow) return;
+	void favorites;
+	updateShelfArrows();
+	const observer = new ResizeObserver(updateShelfArrows);
+	observer.observe(shelfRow);
+	return () => observer.disconnect();
+});
+
+function scrollShelf(direction: -1 | 1) {
+	if (!shelfRow) return;
+	const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+	// 見えている幅の8割ずつ送る（端の作品が少し残って、どこまで見たか分かる）
+	shelfRow.scrollBy({ left: direction * shelfRow.clientWidth * 0.8, behavior: reduceMotion ? "auto" : "smooth" });
+}
 
 // 開いたら検索欄へ。10件そろっていて検索欄が使えないときは、Esc や Tab が効くようダイアログ自体へ
 $effect(() => {
@@ -196,22 +224,45 @@ async function save() {
 				<button type="button" class="btn btn-ghost favorite-shelf-edit" onclick={openEditor}>編集</button>
 			{/if}
 		</div>
-		<ol class="favorite-shelf-row">
-			{#each favorites as anime (anime.id)}
-				<li>
-					<a href="/anime/{anime.id}" class="favorite-card">
-						<span class="favorite-card-cover">
-							{#if anime.cover_url}
-								<img src={anime.cover_url} alt="" loading="lazy">
-							{:else}
-								<span class="favorite-cover-empty i-lucide-clapperboard" aria-hidden="true"></span>
-							{/if}
-						</span>
-						<span class="favorite-card-title">{anime.title}</span>
-					</a>
-				</li>
-			{/each}
-		</ol>
+		<div class="favorite-shelf-scroller">
+			<ol class="favorite-shelf-row" bind:this={shelfRow} onscroll={updateShelfArrows}>
+				{#each favorites as anime (anime.id)}
+					<li>
+						<a href="/anime/{anime.id}" class="favorite-card">
+							<span class="favorite-card-cover">
+								{#if anime.cover_url}
+									<img src={anime.cover_url} alt="" loading="lazy">
+								{:else}
+									<span class="favorite-cover-empty i-lucide-clapperboard" aria-hidden="true"></span>
+								{/if}
+							</span>
+							<span class="favorite-card-title">{anime.title}</span>
+						</a>
+					</li>
+				{/each}
+			</ol>
+			<!-- マウスで使う画面だけに出す（スマホは指で送る） -->
+			{#if canScrollPrev}
+				<button
+					type="button"
+					class="favorite-shelf-arrow favorite-shelf-arrow--prev"
+					aria-label="前の作品を表示"
+					onclick={() => scrollShelf(-1)}
+				>
+					<span class="i-lucide-chevron-left" aria-hidden="true"></span>
+				</button>
+			{/if}
+			{#if canScrollNext}
+				<button
+					type="button"
+					class="favorite-shelf-arrow favorite-shelf-arrow--next"
+					aria-label="次の作品を表示"
+					onclick={() => scrollShelf(1)}
+				>
+					<span class="i-lucide-chevron-right" aria-hidden="true"></span>
+				</button>
+			{/if}
+		</div>
 	</section>
 {:else if isOwn}
 	<!-- 本人にだけ入口を出す。ほかの人には何も出さない -->
@@ -393,8 +444,13 @@ async function save() {
 	padding: 4px 10px;
 	font-size: 13px;
 }
-/* スマホは指で横に送る（スクロールバーは出さない。右端の作品が切れて見えるので続きは分かる） */
+/* 一列に並べて横に送る。スクロールバーは出さず、スマホは指で、マウスの画面は左右のボタンで送る。
+   右端の作品が切れて見えるので、続きがあることは分かる */
+.favorite-shelf-scroller {
+	position: relative;
+}
 .favorite-shelf-row {
+	scroll-snap-type: x proximity;
 	display: flex;
 	gap: 10px;
 	margin: 0;
@@ -406,12 +462,39 @@ async function save() {
 .favorite-shelf-row::-webkit-scrollbar {
 	display: none;
 }
-/* 広い画面では折り返して並べる（横スクロールをマウスで動かさなくて済むように） */
-@media (min-width: 768px) {
-	.favorite-shelf-row {
-		flex-wrap: wrap;
-		row-gap: 14px;
-		overflow-x: visible;
+.favorite-shelf-row > li {
+	scroll-snap-align: start;
+}
+.favorite-shelf-arrow {
+	position: absolute;
+	/* カバーの縦の真ん中（カバーの高さ 92 × 566 / 400 ≒ 130px の半分） */
+	top: 65px;
+	display: none;
+	align-items: center;
+	justify-content: center;
+	width: 34px;
+	height: 34px;
+	border: 1px solid var(--color-border-hover);
+	border-radius: 999px;
+	corner-shape: round;
+	background: var(--color-surface);
+	box-shadow: 0 2px 8px rgb(0 0 0 / 0.3);
+	color: var(--color-text);
+	cursor: pointer;
+	transform: translateY(-50%);
+}
+.favorite-shelf-arrow:hover {
+	background: var(--color-surface-hover);
+}
+.favorite-shelf-arrow--prev {
+	left: -10px;
+}
+.favorite-shelf-arrow--next {
+	right: -10px;
+}
+@media (hover: hover) and (pointer: fine) {
+	.favorite-shelf-arrow {
+		display: flex;
 	}
 }
 .favorite-card {
