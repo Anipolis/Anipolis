@@ -599,16 +599,20 @@ const grouped = $derived(
 							<div class="field">
 								<span class="field-label">アイコン画像</span>
 								<div class="profile-avatar-editor">
-									<UserAvatar
-										src={avatarPreviewUrl ?? profile.avatar_url}
-										username={profile.username}
-										size="lg"
-									/>
+									<!-- アイコンを押しても画像を選べる。Tab の移動先と読み上げは「画像を選択」だけにする -->
+									<label for="profile-avatar-input" class="avatar-pick" aria-hidden="true">
+										<UserAvatar
+											src={avatarPreviewUrl ?? profile.avatar_url}
+											username={profile.display_name || profile.username}
+											size="lg"
+										/>
+									</label>
 								</div>
 								<div class="profile-header-editor-actions">
 									<label class="btn btn-outline profile-header-file-button">
 										{avatarUploading ? '処理中...' : '画像を選択'}
 										<input
+											id="profile-avatar-input"
 											type="file"
 											accept="image/jpeg,image/png,image/webp"
 											disabled={profileSubmitting || avatarUploading}
@@ -616,9 +620,8 @@ const grouped = $derived(
 										>
 									</label>
 								</div>
-								<p class="field-hint">JPEG、PNG、WebP・最大10MB。選んだあとに範囲を決められます。</p>
 								{#if avatarMessage}
-									<p class="profile-header-editor-message" aria-live="polite">{avatarMessage}</p>
+									<p class="field-error-msg" role="alert">{avatarMessage}</p>
 								{/if}
 							</div>
 
@@ -666,7 +669,6 @@ const grouped = $derived(
 									type="text"
 									class="field-input"
 									class:field-error={form && 'field' in form && form.field === 'display_name'}
-									placeholder="アニメ太郎"
 									maxlength="50"
 									bind:value={editDisplayName}
 								>
