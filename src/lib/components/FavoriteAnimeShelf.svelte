@@ -1,12 +1,15 @@
 <script lang="ts">
 import { invalidateAll } from "$app/navigation";
-import { MAX_FAVORITE_ANIME } from "$lib/favorite-anime";
+import { trapFocus } from "$lib/actions/trapFocus";
+import { favoriteAnimeMeta, MAX_FAVORITE_ANIME } from "$lib/favorite-anime";
 import type { Anime } from "$lib/types";
 
 interface Pick {
 	id: number;
 	title: string;
 	cover_url: string | null;
+	type?: string | null | undefined;
+	aired_from?: string | null | undefined;
 }
 
 // favorites が null のときは読み込みに失敗している（未登録の [] とは別）。中身が分からないので編集させない
@@ -19,23 +22,38 @@ let results = $state<Pick[]>([]);
 let searching = $state(false);
 let saving = $state(false);
 let errorMessage = $state("");
+// 一覧に戻ったとき、足したばかりの作品を軽く光らせる
+let lastAddedId = $state<number | null>(null);
 let searchInput = $state<HTMLInputElement | null>(null);
+let editorCard = $state<HTMLDivElement | null>(null);
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
 let searchController: AbortController | null = null;
 
 const full = $derived(picks.length >= MAX_FAVORITE_ANIME);
 const pickedIds = $derived(new Set(picks.map((pick) => pick.id)));
+// 検索欄に文字がある間は、下の場所を検索結果に切り替える（一覧を押し広げて位置がずれないように）
+const showingResults = $derived(query.trim().length > 0);
 
+// 開いたら検索欄へ。10件そろっていて検索欄が使えないときは、Esc や Tab が効くようダイアログ自体へ
 $effect(() => {
-	if (editing && searchInput) searchInput.focus();
+	if (!editing) return;
+	if (searchInput && !searchInput.disabled) searchInput.focus();
+	else editorCard?.focus();
 });
 
 function openEditor() {
 	if (!favorites) return;
-	picks = favorites.map((anime) => ({ id: Number(anime.id), title: anime.title, cover_url: anime.cover_url }));
+	picks = favorites.map((anime) => ({
+		id: Number(anime.id),
+		title: anime.title,
+		cover_url: anime.cover_url,
+		type: anime.type,
+		aired_from: anime.aired_from,
+	}));
 	query = "";
 	results = [];
 	errorMessage = "";
+	lastAddedId = null;
 	editing = true;
 }
 
@@ -51,6 +69,12 @@ function cancelSearch() {
 	searchController?.abort();
 	searchController = null;
 	searching = false;
+}
+
+function clearQuery() {
+	cancelSearch();
+	query = "";
+	results = [];
 }
 
 function onSearchInput() {
@@ -83,8 +107,23 @@ function onSearchInput() {
 
 function addPick(anime: Pick) {
 	if (full || pickedIds.has(anime.id)) return;
-	picks = [...picks, { id: anime.id, title: anime.title, cover_url: anime.cover_url }];
+	picks = [
+		...picks,
+		{
+			id: anime.id,
+			title: anime.title,
+			cover_url: anime.cover_url,
+			type: anime.type,
+			aired_from: anime.aired_from,
+		},
+	];
+	lastAddedId = anime.id;
 	errorMessage = "";
+	// 上限に届いたら、これ以上は足せないので一覧に戻す
+	if (picks.length >= MAX_FAVORITE_ANIME) {
+		clearQuery();
+		return;
+	}
 	// 押したボタンは「選択済み」で使えなくなるので、続けて探せるよう入力欄に戻す
 	searchInput?.focus();
 }
@@ -123,6 +162,26 @@ async function save() {
 }
 </script>
 
+{#snippet cover(url: string | null)}
+	<span class="favorite-pick-cover">
+		{#if url}
+			<img src={url} alt="">
+		{:else}
+			<span class="favorite-cover-empty i-lucide-clapperboard" aria-hidden="true"></span>
+		{/if}
+	</span>
+{/snippet}
+
+{#snippet titleBlock(anime: Pick)}
+	{@const meta = favoriteAnimeMeta(anime)}
+	<span class="favorite-pick-text">
+		<span class="favorite-pick-title">{anime.title}</span>
+		{#if meta}
+			<span class="favorite-pick-meta">{meta}</span>
+		{/if}
+	</span>
+{/snippet}
+
 {#if favorites === null}
 	{#if isOwn}
 		<p class="favorite-shelf-error" role="status">
@@ -137,7 +196,7 @@ async function save() {
 				<button type="button" class="btn btn-ghost favorite-shelf-edit" onclick={openEditor}>編集</button>
 			{/if}
 		</div>
-		<ol class="favorite-shelf-row scrollbar-thin-muted">
+		<ol class="favorite-shelf-row">
 			{#each favorites as anime (anime.id)}
 				<li>
 					<a href="/anime/{anime.id}" class="favorite-card">
@@ -145,7 +204,7 @@ async function save() {
 							{#if anime.cover_url}
 								<img src={anime.cover_url} alt="" loading="lazy">
 							{:else}
-								<span class="favorite-card-cover-empty i-lucide-clapperboard" aria-hidden="true"></span>
+								<span class="favorite-cover-empty i-lucide-clapperboard" aria-hidden="true"></span>
 							{/if}
 						</span>
 						<span class="favorite-card-title">{anime.title}</span>
@@ -165,6 +224,8 @@ async function save() {
 {#if editing}
 	<div class="favorite-editor-overlay" role="presentation" onclick={closeEditor}>
 		<div
+			bind:this={editorCard}
+			use:trapFocus
 			class="favorite-editor-card"
 			role="dialog"
 			aria-modal="true"
@@ -173,11 +234,21 @@ async function save() {
 			onclick={(event) => event.stopPropagation()}
 			onkeydown={(event) => {
 				event.stopPropagation();
-				if (event.key === "Escape") closeEditor();
+				if (event.key !== "Escape") return;
+				// 検索中の Esc は検索をやめて一覧に戻るだけにする
+				if (showingResults) {
+					event.preventDefault();
+					clearQuery();
+					return;
+				}
+				closeEditor();
 			}}
 		>
 			<div class="favorite-editor-header">
-				<span id="favorite-editor-title" class="favorite-editor-title">ベスト作品を選ぶ</span>
+				<span id="favorite-editor-title" class="favorite-editor-title">
+					ベスト作品を選ぶ
+					<span class="favorite-editor-count">{picks.length} / {MAX_FAVORITE_ANIME}</span>
+				</span>
 				<button
 					type="button"
 					class="favorite-editor-close"
@@ -189,95 +260,103 @@ async function save() {
 				</button>
 			</div>
 
-			<div class="favorite-editor-body scrollbar-thin-muted">
-				{#if picks.length > 0}
-					<ol class="favorite-picks" aria-label="選んだ作品">
-						{#each picks as pick, index (pick.id)}
-							<li class="favorite-pick">
-								<span class="favorite-pick-rank">{index + 1}</span>
-								<span class="favorite-pick-cover">
-									{#if pick.cover_url}
-										<img src={pick.cover_url} alt="">
-									{/if}
-								</span>
-								<span class="favorite-pick-title">{pick.title}</span>
-								<span class="favorite-pick-actions">
-									<button
-										type="button"
-										class="favorite-icon-button"
-										aria-label="{pick.title} を上へ"
-										disabled={saving || index === 0}
-										onclick={() => movePick(index, -1)}
-									>
-										<span class="i-lucide-chevron-up" aria-hidden="true"></span>
-									</button>
-									<button
-										type="button"
-										class="favorite-icon-button"
-										aria-label="{pick.title} を下へ"
-										disabled={saving || index === picks.length - 1}
-										onclick={() => movePick(index, 1)}
-									>
-										<span class="i-lucide-chevron-down" aria-hidden="true"></span>
-									</button>
-									<button
-										type="button"
-										class="favorite-icon-button"
-										aria-label="{pick.title} を外す"
-										disabled={saving}
-										onclick={() => removePick(index)}
-									>
-										<span class="i-lucide-x" aria-hidden="true"></span>
-									</button>
-								</span>
-							</li>
-						{/each}
-					</ol>
-				{/if}
+			<div class="favorite-editor-search">
+				<label for="favorite-search-input" class="sr-only">作品を検索</label>
+				<span class="favorite-search-icon i-lucide-search" aria-hidden="true"></span>
+				<input
+					id="favorite-search-input"
+					bind:this={searchInput}
+					type="search"
+					class="field-input favorite-search-input"
+					placeholder="作品名で検索"
+					autocomplete="off"
+					disabled={saving || full}
+					bind:value={query}
+					oninput={onSearchInput}
+				>
+			</div>
 
-				<div class="favorite-search">
-					<label for="favorite-search-input" class="field-label">作品を追加</label>
-					<input
-						id="favorite-search-input"
-						bind:this={searchInput}
-						type="search"
-						class="field-input"
-						autocomplete="off"
-						disabled={saving || full}
-						bind:value={query}
-						oninput={onSearchInput}
-					>
-					{#if full}
-						<p class="field-hint">
-							{MAX_FAVORITE_ANIME}作品まで選べます。入れ替えるときは、どれかを外してください
-						</p>
-					{:else if query.trim() && !searching && results.length === 0}
-						<p class="field-hint">見つかりませんでした</p>
-					{/if}
-					{#if !full && results.length > 0}
-						<ul class="favorite-results" aria-label="検索結果">
+			<div class="favorite-editor-body scrollbar-thin-muted">
+				{#if showingResults}
+					{#if results.length > 0}
+						<ul class="favorite-list" aria-label="検索結果">
 							{#each results as anime (anime.id)}
 								{@const picked = pickedIds.has(anime.id)}
 								<li>
 									<button
 										type="button"
-										class="favorite-result"
+										class="favorite-row favorite-result"
 										disabled={saving || picked}
 										onclick={() => addPick(anime)}
 									>
-										<span class="favorite-pick-cover">
-											{#if anime.cover_url}
-												<img src={anime.cover_url} alt="">
+										{@render cover(anime.cover_url)}
+										{@render titleBlock(anime)}
+										<span class="favorite-result-state">
+											{#if picked}
+												選択済み
+											{:else}
+												<span class="i-lucide-plus" aria-hidden="true"></span>
+												追加
 											{/if}
 										</span>
-										<span class="favorite-pick-title">{anime.title}</span>
-										<span class="favorite-result-state">{picked ? '選択済み' : '追加'}</span>
 									</button>
 								</li>
 							{/each}
 						</ul>
+					{:else if searching}
+						<p class="favorite-editor-note">検索しています…</p>
+					{:else}
+						<p class="favorite-editor-note">見つかりませんでした</p>
 					{/if}
-				</div>
+				{:else}
+					{#if full}
+						<p class="favorite-editor-note">
+							{MAX_FAVORITE_ANIME}作品まで選べます。入れ替えるときは、どれかを外してください
+						</p>
+					{/if}
+					{#if picks.length > 0}
+						<ol class="favorite-list" aria-label="選んだ作品">
+							{#each picks as pick, index (pick.id)}
+								<li class="favorite-row favorite-pick" class:just-added={pick.id === lastAddedId}>
+									<span class="favorite-pick-rank">{index + 1}</span>
+									{@render cover(pick.cover_url)}
+									{@render titleBlock(pick)}
+									<span class="favorite-pick-actions">
+										<button
+											type="button"
+											class="favorite-icon-button"
+											aria-label="{pick.title} を上へ"
+											disabled={saving || index === 0}
+											onclick={() => movePick(index, -1)}
+										>
+											<span class="i-lucide-chevron-up" aria-hidden="true"></span>
+										</button>
+										<button
+											type="button"
+											class="favorite-icon-button"
+											aria-label="{pick.title} を下へ"
+											disabled={saving || index === picks.length - 1}
+											onclick={() => movePick(index, 1)}
+										>
+											<span class="i-lucide-chevron-down" aria-hidden="true"></span>
+										</button>
+										<button
+											type="button"
+											class="favorite-icon-button"
+											aria-label="{pick.title} を外す"
+											disabled={saving}
+											onclick={() => removePick(index)}
+										>
+											<span class="i-lucide-x" aria-hidden="true"></span>
+										</button>
+									</span>
+								</li>
+							{/each}
+						</ol>
+					{:else}
+						<p class="favorite-editor-note">まだ選んでいません</p>
+					{/if}
+				{/if}
 
 				{#if errorMessage}
 					<p class="field-error-msg" role="alert">{errorMessage}</p>
@@ -314,13 +393,26 @@ async function save() {
 	padding: 4px 10px;
 	font-size: 13px;
 }
+/* スマホは指で横に送る（スクロールバーは出さない。右端の作品が切れて見えるので続きは分かる） */
 .favorite-shelf-row {
 	display: flex;
 	gap: 10px;
 	margin: 0;
-	padding: 0 0 8px;
+	padding: 0;
 	list-style: none;
 	overflow-x: auto;
+	scrollbar-width: none;
+}
+.favorite-shelf-row::-webkit-scrollbar {
+	display: none;
+}
+/* 広い画面では折り返して並べる（横スクロールをマウスで動かさなくて済むように） */
+@media (min-width: 768px) {
+	.favorite-shelf-row {
+		flex-wrap: wrap;
+		row-gap: 14px;
+		overflow-x: visible;
+	}
 }
 .favorite-card {
 	display: flex;
@@ -349,7 +441,7 @@ async function save() {
 	height: 100%;
 	object-fit: cover;
 }
-.favorite-card-cover-empty {
+.favorite-cover-empty {
 	width: 24px;
 	height: 24px;
 	color: var(--color-text-muted);
@@ -399,11 +491,13 @@ async function save() {
 	padding: 16px;
 	background: rgb(15 23 42 / 0.68);
 }
+/* 中身が切り替わっても大きさが変わらないよう、高さを決めておく */
 .favorite-editor-card {
+	outline: none;
 	display: flex;
 	flex-direction: column;
 	width: min(100%, 520px);
-	max-height: calc(100dvh - 32px);
+	height: min(640px, calc(100dvh - 32px));
 	overflow: hidden;
 	border: 1px solid var(--color-border);
 	border-radius: 12px;
@@ -426,8 +520,17 @@ async function save() {
 	border-bottom: 0;
 }
 .favorite-editor-title {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
 	font-size: 15px;
 	font-weight: 800;
+}
+.favorite-editor-count {
+	color: var(--color-text-muted);
+	font-size: 13px;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
 }
 .favorite-editor-close {
 	width: 32px;
@@ -445,17 +548,40 @@ async function save() {
 	background: var(--color-border);
 	color: var(--color-text);
 }
+.favorite-editor-search {
+	position: relative;
+	flex-shrink: 0;
+	padding: 12px 14px 4px;
+}
+.favorite-search-icon {
+	position: absolute;
+	top: 50%;
+	left: 26px;
+	width: 16px;
+	height: 16px;
+	margin-top: 4px;
+	color: var(--color-text-muted);
+	transform: translateY(-50%);
+	pointer-events: none;
+}
+.favorite-search-input {
+	padding-left: 36px;
+}
 .favorite-editor-body {
 	display: flex;
 	flex: 1 1 auto;
 	flex-direction: column;
-	gap: 16px;
+	gap: 8px;
 	min-height: 0;
-	padding: 14px;
+	padding: 8px 14px 14px;
 	overflow-y: auto;
 }
-.favorite-picks,
-.favorite-results {
+.favorite-editor-note {
+	margin: 8px 2px;
+	color: var(--color-text-muted);
+	font-size: 13px;
+}
+.favorite-list {
 	display: flex;
 	flex-direction: column;
 	gap: 4px;
@@ -463,11 +589,7 @@ async function save() {
 	padding: 0;
 	list-style: none;
 }
-.favorite-results {
-	margin-top: 8px;
-}
-.favorite-pick,
-.favorite-result {
+.favorite-row {
 	display: flex;
 	align-items: center;
 	gap: 10px;
@@ -477,6 +599,20 @@ async function save() {
 }
 .favorite-pick {
 	background: var(--color-bg-card);
+}
+.favorite-pick.just-added {
+	animation: favorite-just-added 1.6s ease-out;
+}
+@keyframes favorite-just-added {
+	from {
+		background: var(--color-surface-hover);
+		box-shadow: inset 0 0 0 1px var(--color-border-hover);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.favorite-pick.just-added {
+		animation: none;
+	}
 }
 .favorite-result {
 	width: 100%;
@@ -502,25 +638,51 @@ async function save() {
 	text-align: center;
 }
 .favorite-pick-cover {
+	display: flex;
+	align-items: center;
+	justify-content: center;
 	width: 32px;
 	flex-shrink: 0;
 	aspect-ratio: 400 / 566;
 	overflow: hidden;
+	border: 1px solid var(--color-border);
 	border-radius: 4px;
-	background: var(--color-border);
+	background: var(--color-bg-card);
 }
 .favorite-pick-cover img {
 	width: 100%;
 	height: 100%;
 	object-fit: cover;
 }
-.favorite-pick-title {
+.favorite-pick-cover .favorite-cover-empty {
+	width: 14px;
+	height: 14px;
+}
+.favorite-pick-text {
+	display: flex;
 	flex: 1 1 auto;
+	flex-direction: column;
+	gap: 2px;
 	min-width: 0;
+}
+/* スマホでは右のボタンで幅が狭いので、題名は2行まで折り返す */
+.favorite-pick-title {
+	display: -webkit-box;
 	overflow: hidden;
 	font-size: 14px;
+	line-height: 1.35;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	line-clamp: 2;
+}
+.favorite-pick-meta {
+	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+.favorite-pick-meta {
+	color: var(--color-text-muted);
+	font-size: 12px;
 }
 .favorite-pick-actions {
 	display: flex;
@@ -548,12 +710,16 @@ async function save() {
 	cursor: default;
 	opacity: 0.35;
 }
+/* 「追加」は青にしない（青は「保存する」だけ、ux-guidelines） */
 .favorite-result-state {
+	display: flex;
 	flex-shrink: 0;
-	color: var(--color-text-muted);
+	align-items: center;
+	gap: 2px;
+	color: var(--color-text);
 	font-size: 12px;
 }
-.favorite-result:not(:disabled) .favorite-result-state {
-	color: var(--color-primary);
+.favorite-result:disabled .favorite-result-state {
+	color: var(--color-text-muted);
 }
 </style>

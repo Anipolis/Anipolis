@@ -50,6 +50,6 @@ describe("ベスト作品", () => {
 		const edit = [...target.querySelectorAll("button")].find((button) => button.textContent?.trim() === "編集");
 		edit?.click();
 		flushSync();
-		expect(document.querySelector(".favorite-picks")?.textContent).toContain("作品A");
+		expect(document.querySelector('[aria-label="選んだ作品"]')?.textContent).toContain("作品A");
 	});
 });
