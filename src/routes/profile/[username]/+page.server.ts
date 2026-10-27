@@ -12,6 +12,7 @@ import {
 	checkIsFollowing,
 	fillTimelinePage,
 	getAnimeRankingTrending,
+	getFavoriteAnime,
 	getFollowCounts,
 	getFollowRequestStatus,
 	getLikedPostsPage,
@@ -85,25 +86,29 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 		return { posts: page.posts, nextCursor: page.nextCursor };
 	};
 
-	const [activeList, postCount, followCounts, trendingResult, animeTrending, animeList] = await Promise.all([
-		loadActiveList(),
+	const [activeList, postCount, followCounts, trendingResult, animeTrending, animeList, favoriteAnime] =
+		await Promise.all([
+			loadActiveList(),
 
-		canViewContent ? getProfilePostCount(supabase, profile.id) : Promise.resolve(0),
+			canViewContent ? getProfilePostCount(supabase, profile.id) : Promise.resolve(0),
 
-		getFollowCounts(supabase, profile.id),
+			getFollowCounts(supabase, profile.id),
 
-		getTrendingHashtags(supabase, 10),
+			getTrendingHashtags(supabase, 10),
 
-		getAnimeRankingTrending(supabase, 5),
+			getAnimeRankingTrending(supabase, 5),
 
-		// マイリストのタブを開いているときは、読めなければ失敗として扱う（空のリストと見せない、#262）。
-		// ほかのタブでは件数の表示に使うだけなので、読めなくてもプロフィールは出す
-		canViewContent && (isOwn || profile.list_is_public)
-			? activeTab === "list"
-				? getUserAnimeList(supabase, profile.id)
-				: getUserAnimeList(supabase, profile.id).catch(() => [])
-			: Promise.resolve([]),
-	]);
+			// マイリストのタブを開いているときは、読めなければ失敗として扱う（空のリストと見せない、#262）。
+			// ほかのタブでは件数の表示に使うだけなので、読めなくてもプロフィールは出す
+			canViewContent && (isOwn || profile.list_is_public)
+				? activeTab === "list"
+					? getUserAnimeList(supabase, profile.id)
+					: getUserAnimeList(supabase, profile.id).catch(() => [])
+				: Promise.resolve([]),
+
+			// ベスト作品（#361）。投稿と同じ相手に見せる。読めなくてもプロフィールは出す
+			canViewContent ? getFavoriteAnime(supabase, profile.id).catch(() => []) : Promise.resolve([]),
+		]);
 
 	return {
 		profile: profileWithHeader,
@@ -120,6 +125,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 		trending: trendingResult,
 		animeTrending,
 		animeList,
+		favoriteAnime,
 		user,
 	};
 };

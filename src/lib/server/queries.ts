@@ -3496,6 +3496,21 @@ export async function getUserAnimeList(
 		}));
 }
 
+/** プロフィールのベスト作品を並び順で読む（#361）。見える相手かどうかは RLS が判定する */
+export async function getFavoriteAnime(supabase: SupabaseClient<Database>, userId: string): Promise<Anime[]> {
+	const { data, error } = await supabase
+		.from("user_favorite_anime")
+		.select(`position, anime:anime_id(${ANIME_LIST_BASE_COLUMNS})`)
+		.eq("user_id", userId)
+		.order("position", { ascending: true });
+	if (error) failQuery("getFavoriteAnime", error);
+
+	// 後から非公開になった作品などは anime が読めずに null になるので、飛ばす
+	return ((data ?? []) as unknown as { anime: Record<string, unknown> | null }[]).flatMap((row) =>
+		row.anime ? [toAnime(row.anime)] : [],
+	);
+}
+
 export interface AnimeListUser {
 	user_id: string;
 	username: string;

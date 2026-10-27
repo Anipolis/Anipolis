@@ -7,6 +7,7 @@ import { page } from "$app/state";
 import { checkAvatarSource } from "$lib/avatar-crop";
 import AnimeStatusSection from "$lib/components/AnimeStatusSection.svelte";
 import AvatarCropper from "$lib/components/AvatarCropper.svelte";
+import FavoriteAnimeShelf from "$lib/components/FavoriteAnimeShelf.svelte";
 import PostRow from "$lib/components/PostRow.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
@@ -522,6 +523,9 @@ const grouped = $derived(
 							</span>
 						{/if}
 					</div>
+					{#if canViewContent && !data.isBlocked}
+						<FavoriteAnimeShelf favorites={data.favoriteAnime} {isOwn} />
+					{/if}
 				</div>
 			</div>
 		</div>
