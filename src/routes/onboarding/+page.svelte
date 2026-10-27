@@ -119,13 +119,17 @@ onDestroy(clearSelectedAvatarFile);
 				<input type="hidden" name="avatar_choice" value={avatarChoice}>
 
 				<div class="onboarding-avatar-row">
-					<UserAvatar src={selectedAvatarUrl} username={displayName || username} size="lg" />
+					<!-- アイコンを押しても画像を選べる。Tab の移動先と読み上げは「画像を変更」だけにする（同じ操作を 2 つ並べない） -->
+					<label for="onboarding-avatar-input" class="avatar-pick" aria-hidden="true">
+						<UserAvatar src={selectedAvatarUrl} username={displayName || username} size="lg" />
+					</label>
 					<div class="onboarding-avatar-copy">
 						<div class="field-label">プロフィール画像</div>
 						<div class="onboarding-avatar-actions">
 							<label class="btn btn-outline onboarding-avatar-file">
 								画像を変更
 								<input
+									id="onboarding-avatar-input"
 									type="file"
 									name="avatar_file"
 									accept="image/jpeg,image/png,image/webp"
@@ -145,8 +149,6 @@ onDestroy(clearSelectedAvatarFile);
 							<p class="field-error-msg">{form.message}</p>
 						{:else if avatarMessage}
 							<p class="field-error-msg">{avatarMessage}</p>
-						{:else}
-							<p class="field-hint">JPEG、PNG、WebP・最大10MB。選んだあとに範囲を決められます。</p>
 						{/if}
 					</div>
 				</div>
@@ -164,7 +166,6 @@ onDestroy(clearSelectedAvatarFile);
 							class="field-input has-prefix"
 							class:field-error={usernameError !== null}
 							aria-invalid={usernameError !== null}
-							placeholder="animetaro"
 							maxlength="20"
 							pattern={"[a-zA-Z0-9_]{3,20}"}
 							required
@@ -186,7 +187,6 @@ onDestroy(clearSelectedAvatarFile);
 						type="text"
 						class="field-input"
 						class:field-error={form && "field" in form && form.field === "display_name"}
-						placeholder="アニメ太郎"
 						maxlength="50"
 						bind:value={displayName}
 					>

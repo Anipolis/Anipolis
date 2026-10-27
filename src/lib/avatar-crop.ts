@@ -19,8 +19,10 @@ export const AVATAR_SOURCE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 /** 選んだ画像を切り抜きに回せるか。だめなら利用者に見せる理由 */
 export function checkAvatarSource(file: File): string | null {
-	if (!AVATAR_SOURCE_TYPES.includes(file.type)) return "JPEG、PNG、WebP形式の画像を選択してください。";
-	if (file.size > MAX_AVATAR_SOURCE_BYTES) return "画像は10MB以内にしてください。";
+	// 決まりは画面に書かず、外れたときだけ伝える（形式と大きさのどちらでも同じ文）
+	if (!AVATAR_SOURCE_TYPES.includes(file.type) || file.size > MAX_AVATAR_SOURCE_BYTES) {
+		return "10MB以下の画像（JPEG・PNG・WebP）を選んでください";
+	}
 	return null;
 }
 

@@ -994,6 +994,19 @@ textarea {
 	color: #ffffff;
 }
 
+/* アイコンを押して画像を選べる場所（初期設定・プロフィールの編集）。ファイル選択の label として使う */
+.avatar-pick {
+	display: inline-flex;
+	border-radius: 50%;
+	corner-shape: round;
+	cursor: pointer;
+	transition: opacity 0.15s;
+}
+
+.avatar-pick:hover {
+	opacity: 0.8;
+}
+
 .avatar img {
 	width: 100%;
 	aspect-ratio: 1;
