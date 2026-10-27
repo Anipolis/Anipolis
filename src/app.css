@@ -1,4 +1,6 @@
 ﻿:root {
+	/* ブラウザが描く部品（スクロールバー・入力の部品など）も暗い色にする。ライトテーマでは light に戻す */
+	color-scheme: dark;
 	--color-bg: #0d0d0d;
 	--color-surface: #161616;
 	--color-surface-hover: #1c1c1c;
@@ -64,6 +66,7 @@
 }
 
 [data-theme="light"] {
+	color-scheme: light;
 	--color-bg: #ffffff;
 	--color-surface: #ffffff;
 	--color-surface-hover: #f1f5f9;

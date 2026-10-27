@@ -39,6 +39,7 @@ let avatarUploading = $state(false);
 let avatarMessage = $state("");
 let avatarPreviewUrl = $state<string | null>(null);
 let avatarPendingFile = $state<File | null>(null);
+let avatarPendingDelete = $state(false);
 let showProfileEditModal = $state(false);
 let showUserReportModal = $state(false);
 let reportReason = $state("harassment");
@@ -67,6 +68,7 @@ const activeTab = $derived(
 );
 const bioRemaining = $derived(160 - editBio.length);
 const editableHeaderUrl = $derived(headerPreviewUrl ?? (headerPendingDelete ? null : profile.header_url));
+const editableAvatarUrl = $derived(avatarPreviewUrl ?? (avatarPendingDelete ? null : profile.avatar_url));
 
 const submitBlock: SubmitFunction = ({ cancel }) => {
 	if (!data.isBlocked && !window.confirm(`@${profile.username} をブロックします。フォロー関係も解除されます。`)) {
@@ -88,6 +90,7 @@ const handleProfileSubmit: SubmitFunction = () => {
 	const pendingHeaderFile = headerPendingFile;
 	const shouldDeleteHeader = headerPendingDelete;
 	const pendingAvatarFile = avatarPendingFile;
+	const shouldDeleteAvatar = avatarPendingDelete;
 	profileSubmitting = true;
 	return async ({ result, update }) => {
 		// プロフィールテキストの保存が失敗した場合は画像処理をスキップ
@@ -159,6 +162,22 @@ const handleProfileSubmit: SubmitFunction = () => {
 				return;
 			}
 			avatarUploading = false;
+		} else if (shouldDeleteAvatar) {
+			avatarUploading = true;
+			avatarMessage = "";
+			try {
+				const response = await fetch("/api/upload/avatar", { method: "DELETE" });
+				const res = (await response.json().catch(() => ({}))) as { message?: string };
+				if (!response.ok) throw new Error(res.message ?? "アイコン画像の削除に失敗しました");
+				avatarPendingDelete = false;
+			} catch (deleteError) {
+				avatarMessage = deleteError instanceof Error ? deleteError.message : "アイコン画像の削除に失敗しました";
+				avatarUploading = false;
+				profileSubmitting = false;
+				await update({ reset: false });
+				return;
+			}
+			avatarUploading = false;
 		}
 
 		profileSubmitting = false;
@@ -197,6 +216,7 @@ function closeProfileEditModal() {
 		avatarPreviewUrl = null;
 	}
 	avatarPendingFile = null;
+	avatarPendingDelete = false;
 	editDisplayName = data.profile.display_name ?? "";
 	editBio = data.profile.bio ?? "";
 }
@@ -207,13 +227,9 @@ function updateHeaderImage(event: Event) {
 	if (!file) return;
 
 	headerMessage = "";
-	if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-		headerMessage = "JPEG、PNG、WebP形式の画像を選択してください。";
-		input.value = "";
-		return;
-	}
-	if (file.size > 5 * 1024 * 1024) {
-		headerMessage = "画像は5MB以内にしてください。";
+	// 決まりは画面に書かず、外れたときだけ伝える（形式と大きさのどちらでも同じ文。ux-guidelines）
+	if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 5 * 1024 * 1024) {
+		headerMessage = "5MB以下の画像（JPEG・PNG・WebP）を選んでください";
 		input.value = "";
 		return;
 	}
@@ -248,6 +264,18 @@ function applyCroppedAvatar(cropped: File) {
 	if (avatarPreviewUrl) URL.revokeObjectURL(avatarPreviewUrl);
 	avatarPreviewUrl = URL.createObjectURL(cropped);
 	avatarPendingFile = cropped;
+	avatarPendingDelete = false;
+}
+
+/** アイコン画像を外す（頭文字のアイコンに戻す）。保存したときに消す */
+function removeAvatarImage() {
+	if (avatarPreviewUrl) {
+		URL.revokeObjectURL(avatarPreviewUrl);
+		avatarPreviewUrl = null;
+	}
+	avatarPendingFile = null;
+	avatarPendingDelete = true;
+	avatarMessage = "";
 }
 
 function removeHeaderImage() {
@@ -587,7 +615,7 @@ const grouped = $derived(
 						action="?/updateProfile"
 						use:enhance={handleProfileSubmit}
 					>
-						<div class="profile-edit-modal-body">
+						<div class="profile-edit-modal-body scrollbar-thin-muted">
 							{#if form?.success}
 								<div class="flash-success">プロフィールを更新しました。</div>
 							{/if}
@@ -598,27 +626,37 @@ const grouped = $derived(
 
 							<div class="field">
 								<span class="field-label">アイコン画像</span>
+								<!-- 左にアイコン、右にボタン（初期設定と同じ並び）。アイコンを押しても選べる。Tab の移動先と読み上げはボタンだけ -->
 								<div class="profile-avatar-editor">
-									<!-- アイコンを押しても画像を選べる。Tab の移動先と読み上げは「画像を選択」だけにする -->
 									<label for="profile-avatar-input" class="avatar-pick" aria-hidden="true">
 										<UserAvatar
-											src={avatarPreviewUrl ?? profile.avatar_url}
+											src={editableAvatarUrl}
 											username={profile.display_name || profile.username}
 											size="lg"
 										/>
 									</label>
-								</div>
-								<div class="profile-header-editor-actions">
-									<label class="btn btn-outline profile-header-file-button">
-										{avatarUploading ? '処理中...' : '画像を選択'}
-										<input
-											id="profile-avatar-input"
-											type="file"
-											accept="image/jpeg,image/png,image/webp"
-											disabled={profileSubmitting || avatarUploading}
-											onchange={updateAvatarImage}
-										>
-									</label>
+									<div class="profile-image-actions">
+										<label class="btn btn-outline profile-image-button">
+											{avatarUploading ? '処理中...' : editableAvatarUrl ? '画像を変更' : '画像を選択'}
+											<input
+												id="profile-avatar-input"
+												type="file"
+												accept="image/jpeg,image/png,image/webp"
+												disabled={profileSubmitting || avatarUploading}
+												onchange={updateAvatarImage}
+											>
+										</label>
+										{#if editableAvatarUrl}
+											<button
+												type="button"
+												class="btn btn-ghost"
+												disabled={profileSubmitting || avatarUploading}
+												onclick={removeAvatarImage}
+											>
+												削除
+											</button>
+										{/if}
+									</div>
 								</div>
 								{#if avatarMessage}
 									<p class="field-error-msg" role="alert">{avatarMessage}</p>
@@ -627,17 +665,19 @@ const grouped = $derived(
 
 							<div class="field">
 								<span class="field-label">ヘッダー画像</span>
-								<div class="profile-header-editor">
+								<!-- プレビューを押しても選べる（読み上げはボタンだけ） -->
+								<label for="profile-header-input" class="profile-header-editor" aria-hidden="true">
 									{#if editableHeaderUrl}
-										<img src={editableHeaderUrl} alt="ヘッダー画像のプレビュー">
+										<img src={editableHeaderUrl} alt="">
 									{:else}
-										<div class="profile-header-editor-empty">ヘッダー画像は未設定です</div>
+										<span class="profile-header-editor-empty">ヘッダー画像は未設定です</span>
 									{/if}
-								</div>
-								<div class="profile-header-editor-actions">
-									<label class="btn btn-outline profile-header-file-button">
-										{headerUploading ? '処理中...' : '画像を選択'}
+								</label>
+								<div class="profile-image-actions profile-header-actions-row">
+									<label class="btn btn-outline profile-image-button">
+										{headerUploading ? '処理中...' : editableHeaderUrl ? '画像を変更' : '画像を選択'}
 										<input
+											id="profile-header-input"
 											type="file"
 											accept="image/jpeg,image/png,image/webp"
 											disabled={profileSubmitting || headerUploading}
@@ -655,9 +695,8 @@ const grouped = $derived(
 										</button>
 									{/if}
 								</div>
-								<p class="field-hint">横長の画像を推奨します。JPEG、PNG、WebP・最大5MB。</p>
 								{#if headerMessage}
-									<p class="profile-header-editor-message" aria-live="polite">{headerMessage}</p>
+									<p class="field-error-msg" role="alert">{headerMessage}</p>
 								{/if}
 							</div>
 
@@ -674,8 +713,6 @@ const grouped = $derived(
 								>
 								{#if form && 'field' in form && form.field === 'display_name'}
 									<p class="field-error-msg">{form.message}</p>
-								{:else}
-									<p class="field-hint">タイムラインやプロフィールで表示される名前です。</p>
 								{/if}
 							</div>
 
@@ -1189,13 +1226,21 @@ const grouped = $derived(
 	overflow-y: auto;
 }
 
+/* 欄どうしの間は .profile-edit-modal-body の gap だけにする（.field の下の余白と重なって広がっていた） */
+.profile-edit-modal-body :global(.field) {
+	margin-bottom: 0;
+}
+
 .profile-avatar-editor {
 	display: flex;
 	align-items: center;
-	gap: 12px;
+	gap: 14px;
 }
 
 .profile-header-editor {
+	display: block;
+	cursor: pointer;
+	transition: opacity 0.15s;
 	overflow: hidden;
 	width: 100%;
 	aspect-ratio: 3 / 1;
@@ -1219,20 +1264,34 @@ const grouped = $derived(
 	font-size: 13px;
 }
 
-.profile-header-editor-actions {
+.profile-header-editor:hover {
+	opacity: 0.8;
+}
+
+.profile-image-actions {
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	margin-top: 10px;
 }
 
-.profile-header-file-button {
+.profile-header-actions-row {
+	margin-top: 8px;
+}
+
+/* 画像のボタンは補助の操作なので灰色の枠にし、青は「保存する」だけに残す（ux-guidelines） */
+.profile-image-button {
 	position: relative;
 	cursor: pointer;
 	font-size: 13px;
+	border-color: var(--color-border-hover);
+	color: var(--color-text);
 }
 
-.profile-header-file-button input {
+.profile-image-button:hover {
+	background: var(--color-surface-hover);
+}
+
+.profile-image-button input {
 	position: absolute;
 	width: 1px;
 	height: 1px;
@@ -1240,12 +1299,6 @@ const grouped = $derived(
 	clip: rect(0 0 0 0);
 	clip-path: inset(50%);
 	white-space: nowrap;
-}
-
-.profile-header-editor-message {
-	margin: 6px 0 0;
-	color: var(--color-text-secondary, var(--fg-muted, #94a3b8));
-	font-size: 13px;
 }
 
 .tab-lock {

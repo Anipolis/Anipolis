@@ -1,6 +1,11 @@
 import { error, json } from "@sveltejs/kit";
 import { requireAccountCanWrite } from "$lib/server/actions";
-import { MULTIPART_OVERHEAD_BYTES, readFormDataWithLimit, validateImageBuffer } from "$lib/server/upload";
+import {
+	MULTIPART_OVERHEAD_BYTES,
+	publicUrlToStoragePath,
+	readFormDataWithLimit,
+	validateImageBuffer,
+} from "$lib/server/upload";
 import type { RequestHandler } from "./$types";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -60,4 +65,41 @@ export const POST: RequestHandler = async ({ request, locals: { supabase, safeGe
 	}
 
 	return json({ url: publicUrl });
+};
+
+// アイコン画像を外す（頭文字のアイコンに戻す）。ヘッダー画像の削除と同じく、先にプロフィールを空にしてからファイルを消す
+export const DELETE: RequestHandler = async ({ locals: { supabase, safeGetSession } }) => {
+	const { user } = await safeGetSession();
+	if (!user) error(401, "ログインが必要です");
+	await requireAccountCanWrite(supabase, user.id);
+
+	// 消すのは外す前のアイコンだけにする。フォルダごと消すと、別のタブで同時に保存した新しいアイコンまで消してしまう
+	const { data: currentProfile, error: profileError } = await supabase
+		.from("profiles")
+		.select("avatar_url")
+		.eq("id", user.id)
+		.maybeSingle();
+	if (profileError || !currentProfile) error(500, "プロフィールの取得に失敗しました");
+	const previousUrl = currentProfile.avatar_url;
+
+	const { data: updatedProfile, error: dbError } = await supabase
+		.from("profiles")
+		.update({ avatar_url: null })
+		.eq("id", user.id)
+		.select("id")
+		.maybeSingle();
+	if (dbError || !updatedProfile) {
+		console.error("avatar remove error:", dbError);
+		error(500, "アイコン画像の削除に失敗しました");
+	}
+
+	// 外す前のアイコンのファイルを消す（ベストエフォート — 失敗してもプロフィールからは外れている）。
+	// 自分のフォルダの中のものだけ（外部サービスのアイコンの URL などは消さない）
+	const path = previousUrl ? publicUrlToStoragePath(previousUrl, "profile-avatars") : null;
+	if (path?.startsWith(`${user.id}/`)) {
+		const { error: cleanupError } = await supabase.storage.from("profile-avatars").remove([path]);
+		if (cleanupError) console.error("avatar file cleanup error:", cleanupError);
+	}
+
+	return json({ success: true });
 };

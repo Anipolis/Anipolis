@@ -119,15 +119,15 @@ onDestroy(clearSelectedAvatarFile);
 				<input type="hidden" name="avatar_choice" value={avatarChoice}>
 
 				<div class="onboarding-avatar-row">
-					<!-- アイコンを押しても画像を選べる。Tab の移動先と読み上げは「画像を変更」だけにする（同じ操作を 2 つ並べない） -->
+					<!-- アイコンを押しても画像を選べる。Tab の移動先と読み上げは「画像を選択／変更」だけにする（同じ操作を 2 つ並べない） -->
 					<label for="onboarding-avatar-input" class="avatar-pick" aria-hidden="true">
 						<UserAvatar src={selectedAvatarUrl} username={displayName || username} size="lg" />
 					</label>
 					<div class="onboarding-avatar-copy">
-						<div class="field-label">プロフィール画像</div>
+						<div class="field-label">アイコン画像</div>
 						<div class="onboarding-avatar-actions">
 							<label class="btn btn-outline onboarding-avatar-file">
-								画像を変更
+								{avatarChoice === "none" ? "画像を選択" : "画像を変更"}
 								<input
 									id="onboarding-avatar-input"
 									type="file"
