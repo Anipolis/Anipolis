@@ -86,12 +86,36 @@ const submitBlock: SubmitFunction = ({ cancel }) => {
 	};
 };
 
+/** 画像を先に読み込んでおく（読み込めなくても、待ちすぎないよう 5 秒で先へ進む） */
+function preloadImage(url: string | null | undefined): Promise<void> {
+	if (!url) return Promise.resolve();
+	const image = new Image();
+	image.src = url;
+	return Promise.race([image.decode().catch(() => {}), new Promise<void>((resolve) => setTimeout(resolve, 5000))]);
+}
+
 const handleProfileSubmit: SubmitFunction = () => {
 	// 保存中に選択が変わっても送信開始時点の画像状態を使う
 	const pendingHeaderFile = headerPendingFile;
 	const shouldDeleteHeader = headerPendingDelete;
 	const pendingAvatarFile = avatarPendingFile;
 	const shouldDeleteAvatar = avatarPendingDelete;
+	// 保存できた画像。手元のプレビュー（または「削除する」の表示）は、ページを読み直すまで残す。
+	// 先に片付けると、読み直すまでのあいだ前の画像に一瞬戻ってしまう
+	let headerSaved = false;
+	let avatarSaved = false;
+	const settleSavedImages = () => {
+		if (headerSaved) {
+			if (headerPreviewUrl) URL.revokeObjectURL(headerPreviewUrl);
+			headerPreviewUrl = null;
+			headerPendingDelete = false;
+		}
+		if (avatarSaved) {
+			if (avatarPreviewUrl) URL.revokeObjectURL(avatarPreviewUrl);
+			avatarPreviewUrl = null;
+			avatarPendingDelete = false;
+		}
+	};
 	profileSubmitting = true;
 	return async ({ result, update }) => {
 		// プロフィールテキストの保存が失敗した場合は画像処理をスキップ
@@ -110,16 +134,14 @@ const handleProfileSubmit: SubmitFunction = () => {
 				const response = await fetch("/api/upload/profile-header", { method: "POST", body });
 				const res = (await response.json().catch(() => ({}))) as { message?: string };
 				if (!response.ok) throw new Error(res.message ?? "ヘッダー画像の更新に失敗しました");
-				if (headerPreviewUrl) {
-					URL.revokeObjectURL(headerPreviewUrl);
-					headerPreviewUrl = null;
-				}
 				headerPendingFile = null;
+				headerSaved = true;
 			} catch (uploadError) {
 				headerMessage = uploadError instanceof Error ? uploadError.message : "ヘッダー画像の更新に失敗しました";
 				headerUploading = false;
 				profileSubmitting = false;
 				await update({ reset: false });
+				settleSavedImages();
 				return;
 			}
 			headerUploading = false;
@@ -130,12 +152,13 @@ const handleProfileSubmit: SubmitFunction = () => {
 				const response = await fetch("/api/upload/profile-header", { method: "DELETE" });
 				const res = (await response.json().catch(() => ({}))) as { message?: string };
 				if (!response.ok) throw new Error(res.message ?? "ヘッダー画像の削除に失敗しました");
-				headerPendingDelete = false;
+				headerSaved = true;
 			} catch (deleteError) {
 				headerMessage = deleteError instanceof Error ? deleteError.message : "ヘッダー画像の削除に失敗しました";
 				headerUploading = false;
 				profileSubmitting = false;
 				await update({ reset: false });
+				settleSavedImages();
 				return;
 			}
 			headerUploading = false;
@@ -150,16 +173,14 @@ const handleProfileSubmit: SubmitFunction = () => {
 				const response = await fetch("/api/upload/avatar", { method: "POST", body });
 				const res = (await response.json().catch(() => ({}))) as { message?: string };
 				if (!response.ok) throw new Error(res.message ?? "アイコン画像の更新に失敗しました");
-				if (avatarPreviewUrl) {
-					URL.revokeObjectURL(avatarPreviewUrl);
-					avatarPreviewUrl = null;
-				}
 				avatarPendingFile = null;
+				avatarSaved = true;
 			} catch (uploadError) {
 				avatarMessage = uploadError instanceof Error ? uploadError.message : "アイコン画像の更新に失敗しました";
 				avatarUploading = false;
 				profileSubmitting = false;
 				await update({ reset: false });
+				settleSavedImages();
 				return;
 			}
 			avatarUploading = false;
@@ -170,19 +191,26 @@ const handleProfileSubmit: SubmitFunction = () => {
 				const response = await fetch("/api/upload/avatar", { method: "DELETE" });
 				const res = (await response.json().catch(() => ({}))) as { message?: string };
 				if (!response.ok) throw new Error(res.message ?? "アイコン画像の削除に失敗しました");
-				avatarPendingDelete = false;
+				avatarSaved = true;
 			} catch (deleteError) {
 				avatarMessage = deleteError instanceof Error ? deleteError.message : "アイコン画像の削除に失敗しました";
 				avatarUploading = false;
 				profileSubmitting = false;
 				await update({ reset: false });
+				settleSavedImages();
 				return;
 			}
 			avatarUploading = false;
 		}
 
-		profileSubmitting = false;
 		await update({ reset: false });
+		// 新しい画像を読み込み終えてから閉じる。閉じた直後にプロフィールで前の画像が一瞬見えないように
+		await Promise.all([
+			headerSaved ? preloadImage(data.profile.header_url) : null,
+			avatarSaved ? preloadImage(data.profile.avatar_url) : null,
+		]);
+		settleSavedImages();
+		profileSubmitting = false;
 		editDisplayName = data.profile.display_name ?? "";
 		editBio = data.profile.bio ?? "";
 		showProfileEditModal = false;
