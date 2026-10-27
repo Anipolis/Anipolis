@@ -106,8 +106,9 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 					: getUserAnimeList(supabase, profile.id).catch(() => [])
 				: Promise.resolve([]),
 
-			// ベスト作品（#361）。投稿と同じ相手に見せる。読めなくてもプロフィールは出す
-			canViewContent ? getFavoriteAnime(supabase, profile.id).catch(() => []) : Promise.resolve([]),
+			// ベスト作品（#361）。投稿と同じ相手に見せる。読めなくてもプロフィールは出すが、失敗は null で
+			// 「未登録（[]）」と分ける。空と取り違えて編集・保存すると、保存済みの選択を消してしまう
+			canViewContent ? getFavoriteAnime(supabase, profile.id).catch((): null => null) : Promise.resolve([]),
 		]);
 
 	return {

@@ -9,7 +9,8 @@ interface Pick {
 	cover_url: string | null;
 }
 
-let { favorites, isOwn }: { favorites: Anime[]; isOwn: boolean } = $props();
+// favorites が null のときは読み込みに失敗している（未登録の [] とは別）。中身が分からないので編集させない
+let { favorites, isOwn }: { favorites: Anime[] | null; isOwn: boolean } = $props();
 
 let editing = $state(false);
 let picks = $state<Pick[]>([]);
@@ -30,6 +31,7 @@ $effect(() => {
 });
 
 function openEditor() {
+	if (!favorites) return;
 	picks = favorites.map((anime) => ({ id: Number(anime.id), title: anime.title, cover_url: anime.cover_url }));
 	query = "";
 	results = [];
@@ -121,7 +123,13 @@ async function save() {
 }
 </script>
 
-{#if favorites.length > 0}
+{#if favorites === null}
+	{#if isOwn}
+		<p class="favorite-shelf-error" role="status">
+			ベスト作品を読み込めませんでした。ページを再読み込みしてください
+		</p>
+	{/if}
+{:else if favorites.length > 0}
 	<section class="favorite-shelf" aria-labelledby="favorite-shelf-title">
 		<div class="favorite-shelf-header">
 			<h2 id="favorite-shelf-title" class="favorite-shelf-title">ベスト作品</h2>
@@ -354,6 +362,11 @@ async function save() {
 	-webkit-box-orient: vertical;
 	-webkit-line-clamp: 2;
 	line-clamp: 2;
+}
+.favorite-shelf-error {
+	margin: 16px 0 0;
+	color: var(--color-text-muted);
+	font-size: 13px;
 }
 .favorite-shelf-empty {
 	display: flex;
