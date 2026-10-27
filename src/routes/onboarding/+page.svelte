@@ -2,6 +2,8 @@
 import type { SubmitFunction } from "@sveltejs/kit";
 import { onDestroy, untrack } from "svelte";
 import { enhance } from "$app/forms";
+import { checkAvatarSource } from "$lib/avatar-crop";
+import AvatarCropper from "$lib/components/AvatarCropper.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
 import type { PageProps } from "./$types";
 
@@ -43,6 +45,7 @@ const onSubmit: SubmitFunction = () => {
 };
 
 function clearSelectedAvatarFile() {
+	committedAvatarFile = null;
 	if (avatarFileInput) avatarFileInput.value = "";
 	if (avatarPreviewUrl) {
 		URL.revokeObjectURL(avatarPreviewUrl);
@@ -50,27 +53,40 @@ function clearSelectedAvatarFile() {
 	}
 }
 
+// 選んだ画像は、まず切り抜きの画面（AvatarCropper）に回す。決めた範囲の画像をフォームの欄に入れ直して送る
+let cropSource = $state<File | null>(null);
+// 切り抜きをやめたときに戻す、それまでに選んでいた画像
+let committedAvatarFile: File | null = null;
+
 function updateAvatarFile(event: Event) {
 	const input = event.currentTarget as HTMLInputElement;
 	const file = input.files?.[0];
 	if (!file) return;
 
 	avatarMessage = "";
-	if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-		avatarMessage = "JPEG、PNG、WebP形式の画像を選択してください。";
-		clearSelectedAvatarFile();
-		avatarChoice = "none";
+	const problem = checkAvatarSource(file);
+	restoreCommittedFile();
+	if (problem) {
+		avatarMessage = problem;
 		return;
 	}
-	if (file.size > 2 * 1024 * 1024) {
-		avatarMessage = "画像は2MB以内にしてください。";
-		clearSelectedAvatarFile();
-		avatarChoice = "none";
-		return;
-	}
+	cropSource = file;
+}
 
+/** フォームの欄を、切り抜いて決めた画像（無ければ空）に戻す */
+function restoreCommittedFile() {
+	if (!avatarFileInput) return;
+	const transfer = new DataTransfer();
+	if (committedAvatarFile) transfer.items.add(committedAvatarFile);
+	avatarFileInput.files = transfer.files;
+}
+
+function applyCroppedAvatar(cropped: File) {
+	cropSource = null;
+	committedAvatarFile = cropped;
+	restoreCommittedFile();
 	if (avatarPreviewUrl) URL.revokeObjectURL(avatarPreviewUrl);
-	avatarPreviewUrl = URL.createObjectURL(file);
+	avatarPreviewUrl = URL.createObjectURL(cropped);
 	avatarChoice = "upload";
 }
 
@@ -130,7 +146,7 @@ onDestroy(clearSelectedAvatarFile);
 						{:else if avatarMessage}
 							<p class="field-error-msg">{avatarMessage}</p>
 						{:else}
-							<p class="field-hint">JPEG、PNG、WebP・最大2MB。</p>
+							<p class="field-hint">JPEG、PNG、WebP・最大10MB。選んだあとに範囲を決められます。</p>
 						{/if}
 					</div>
 				</div>
@@ -195,6 +211,16 @@ onDestroy(clearSelectedAvatarFile);
 		</div>
 	</div>
 </div>
+
+{#if cropSource}
+	<AvatarCropper
+		file={cropSource}
+		onconfirm={applyCroppedAvatar}
+		oncancel={() => {
+			cropSource = null;
+		}}
+	/>
+{/if}
 
 <style>
 .onboarding-avatar-row {
