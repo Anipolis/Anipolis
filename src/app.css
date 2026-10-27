@@ -1392,6 +1392,7 @@ textarea {
 	overflow: hidden;
 }
 
+/* 編集で切り抜く範囲（3:1、ImageCropper）と同じ比率で、どの画面幅でも見せる */
 .profile-header-image {
 	display: block;
 	width: 100%;
@@ -3554,10 +3555,6 @@ form + .repost-menu-item {
 
 	.profile-header-top {
 		margin-bottom: 10px;
-	}
-
-	.profile-header-image {
-		aspect-ratio: 2 / 1;
 	}
 
 	.profile-stats {

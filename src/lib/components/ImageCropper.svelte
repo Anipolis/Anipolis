@@ -2,31 +2,40 @@
 import { onDestroy, onMount, untrack } from "svelte";
 import { trapFocus } from "$lib/actions/trapFocus";
 import {
-	AVATAR_OUTPUT_SIZE,
+	AVATAR_CROP,
 	type CropState,
 	clampOffset,
 	coverScale,
+	type Frame,
+	HEADER_CROP,
 	initialCrop,
 	MAX_ZOOM,
 	sourceRect,
 	zoomTo,
-} from "$lib/avatar-crop";
+} from "$lib/image-crop";
 
 /**
- * アイコンにする範囲を選ぶ画面（初期設定・プロフィールの編集で共用）。
- * 画像をドラッグで動かし、スライダー・ホイール・2 本指で拡大する。決めた範囲を正方形（512px）の画像にして返す。
+ * 画像の使う範囲を選ぶ画面。アイコン（初期設定・プロフィールの編集）とヘッダー画像（プロフィールの編集）で共用。
+ * 画像をドラッグで動かし、スライダー・ホイール・2 本指で拡大する。決めた範囲を
+ * アイコンは正方形（512px）、ヘッダーは 3:1（1500×500px）の画像にして返す。
  * 切り抜きはブラウザの中で行うので、サーバー側は今のアップロードの仕組みのまま
  */
 interface Props {
 	file: File;
+	kind?: "avatar" | "header";
 	onconfirm: (cropped: File) => void;
 	oncancel: () => void;
 }
 
-let { file, onconfirm, oncancel }: Props = $props();
+let { file, kind = "avatar", onconfirm, oncancel }: Props = $props();
 
-/** 枠（正方形）の一辺。開いたときの画面の幅に合わせて決める（幅 320px の端末でも収まるように） */
-let VIEW = $state(280);
+// 開いている間に種類が変わることはない（呼ぶ側の {#if} で作り直される）
+const isHeader = untrack(() => kind === "header");
+const shape = isHeader ? HEADER_CROP : AVATAR_CROP;
+const title = isHeader ? "ヘッダー画像の範囲を決める" : "アイコンの範囲を決める";
+
+/** 枠の大きさ。開いたときの画面の幅に合わせて決める（幅 320px の端末でも収まるように） */
+let FRAME = $state<Frame>(isHeader ? { width: 480, height: 160 } : { width: 280, height: 280 });
 
 // 画像を選び直すときは、この画面ごと作り直される（呼ぶ側の {#if}）ので、最初の file だけを使う
 const imageUrl = URL.createObjectURL(untrack(() => file));
@@ -36,17 +45,20 @@ let crop = $state<CropState>({ x: 0, y: 0, scale: 1 });
 let loadFailed = $state(false);
 let saving = $state(false);
 
-const minScale = $derived(natural.width ? coverScale(natural.width, natural.height, VIEW) : 1);
+const minScale = $derived(natural.width ? coverScale(natural.width, natural.height, FRAME) : 1);
 // スライダーは「枠を埋める倍率」から何倍かで持つ（1〜MAX_ZOOM）
 const zoom = $derived(crop.scale / minScale);
 
 onMount(() => {
-	VIEW = Math.max(200, Math.min(280, window.innerWidth - 80));
+	const width = isHeader
+		? Math.max(240, Math.min(480, window.innerWidth - 80))
+		: Math.max(200, Math.min(280, window.innerWidth - 80));
+	FRAME = { width, height: Math.round(width / shape.aspect) };
 	const img = new Image();
 	img.onload = () => {
 		image = img;
 		natural = { width: img.naturalWidth, height: img.naturalHeight };
-		crop = initialCrop(img.naturalWidth, img.naturalHeight, VIEW);
+		crop = initialCrop(img.naturalWidth, img.naturalHeight, FRAME);
 	};
 	img.onerror = () => {
 		loadFailed = true;
@@ -68,11 +80,11 @@ onDestroy(() => {
 });
 
 function setZoom(nextZoom: number, cx?: number, cy?: number): void {
-	crop = zoomTo(crop, minScale * nextZoom, natural.width, natural.height, VIEW, cx, cy);
+	crop = zoomTo(crop, minScale * nextZoom, natural.width, natural.height, FRAME, cx, cy);
 }
 
 function moveBy(dx: number, dy: number): void {
-	crop = clampOffset({ ...crop, x: crop.x + dx, y: crop.y + dy }, natural.width, natural.height, VIEW);
+	crop = clampOffset({ ...crop, x: crop.x + dx, y: crop.y + dy }, natural.width, natural.height, FRAME);
 }
 
 // ドラッグ（1 本指・マウス）と 2 本指の拡大
@@ -145,21 +157,21 @@ function handleWindowKeydown(event: KeyboardEvent): void {
 	if (event.key === "Escape") cancel();
 }
 
-/** 枠に見えている範囲を正方形の画像にする。WebP にできないブラウザ（古い Safari など）では JPEG にする */
+/** 枠に見えている範囲を画像にする。WebP にできないブラウザ（古い Safari など）では JPEG にする */
 async function confirmCrop(): Promise<void> {
 	if (!image || saving) return;
 	saving = true;
 	const canvas = document.createElement("canvas");
-	canvas.width = AVATAR_OUTPUT_SIZE;
-	canvas.height = AVATAR_OUTPUT_SIZE;
+	canvas.width = shape.outputWidth;
+	canvas.height = shape.outputHeight;
 	const context = canvas.getContext("2d");
 	if (!context) {
 		saving = false;
 		return;
 	}
-	const { sx, sy, size } = sourceRect(crop, VIEW);
+	const { sx, sy, width, height } = sourceRect(crop, FRAME);
 	context.imageSmoothingQuality = "high";
-	context.drawImage(image, sx, sy, size, size, 0, 0, AVATAR_OUTPUT_SIZE, AVATAR_OUTPUT_SIZE);
+	context.drawImage(image, sx, sy, width, height, 0, 0, shape.outputWidth, shape.outputHeight);
 
 	const toBlob = (type: string) => new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, 0.9));
 	let blob = await toBlob("image/webp");
@@ -167,7 +179,7 @@ async function confirmCrop(): Promise<void> {
 	saving = false;
 	if (!blob || closed) return;
 	const ext = blob.type === "image/webp" ? "webp" : "jpg";
-	onconfirm(new File([blob], `avatar.${ext}`, { type: blob.type }));
+	onconfirm(new File([blob], `${kind}.${ext}`, { type: blob.type }));
 }
 </script>
 
@@ -180,9 +192,16 @@ async function confirmCrop(): Promise<void> {
 		if (event.target === event.currentTarget) cancel();
 	}}
 >
-	<div class="cropper" use:trapFocus role="dialog" aria-modal="true" aria-labelledby="cropper-title">
+	<div
+		class="cropper"
+		class:cropper--wide={isHeader}
+		use:trapFocus
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="cropper-title"
+	>
 		<div class="cropper-header">
-			<h2 id="cropper-title">アイコンの範囲を決める</h2>
+			<h2 id="cropper-title">{title}</h2>
 			<button type="button" class="cropper-close" onclick={cancel} aria-label="閉じる">
 				<span class="i-lucide-x" aria-hidden="true"></span>
 			</button>
@@ -194,10 +213,10 @@ async function confirmCrop(): Promise<void> {
 			<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -- 枠はドラッグと矢印キーで画像を動かす操作の場所（role="application"）なので、フォーカスでき、操作を受け取る -->
 			<div
 				class="cropper-stage"
-				style:width="{VIEW}px"
-				style:height="{VIEW}px"
+				style:width="{FRAME.width}px"
+				style:height="{FRAME.height}px"
 				role="application"
-				aria-label="アイコンにする範囲。ドラッグか矢印キーで動かし、＋／－で拡大・縮小します"
+				aria-label="{isHeader ? 'ヘッダー画像' : 'アイコン'}にする範囲。ドラッグか矢印キーで動かし、＋／－で拡大・縮小します"
 				tabindex="0"
 				onpointerdown={handlePointerDown}
 				onpointermove={handlePointerMove}
@@ -216,7 +235,8 @@ async function confirmCrop(): Promise<void> {
 						style:transform="translate({crop.x}px, {crop.y}px)"
 					>
 				{/if}
-				<div class="cropper-circle" aria-hidden="true"></div>
+				<!-- アイコンは丸い枠の外を暗くする。ヘッダーは枠いっぱいがそのまま使われるので、縁取りだけ -->
+				<div class="cropper-guide" class:cropper-guide--round={!isHeader} aria-hidden="true"></div>
 			</div>
 
 			<label class="cropper-zoom">
@@ -267,6 +287,10 @@ async function confirmCrop(): Promise<void> {
 	background: var(--color-surface);
 	box-shadow: 0 24px 64px rgb(0 0 0 / 0.34);
 	color: var(--color-text);
+}
+
+.cropper--wide {
+	width: min(560px, 100%);
 }
 
 .cropper-header {
@@ -333,16 +357,22 @@ async function confirmCrop(): Promise<void> {
 	pointer-events: none;
 }
 
-/* 丸い枠の外を暗くして、アイコンに使われる範囲を示す */
-.cropper-circle {
+.cropper-guide {
 	position: absolute;
 	inset: 0;
+	border-radius: 8px;
+	outline: 2px solid rgb(255 255 255 / 0.8);
+	outline-offset: -2px;
+	pointer-events: none;
+}
+
+/* 丸い枠の外を暗くして、アイコンに使われる範囲を示す */
+.cropper-guide--round {
 	border-radius: 50%;
 	/* サイト全体の角の形（squircle）ではなく、実際のアイコン（.avatar）と同じ真円にする */
 	corner-shape: round;
 	box-shadow: 0 0 0 9999px rgb(0 0 0 / 0.5);
-	outline: 2px solid rgb(255 255 255 / 0.8);
-	pointer-events: none;
+	outline-offset: 0;
 }
 
 .cropper-zoom {

@@ -4,13 +4,13 @@ import { untrack } from "svelte";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
-import { checkAvatarSource } from "$lib/avatar-crop";
 import AnimeStatusSection from "$lib/components/AnimeStatusSection.svelte";
-import AvatarCropper from "$lib/components/AvatarCropper.svelte";
 import FavoriteAnimeShelf from "$lib/components/FavoriteAnimeShelf.svelte";
+import ImageCropper from "$lib/components/ImageCropper.svelte";
 import PostRow from "$lib/components/PostRow.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
+import { checkCropSource } from "$lib/image-crop";
 import { timelineCursorHref } from "$lib/timeline-cursor";
 import type { Anime, AnimeStatus } from "$lib/types";
 import type { PageProps } from "./$types";
@@ -222,27 +222,34 @@ function closeProfileEditModal() {
 	editBio = data.profile.bio ?? "";
 }
 
+// 選んだ画像は、まず切り抜きの画面（ImageCropper）に回し、決めた範囲の画像を保存のときに送る
+let avatarCropSource = $state<File | null>(null);
+let headerCropSource = $state<File | null>(null);
+
 function updateHeaderImage(event: Event) {
 	const input = event.currentTarget as HTMLInputElement;
 	const file = input.files?.[0];
+	// 同じ画像を選び直しても選んだことになるように、欄はすぐ空に戻す
+	input.value = "";
 	if (!file) return;
 
 	headerMessage = "";
-	// 決まりは画面に書かず、外れたときだけ伝える（形式と大きさのどちらでも同じ文。ux-guidelines）
-	if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 5 * 1024 * 1024) {
-		headerMessage = "5MB以下の画像（JPEG・PNG・WebP）を選んでください";
-		input.value = "";
+	// 決まりは画面に書かず、外れたときだけ伝える（ux-guidelines）
+	const problem = checkCropSource(file);
+	if (problem) {
+		headerMessage = problem;
 		return;
 	}
-
-	if (headerPreviewUrl) URL.revokeObjectURL(headerPreviewUrl);
-	headerPreviewUrl = URL.createObjectURL(file);
-	headerPendingFile = file;
-	headerPendingDelete = false;
+	headerCropSource = file;
 }
 
-// 選んだ画像は、まず切り抜きの画面（AvatarCropper）に回し、決めた範囲の画像を保存のときに送る
-let avatarCropSource = $state<File | null>(null);
+function applyCroppedHeader(cropped: File) {
+	headerCropSource = null;
+	if (headerPreviewUrl) URL.revokeObjectURL(headerPreviewUrl);
+	headerPreviewUrl = URL.createObjectURL(cropped);
+	headerPendingFile = cropped;
+	headerPendingDelete = false;
+}
 
 function updateAvatarImage(event: Event) {
 	const input = event.currentTarget as HTMLInputElement;
@@ -252,7 +259,7 @@ function updateAvatarImage(event: Event) {
 	if (!file) return;
 
 	avatarMessage = "";
-	const problem = checkAvatarSource(file);
+	const problem = checkCropSource(file);
 	if (problem) {
 		avatarMessage = problem;
 		return;
@@ -903,11 +910,22 @@ const grouped = $derived(
 </div>
 
 {#if avatarCropSource}
-	<AvatarCropper
+	<ImageCropper
 		file={avatarCropSource}
 		onconfirm={applyCroppedAvatar}
 		oncancel={() => {
 			avatarCropSource = null;
+		}}
+	/>
+{/if}
+
+{#if headerCropSource}
+	<ImageCropper
+		file={headerCropSource}
+		kind="header"
+		onconfirm={applyCroppedHeader}
+		oncancel={() => {
+			headerCropSource = null;
 		}}
 	/>
 {/if}
