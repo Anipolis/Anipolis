@@ -2,9 +2,9 @@
 import type { SubmitFunction } from "@sveltejs/kit";
 import { onDestroy, untrack } from "svelte";
 import { enhance } from "$app/forms";
-import { checkAvatarSource } from "$lib/avatar-crop";
-import AvatarCropper from "$lib/components/AvatarCropper.svelte";
+import ImageCropper from "$lib/components/ImageCropper.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
+import { checkCropSource } from "$lib/image-crop";
 import type { PageProps } from "./$types";
 
 let { data, form }: PageProps = $props();
@@ -53,7 +53,7 @@ function clearSelectedAvatarFile() {
 	}
 }
 
-// 選んだ画像は、まず切り抜きの画面（AvatarCropper）に回す。決めた範囲の画像をフォームの欄に入れ直して送る
+// 選んだ画像は、まず切り抜きの画面（ImageCropper）に回す。決めた範囲の画像をフォームの欄に入れ直して送る
 let cropSource = $state<File | null>(null);
 // 切り抜きをやめたときに戻す、それまでに選んでいた画像
 let committedAvatarFile: File | null = null;
@@ -64,7 +64,7 @@ function updateAvatarFile(event: Event) {
 	if (!file) return;
 
 	avatarMessage = "";
-	const problem = checkAvatarSource(file);
+	const problem = checkCropSource(file);
 	restoreCommittedFile();
 	if (problem) {
 		avatarMessage = problem;
@@ -213,7 +213,7 @@ onDestroy(clearSelectedAvatarFile);
 </div>
 
 {#if cropSource}
-	<AvatarCropper
+	<ImageCropper
 		file={cropSource}
 		onconfirm={applyCroppedAvatar}
 		oncancel={() => {
