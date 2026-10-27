@@ -4,7 +4,9 @@ import { untrack } from "svelte";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
+import { checkAvatarSource } from "$lib/avatar-crop";
 import AnimeStatusSection from "$lib/components/AnimeStatusSection.svelte";
+import AvatarCropper from "$lib/components/AvatarCropper.svelte";
 import PostRow from "$lib/components/PostRow.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
@@ -222,26 +224,30 @@ function updateHeaderImage(event: Event) {
 	headerPendingDelete = false;
 }
 
+// 選んだ画像は、まず切り抜きの画面（AvatarCropper）に回し、決めた範囲の画像を保存のときに送る
+let avatarCropSource = $state<File | null>(null);
+
 function updateAvatarImage(event: Event) {
 	const input = event.currentTarget as HTMLInputElement;
 	const file = input.files?.[0];
+	// 同じ画像を選び直しても選んだことになるように、欄はすぐ空に戻す
+	input.value = "";
 	if (!file) return;
 
 	avatarMessage = "";
-	if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-		avatarMessage = "JPEG、PNG、WebP形式の画像を選択してください。";
-		input.value = "";
+	const problem = checkAvatarSource(file);
+	if (problem) {
+		avatarMessage = problem;
 		return;
 	}
-	if (file.size > 2 * 1024 * 1024) {
-		avatarMessage = "画像は2MB以内にしてください。";
-		input.value = "";
-		return;
-	}
+	avatarCropSource = file;
+}
 
+function applyCroppedAvatar(cropped: File) {
+	avatarCropSource = null;
 	if (avatarPreviewUrl) URL.revokeObjectURL(avatarPreviewUrl);
-	avatarPreviewUrl = URL.createObjectURL(file);
-	avatarPendingFile = file;
+	avatarPreviewUrl = URL.createObjectURL(cropped);
+	avatarPendingFile = cropped;
 }
 
 function removeHeaderImage() {
@@ -610,7 +616,7 @@ const grouped = $derived(
 										>
 									</label>
 								</div>
-								<p class="field-hint">JPEG、PNG、WebP・最大2MB。</p>
+								<p class="field-hint">JPEG、PNG、WebP・最大10MB。選んだあとに範囲を決められます。</p>
 								{#if avatarMessage}
 									<p class="profile-header-editor-message" aria-live="polite">{avatarMessage}</p>
 								{/if}
@@ -852,6 +858,16 @@ const grouped = $derived(
 		<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
 	</aside>
 </div>
+
+{#if avatarCropSource}
+	<AvatarCropper
+		file={avatarCropSource}
+		onconfirm={applyCroppedAvatar}
+		oncancel={() => {
+			avatarCropSource = null;
+		}}
+	/>
+{/if}
 
 <style>
 .load-more-btn {
