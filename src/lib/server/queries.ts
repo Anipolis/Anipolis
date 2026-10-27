@@ -4423,9 +4423,11 @@ export async function getOpenBroadcastRoomSessions(
 	};
 	return rows
 		.filter((row) => {
-			if (row.room_kind !== "episode") return true;
+			// 作品を読めない（情報がまだそろっていない・管理者が隠した）ルームは出さない。総合ロビーも同じ
+			// （作品名が「不明」のまま一覧に出て、開いても見つからなかった）
 			const anime = rawAnimeForRow(row.anime);
 			if (!anime) return false;
+			if (row.room_kind !== "episode") return true;
 			const override = overrideBySessionKey.get(`${row.anime_id}:${row.room_date.slice(0, 10)}`);
 			if (override?.is_cancelled) return false;
 			if (row.schedule_source === "syobocal") return true;
