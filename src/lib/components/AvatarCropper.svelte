@@ -54,7 +54,18 @@ onMount(() => {
 	img.src = imageUrl;
 });
 
-onDestroy(() => URL.revokeObjectURL(imageUrl));
+// 閉じた（キャンセル・破棄）あとに画像の作成が終わっても、結果を渡さない
+let closed = false;
+
+function cancel(): void {
+	closed = true;
+	oncancel();
+}
+
+onDestroy(() => {
+	closed = true;
+	URL.revokeObjectURL(imageUrl);
+});
 
 function setZoom(nextZoom: number, cx?: number, cy?: number): void {
 	crop = zoomTo(crop, minScale * nextZoom, natural.width, natural.height, VIEW, cx, cy);
@@ -131,7 +142,7 @@ function handleStageKeydown(event: KeyboardEvent): void {
 }
 
 function handleWindowKeydown(event: KeyboardEvent): void {
-	if (event.key === "Escape") oncancel();
+	if (event.key === "Escape") cancel();
 }
 
 /** 枠に見えている範囲を正方形の画像にする。WebP にできないブラウザ（古い Safari など）では JPEG にする */
@@ -154,7 +165,7 @@ async function confirmCrop(): Promise<void> {
 	let blob = await toBlob("image/webp");
 	if (!blob || blob.type !== "image/webp") blob = await toBlob("image/jpeg");
 	saving = false;
-	if (!blob) return;
+	if (!blob || closed) return;
 	const ext = blob.type === "image/webp" ? "webp" : "jpg";
 	onconfirm(new File([blob], `avatar.${ext}`, { type: blob.type }));
 }
@@ -166,13 +177,13 @@ async function confirmCrop(): Promise<void> {
 	class="cropper-backdrop"
 	role="presentation"
 	onclick={(event) => {
-		if (event.target === event.currentTarget) oncancel();
+		if (event.target === event.currentTarget) cancel();
 	}}
 >
 	<div class="cropper" use:trapFocus role="dialog" aria-modal="true" aria-labelledby="cropper-title">
 		<div class="cropper-header">
 			<h2 id="cropper-title">アイコンの範囲を決める</h2>
-			<button type="button" class="cropper-close" onclick={oncancel} aria-label="閉じる">
+			<button type="button" class="cropper-close" onclick={cancel} aria-label="閉じる">
 				<span class="i-lucide-x" aria-hidden="true"></span>
 			</button>
 		</div>
@@ -225,7 +236,7 @@ async function confirmCrop(): Promise<void> {
 		{/if}
 
 		<div class="cropper-actions">
-			<button type="button" class="btn btn-ghost" onclick={oncancel}>キャンセル</button>
+			<button type="button" class="btn btn-ghost" onclick={cancel}>キャンセル</button>
 			<button type="button" class="btn btn-primary" onclick={confirmCrop} disabled={!image || saving}>
 				{saving ? "処理中..." : "この範囲で決定"}
 			</button>
