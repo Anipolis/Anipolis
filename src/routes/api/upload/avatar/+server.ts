@@ -61,3 +61,31 @@ export const POST: RequestHandler = async ({ request, locals: { supabase, safeGe
 
 	return json({ url: publicUrl });
 };
+
+// アイコン画像を外す（頭文字のアイコンに戻す）。ヘッダー画像の削除と同じく、先にプロフィールを空にしてからファイルを消す
+export const DELETE: RequestHandler = async ({ locals: { supabase, safeGetSession } }) => {
+	const { user } = await safeGetSession();
+	if (!user) error(401, "ログインが必要です");
+	await requireAccountCanWrite(supabase, user.id);
+
+	const { data: updatedProfile, error: dbError } = await supabase
+		.from("profiles")
+		.update({ avatar_url: null })
+		.eq("id", user.id)
+		.select("id")
+		.maybeSingle();
+	if (dbError || !updatedProfile) {
+		console.error("avatar remove error:", dbError);
+		error(500, "アイコン画像の削除に失敗しました");
+	}
+
+	// 自分のフォルダのアイコンを消す（ベストエフォート — 失敗してもプロフィールからは外れている）
+	const { data: files } = await supabase.storage.from("profile-avatars").list(user.id);
+	const paths = (files ?? []).map((f) => `${user.id}/${f.name}`);
+	if (paths.length > 0) {
+		const { error: cleanupError } = await supabase.storage.from("profile-avatars").remove(paths);
+		if (cleanupError) console.error("avatar file cleanup error:", cleanupError);
+	}
+
+	return json({ success: true });
+};
