@@ -466,7 +466,7 @@ const grouped = $derived(
 									<input type="hidden" name="target_id" value={profile.id}>
 									<button
 										type="submit"
-										class="btn {isFollowing || followRequestStatus === 'pending' ? 'btn-outline' : 'btn-primary'}"
+										class="btn {isFollowing || followRequestStatus === 'pending' ? 'btn-secondary' : 'btn-primary'}"
 										disabled={isProcessing || followRequestStatus === 'pending'}
 										style="font-size: 13px;"
 									>
