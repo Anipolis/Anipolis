@@ -6,6 +6,7 @@ import { ANIME_GENRE_FILTER_HELP, ANIME_GENRE_GROUPS, ANIME_GENRES, ANIME_SOURCE
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
 import InfoTip from "$lib/components/InfoTip.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
+import MyListStatusPopover from "$lib/components/MyListStatusPopover.svelte";
 import { createDebouncedCommit } from "$lib/debounced-commit";
 import { isSamePageRefresh } from "$lib/navigation-skeleton";
 import type { ActiveAnimeSeasonChip, AnimeListItem, AnimeStatus } from "$lib/types";
@@ -57,6 +58,8 @@ function animeStatusBadge(anime: AnimeListItem): string {
 }
 
 let quickAddAnime = $state<AnimeListItem | null>(null);
+/** PC: カードのボタンの近くに出す小さな視聴ステータス欄 */
+let statusPopover = $state<{ anime: AnimeListItem; anchor: HTMLElement } | null>(null);
 // スマホの検索欄。URL の検索語から作り直し、入力で書き換える（bind:value でハイドレーション前の入力も残す、#417）
 let mobileSearchInput = $derived(data.search ?? "");
 // svelte-ignore state_referenced_locally
@@ -285,6 +288,12 @@ function getVisibleAnimeSectionPages(pageCount: number, currentIndex: number, vi
 function openQuickAdd(e: MouseEvent, anime: AnimeListItem) {
 	e.preventDefault();
 	e.stopPropagation();
+	const anchor = e.currentTarget as HTMLElement;
+	// マウスで操作する PC は状態だけを選ぶ小さな欄、タッチ端末は押しやすい大きいモーダル
+	if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+		statusPopover = statusPopover?.anchor === anchor ? null : { anime, anchor };
+		return;
+	}
 	quickAddAnime = anime;
 }
 
@@ -777,6 +786,8 @@ function isAiringToday(anime: AnimeListItem): boolean {
 										class="quick-add-btn status-text-{entryStatus ?? 'none'}"
 										onclick={(e) => openQuickAdd(e, anime)}
 										aria-label={entryStatus ? `マイリスト: ${statusLabels[entryStatus]}` : 'マイリストに追加'}
+										aria-haspopup="dialog"
+										aria-expanded={statusPopover?.anime.id === anime.id}
 										title={entryStatus ? 'マイリストを編集' : 'マイリストに追加'}
 									>
 										{#if entryStatus}
@@ -885,6 +896,24 @@ function isAiringToday(anime: AnimeListItem): boolean {
 			</div>
 		{/if}
 	</main>
+
+	{#if statusPopover && data.user}
+		{@const popoverAnime = statusPopover.anime}
+		<MyListStatusPopover
+			anchor={statusPopover.anchor}
+			animeId={popoverAnime.id}
+			animeTitle={popoverAnime.title}
+			entry={popoverAnime.user_entry}
+			onclose={() => {
+				statusPopover = null;
+			}}
+			onopenfull={() => {
+				// 先に作品を移す（statusPopover を外すと popoverAnime も読めなくなる）
+				quickAddAnime = popoverAnime;
+				statusPopover = null;
+			}}
+		/>
+	{/if}
 
 	{#if quickAddAnime && data.user}
 		<MyListModal
