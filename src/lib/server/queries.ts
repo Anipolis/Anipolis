@@ -3164,6 +3164,22 @@ async function sortAnimeListItems(
 	});
 }
 
+/** 一覧カードに出す平均スコア（公開リストの評価のみ。作品ページの値と同じ anime_top_rated） */
+export async function attachAnimeAverageScores(supabase: SupabaseClient<Database>, animes: Anime[]): Promise<void> {
+	const missing = animes.filter((anime) => anime.score_count == null);
+	if (missing.length === 0) return;
+	const metrics = await getAnimeRankingMetrics(
+		supabase,
+		missing.map((anime) => anime.id),
+		"top_rated",
+	);
+	for (const anime of missing) {
+		const metric = metrics.get(anime.id);
+		anime.score_count = metric?.secondary ?? 0;
+		anime.avg_score = metric ? normalizeAverageScore(metric.primary, metric.secondary) : null;
+	}
+}
+
 async function getAnimeRankingMetrics(
 	supabase: SupabaseClient<Database>,
 	animeIds: string[],
@@ -3920,7 +3936,7 @@ async function fetchAnimesByIds(supabase: SupabaseClient<Database>, ids: string[
 	return ids.map((id) => map.get(id)).filter((a): a is Anime => a !== undefined);
 }
 
-async function enrichAnimeWithUserEntries(
+export async function enrichAnimeWithUserEntries(
 	supabase: SupabaseClient<Database>,
 	animes: Anime[],
 	userId: string,

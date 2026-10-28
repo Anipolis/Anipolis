@@ -3,8 +3,10 @@ import { registerAnimeAction } from "$lib/server/anime-admin";
 import { buildAnimeListOptions, parseAnimeListFilters } from "$lib/server/anime-list-filters";
 import {
 	type AnimeListPageResult,
+	attachAnimeAverageScores,
 	countAnimeRanking,
 	countUserAnimeList,
+	enrichAnimeWithUserEntries,
 	getAnimeListPage,
 	getAnimeRankingPopularity,
 	getAnimeRankingTopRated,
@@ -29,6 +31,8 @@ function toAnimeListItem(a: Anime): AnimeListItem {
 		broadcast_day: a.broadcast_day,
 		computed_broadcast_status: a.computed_broadcast_status,
 		user_entry: a.user_entry ?? null,
+		avg_score: a.avg_score ?? null,
+		score_count: a.score_count ?? 0,
 	};
 }
 
@@ -67,7 +71,12 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	): Promise<AnimeListPageResult> => {
 		const total = await countAnimeRanking(supabase, kind);
 		if (total === 0) return getAnimeListPage(supabase, { page, pageSize: PAGE_SIZE, userId });
-		return { items: await fetchPage(PAGE_SIZE, offset), total };
+		const items = await fetchPage(PAGE_SIZE, offset);
+		// ランキングのビューは見ている人のマイリストを含まない。カードのボタンに状態を出すため足す
+		return {
+			items: userId && items.length ? await enrichAnimeWithUserEntries(supabase, items, userId) : items,
+			total,
+		};
 	};
 
 	let result: AnimeListPageResult;
@@ -112,6 +121,8 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	} else {
 		result = await rankingTab("popular", (limit, off) => getAnimeRankingPopularity(supabase, limit, off));
 	}
+
+	await attachAnimeAverageScores(supabase, result.items);
 
 	return {
 		animes: result.items.map(toAnimeListItem),
