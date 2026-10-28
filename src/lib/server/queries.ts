@@ -3496,6 +3496,107 @@ export async function getUserAnimeList(
 		}));
 }
 
+/** プロフィールの「コレクション」タブに並べる要約（#515） */
+export interface CollectionSummary {
+	id: string;
+	title: string;
+	description: string | null;
+	is_public: boolean;
+	updated_at: string;
+	item_count: number;
+	/** 先頭の作品のカバー（最大4枚。カバーの無い作品は飛ばす） */
+	covers: string[];
+}
+
+/** その人のコレクションを新しく更新した順に読む。非公開のものは本人にだけ返る（RLS） */
+export async function getUserCollections(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+): Promise<CollectionSummary[]> {
+	const { data, error } = await supabase
+		.from("user_collections")
+		.select(
+			"id, title, description, is_public, updated_at, item_count:user_collection_items(count), preview:user_collection_items(position, anime:anime_id(cover_url))",
+		)
+		.eq("user_id", userId)
+		.order("updated_at", { ascending: false })
+		.order("position", { referencedTable: "preview" })
+		.limit(8, { referencedTable: "preview" });
+	if (error) failQuery("getUserCollections", error);
+
+	type Row = {
+		id: string;
+		title: string;
+		description: string | null;
+		is_public: boolean;
+		updated_at: string;
+		item_count: { count: number }[];
+		preview: { anime: { cover_url: string | null } | null }[];
+	};
+	return ((data ?? []) as unknown as Row[]).map((row) => ({
+		id: row.id,
+		title: row.title,
+		description: row.description,
+		is_public: row.is_public,
+		updated_at: row.updated_at,
+		item_count: row.item_count[0]?.count ?? 0,
+		covers: row.preview.flatMap((item) => (item.anime?.cover_url ? [item.anime.cover_url] : [])).slice(0, 4),
+	}));
+}
+
+export interface CollectionDetail {
+	id: string;
+	title: string;
+	description: string | null;
+	is_public: boolean;
+	created_at: string;
+	updated_at: string;
+	owner: { id: string; username: string; display_name: string | null; avatar_url: string | null };
+	items: Anime[];
+}
+
+/** コレクションを作品の並び順つきで読む。見えない（非公開・鍵・ブロック）・無いときは null */
+export async function getCollection(supabase: SupabaseClient<Database>, id: string): Promise<CollectionDetail | null> {
+	const { data, error } = await supabase
+		.from("user_collections")
+		.select(
+			`id, title, description, is_public, created_at, updated_at, owner:profiles!user_collections_user_id_fkey(id, username, display_name, avatar_url), items:user_collection_items(position, anime:anime_id(${ANIME_LIST_BASE_COLUMNS}))`,
+		)
+		.eq("id", id)
+		.order("position", { referencedTable: "items" })
+		.maybeSingle();
+	if (error) failQuery("getCollection", error);
+	if (!data) return null;
+
+	const row = data as unknown as Omit<CollectionDetail, "items"> & {
+		items: { anime: Record<string, unknown> | null }[];
+	};
+	return {
+		...row,
+		// 後から非公開になった作品などは anime が読めずに null になるので、飛ばす
+		items: row.items.flatMap((item) => (item.anime ? [toAnime(item.anime)] : [])),
+	};
+}
+
+/** 見ている人のマイリストでの状態（作品 ID → ステータス）。コレクションの作品に添えて出す */
+export async function getMyListStatuses(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+	animeIds: string[],
+): Promise<Record<string, AnimeStatus>> {
+	if (animeIds.length === 0) return {};
+	const { data, error } = await supabase
+		.from("user_anime_list")
+		.select("anime_id, status")
+		.eq("user_id", userId)
+		.in("anime_id", animeIds.map(Number));
+	if (error) {
+		logQueryFailure("getMyListStatuses", error);
+		return {};
+	}
+	return Object.fromEntries((data ?? []).map((row) => [String(row.anime_id), row.status as AnimeStatus]));
+}
+
 /** プロフィールのベスト作品を並び順で読む（#361）。見える相手かどうかは RLS が判定する */
 export async function getFavoriteAnime(supabase: SupabaseClient<Database>, userId: string): Promise<Anime[]> {
 	const { data, error } = await supabase
