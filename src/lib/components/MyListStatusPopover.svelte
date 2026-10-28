@@ -3,6 +3,7 @@ import type { SubmitFunction } from "@sveltejs/kit";
 import { tick, untrack } from "svelte";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
+import { entryFromForm } from "$lib/mylist/entry-from-form";
 import type { AnimeStatus, UserAnimeEntry } from "$lib/types";
 
 /**
@@ -16,10 +17,12 @@ type Props = {
 	animeTitle: string;
 	entry?: UserAnimeEntry | null | undefined;
 	action?: string;
+	/** 渡すと保存後にページを読み込み直さず、保存した内容を知らせる */
+	onsaved?: (entry: UserAnimeEntry) => void;
 	onclose: () => void;
 };
 
-let { anchor, animeId, animeTitle, entry = null, action = "?/upsertWatchlist", onclose }: Props = $props();
+let { anchor, animeId, animeTitle, entry = null, action = "?/upsertWatchlist", onsaved, onclose }: Props = $props();
 
 const statusOptions: { value: AnimeStatus; label: string }[] = [
 	{ value: "plan_to_watch", label: "視聴予定" },
@@ -119,7 +122,8 @@ const handleSubmit: SubmitFunction = ({ formData, cancel }) => {
 			errorMessage = "マイリストの保存に失敗しました";
 			return;
 		}
-		await invalidateAll();
+		if (onsaved) onsaved(entryFromForm(formData));
+		else await invalidateAll();
 		close({ returnFocus: true });
 	};
 };

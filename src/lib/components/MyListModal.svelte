@@ -3,6 +3,7 @@ import type { SubmitFunction } from "@sveltejs/kit";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
 import { trapFocus } from "$lib/actions/trapFocus";
+import { entryFromForm } from "$lib/mylist/entry-from-form";
 import type { AnimeStatus, UserAnimeEntry } from "$lib/types";
 
 type Props = {
@@ -13,6 +14,8 @@ type Props = {
 	entry?: UserAnimeEntry | null | undefined;
 	action?: string;
 	variant?: "full" | "status-only";
+	/** 渡すと保存後にページを読み込み直さず、保存した内容を知らせる */
+	onsaved?: (entry: UserAnimeEntry) => void;
 	onclose: () => void;
 };
 
@@ -24,6 +27,7 @@ let {
 	entry = null,
 	action = "?/upsertWatchlist",
 	variant = "full",
+	onsaved,
 	onclose,
 }: Props = $props();
 
@@ -66,7 +70,7 @@ function handleProgressInput(event: Event) {
 	setProgress(Number((event.currentTarget as HTMLInputElement).value));
 }
 
-const handleSubmit: SubmitFunction = () => {
+const handleSubmit: SubmitFunction = ({ formData }) => {
 	submitting = true;
 	errorMessage = "";
 	return async ({ result }) => {
@@ -79,7 +83,8 @@ const handleSubmit: SubmitFunction = () => {
 			errorMessage = "マイリストの保存に失敗しました";
 			return;
 		}
-		await invalidateAll();
+		if (onsaved) onsaved(entryFromForm(formData));
+		else await invalidateAll();
 		onclose();
 	};
 };

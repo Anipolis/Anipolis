@@ -9,7 +9,7 @@ import MyListModal from "$lib/components/MyListModal.svelte";
 import MyListStatusPopover from "$lib/components/MyListStatusPopover.svelte";
 import { createDebouncedCommit } from "$lib/debounced-commit";
 import { isSamePageRefresh } from "$lib/navigation-skeleton";
-import type { ActiveAnimeSeasonChip, AnimeListItem, AnimeStatus } from "$lib/types";
+import type { ActiveAnimeSeasonChip, AnimeListItem, AnimeStatus, UserAnimeEntry } from "$lib/types";
 import { dateKeyWeekday, jstBroadcastDateKey } from "$lib/utils/jst";
 import type { PageProps } from "./$types";
 
@@ -60,6 +60,19 @@ function animeStatusBadge(anime: AnimeListItem): string {
 let quickAddAnime = $state<AnimeListItem | null>(null);
 /** PC: カードのボタンの近くに出す小さな視聴ステータス欄 */
 let statusPopover = $state<{ anime: AnimeListItem; anchor: HTMLElement } | null>(null);
+// マイリストに保存した作品の新しい状態。保存のたびに読み込み直すと人気順などでカードが動くので、
+// 並び順はそのままにカードの表示だけを変える。読み込み直し（タブ・ページ・絞り込みの切り替えやリロード）で捨てる
+let savedEntries = $state.raw<{ list: AnimeListItem[]; entries: Record<string, UserAnimeEntry> } | null>(null);
+
+function entryOf(anime: AnimeListItem): UserAnimeEntry | null | undefined {
+	const saved = savedEntries?.list === data.animes ? savedEntries.entries[anime.id] : undefined;
+	return saved ?? anime.user_entry;
+}
+
+function rememberSavedEntry(anime: AnimeListItem, entry: UserAnimeEntry) {
+	const entries = savedEntries?.list === data.animes ? savedEntries.entries : {};
+	savedEntries = { list: data.animes, entries: { ...entries, [anime.id]: entry } };
+}
 // スマホの検索欄。URL の検索語から作り直し、入力で書き換える（bind:value でハイドレーション前の入力も残す、#417）
 let mobileSearchInput = $derived(data.search ?? "");
 // svelte-ignore state_referenced_locally
@@ -787,7 +800,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 									</span>
 								{/if}
 								{#if data.user}
-									{@const entryStatus = anime.user_entry?.status as AnimeStatus | undefined}
+									{@const entryStatus = entryOf(anime)?.status as AnimeStatus | undefined}
 									<button
 										type="button"
 										class="quick-add-btn status-text-{entryStatus ?? 'none'}"
@@ -910,7 +923,8 @@ function isAiringToday(anime: AnimeListItem): boolean {
 			anchor={statusPopover.anchor}
 			animeId={popoverAnime.id}
 			animeTitle={popoverAnime.title}
-			entry={popoverAnime.user_entry}
+			entry={entryOf(popoverAnime)}
+			onsaved={(entry) => rememberSavedEntry(popoverAnime, entry)}
 			onclose={() => {
 				statusPopover = null;
 			}}
@@ -923,7 +937,8 @@ function isAiringToday(anime: AnimeListItem): boolean {
 			animeId={quickAddAnime.id}
 			animeTitle={quickAddAnime.title}
 			episodeCount={quickAddAnime.episode_count}
-			entry={quickAddAnime.user_entry}
+			entry={entryOf(quickAddAnime)}
+			onsaved={(entry) => quickAddAnime && rememberSavedEntry(quickAddAnime, entry)}
 			onclose={closeQuickAdd}
 		/>
 	{/if}
