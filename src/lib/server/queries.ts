@@ -3164,19 +3164,28 @@ async function sortAnimeListItems(
 	});
 }
 
-/** 一覧カードに出す平均スコア（公開リストの評価のみ。作品ページの値と同じ anime_top_rated） */
+/**
+ * 一覧カードに出す平均スコア（公開リストの評価のみ。作品ページの値と同じ anime_top_rated）。
+ * 取得に失敗したときは score_count を入れずに返す（「評価なし」と区別するため）
+ */
 export async function attachAnimeAverageScores(supabase: SupabaseClient<Database>, animes: Anime[]): Promise<void> {
 	const missing = animes.filter((anime) => anime.score_count == null);
-	if (missing.length === 0) return;
-	const metrics = await getAnimeRankingMetrics(
-		supabase,
-		missing.map((anime) => anime.id),
-		"top_rated",
-	);
+	const ids = missing.map((anime) => Number(anime.id)).filter((id) => Number.isFinite(id));
+	if (ids.length === 0) return;
+	const { data, error } = await supabase
+		.from("anime_top_rated")
+		.select("anime_id, avg_score, score_count")
+		.in("anime_id", ids);
+	if (error) {
+		console.error("[attachAnimeAverageScores]", error);
+		return;
+	}
+	const rows = new Map((data ?? []).map((row) => [String(row.anime_id), row]));
 	for (const anime of missing) {
-		const metric = metrics.get(anime.id);
-		anime.score_count = metric?.secondary ?? 0;
-		anime.avg_score = metric ? normalizeAverageScore(metric.primary, metric.secondary) : null;
+		const row = rows.get(anime.id);
+		const count = Number(row?.score_count ?? 0);
+		anime.score_count = count;
+		anime.avg_score = normalizeAverageScore(Number(row?.avg_score ?? 0), count);
 	}
 }
 

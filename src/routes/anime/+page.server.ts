@@ -31,8 +31,8 @@ function toAnimeListItem(a: Anime): AnimeListItem {
 		broadcast_day: a.broadcast_day,
 		computed_broadcast_status: a.computed_broadcast_status,
 		user_entry: a.user_entry ?? null,
-		avg_score: a.avg_score ?? null,
-		score_count: a.score_count ?? 0,
+		// スコアを取れなかった作品は入れない（カードは「評価なし」ではなく空欄にする）
+		...(a.score_count != null ? { avg_score: a.avg_score ?? null, score_count: a.score_count } : {}),
 	};
 }
 

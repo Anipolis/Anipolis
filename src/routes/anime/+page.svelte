@@ -767,18 +767,25 @@ function isAiringToday(anime: AnimeListItem): boolean {
 							</div>
 							<!-- 画像の下: 左に平均スコア、右にマイリストの状態（2マスに仕切る） -->
 							<div class="anime-card-actions" class:anime-card-actions--split={data.user}>
-								<span class="anime-score" class:anime-score--none={anime.avg_score == null}>
-									<span class="anime-score-star" aria-hidden="true">★</span>
-									{#if anime.avg_score != null}
-										<span class="sr-only">平均スコア</span>
-										<span title="{anime.score_count}人の評価の平均"
-											>{anime.avg_score.toFixed(2)}</span
-										>
-									{:else}
-										<span class="sr-only">評価なし</span>
-										<span aria-hidden="true">—</span>
-									{/if}
-								</span>
+								{#if anime.score_count == null}
+									<!-- スコアを読み込めなかった（評価なしとは区別して何も出さない） -->
+									<span class="anime-score"
+										><span class="sr-only">スコアを読み込めませんでした</span></span
+									>
+								{:else}
+									<span class="anime-score" class:anime-score--none={anime.avg_score == null}>
+										<span class="anime-score-star" aria-hidden="true">★</span>
+										{#if anime.avg_score != null}
+											<span class="sr-only">平均スコア</span>
+											<span title="{anime.score_count}人の評価の平均"
+												>{anime.avg_score.toFixed(2)}</span
+											>
+										{:else}
+											<span class="sr-only">評価なし</span>
+											<span aria-hidden="true">—</span>
+										{/if}
+									</span>
+								{/if}
 								{#if data.user}
 									{@const entryStatus = anime.user_entry?.status as AnimeStatus | undefined}
 									<button
