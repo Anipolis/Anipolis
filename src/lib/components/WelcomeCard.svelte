@@ -42,15 +42,15 @@ function dismiss(): void {
 			</button>
 		</div>
 		<div class="welcome-card-actions">
-			<a href="/anime" class="btn btn-outline welcome-card-action">
+			<a href="/anime" class="btn btn-secondary welcome-card-action">
 				<span class="i-lucide-list-plus" aria-hidden="true"></span>
 				アニメを探してマイリストに追加
 			</a>
-			<a href="/schedule" class="btn btn-outline welcome-card-action">
+			<a href="/schedule" class="btn btn-secondary welcome-card-action">
 				<span class="i-lucide-tv" aria-hidden="true"></span>
 				今日の放送と実況ルームを見る
 			</a>
-			<a href="/search" class="btn btn-outline welcome-card-action">
+			<a href="/search" class="btn btn-secondary welcome-card-action">
 				<span class="i-lucide-user-search" aria-hidden="true"></span>
 				ユーザーを探してフォロー
 			</a>
@@ -109,11 +109,9 @@ function dismiss(): void {
 	gap: 8px;
 }
 
-/* 案内の中のボタンは補助の操作なので灰色の枠にする（ux-guidelines: 青はいちばん押してほしい操作だけ） */
+/* 案内の中のボタンは補助の操作なので灰色の枠（.btn-secondary） */
 .welcome-card-action {
 	justify-content: flex-start;
-	border-color: var(--color-border-hover);
-	color: var(--color-text);
 	text-decoration: none;
 }
 

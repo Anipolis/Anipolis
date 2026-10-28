@@ -377,7 +377,7 @@ async function handlePasskeyLogin(): Promise<void> {
 					<input type="hidden" name="invite_code" value={inviteCodeState.value}>
 					<button
 						type="submit"
-						class="btn btn-outline auth-wide-button auth-provider-button"
+						class="btn btn-secondary auth-wide-button auth-provider-button"
 						disabled={submitting !== null}
 					>
 						<span class="auth-provider-icon i-brand-discord" aria-hidden="true"></span>
@@ -429,7 +429,7 @@ async function handlePasskeyLogin(): Promise<void> {
 						{/if}
 						<button
 							type="button"
-							class="btn btn-outline auth-wide-button auth-provider-button"
+							class="btn btn-secondary auth-wide-button auth-provider-button"
 							onclick={handlePasskeyLogin}
 							disabled={passkeyPending || submitting !== null}
 						>
@@ -450,7 +450,7 @@ async function handlePasskeyLogin(): Promise<void> {
 							<input type="hidden" name="invite_code" value={inviteCodeState.value}>
 							<button
 								type="submit"
-								class="btn btn-outline auth-wide-button auth-provider-button"
+								class="btn btn-secondary auth-wide-button auth-provider-button"
 								disabled={submitting !== null}
 							>
 								<span class="auth-provider-icon {provider.icon}" aria-hidden="true"></span>
@@ -462,7 +462,7 @@ async function handlePasskeyLogin(): Promise<void> {
 
 					<!-- メールアドレスも他と同じボタンにし、押したらその場でフォームを開く（JavaScript が無くても開ける） -->
 					<details class="auth-email" bind:open={emailOpen} ontoggle={focusEmailField}>
-						<summary class="btn btn-outline auth-wide-button auth-provider-button">
+						<summary class="btn btn-secondary auth-wide-button auth-provider-button">
 							<span class="auth-provider-icon i-lucide-mail" aria-hidden="true"></span>
 							メールアドレス{actionWord}
 							{@render lastUsedBadge('email')}
@@ -758,16 +758,9 @@ async function handlePasskeyLogin(): Promise<void> {
 	font-weight: 700;
 }
 
-/* 外部サービスのボタンは枠を灰色・文字を本文の色にして、青をメインの操作（ログイン・作成）だけに残す */
+/* 外部サービスのボタンは灰色の枠（.btn-secondary）にして、青をメインの操作（ログイン・作成）だけに残す */
 .auth-provider-button {
 	position: relative;
-	border-color: var(--color-border-hover);
-	color: var(--fg);
-}
-
-.auth-provider-button:hover:not(:disabled) {
-	background: var(--bg-hover);
-	color: var(--fg);
 }
 
 /* ロゴはボタンの左端に固定して縦一列にそろえ、文字だけを中央に置く */

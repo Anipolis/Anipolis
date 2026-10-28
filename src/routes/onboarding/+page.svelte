@@ -126,7 +126,7 @@ onDestroy(clearSelectedAvatarFile);
 					<div class="onboarding-avatar-copy">
 						<div class="field-label">アイコン画像</div>
 						<div class="onboarding-avatar-actions">
-							<label class="btn btn-outline onboarding-avatar-file">
+							<label class="btn btn-secondary onboarding-avatar-file">
 								{avatarChoice === "none" ? "画像を選択" : "画像を変更"}
 								<input
 									id="onboarding-avatar-input"
@@ -244,16 +244,7 @@ onDestroy(clearSelectedAvatarFile);
 	margin: 12px 0 6px;
 }
 
-/* 「画像を変更」は補助の操作なので灰色の枠にし、青は「はじめる」だけに残す（ux-guidelines） */
-.onboarding-avatar-file {
-	border-color: var(--color-border-hover);
-	color: var(--fg);
-}
-
-.onboarding-avatar-file:hover {
-	background: var(--bg-hover);
-}
-
+/* ファイルの欄は隠し、ボタン（label。補助の操作なので灰色の枠の .btn-secondary）を押して選ぶ */
 .onboarding-avatar-file input {
 	display: none;
 }
