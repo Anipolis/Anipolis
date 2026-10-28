@@ -756,55 +756,33 @@ function isAiringToday(anime: AnimeListItem): boolean {
 									<span class="airing-today-badge">本日放送</span>
 								{/if}
 							</div>
-							<!-- 画像の下: 平均スコアとマイリストへの追加 -->
-							<div class="anime-card-actions">
-								{#if anime.avg_score != null}
-									<span class="anime-score" title="{anime.score_count}人の評価の平均">
-										<span class="anime-score-star" aria-hidden="true">★</span>
+							<!-- 画像の下: 左に平均スコア、右にマイリストの状態（2マスに仕切る） -->
+							<div class="anime-card-actions" class:anime-card-actions--split={data.user}>
+								<span class="anime-score" class:anime-score--none={anime.avg_score == null}>
+									<span class="anime-score-star" aria-hidden="true">★</span>
+									{#if anime.avg_score != null}
 										<span class="sr-only">平均スコア</span>
-										{anime.avg_score.toFixed(2)}
-									</span>
-								{:else}
-									<span class="anime-score anime-score--none">
-										<span class="anime-score-star" aria-hidden="true">★</span>
+										<span title="{anime.score_count}人の評価の平均"
+											>{anime.avg_score.toFixed(2)}</span
+										>
+									{:else}
 										<span class="sr-only">評価なし</span>
 										<span aria-hidden="true">—</span>
-									</span>
-								{/if}
+									{/if}
+								</span>
 								{#if data.user}
+									{@const entryStatus = anime.user_entry?.status as AnimeStatus | undefined}
 									<button
 										type="button"
-										class="quick-add-btn"
-										class:in-list={anime.user_entry}
+										class="quick-add-btn status-text-{entryStatus ?? 'none'}"
 										onclick={(e) => openQuickAdd(e, anime)}
-										aria-label={anime.user_entry ? `マイリスト: ${statusLabels[anime.user_entry.status as AnimeStatus]}` : 'マイリストに追加'}
-										title={anime.user_entry ? 'マイリストを編集' : 'マイリストに追加'}
+										aria-label={entryStatus ? `マイリスト: ${statusLabels[entryStatus]}` : 'マイリストに追加'}
+										title={entryStatus ? 'マイリストを編集' : 'マイリストに追加'}
 									>
-										{#if anime.user_entry}
-											<svg
-												width="12"
-												height="12"
-												viewBox="0 0 24 24"
-												fill="currentColor"
-												aria-hidden="true"
-											>
-												<path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
-											</svg>
-											<span aria-hidden="true"
-												>{statusLabels[anime.user_entry.status as AnimeStatus]}</span
-											>
+										{#if entryStatus}
+											<span aria-hidden="true">{statusLabels[entryStatus]}</span>
 										{:else}
-											<svg
-												width="14"
-												height="14"
-												viewBox="0 0 24 24"
-												fill="none"
-												stroke="currentColor"
-												stroke-width="2.5"
-												aria-hidden="true"
-											>
-												<path d="M12 5v14M5 12h14" />
-											</svg>
+											<span class="i-lucide-list-plus" aria-hidden="true"></span>
 										{/if}
 									</button>
 								{/if}
@@ -1659,7 +1637,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 }
 
 .anime-info {
-	padding: 4px 8px 8px;
+	padding: 8px;
 	display: flex;
 	flex-direction: column;
 	gap: 4px;
@@ -1782,26 +1760,29 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	color: #fff;
 }
 
-/* ─── 画像の下の行: 平均スコアとマイリスト追加ボタン ─── */
+/* ─── 画像の下の行: 左に平均スコア、右にマイリストの状態 ─── */
 .anime-card-actions {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 6px;
-	min-height: 34px;
-	padding: 6px 8px 0;
+	display: grid;
+	grid-template-columns: 1fr;
+	height: 34px;
+	border-bottom: 1px solid var(--color-border);
+}
+.anime-card-actions--split {
+	grid-template-columns: 1fr 1fr;
 }
 .anime-score {
 	display: inline-flex;
 	align-items: center;
+	justify-content: center;
 	gap: 3px;
+	min-width: 0;
 	font-size: 0.82rem;
 	font-weight: 700;
 	font-variant-numeric: tabular-nums;
 	white-space: nowrap;
 }
 .anime-score-star {
-	color: #f5b301;
+	color: var(--status-score);
 }
 .anime-score--none {
 	color: var(--color-text-muted);
@@ -1812,39 +1793,47 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	opacity: 0.6;
 }
 .quick-add-btn {
-	display: inline-flex;
-	flex-shrink: 1;
+	display: flex;
 	align-items: center;
 	justify-content: center;
-	gap: 4px;
-	min-width: 28px;
-	height: 28px;
-	padding: 0 8px;
+	min-width: 0;
+	padding: 0 4px;
 	overflow: hidden;
-	border: 1px solid var(--color-border-hover);
-	border-radius: 999px;
-	corner-shape: round;
+	border: 0;
+	border-left: 1px solid var(--color-border);
 	background: transparent;
-	color: var(--color-text);
+	color: var(--color-text-muted);
 	cursor: pointer;
 	font: inherit;
-	font-size: 0.72rem;
-	font-weight: 600;
+	font-size: 0.75rem;
+	font-weight: 700;
 	white-space: nowrap;
 	transition:
 		background 0.15s,
-		border-color 0.15s;
+		color 0.15s;
 }
 .quick-add-btn:hover {
 	background: var(--color-surface-hover);
+	color: var(--color-text);
 }
-.quick-add-btn.in-list {
-	border-color: color-mix(in srgb, var(--status-completed) 55%, transparent);
-	background: color-mix(in srgb, var(--status-completed) 14%, transparent);
+.quick-add-btn .i-lucide-list-plus {
+	width: 18px;
+	height: 18px;
+}
+.status-text-watching {
+	color: var(--status-watching);
+}
+.status-text-plan_to_watch {
+	color: var(--status-plan);
+}
+.status-text-completed {
 	color: var(--status-completed);
 }
-.quick-add-btn.in-list:hover {
-	background: color-mix(in srgb, var(--status-completed) 24%, transparent);
+.status-text-on_hold {
+	color: var(--status-on-hold);
+}
+.status-text-dropped {
+	color: var(--status-dropped);
 }
 
 /* ─── クイック追加モーダル ─── */
