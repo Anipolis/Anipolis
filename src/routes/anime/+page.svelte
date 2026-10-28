@@ -907,11 +907,6 @@ function isAiringToday(anime: AnimeListItem): boolean {
 			onclose={() => {
 				statusPopover = null;
 			}}
-			onopenfull={() => {
-				// 先に作品を移す（statusPopover を外すと popoverAnime も読めなくなる）
-				quickAddAnime = popoverAnime;
-				statusPopover = null;
-			}}
 		/>
 	{/if}
 
@@ -1628,7 +1623,9 @@ function isAiringToday(anime: AnimeListItem): boolean {
 		border-color 0.15s,
 		transform 0.15s;
 }
-.anime-card:hover {
+.anime-card:hover,
+/* 状態の欄はカードの外に出すので、開いている間も持ち上げたままにする（ずれて隙間が出ないように） */
+.anime-card:has(.quick-add-btn[aria-expanded="true"]) {
 	border-color: var(--color-accent);
 	transform: translateY(-2px);
 }

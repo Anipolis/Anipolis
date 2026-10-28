@@ -20,14 +20,13 @@ function mountPopover(props: Record<string, unknown> = {}) {
 	const target = document.createElement("div");
 	document.body.appendChild(target);
 	const onclose = vi.fn();
-	const onopenfull = vi.fn();
 	const component = mount(MyListStatusPopover, {
 		target,
-		props: { anchor, animeId: "42", animeTitle: "テスト作品", onclose, onopenfull, ...props },
+		props: { anchor, animeId: "42", animeTitle: "テスト作品", onclose, ...props },
 	});
 	flushSync();
 	cleanup = () => unmount(component);
-	return { target, anchor, onclose, onopenfull };
+	return { target, anchor, onclose };
 }
 
 const hiddenValue = (target: HTMLElement, name: string) =>
@@ -62,12 +61,10 @@ describe("MyListStatusPopover", () => {
 		expect(onclose).toHaveBeenCalledTimes(1);
 	});
 
-	it("Esc で閉じてボタンへフォーカスを戻し、「スコア・進捗も編集」で大きいモーダルへ", () => {
-		const { target, anchor, onclose, onopenfull } = mountPopover();
+	it("Esc で閉じてボタンへフォーカスを戻す", () => {
+		const { anchor, onclose } = mountPopover();
 		window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
 		expect(onclose).toHaveBeenCalledTimes(1);
 		expect(document.activeElement).toBe(anchor);
-		target.querySelector<HTMLButtonElement>(".status-popover-more")?.click();
-		expect(onopenfull).toHaveBeenCalledTimes(1);
 	});
 });

@@ -1,14 +1,14 @@
 <script lang="ts">
 import type { SubmitFunction } from "@sveltejs/kit";
-import { tick } from "svelte";
+import { tick, untrack } from "svelte";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
 import type { AnimeStatus, UserAnimeEntry } from "$lib/types";
 
 /**
  * PC のアニメ一覧で、カードのボタンから開く小さな視聴ステータス欄。
- * ボタンの上（入りきらなければ下）に出し、選んだらその場で保存する。
- * スコアや進捗は大きいモーダル（MyListModal）で直す
+ * ボタンと同じ幅で、ボタンの上（入りきらなければ下）へそのまま伸ばし、選んだらその場で保存する。
+ * スコアや進捗は作品ページや大きいモーダル（MyListModal）で直す
  */
 type Props = {
 	anchor: HTMLElement;
@@ -17,11 +17,9 @@ type Props = {
 	entry?: UserAnimeEntry | null | undefined;
 	action?: string;
 	onclose: () => void;
-	/** 「スコア・進捗も編集」で大きいモーダルへ切り替える */
-	onopenfull: () => void;
 };
 
-let { anchor, animeId, animeTitle, entry = null, action = "?/upsertWatchlist", onclose, onopenfull }: Props = $props();
+let { anchor, animeId, animeTitle, entry = null, action = "?/upsertWatchlist", onclose }: Props = $props();
 
 const statusOptions: { value: AnimeStatus; label: string }[] = [
 	{ value: "plan_to_watch", label: "視聴予定" },
@@ -31,11 +29,10 @@ const statusOptions: { value: AnimeStatus; label: string }[] = [
 	{ value: "dropped", label: "断念" },
 ];
 
-const GAP = 6;
 const MARGIN = 8;
 
 let popover = $state<HTMLDivElement | null>(null);
-let position = $state<{ top: number; left: number } | null>(null);
+let position = $state<{ top: number; left: number; width: number; placement: "above" | "below" } | null>(null);
 let submitting = $state(false);
 let errorMessage = $state("");
 
@@ -43,17 +40,17 @@ let errorMessage = $state("");
 const currentScore = $derived(entry?.score != null && entry.score > 0 ? Math.round(entry.score) : "");
 const currentProgress = $derived(entry?.progress ?? 0);
 
+// 上下は開いたときに一度だけ決める（$state にすると place を呼ぶ effect が自分を呼び直す）
+let placement: "above" | "below" | null = null;
+
 function place() {
 	if (!popover) return;
 	const rect = anchor.getBoundingClientRect();
 	const height = popover.offsetHeight;
-	const width = popover.offsetWidth;
-	const fitsAbove = rect.top - GAP - height >= MARGIN;
-	const top = fitsAbove
-		? rect.top - GAP - height
-		: Math.max(MARGIN, Math.min(rect.bottom + GAP, window.innerHeight - height - MARGIN));
-	const left = Math.max(MARGIN, Math.min(rect.left + rect.width / 2 - width / 2, window.innerWidth - width - MARGIN));
-	position = { top, left };
+	placement ??= rect.top - height >= MARGIN ? "above" : "below";
+	const top = placement === "above" ? rect.top - height : rect.bottom;
+	if (position && position.top === top && position.left === rect.left && position.width === rect.width) return;
+	position = { top, left: rect.left, width: rect.width, placement };
 }
 
 function close({ returnFocus = false } = {}) {
@@ -66,11 +63,18 @@ function close({ returnFocus = false } = {}) {
 
 $effect(() => {
 	if (!popover) return;
-	place();
+	// place は position を読むので、effect の依存にしない（書くたびに effect が走り直す）
+	untrack(place);
+	// カードはホバーで少し持ち上がるので、動いている間もボタンに付いていく
+	let frame = requestAnimationFrame(function follow() {
+		place();
+		frame = requestAnimationFrame(follow);
+	});
 	void tick().then(() => {
 		const current = popover?.querySelector<HTMLButtonElement>('[aria-current="true"]');
 		(current ?? popover?.querySelector<HTMLButtonElement>("button"))?.focus();
 	});
+	return () => cancelAnimationFrame(frame);
 });
 
 $effect(() => {
@@ -125,8 +129,10 @@ const handleSubmit: SubmitFunction = ({ formData, cancel }) => {
 	bind:this={popover}
 	class="status-popover"
 	class:status-popover--placed={position}
+	class:status-popover--below={position?.placement === "below"}
 	style:top={position ? `${position.top}px` : undefined}
 	style:left={position ? `${position.left}px` : undefined}
+	style:width={position ? `${position.width}px` : `${anchor.offsetWidth}px`}
 	role="dialog"
 	aria-label="{animeTitle}の視聴ステータス"
 >
@@ -147,11 +153,7 @@ const handleSubmit: SubmitFunction = ({ formData, cancel }) => {
 						aria-current={selected ? "true" : undefined}
 						disabled={submitting}
 					>
-						<span class="status-popover-dot" aria-hidden="true"></span>
-						<span class="status-popover-label">{option.label}</span>
-						{#if selected}
-							<span class="i-lucide-check status-popover-check" aria-hidden="true"></span>
-						{/if}
+						{option.label}
 					</button>
 				</li>
 			{/each}
@@ -160,24 +162,28 @@ const handleSubmit: SubmitFunction = ({ formData, cancel }) => {
 	{#if errorMessage}
 		<p class="status-popover-error" role="alert">{errorMessage}</p>
 	{/if}
-	<button type="button" class="status-popover-more" disabled={submitting} onclick={onopenfull}>
-		スコア・進捗も編集
-	</button>
 </div>
 
 <style>
+/* ボタンの上に付けて伸ばす（下に開くときは上下を入れ替える） */
 .status-popover {
 	position: fixed;
 	top: 0;
 	left: 0;
 	z-index: 900;
-	width: 168px;
-	padding: 4px;
+	overflow: hidden;
 	border: 1px solid var(--color-border-hover);
-	border-radius: 12px;
+	border-bottom: 0;
+	border-radius: 10px 10px 0 0;
 	background: var(--color-surface);
-	box-shadow: 0 12px 32px rgb(0 0 0 / 0.32);
+	box-shadow: 0 -8px 24px rgb(0 0 0 / 0.28);
 	visibility: hidden;
+}
+.status-popover--below {
+	border-top: 0;
+	border-bottom: 1px solid var(--color-border-hover);
+	border-radius: 0 0 10px 10px;
+	box-shadow: 0 8px 24px rgb(0 0 0 / 0.28);
 }
 .status-popover--placed {
 	visibility: visible;
@@ -187,51 +193,39 @@ const handleSubmit: SubmitFunction = ({ formData, cancel }) => {
 	padding: 0;
 	list-style: none;
 }
-.status-popover-option,
-.status-popover-more {
-	display: flex;
-	align-items: center;
-	gap: 8px;
+.status-popover-option {
+	display: block;
 	width: 100%;
-	padding: 7px 10px;
+	height: 32px;
+	padding: 0 4px;
+	overflow: hidden;
 	border: 0;
-	border-radius: 8px;
 	background: transparent;
-	color: var(--color-text);
+	color: var(--color-text-muted);
 	cursor: pointer;
 	font: inherit;
-	font-size: 0.85rem;
-	text-align: left;
+	font-size: 0.75rem;
+	font-weight: 700;
+	text-align: center;
+	white-space: nowrap;
+}
+/* 選んでいる状態は、その状態の色で塗る */
+.status-popover-option[aria-current="true"] {
+	background: color-mix(in srgb, var(--status-color) 20%, transparent);
+	color: var(--status-color);
 }
 .status-popover-option:hover:not(:disabled),
-.status-popover-more:hover:not(:disabled),
-.status-popover-option:focus-visible,
-.status-popover-more:focus-visible {
-	background: var(--color-surface-hover);
+.status-popover-option:focus-visible {
+	background: color-mix(in srgb, var(--status-color) 12%, transparent);
+	color: var(--status-color);
 	outline: none;
 }
-.status-popover-option[aria-current="true"] {
-	font-weight: 700;
+.status-popover-option[aria-current="true"]:hover:not(:disabled) {
+	background: color-mix(in srgb, var(--status-color) 26%, transparent);
 }
-.status-popover-option:disabled,
-.status-popover-more:disabled {
+.status-popover-option:disabled {
 	cursor: wait;
 	opacity: 0.6;
-}
-.status-popover-dot {
-	flex-shrink: 0;
-	width: 8px;
-	height: 8px;
-	border-radius: 50%;
-	background: var(--status-color);
-}
-.status-popover-label {
-	flex: 1;
-}
-.status-popover-check {
-	width: 14px;
-	height: 14px;
-	color: var(--status-color);
 }
 [data-status="plan_to_watch"] {
 	--status-color: var(--status-plan);
@@ -248,16 +242,11 @@ const handleSubmit: SubmitFunction = ({ formData, cancel }) => {
 [data-status="dropped"] {
 	--status-color: var(--status-dropped);
 }
-.status-popover-more {
-	margin-top: 4px;
-	border-top: 1px solid var(--color-border);
-	border-radius: 0 0 8px 8px;
-	color: var(--color-text-muted);
-	font-size: 0.78rem;
-}
 .status-popover-error {
-	margin: 4px 6px;
+	margin: 0;
+	padding: 4px 6px;
 	color: var(--color-danger);
-	font-size: 0.75rem;
+	font-size: 0.7rem;
+	text-align: center;
 }
 </style>
