@@ -23,9 +23,11 @@ const listPosts = $derived(data.listPosts);
 const displayName = $derived(profile.display_name ?? profile.username);
 const profileSocialImage = $derived(profile.header_url ?? profile.avatar_url);
 
-let isFollowing = $state(false);
-let followRequestStatus = $state<"none" | "pending">("none");
-let followerCount = $state(0);
+// 最初からサーバーの値で始める（false で始めると、サーバーで出す HTML と開いた直後に「フォローする」が一瞬見える）。
+// そのあとの変化は下の $effect で合わせる
+let isFollowing = $state(untrack(() => data.isFollowing));
+let followRequestStatus = $state<"none" | "pending">(untrack(() => data.followRequestStatus));
+let followerCount = $state(untrack(() => data.followCounts.followers));
 let isProcessing = $state(false);
 let editDisplayName = $state(untrack(() => data.profile.display_name ?? ""));
 let editBio = $state(untrack(() => data.profile.bio ?? ""));
