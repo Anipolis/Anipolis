@@ -752,31 +752,47 @@ $effect(() => {
 
 		<!-- Right column: スマホ版はアクション専用リモコン / PC版はmain上部に従来配置 -->
 		<div class="remote">
-			<!-- スコアとリスト登録はカードにせず、作品の情報として1行の文字で出す（スマホは2行） -->
+			<!-- 登録者数とスコアをカードにせず、大きい数字の下に説明を添えて並べる（登録者数の方が大事なので先頭） -->
 			<div class="stats-line">
-				<span class="stats-score">
-					{#if data.anime.avg_score != null && (data.anime.score_count ?? 0) > 0}
-						<span class="stats-score-value">★ {data.anime.avg_score.toFixed(2)}</span>
-						<span class="stats-sub">{data.anime.score_count}人が評価</span>
-					{:else}
-						<span class="stats-score-value stats-score-value--empty">★ —</span>
-						<span class="stats-sub">評価なし</span>
-					{/if}
-					<InfoTip label="スコアとリスト登録">
-						<p>スコアは、公開マイリストで付けられた点数（1〜10）の平均です。</p>
-						<p>リスト登録は、この作品を公開マイリストに入れている人の数です。</p>
-					</InfoTip>
-				</span>
 				{#if data.anime.list_count}
 					<button
 						type="button"
-						class="stats-list-link"
+						class="stat stat--link"
 						onclick={() => (showUserListModal = true)}
 						aria-haspopup="dialog"
 					>
-						{data.anime.list_count}人が登録<span class="i-lucide-chevron-right" aria-hidden="true"></span>
+						<span class="stat-value">{data.anime.list_count}</span>
+						<span class="stat-label"
+							>人が登録<span class="i-lucide-chevron-right" aria-hidden="true"></span></span
+						>
 					</button>
+				{:else}
+					<span class="stat">
+						<span class="stat-value">0</span>
+						<span class="stat-label">人が登録</span>
+					</span>
 				{/if}
+				<span class="stat">
+					{#if data.anime.avg_score != null && (data.anime.score_count ?? 0) > 0}
+						<span class="stat-value stat-value--score">★ {data.anime.avg_score.toFixed(2)}</span>
+						<span class="stat-label">
+							{data.anime.score_count}人が評価
+							<InfoTip label="スコアとリスト登録">
+								<p>スコアは、公開マイリストで付けられた点数（1〜10）の平均です。</p>
+								<p>リスト登録は、この作品を公開マイリストに入れている人の数です。</p>
+							</InfoTip>
+						</span>
+					{:else}
+						<span class="stat-value stat-value--empty">★ —</span>
+						<span class="stat-label">
+							評価なし
+							<InfoTip label="スコアとリスト登録">
+								<p>スコアは、公開マイリストで付けられた点数（1〜10）の平均です。</p>
+								<p>リスト登録は、この作品を公開マイリストに入れている人の数です。</p>
+							</InfoTip>
+						</span>
+					{/if}
+				</span>
 			</div>
 			<!-- アクションバー -->
 
@@ -2341,52 +2357,56 @@ $effect(() => {
 	border-color: var(--accent);
 }
 
-/* スコアとリスト登録の行（カードにしない） */
+/* 登録者数とスコア（カードにしない）。大きい数字の下に小さい説明を置いて左右に並べる */
 .stats-line {
 	display: flex;
 	flex-wrap: wrap;
-	align-items: baseline;
-	gap: 4px 16px;
+	align-items: flex-start;
+	gap: 8px 28px;
 }
-.stats-score {
-	display: inline-flex;
-	align-items: baseline;
-	gap: 8px;
-	white-space: nowrap;
-}
-.stats-score-value {
-	color: var(--status-score);
-	font-size: 1.5rem;
-	font-weight: 800;
-	line-height: 1;
-}
-.stats-score-value--empty {
-	color: var(--color-text-muted);
-}
-.stats-sub {
-	color: var(--color-text-muted);
-	font-size: 0.8rem;
-}
-.stats-list-link {
-	display: inline-flex;
-	align-items: center;
-	gap: 2px;
+.stat {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 4px;
 	padding: 0;
 	border: 0;
 	background: transparent;
-	color: var(--color-text-muted);
-	cursor: pointer;
+	color: inherit;
 	font: inherit;
-	font-size: 0.8rem;
+	text-align: left;
 }
-.stats-list-link:hover,
-.stats-list-link:focus-visible {
+.stat--link {
+	cursor: pointer;
+}
+.stat-value {
+	font-size: 1.5rem;
+	font-weight: 800;
+	line-height: 1;
+	white-space: nowrap;
+}
+.stat-value--score {
+	color: var(--status-score);
+}
+.stat-value--empty {
+	color: var(--color-text-muted);
+}
+.stat-label {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	color: var(--color-text-muted);
+	font-size: 0.75rem;
+	white-space: nowrap;
+}
+.stat--link:hover .stat-label,
+.stat--link:focus-visible .stat-label {
 	color: var(--color-text);
 	text-decoration: underline;
 }
-.stats-list-link [class^="i-lucide"] {
-	width: 14px;
-	height: 14px;
+.stat-label [class^="i-lucide"] {
+	width: 13px;
+	height: 13px;
 }
 
 /* Synopsis */
@@ -3808,6 +3828,13 @@ a.relation-card:hover {
 @media (max-width: 340px) {
 	.anime-layout {
 		grid-template-columns: minmax(0, 42%) minmax(0, 1fr);
+	}
+	/* 登録者数とスコアを1行に収める */
+	.stats-line {
+		column-gap: 14px;
+	}
+	.stat-value {
+		font-size: 1.25rem;
 	}
 }
 /* 最新話の青いボタンの中の日付と LIVE（ほかの指定より後ろに置く） */
