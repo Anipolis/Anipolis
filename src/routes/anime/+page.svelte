@@ -2,6 +2,7 @@
 import { onDestroy } from "svelte";
 import { beforeNavigate, goto } from "$app/navigation";
 import { navigating } from "$app/state";
+import { animeCardMeta } from "$lib/anime-labels";
 import { ANIME_GENRE_FILTER_HELP, ANIME_GENRE_GROUPS, ANIME_GENRES, ANIME_SOURCE_OPTIONS } from "$lib/anime-vocabulary";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
 import InfoTip from "$lib/components/InfoTip.svelte";
@@ -49,13 +50,6 @@ const statusLabels: Record<AnimeStatus, string> = {
 	dropped: "断念",
 	on_hold: "中断",
 };
-
-function animeStatusBadge(anime: AnimeListItem): string {
-	if (anime.computed_broadcast_status === "airing") return "放送中";
-	if (anime.computed_broadcast_status === "upcoming") return "放送予定";
-	if (anime.computed_broadcast_status === "finished") return "放送終了";
-	return "未定";
-}
 
 let quickAddAnime = $state<AnimeListItem | null>(null);
 /** PC: カードのボタンの近くに出す小さな視聴ステータス欄 */
@@ -752,6 +746,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 				<div class="anime-grid">
 					{#each data.animes as anime, sectionItemIndex}
 						{@const rankIndex = pageStartRank + sectionItemIndex}
+						{@const meta = animeCardMeta(anime)}
 						<a href={buildAnimeDetailUrl(anime.id)} class="anime-card">
 							<div class="anime-cover">
 								{#if anime.cover_url}
@@ -775,8 +770,12 @@ function isAiringToday(anime: AnimeListItem): boolean {
 								{#if data.tab === 'popular' || data.tab === 'trending' || data.tab === 'top_rated'}
 									<span class="rank-badge">#{rankIndex + 1}</span>
 								{/if}
+								<!-- 放送中の作品は右上のリボンで示す。今日放送があれば「本日放送」を優先し、
+								     どれも放送中の「放送中」タブでは「放送中」は出さない -->
 								{#if isAiringToday(anime)}
-									<span class="airing-today-badge">本日放送</span>
+									<span class="cover-ribbon cover-ribbon--today">本日放送</span>
+								{:else if anime.computed_broadcast_status === 'airing' && data.tab !== 'airing'}
+									<span class="cover-ribbon cover-ribbon--airing">放送中</span>
 								{/if}
 							</div>
 							<!-- 画像の下: 左に平均スコア、右にマイリストの状態（2マスに仕切る） -->
@@ -831,23 +830,14 @@ function isAiringToday(anime: AnimeListItem): boolean {
 								>
 									{anime.title_en ?? '\u00A0'}
 								</p>
-								<div class="anime-meta">
-									<div class="anime-status-slot">
-										<span class="anime-status-badge status-{anime.computed_broadcast_status}"
-											>{animeStatusBadge(anime)}</span
-										>
-									</div>
-									<span
-										class="anime-season"
-										class:anime-season--placeholder={!anime.season}
-										aria-hidden={anime.season ? undefined : "true"}
-									>
-										{anime.season ?? '\u00A0'}
-										{#if anime.type && anime.type !== 'TV'}
-											<span class="anime-type-badge">{anime.type}</span>
-										{/if}
-									</span>
-								</div>
+								<!-- 種別と時期（「TV・2026年春」、映画は年だけ）を1行で -->
+								<p
+									class="anime-meta"
+									class:anime-meta--placeholder={!meta}
+									aria-hidden={meta ? undefined : "true"}
+								>
+									{meta || ' '}
+								</p>
 							</div>
 						</a>
 					{/each}
@@ -1328,27 +1318,6 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	color: var(--color-text);
 }
 
-.filter-row {
-	display: flex;
-	gap: 10px;
-	flex-wrap: wrap;
-	align-items: flex-end;
-	padding: 10px 12px;
-	background: var(--color-surface);
-	border: 1px solid var(--color-border);
-	border-radius: 12px;
-}
-.filter-group {
-	display: flex;
-	flex-direction: column;
-	gap: 4px;
-	flex: 1 1 140px;
-	min-width: 120px;
-	max-width: 220px;
-}
-.filter-group--year {
-	flex: 0 1 160px;
-}
 .filter-year-wrap {
 	display: flex;
 	gap: 4px;
@@ -1369,30 +1338,6 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	background: var(--color-accent);
 	color: #fff;
 	border-color: var(--color-accent);
-}
-.filter-group--reset {
-	flex: 0 0 auto;
-	min-width: unset;
-	justify-content: flex-end;
-}
-.filter-reset-btn {
-	padding: 7px 12px;
-	border-radius: 12px;
-	border: 1px solid var(--color-border);
-	color: var(--color-text-muted);
-	text-decoration: none;
-	font-size: 0.82rem;
-	white-space: nowrap;
-	transition: background 0.12s;
-}
-.filter-reset-btn:hover {
-	background: var(--color-surface-hover);
-}
-.filter-label {
-	font-size: 0.75rem;
-	font-weight: 600;
-	color: var(--color-text-muted);
-	letter-spacing: 0.02em;
 }
 .filter-select,
 .filter-input {
@@ -1722,57 +1667,9 @@ function isAiringToday(anime: AnimeListItem): boolean {
 .anime-title-en--placeholder {
 	visibility: hidden;
 }
+/* 種別と時期の1行 */
 .anime-meta {
-	display: grid;
-	grid-template-rows: repeat(2, calc(0.72rem * 1.6 + 2px));
-	gap: 4px;
-	min-width: 0;
-}
-.anime-status-slot {
-	display: flex;
-	align-items: flex-start;
-	min-width: 0;
-}
-.anime-status-badge {
-	font-size: 0.7rem;
-	padding: 1px 5px;
-	border-radius: 3px;
-	font-weight: 600;
-	line-height: 1.6;
-	white-space: nowrap;
-}
-.status-airing {
-	background: color-mix(in srgb, var(--status-watching) 15%, transparent);
-	color: var(--status-watching);
-}
-.status-upcoming {
-	background: color-mix(in srgb, var(--status-plan) 15%, transparent);
-	color: var(--status-plan);
-}
-.status-finished {
-	background: var(--color-surface-hover);
-	color: var(--color-text-muted);
-}
-.status-unknown {
-	background: var(--color-surface);
-	color: var(--color-text-muted);
-}
-
-.airing-today-badge {
-	position: absolute;
-	top: 6px;
-	right: 6px;
-	font-size: 0.7rem;
-	font-weight: 700;
-	padding: 3px 6px;
-	border-radius: 4px;
-	background: #ef4444;
-	color: #fff;
-	letter-spacing: 0.02em;
-	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
-}
-
-.anime-season {
+	margin: 0;
 	font-size: 0.72rem;
 	line-height: 1.6;
 	color: var(--color-text-muted);
@@ -1780,18 +1677,28 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-/* 同一シーズンに同名のTV版とSpecial/ONA版が並ぶことがあるため、非TVは媒体を明示 */
-.anime-type-badge {
-	margin-left: 4px;
-	padding: 0 4px;
-	border: 1px solid var(--color-border);
-	border-radius: 3px;
-	font-size: 0.62rem;
-	color: var(--color-text-muted);
-	white-space: nowrap;
-}
-.anime-season--placeholder {
+.anime-meta--placeholder {
 	visibility: hidden;
+}
+
+/* 画像の右上に重ねるリボン（本日放送・放送中） */
+.cover-ribbon {
+	position: absolute;
+	top: 6px;
+	right: 6px;
+	font-size: 0.7rem;
+	font-weight: 700;
+	padding: 3px 6px;
+	border-radius: 4px;
+	color: var(--ribbon-text);
+	letter-spacing: 0.02em;
+	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+.cover-ribbon--today {
+	background: var(--ribbon-today);
+}
+.cover-ribbon--airing {
+	background: var(--ribbon-airing);
 }
 
 .empty-state {
@@ -2185,9 +2092,6 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	}
 	.filter-icon-btn {
 		display: flex;
-	}
-	.filter-row--desktop {
-		display: none;
 	}
 }
 </style>
