@@ -54,6 +54,7 @@ const statusLabels: Record<AnimeStatus, string> = {
 let quickAddAnime = $state<AnimeListItem | null>(null);
 /** PC: カードのボタンの近くに出す小さな視聴ステータス欄 */
 let statusPopover = $state<{ anime: AnimeListItem; anchor: HTMLElement } | null>(null);
+let statusPopoverSaving = $state(false);
 // マイリストに保存した作品の新しい状態。保存のたびに読み込み直すと人気順などでカードが動くので、
 // 並び順はそのままにカードの表示だけを変える。読み込み直し（タブ・ページ・絞り込みの切り替えやリロード）で捨てる
 // 外した作品は null を入れる
@@ -299,6 +300,8 @@ function openQuickAdd(e: MouseEvent, anime: AnimeListItem) {
 	const anchor = e.currentTarget as HTMLElement;
 	// マウスで操作する PC は状態だけを選ぶ小さな欄、タッチ端末は押しやすい大きいモーダル
 	if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+		// 保存中は欄を閉じたり別の作品へ切り替えたりしない（応答が別の作品に反映されるため）
+		if (statusPopoverSaving) return;
 		statusPopover = statusPopover?.anchor === anchor ? null : { anime, anchor };
 		return;
 	}
@@ -923,6 +926,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 			onclose={() => {
 				statusPopover = null;
 			}}
+			bind:submitting={statusPopoverSaving}
 		/>
 	{/if}
 

@@ -23,6 +23,8 @@ type Props = {
 	/** 渡すと保存後にページを読み込み直さず、保存した内容を知らせる（外したときは null） */
 	onsaved?: (entry: UserAnimeEntry | null) => void;
 	onclose: () => void;
+	/** 保存中かどうか。親は保存中に別の作品へ切り替えない（応答が切り替え先に反映されるため） */
+	submitting?: boolean;
 };
 
 let {
@@ -34,6 +36,7 @@ let {
 	removeAction,
 	onsaved,
 	onclose,
+	submitting = $bindable(false),
 }: Props = $props();
 
 const statusOptions: { value: AnimeStatus; label: string }[] = [
@@ -48,7 +51,6 @@ const MARGIN = 8;
 
 let popover = $state<HTMLDivElement | null>(null);
 let position = $state<{ top: number; left: number; width: number; placement: "above" | "below" } | null>(null);
-let submitting = $state(false);
 let errorMessage = $state("");
 
 // 状態だけを変えるので、スコアと進捗は今の値のまま送る（送らないと消える）
@@ -114,6 +116,11 @@ $effect(() => {
 		window.removeEventListener("scroll", handleMove, { capture: true });
 		window.removeEventListener("resize", handleMove);
 	};
+});
+
+// 保存中に欄が消えても、親が切り替えられないままにならないようにする
+$effect(() => () => {
+	submitting = false;
 });
 
 const handleSubmit: SubmitFunction = ({ formData, submitter, cancel }) => {
