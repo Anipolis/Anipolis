@@ -544,24 +544,27 @@ $effect(() => {
 			{#if data.anime.title_en}
 				<p class="anime-title-en">{data.anime.title_en}</p>
 			{/if}
-			<!-- タグは同じ見た目にそろえ、放送状態は色の点だけで示す。シーズン（一覧へのリンク）はホバー・フォーカスで色が付く -->
+			<!-- 押せない情報（放送状態・種別・話数・放送期間）は「·」で区切った文字にし、押せるシーズン（一覧へのリンク）だけチップにする。
+			     放送状態は色の点で示す -->
 			<div class="meta-row">
-				<span class="meta-chip meta-chip--status status-{data.anime.computed_broadcast_status}">
-					{broadcastLabels[data.anime.computed_broadcast_status] ?? data.anime.computed_broadcast_status}
+				<span class="meta-text">
+					<span class="meta-status status-{data.anime.computed_broadcast_status}">
+						{broadcastLabels[data.anime.computed_broadcast_status] ?? data.anime.computed_broadcast_status}
+					</span>
+					{#if data.anime.type}
+						<span>{animeTypeLabel(data.anime.type)}</span>
+					{/if}
+					{#if data.anime.episode_count}
+						<span>{formatEpisodeCount(data.anime.episode_count)}</span>
+					{/if}
+					{#if data.anime.aired_from}
+						<span>{formatAiredPeriod(data.anime.aired_from, data.anime.aired_to)}</span>
+					{/if}
 				</span>
-				{#if data.anime.type}
-					<span class="meta-chip">{animeTypeLabel(data.anime.type)}</span>
-				{/if}
 				{#if data.anime.season}
 					<a href="/anime?season={encodeURIComponent(data.anime.season)}" class="meta-chip meta-chip--link"
 						>{animeSeasonLabel(data.anime.season)}</a
 					>
-				{/if}
-				{#if data.anime.episode_count}
-					<span class="meta-chip">{formatEpisodeCount(data.anime.episode_count)}</span>
-				{/if}
-				{#if data.anime.aired_from}
-					<span class="meta-chip">{formatAiredPeriod(data.anime.aired_from, data.anime.aired_to)}</span>
 				{/if}
 			</div>
 		</div>
@@ -709,7 +712,7 @@ $effect(() => {
 													href={resource.url}
 													target="_blank"
 													rel="noopener noreferrer"
-													class="genre-chip external-chip"
+													class="external-link"
 													>{resource.name}
 													<span class="i-lucide-arrow-up-right" aria-hidden="true"></span></a
 												>
@@ -726,7 +729,7 @@ $effect(() => {
 													href={resource.url}
 													target="_blank"
 													rel="noopener noreferrer"
-													class="genre-chip external-chip"
+													class="external-link"
 													>{resource.name}
 													<span class="i-lucide-arrow-up-right" aria-hidden="true"></span></a
 												>
@@ -749,34 +752,29 @@ $effect(() => {
 
 		<!-- Right column: スマホ版はアクション専用リモコン / PC版はmain上部に従来配置 -->
 		<div class="remote">
-			<!-- Score hero -->
-			<div class="stats-grid">
-				<div class="stat-card stat-card--score">
-					<span class="stat-card-label with-info-tip">
-						スコア
-						<InfoTip label="スコアとリスト登録">
-							<p>スコアは、公開マイリストで付けられた点数（1〜10）の平均です。</p>
-							<p>リスト登録は、この作品を公開マイリストに入れている人の数です。</p>
-						</InfoTip>
-					</span>
+			<!-- スコアとリスト登録はカードにせず、作品の情報として1行の文字で出す（スマホは2行） -->
+			<div class="stats-line">
+				<span class="stats-score">
 					{#if data.anime.avg_score != null && (data.anime.score_count ?? 0) > 0}
-						<span class="stat-card-value">★ {data.anime.avg_score.toFixed(2)}</span>
-						<span class="stat-card-sub">{data.anime.score_count}人が評価</span>
+						<span class="stats-score-value">★ {data.anime.avg_score.toFixed(2)}</span>
+						<span class="stats-sub">{data.anime.score_count}人が評価</span>
 					{:else}
-						<span class="stat-card-value">—</span>
-						<span class="stat-card-sub">まだ評価がありません</span>
+						<span class="stats-score-value stats-score-value--empty">★ —</span>
+						<span class="stats-sub">評価なし</span>
 					{/if}
-				</div>
+					<InfoTip label="スコアとリスト登録">
+						<p>スコアは、公開マイリストで付けられた点数（1〜10）の平均です。</p>
+						<p>リスト登録は、この作品を公開マイリストに入れている人の数です。</p>
+					</InfoTip>
+				</span>
 				{#if data.anime.list_count}
 					<button
 						type="button"
-						class="stat-card stat-card--interactive"
+						class="stats-list-link"
 						onclick={() => (showUserListModal = true)}
 						aria-haspopup="dialog"
 					>
-						<span class="stat-card-label">リスト登録</span>
-						<span class="stat-card-value">{data.anime.list_count}</span>
-						<span class="stat-card-sub">人が登録</span>
+						{data.anime.list_count}人が登録<span class="i-lucide-chevron-right" aria-hidden="true"></span>
 					</button>
 				{/if}
 			</div>
@@ -2191,16 +2189,25 @@ $effect(() => {
 	color: #fff;
 	border-color: var(--accent);
 }
-/* 公式サイト・X・関連リンク（外部サイト）もジャンルと同じチップにし、矢印で外へ出ることを示す */
-.external-chip {
+/* 公式サイト・X・関連リンクは外部サイトなので、チップではなく下線の文字リンクにし、矢印で外へ出ることを示す */
+.external-link {
 	display: inline-flex;
 	align-items: center;
 	gap: 2px;
+	color: var(--color-text);
+	font-size: 0.8rem;
+	text-decoration: underline;
+	text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+	text-underline-offset: 3px;
 	white-space: nowrap;
 }
-.external-chip [class^="i-lucide"] {
-	width: 11px;
-	height: 11px;
+.external-link:hover {
+	color: var(--accent);
+	text-decoration-color: currentColor;
+}
+.external-link [class^="i-lucide"] {
+	width: 12px;
+	height: 12px;
 }
 .links-list {
 	display: flex;
@@ -2284,23 +2291,35 @@ $effect(() => {
 	color: var(--color-text-muted);
 	border: 1px solid var(--color-border);
 }
-/* 放送状態はほかのタグと同じ見た目にし、先頭の点の色だけで示す */
-.meta-chip--status {
+/* 押せない情報は「·」で区切った文字。放送状態は先頭の点の色で示す */
+.meta-text {
+	display: inline-flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0 6px;
+	color: var(--color-text-muted);
+	font-size: 0.8rem;
+}
+.meta-text > span + span::before {
+	content: "·";
+	margin-right: 6px;
+}
+.meta-status {
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
 }
-.meta-chip--status::before {
+.meta-status::before {
 	content: "";
 	width: 7px;
 	height: 7px;
 	border-radius: 50%;
 	background: var(--color-text-muted);
 }
-.meta-chip--status.status-airing::before {
+.meta-status.status-airing::before {
 	background: var(--status-watching);
 }
-.meta-chip--status.status-upcoming::before {
+.meta-status.status-upcoming::before {
 	background: var(--status-plan);
 }
 /* シーズンは一覧へのリンク。ふだんはほかのタグと同じで、ホバー・フォーカスしたときだけ左のチップと同じく色を付ける */
@@ -2317,63 +2336,52 @@ $effect(() => {
 	border-color: var(--accent);
 }
 
-/* Stats cards */
-.stats-grid {
+/* スコアとリスト登録の行（カードにしない） */
+.stats-line {
 	display: flex;
-	gap: 12px;
 	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 4px 16px;
 }
-.stat-card {
-	display: flex;
-	flex-direction: column;
-	gap: 4px;
-	padding: 16px 24px;
-	background: var(--color-surface);
-	border: 1px solid var(--color-border);
-	border-radius: 14px;
-	min-width: 120px;
+.stats-score {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 8px;
+	white-space: nowrap;
 }
-.stat-card--interactive {
-	font: inherit;
-	color: inherit;
-	text-align: left;
-	cursor: pointer;
-	transition:
-		transform 0.15s,
-		background 0.15s,
-		border-color 0.15s;
-}
-.stat-card--interactive:hover {
-	background: var(--hover-bg);
-	border-color: var(--color-border-hover);
-}
-.stat-card--interactive:active {
-	transform: scale(0.95);
-}
-.stat-card--interactive:focus-visible {
-	outline: 2px solid var(--accent);
-	outline-offset: 2px;
-	background: var(--hover-bg);
-	border-color: var(--accent);
-}
-.stat-card-label {
-	font-size: 0.72rem;
-	font-weight: 600;
-	text-transform: uppercase;
-	letter-spacing: 0.05em;
-	color: var(--color-text-muted);
-}
-.stat-card-value {
-	font-size: 1.8rem;
-	font-weight: 700;
+.stats-score-value {
+	color: var(--status-score);
+	font-size: 1.5rem;
+	font-weight: 800;
 	line-height: 1;
 }
-.stat-card--score .stat-card-value {
-	color: var(--status-score);
-}
-.stat-card-sub {
-	font-size: 0.75rem;
+.stats-score-value--empty {
 	color: var(--color-text-muted);
+}
+.stats-sub {
+	color: var(--color-text-muted);
+	font-size: 0.8rem;
+}
+.stats-list-link {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--color-text-muted);
+	cursor: pointer;
+	font: inherit;
+	font-size: 0.8rem;
+}
+.stats-list-link:hover,
+.stats-list-link:focus-visible {
+	color: var(--color-text);
+	text-decoration: underline;
+}
+.stats-list-link [class^="i-lucide"] {
+	width: 14px;
+	height: 14px;
 }
 
 /* Synopsis */
@@ -3702,24 +3710,12 @@ a.relation-card:hover {
 	.remote {
 		gap: 12px;
 	}
-	.remote .stats-grid {
-		gap: 8px;
-		flex-wrap: nowrap;
-	}
-	.remote .stat-card {
-		flex: 1 1 0;
-		min-width: 0;
-		padding: 10px 12px;
-	}
-	.remote .stat-card-value {
-		font-size: 1.35rem;
-	}
 	/* 表紙の横の細い列では、マイリストを1段目いっぱいに、残りの3つを2段目に小さく並べる */
 	.remote .mylist-split {
 		grid-column: 1 / -1;
 	}
 	.remote .mylist-split-main {
-		padding: 7px 26px;
+		padding: 7px 22px;
 	}
 	.remote .mylist-split-detail {
 		padding: 7px 10px;
@@ -3728,7 +3724,7 @@ a.relation-card:hover {
 		right: 6px;
 	}
 	.remote .mylist-split-label {
-		font-size: 0.85rem;
+		font-size: 0.82rem;
 	}
 	.remote .action-bar {
 		grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -3785,8 +3781,9 @@ a.relation-card:hover {
 }
 
 @media (max-width: 480px) {
+	/* 表紙は列の 40%（最大 170px）。右の3つのボタンの文字（「コレクション」）が切れない幅を残す */
 	.anime-layout {
-		grid-template-columns: minmax(0, 128px) minmax(0, 1fr);
+		grid-template-columns: minmax(0, min(40%, 170px)) minmax(0, 1fr);
 		column-gap: 10px;
 	}
 	.anime-title {
@@ -3795,6 +3792,13 @@ a.relation-card:hover {
 	.detail-page {
 		padding-left: 8px;
 		padding-right: 8px;
+	}
+}
+
+/* 幅 320 前後の小さい端末では、「マイリストに追加」が切れないよう表紙を少し小さくする */
+@media (max-width: 340px) {
+	.anime-layout {
+		grid-template-columns: minmax(0, 34%) minmax(0, 1fr);
 	}
 }
 /* 最新話の青いボタンの中の日付と LIVE（ほかの指定より後ろに置く） */
