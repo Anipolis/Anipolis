@@ -839,6 +839,18 @@ $effect(() => {
 							{/if}
 						</button>
 					</div>
+					<!-- コレクション（マイリストと同じく手元に集める）→ 引用（自分で語る）→ 推薦（人に勧める）の順 -->
+					<button
+						type="button"
+						class="action-bar-btn"
+						class:active={collectionModalOpen}
+						onclick={() => (collectionModalOpen = true)}
+						aria-haspopup="dialog"
+						aria-expanded={collectionModalOpen}
+					>
+						<span class="i-lucide-folder-plus action-bar-icon" aria-hidden="true"></span>
+						<span>コレクション</span>
+					</button>
 					<a href="/?quote_anime={data.anime.id}#compose" class="action-bar-btn">
 						<svg
 							width="18"
@@ -857,17 +869,6 @@ $effect(() => {
 						<!-- 作品を引用した投稿欄を開く（「投稿」だとレビューを書くように見える） -->
 						<span>引用する</span>
 					</a>
-					<button
-						type="button"
-						class="action-bar-btn"
-						class:active={collectionModalOpen}
-						onclick={() => (collectionModalOpen = true)}
-						aria-haspopup="dialog"
-						aria-expanded={collectionModalOpen}
-					>
-						<span class="i-lucide-folder-plus action-bar-icon" aria-hidden="true"></span>
-						<span>コレクション</span>
-					</button>
 					<button
 						type="button"
 						class="action-bar-btn"
@@ -3692,7 +3693,7 @@ a.relation-card:hover {
 			"info info"
 			"rel rel";
 		align-items: start;
-		column-gap: 14px;
+		column-gap: 16px;
 		row-gap: 16px;
 	}
 	/* 左の列の中身（表紙と作品情報）を別々の段に置く */
@@ -3760,8 +3761,23 @@ a.relation-card:hover {
 	.remote .mylist-split-caret {
 		right: 6px;
 	}
+	/* 細い列なので、スコアと登録者数は縦に積み、数字と説明を横に並べる */
+	.remote .stats-line {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 8px;
+	}
+	.remote .stat {
+		flex-direction: row;
+		align-items: baseline;
+		gap: 6px;
+	}
+	.remote .stat-value {
+		font-size: 1.25rem;
+	}
+	/* 右の列の文字は少し小さくして、「リストに追加」などが切れないようにする */
 	.remote .mylist-split-label {
-		font-size: 0.82rem;
+		font-size: 0.78rem;
 	}
 	.remote .mylist-label-long {
 		display: none;
@@ -3782,7 +3798,7 @@ a.relation-card:hover {
 	.remote .action-bar-btn {
 		gap: 6px;
 		padding: 7px 10px;
-		font-size: 0.75rem;
+		font-size: 0.72rem;
 		white-space: nowrap;
 	}
 	.remote-admin-btn {
@@ -3830,7 +3846,7 @@ a.relation-card:hover {
 
 @media (max-width: 480px) {
 	.anime-layout {
-		column-gap: 10px;
+		column-gap: 16px;
 	}
 	.anime-title {
 		font-size: 1.1rem;
@@ -3846,12 +3862,8 @@ a.relation-card:hover {
 	.anime-layout {
 		grid-template-columns: minmax(0, 42%) minmax(0, 1fr);
 	}
-	/* 登録者数とスコアを1行に収める */
-	.stats-line {
-		column-gap: 14px;
-	}
-	.stat-value {
-		font-size: 1.25rem;
+	.remote .mylist-split-main {
+		padding-inline: 18px;
 	}
 }
 /* 最新話の青いボタンの中の日付と LIVE（ほかの指定より後ろに置く） */
