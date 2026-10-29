@@ -3540,10 +3540,6 @@ a.relation-card:hover {
 }
 
 /* Room log */
-.room-log-item--unaired {
-	opacity: 0.6;
-}
-
 .room-log-section {
 	display: flex;
 	flex-direction: column;
@@ -3588,6 +3584,17 @@ a.relation-card:hover {
 	background: var(--hover-bg);
 	border-color: var(--text-muted);
 	transform: translateY(-2px);
+}
+/* 未放送は色の薄さだけでなく形でも分ける。放送済みは背景と実線の枠、未放送は背景なしの点線の枠と薄い数字 */
+.room-log-item.room-log-item--unaired {
+	border-style: dashed;
+	background: transparent;
+	color: var(--color-text-muted);
+	font-weight: 500;
+}
+.room-log-item.room-log-item--unaired:hover {
+	background: transparent;
+	border-color: var(--color-text-muted);
 }
 /* 特番は数字が無いので名前を出す（2マス分の幅） */
 .room-log-item--special {
@@ -3645,6 +3652,9 @@ a.relation-card:hover {
 	font-size: 0.72rem;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+.room-log-item.room-log-item--unaired .room-log-ep-compact {
+	font-weight: 500;
 }
 /* 放送中の話は右上の赤い点で示す（小さいボタンに「LIVE」の文字は入らない） */
 .room-log-live-dot {
