@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { favoriteAnimeMeta } from "./favorite-anime";
+import { animePickMeta } from "./anime-picker";
 
-describe("ベスト作品の検索結果の補足", () => {
+describe("作品を選ぶ画面の補足", () => {
 	it.each([
 		[{ aired_from: "2018-04-07", type: "TV" }, "2018年・TV"],
 		[{ aired_from: "1988-12-01", type: "OVA" }, "1988年・OVA"],
@@ -10,6 +10,6 @@ describe("ベスト作品の検索結果の補足", () => {
 		[{ aired_from: "2020-01-01", type: null }, "2020年"],
 		[{}, ""],
 	])("%o → %s", (anime, expected) => {
-		expect(favoriteAnimeMeta(anime)).toBe(expected);
+		expect(animePickMeta(anime)).toBe(expected);
 	});
 });
