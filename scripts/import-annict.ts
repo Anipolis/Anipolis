@@ -12,6 +12,7 @@ import {
 	copyrightComparisonKey,
 	looseCopyrightKey,
 	normalizeAnnictCopyright,
+	normalizeAnnictHashtags,
 	normalizeAnnictOfficialSiteUrl,
 } from "../src/lib/annict.ts";
 import { isPlatformCopyright } from "../src/lib/copyright-platform.ts";
@@ -34,6 +35,9 @@ import {
 // - 既存 © と食い違う作品・シリーズ共通として入れた作品・候補が割れた作品は、
 //   管理画面の「©確認」キュー（anime_copyright_reviews）に積む（既存 © は変えない）。
 // - 管理者が「© なし」に確定した作品には © を入れない。
+// - 公式ハッシュタグ（twitterHashtag）は、official_hashtag が空の作品だけ直接埋める（手で入れた値は
+//   変えない）。投稿のハッシュタグとして通らないもの（記号入りなど）は入れずに一覧へ出す。
+//   出どころはソースレコードの normalized_data.official_hashtag に残る。
 //
 // LOCAL ONLY. 外部サイト巡回系と同じく GitHub Actions からは実行しない。
 
@@ -47,11 +51,12 @@ const SEASON_NAMES = ["winter", "spring", "summer", "fall"] as const;
 const SEARCH_WORKS_QUERY = `query($seasons: [String!], $after: String) {
 	searchWorks(seasons: $seasons, first: ${PAGE_SIZE}, after: $after, orderBy: { field: WATCHERS_COUNT, direction: DESC }) {
 		pageInfo { hasNextPage endCursor }
-		nodes { annictId title malAnimeId syobocalTid officialSiteUrl twitterUsername image { copyright } }
+		nodes { annictId title malAnimeId syobocalTid officialSiteUrl twitterUsername twitterHashtag image { copyright } }
 	}
 }`;
 
-type Options = { seasons: string[]; dryRun: boolean; allowShared: boolean };
+// hashtagsOnly: 過去の作品へ公式ハッシュタグだけを入れるときに使う（公式URL/X・© は処理せず、©確認キューにも積まない）
+type Options = { seasons: string[]; dryRun: boolean; allowShared: boolean; hashtagsOnly: boolean };
 
 type AnnictWork = {
 	annictId: number;
@@ -60,10 +65,28 @@ type AnnictWork = {
 	syobocalTid: number | null;
 	officialSiteUrl: string | null;
 	twitterUsername: string | null;
+	twitterHashtag: string | null;
 	image: { copyright: string | null } | null;
 };
 
-type AnimeRow = { id: number; mal_id: number; title: string; season: string | null; copyright: string | null };
+type AnimeRow = {
+	id: number;
+	mal_id: number;
+	title: string;
+	season: string | null;
+	copyright: string | null;
+	official_hashtag: string[] | null;
+};
+
+type HashtagDecision = {
+	result: "applied" | "rejected";
+	anime_id: number;
+	mal_id: number;
+	season: string | null;
+	title: string;
+	tags: string[];
+	rejected: string[];
+};
 
 type CopyrightDecision = {
 	anime_id: number;
@@ -81,6 +104,7 @@ function parseArgs(argv: string[]): Options {
 	const seasons: string[] = [];
 	let dryRun = false;
 	let allowShared = false;
+	let hashtagsOnly = false;
 	for (let index = 0; index < argv.length; index += 1) {
 		const arg = argv[index];
 		const next = argv[index + 1];
@@ -91,6 +115,10 @@ function parseArgs(argv: string[]): Options {
 		}
 		if (arg === "--allow-shared") {
 			allowShared = true;
+			continue;
+		}
+		if (arg === "--hashtags-only") {
+			hashtagsOnly = true;
 			continue;
 		}
 		if (arg === "--season" && next) {
@@ -112,11 +140,11 @@ function parseArgs(argv: string[]): Options {
 	}
 	if (seasons.length === 0) {
 		throw new Error(
-			"Usage: pnpm import:annict -- (--season 2015-spring ... | --years 2010-2019) [--allow-shared] [--dry-run]",
+			"Usage: pnpm import:annict -- (--season 2015-spring ... | --years 2010-2019) [--allow-shared] [--hashtags-only] [--dry-run]",
 		);
 	}
 	// 古い順に処理する（シリーズ内で最初の作品に © を付け、続編を保留にするため）
-	return { seasons: [...new Set(seasons)].sort(compareSeasons), dryRun, allowShared };
+	return { seasons: [...new Set(seasons)].sort(compareSeasons), dryRun, allowShared, hashtagsOnly };
 }
 
 function compareSeasons(left: string, right: string): number {
@@ -190,7 +218,7 @@ async function fetchAnimeByMalIds(
 	for (let start = 0; start < malIds.length; start += DATABASE_BATCH_SIZE) {
 		const { data, error } = await supabase
 			.from("anime")
-			.select("id,mal_id,title,season,copyright")
+			.select("id,mal_id,title,season,copyright,official_hashtag")
 			.in("mal_id", malIds.slice(start, start + DATABASE_BATCH_SIZE));
 		if (error) throw new Error(`Could not read anime rows: ${error.message}`);
 		rows.push(...((data ?? []) as AnimeRow[]));
@@ -275,6 +303,22 @@ async function applyAnnictLinks(
 	return counts;
 }
 
+/** --hashtags-only のとき: 公式URL/X は書かず、Annict の出典の公開だけを行う（入れたハッシュタグの出どころを示す） */
+async function saveAnnictAttributions(
+	supabase: ReturnType<typeof getSupabaseClient>,
+	records: CatalogSourceRecord[],
+	dryRun: boolean,
+): Promise<{ site: number; x: number }> {
+	const attributions = buildAnimeDataAttributions(records);
+	if (!dryRun && attributions.length > 0) {
+		const { error } = await supabase
+			.from("anime_data_attributions")
+			.upsert(attributions, { onConflict: "anime_mal_id,source" });
+		if (error) throw new Error(`Could not save Annict attributions: ${error.message}`);
+	}
+	return { site: 0, x: 0 };
+}
+
 function toReviewInput(decision: CopyrightDecision): CopyrightReviewInput[] {
 	const candidates = decision.annict_copyright.split(" ⏐ ").map((text) => ({ text, source: "annict" as const }));
 	switch (decision.result) {
@@ -302,6 +346,7 @@ async function main() {
 	const clearedAnimeIds = await fetchCopyrightClearedAnimeIds(supabase);
 	const today = new Date().toISOString().slice(0, 10);
 	const decisions: CopyrightDecision[] = [];
+	const hashtagDecisions: HashtagDecision[] = [];
 	let savedRecords = 0;
 	const linkTotals = { site: 0, x: 0 };
 
@@ -327,9 +372,10 @@ async function main() {
 							.map((value) => [copyrightComparisonKey(value), value]),
 					).values(),
 				];
+				const hashtags = group.map((work) => normalizeAnnictHashtags(work.twitterHashtag));
 				return {
 					mal_id: malId,
-					source: "annict",
+					source: "annict" as const,
 					source_version: today,
 					source_url: `https://annict.com/works/${group[0]?.annictId}`,
 					normalized_data: {
@@ -344,6 +390,8 @@ async function main() {
 						// 同じ MAL ID に複数の Annict 作品があり © が食い違う場合は採用しない
 						copyright: copyrights.length === 1 ? copyrights[0] : null,
 						copyright_candidates: copyrights,
+						official_hashtag: [...new Set(hashtags.flatMap((hashtag) => hashtag.tags))],
+						official_hashtag_rejected: [...new Set(hashtags.flatMap((hashtag) => hashtag.rejected))],
 					},
 				};
 			});
@@ -358,17 +406,55 @@ async function main() {
 		}
 		savedRecords += records.length;
 		// dry-run ではソースレコードを保存しないので、解決結果は既存レコード基準の目安になる
-		const links = await applyAnnictLinks(
-			supabase,
-			records.map((record) => record.mal_id),
-			options.dryRun,
-		);
+		const links = options.hashtagsOnly
+			? await saveAnnictAttributions(supabase, records, options.dryRun)
+			: await applyAnnictLinks(
+					supabase,
+					records.map((record) => record.mal_id),
+					options.dryRun,
+				);
 		linkTotals.site += links.site;
 		linkTotals.x += links.x;
 
 		const recordByMalId = new Map(records.map((record) => [record.mal_id, record.normalized_data]));
-		const seasonDecisionStart = decisions.length;
+
+		// 公式ハッシュタグ: 空の作品だけ埋める（並行して誰かが入れた値は上書きしない）
+		const seasonHashtagStart = hashtagDecisions.length;
 		for (const anime of animeRows) {
+			const record = recordByMalId.get(anime.mal_id);
+			if (!record || (anime.official_hashtag ?? []).length > 0) continue;
+			const base = { anime_id: anime.id, mal_id: anime.mal_id, season: anime.season, title: anime.title };
+			if (record.official_hashtag.length === 0) {
+				if (record.official_hashtag_rejected.length > 0)
+					hashtagDecisions.push({
+						...base,
+						result: "rejected",
+						tags: [],
+						rejected: record.official_hashtag_rejected,
+					});
+				continue;
+			}
+			if (!options.dryRun) {
+				const { data, error } = await supabase
+					.from("anime")
+					.update({ official_hashtag: record.official_hashtag })
+					.eq("id", anime.id)
+					.or("official_hashtag.is.null,official_hashtag.eq.{}")
+					.select("id");
+				if (error) throw new Error(`Could not update anime ${anime.id}: ${error.message}`);
+				if ((data ?? []).length === 0) continue;
+			}
+			hashtagDecisions.push({
+				...base,
+				result: "applied",
+				tags: record.official_hashtag,
+				rejected: record.official_hashtag_rejected,
+			});
+		}
+		const seasonHashtags = hashtagDecisions.slice(seasonHashtagStart);
+
+		const seasonDecisionStart = decisions.length;
+		for (const anime of options.hashtagsOnly ? [] : animeRows) {
 			const record = recordByMalId.get(anime.mal_id);
 			if (!record || record.copyright_candidates.length === 0) continue;
 			if (!anime.copyright && clearedAnimeIds.has(anime.id)) continue;
@@ -438,7 +524,7 @@ async function main() {
 		const count = (result: CopyrightDecision["result"]) =>
 			seasonDecisions.filter((decision) => decision.result === result).length;
 		console.log(
-			`${season}: Annict ${works.length} works, matched ${records.length}, © applied ${count("applied")}+${count("applied_shared")} shared, held ${count("held_shared") + count("held_ambiguous")}, mismatch ${count("mismatch")}, site ${links.site}, X ${links.x}`,
+			`${season}: Annict ${works.length} works, matched ${records.length}, © applied ${count("applied")}+${count("applied_shared")} shared, held ${count("held_shared") + count("held_ambiguous")}, mismatch ${count("mismatch")}, site ${links.site}, X ${links.x}, hashtag ${seasonHashtags.filter((item) => item.result === "applied").length} (rejected ${seasonHashtags.filter((item) => item.result === "rejected").length})`,
 		);
 	}
 
@@ -463,13 +549,30 @@ async function main() {
 		),
 	].join("\n");
 	await writeFile(tsvPath, `${tsv}\n`, "utf8");
+	// 公式ハッシュタグ: 入れたもの（applied）と、通らない文字のため入れなかったもの（rejected、手で直す候補）
+	const hashtagPath = join(OUTPUT_DIRECTORY, `${scope}-hashtags.tsv`);
+	const hashtagTsv = [
+		"result\tanime_id\tmal_id\tseason\ttitle\ttags\trejected",
+		...hashtagDecisions.map((item) =>
+			[
+				item.result,
+				item.anime_id,
+				item.mal_id,
+				item.season ?? "",
+				item.title,
+				item.tags.join(" "),
+				item.rejected.join(" "),
+			].join("\t"),
+		),
+	].join("\n");
+	await writeFile(hashtagPath, `${hashtagTsv}\n`, "utf8");
 
 	const total = (result: CopyrightDecision["result"]) =>
 		decisions.filter((decision) => decision.result === result).length;
 	console.log(
-		`\nDone${options.dryRun ? " (dry run, nothing written)" : ""}. source records: ${savedRecords}, © applied: ${total("applied")}, applied (shared): ${total("applied_shared")}, held (shared): ${total("held_shared")}, held (ambiguous): ${total("held_ambiguous")}, mismatch: ${total("mismatch")}, official site: ${linkTotals.site}, X: ${linkTotals.x}`,
+		`\nDone${options.dryRun ? " (dry run, nothing written)" : ""}. source records: ${savedRecords}, © applied: ${total("applied")}, applied (shared): ${total("applied_shared")}, held (shared): ${total("held_shared")}, held (ambiguous): ${total("held_ambiguous")}, mismatch: ${total("mismatch")}, official site: ${linkTotals.site}, X: ${linkTotals.x}, hashtag: ${hashtagDecisions.filter((item) => item.result === "applied").length} (rejected: ${hashtagDecisions.filter((item) => item.result === "rejected").length})`,
 	);
-	console.log(`review files: ${jsonPath} / ${tsvPath}`);
+	console.log(`review files: ${jsonPath} / ${tsvPath} / ${hashtagPath}`);
 }
 
 main().catch((error) => {

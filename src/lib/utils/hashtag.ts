@@ -1,7 +1,14 @@
 // 日本語・英数字・アンダースコアを含むハッシュタグにマッチ
-const HASHTAG_PATTERN = "#([a-zA-Z0-9぀-ゟ゠-ヿ㐀-鿿_]+)";
+const HASHTAG_CHARS = "a-zA-Z0-9぀-ゟ゠-ヿ㐀-鿿_";
+const HASHTAG_PATTERN = `#([${HASHTAG_CHARS}]+)`;
+const HASHTAG_NAME_PATTERN = new RegExp(`^[${HASHTAG_CHARS}]+$`);
 // ユーザー名（ASCII英数字・アンダースコア）にマッチ
 const MENTION_PATTERN = "@([a-zA-Z0-9_]+)";
+
+/** 投稿のハッシュタグとしてそのまま通る名前か（先頭の # は付けない） */
+export function isHashtagName(tag: string): boolean {
+	return HASHTAG_NAME_PATTERN.test(tag);
+}
 
 /**
  * テキストからハッシュタグ名の配列を抽出する
