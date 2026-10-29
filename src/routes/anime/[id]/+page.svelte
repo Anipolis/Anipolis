@@ -3533,13 +3533,6 @@ a.relation-card:hover {
 	height: 44px;
 	padding: 0 6px;
 }
-.room-log-item--special .room-log-ep-compact {
-	overflow: hidden;
-	max-width: 100%;
-	font-size: 0.72rem;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
 .room-log-item--latest {
 	aspect-ratio: auto;
 	width: fit-content;
@@ -3576,6 +3569,13 @@ a.relation-card:hover {
 	font-weight: 750;
 	line-height: 1;
 	text-align: center;
+}
+.room-log-item--special .room-log-ep-compact {
+	overflow: hidden;
+	max-width: 100%;
+	font-size: 0.72rem;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 /* 放送中の話は右上の赤い点で示す（小さいボタンに「LIVE」の文字は入らない） */
 .room-log-live-dot {
