@@ -11,7 +11,7 @@ import InfoTip from "$lib/components/InfoTip.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import { episodeRoomEntryState, formatAiringTime, isEpisodeRoomEntryLive } from "$lib/episode-room";
-import type { BroadcastRoomOverride } from "$lib/types";
+import type { AnimeStatus, BroadcastRoomOverride } from "$lib/types";
 import {
 	type BroadcastOverrideKind,
 	formatBroadcastEpisodeNumber,
@@ -166,6 +166,18 @@ function dedupeLinks(links: { name: string; url: string }[]) {
 }
 
 let myListModalOpen = $state(false);
+// マイリストのボタンは、アニメ一覧のカードと同じく登録したかどうかを形と色で示す
+const myListStatusLabels: Record<AnimeStatus, string> = {
+	plan_to_watch: "視聴予定",
+	watching: "視聴中",
+	completed: "完了",
+	on_hold: "中断",
+	dropped: "断念",
+};
+const myListLabel = $derived.by(() => {
+	const status = data.anime.user_entry?.status as AnimeStatus | undefined;
+	return status ? `マイリスト: ${myListStatusLabels[status]}` : "マイリストに追加";
+});
 let showUserListModal = $state(false);
 let recommendModalOpen = $state(false);
 let hideRecommendFormResult = $state(false);
@@ -778,28 +790,18 @@ $effect(() => {
 						type="button"
 						class="action-bar-btn"
 						class:active={myListModalOpen}
+						class:action-bar-btn--listed={data.anime.user_entry}
 						onclick={() => (myListModalOpen = true)}
 						aria-pressed={myListModalOpen}
+						aria-label={myListLabel}
+						title={myListLabel}
 					>
-						<svg
-							width="18"
-							height="18"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							aria-hidden="true"
-						>
-							<!-- サイドバーのマイリストと同じリストのアイコン（しおり形はブックマークと紛らわしいため） -->
-							<path d="M4 6h.01" />
-							<path d="M4 12h.01" />
-							<path d="M4 18h.01" />
-							<path d="M8 6h12" />
-							<path d="M8 12h12" />
-							<path d="M8 18h12" />
-						</svg>
+						<!-- 未登録は list-plus、登録済みは list-check（アニメ一覧のカードと同じ） -->
+						{#if data.anime.user_entry}
+							<span class="i-lucide-list-check action-bar-icon" aria-hidden="true"></span>
+						{:else}
+							<span class="i-lucide-list-plus action-bar-icon" aria-hidden="true"></span>
+						{/if}
 						<span>マイリスト</span>
 					</button>
 					<button
@@ -1918,6 +1920,7 @@ $effect(() => {
 	animeTitle={data.anime.title}
 	episodeCount={data.anime.episode_count}
 	entry={data.anime.user_entry}
+	removeAction="?/removeWatchlist"
 	onclose={() => { myListModalOpen = false; }}
 />
 <style>
@@ -2899,6 +2902,20 @@ a.relation-card:hover {
 .action-bar-btn.active {
 	background: var(--accent);
 	color: #fff;
+}
+.action-bar-icon {
+	width: 18px;
+	height: 18px;
+}
+/* 登録済みは状態によらず同じ色にする（アニメ一覧のカードと同じ） */
+.action-bar-btn--listed:not(.active) {
+	border-color: color-mix(in srgb, var(--color-accent) 45%, var(--border));
+	background: color-mix(in srgb, var(--color-accent) 12%, var(--card-bg));
+	color: var(--color-accent);
+}
+.action-bar-btn--listed:not(.active):hover {
+	background: color-mix(in srgb, var(--color-accent) 20%, var(--card-bg));
+	color: var(--color-accent);
 }
 .action-bar-btn--link {
 	border-style: dashed;

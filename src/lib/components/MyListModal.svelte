@@ -375,6 +375,60 @@ form {
 	font-weight: 800;
 	box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 20%, transparent);
 }
+.stepper {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+}
+.stepper button {
+	width: 44px;
+	height: 44px;
+	border: 1px solid var(--color-border);
+	border-radius: 18px;
+	background: var(--color-surface);
+	color: var(--color-text);
+	cursor: pointer;
+	font-size: 1.25rem;
+	font-weight: 700;
+	transition:
+		transform 0.12s,
+		background 0.12s;
+}
+.stepper button:hover:not(:disabled) {
+	background: var(--color-surface-hover);
+}
+.stepper button:disabled {
+	cursor: not-allowed;
+	opacity: 0.35;
+}
+.stepper input {
+	width: 66px;
+	height: 44px;
+	border: 1px solid var(--color-border);
+	border-radius: 18px;
+	outline: none;
+	background: var(--color-bg);
+	color: var(--color-text);
+	font-size: 1rem;
+	font-weight: 750;
+	text-align: center;
+	/* ブラウザ標準の上下矢印は出さない（−/＋ボタンがあり、矢印の分だけ数字が左に寄るため） */
+	appearance: textfield;
+	-moz-appearance: textfield;
+}
+.stepper input::-webkit-inner-spin-button,
+.stepper input::-webkit-outer-spin-button {
+	-webkit-appearance: none;
+	margin: 0;
+}
+.stepper input:focus {
+	border-color: var(--color-accent);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 15%, transparent);
+}
+.stepper input:focus-visible {
+	outline: 2px solid var(--color-accent);
+	outline-offset: 2px;
+}
 .episode-total {
 	color: var(--color-text-muted);
 	font-size: 0.82rem;
