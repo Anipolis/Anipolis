@@ -1648,6 +1648,10 @@ $effect(() => {
 												<span class="room-log-date"
 													>{formatRoomDate(latestEpisodeRoom.firstAiredOn)}</span
 												>
+												<span
+													class="i-lucide-arrow-right room-log-latest-arrow"
+													aria-hidden="true"
+												></span>
 											</a>
 										</li>
 									{/if}
@@ -1700,6 +1704,10 @@ $effect(() => {
 													<span class="room-log-live-badge">LIVE</span>
 												{/if}
 												<span class="room-log-date">{formatRoomDate(latestRoomLog.date)}</span>
+												<span
+													class="i-lucide-arrow-right room-log-latest-arrow"
+													aria-hidden="true"
+												></span>
 											</a>
 										</li>
 									{/if}
@@ -2961,11 +2969,13 @@ a.relation-card:hover {
 	outline: 2px solid var(--color-text);
 	outline-offset: -4px;
 }
+/* 状態の文字はボタンの真ん中に置き、▾ は右端に寄せる（並べると文字が左にずれる） */
 .mylist-split-main {
+	position: relative;
 	flex: 1;
 	justify-content: center;
-	gap: 8px;
 	min-width: 0;
+	padding-inline: 30px;
 }
 .mylist-split-detail {
 	flex-shrink: 0;
@@ -2978,10 +2988,13 @@ a.relation-card:hover {
 	height: 20px;
 }
 .mylist-split-caret {
-	flex-shrink: 0;
+	position: absolute;
+	top: 50%;
+	right: 10px;
 	width: 16px;
 	height: 16px;
 	opacity: 0.8;
+	transform: translateY(-50%);
 }
 .mylist-split-label {
 	overflow: hidden;
@@ -3542,6 +3555,11 @@ a.relation-card:hover {
 .room-log-latest-slot {
 	grid-column: 1 / -1;
 }
+/* 押すと話数ルームへ移ることを示す */
+.room-log-latest-arrow {
+	width: 16px;
+	height: 16px;
+}
 .room-log-latest-label {
 	font-size: 0.78rem;
 	font-weight: 700;
@@ -3653,10 +3671,14 @@ a.relation-card:hover {
 	.remote .mylist-split {
 		grid-column: 1 / -1;
 	}
-	.remote .mylist-split-main,
+	.remote .mylist-split-main {
+		padding: 7px 26px;
+	}
 	.remote .mylist-split-detail {
-		gap: 4px;
 		padding: 7px 10px;
+	}
+	.remote .mylist-split-caret {
+		right: 6px;
 	}
 	.remote .mylist-split-label {
 		font-size: 0.85rem;
