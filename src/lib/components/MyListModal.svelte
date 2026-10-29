@@ -14,8 +14,10 @@ type Props = {
 	entry?: UserAnimeEntry | null | undefined;
 	action?: string;
 	variant?: "full" | "status-only";
-	/** 渡すと保存後にページを読み込み直さず、保存した内容を知らせる */
-	onsaved?: (entry: UserAnimeEntry) => void;
+	/** 渡すと、登録済みの作品に「マイリストから外す」を出す */
+	removeAction?: string;
+	/** 渡すと保存後にページを読み込み直さず、保存した内容を知らせる（外したときは null） */
+	onsaved?: (entry: UserAnimeEntry | null) => void;
 	onclose: () => void;
 };
 
@@ -27,6 +29,7 @@ let {
 	entry = null,
 	action = "?/upsertWatchlist",
 	variant = "full",
+	removeAction,
 	onsaved,
 	onclose,
 }: Props = $props();
@@ -70,7 +73,8 @@ function handleProgressInput(event: Event) {
 	setProgress(Number((event.currentTarget as HTMLInputElement).value));
 }
 
-const handleSubmit: SubmitFunction = ({ formData }) => {
+const handleSubmit: SubmitFunction = ({ formData, submitter }) => {
+	const removing = submitter?.hasAttribute("data-remove") === true;
 	submitting = true;
 	errorMessage = "";
 	return async ({ result }) => {
@@ -83,7 +87,7 @@ const handleSubmit: SubmitFunction = ({ formData }) => {
 			errorMessage = "マイリストの保存に失敗しました";
 			return;
 		}
-		if (onsaved) onsaved(entryFromForm(formData));
+		if (onsaved) onsaved(removing ? null : entryFromForm(formData));
 		else await invalidateAll();
 		onclose();
 	};
@@ -221,6 +225,21 @@ $effect(() => {
 					</div>
 				</section>
 
+				{#if entry && removeAction}
+					<!-- 保存・キャンセルと並べるとスマホで入りきらないので、別の行にする -->
+					<div class="remove-row">
+						<button
+							type="submit"
+							formaction={removeAction}
+							class="remove-button"
+							data-remove
+							disabled={submitting}
+						>
+							マイリストから外す
+						</button>
+					</div>
+				{/if}
+
 				{#if errorMessage}
 					<p class="form-error" role="alert">{errorMessage}</p>
 				{:else if selectedStatus === null}
@@ -347,95 +366,14 @@ form {
 .stepper button:active {
 	transform: scale(0.96);
 }
-.score-grid button.active {
+/* 視聴ステータスも状態ごとの色にせず、スコアと同じ色で示す */
+.score-grid button.active,
+.status-grid button.active {
 	border-color: var(--color-accent);
 	background: var(--color-accent);
 	color: var(--color-bg);
 	font-weight: 800;
 	box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 20%, transparent);
-}
-.status-grid button.active {
-	color: var(--color-bg);
-	font-weight: 800;
-}
-.status-grid button[data-status="plan_to_watch"].active {
-	border-color: var(--watch-status-plan);
-	background: var(--watch-status-plan);
-	box-shadow: 0 0 0 3px color-mix(in srgb, var(--watch-status-plan) 20%, transparent);
-}
-.status-grid button[data-status="watching"].active {
-	border-color: var(--status-watching);
-	background: var(--status-watching);
-	box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-watching) 20%, transparent);
-}
-.status-grid button[data-status="completed"].active {
-	border-color: var(--status-completed);
-	background: var(--status-completed);
-	box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-completed) 20%, transparent);
-}
-.status-grid button[data-status="on_hold"].active {
-	border-color: var(--status-on-hold);
-	background: var(--status-on-hold);
-	box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-on-hold) 20%, transparent);
-}
-.status-grid button[data-status="dropped"].active {
-	border-color: var(--status-dropped);
-	background: var(--status-dropped);
-	box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-dropped) 20%, transparent);
-}
-.stepper {
-	display: flex;
-	align-items: center;
-	gap: 9px;
-}
-.stepper button {
-	width: 44px;
-	height: 44px;
-	border: 1px solid var(--color-border);
-	border-radius: 18px;
-	background: var(--color-surface);
-	color: var(--color-text);
-	cursor: pointer;
-	font-size: 1.25rem;
-	font-weight: 700;
-	transition:
-		transform 0.12s,
-		background 0.12s;
-}
-.stepper button:hover:not(:disabled) {
-	background: var(--color-surface-hover);
-}
-.stepper button:disabled {
-	cursor: not-allowed;
-	opacity: 0.35;
-}
-.stepper input {
-	width: 66px;
-	height: 44px;
-	border: 1px solid var(--color-border);
-	border-radius: 18px;
-	outline: none;
-	background: var(--color-bg);
-	color: var(--color-text);
-	font-size: 1rem;
-	font-weight: 750;
-	text-align: center;
-	/* ブラウザ標準の上下矢印は出さない（−/＋ボタンがあり、矢印の分だけ数字が左に寄るため） */
-	appearance: textfield;
-	-moz-appearance: textfield;
-}
-.stepper input::-webkit-inner-spin-button,
-.stepper input::-webkit-outer-spin-button {
-	-webkit-appearance: none;
-	margin: 0;
-}
-.stepper input:focus {
-	border-color: var(--color-accent);
-	box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 15%, transparent);
-}
-.stepper input:focus-visible {
-	outline: 2px solid var(--color-accent);
-	outline-offset: 2px;
 }
 .episode-total {
 	color: var(--color-text-muted);
@@ -494,6 +432,30 @@ form {
 .cancel-button:hover:not(:disabled) {
 	background: var(--color-hover);
 	color: var(--color-text);
+}
+.remove-row {
+	display: flex;
+	justify-content: center;
+	padding-top: 12px;
+}
+.remove-button {
+	min-height: 36px;
+	padding: 0 12px;
+	border: 0;
+	border-radius: 12px;
+	background: transparent;
+	color: var(--color-text-muted);
+	cursor: pointer;
+	font-size: 0.82rem;
+	font-weight: 600;
+}
+.remove-button:hover:not(:disabled) {
+	background: var(--color-hover);
+	color: var(--color-error-text);
+}
+.remove-button:disabled {
+	cursor: wait;
+	opacity: 0.6;
 }
 .save-button {
 	border: 1px solid var(--color-accent);

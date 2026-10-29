@@ -53,6 +53,20 @@ describe("MyListStatusPopover", () => {
 		expect(values).toEqual(["plan_to_watch", "watching", "completed", "on_hold", "dropped"]);
 	});
 
+	it("「マイリストから外す」は登録済みで、外す先が渡されたときだけ出す", () => {
+		const entry = { status: "watching", score: null, progress: 0, updated_at: "2026-10-28T00:00:00Z" };
+		const removeButton = (target: HTMLElement) => target.querySelector<HTMLButtonElement>("button[data-remove]");
+
+		const listed = mountPopover({ entry, removeAction: "?/removeWatchlist" });
+		expect(removeButton(listed.target)?.getAttribute("formaction")).toBe("?/removeWatchlist");
+		void cleanup?.();
+
+		expect(removeButton(mountPopover({ entry: null, removeAction: "?/removeWatchlist" }).target)).toBeNull();
+		void cleanup?.();
+
+		expect(removeButton(mountPopover({ entry }).target)).toBeNull();
+	});
+
 	it("外側を押すと閉じ、ボタン自身を押したときは閉じない（開け閉めはボタン側）", () => {
 		const { anchor, onclose } = mountPopover();
 		anchor.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));

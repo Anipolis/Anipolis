@@ -9,7 +9,8 @@ import type { AnimeStatus, UserAnimeEntry } from "$lib/types";
 /**
  * PC のアニメ一覧で、カードのボタンから開く小さな視聴ステータス欄。
  * ボタンと同じ幅で、ボタンの上（入りきらなければ下）へそのまま伸ばし、選んだらその場で保存する。
- * スコアや進捗は作品ページや大きいモーダル（MyListModal）で直す
+ * スコアや進捗は作品ページや大きいモーダル（MyListModal）で直す。
+ * 選んでいる状態は、状態ごとの色ではなく共通の色で示す（一覧では登録したかどうかが分かればよい）
  */
 type Props = {
 	anchor: HTMLElement;
@@ -17,12 +18,23 @@ type Props = {
 	animeTitle: string;
 	entry?: UserAnimeEntry | null | undefined;
 	action?: string;
-	/** 渡すと保存後にページを読み込み直さず、保存した内容を知らせる */
-	onsaved?: (entry: UserAnimeEntry) => void;
+	/** 渡すと、登録済みの作品に「マイリストから外す」を出す */
+	removeAction?: string;
+	/** 渡すと保存後にページを読み込み直さず、保存した内容を知らせる（外したときは null） */
+	onsaved?: (entry: UserAnimeEntry | null) => void;
 	onclose: () => void;
 };
 
-let { anchor, animeId, animeTitle, entry = null, action = "?/upsertWatchlist", onsaved, onclose }: Props = $props();
+let {
+	anchor,
+	animeId,
+	animeTitle,
+	entry = null,
+	action = "?/upsertWatchlist",
+	removeAction,
+	onsaved,
+	onclose,
+}: Props = $props();
 
 const statusOptions: { value: AnimeStatus; label: string }[] = [
 	{ value: "plan_to_watch", label: "視聴予定" },
@@ -104,8 +116,9 @@ $effect(() => {
 	};
 });
 
-const handleSubmit: SubmitFunction = ({ formData, cancel }) => {
-	if (formData.get("status") === entry?.status) {
+const handleSubmit: SubmitFunction = ({ formData, submitter, cancel }) => {
+	const removing = submitter?.hasAttribute("data-remove") === true;
+	if (!removing && formData.get("status") === entry?.status) {
 		cancel();
 		close({ returnFocus: true });
 		return;
@@ -122,7 +135,7 @@ const handleSubmit: SubmitFunction = ({ formData, cancel }) => {
 			errorMessage = "マイリストの保存に失敗しました";
 			return;
 		}
-		if (onsaved) onsaved(entryFromForm(formData));
+		if (onsaved) onsaved(removing ? null : entryFromForm(formData));
 		else await invalidateAll();
 		close({ returnFocus: true });
 	};
@@ -153,7 +166,6 @@ const handleSubmit: SubmitFunction = ({ formData, cancel }) => {
 						name="status"
 						value={option.value}
 						class="status-popover-option"
-						data-status={option.value}
 						aria-current={selected ? "true" : undefined}
 						disabled={submitting}
 					>
@@ -162,6 +174,20 @@ const handleSubmit: SubmitFunction = ({ formData, cancel }) => {
 				</li>
 			{/each}
 		</ul>
+		{#if entry && removeAction}
+			<button
+				type="submit"
+				formaction={removeAction}
+				class="status-popover-remove"
+				data-remove
+				disabled={submitting}
+				aria-label="マイリストから外す"
+				title="マイリストから外す"
+			>
+				<!-- 欄はカードのボタンと同じ幅で狭いので、短く書く -->
+				外す
+			</button>
+		{/if}
 	</form>
 	{#if errorMessage}
 		<p class="status-popover-error" role="alert">{errorMessage}</p>
@@ -197,7 +223,8 @@ const handleSubmit: SubmitFunction = ({ formData, cancel }) => {
 	padding: 0;
 	list-style: none;
 }
-.status-popover-option {
+.status-popover-option,
+.status-popover-remove {
 	display: block;
 	width: 100%;
 	height: 32px;
@@ -209,42 +236,41 @@ const handleSubmit: SubmitFunction = ({ formData, cancel }) => {
 	cursor: pointer;
 	font: inherit;
 	font-size: 0.75rem;
-	font-weight: 700;
+	font-weight: 600;
 	text-align: center;
 	white-space: nowrap;
 }
-/* 選んでいる状態は、その状態の色で塗る */
-.status-popover-option[aria-current="true"] {
-	background: color-mix(in srgb, var(--status-color) 20%, transparent);
-	color: var(--status-color);
-}
 .status-popover-option:hover:not(:disabled),
 .status-popover-option:focus-visible {
-	background: color-mix(in srgb, var(--status-color) 12%, transparent);
-	color: var(--status-color);
+	background: var(--color-surface-hover);
+	color: var(--color-text);
 	outline: none;
 }
-.status-popover-option[aria-current="true"]:hover:not(:disabled) {
-	background: color-mix(in srgb, var(--status-color) 26%, transparent);
+/* 選んでいる状態は、状態によらず同じ色の背景と太字で示す */
+.status-popover-option[aria-current="true"] {
+	background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+	color: var(--color-accent);
+	font-weight: 800;
 }
-.status-popover-option:disabled {
+.status-popover-option[aria-current="true"]:hover:not(:disabled),
+.status-popover-option[aria-current="true"]:focus-visible {
+	background: color-mix(in srgb, var(--color-accent) 24%, transparent);
+	color: var(--color-accent);
+}
+.status-popover-remove {
+	border-top: 1px solid var(--color-border);
+	font-weight: 500;
+}
+.status-popover-remove:hover:not(:disabled),
+.status-popover-remove:focus-visible {
+	background: var(--color-surface-hover);
+	color: var(--color-error-text);
+	outline: none;
+}
+.status-popover-option:disabled,
+.status-popover-remove:disabled {
 	cursor: wait;
 	opacity: 0.6;
-}
-[data-status="plan_to_watch"] {
-	--status-color: var(--status-plan);
-}
-[data-status="watching"] {
-	--status-color: var(--status-watching);
-}
-[data-status="completed"] {
-	--status-color: var(--status-completed);
-}
-[data-status="on_hold"] {
-	--status-color: var(--status-on-hold);
-}
-[data-status="dropped"] {
-	--status-color: var(--status-dropped);
 }
 .status-popover-error {
 	margin: 0;

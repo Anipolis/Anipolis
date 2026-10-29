@@ -62,14 +62,15 @@ let quickAddAnime = $state<AnimeListItem | null>(null);
 let statusPopover = $state<{ anime: AnimeListItem; anchor: HTMLElement } | null>(null);
 // マイリストに保存した作品の新しい状態。保存のたびに読み込み直すと人気順などでカードが動くので、
 // 並び順はそのままにカードの表示だけを変える。読み込み直し（タブ・ページ・絞り込みの切り替えやリロード）で捨てる
-let savedEntries = $state.raw<{ list: AnimeListItem[]; entries: Record<string, UserAnimeEntry> } | null>(null);
+// 外した作品は null を入れる
+let savedEntries = $state.raw<{ list: AnimeListItem[]; entries: Record<string, UserAnimeEntry | null> } | null>(null);
 
 function entryOf(anime: AnimeListItem): UserAnimeEntry | null | undefined {
-	const saved = savedEntries?.list === data.animes ? savedEntries.entries[anime.id] : undefined;
-	return saved ?? anime.user_entry;
+	if (savedEntries?.list === data.animes && anime.id in savedEntries.entries) return savedEntries.entries[anime.id];
+	return anime.user_entry;
 }
 
-function rememberSavedEntry(anime: AnimeListItem, entry: UserAnimeEntry) {
+function rememberSavedEntry(anime: AnimeListItem, entry: UserAnimeEntry | null) {
 	const entries = savedEntries?.list === data.animes ? savedEntries.entries : {};
 	savedEntries = { list: data.animes, entries: { ...entries, [anime.id]: entry } };
 }
@@ -801,17 +802,20 @@ function isAiringToday(anime: AnimeListItem): boolean {
 								{/if}
 								{#if data.user}
 									{@const entryStatus = entryOf(anime)?.status as AnimeStatus | undefined}
+									{@const quickAddLabel = entryStatus ? `マイリスト: ${statusLabels[entryStatus]}` : 'マイリストに追加'}
+									<!-- 一覧では登録したかどうかだけを示す（状態の名前はマウスを乗せたときと読み上げで伝える） -->
 									<button
 										type="button"
-										class="quick-add-btn status-text-{entryStatus ?? 'none'}"
+										class="quick-add-btn"
+										class:quick-add-btn--listed={entryStatus}
 										onclick={(e) => openQuickAdd(e, anime)}
-										aria-label={entryStatus ? `マイリスト: ${statusLabels[entryStatus]}` : 'マイリストに追加'}
+										aria-label={quickAddLabel}
 										aria-haspopup="dialog"
 										aria-expanded={statusPopover?.anime.id === anime.id}
-										title={entryStatus ? 'マイリストを編集' : 'マイリストに追加'}
+										title={quickAddLabel}
 									>
 										{#if entryStatus}
-											<span aria-hidden="true">{statusLabels[entryStatus]}</span>
+											<span class="i-lucide-list-check" aria-hidden="true"></span>
 										{:else}
 											<span class="i-lucide-list-plus" aria-hidden="true"></span>
 										{/if}
@@ -924,6 +928,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 			animeId={popoverAnime.id}
 			animeTitle={popoverAnime.title}
 			entry={entryOf(popoverAnime)}
+			removeAction="?/removeWatchlist"
 			onsaved={(entry) => rememberSavedEntry(popoverAnime, entry)}
 			onclose={() => {
 				statusPopover = null;
@@ -938,6 +943,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 			animeTitle={quickAddAnime.title}
 			episodeCount={quickAddAnime.episode_count}
 			entry={entryOf(quickAddAnime)}
+			removeAction="?/removeWatchlist"
 			onsaved={(entry) => quickAddAnime && rememberSavedEntry(quickAddAnime, entry)}
 			onclose={closeQuickAdd}
 		/>
@@ -1864,24 +1870,19 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	background: var(--color-surface-hover);
 	color: var(--color-text);
 }
-.quick-add-btn .i-lucide-list-plus {
+.quick-add-btn .i-lucide-list-plus,
+.quick-add-btn .i-lucide-list-check {
 	width: 18px;
 	height: 18px;
 }
-.status-text-watching {
-	color: var(--status-watching);
+/* 登録済みは状態によらず同じ色にする（一覧では登録したかどうかが分かればよい） */
+.quick-add-btn--listed {
+	background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+	color: var(--color-accent);
 }
-.status-text-plan_to_watch {
-	color: var(--status-plan);
-}
-.status-text-completed {
-	color: var(--status-completed);
-}
-.status-text-on_hold {
-	color: var(--status-on-hold);
-}
-.status-text-dropped {
-	color: var(--status-dropped);
+.quick-add-btn--listed:hover {
+	background: color-mix(in srgb, var(--color-accent) 20%, transparent);
+	color: var(--color-accent);
 }
 
 /* ─── クイック追加モーダル ─── */

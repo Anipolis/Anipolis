@@ -153,6 +153,13 @@ export const actions: Actions = {
 		return upsertUserAnimeEntry(supabase, request, user.id);
 	},
 
+	removeWatchlist: async ({ request, locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { message: "ログインが必要です" });
+		const { removeUserAnimeEntry } = await import("$lib/server/actions");
+		return removeUserAnimeEntry(supabase, request, user.id);
+	},
+
 	registerAnime: async ({ request, locals: { supabase, safeGetSession } }) => {
 		const { user } = await safeGetSession();
 		if (!user) return fail(401, { message: "ログインが必要です" });
