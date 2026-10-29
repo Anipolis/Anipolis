@@ -3,6 +3,7 @@ import type { SubmitFunction } from "@sveltejs/kit";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
 import { trapFocus } from "$lib/actions/trapFocus";
+import { entryFromForm } from "$lib/mylist/entry-from-form";
 import type { AnimeStatus, UserAnimeEntry } from "$lib/types";
 
 type Props = {
@@ -13,6 +14,10 @@ type Props = {
 	entry?: UserAnimeEntry | null | undefined;
 	action?: string;
 	variant?: "full" | "status-only";
+	/** 渡すと、登録済みの作品に「マイリストから外す」を出す */
+	removeAction?: string;
+	/** 渡すと保存後にページを読み込み直さず、保存した内容を知らせる（外したときは null） */
+	onsaved?: (entry: UserAnimeEntry | null) => void;
 	onclose: () => void;
 };
 
@@ -24,6 +29,8 @@ let {
 	entry = null,
 	action = "?/upsertWatchlist",
 	variant = "full",
+	removeAction,
+	onsaved,
 	onclose,
 }: Props = $props();
 
@@ -66,7 +73,8 @@ function handleProgressInput(event: Event) {
 	setProgress(Number((event.currentTarget as HTMLInputElement).value));
 }
 
-const handleSubmit: SubmitFunction = () => {
+const handleSubmit: SubmitFunction = ({ formData, submitter }) => {
+	const removing = submitter?.hasAttribute("data-remove") === true;
 	submitting = true;
 	errorMessage = "";
 	return async ({ result }) => {
@@ -79,7 +87,8 @@ const handleSubmit: SubmitFunction = () => {
 			errorMessage = "マイリストの保存に失敗しました";
 			return;
 		}
-		await invalidateAll();
+		if (onsaved) onsaved(removing ? null : entryFromForm(formData));
+		else await invalidateAll();
 		onclose();
 	};
 };
@@ -216,6 +225,21 @@ $effect(() => {
 					</div>
 				</section>
 
+				{#if entry && removeAction}
+					<!-- 保存・キャンセルと並べるとスマホで入りきらないので、別の行にする -->
+					<div class="remove-row">
+						<button
+							type="submit"
+							formaction={removeAction}
+							class="remove-button"
+							data-remove
+							disabled={submitting}
+						>
+							マイリストから外す
+						</button>
+					</div>
+				{/if}
+
 				{#if errorMessage}
 					<p class="form-error" role="alert">{errorMessage}</p>
 				{:else if selectedStatus === null}
@@ -342,41 +366,14 @@ form {
 .stepper button:active {
 	transform: scale(0.96);
 }
-.score-grid button.active {
+/* 視聴ステータスも状態ごとの色にせず、スコアと同じ色で示す */
+.score-grid button.active,
+.status-grid button.active {
 	border-color: var(--color-accent);
 	background: var(--color-accent);
 	color: var(--color-bg);
 	font-weight: 800;
 	box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 20%, transparent);
-}
-.status-grid button.active {
-	color: var(--color-bg);
-	font-weight: 800;
-}
-.status-grid button[data-status="plan_to_watch"].active {
-	border-color: var(--watch-status-plan);
-	background: var(--watch-status-plan);
-	box-shadow: 0 0 0 3px color-mix(in srgb, var(--watch-status-plan) 20%, transparent);
-}
-.status-grid button[data-status="watching"].active {
-	border-color: var(--status-watching);
-	background: var(--status-watching);
-	box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-watching) 20%, transparent);
-}
-.status-grid button[data-status="completed"].active {
-	border-color: var(--status-completed);
-	background: var(--status-completed);
-	box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-completed) 20%, transparent);
-}
-.status-grid button[data-status="on_hold"].active {
-	border-color: var(--status-on-hold);
-	background: var(--status-on-hold);
-	box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-on-hold) 20%, transparent);
-}
-.status-grid button[data-status="dropped"].active {
-	border-color: var(--status-dropped);
-	background: var(--status-dropped);
-	box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-dropped) 20%, transparent);
 }
 .stepper {
 	display: flex;
@@ -489,6 +486,30 @@ form {
 .cancel-button:hover:not(:disabled) {
 	background: var(--color-hover);
 	color: var(--color-text);
+}
+.remove-row {
+	display: flex;
+	justify-content: center;
+	padding-top: 12px;
+}
+.remove-button {
+	min-height: 36px;
+	padding: 0 12px;
+	border: 0;
+	border-radius: 12px;
+	background: transparent;
+	color: var(--color-text-muted);
+	cursor: pointer;
+	font-size: 0.82rem;
+	font-weight: 600;
+}
+.remove-button:hover:not(:disabled) {
+	background: var(--color-hover);
+	color: var(--color-error-text);
+}
+.remove-button:disabled {
+	cursor: wait;
+	opacity: 0.6;
 }
 .save-button {
 	border: 1px solid var(--color-accent);

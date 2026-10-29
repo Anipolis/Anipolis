@@ -2,13 +2,15 @@
 import { onDestroy } from "svelte";
 import { beforeNavigate, goto } from "$app/navigation";
 import { navigating } from "$app/state";
+import { animeCardMeta } from "$lib/anime-labels";
 import { ANIME_GENRE_FILTER_HELP, ANIME_GENRE_GROUPS, ANIME_GENRES, ANIME_SOURCE_OPTIONS } from "$lib/anime-vocabulary";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
 import InfoTip from "$lib/components/InfoTip.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
+import MyListStatusPopover from "$lib/components/MyListStatusPopover.svelte";
 import { createDebouncedCommit } from "$lib/debounced-commit";
 import { isSamePageRefresh } from "$lib/navigation-skeleton";
-import type { ActiveAnimeSeasonChip, AnimeListItem, AnimeStatus } from "$lib/types";
+import type { ActiveAnimeSeasonChip, AnimeListItem, AnimeStatus, UserAnimeEntry } from "$lib/types";
 import { dateKeyWeekday, jstBroadcastDateKey } from "$lib/utils/jst";
 import type { PageProps } from "./$types";
 
@@ -49,14 +51,24 @@ const statusLabels: Record<AnimeStatus, string> = {
 	on_hold: "中断",
 };
 
-function animeStatusBadge(anime: AnimeListItem): string {
-	if (anime.computed_broadcast_status === "airing") return "放送中";
-	if (anime.computed_broadcast_status === "upcoming") return "放送予定";
-	if (anime.computed_broadcast_status === "finished") return "放送終了";
-	return "未定";
+let quickAddAnime = $state<AnimeListItem | null>(null);
+/** PC: カードのボタンの近くに出す小さな視聴ステータス欄 */
+let statusPopover = $state<{ anime: AnimeListItem; anchor: HTMLElement } | null>(null);
+let statusPopoverSaving = $state(false);
+// マイリストに保存した作品の新しい状態。保存のたびに読み込み直すと人気順などでカードが動くので、
+// 並び順はそのままにカードの表示だけを変える。読み込み直し（タブ・ページ・絞り込みの切り替えやリロード）で捨てる
+// 外した作品は null を入れる
+let savedEntries = $state.raw<{ list: AnimeListItem[]; entries: Record<string, UserAnimeEntry | null> } | null>(null);
+
+function entryOf(anime: AnimeListItem): UserAnimeEntry | null | undefined {
+	if (savedEntries?.list === data.animes && anime.id in savedEntries.entries) return savedEntries.entries[anime.id];
+	return anime.user_entry;
 }
 
-let quickAddAnime = $state<AnimeListItem | null>(null);
+function rememberSavedEntry(anime: AnimeListItem, entry: UserAnimeEntry | null) {
+	const entries = savedEntries?.list === data.animes ? savedEntries.entries : {};
+	savedEntries = { list: data.animes, entries: { ...entries, [anime.id]: entry } };
+}
 // スマホの検索欄。URL の検索語から作り直し、入力で書き換える（bind:value でハイドレーション前の入力も残す、#417）
 let mobileSearchInput = $derived(data.search ?? "");
 // svelte-ignore state_referenced_locally
@@ -285,6 +297,14 @@ function getVisibleAnimeSectionPages(pageCount: number, currentIndex: number, vi
 function openQuickAdd(e: MouseEvent, anime: AnimeListItem) {
 	e.preventDefault();
 	e.stopPropagation();
+	const anchor = e.currentTarget as HTMLElement;
+	// マウスで操作する PC は状態だけを選ぶ小さな欄、タッチ端末は押しやすい大きいモーダル
+	if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+		// 保存中は欄を閉じたり別の作品へ切り替えたりしない（応答が別の作品に反映されるため）
+		if (statusPopoverSaving) return;
+		statusPopover = statusPopover?.anchor === anchor ? null : { anime, anchor };
+		return;
+	}
 	quickAddAnime = anime;
 }
 
@@ -729,6 +749,7 @@ function isAiringToday(anime: AnimeListItem): boolean {
 				<div class="anime-grid">
 					{#each data.animes as anime, sectionItemIndex}
 						{@const rankIndex = pageStartRank + sectionItemIndex}
+						{@const meta = animeCardMeta(anime)}
 						<a href={buildAnimeDetailUrl(anime.id)} class="anime-card">
 							<div class="anime-cover">
 								{#if anime.cover_url}
@@ -752,40 +773,53 @@ function isAiringToday(anime: AnimeListItem): boolean {
 								{#if data.tab === 'popular' || data.tab === 'trending' || data.tab === 'top_rated'}
 									<span class="rank-badge">#{rankIndex + 1}</span>
 								{/if}
+								<!-- 放送中の作品は右上のリボンで示す。今日放送があれば「本日放送」を優先し、
+								     どれも放送中の「放送中」タブでは「放送中」は出さない -->
 								{#if isAiringToday(anime)}
-									<span class="airing-today-badge">本日放送</span>
+									<span class="cover-ribbon cover-ribbon--today">本日放送</span>
+								{:else if anime.computed_broadcast_status === 'airing' && data.tab !== 'airing'}
+									<span class="cover-ribbon cover-ribbon--airing">放送中</span>
+								{/if}
+							</div>
+							<!-- 画像の下: 左に平均スコア、右にマイリストの状態（2マスに仕切る） -->
+							<div class="anime-card-actions" class:anime-card-actions--split={data.user}>
+								{#if anime.score_count == null}
+									<!-- スコアを読み込めなかった（評価なしとは区別して何も出さない） -->
+									<span class="anime-score"
+										><span class="sr-only">スコアを読み込めませんでした</span></span
+									>
+								{:else}
+									<span class="anime-score" class:anime-score--none={anime.avg_score == null}>
+										<span class="anime-score-star" aria-hidden="true">★</span>
+										{#if anime.avg_score != null}
+											<span class="sr-only">平均スコア</span>
+											<span title="{anime.score_count}人の評価の平均"
+												>{anime.avg_score.toFixed(2)}</span
+											>
+										{:else}
+											<span class="sr-only">評価なし</span>
+											<span aria-hidden="true">—</span>
+										{/if}
+									</span>
 								{/if}
 								{#if data.user}
+									{@const entryStatus = entryOf(anime)?.status as AnimeStatus | undefined}
+									{@const quickAddLabel = entryStatus ? `マイリスト: ${statusLabels[entryStatus]}` : 'マイリストに追加'}
+									<!-- 一覧では登録したかどうかだけを示す（状態の名前はマウスを乗せたときと読み上げで伝える） -->
 									<button
 										type="button"
 										class="quick-add-btn"
-										class:in-list={anime.user_entry}
+										class:quick-add-btn--listed={entryStatus}
 										onclick={(e) => openQuickAdd(e, anime)}
-										aria-label={anime.user_entry ? statusLabels[anime.user_entry.status as AnimeStatus] : 'マイリストに追加'}
-										title={anime.user_entry ? statusLabels[anime.user_entry.status as AnimeStatus] : 'マイリストに追加'}
+										aria-label={quickAddLabel}
+										aria-haspopup="dialog"
+										aria-expanded={statusPopover?.anime.id === anime.id}
+										title={quickAddLabel}
 									>
-										{#if anime.user_entry}
-											<svg
-												width="13"
-												height="13"
-												viewBox="0 0 24 24"
-												fill="currentColor"
-												aria-hidden="true"
-											>
-												<path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
-											</svg>
+										{#if entryStatus}
+											<span class="i-lucide-list-check" aria-hidden="true"></span>
 										{:else}
-											<svg
-												width="13"
-												height="13"
-												viewBox="0 0 24 24"
-												fill="none"
-												stroke="currentColor"
-												stroke-width="2.5"
-												aria-hidden="true"
-											>
-												<path d="M12 5v14M5 12h14" />
-											</svg>
+											<span class="i-lucide-list-plus" aria-hidden="true"></span>
 										{/if}
 									</button>
 								{/if}
@@ -799,30 +833,14 @@ function isAiringToday(anime: AnimeListItem): boolean {
 								>
 									{anime.title_en ?? '\u00A0'}
 								</p>
-								<div class="anime-meta">
-									<div class="anime-status-slot">
-										<span class="anime-status-badge status-{anime.computed_broadcast_status}"
-											>{animeStatusBadge(anime)}</span
-										>
-									</div>
-									<span
-										class="anime-season"
-										class:anime-season--placeholder={!anime.season}
-										aria-hidden={anime.season ? undefined : "true"}
-									>
-										{anime.season ?? '\u00A0'}
-										{#if anime.type && anime.type !== 'TV'}
-											<span class="anime-type-badge">{anime.type}</span>
-										{/if}
-									</span>
-								</div>
-								<div class="mylist-badge-slot">
-									{#if anime.user_entry}
-										<span class="mylist-badge"
-											>{statusLabels[anime.user_entry.status as AnimeStatus]}</span
-										>
-									{/if}
-								</div>
+								<!-- 種別と時期（「TV・2026年春」、映画は年だけ）を1行で -->
+								<p
+									class="anime-meta"
+									class:anime-meta--placeholder={!meta}
+									aria-hidden={meta ? undefined : "true"}
+								>
+									{meta || ' '}
+								</p>
 							</div>
 						</a>
 					{/each}
@@ -896,13 +914,31 @@ function isAiringToday(anime: AnimeListItem): boolean {
 		{/if}
 	</main>
 
+	{#if statusPopover && data.user}
+		{@const popoverAnime = statusPopover.anime}
+		<MyListStatusPopover
+			anchor={statusPopover.anchor}
+			animeId={popoverAnime.id}
+			animeTitle={popoverAnime.title}
+			entry={entryOf(popoverAnime)}
+			removeAction="?/removeWatchlist"
+			onsaved={(entry) => rememberSavedEntry(popoverAnime, entry)}
+			onclose={() => {
+				statusPopover = null;
+			}}
+			bind:submitting={statusPopoverSaving}
+		/>
+	{/if}
+
 	{#if quickAddAnime && data.user}
 		<MyListModal
 			open
 			animeId={quickAddAnime.id}
 			animeTitle={quickAddAnime.title}
 			episodeCount={quickAddAnime.episode_count}
-			entry={quickAddAnime.user_entry}
+			entry={entryOf(quickAddAnime)}
+			removeAction="?/removeWatchlist"
+			onsaved={(entry) => quickAddAnime && rememberSavedEntry(quickAddAnime, entry)}
 			onclose={closeQuickAdd}
 		/>
 	{/if}
@@ -1286,27 +1322,6 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	color: var(--color-text);
 }
 
-.filter-row {
-	display: flex;
-	gap: 10px;
-	flex-wrap: wrap;
-	align-items: flex-end;
-	padding: 10px 12px;
-	background: var(--color-surface);
-	border: 1px solid var(--color-border);
-	border-radius: 12px;
-}
-.filter-group {
-	display: flex;
-	flex-direction: column;
-	gap: 4px;
-	flex: 1 1 140px;
-	min-width: 120px;
-	max-width: 220px;
-}
-.filter-group--year {
-	flex: 0 1 160px;
-}
 .filter-year-wrap {
 	display: flex;
 	gap: 4px;
@@ -1327,30 +1342,6 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	background: var(--color-accent);
 	color: #fff;
 	border-color: var(--color-accent);
-}
-.filter-group--reset {
-	flex: 0 0 auto;
-	min-width: unset;
-	justify-content: flex-end;
-}
-.filter-reset-btn {
-	padding: 7px 12px;
-	border-radius: 12px;
-	border: 1px solid var(--color-border);
-	color: var(--color-text-muted);
-	text-decoration: none;
-	font-size: 0.82rem;
-	white-space: nowrap;
-	transition: background 0.12s;
-}
-.filter-reset-btn:hover {
-	background: var(--color-surface-hover);
-}
-.filter-label {
-	font-size: 0.75rem;
-	font-weight: 600;
-	color: var(--color-text-muted);
-	letter-spacing: 0.02em;
 }
 .filter-select,
 .filter-input {
@@ -1609,7 +1600,9 @@ function isAiringToday(anime: AnimeListItem): boolean {
 		border-color 0.15s,
 		transform 0.15s;
 }
-.anime-card:hover {
+.anime-card:hover,
+/* 状態の欄はカードの外に出すので、開いている間も持ち上げたままにする（ずれて隙間が出ないように） */
+.anime-card:has(.quick-add-btn[aria-expanded="true"]) {
 	border-color: var(--color-accent);
 	transform: translateY(-2px);
 }
@@ -1678,57 +1671,9 @@ function isAiringToday(anime: AnimeListItem): boolean {
 .anime-title-en--placeholder {
 	visibility: hidden;
 }
+/* 種別と時期の1行 */
 .anime-meta {
-	display: grid;
-	grid-template-rows: repeat(2, calc(0.72rem * 1.6 + 2px));
-	gap: 4px;
-	min-width: 0;
-}
-.anime-status-slot {
-	display: flex;
-	align-items: flex-start;
-	min-width: 0;
-}
-.anime-status-badge {
-	font-size: 0.7rem;
-	padding: 1px 5px;
-	border-radius: 3px;
-	font-weight: 600;
-	line-height: 1.6;
-	white-space: nowrap;
-}
-.status-airing {
-	background: color-mix(in srgb, var(--status-watching) 15%, transparent);
-	color: var(--status-watching);
-}
-.status-upcoming {
-	background: color-mix(in srgb, var(--status-plan) 15%, transparent);
-	color: var(--status-plan);
-}
-.status-finished {
-	background: var(--color-surface-hover);
-	color: var(--color-text-muted);
-}
-.status-unknown {
-	background: var(--color-surface);
-	color: var(--color-text-muted);
-}
-
-.airing-today-badge {
-	position: absolute;
-	top: 6px;
-	right: 6px;
-	font-size: 0.7rem;
-	font-weight: 700;
-	padding: 3px 6px;
-	border-radius: 4px;
-	background: #ef4444;
-	color: #fff;
-	letter-spacing: 0.02em;
-	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
-}
-
-.anime-season {
+	margin: 0;
 	font-size: 0.72rem;
 	line-height: 1.6;
 	color: var(--color-text-muted);
@@ -1736,33 +1681,28 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-/* 同一シーズンに同名のTV版とSpecial/ONA版が並ぶことがあるため、非TVは媒体を明示 */
-.anime-type-badge {
-	margin-left: 4px;
-	padding: 0 4px;
-	border: 1px solid var(--color-border);
-	border-radius: 3px;
-	font-size: 0.62rem;
-	color: var(--color-text-muted);
-	white-space: nowrap;
-}
-.anime-season--placeholder {
+.anime-meta--placeholder {
 	visibility: hidden;
 }
-.mylist-badge-slot {
-	display: flex;
-	align-items: flex-start;
-	height: calc(0.7rem * 1.6 + 2px);
-}
-.mylist-badge {
+
+/* 画像の右上に重ねるリボン（本日放送・放送中） */
+.cover-ribbon {
+	position: absolute;
+	top: 6px;
+	right: 6px;
 	font-size: 0.7rem;
-	line-height: 1.6;
-	padding: 1px 5px;
-	border-radius: 3px;
-	background: var(--accent-muted, #19448e22);
-	color: var(--accent);
-	width: fit-content;
-	white-space: nowrap;
+	font-weight: 700;
+	padding: 3px 6px;
+	border-radius: 4px;
+	color: var(--ribbon-text);
+	letter-spacing: 0.02em;
+	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+.cover-ribbon--today {
+	background: var(--ribbon-today);
+}
+.cover-ribbon--airing {
+	background: var(--ribbon-airing);
 }
 
 .empty-state {
@@ -1785,40 +1725,75 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	color: #fff;
 }
 
-/* ─── マイリスト追加ボタン（カバー上オーバーレイ） ─── */
+/* ─── 画像の下の行: 左に平均スコア、右にマイリストの状態 ─── */
+.anime-card-actions {
+	display: grid;
+	grid-template-columns: 1fr;
+	height: 34px;
+	border-bottom: 1px solid var(--color-border);
+}
+.anime-card-actions--split {
+	grid-template-columns: 1fr 1fr;
+}
+.anime-score {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 3px;
+	min-width: 0;
+	font-size: 0.82rem;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+.anime-score-star {
+	color: var(--status-score);
+}
+.anime-score--none {
+	color: var(--color-text-muted);
+	font-weight: 500;
+}
+.anime-score--none .anime-score-star {
+	color: inherit;
+	opacity: 0.6;
+}
 .quick-add-btn {
-	position: absolute;
-	bottom: 6px;
-	right: 6px;
-	width: 28px;
-	height: 28px;
-	border-radius: 50%;
-	corner-shape: round;
-	background: rgba(0, 0, 0, 0.6);
-	color: #fff;
-	border: 1.5px solid rgba(255, 255, 255, 0.4);
 	display: flex;
 	align-items: center;
 	justify-content: center;
+	min-width: 0;
+	padding: 0 4px;
+	overflow: hidden;
+	border: 0;
+	border-left: 1px solid var(--color-border);
+	background: transparent;
+	color: var(--color-text-muted);
 	cursor: pointer;
+	font: inherit;
+	font-size: 0.75rem;
+	font-weight: 700;
+	white-space: nowrap;
 	transition:
 		background 0.15s,
-		border-color 0.15s,
-		transform 0.15s;
-	padding: 0;
-	backdrop-filter: blur(4px);
+		color 0.15s;
 }
 .quick-add-btn:hover {
-	background: var(--color-accent);
-	border-color: var(--color-accent);
-	transform: scale(1.1);
+	background: var(--color-surface-hover);
+	color: var(--color-text);
 }
-.quick-add-btn.in-list {
-	background: color-mix(in srgb, var(--status-completed) 78%, transparent);
-	border-color: var(--status-completed);
+.quick-add-btn .i-lucide-list-plus,
+.quick-add-btn .i-lucide-list-check {
+	width: 18px;
+	height: 18px;
 }
-.quick-add-btn.in-list:hover {
-	background: var(--status-completed);
+/* 登録済みは状態によらず同じ色にする（一覧では登録したかどうかが分かればよい） */
+.quick-add-btn--listed {
+	background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+	color: var(--color-accent);
+}
+.quick-add-btn--listed:hover {
+	background: color-mix(in srgb, var(--color-accent) 20%, transparent);
+	color: var(--color-accent);
 }
 
 /* ─── クイック追加モーダル ─── */
@@ -2121,9 +2096,6 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	}
 	.filter-icon-btn {
 		display: flex;
-	}
-	.filter-row--desktop {
-		display: none;
 	}
 }
 </style>
