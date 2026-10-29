@@ -796,9 +796,13 @@ $effect(() => {
 							title={myListLabel}
 						>
 							<span class="mylist-split-label" aria-hidden="true">
-								{data.anime.user_entry
-									? myListStatusLabels[data.anime.user_entry.status as AnimeStatus]
-									: 'マイリストに追加'}
+								{#if data.anime.user_entry}
+									{myListStatusLabels[data.anime.user_entry.status as AnimeStatus]}
+								{:else}
+									<!-- スマホの細い列では「マイリストに追加」が入らないので短くする -->
+									<span class="mylist-label-long">マイリストに追加</span>
+									<span class="mylist-label-short">リストに追加</span>
+								{/if}
 							</span>
 							<span class="i-lucide-chevron-down mylist-split-caret" aria-hidden="true"></span>
 						</button>
@@ -819,7 +823,7 @@ $effect(() => {
 							{/if}
 						</button>
 					</div>
-					<a href="/?quote_anime={data.anime.id}#compose" class="action-bar-btn action-bar-btn--link">
+					<a href="/?quote_anime={data.anime.id}#compose" class="action-bar-btn">
 						<svg
 							width="18"
 							height="18"
@@ -834,7 +838,8 @@ $effect(() => {
 							<path d="M12 20h9" />
 							<path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
 						</svg>
-						<span>投稿する</span>
+						<!-- 作品を引用した投稿欄を開く（「投稿」だとレビューを書くように見える） -->
+						<span>引用する</span>
 					</a>
 					<button
 						type="button"
@@ -2194,7 +2199,7 @@ $effect(() => {
 	display: inline-flex;
 	align-items: center;
 	gap: 2px;
-	color: var(--color-text);
+	color: var(--color-text-muted);
 	font-size: 0.8rem;
 	text-decoration: underline;
 	text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
@@ -2955,8 +2960,8 @@ a.relation-card:hover {
 	width: 18px;
 	height: 18px;
 }
-.action-bar-btn--link {
-	border-style: dashed;
+.mylist-label-short {
+	display: none;
 }
 /* マイリスト: 左（状態を選ぶ）と右（スコア・進捗の詳細）をくっつけた青いボタン。
    文字は背景色にする（青の上の白い文字はダークテーマで読みにくい、#500） */
@@ -3647,7 +3652,7 @@ a.relation-card:hover {
 	   作品情報まで左の列に入れると、その長さの分だけ話数ルームが押し下げられて最初の画面に入らない */
 	.anime-layout {
 		display: grid;
-		grid-template-columns: minmax(0, 150px) minmax(0, 1fr);
+		grid-template-columns: repeat(2, minmax(0, 1fr));
 		grid-template-rows: auto auto auto auto auto;
 		grid-template-areas:
 			"title title"
@@ -3710,7 +3715,8 @@ a.relation-card:hover {
 	.remote {
 		gap: 12px;
 	}
-	/* 表紙の横の細い列では、マイリストを1段目いっぱいに、残りの3つを2段目に小さく並べる */
+	/* 表紙（列の半分）の横では、マイリストの下に残りの3つを縦に積み、アイコンと文字を横に並べる
+	   （横に3つ並べると「コレクション」が入らない） */
 	.remote .mylist-split {
 		grid-column: 1 / -1;
 	}
@@ -3726,15 +3732,20 @@ a.relation-card:hover {
 	.remote .mylist-split-label {
 		font-size: 0.82rem;
 	}
+	.remote .mylist-label-long {
+		display: none;
+	}
+	.remote .mylist-label-short {
+		display: inline;
+	}
 	.remote .action-bar {
-		grid-template-columns: repeat(3, minmax(0, 1fr));
+		grid-template-columns: minmax(0, 1fr);
 		gap: 6px;
 	}
 	.remote .action-bar-btn {
-		flex-direction: column;
-		gap: 2px;
-		padding: 7px 2px;
-		font-size: 0.62rem;
+		gap: 6px;
+		padding: 7px 10px;
+		font-size: 0.75rem;
 		white-space: nowrap;
 	}
 	.remote-admin-btn {
@@ -3781,9 +3792,7 @@ a.relation-card:hover {
 }
 
 @media (max-width: 480px) {
-	/* 表紙は列の 40%（最大 170px）。右の3つのボタンの文字（「コレクション」）が切れない幅を残す */
 	.anime-layout {
-		grid-template-columns: minmax(0, min(40%, 170px)) minmax(0, 1fr);
 		column-gap: 10px;
 	}
 	.anime-title {
@@ -3795,10 +3804,10 @@ a.relation-card:hover {
 	}
 }
 
-/* 幅 320 前後の小さい端末では、「マイリストに追加」が切れないよう表紙を少し小さくする */
+/* 幅 320 前後の小さい端末では、「リストに追加」が切れないよう表紙を少し小さくする */
 @media (max-width: 340px) {
 	.anime-layout {
-		grid-template-columns: minmax(0, 34%) minmax(0, 1fr);
+		grid-template-columns: minmax(0, 42%) minmax(0, 1fr);
 	}
 }
 /* 最新話の青いボタンの中の日付と LIVE（ほかの指定より後ろに置く） */
