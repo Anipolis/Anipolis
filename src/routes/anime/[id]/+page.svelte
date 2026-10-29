@@ -671,7 +671,7 @@ $effect(() => {
 							</div>
 						{/if}
 						{#if data.anime.official_hashtag?.length}
-							<div class="prod-row prod-row--wrap">
+							<div class="prod-row prod-row--wrap prod-row--side">
 								<dt>ハッシュタグ</dt>
 								<dd class="genre-list">
 									{#each data.anime.official_hashtag as tag}
@@ -683,7 +683,7 @@ $effect(() => {
 							</div>
 						{/if}
 						{#if displayOfficialLinks.length}
-							<div class="prod-row prod-row--wrap">
+							<div class="prod-row prod-row--wrap prod-row--side">
 								<dt>公式リンク</dt>
 								<dd class="links-list">
 									{#each displayOfficialLinks as resource (resource.url)}
@@ -3646,11 +3646,20 @@ a.relation-card:hover {
 	.left-panel-info {
 		grid-area: info;
 	}
-	/* 作品情報は全幅になるので2列に並べる */
+	/* 作品情報は全幅になるので2列に並べる。左は作品の中身（スタジオ・制作・原作・ジャンル）、
+	   右は外への入口（ハッシュタグ・公式リンク）。右の段は上から詰める（dense） */
 	.left-panel-info .prod-info {
 		display: grid;
 		grid-template-columns: repeat(2, minmax(0, 1fr));
+		grid-auto-flow: row dense;
+		align-items: start;
 		gap: 12px 16px;
+	}
+	.left-panel-info .prod-row {
+		grid-column: 1;
+	}
+	.left-panel-info .prod-row--side {
+		grid-column: 2;
 	}
 	.relations-slot--mobile {
 		display: block;
