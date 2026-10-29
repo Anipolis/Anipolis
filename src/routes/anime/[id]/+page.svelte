@@ -190,14 +190,6 @@ const myListLabel = $derived.by(() => {
 	const status = data.anime.user_entry?.status as AnimeStatus | undefined;
 	return status ? `マイリスト: ${myListStatusLabels[status]}` : "マイリストに追加";
 });
-// マイリストのボタンの2行目: 「4 / 12話」（話数が分からなければ「4話まで」）と、付けていればスコア
-const myListDetail = $derived.by(() => {
-	const entry = data.anime.user_entry;
-	if (!entry) return null;
-	const total = Number.parseInt(data.anime.episode_count ?? "", 10);
-	const progress = Number.isFinite(total) && total > 0 ? `${entry.progress} / ${total}話` : `${entry.progress}話まで`;
-	return entry.score != null && entry.score > 0 ? `${progress}・★${Math.round(entry.score)}` : progress;
-});
 let showUserListModal = $state(false);
 let recommendModalOpen = $state(false);
 let collectionModalOpen = $state(false);
@@ -760,7 +752,7 @@ $effect(() => {
 			{#if data.user}
 				<div class="action-bar">
 					<!-- マイリストはいちばん大事なので、先頭のいちばん目立つ青いボタンにする。
-					     左で状態だけを選び（その場で保存）、右でスコア・進捗まで入れる大きいモーダルを開く -->
+					     左（文字）で状態だけを選び（その場で保存）、右（アイコン）でスコア・進捗まで入れる大きいモーダルを開く -->
 					<div class="mylist-split">
 						<button
 							type="button"
@@ -772,12 +764,6 @@ $effect(() => {
 							aria-label={myListLabel}
 							title={myListLabel}
 						>
-							<!-- 未登録は list-plus、登録済みは list-check（アニメ一覧のカードと同じ） -->
-							{#if data.anime.user_entry}
-								<span class="i-lucide-list-check mylist-split-icon" aria-hidden="true"></span>
-							{:else}
-								<span class="i-lucide-list-plus mylist-split-icon" aria-hidden="true"></span>
-							{/if}
 							<span class="mylist-split-label" aria-hidden="true">
 								{data.anime.user_entry
 									? myListStatusLabels[data.anime.user_entry.status as AnimeStatus]
@@ -791,13 +777,15 @@ $effect(() => {
 							class:active={myListModalOpen}
 							onclick={() => (myListModalOpen = true)}
 							aria-haspopup="dialog"
-							aria-label={myListDetail ? `スコア・進捗を編集（${myListDetail}）` : 'スコア・進捗も入れて登録'}
-							title={myListDetail ? 'スコア・進捗を編集' : 'スコア・進捗も入れて登録'}
+							aria-label={data.anime.user_entry ? 'スコア・進捗を編集' : 'スコア・進捗も入れて登録'}
+							title={data.anime.user_entry ? 'スコア・進捗を編集' : 'スコア・進捗も入れて登録'}
 						>
-							{#if myListDetail}
-								<span class="mylist-split-detail-text" aria-hidden="true">{myListDetail}</span>
+							<!-- 未登録は list-plus、登録済みは list-check（アニメ一覧のカードと同じ） -->
+							{#if data.anime.user_entry}
+								<span class="i-lucide-list-check mylist-split-icon" aria-hidden="true"></span>
+							{:else}
+								<span class="i-lucide-list-plus mylist-split-icon" aria-hidden="true"></span>
 							{/if}
-							<span class="i-lucide-sliders-horizontal mylist-split-icon" aria-hidden="true"></span>
 						</button>
 					</div>
 					<a href="/?quote_anime={data.anime.id}#compose" class="action-bar-btn action-bar-btn--link">
@@ -2904,11 +2892,10 @@ a.relation-card:hover {
 	flex: 1;
 	min-width: 0;
 	display: flex;
-	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-	gap: 4px;
-	padding: 12px 8px;
+	gap: 6px;
+	padding: 8px;
 	background: var(--card-bg);
 	border: 1px solid var(--border);
 	border-radius: 14px;
@@ -2950,7 +2937,7 @@ a.relation-card:hover {
 .mylist-split-detail {
 	display: flex;
 	align-items: center;
-	padding: 12px 14px;
+	padding: 8px 14px;
 	border: 0;
 	background: var(--color-accent);
 	color: var(--color-bg);
@@ -2977,7 +2964,7 @@ a.relation-card:hover {
 }
 .mylist-split-detail {
 	flex-shrink: 0;
-	gap: 6px;
+	padding-inline: 12px;
 	border-left: 1px solid color-mix(in srgb, var(--color-bg) 35%, transparent);
 }
 .mylist-split-icon {
@@ -2996,11 +2983,6 @@ a.relation-card:hover {
 	font-size: 0.92rem;
 	font-weight: 800;
 	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-.mylist-split-detail-text {
-	font-size: 0.72rem;
-	font-weight: 700;
 	white-space: nowrap;
 }
 .form-row {
@@ -3638,26 +3620,20 @@ a.relation-card:hover {
 	.remote .mylist-split {
 		grid-column: 1 / -1;
 	}
-	/* 細い列では状態の名前が切れないよう、左のリストのアイコンを省いて文字を小さくする（右の▾で選べることは伝わる） */
 	.remote .mylist-split-main,
 	.remote .mylist-split-detail {
 		gap: 4px;
-		padding: 9px 8px;
-	}
-	.remote .mylist-split-main .mylist-split-icon {
-		display: none;
+		padding: 7px 10px;
 	}
 	.remote .mylist-split-label {
-		font-size: 0.82rem;
-	}
-	.remote .mylist-split-detail-text {
-		font-size: 0.68rem;
+		font-size: 0.85rem;
 	}
 	.remote .action-bar {
 		grid-template-columns: repeat(3, minmax(0, 1fr));
 		gap: 6px;
 	}
 	.remote .action-bar-btn {
+		flex-direction: column;
 		gap: 2px;
 		padding: 7px 2px;
 		font-size: 0.62rem;
