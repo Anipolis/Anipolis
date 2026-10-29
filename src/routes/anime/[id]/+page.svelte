@@ -6,7 +6,7 @@ import { enhance } from "$app/forms";
 import { page } from "$app/state";
 import { trapFocus } from "$lib/actions/trapFocus";
 import { isCoverHiddenWithoutCopyright } from "$lib/anime-cover";
-import { animeSeasonLabel, animeTypeLabel } from "$lib/anime-labels";
+import { animeRelationLabel, animeSeasonLabel, animeTypeLabel } from "$lib/anime-labels";
 import AddToCollectionModal from "$lib/components/AddToCollectionModal.svelte";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
 import InfoTip from "$lib/components/InfoTip.svelte";
@@ -505,40 +505,27 @@ $effect(() => {
 						{/if}
 						<div class="relation-list">
 							{#each group.relations as relation (`${relation.relation_type}-${relation.related_anime_mal_id}`)}
-								{#if relation.anime}
-									<a href="/anime/{relation.anime.id}" class="relation-card">
-										{#if relation.anime.cover_url}
-											<img
-												class="relation-card-thumb"
-												src={coverThumbSrc(relation.anime.cover_url)}
-												{@attach coverThumbFallback(relation.anime.cover_url)}
-												alt=""
-											>
-										{:else}
-											<span
-												class="relation-card-thumb relation-card-thumb--placeholder"
-												aria-hidden="true"
-											></span>
-										{/if}
-										<span class="relation-card-body">
-											<strong>{relation.anime.title}</strong>
-											{#if group.key === 'other'}
-												<small>{relation.relation_type}</small>
-											{/if}
-										</span>
-									</a>
-								{:else}
-									<div class="relation-card relation-card--unavailable">
+								<a href="/anime/{relation.anime.id}" class="relation-card">
+									{#if relation.anime.cover_url}
+										<img
+											class="relation-card-thumb"
+											src={coverThumbSrc(relation.anime.cover_url)}
+											{@attach coverThumbFallback(relation.anime.cover_url)}
+											alt=""
+										>
+									{:else}
 										<span
 											class="relation-card-thumb relation-card-thumb--placeholder"
 											aria-hidden="true"
 										></span>
-										<span class="relation-card-body">
-											<strong>{relation.related_title}</strong>
-											<small> {group.key === 'other' ? relation.relation_type : '未登録'} </small>
-										</span>
-									</div>
-								{/if}
+									{/if}
+									<span class="relation-card-body">
+										<strong>{relation.anime.title}</strong>
+										{#if group.key === 'other' && animeRelationLabel(relation.relation_type)}
+											<small>{animeRelationLabel(relation.relation_type)}</small>
+										{/if}
+									</span>
+								</a>
 							{/each}
 						</div>
 					</div>
@@ -2913,9 +2900,6 @@ a.relation-card:hover {
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	font-size: 0.72rem;
-	color: var(--text-muted);
-}
-.relation-card--unavailable {
 	color: var(--text-muted);
 }
 .relations-slot--mobile {

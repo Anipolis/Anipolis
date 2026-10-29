@@ -265,7 +265,7 @@ export interface AnimeRelation {
 		id: string;
 		title: string;
 		cover_url: string | null;
-	} | null;
+	};
 }
 
 export interface Anime {
