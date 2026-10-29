@@ -11,6 +11,7 @@ import AddToCollectionModal from "$lib/components/AddToCollectionModal.svelte";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
 import InfoTip from "$lib/components/InfoTip.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
+import MyListStatusPopover from "$lib/components/MyListStatusPopover.svelte";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import { episodeRoomEntryState, formatAiringTime, isEpisodeRoomEntryLive } from "$lib/episode-room";
 import type { AnimeStatus, BroadcastRoomOverride } from "$lib/types";
@@ -174,6 +175,9 @@ function dedupeLinks(links: { name: string; url: string }[]) {
 }
 
 let myListModalOpen = $state(false);
+// マイリストのボタンの左側から開く、状態だけを選ぶ欄
+let myListStatusOpen = $state(false);
+let myListStatusAnchor = $state<HTMLElement | null>(null);
 // マイリストのボタンは、アニメ一覧のカードと同じく登録したかどうかを形と色で示す
 const myListStatusLabels: Record<AnimeStatus, string> = {
 	plan_to_watch: "視聴予定",
@@ -202,6 +206,7 @@ $effect(() => {
 	void data.anime.id;
 	untrack(() => {
 		collectionModalOpen = false;
+		myListStatusOpen = false;
 	});
 });
 let hideRecommendFormResult = $state(false);
@@ -672,7 +677,7 @@ $effect(() => {
 								<dt>ハッシュタグ</dt>
 								<dd class="genre-list">
 									{#each data.anime.official_hashtag as tag}
-										<a href="/hashtag/{tag.replace(/^#/, '')}" class="genre-chip"
+										<a href="/hashtag/{tag.replace(/^#/, '')}" class="hashtag-link"
 											>#{tag.replace(/^#/, '')}</a
 										>
 									{/each}
@@ -754,34 +759,47 @@ $effect(() => {
 
 			{#if data.user}
 				<div class="action-bar">
-					<!-- マイリストがいちばん大事なので、先頭で大きく出し、登録済みなら状態と進捗まで見せる -->
-					<button
-						type="button"
-						class="action-bar-btn action-bar-btn--primary"
-						class:active={myListModalOpen}
-						class:action-bar-btn--listed={data.anime.user_entry}
-						onclick={() => (myListModalOpen = true)}
-						aria-pressed={myListModalOpen}
-						aria-label={myListDetail ? `${myListLabel}（${myListDetail}）` : myListLabel}
-						title={myListLabel}
-					>
-						<!-- 未登録は list-plus、登録済みは list-check（アニメ一覧のカードと同じ） -->
-						{#if data.anime.user_entry}
-							<span class="i-lucide-list-check action-bar-icon" aria-hidden="true"></span>
-						{:else}
-							<span class="i-lucide-list-plus action-bar-icon" aria-hidden="true"></span>
-						{/if}
-						<span class="action-bar-primary-text" aria-hidden="true">
-							<span class="action-bar-primary-label">
+					<!-- マイリストはいちばん大事なので、先頭のいちばん目立つ青いボタンにする。
+					     左で状態だけを選び（その場で保存）、右でスコア・進捗まで入れる大きいモーダルを開く -->
+					<div class="mylist-split">
+						<button
+							type="button"
+							class="mylist-split-main"
+							bind:this={myListStatusAnchor}
+							onclick={() => (myListStatusOpen = !myListStatusOpen)}
+							aria-haspopup="dialog"
+							aria-expanded={myListStatusOpen}
+							aria-label={myListLabel}
+							title={myListLabel}
+						>
+							<!-- 未登録は list-plus、登録済みは list-check（アニメ一覧のカードと同じ） -->
+							{#if data.anime.user_entry}
+								<span class="i-lucide-list-check mylist-split-icon" aria-hidden="true"></span>
+							{:else}
+								<span class="i-lucide-list-plus mylist-split-icon" aria-hidden="true"></span>
+							{/if}
+							<span class="mylist-split-label" aria-hidden="true">
 								{data.anime.user_entry
 									? myListStatusLabels[data.anime.user_entry.status as AnimeStatus]
 									: 'マイリストに追加'}
 							</span>
+							<span class="i-lucide-chevron-down mylist-split-caret" aria-hidden="true"></span>
+						</button>
+						<button
+							type="button"
+							class="mylist-split-detail"
+							class:active={myListModalOpen}
+							onclick={() => (myListModalOpen = true)}
+							aria-haspopup="dialog"
+							aria-label={myListDetail ? `スコア・進捗を編集（${myListDetail}）` : 'スコア・進捗も入れて登録'}
+							title={myListDetail ? 'スコア・進捗を編集' : 'スコア・進捗も入れて登録'}
+						>
 							{#if myListDetail}
-								<span class="action-bar-primary-detail">{myListDetail}</span>
+								<span class="mylist-split-detail-text" aria-hidden="true">{myListDetail}</span>
 							{/if}
-						</span>
-					</button>
+							<span class="i-lucide-sliders-horizontal mylist-split-icon" aria-hidden="true"></span>
+						</button>
+					</div>
 					<a href="/?quote_anime={data.anime.id}#compose" class="action-bar-btn action-bar-btn--link">
 						<svg
 							width="18"
@@ -1819,6 +1837,19 @@ $effect(() => {
 	</div>
 {/if}
 
+{#if myListStatusOpen && myListStatusAnchor && data.user}
+	<MyListStatusPopover
+		anchor={myListStatusAnchor}
+		animeId={data.anime.id}
+		animeTitle={data.anime.title}
+		entry={data.anime.user_entry}
+		removeAction="?/removeWatchlist"
+		onclose={() => {
+			myListStatusOpen = false;
+		}}
+	/>
+{/if}
+
 {#if collectionModalOpen && data.user}
 	{#key data.anime.id}
 		<AddToCollectionModal
@@ -2226,12 +2257,14 @@ $effect(() => {
 	gap: 6px;
 	align-items: center;
 }
+/* 左の情報欄のチップ（.genre-chip）と同じ形にそろえる */
 .meta-chip {
-	font-size: 0.78rem;
-	padding: 3px 9px;
-	border-radius: 4px;
+	font-size: 0.75rem;
+	padding: 2px 9px;
+	border-radius: 14px;
 	background: var(--color-surface-hover);
 	color: var(--color-text-muted);
+	border: 1px solid var(--color-border);
 }
 /* 放送状態はほかのタグと同じ見た目にし、先頭の点の色だけで示す */
 .meta-chip--status {
@@ -2252,7 +2285,7 @@ $effect(() => {
 .meta-chip--status.status-upcoming::before {
 	background: var(--status-plan);
 }
-/* シーズンは一覧へのリンク。ふだんはほかのタグと同じで、ホバー・フォーカスしたときだけ色を付ける */
+/* シーズンは一覧へのリンク。ふだんはほかのタグと同じで、ホバー・フォーカスしたときだけ左のチップと同じく色を付ける */
 .meta-chip--link {
 	text-decoration: none;
 	transition:
@@ -2261,8 +2294,9 @@ $effect(() => {
 }
 .meta-chip--link:hover,
 .meta-chip--link:focus-visible {
-	background: color-mix(in srgb, var(--accent) 15%, var(--color-surface-hover));
-	color: var(--accent);
+	background: var(--accent);
+	color: #fff;
+	border-color: var(--accent);
 }
 
 /* Stats cards */
@@ -2900,48 +2934,73 @@ a.relation-card:hover {
 	width: 18px;
 	height: 18px;
 }
-/* 登録済みは状態によらず同じ色にする（アニメ一覧のカードと同じ） */
-.action-bar-btn--listed:not(.active) {
-	border-color: color-mix(in srgb, var(--color-accent) 45%, var(--border));
-	background: color-mix(in srgb, var(--color-accent) 12%, var(--card-bg));
-	color: var(--color-accent);
-}
-.action-bar-btn--listed:not(.active):hover {
-	background: color-mix(in srgb, var(--color-accent) 20%, var(--card-bg));
-	color: var(--color-accent);
-}
 .action-bar-btn--link {
 	border-style: dashed;
 }
-.action-bar-btn--primary {
-	flex-direction: row;
-	gap: 10px;
-	padding: 12px 16px;
-	border-color: color-mix(in srgb, var(--color-accent) 45%, var(--border));
-	color: var(--color-accent);
-}
-.action-bar-btn--primary .action-bar-icon {
-	flex-shrink: 0;
-	width: 22px;
-	height: 22px;
-}
-.action-bar-primary-text {
+/* マイリスト: 左（状態を選ぶ）と右（スコア・進捗の詳細）をくっつけた青いボタン。
+   文字は背景色にする（青の上の白い文字はダークテーマで読みにくい、#500） */
+.mylist-split {
 	display: flex;
-	flex-direction: column;
-	align-items: flex-start;
-	gap: 2px;
+	min-width: 0;
+	overflow: hidden;
+	border-radius: 14px;
+	box-shadow: 0 4px 14px color-mix(in srgb, var(--color-accent) 25%, transparent);
+}
+.mylist-split-main,
+.mylist-split-detail {
+	display: flex;
+	align-items: center;
+	padding: 12px 14px;
+	border: 0;
+	background: var(--color-accent);
+	color: var(--color-bg);
+	cursor: pointer;
+	font: inherit;
+	transition: background 0.12s;
+}
+.mylist-split-main:hover,
+.mylist-split-detail:hover,
+.mylist-split-main[aria-expanded="true"],
+.mylist-split-detail.active {
+	background: var(--color-accent-hover);
+}
+.mylist-split-main:focus-visible,
+.mylist-split-detail:focus-visible {
+	outline: 2px solid var(--color-text);
+	outline-offset: -4px;
+}
+.mylist-split-main {
+	flex: 1;
+	justify-content: center;
+	gap: 8px;
 	min-width: 0;
 }
-.action-bar-primary-label {
+.mylist-split-detail {
+	flex-shrink: 0;
+	gap: 6px;
+	border-left: 1px solid color-mix(in srgb, var(--color-bg) 35%, transparent);
+}
+.mylist-split-icon {
+	flex-shrink: 0;
+	width: 20px;
+	height: 20px;
+}
+.mylist-split-caret {
+	flex-shrink: 0;
+	width: 16px;
+	height: 16px;
+	opacity: 0.8;
+}
+.mylist-split-label {
+	overflow: hidden;
 	font-size: 0.92rem;
 	font-weight: 800;
+	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-.action-bar-primary-detail {
-	overflow: hidden;
+.mylist-split-detail-text {
 	font-size: 0.72rem;
-	opacity: 0.85;
-	text-overflow: ellipsis;
+	font-weight: 700;
 	white-space: nowrap;
 }
 .form-row {
@@ -3576,6 +3635,24 @@ a.relation-card:hover {
 		font-size: 1.35rem;
 	}
 	/* 表紙の横の細い列では、マイリストを1段目いっぱいに、残りの3つを2段目に小さく並べる */
+	.remote .mylist-split {
+		grid-column: 1 / -1;
+	}
+	/* 細い列では状態の名前が切れないよう、左のリストのアイコンを省いて文字を小さくする（右の▾で選べることは伝わる） */
+	.remote .mylist-split-main,
+	.remote .mylist-split-detail {
+		gap: 4px;
+		padding: 9px 8px;
+	}
+	.remote .mylist-split-main .mylist-split-icon {
+		display: none;
+	}
+	.remote .mylist-split-label {
+		font-size: 0.82rem;
+	}
+	.remote .mylist-split-detail-text {
+		font-size: 0.68rem;
+	}
 	.remote .action-bar {
 		grid-template-columns: repeat(3, minmax(0, 1fr));
 		gap: 6px;
@@ -3585,11 +3662,6 @@ a.relation-card:hover {
 		padding: 7px 2px;
 		font-size: 0.62rem;
 		white-space: nowrap;
-	}
-	.remote .action-bar-btn--primary {
-		grid-column: 1 / -1;
-		gap: 8px;
-		padding: 9px 10px;
 	}
 	.mobile-relations-slot {
 		display: block;
