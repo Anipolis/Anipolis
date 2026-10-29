@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { animeCardMeta, animeSeasonLabel, animeTypeLabel } from "./anime-labels";
+import { animeCardMeta, animeRelationLabel, animeSeasonLabel, animeTypeLabel } from "./anime-labels";
 
 describe("animeTypeLabel", () => {
 	it.each([
@@ -38,5 +38,17 @@ describe("animeCardMeta", () => {
 		[{}, ""],
 	])("%o → %s", (anime, expected) => {
 		expect(animeCardMeta(anime)).toBe(expected);
+	});
+});
+
+describe("animeRelationLabel", () => {
+	it.each([
+		["Side Story", "外伝"],
+		["Spin-Off", "スピンオフ"],
+		["Summary", "総集編"],
+		["Other", null],
+		["Unknown", null],
+	])("%s → %s", (type, expected) => {
+		expect(animeRelationLabel(type)).toBe(expected);
 	});
 });

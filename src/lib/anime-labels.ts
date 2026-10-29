@@ -1,6 +1,23 @@
 // カタログのタイプ（MAL 由来の英語表記）のうち、日本語や分かりやすい名前で出すもの
 const TYPE_LABELS: Record<string, string> = { Movie: "映画", Special: "特別", ONA: "Web" };
 
+// 関連作品の種類（MAL の relation_type）の表示名。「その他（Other）」は段の名前と重なるので出さない
+const RELATION_LABELS: Record<string, string> = {
+	"Side Story": "外伝",
+	"Parent Story": "本編",
+	"Full Story": "本編",
+	Summary: "総集編",
+	"Alternative Version": "別バージョン",
+	"Alternative Setting": "別設定",
+	"Spin-Off": "スピンオフ",
+	Character: "同じキャラクター",
+};
+
+/** 関連作品の種類の表示名。「その他」や分からない種類は null（出さない） */
+export function animeRelationLabel(relationType: string): string | null {
+	return RELATION_LABELS[relationType] ?? null;
+}
+
 const SEASON_LABELS: Record<string, string> = { winter: "冬", spring: "春", summer: "夏", fall: "秋" };
 
 /** 作品の種別の表示名（TV・映画・OVA・Web・特別） */

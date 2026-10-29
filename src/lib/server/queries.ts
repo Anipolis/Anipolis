@@ -3355,10 +3355,11 @@ export async function getAnimeRelations(
 			]),
 	);
 
-	return rows.map((row) => ({
-		...row,
-		anime: animesByMalId.get(row.related_anime_mal_id) ?? null,
-	}));
+	// 読めない作品（未取り込み・非公開・情報未整備）は、MAL の題名だけの枠になるので出さない
+	return rows.flatMap((row) => {
+		const anime = animesByMalId.get(row.related_anime_mal_id);
+		return anime ? [{ ...row, anime }] : [];
+	});
 }
 
 /**
