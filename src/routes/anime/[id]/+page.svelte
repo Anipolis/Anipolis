@@ -117,6 +117,12 @@ function parseDateParts(value: string | null): { year: number; month: number; da
 	return match ? { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) } : null;
 }
 
+/** 話数ルームの日付「10月24日」（年はタイトル下の放送期間で分かるので省く） */
+function formatRoomDate(value: string | null): string {
+	const date = parseDateParts(value);
+	return date ? `${date.month}月${date.day}日` : "";
+}
+
 /** 「全12話」。話数が数字でなければそのまま「〜話」 */
 function formatEpisodeCount(value: string): string {
 	return /^\d+$/.test(value) ? `全${value}話` : `${value}話`;
@@ -1641,33 +1647,41 @@ $effect(() => {
 													</span>
 												{/if}
 												<span class="room-log-ep">{latestEpisodeRoom.label}</span>
-												<span class="room-log-ep-compact">{latestEpisodeRoom.label}</span>
 												{#if liveEpisodeRoomKeys.has(latestEpisodeRoom.key)}
 													<span class="room-log-live-badge">LIVE</span>
 												{/if}
 												<span class="room-log-date"
-													>{latestEpisodeRoom.firstAiredOn ?? ""}</span
+													>{formatRoomDate(latestEpisodeRoom.firstAiredOn)}</span
 												>
 											</a>
 										</li>
 									{/if}
 									{#each data.episodeRooms as entry (entry.key)}
 										{@const entryState = episodeRoomEntryState(entry, episodeRoomNow)}
+										{@const entryDetail = liveEpisodeRoomKeys.has(entry.key)
+											? "放送中"
+											: entryState !== "open"
+												? "未放送"
+												: formatRoomDate(entry.firstAiredOn)}
 										<li>
+											<!-- 各話は数字だけの小さいボタン（未放送は暗くして見分ける）。話数と日付は読み上げとホバーで伝える -->
 											<svelte:element
 												this={entry.href ? "a" : "span"}
 												href={entry.href ?? undefined}
 												class="room-log-item"
 												class:room-log-item--unaired={entryState !== "open"}
+												class:room-log-item--special={entry.episodeNumber == null}
+												title={entryDetail ? `${entry.label}（${entryDetail}）` : entry.label}
 											>
-												<span class="room-log-ep">{entry.label}</span>
-												<span class="room-log-ep-compact">{entry.label}</span>
+												<span class="room-log-ep-compact" aria-hidden="true"
+													>{entry.episodeNumber ?? entry.label}</span
+												>
+												<span class="sr-only"
+													>{entryDetail ? `${entry.label}（${entryDetail}）` : entry.label}</span
+												>
 												{#if liveEpisodeRoomKeys.has(entry.key)}
-													<span class="room-log-live-badge">LIVE</span>
-												{:else if entryState !== "open"}
-													<span class="room-log-unaired-label">未放送</span>
+													<span class="room-log-live-dot" aria-hidden="true"></span>
 												{/if}
-												<span class="room-log-date">{entry.firstAiredOn ?? ""}</span>
 											</svelte:element>
 										</li>
 									{/each}
@@ -1693,27 +1707,29 @@ $effect(() => {
 												<span class="room-log-ep"
 													>{formatBroadcastEpisodeSlot(latestRoomLog)}</span
 												>
-												<span class="room-log-ep-compact"
-													>{formatBroadcastEpisodeNumber(latestRoomLog)}</span
-												>
 												{#if liveRoomDates.has(latestRoomLog.date)}
 													<span class="room-log-live-badge">LIVE</span>
 												{/if}
-												<span class="room-log-date">{latestRoomLog.date}</span>
+												<span class="room-log-date">{formatRoomDate(latestRoomLog.date)}</span>
 											</a>
 										</li>
 									{/if}
 									{#each sortedRoomLogs as ep (ep.date)}
 										<li>
-											<a href="/rooms/anime/{data.anime.id}/{ep.date}" class="room-log-item">
-												<span class="room-log-ep">{formatBroadcastEpisodeSlot(ep)}</span>
-												<span class="room-log-ep-compact"
+											<a
+												href="/rooms/anime/{data.anime.id}/{ep.date}"
+												class="room-log-item"
+												title="{formatBroadcastEpisodeSlot(ep)}（{formatRoomDate(ep.date)}）"
+											>
+												<span class="room-log-ep-compact" aria-hidden="true"
 													>{formatBroadcastEpisodeNumber(ep)}</span
 												>
+												<span class="sr-only"
+													>{formatBroadcastEpisodeSlot(ep)}（{formatRoomDate(ep.date)}）</span
+												>
 												{#if liveRoomDates.has(ep.date)}
-													<span class="room-log-live-badge">LIVE</span>
+													<span class="room-log-live-dot" aria-hidden="true"></span>
 												{/if}
-												<span class="room-log-date">{ep.date}</span>
 											</a>
 										</li>
 									{/each}
@@ -3466,11 +3482,6 @@ a.relation-card:hover {
 	opacity: 0.6;
 }
 
-.room-log-unaired-label {
-	font-size: 11px;
-	color: var(--color-text-secondary);
-}
-
 .room-log-section {
 	display: flex;
 	flex-direction: column;
@@ -3481,13 +3492,14 @@ a.relation-card:hover {
 	font-weight: 600;
 	margin: 0;
 }
+/* 各話は数字だけの小さい正方形のボタン。最新話だけは1段目に大きく出す */
 .room-log-list {
 	list-style: none;
 	padding: 0;
 	margin: 0;
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
-	gap: 8px;
+	grid-template-columns: repeat(auto-fill, 44px);
+	gap: 6px;
 }
 .room-log-item {
 	position: relative;
@@ -3495,10 +3507,10 @@ a.relation-card:hover {
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-	gap: 7px;
+	gap: 6px;
 	aspect-ratio: 1;
-	padding: 10px 6px;
-	border-radius: 14px;
+	padding: 0;
+	border-radius: 10px;
 	text-decoration: none;
 	color: var(--text);
 	border: 1px solid var(--border);
@@ -3514,7 +3526,26 @@ a.relation-card:hover {
 	border-color: var(--text-muted);
 	transform: translateY(-2px);
 }
+/* 特番は数字が無いので名前を出す（2マス分の幅） */
+.room-log-item--special {
+	grid-column: span 2;
+	aspect-ratio: auto;
+	height: 44px;
+	padding: 0 6px;
+}
+.room-log-item--special .room-log-ep-compact {
+	overflow: hidden;
+	max-width: 100%;
+	font-size: 0.72rem;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
 .room-log-item--latest {
+	aspect-ratio: auto;
+	width: fit-content;
+	min-width: 112px;
+	padding: 12px 20px;
+	border-radius: 14px;
 	border-color: color-mix(in srgb, #2dd4bf 50%, var(--border));
 	background: color-mix(in srgb, #2dd4bf 6%, var(--card-bg));
 }
@@ -3522,8 +3553,8 @@ a.relation-card:hover {
 	border-color: color-mix(in srgb, #2dd4bf 70%, var(--border));
 	background: color-mix(in srgb, #2dd4bf 10%, var(--card-bg));
 }
-.room-log-latest-slot + li {
-	grid-column-start: 1;
+.room-log-latest-slot {
+	grid-column: 1 / -1;
 }
 .room-log-latest-label {
 	display: inline-flex;
@@ -3540,9 +3571,21 @@ a.relation-card:hover {
 	line-height: 1.2;
 	text-align: center;
 }
-/* スマホ版のみ使用する数字のみの短縮表示 */
 .room-log-ep-compact {
-	display: none;
+	font-size: 0.9rem;
+	font-weight: 750;
+	line-height: 1;
+	text-align: center;
+}
+/* 放送中の話は右上の赤い点で示す（小さいボタンに「LIVE」の文字は入らない） */
+.room-log-live-dot {
+	position: absolute;
+	top: 4px;
+	right: 4px;
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: #ef4444;
 }
 .room-log-live-badge {
 	position: absolute;
@@ -3710,28 +3753,6 @@ a.relation-card:hover {
 	}
 	.recommend-submit {
 		width: 100%;
-	}
-	/* ルームログ: 数字のみの小型ボックスで一覧性を向上 */
-	.room-log-list {
-		grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
-		gap: 6px;
-	}
-	.room-log-item {
-		gap: 0;
-		padding: 4px;
-		border-radius: 12px;
-	}
-	.room-log-ep,
-	.room-log-date,
-	.room-log-latest-label {
-		display: none;
-	}
-	.room-log-ep-compact {
-		display: block;
-		font-size: 0.9rem;
-		font-weight: 750;
-		line-height: 1.1;
-		text-align: center;
 	}
 	.room-log-live-badge {
 		top: 3px;
