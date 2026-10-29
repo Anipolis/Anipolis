@@ -6,6 +6,7 @@ import { enhance } from "$app/forms";
 import { page } from "$app/state";
 import { trapFocus } from "$lib/actions/trapFocus";
 import { isCoverHiddenWithoutCopyright } from "$lib/anime-cover";
+import { animeSeasonLabel, animeTypeLabel } from "$lib/anime-labels";
 import AddToCollectionModal from "$lib/components/AddToCollectionModal.svelte";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
 import InfoTip from "$lib/components/InfoTip.svelte";
@@ -50,15 +51,6 @@ const displayResources = $derived(
 		data.anime.official_x_url,
 	),
 );
-// スマホ版左カラム用: ラベルを廃した、タップ検索可能な静的メタ情報チップ
-const compactMetaLinks = $derived([
-	...displayStudios.map((s) => ({ text: s, href: `/anime?studio=${encodeURIComponent(s)}` })),
-	...(data.anime.source
-		? [{ text: data.anime.source, href: `/anime?source=${encodeURIComponent(data.anime.source)}` }]
-		: []),
-	...displayGenres.map((g) => ({ text: g, href: `/anime?genre=${encodeURIComponent(g)}` })),
-	...(data.anime.producer ?? []).map((p) => ({ text: p, href: `/anime?producer=${encodeURIComponent(p)}` })),
-]);
 const prequelRelations = $derived(data.relations.filter((relation) => relation.relation_type === "Prequel"));
 const sequelRelations = $derived(data.relations.filter((relation) => relation.relation_type === "Sequel"));
 const otherRelations = $derived(
@@ -109,9 +101,24 @@ function getAnimeListHref() {
 	}
 }
 
+/** 「2026年10月3日〜」「2024年4月6日〜6月29日」（同じ年なら終わりの年を省く） */
 function formatAiredPeriod(airedFrom: string | null, airedTo: string | null): string | null {
-	if (!airedFrom) return null;
-	return `${airedFrom.slice(0, 10)} 〜 ${airedTo ? airedTo.slice(0, 10) : "未定"}`;
+	const from = parseDateParts(airedFrom);
+	if (!from) return null;
+	const to = parseDateParts(airedTo);
+	const start = `${from.year}年${from.month}月${from.day}日`;
+	if (!to) return `${start}〜`;
+	return `${start}〜${to.year === from.year ? "" : `${to.year}年`}${to.month}月${to.day}日`;
+}
+
+function parseDateParts(value: string | null): { year: number; month: number; day: number } | null {
+	const match = value?.match(/^(\d{4})-(\d{2})-(\d{2})/);
+	return match ? { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) } : null;
+}
+
+/** 「全12話」。話数が数字でなければそのまま「〜話」 */
+function formatEpisodeCount(value: string): string {
+	return /^\d+$/.test(value) ? `全${value}話` : `${value}話`;
 }
 
 import { isHttpUrl, isMalUrl } from "$lib/utils/url";
@@ -120,7 +127,7 @@ function buildDisplayOfficialLinks(officialSiteUrl: string | null, officialXUrl:
 	const links: { name: string; url: string }[] = [];
 
 	if (isHttpUrl(officialSiteUrl)) links.push({ name: "公式サイト", url: officialSiteUrl });
-	if (isHttpUrl(officialXUrl)) links.push({ name: "X (Twitter)", url: officialXUrl });
+	if (isHttpUrl(officialXUrl)) links.push({ name: "X", url: officialXUrl });
 
 	return dedupeLinks(links);
 }
@@ -178,6 +185,14 @@ const myListStatusLabels: Record<AnimeStatus, string> = {
 const myListLabel = $derived.by(() => {
 	const status = data.anime.user_entry?.status as AnimeStatus | undefined;
 	return status ? `マイリスト: ${myListStatusLabels[status]}` : "マイリストに追加";
+});
+// マイリストのボタンの2行目: 「4 / 12話」（話数が分からなければ「4話まで」）と、付けていればスコア
+const myListDetail = $derived.by(() => {
+	const entry = data.anime.user_entry;
+	if (!entry) return null;
+	const total = Number.parseInt(data.anime.episode_count ?? "", 10);
+	const progress = Number.isFinite(total) && total > 0 ? `${entry.progress} / ${total}話` : `${entry.progress}話まで`;
+	return entry.score != null && entry.score > 0 ? `${progress}・★${Math.round(entry.score)}` : progress;
 });
 let showUserListModal = $state(false);
 let recommendModalOpen = $state(false);
@@ -525,25 +540,24 @@ $effect(() => {
 			{#if data.anime.title_en}
 				<p class="anime-title-en">{data.anime.title_en}</p>
 			{/if}
+			<!-- タグは同じ見た目にそろえ、放送状態は色の点だけで示す。シーズン（一覧へのリンク）はホバー・フォーカスで色が付く -->
 			<div class="meta-row">
-				<span class="status-badge status-{data.anime.computed_broadcast_status}">
+				<span class="meta-chip meta-chip--status status-{data.anime.computed_broadcast_status}">
 					{broadcastLabels[data.anime.computed_broadcast_status] ?? data.anime.computed_broadcast_status}
 				</span>
 				{#if data.anime.type}
-					<span class="meta-chip">{data.anime.type}</span>
+					<span class="meta-chip">{animeTypeLabel(data.anime.type)}</span>
 				{/if}
 				{#if data.anime.season}
 					<a href="/anime?season={encodeURIComponent(data.anime.season)}" class="meta-chip meta-chip--link"
-						>{data.anime.season}</a
+						>{animeSeasonLabel(data.anime.season)}</a
 					>
 				{/if}
 				{#if data.anime.episode_count}
-					<span class="meta-chip">{data.anime.episode_count}話</span>
+					<span class="meta-chip">{formatEpisodeCount(data.anime.episode_count)}</span>
 				{/if}
 				{#if data.anime.aired_from}
-					<span class="meta-chip aired">
-						{formatAiredPeriod(data.anime.aired_from, data.anime.aired_to)}
-					</span>
+					<span class="meta-chip">{formatAiredPeriod(data.anime.aired_from, data.anime.aired_to)}</span>
 				{/if}
 			</div>
 		</div>
@@ -602,45 +616,6 @@ $effect(() => {
 					<p class="copyright-notice">{data.anime.copyright}</p>
 				{/if}
 			</div>
-			<!-- スマホ版のみ: 画像下に圧縮メタ＋ハッシュタグ＋公式アイコンを集約（PC版は .prod-info を使用） -->
-			<div class="mobile-meta">
-				{#if compactMetaLinks.length}
-					<div class="mobile-meta-chips">
-						{#each compactMetaLinks as item (item.href + item.text)}
-							<a href={item.href} class="mobile-meta-chip">{item.text}</a>
-						{/each}
-					</div>
-				{/if}
-				{#if data.anime.official_hashtag?.length}
-					<div class="mobile-hashtags">
-						{#each data.anime.official_hashtag as tag}
-							<a href="/hashtag/{tag.replace(/^#/, '')}" class="mobile-hashtag"
-								>#{tag.replace(/^#/, '')}</a
-							>
-						{/each}
-					</div>
-				{/if}
-				{#if displayOfficialLinks.length}
-					<div class="mobile-official-icons">
-						{#each displayOfficialLinks as link (link.url)}
-							<a
-								href={link.url}
-								target="_blank"
-								rel="noopener noreferrer"
-								class="mobile-icon-link"
-								aria-label={link.name}
-								title={link.name}
-							>
-								{#if link.name.includes("公式サイト")}
-									<span class="i-lucide-globe-2" aria-hidden="true"></span>
-								{:else}
-									𝕏
-								{/if}
-							</a>
-						{/each}
-					</div>
-				{/if}
-			</div>
 			<div class="left-panel-info">
 				{#if coverError}
 					<p class="cover-error">{coverError}</p>
@@ -697,7 +672,7 @@ $effect(() => {
 								<dt>ハッシュタグ</dt>
 								<dd class="genre-list">
 									{#each data.anime.official_hashtag as tag}
-										<a href="/hashtag/{tag.replace(/^#/, '')}" class="hashtag-link"
+										<a href="/hashtag/{tag.replace(/^#/, '')}" class="genre-chip"
 											>#{tag.replace(/^#/, '')}</a
 										>
 									{/each}
@@ -713,8 +688,9 @@ $effect(() => {
 											href={resource.url}
 											target="_blank"
 											rel="noopener noreferrer"
-											class="official-link"
-											>{resource.name}</a
+											class="genre-chip external-chip"
+											>{resource.name}
+											<span class="i-lucide-arrow-up-right" aria-hidden="true"></span></a
 										>
 									{/each}
 								</dd>
@@ -731,8 +707,8 @@ $effect(() => {
 									href={resource.url}
 									target="_blank"
 									rel="noopener noreferrer"
-									class="official-link resource-link"
-									>{resource.name}</a
+									class="genre-chip external-chip"
+									>{resource.name}<span class="i-lucide-arrow-up-right" aria-hidden="true"></span></a
 								>
 							{/each}
 						</div>
@@ -755,7 +731,7 @@ $effect(() => {
 					</span>
 					{#if data.anime.avg_score != null && (data.anime.score_count ?? 0) > 0}
 						<span class="stat-card-value">★ {data.anime.avg_score.toFixed(2)}</span>
-						<span class="stat-card-sub">{data.anime.score_count}件の評価</span>
+						<span class="stat-card-sub">{data.anime.score_count}人が評価</span>
 					{:else}
 						<span class="stat-card-value">—</span>
 						<span class="stat-card-sub">まだ評価がありません</span>
@@ -770,7 +746,7 @@ $effect(() => {
 					>
 						<span class="stat-card-label">リスト登録</span>
 						<span class="stat-card-value">{data.anime.list_count}</span>
-						<span class="stat-card-sub">ユーザー</span>
+						<span class="stat-card-sub">人が登録</span>
 					</button>
 				{/if}
 			</div>
@@ -778,6 +754,34 @@ $effect(() => {
 
 			{#if data.user}
 				<div class="action-bar">
+					<!-- マイリストがいちばん大事なので、先頭で大きく出し、登録済みなら状態と進捗まで見せる -->
+					<button
+						type="button"
+						class="action-bar-btn action-bar-btn--primary"
+						class:active={myListModalOpen}
+						class:action-bar-btn--listed={data.anime.user_entry}
+						onclick={() => (myListModalOpen = true)}
+						aria-pressed={myListModalOpen}
+						aria-label={myListDetail ? `${myListLabel}（${myListDetail}）` : myListLabel}
+						title={myListLabel}
+					>
+						<!-- 未登録は list-plus、登録済みは list-check（アニメ一覧のカードと同じ） -->
+						{#if data.anime.user_entry}
+							<span class="i-lucide-list-check action-bar-icon" aria-hidden="true"></span>
+						{:else}
+							<span class="i-lucide-list-plus action-bar-icon" aria-hidden="true"></span>
+						{/if}
+						<span class="action-bar-primary-text" aria-hidden="true">
+							<span class="action-bar-primary-label">
+								{data.anime.user_entry
+									? myListStatusLabels[data.anime.user_entry.status as AnimeStatus]
+									: 'マイリストに追加'}
+							</span>
+							{#if myListDetail}
+								<span class="action-bar-primary-detail">{myListDetail}</span>
+							{/if}
+						</span>
+					</button>
 					<a href="/?quote_anime={data.anime.id}#compose" class="action-bar-btn action-bar-btn--link">
 						<svg
 							width="18"
@@ -795,24 +799,6 @@ $effect(() => {
 						</svg>
 						<span>投稿する</span>
 					</a>
-					<button
-						type="button"
-						class="action-bar-btn"
-						class:active={myListModalOpen}
-						class:action-bar-btn--listed={data.anime.user_entry}
-						onclick={() => (myListModalOpen = true)}
-						aria-pressed={myListModalOpen}
-						aria-label={myListLabel}
-						title={myListLabel}
-					>
-						<!-- 未登録は list-plus、登録済みは list-check（アニメ一覧のカードと同じ） -->
-						{#if data.anime.user_entry}
-							<span class="i-lucide-list-check action-bar-icon" aria-hidden="true"></span>
-						{:else}
-							<span class="i-lucide-list-plus action-bar-icon" aria-hidden="true"></span>
-						{/if}
-						<span>マイリスト</span>
-					</button>
 					<button
 						type="button"
 						class="action-bar-btn"
@@ -2139,33 +2125,21 @@ $effect(() => {
 	color: #fff;
 	border-color: var(--accent);
 }
+/* 公式サイト・X・関連リンク（外部サイト）もジャンルと同じチップにし、矢印で外へ出ることを示す */
+.external-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	white-space: nowrap;
+}
+.external-chip [class^="i-lucide"] {
+	width: 11px;
+	height: 11px;
+}
 .links-list {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 6px;
-}
-.official-link {
-	font-size: 0.78rem;
-	color: var(--accent);
-	text-decoration: none;
-	padding: 2px 8px;
-	border: 1px solid var(--accent);
-	border-radius: 4px;
-}
-.official-link:hover {
-	background: var(--accent);
-	color: #fff;
-}
-.resource-link {
-	border-color: var(--border);
-	color: var(--text-muted);
-	/* 「しょぼいカレンダー」などが折り返すとボタンの形が崩れるので、1行に保つ */
-	white-space: nowrap;
-}
-.resource-link:hover {
-	background: var(--hover-bg);
-	border-color: var(--border);
-	color: var(--text);
 }
 .resource-links {
 	display: flex;
@@ -2179,14 +2153,10 @@ $effect(() => {
 	font-weight: 600;
 	letter-spacing: 0.04em;
 }
-/* スマホ幅では表紙の下の狭い列に入るので、余白と字間を詰めて「しょぼいカレンダー」も1行で収める */
+/* スマホ幅では表紙の下の狭い列に入るので、余白を詰める */
 @media (max-width: 768px) {
 	.resource-links {
 		padding: 0;
-	}
-	.resource-link {
-		padding: 2px 6px;
-		letter-spacing: 0;
 	}
 }
 .copyright {
@@ -2232,11 +2202,6 @@ $effect(() => {
 	display: none;
 }
 
-/* スマホ版のみ表示する画像下の圧縮メタ（PC版は .prod-info を使用） */
-.mobile-meta {
-	display: none;
-}
-
 .title-block {
 	grid-area: title;
 	display: flex;
@@ -2261,28 +2226,6 @@ $effect(() => {
 	gap: 6px;
 	align-items: center;
 }
-.status-badge {
-	font-size: 0.75rem;
-	padding: 3px 10px;
-	border-radius: 4px;
-	font-weight: 600;
-}
-.status-airing {
-	background: color-mix(in srgb, var(--status-watching) 15%, transparent);
-	color: var(--status-watching);
-}
-.status-upcoming {
-	background: color-mix(in srgb, var(--status-plan) 15%, transparent);
-	color: var(--status-plan);
-}
-.status-finished {
-	background: var(--color-surface-hover);
-	color: var(--color-text-muted);
-}
-.status-unknown {
-	background: var(--hover-bg);
-	color: var(--text-muted);
-}
 .meta-chip {
 	font-size: 0.78rem;
 	padding: 3px 9px;
@@ -2290,20 +2233,36 @@ $effect(() => {
 	background: var(--color-surface-hover);
 	color: var(--color-text-muted);
 }
-.meta-chip.aired {
-	font-size: 0.75rem;
+/* 放送状態はほかのタグと同じ見た目にし、先頭の点の色だけで示す */
+.meta-chip--status {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
 }
+.meta-chip--status::before {
+	content: "";
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--color-text-muted);
+}
+.meta-chip--status.status-airing::before {
+	background: var(--status-watching);
+}
+.meta-chip--status.status-upcoming::before {
+	background: var(--status-plan);
+}
+/* シーズンは一覧へのリンク。ふだんはほかのタグと同じで、ホバー・フォーカスしたときだけ色を付ける */
 .meta-chip--link {
 	text-decoration: none;
-	color: var(--accent);
-	background: color-mix(in srgb, var(--accent) 10%, var(--color-surface-hover));
 	transition:
 		background 0.15s,
 		color 0.15s;
 }
-.meta-chip--link:hover {
-	background: var(--accent);
-	color: #fff;
+.meta-chip--link:hover,
+.meta-chip--link:focus-visible {
+	background: color-mix(in srgb, var(--accent) 15%, var(--color-surface-hover));
+	color: var(--accent);
 }
 
 /* Stats cards */
@@ -2899,8 +2858,10 @@ a.relation-card:hover {
 }
 
 /* Action bar */
+/* マイリストを先頭で大きく、残り（投稿・コレクション・推薦）は控えめに並べる */
 .action-bar {
-	display: flex;
+	display: grid;
+	grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr));
 	gap: 10px;
 	width: 100%;
 	min-width: 0;
@@ -2951,6 +2912,37 @@ a.relation-card:hover {
 }
 .action-bar-btn--link {
 	border-style: dashed;
+}
+.action-bar-btn--primary {
+	flex-direction: row;
+	gap: 10px;
+	padding: 12px 16px;
+	border-color: color-mix(in srgb, var(--color-accent) 45%, var(--border));
+	color: var(--color-accent);
+}
+.action-bar-btn--primary .action-bar-icon {
+	flex-shrink: 0;
+	width: 22px;
+	height: 22px;
+}
+.action-bar-primary-text {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 2px;
+	min-width: 0;
+}
+.action-bar-primary-label {
+	font-size: 0.92rem;
+	font-weight: 800;
+	white-space: nowrap;
+}
+.action-bar-primary-detail {
+	overflow: hidden;
+	font-size: 0.72rem;
+	opacity: 0.85;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 .form-row {
 	display: flex;
@@ -3560,84 +3552,12 @@ a.relation-card:hover {
 	.anime-cover {
 		max-width: none;
 	}
-	/* PC版の冗長なラベル付きdlは隠し、圧縮メタを表示（Resourcesは維持） */
+	/* 表紙の下の細い列では、見出し付きの情報欄を枠なしで詰めて出す（見出しが無いと何の情報か分からない） */
 	.left-panel-info .prod-info {
-		display: none;
-	}
-	.mobile-meta {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-		margin-top: 8px;
-	}
-	.mobile-meta-chips {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 5px;
-	}
-	.mobile-meta-chip {
-		font-size: 11px;
-		line-height: 1.3;
-		padding: 2px 7px;
-		border-radius: 14px;
-		background: var(--hover-bg);
-		color: var(--text-muted);
-		border: 1px solid var(--border);
-		text-decoration: none;
-		transition:
-			background 0.15s,
-			color 0.15s,
-			border-color 0.15s;
-	}
-	.mobile-meta-chip:hover,
-	.mobile-meta-chip:active {
-		background: var(--accent);
-		color: #fff;
-		border-color: var(--accent);
-	}
-	.mobile-hashtags {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 6px;
-	}
-	.mobile-hashtag {
-		font-size: 11px;
-		color: var(--accent);
-		text-decoration: none;
-	}
-	.mobile-hashtag:hover {
-		text-decoration: underline;
-	}
-	.mobile-official-icons {
-		display: flex;
-		align-items: center;
-		gap: 12px;
-		margin-top: 2px;
-	}
-	.mobile-icon-link {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 30px;
-		height: 30px;
-		border-radius: 50%;
-		corner-shape: round;
-		border: 1px solid var(--border);
-		background: var(--hover-bg);
-		color: var(--text);
-		font-size: 0.95rem;
-		text-decoration: none;
-		transition:
-			background 0.15s,
-			border-color 0.15s;
-	}
-	.mobile-icon-link [class^="i-lucide"] {
-		width: 1em;
-		height: 1em;
-	}
-	.mobile-icon-link:hover {
-		border-color: var(--accent);
-		background: var(--card-bg);
+		gap: 8px;
+		padding: 0;
+		border: 0;
+		background: transparent;
 	}
 	/* 右カラム: 純粋なアクションリモコン化（スコア＋リストを横並び→ボタン→管理者） */
 	.remote {
@@ -3655,18 +3575,21 @@ a.relation-card:hover {
 	.remote .stat-card-value {
 		font-size: 1.35rem;
 	}
-	/* 表紙の横の細い列では4つ横に並べると文字が折り返すので、2列×2段にしてアイコンと文字を横に並べる */
+	/* 表紙の横の細い列では、マイリストを1段目いっぱいに、残りの3つを2段目に小さく並べる */
 	.remote .action-bar {
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
+		grid-template-columns: repeat(3, minmax(0, 1fr));
 		gap: 6px;
 	}
 	.remote .action-bar-btn {
-		flex-direction: row;
-		gap: 4px;
-		padding: 8px 4px;
-		font-size: 0.68rem;
+		gap: 2px;
+		padding: 7px 2px;
+		font-size: 0.62rem;
 		white-space: nowrap;
+	}
+	.remote .action-bar-btn--primary {
+		grid-column: 1 / -1;
+		gap: 8px;
+		padding: 9px 10px;
 	}
 	.mobile-relations-slot {
 		display: block;
