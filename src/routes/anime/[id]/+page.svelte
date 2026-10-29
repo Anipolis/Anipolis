@@ -152,7 +152,7 @@ function buildDisplayOfficialLinks(officialSiteUrl: string | null, officialXUrl:
 	const links: { name: string; url: string }[] = [];
 
 	if (isHttpUrl(officialSiteUrl)) links.push({ name: "公式サイト", url: officialSiteUrl });
-	if (isHttpUrl(officialXUrl)) links.push({ name: "X", url: officialXUrl });
+	if (isHttpUrl(officialXUrl)) links.push({ name: "公式X", url: officialXUrl });
 
 	return dedupeLinks(links);
 }
