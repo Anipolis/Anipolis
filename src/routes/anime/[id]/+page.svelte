@@ -52,6 +52,15 @@ const displayResources = $derived(
 		data.anime.official_x_url,
 	),
 );
+const hasWorkInfo = $derived(
+	displayStudios.length > 0 ||
+		(data.anime.producer?.length ?? 0) > 0 ||
+		!!data.anime.source ||
+		displayGenres.length > 0,
+);
+const hasEntryInfo = $derived(
+	(data.anime.official_hashtag?.length ?? 0) > 0 || displayOfficialLinks.length > 0 || displayResources.length > 0,
+);
 const prequelRelations = $derived(data.relations.filter((relation) => relation.relation_type === "Prequel"));
 const sequelRelations = $derived(data.relations.filter((relation) => relation.relation_type === "Sequel"));
 const otherRelations = $derived(
@@ -627,94 +636,112 @@ $effect(() => {
 					<p class="cover-hidden-note">権利表記（©）が未設定のため、カバー画像は表示されていません。</p>
 				{/if}
 
-				<!-- Production info below cover -->
-				{#if displayStudios.length || data.anime.producer?.length || data.anime.source || displayGenres.length || data.anime.official_hashtag?.length || displayOfficialLinks.length}
-					<dl class="prod-info">
-						{#if displayStudios.length}
-							<div class="prod-row prod-row--wrap">
-								<dt>スタジオ</dt>
-								<dd class="genre-list">
-									{#each displayStudios as s}
-										<a href="/anime?studio={encodeURIComponent(s)}" class="genre-chip">{s}</a>
-									{/each}
-								</dd>
-							</div>
+				<!-- 作品情報。左の列は作品の中身（スタジオ・制作・原作・ジャンル）、右の列は外への入口
+				     （ハッシュタグ・公式リンク・関連リンク）。PC は縦に続け、スマホは左右に並べる -->
+				{#if hasWorkInfo || hasEntryInfo}
+					<div class="prod-info">
+						{#if hasWorkInfo}
+							<dl class="prod-col">
+								{#if displayStudios.length}
+									<div class="prod-row prod-row--wrap">
+										<dt>スタジオ</dt>
+										<dd class="genre-list">
+											{#each displayStudios as s}
+												<a href="/anime?studio={encodeURIComponent(s)}" class="genre-chip"
+													>{s}</a
+												>
+											{/each}
+										</dd>
+									</div>
+								{/if}
+								{#if data.anime.producer?.length}
+									<div class="prod-row prod-row--wrap">
+										<dt>制作</dt>
+										<dd class="genre-list">
+											{#each data.anime.producer as p}
+												<a href="/anime?producer={encodeURIComponent(p)}" class="genre-chip"
+													>{p}</a
+												>
+											{/each}
+										</dd>
+									</div>
+								{/if}
+								{#if data.anime.source}
+									<div class="prod-row">
+										<dt>原作</dt>
+										<dd>
+											<a
+												href="/anime?source={encodeURIComponent(data.anime.source)}"
+												class="genre-chip"
+												>{data.anime.source}</a
+											>
+										</dd>
+									</div>
+								{/if}
+								{#if displayGenres.length}
+									<div class="prod-row prod-row--wrap">
+										<dt>ジャンル</dt>
+										<dd class="genre-list">
+											{#each displayGenres as g}
+												<a href="/anime?genre={encodeURIComponent(g)}" class="genre-chip"
+													>{g}</a
+												>
+											{/each}
+										</dd>
+									</div>
+								{/if}
+							</dl>
 						{/if}
-						{#if data.anime.producer?.length}
-							<div class="prod-row prod-row--wrap">
-								<dt>制作</dt>
-								<dd class="genre-list">
-									{#each data.anime.producer as p}
-										<a href="/anime?producer={encodeURIComponent(p)}" class="genre-chip">{p}</a>
-									{/each}
-								</dd>
-							</div>
+						{#if hasEntryInfo}
+							<dl class="prod-col">
+								{#if data.anime.official_hashtag?.length}
+									<div class="prod-row prod-row--wrap">
+										<dt>ハッシュタグ</dt>
+										<dd class="genre-list">
+											{#each data.anime.official_hashtag as tag}
+												<a href="/hashtag/{tag.replace(/^#/, '')}" class="hashtag-link"
+													>#{tag.replace(/^#/, '')}</a
+												>
+											{/each}
+										</dd>
+									</div>
+								{/if}
+								{#if displayOfficialLinks.length}
+									<div class="prod-row prod-row--wrap">
+										<dt>公式リンク</dt>
+										<dd class="links-list">
+											{#each displayOfficialLinks as resource (resource.url)}
+												<a
+													href={resource.url}
+													target="_blank"
+													rel="noopener noreferrer"
+													class="genre-chip external-chip"
+													>{resource.name}
+													<span class="i-lucide-arrow-up-right" aria-hidden="true"></span></a
+												>
+											{/each}
+										</dd>
+									</div>
+								{/if}
+								{#if displayResources.length}
+									<div class="prod-row prod-row--wrap">
+										<dt>関連リンク</dt>
+										<dd class="links-list">
+											{#each displayResources as resource (resource.url)}
+												<a
+													href={resource.url}
+													target="_blank"
+													rel="noopener noreferrer"
+													class="genre-chip external-chip"
+													>{resource.name}
+													<span class="i-lucide-arrow-up-right" aria-hidden="true"></span></a
+												>
+											{/each}
+										</dd>
+									</div>
+								{/if}
+							</dl>
 						{/if}
-						{#if data.anime.source}
-							<div class="prod-row">
-								<dt>原作</dt>
-								<dd>
-									<a href="/anime?source={encodeURIComponent(data.anime.source)}" class="genre-chip"
-										>{data.anime.source}</a
-									>
-								</dd>
-							</div>
-						{/if}
-						{#if displayGenres.length}
-							<div class="prod-row prod-row--wrap">
-								<dt>ジャンル</dt>
-								<dd class="genre-list">
-									{#each displayGenres as g}
-										<a href="/anime?genre={encodeURIComponent(g)}" class="genre-chip">{g}</a>
-									{/each}
-								</dd>
-							</div>
-						{/if}
-						{#if data.anime.official_hashtag?.length}
-							<div class="prod-row prod-row--wrap prod-row--side">
-								<dt>ハッシュタグ</dt>
-								<dd class="genre-list">
-									{#each data.anime.official_hashtag as tag}
-										<a href="/hashtag/{tag.replace(/^#/, '')}" class="hashtag-link"
-											>#{tag.replace(/^#/, '')}</a
-										>
-									{/each}
-								</dd>
-							</div>
-						{/if}
-						{#if displayOfficialLinks.length}
-							<div class="prod-row prod-row--wrap prod-row--side">
-								<dt>公式リンク</dt>
-								<dd class="links-list">
-									{#each displayOfficialLinks as resource (resource.url)}
-										<a
-											href={resource.url}
-											target="_blank"
-											rel="noopener noreferrer"
-											class="genre-chip external-chip"
-											>{resource.name}
-											<span class="i-lucide-arrow-up-right" aria-hidden="true"></span></a
-										>
-									{/each}
-								</dd>
-							</div>
-						{/if}
-					</dl>
-				{/if}
-				{#if displayResources.length}
-					<div class="resource-links">
-						<div class="resource-links-title">関連リンク</div>
-						<div class="links-list">
-							{#each displayResources as resource (resource.url)}
-								<a
-									href={resource.url}
-									target="_blank"
-									rel="noopener noreferrer"
-									class="genre-chip external-chip"
-									>{resource.name}<span class="i-lucide-arrow-up-right" aria-hidden="true"></span></a
-								>
-							{/each}
-						</div>
 					</div>
 				{/if}
 			</div>
@@ -2118,6 +2145,14 @@ $effect(() => {
 	border: 1px solid var(--color-border);
 	border-radius: 12px;
 }
+/* 作品情報の左右の列（PC では縦に続く） */
+.prod-col {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	min-width: 0;
+	margin: 0;
+}
 .prod-row {
 	display: flex;
 	flex-direction: column;
@@ -2174,24 +2209,7 @@ $effect(() => {
 	flex-wrap: wrap;
 	gap: 6px;
 }
-.resource-links {
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-	padding: 0 14px;
-}
-.resource-links-title {
-	color: var(--text-muted);
-	font-size: 0.72rem;
-	font-weight: 600;
-	letter-spacing: 0.04em;
-}
-/* スマホ幅では表紙の下の狭い列に入るので、余白を詰める */
-@media (max-width: 768px) {
-	.resource-links {
-		padding: 0;
-	}
-}
+
 .copyright {
 	font-size: 0.72rem;
 	color: var(--color-text-muted);
@@ -3646,20 +3664,13 @@ a.relation-card:hover {
 	.left-panel-info {
 		grid-area: info;
 	}
-	/* 作品情報は全幅になるので2列に並べる。左は作品の中身（スタジオ・制作・原作・ジャンル）、
-	   右は外への入口（ハッシュタグ・公式リンク）。右の段は上から詰める（dense） */
+	/* 作品情報は全幅になるので、左（作品の中身）と右（外への入口）の列を左右に並べる。
+	   列ごとに縦に積むので、片方の段の高さがもう片方の間隔に響かない */
 	.left-panel-info .prod-info {
 		display: grid;
 		grid-template-columns: repeat(2, minmax(0, 1fr));
-		grid-auto-flow: row dense;
 		align-items: start;
-		gap: 12px 16px;
-	}
-	.left-panel-info .prod-row {
-		grid-column: 1;
-	}
-	.left-panel-info .prod-row--side {
-		grid-column: 2;
+		gap: 16px;
 	}
 	.relations-slot--mobile {
 		display: block;
