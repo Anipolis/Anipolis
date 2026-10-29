@@ -13,6 +13,8 @@ type Options = {
 	animeId?: string;
 	/** 今のコレクションの作品（null なら自分のコレクションが見つからない） */
 	items?: number[] | null;
+	/** 中にあるが、非表示などで読めない作品 */
+	hidden?: number[];
 	rpcError?: { code: string };
 };
 
@@ -24,7 +26,16 @@ function makeEvent(options: Options = {}) {
 		eq: () => query,
 		order: () => query,
 		maybeSingle: async () => ({
-			data: items ? { id: COLLECTION, items: items.map((anime_id, position) => ({ anime_id, position })) } : null,
+			data: items
+				? {
+						id: COLLECTION,
+						items: items.map((anime_id, position) => ({
+							anime_id,
+							position,
+							anime: options.hidden?.includes(anime_id) ? null : { id: anime_id },
+						})),
+					}
+				: null,
 			error: null,
 		}),
 	};
@@ -77,6 +88,15 @@ describe("コレクションへの1作品の出し入れ", () => {
 		const removed = makeEvent({ animeId: "30" });
 		expect(await statusOf(DELETE(removed.event))).toBe(200);
 		expect([...added.calls, ...removed.calls]).toEqual([]);
+	});
+
+	it("後から読めなくなった作品は並びから外して保存する（残すと DB が全体を断る）", async () => {
+		const { event, calls } = makeEvent({ items: [10, 20, 40], hidden: [20] });
+		const response = await POST(event);
+		expect(await response.json()).toEqual({ success: true, itemCount: 3 });
+		expect(calls).toEqual([
+			{ name: "set_collection_items", args: { p_collection_id: COLLECTION, p_anime_ids: [10, 40, 30] } },
+		]);
 	});
 
 	it("100作品入っていれば足せない", async () => {

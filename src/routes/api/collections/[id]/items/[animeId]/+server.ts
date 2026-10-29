@@ -6,7 +6,9 @@ import type { RequestEvent, RequestHandler } from "./$types";
 /**
  * 作品ページの「コレクションに追加」から、1作品だけを足す（POST）・外す（DELETE）（#515）。
  * 今の並びを読んで1作品を足し引きし、set_collection_items で丸ごと置き換える。
- * 同じ人が別の画面で同時に並びを保存すると後の保存が勝つが、コレクションの編集画面と同じ扱いにする
+ * 同じ人が別の画面で同時に並びを保存すると後の保存が勝つが、コレクションの編集画面と同じ扱いにする。
+ * 後から非表示になった作品は読めず、残すと set_collection_items が全体を断るので、並びから外して保存する
+ * （編集画面も読めない作品を除いて保存するのと同じ）
  */
 async function updateMembership(event: RequestEvent, mode: "add" | "remove") {
 	const {
@@ -22,7 +24,7 @@ async function updateMembership(event: RequestEvent, mode: "add" | "remove") {
 
 	const { data: collection, error: readError } = await supabase
 		.from("user_collections")
-		.select("id, items:user_collection_items(anime_id, position)")
+		.select("id, items:user_collection_items(anime_id, position, anime:anime_id(id))")
 		.eq("id", params.id)
 		.eq("user_id", user.id)
 		.order("position", { referencedTable: "items" })
@@ -33,7 +35,7 @@ async function updateMembership(event: RequestEvent, mode: "add" | "remove") {
 	}
 	if (!collection) error(404, "コレクションが見つかりません");
 
-	const current = collection.items.map((item) => Number(item.anime_id));
+	const current = collection.items.filter((item) => item.anime !== null).map((item) => Number(item.anime_id));
 	const next = mode === "add" ? withAnimeAdded(current, animeId) : withAnimeRemoved(current, animeId);
 	if (next.length === current.length) return json({ success: true, itemCount: current.length });
 	if (next.length > MAX_COLLECTION_ITEMS) error(400, `コレクションには${MAX_COLLECTION_ITEMS}作品まで入れられます`);

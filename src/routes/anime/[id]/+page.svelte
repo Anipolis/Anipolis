@@ -1,6 +1,6 @@
 <script lang="ts">
 import type { SubmitFunction } from "@sveltejs/kit";
-import { tick } from "svelte";
+import { tick, untrack } from "svelte";
 import { fade, scale } from "svelte/transition";
 import { enhance } from "$app/forms";
 import { page } from "$app/state";
@@ -182,6 +182,13 @@ const myListLabel = $derived.by(() => {
 let showUserListModal = $state(false);
 let recommendModalOpen = $state(false);
 let collectionModalOpen = $state(false);
+// 別の作品へ移ったら閉じる（ページが使い回されると、前の作品のチェック状態のまま新しい作品に保存してしまう）
+$effect(() => {
+	void data.anime.id;
+	untrack(() => {
+		collectionModalOpen = false;
+	});
+});
 let hideRecommendFormResult = $state(false);
 const recommendFormMessage = $derived(hideRecommendFormResult ? "" : (form?.recommendMessage ?? ""));
 const recommendFormSuccess = $derived(!hideRecommendFormResult && Boolean(form?.recommendSuccess));
@@ -1827,13 +1834,15 @@ $effect(() => {
 {/if}
 
 {#if collectionModalOpen && data.user}
-	<AddToCollectionModal
-		animeId={Number(data.anime.id)}
-		animeTitle={data.anime.title}
-		onclose={() => {
-			collectionModalOpen = false;
-		}}
-	/>
+	{#key data.anime.id}
+		<AddToCollectionModal
+			animeId={Number(data.anime.id)}
+			animeTitle={data.anime.title}
+			onclose={() => {
+				collectionModalOpen = false;
+			}}
+		/>
+	{/key}
 {/if}
 
 {#if recommendModalOpen}
