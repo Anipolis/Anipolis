@@ -9,7 +9,6 @@ import { isCoverHiddenWithoutCopyright } from "$lib/anime-cover";
 import { animeRelationLabel, animeSeasonLabel, animeTypeLabel } from "$lib/anime-labels";
 import AddToCollectionModal from "$lib/components/AddToCollectionModal.svelte";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
-import InfoTip from "$lib/components/InfoTip.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
 import MyListStatusPopover from "$lib/components/MyListStatusPopover.svelte";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
@@ -759,21 +758,17 @@ $effect(() => {
 					{#if data.anime.avg_score != null && (data.anime.score_count ?? 0) > 0}
 						<span class="stat-value stat-value--score">★ {data.anime.avg_score.toFixed(2)}</span>
 						<span class="stat-label">
-							{data.anime.score_count}人が評価
-							<InfoTip label="スコアとリスト登録">
-								<p>スコアは、公開マイリストで付けられた点数（1〜10）の平均です。</p>
-								<p>リスト登録は、この作品を公開マイリストに入れている人の数です。</p>
-							</InfoTip>
+							<!-- スマホでは大きな数を「1.2万」と縮める（PC はそのまま） -->
+							<span
+								><span class="count-full">{formatCount(data.anime.score_count ?? 0)}</span
+								><span class="count-compact"
+									>{formatCompactCount(data.anime.score_count ?? 0)}</span
+								>人が評価</span
+							>
 						</span>
 					{:else}
 						<span class="stat-value stat-value--empty">★ —</span>
-						<span class="stat-label">
-							評価なし
-							<InfoTip label="スコアとリスト登録">
-								<p>スコアは、公開マイリストで付けられた点数（1〜10）の平均です。</p>
-								<p>リスト登録は、この作品を公開マイリストに入れている人の数です。</p>
-							</InfoTip>
-						</span>
+						<span class="stat-label"> 評価なし </span>
 					{/if}
 				</span>
 				{#if data.anime.list_count}
