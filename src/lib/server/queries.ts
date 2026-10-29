@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { isRepeatMuteActive } from "$lib/anime-mute-schedule";
 import { groupGenreFilters, translateAnimeGenres } from "$lib/anime-vocabulary";
 import { computeBroadcastStatus } from "$lib/broadcast-status";
+import type { CollectionMembership } from "$lib/collections";
 import { toValidExchangeSubjectiveTags } from "$lib/exchange-tags";
 import { isOwnPostImage, postImageMediaUrl } from "$lib/post-image-url";
 import { getAssuranceLevel } from "$lib/server/mfa";
@@ -3531,6 +3532,36 @@ export interface CollectionSummary {
 	item_count: number;
 	/** 先頭の作品のカバー（最大4枚。カバーの無い作品は飛ばす） */
 	covers: string[];
+}
+
+/** 自分のコレクションを新しく更新した順に読み、その作品が入っているかを添える */
+export async function getCollectionsForAnime(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+	animeId: number,
+): Promise<CollectionMembership[]> {
+	const { data, error } = await supabase
+		.from("user_collections")
+		.select("id, title, is_public, item_count:user_collection_items(count), hit:user_collection_items(anime_id)")
+		.eq("user_id", userId)
+		.eq("hit.anime_id", animeId)
+		.order("updated_at", { ascending: false });
+	if (error) failQuery("getCollectionsForAnime", error);
+
+	type Row = {
+		id: string;
+		title: string;
+		is_public: boolean;
+		item_count: { count: number }[];
+		hit: { anime_id: number }[];
+	};
+	return ((data ?? []) as unknown as Row[]).map((row) => ({
+		id: row.id,
+		title: row.title,
+		is_public: row.is_public,
+		item_count: row.item_count[0]?.count ?? 0,
+		has_anime: row.hit.length > 0,
+	}));
 }
 
 /** その人のコレクションを新しく更新した順に読む。非公開のものは本人にだけ返る（RLS） */

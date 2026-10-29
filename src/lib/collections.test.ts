@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseCollectionInput } from "./collections";
+import { parseCollectionInput, withAnimeAdded, withAnimeRemoved } from "./collections";
 
 function form(values: Record<string, string>) {
 	const data = new FormData();
@@ -34,5 +34,17 @@ describe("コレクションの入力", () => {
 
 	it("50文字の題名と300文字の説明は通す", () => {
 		expect(parseCollectionInput(form({ title: "あ".repeat(50), description: "い".repeat(300) })).ok).toBe(true);
+	});
+});
+
+describe("コレクションへの作品の出し入れ", () => {
+	it("足すときは末尾に足し、入っていればそのまま", () => {
+		expect(withAnimeAdded([3, 1], 2)).toEqual([3, 1, 2]);
+		expect(withAnimeAdded([3, 1], 1)).toEqual([3, 1]);
+	});
+
+	it("外すときは並びを保ったまま抜き、入っていなければそのまま", () => {
+		expect(withAnimeRemoved([3, 1, 2], 1)).toEqual([3, 2]);
+		expect(withAnimeRemoved([3, 2], 1)).toEqual([3, 2]);
 	});
 });
