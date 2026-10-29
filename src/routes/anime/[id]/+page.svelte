@@ -1639,13 +1639,8 @@ $effect(() => {
 												href={latestEpisodeRoom.href ?? undefined}
 												class="room-log-item room-log-item--latest"
 											>
-												<!-- 放送中は右上の「LIVE」と重なって隠れるので、「Latest」は出さない（#433） -->
-												{#if !liveEpisodeRoomKeys.has(latestEpisodeRoom.key)}
-													<span class="room-log-latest-label">
-														<span class="i-lucide-zap" aria-hidden="true"></span>
-														Latest
-													</span>
-												{/if}
+												<!-- 最新話は青い横長のボタンにし、「最新話 第4話 10月24日」を1行で出す。放送中は「LIVE」も並べる -->
+												<span class="room-log-latest-label">最新話</span>
 												<span class="room-log-ep">{latestEpisodeRoom.label}</span>
 												{#if liveEpisodeRoomKeys.has(latestEpisodeRoom.key)}
 													<span class="room-log-live-badge">LIVE</span>
@@ -1697,13 +1692,7 @@ $effect(() => {
 												href="/rooms/anime/{data.anime.id}/{latestRoomLog.date}"
 												class="room-log-item room-log-item--latest"
 											>
-												<!-- 放送中は「LIVE」だけを出す（#433） -->
-												{#if !liveRoomDates.has(latestRoomLog.date)}
-													<span class="room-log-latest-label">
-														<span class="i-lucide-zap" aria-hidden="true"></span>
-														Latest
-													</span>
-												{/if}
+												<span class="room-log-latest-label">最新話</span>
 												<span class="room-log-ep"
 													>{formatBroadcastEpisodeSlot(latestRoomLog)}</span
 												>
@@ -3533,30 +3522,31 @@ a.relation-card:hover {
 	height: 44px;
 	padding: 0 6px;
 }
+/* 最新話はマイリストと同じ目立つ青の横長ボタン（文字は背景色、#500） */
 .room-log-item--latest {
+	flex-direction: row;
+	gap: 10px;
 	aspect-ratio: auto;
 	width: fit-content;
-	min-width: 112px;
-	padding: 12px 20px;
-	border-radius: 14px;
-	border-color: color-mix(in srgb, #2dd4bf 50%, var(--border));
-	background: color-mix(in srgb, #2dd4bf 6%, var(--card-bg));
+	padding: 9px 18px;
+	border-radius: 12px;
+	border-color: var(--color-accent);
+	background: var(--color-accent);
+	color: var(--color-bg);
+	box-shadow: 0 4px 14px color-mix(in srgb, var(--color-accent) 25%, transparent);
 }
 .room-log-item--latest:hover {
-	border-color: color-mix(in srgb, #2dd4bf 70%, var(--border));
-	background: color-mix(in srgb, #2dd4bf 10%, var(--card-bg));
+	border-color: var(--color-accent-hover);
+	background: var(--color-accent-hover);
 }
 .room-log-latest-slot {
 	grid-column: 1 / -1;
 }
 .room-log-latest-label {
-	display: inline-flex;
-	align-items: center;
-	gap: 3px;
-	color: #5eead4;
-	font-size: 0.65rem;
-	font-weight: 750;
+	font-size: 0.78rem;
+	font-weight: 700;
 	line-height: 1;
+	opacity: 0.85;
 }
 .room-log-ep {
 	font-size: 1rem;
@@ -3775,5 +3765,13 @@ a.relation-card:hover {
 		padding-left: 8px;
 		padding-right: 8px;
 	}
+}
+/* 最新話の青いボタンの中の日付と LIVE（ほかの指定より後ろに置く） */
+.room-log-item--latest .room-log-date {
+	color: inherit;
+	opacity: 0.8;
+}
+.room-log-item--latest .room-log-live-badge {
+	position: static;
 }
 </style>
