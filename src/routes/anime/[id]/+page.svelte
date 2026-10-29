@@ -146,6 +146,7 @@ function formatEpisodeCount(value: string): string {
 	return /^\d+$/.test(value) ? `全${value}話` : `${value}話`;
 }
 
+import { formatCompactCount, formatCount } from "$lib/utils/format";
 import { isHttpUrl, isMalUrl } from "$lib/utils/url";
 
 function buildDisplayOfficialLinks(officialSiteUrl: string | null, officialXUrl: string | null) {
@@ -752,26 +753,8 @@ $effect(() => {
 
 		<!-- Right column: スマホ版はアクション専用リモコン / PC版はmain上部に従来配置 -->
 		<div class="remote">
-			<!-- 登録者数とスコアをカードにせず、大きい数字の下に説明を添えて並べる（登録者数の方が大事なので先頭） -->
+			<!-- スコアと登録者数をカードにせず、大きい数字の下に説明を添えて並べる -->
 			<div class="stats-line">
-				{#if data.anime.list_count}
-					<button
-						type="button"
-						class="stat stat--link"
-						onclick={() => (showUserListModal = true)}
-						aria-haspopup="dialog"
-					>
-						<span class="stat-value">{data.anime.list_count}</span>
-						<span class="stat-label"
-							>人が登録<span class="i-lucide-chevron-right" aria-hidden="true"></span></span
-						>
-					</button>
-				{:else}
-					<span class="stat">
-						<span class="stat-value">0</span>
-						<span class="stat-label">人が登録</span>
-					</span>
-				{/if}
 				<span class="stat">
 					{#if data.anime.avg_score != null && (data.anime.score_count ?? 0) > 0}
 						<span class="stat-value stat-value--score">★ {data.anime.avg_score.toFixed(2)}</span>
@@ -793,6 +776,28 @@ $effect(() => {
 						</span>
 					{/if}
 				</span>
+				{#if data.anime.list_count}
+					<button
+						type="button"
+						class="stat stat--link"
+						onclick={() => (showUserListModal = true)}
+						aria-haspopup="dialog"
+					>
+						<!-- スマホでは大きな数を「1.2万」と縮める（PC はそのまま） -->
+						<span class="stat-value">
+							<span class="count-full">{formatCount(data.anime.list_count)}</span>
+							<span class="count-compact">{formatCompactCount(data.anime.list_count)}</span>
+						</span>
+						<span class="stat-label"
+							>人が登録<span class="i-lucide-chevron-right" aria-hidden="true"></span></span
+						>
+					</button>
+				{:else}
+					<span class="stat">
+						<span class="stat-value">0</span>
+						<span class="stat-label">人が登録</span>
+					</span>
+				{/if}
 			</div>
 			<!-- アクションバー -->
 
@@ -2376,8 +2381,24 @@ $effect(() => {
 	font: inherit;
 	text-align: left;
 }
+/* 登録者数は押せるかたまり。ホバーで数字も含めた全体をうっすら明るくする（下線は付けない） */
 .stat--link {
+	margin: -6px -10px;
+	padding: 6px 10px;
+	border-radius: 10px;
 	cursor: pointer;
+	transition: background 0.12s;
+}
+.stat--link:hover,
+.stat--link:focus-visible {
+	background: color-mix(in srgb, var(--color-text) 8%, transparent);
+	outline: none;
+}
+.stat--link:focus-visible {
+	box-shadow: 0 0 0 2px var(--accent);
+}
+.count-compact {
+	display: none;
 }
 .stat-value {
 	font-size: 1.5rem;
@@ -2398,11 +2419,6 @@ $effect(() => {
 	color: var(--color-text-muted);
 	font-size: 0.75rem;
 	white-space: nowrap;
-}
-.stat--link:hover .stat-label,
-.stat--link:focus-visible .stat-label {
-	color: var(--color-text);
-	text-decoration: underline;
 }
 .stat-label [class^="i-lucide"] {
 	width: 13px;
@@ -3754,6 +3770,12 @@ a.relation-card:hover {
 	}
 	.remote .mylist-label-long {
 		display: none;
+	}
+	.count-full {
+		display: none;
+	}
+	.count-compact {
+		display: inline;
 	}
 	.remote .mylist-label-short {
 		display: inline;

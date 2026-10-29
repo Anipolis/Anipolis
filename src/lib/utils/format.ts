@@ -73,3 +73,18 @@ export function formatPostDateTime(value: string | Date): string {
 	const post = jstParts(value);
 	return `${post.year}/${post.month}/${post.day} ${post.clock}:${post.seconds}`;
 }
+
+/** 人数などの数を「12,345」と区切って出す */
+export function formatCount(value: number): string {
+	return value.toLocaleString("ja-JP");
+}
+
+/** 狭い場所向けの短い表記。1万未満は「9,999」、それ以上は「1.2万」「345万」「1.2億」 */
+export function formatCompactCount(value: number): string {
+	if (value < 10_000) return formatCount(value);
+	const [unit, label] = value < 100_000_000 ? [10_000, "万"] : [100_000_000, "億"];
+	const scaled = value / unit;
+	// 10未満は小数1桁まで（切り捨てて、実際より多く見せない）
+	const text = scaled < 10 ? (Math.floor(scaled * 10) / 10).toString() : Math.floor(scaled).toString();
+	return `${text}${label}`;
+}
