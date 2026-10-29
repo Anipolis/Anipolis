@@ -66,6 +66,15 @@ const sequelRelations = $derived(data.relations.filter((relation) => relation.re
 const otherRelations = $derived(
 	data.relations.filter((relation) => relation.relation_type !== "Prequel" && relation.relation_type !== "Sequel"),
 );
+const relationGroups = $derived(
+	[
+		{ key: "prequel", label: "前作", relations: prequelRelations },
+		{ key: "sequel", label: "続編", relations: sequelRelations },
+		{ key: "other", label: "その他", relations: otherRelations },
+	].filter((group) => group.relations.length > 0),
+);
+// 「その他」だけのときは、見出し「関連作品」の下に同じような小見出しを重ねない
+const showRelationGroupLabels = $derived(relationGroups.length > 1 || relationGroups[0]?.key !== "other");
 const animeListHref = $derived(getAnimeListHref());
 const sortedRoomLogs = $derived([...data.episodes].sort((a, b) => a.date.localeCompare(b.date)));
 const latestRoomLog = $derived(sortedRoomLogs.at(-1));
@@ -488,14 +497,12 @@ $effect(() => {
 	{#if data.relations.length > 0}
 		<section class="relations-section">
 			<h2>関連作品</h2>
-			{#each [
-				{ label: '前作', relations: prequelRelations },
-				{ label: '続編', relations: sequelRelations },
-				{ label: '関連作品', relations: otherRelations },
-			] as group (group.label)}
+			{#each relationGroups as group (group.key)}
 				{#if group.relations.length > 0}
 					<div class="relation-group">
-						<h3>{group.label}</h3>
+						{#if showRelationGroupLabels}
+							<h3>{group.label}</h3>
+						{/if}
 						<div class="relation-list">
 							{#each group.relations as relation (`${relation.relation_type}-${relation.related_anime_mal_id}`)}
 								{#if relation.anime}
@@ -515,7 +522,7 @@ $effect(() => {
 										{/if}
 										<span class="relation-card-body">
 											<strong>{relation.anime.title}</strong>
-											{#if group.label === '関連作品'}
+											{#if group.key === 'other'}
 												<small>{relation.relation_type}</small>
 											{/if}
 										</span>
@@ -528,9 +535,7 @@ $effect(() => {
 										></span>
 										<span class="relation-card-body">
 											<strong>{relation.related_title}</strong>
-											<small>
-												{group.label === '関連作品' ? relation.relation_type : '未登録'}
-											</small>
+											<small> {group.key === 'other' ? relation.relation_type : '未登録'} </small>
 										</span>
 									</div>
 								{/if}
@@ -639,6 +644,8 @@ $effect(() => {
 				<!-- 作品情報。左の列は作品の中身（スタジオ・制作・原作・ジャンル）、右の列は外への入口
 				     （ハッシュタグ・公式リンク・関連リンク）。PC は縦に続け、スマホは左右に並べる -->
 				{#if hasWorkInfo || hasEntryInfo}
+					<!-- スマホではカードをやめ、話数ルーム・関連作品と同じ段の見出しで区切る（PC は左の列のカード） -->
+					<h2 class="info-heading">作品情報</h2>
 					<div class="prod-info">
 						{#if hasWorkInfo}
 							<dl class="prod-col">
@@ -2145,6 +2152,10 @@ $effect(() => {
 	border: 1px solid var(--color-border);
 	border-radius: 12px;
 }
+/* 「作品情報」の見出しはスマホだけ（PC は左の列のカードで分かる） */
+.info-heading {
+	display: none;
+}
 /* 作品情報の左右の列（PC では縦に続く） */
 .prod-col {
 	display: flex;
@@ -2162,7 +2173,7 @@ $effect(() => {
 .prod-row dt {
 	color: var(--color-text-muted);
 	font-weight: 600;
-	font-size: 0.72rem;
+	font-size: 0.75rem;
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
 }
@@ -2830,7 +2841,7 @@ $effect(() => {
 .relations-section h2 {
 	grid-column: 1 / -1;
 	font-size: 1rem;
-	font-weight: 600;
+	font-weight: 700;
 	margin: 0;
 }
 .relation-group {
@@ -2839,7 +2850,7 @@ $effect(() => {
 	gap: 7px;
 }
 .relation-group h3 {
-	font-size: 0.76rem;
+	font-size: 0.75rem;
 	color: var(--text-muted);
 	margin: 0;
 	font-weight: 600;
@@ -3419,14 +3430,16 @@ a.relation-card:hover {
 	gap: 6px;
 	border-bottom: 1px solid var(--border);
 }
+/* 見出しは2段階にそろえる。段の見出し（タブ・作品情報・関連作品）は 1rem の太字、
+   その中の小見出し（話数ルーム・スタジオなど・前作／続編）は 0.75rem の薄い色 */
 .room-tab {
 	appearance: none;
 	background: none;
 	border: none;
 	border-bottom: 2px solid transparent;
 	padding: 8px 4px;
-	font-size: 0.9rem;
-	font-weight: 600;
+	font-size: 1rem;
+	font-weight: 700;
 	color: var(--text-muted);
 	cursor: pointer;
 }
@@ -3508,8 +3521,9 @@ a.relation-card:hover {
 	gap: 10px;
 }
 .room-log-heading {
-	font-size: 1rem;
+	font-size: 0.75rem;
 	font-weight: 600;
+	color: var(--text-muted);
 	margin: 0;
 }
 /* 各話は数字だけの小さい正方形のボタン。最新話だけは1段目に大きく出す */
@@ -3663,14 +3677,31 @@ a.relation-card:hover {
 	}
 	.left-panel-info {
 		grid-area: info;
+		gap: 12px;
 	}
 	/* 作品情報は全幅になるので、左（作品の中身）と右（外への入口）の列を左右に並べる。
-	   列ごとに縦に積むので、片方の段の高さがもう片方の間隔に響かない */
+	   列ごとに縦に積むので、片方の段の高さがもう片方の間隔に響かない。
+	   カードはやめ、話数ルーム・関連作品と同じく上の区切り線と段の見出しで分ける */
 	.left-panel-info .prod-info {
 		display: grid;
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 		align-items: start;
 		gap: 16px;
+		padding: 0;
+		border: 0;
+		background: transparent;
+	}
+	.info-heading {
+		display: block;
+		margin: 0;
+		font-size: 1rem;
+		font-weight: 700;
+	}
+	.room-tabs-section,
+	.left-panel-info,
+	.relations-slot--mobile {
+		padding-top: 16px;
+		border-top: 1px solid var(--border);
 	}
 	.relations-slot--mobile {
 		display: block;
