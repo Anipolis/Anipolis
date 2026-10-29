@@ -718,6 +718,12 @@ $effect(() => {
 					</div>
 				{/if}
 			</div>
+			<!-- スマホでは作品情報の後ろに関連作品を出す（PC では右の列の下。中身は同じスニペット） -->
+			{#if data.relations.length > 0}
+				<div class="relations-slot relations-slot--mobile">
+					{@render relationsSection()}
+				</div>
+			{/if}
 		</aside>
 
 		<!-- Right column: スマホ版はアクション専用リモコン / PC版はmain上部に従来配置 -->
@@ -1764,7 +1770,7 @@ $effect(() => {
 			</section>
 
 			{#if data.relations.length > 0}
-				<div class="relations-slot">
+				<div class="relations-slot relations-slot--desktop">
 					{@render relationsSection()}
 				</div>
 			{/if}
@@ -2883,6 +2889,9 @@ a.relation-card:hover {
 .relation-card--unavailable {
 	color: var(--text-muted);
 }
+.relations-slot--mobile {
+	display: none;
+}
 /* Action bar */
 /* マイリストを先頭で大きく、残り（投稿・コレクション・推薦）は控えめに並べる */
 .action-bar {
@@ -3615,12 +3624,13 @@ a.relation-card:hover {
 	.anime-layout {
 		display: grid;
 		grid-template-columns: minmax(0, 150px) minmax(0, 1fr);
-		grid-template-rows: auto auto auto auto;
+		grid-template-rows: auto auto auto auto auto;
 		grid-template-areas:
 			"title title"
 			"left remote"
 			"main main"
-			"info info";
+			"info info"
+			"rel rel";
 		align-items: start;
 		column-gap: 14px;
 		row-gap: 16px;
@@ -3635,6 +3645,20 @@ a.relation-card:hover {
 	}
 	.left-panel-info {
 		grid-area: info;
+	}
+	/* 作品情報は全幅になるので2列に並べる */
+	.left-panel-info .prod-info {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 12px 16px;
+	}
+	.relations-slot--mobile {
+		display: block;
+		grid-area: rel;
+		min-width: 0;
+	}
+	.relations-slot--desktop {
+		display: none;
 	}
 	.anime-cover {
 		max-width: none;
