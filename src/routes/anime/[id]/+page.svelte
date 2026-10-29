@@ -6,6 +6,7 @@ import { enhance } from "$app/forms";
 import { page } from "$app/state";
 import { trapFocus } from "$lib/actions/trapFocus";
 import { isCoverHiddenWithoutCopyright } from "$lib/anime-cover";
+import AddToCollectionModal from "$lib/components/AddToCollectionModal.svelte";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
 import InfoTip from "$lib/components/InfoTip.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
@@ -180,6 +181,7 @@ const myListLabel = $derived.by(() => {
 });
 let showUserListModal = $state(false);
 let recommendModalOpen = $state(false);
+let collectionModalOpen = $state(false);
 let hideRecommendFormResult = $state(false);
 const recommendFormMessage = $derived(hideRecommendFormResult ? "" : (form?.recommendMessage ?? ""));
 const recommendFormSuccess = $derived(!hideRecommendFormResult && Boolean(form?.recommendSuccess));
@@ -803,6 +805,17 @@ $effect(() => {
 							<span class="i-lucide-list-plus action-bar-icon" aria-hidden="true"></span>
 						{/if}
 						<span>マイリスト</span>
+					</button>
+					<button
+						type="button"
+						class="action-bar-btn"
+						class:active={collectionModalOpen}
+						onclick={() => (collectionModalOpen = true)}
+						aria-haspopup="dialog"
+						aria-expanded={collectionModalOpen}
+					>
+						<span class="i-lucide-folder-plus action-bar-icon" aria-hidden="true"></span>
+						<span>コレクション</span>
 					</button>
 					<button
 						type="button"
@@ -1811,6 +1824,16 @@ $effect(() => {
 			</div>
 		</div>
 	</div>
+{/if}
+
+{#if collectionModalOpen && data.user}
+	<AddToCollectionModal
+		animeId={Number(data.anime.id)}
+		animeTitle={data.anime.title}
+		onclose={() => {
+			collectionModalOpen = false;
+		}}
+	/>
 {/if}
 
 {#if recommendModalOpen}
@@ -3623,12 +3646,18 @@ a.relation-card:hover {
 	.remote .stat-card-value {
 		font-size: 1.35rem;
 	}
+	/* 表紙の横の細い列では4つ横に並べると文字が折り返すので、2列×2段にしてアイコンと文字を横に並べる */
 	.remote .action-bar {
-		gap: 8px;
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 6px;
 	}
 	.remote .action-bar-btn {
-		padding: 10px 4px;
+		flex-direction: row;
+		gap: 4px;
+		padding: 8px 4px;
 		font-size: 0.68rem;
+		white-space: nowrap;
 	}
 	.mobile-relations-slot {
 		display: block;
