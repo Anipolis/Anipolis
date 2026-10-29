@@ -891,7 +891,7 @@ $effect(() => {
 							<line x1="22" y1="2" x2="11" y2="13" />
 							<polygon points="22 2 15 22 11 13 2 9 22 2" />
 						</svg>
-						<span>推薦</span>
+						<span>推薦する</span>
 					</button>
 				</div>
 			{/if}
@@ -2951,7 +2951,7 @@ a.relation-card:hover {
 	display: none;
 }
 /* Action bar */
-/* マイリストを先頭で大きく、残り（投稿・コレクション・推薦）は控えめに並べる */
+/* マイリストを先頭で大きく、残り（コレクション・引用・推薦）は控えめに並べる */
 .action-bar {
 	display: grid;
 	grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr));
@@ -3765,7 +3765,8 @@ a.relation-card:hover {
 	.remote .stats-line {
 		flex-direction: column;
 		align-items: flex-start;
-		gap: 8px;
+		gap: 14px;
+		padding-block: 4px;
 	}
 	.remote .stat {
 		flex-direction: row;
@@ -3795,9 +3796,11 @@ a.relation-card:hover {
 		grid-template-columns: minmax(0, 1fr);
 		gap: 6px;
 	}
+	/* 縦に積んだ3つのボタンは左寄せにして、アイコンを縦一列にそろえる */
 	.remote .action-bar-btn {
-		gap: 6px;
-		padding: 7px 10px;
+		justify-content: flex-start;
+		gap: 8px;
+		padding: 7px 14px;
 		font-size: 0.72rem;
 		white-space: nowrap;
 	}
