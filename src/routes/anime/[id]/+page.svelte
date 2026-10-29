@@ -866,11 +866,6 @@ $effect(() => {
 					{adminEditOpen ? "作品情報フォームを閉じる" : "作品情報を編集"}
 				</button>
 			{/if}
-			{#if data.relations.length > 0}
-				<div class="mobile-relations-slot">
-					{@render relationsSection()}
-				</div>
-			{/if}
 		</div>
 
 		<!-- Main: synopsis, panels, relations, room log -->
@@ -1769,7 +1764,7 @@ $effect(() => {
 			</section>
 
 			{#if data.relations.length > 0}
-				<div class="desktop-relations-slot">
+				<div class="relations-slot">
 					{@render relationsSection()}
 				</div>
 			{/if}
@@ -2888,10 +2883,6 @@ a.relation-card:hover {
 .relation-card--unavailable {
 	color: var(--text-muted);
 }
-.mobile-relations-slot {
-	display: none;
-}
-
 /* Action bar */
 /* マイリストを先頭で大きく、残り（投稿・コレクション・推薦）は控えめに並べる */
 .action-bar {
@@ -3619,37 +3610,34 @@ a.relation-card:hover {
 
 /* Responsive */
 @media (max-width: 768px) {
-	/* 左=情報カラム / 右=アクションリモコン の2カラム。title/mainは全幅 */
+	/* 上だけ 左=表紙 / 右=スコアとボタン に分け、そこから下（話数ルーム・関連作品・作品情報）は全幅の1列にする。
+	   作品情報まで左の列に入れると、その長さの分だけ話数ルームが押し下げられて最初の画面に入らない */
 	.anime-layout {
 		display: grid;
 		grid-template-columns: minmax(0, 150px) minmax(0, 1fr);
-		grid-template-rows: auto auto auto;
+		grid-template-rows: auto auto auto auto;
 		grid-template-areas:
 			"title title"
 			"left remote"
-			"main main";
+			"main main"
+			"info info";
 		align-items: start;
 		column-gap: 14px;
 		row-gap: 16px;
 	}
-	/* 左カラム: カバー画像の下に静的データを縦積み */
+	/* 左の列の中身（表紙と作品情報）を別々の段に置く */
 	.left-panel {
-		flex-direction: column;
-		align-items: stretch;
-		gap: 10px;
+		display: contents;
 	}
 	.cover-col {
+		grid-area: left;
 		width: 100%;
+	}
+	.left-panel-info {
+		grid-area: info;
 	}
 	.anime-cover {
 		max-width: none;
-	}
-	/* 表紙の下の細い列では、見出し付きの情報欄を枠なしで詰めて出す（見出しが無いと何の情報か分からない） */
-	.left-panel-info .prod-info {
-		gap: 8px;
-		padding: 0;
-		border: 0;
-		background: transparent;
 	}
 	/* 右カラム: 純粋なアクションリモコン化（スコア＋リストを横並び→ボタン→管理者） */
 	.remote {
@@ -3692,44 +3680,6 @@ a.relation-card:hover {
 		gap: 2px;
 		padding: 7px 2px;
 		font-size: 0.62rem;
-		white-space: nowrap;
-	}
-	.mobile-relations-slot {
-		display: block;
-		min-width: 0;
-	}
-	.desktop-relations-slot {
-		display: none;
-	}
-	.remote .relations-section {
-		gap: 10px;
-	}
-	.remote .relations-section h2 {
-		font-size: 0.9rem;
-	}
-	.remote .relation-group {
-		gap: 6px;
-	}
-	.remote .relation-list {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr);
-		gap: 6px;
-	}
-	.remote .relation-card {
-		width: 100%;
-		height: 56px;
-		max-width: none;
-		min-width: 0;
-		min-height: 48px;
-		padding: 6px 8px 6px 6px;
-	}
-	.remote .relation-card-thumb {
-		width: 30px;
-	}
-	.remote .relation-card strong,
-	.remote .relation-card small {
-		overflow: hidden;
-		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
 	.remote-admin-btn {
