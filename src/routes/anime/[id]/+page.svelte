@@ -221,7 +221,9 @@ const userEntry = $derived(savedMyList?.animeId === data.anime.id ? savedMyList.
 const listCount = $derived(
 	savedMyList?.animeId === data.anime.id ? savedMyList.listCount : (data.anime.list_count ?? 0),
 );
-function handleMyListSaved(entry: UserAnimeEntry | null) {
+function handleMyListSaved(entry: UserAnimeEntry | null, savedAnimeId: string) {
+	// 保存中に別の作品へ移っていたら、その作品の表示には使わない
+	if (savedAnimeId !== String(data.anime.id)) return;
 	const delta = (entry ? 1 : 0) - (userEntry ? 1 : 0);
 	const saved = { animeId: data.anime.id, entry, listCount: Math.max(0, listCount + delta) };
 	savedMyList = saved;
