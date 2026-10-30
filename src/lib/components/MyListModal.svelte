@@ -65,7 +65,11 @@ let totalEpisodes = $derived(parseEpisodeCount(episodeCount));
 let statusOnly = $derived(variant === "status-only");
 // 登録済みなのに日付・メモを読み込んでいない画面では、欄を出さない（送らなければ保存でも触らない）
 let showRecord = $derived(!statusOnly && (entry == null || entry.note !== undefined));
-const today = jstDateKey(new Date());
+// 作品ページではモーダルが閉じていても残るので、開くたびに今日を取り直す（日付をまたいでも前日を入れない）
+let today = $state(jstDateKey(new Date()));
+$effect(() => {
+	if (open) today = jstDateKey(new Date());
+});
 // 閉じているときも中身が分かるよう、見出しの横に短く出す（今年の日付は月/日だけ）
 let recordSummary = $derived(
 	[
