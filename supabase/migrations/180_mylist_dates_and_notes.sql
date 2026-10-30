@@ -35,9 +35,21 @@ BEGIN
     IF TG_OP = 'UPDATE' AND NEW.status IS NOT DISTINCT FROM OLD.status THEN
         RETURN NEW;
     END IF;
+    -- アプリの保存は upsert（INSERT ... ON CONFLICT DO UPDATE）なので、登録済みの作品でも先に
+    -- INSERT のトリガーが走る。ここで埋めると、ステータスを変えていない保存でも空の日付が今日になる。
+    -- 登録済みなら何もせず、続く UPDATE のトリガー（ステータスが変わったときだけ）に任せる
+    IF TG_OP = 'INSERT' AND EXISTS (
+        SELECT 1 FROM public.user_anime_list
+        WHERE user_id = NEW.user_id AND anime_id = NEW.anime_id
+    ) THEN
+        RETURN NEW;
+    END IF;
 
     IF NEW.status = 'watching' AND NEW.started_on IS NULL THEN
-        NEW.started_on := today;
+        -- 見終えた日が今日より前に入っていたら（見直しで「視聴中」に戻したときなど）、順番の制約に反するので埋めない
+        IF NEW.finished_on IS NULL OR NEW.finished_on >= today THEN
+            NEW.started_on := today;
+        END IF;
     ELSIF NEW.status = 'completed' AND NEW.finished_on IS NULL THEN
         -- 見始めた日が今日より後に手で入っていたら、順番の制約に反するので埋めない
         IF NEW.started_on IS NULL OR NEW.started_on <= today THEN

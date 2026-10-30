@@ -93,7 +93,7 @@ function selectStatus(value: AnimeStatus) {
 		autoFinished = false;
 	}
 	if (value === entry?.status) return;
-	if (value === "watching" && !startedOn) {
+	if (value === "watching" && !startedOn && (!finishedOn || finishedOn >= today)) {
 		startedOn = today;
 		autoStarted = true;
 	}
