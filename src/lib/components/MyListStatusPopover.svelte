@@ -3,7 +3,7 @@ import type { SubmitFunction } from "@sveltejs/kit";
 import { tick, untrack } from "svelte";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
-import { entryFromForm } from "$lib/mylist/entry-from-form";
+import { savedEntryFromResult } from "$lib/mylist/entry-from-form";
 import type { AnimeStatus, UserAnimeEntry } from "$lib/types";
 
 /**
@@ -143,7 +143,13 @@ const handleSubmit: SubmitFunction = ({ formData, submitter, cancel }) => {
 			return;
 		}
 		// 保存した作品の ID も渡す（応答が来るまでに親が別の作品へ移っていることがある）
-		if (onsaved) onsaved(removing ? null : entryFromForm(formData), String(formData.get("anime_id")));
+		if (onsaved)
+			onsaved(
+				removing
+					? null
+					: savedEntryFromResult(result.type === "success" ? result.data : undefined, formData, entry),
+				String(formData.get("anime_id")),
+			);
 		else await invalidateAll();
 		close({ returnFocus: true });
 	};

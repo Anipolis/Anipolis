@@ -233,6 +233,11 @@ export interface UserAnimeEntry {
 	score: number | null;
 	progress: number;
 	updated_at: string;
+	/** 見始めた日・見終えた日（YYYY-MM-DD、日本時間の日付）。読み込んでいないときは undefined */
+	started_on?: string | null;
+	finished_on?: string | null;
+	/** 自分だけに見えるメモ。読み込んでいないときは undefined（そのときは保存でも触らない） */
+	note?: string | null;
 }
 
 export interface AnimeResourceLink {
