@@ -21,7 +21,7 @@ type Props = {
 	/** 渡すと、登録済みの作品に「マイリストから外す」を出す */
 	removeAction?: string;
 	/** 渡すと保存後にページを読み込み直さず、保存した内容を知らせる（外したときは null） */
-	onsaved?: (entry: UserAnimeEntry | null) => void;
+	onsaved?: (entry: UserAnimeEntry | null, animeId: string) => void;
 	onclose: () => void;
 	/** 保存中かどうか。親は保存中に別の作品へ切り替えない（応答が切り替え先に反映されるため） */
 	submitting?: boolean;
@@ -72,10 +72,10 @@ function place() {
 
 function close({ returnFocus = false } = {}) {
 	if (submitting) return;
-	// 閉じると親が anchor を外すので、先に控えておく
+	// 閉じると親が anchor を外すので、先に控えておく（保存中に別の作品へ移ると、もう無いこともある）
 	const button = anchor;
 	onclose();
-	if (returnFocus) button.focus();
+	if (returnFocus) button?.focus();
 }
 
 $effect(() => {
@@ -142,7 +142,8 @@ const handleSubmit: SubmitFunction = ({ formData, submitter, cancel }) => {
 			errorMessage = "マイリストの保存に失敗しました";
 			return;
 		}
-		if (onsaved) onsaved(removing ? null : entryFromForm(formData));
+		// 保存した作品の ID も渡す（応答が来るまでに親が別の作品へ移っていることがある）
+		if (onsaved) onsaved(removing ? null : entryFromForm(formData), String(formData.get("anime_id")));
 		else await invalidateAll();
 		close({ returnFocus: true });
 	};

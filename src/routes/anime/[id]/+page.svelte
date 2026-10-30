@@ -3,6 +3,7 @@ import type { SubmitFunction } from "@sveltejs/kit";
 import { tick, untrack } from "svelte";
 import { fade, scale } from "svelte/transition";
 import { enhance } from "$app/forms";
+import { invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
 import { trapFocus } from "$lib/actions/trapFocus";
 import { isCoverHiddenWithoutCopyright } from "$lib/anime-cover";
@@ -13,7 +14,7 @@ import MyListModal from "$lib/components/MyListModal.svelte";
 import MyListStatusPopover from "$lib/components/MyListStatusPopover.svelte";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import { episodeRoomEntryState, formatAiringTime, isEpisodeRoomEntryLive } from "$lib/episode-room";
-import type { AnimeStatus, BroadcastRoomOverride } from "$lib/types";
+import type { AnimeStatus, BroadcastRoomOverride, UserAnimeEntry } from "$lib/types";
 import {
 	type BroadcastOverrideKind,
 	formatBroadcastEpisodeNumber,
@@ -210,8 +211,29 @@ const myListStatusLabels: Record<AnimeStatus, string> = {
 	on_hold: "中断",
 	dropped: "断念",
 };
+// 保存の応答が来たら、マイリストのボタンと登録者数をすぐ変える（ページの読み直しは裏で待つ）
+let savedMyList = $state.raw<{
+	animeId: typeof data.anime.id;
+	entry: UserAnimeEntry | null;
+	listCount: number;
+} | null>(null);
+const userEntry = $derived(savedMyList?.animeId === data.anime.id ? savedMyList.entry : data.anime.user_entry);
+const listCount = $derived(
+	savedMyList?.animeId === data.anime.id ? savedMyList.listCount : (data.anime.list_count ?? 0),
+);
+function handleMyListSaved(entry: UserAnimeEntry | null, savedAnimeId: string) {
+	// 保存中に別の作品へ移っていたら、その作品の表示には使わない
+	if (savedAnimeId !== String(data.anime.id)) return;
+	const delta = (entry ? 1 : 0) - (userEntry ? 1 : 0);
+	const saved = { animeId: data.anime.id, entry, listCount: Math.max(0, listCount + delta) };
+	savedMyList = saved;
+	// 読み直しが済んだらページのデータに戻す（その間にもう一度保存していたら、新しい方を残す）
+	void invalidateAll().finally(() => {
+		if (savedMyList === saved) savedMyList = null;
+	});
+}
 const myListLabel = $derived.by(() => {
-	const status = data.anime.user_entry?.status as AnimeStatus | undefined;
+	const status = userEntry?.status as AnimeStatus | undefined;
 	return status ? `マイリスト: ${myListStatusLabels[status]}` : "マイリストに追加";
 });
 let showUserListModal = $state(false);
@@ -771,7 +793,7 @@ $effect(() => {
 						<span class="stat-label"> 評価なし </span>
 					{/if}
 				</span>
-				{#if data.anime.list_count}
+				{#if listCount}
 					<button
 						type="button"
 						class="stat stat--link"
@@ -780,8 +802,8 @@ $effect(() => {
 					>
 						<!-- スマホでは大きな数を「1.2万」と縮める（PC はそのまま） -->
 						<span class="stat-value">
-							<span class="count-full">{formatCount(data.anime.list_count)}</span>
-							<span class="count-compact">{formatCompactCount(data.anime.list_count)}</span>
+							<span class="count-full">{formatCount(listCount)}</span>
+							<span class="count-compact">{formatCompactCount(listCount)}</span>
 						</span>
 						<span class="stat-label"
 							>人が登録<span class="i-lucide-chevron-right" aria-hidden="true"></span></span
@@ -812,8 +834,8 @@ $effect(() => {
 							title={myListLabel}
 						>
 							<span class="mylist-split-label" aria-hidden="true">
-								{#if data.anime.user_entry}
-									{myListStatusLabels[data.anime.user_entry.status as AnimeStatus]}
+								{#if userEntry}
+									{myListStatusLabels[userEntry.status as AnimeStatus]}
 								{:else}
 									<!-- スマホの細い列では「マイリストに追加」が入らないので短くする -->
 									<span class="mylist-label-long">マイリストに追加</span>
@@ -828,11 +850,11 @@ $effect(() => {
 							class:active={myListModalOpen}
 							onclick={() => (myListModalOpen = true)}
 							aria-haspopup="dialog"
-							aria-label={data.anime.user_entry ? 'スコア・進捗を編集' : 'スコア・進捗も入れて登録'}
-							title={data.anime.user_entry ? 'スコア・進捗を編集' : 'スコア・進捗も入れて登録'}
+							aria-label={userEntry ? 'スコア・進捗を編集' : 'スコア・進捗も入れて登録'}
+							title={userEntry ? 'スコア・進捗を編集' : 'スコア・進捗も入れて登録'}
 						>
 							<!-- 未登録は list-plus、登録済みは list-check（アニメ一覧のカードと同じ） -->
-							{#if data.anime.user_entry}
+							{#if userEntry}
 								<span class="i-lucide-list-check mylist-split-icon" aria-hidden="true"></span>
 							{:else}
 								<span class="i-lucide-list-plus mylist-split-icon" aria-hidden="true"></span>
@@ -1885,8 +1907,9 @@ $effect(() => {
 		anchor={myListStatusAnchor}
 		animeId={data.anime.id}
 		animeTitle={data.anime.title}
-		entry={data.anime.user_entry}
+		entry={userEntry}
 		removeAction="?/removeWatchlist"
+		onsaved={handleMyListSaved}
 		onclose={() => {
 			myListStatusOpen = false;
 		}}
@@ -2011,8 +2034,9 @@ $effect(() => {
 	animeId={data.anime.id}
 	animeTitle={data.anime.title}
 	episodeCount={data.anime.episode_count}
-	entry={data.anime.user_entry}
+	entry={userEntry}
 	removeAction="?/removeWatchlist"
+	onsaved={handleMyListSaved}
 	onclose={() => { myListModalOpen = false; }}
 />
 <style>
