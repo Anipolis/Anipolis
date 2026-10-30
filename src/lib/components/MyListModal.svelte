@@ -53,7 +53,7 @@ let progress = $state(0);
 let startedOn = $state("");
 let finishedOn = $state("");
 let note = $state("");
-// 視聴ステータスを選んだときに今日で埋めた日付。別のステータスに選び直したら消す
+// 視聴ステータスを選んだときに今日で埋めた日付。別のステータスに選び直したら消す（手で直したら残す）
 let autoStarted = false;
 let autoFinished = false;
 let submitting = $state(false);
@@ -278,7 +278,13 @@ $effect(() => {
 						<div class="date-row">
 							<label class="date-field">
 								<span>見始めた日</span>
-								<input type="date" name="started_on" max={finishedOn || today} bind:value={startedOn}>
+								<input
+									type="date"
+									name="started_on"
+									max={finishedOn || today}
+									bind:value={startedOn}
+									oninput={() => (autoStarted = false)}
+								>
 							</label>
 							<label class="date-field">
 								<span>見終えた日</span>
@@ -288,6 +294,7 @@ $effect(() => {
 									min={startedOn || undefined}
 									max={today}
 									bind:value={finishedOn}
+									oninput={() => (autoFinished = false)}
 								>
 							</label>
 						</div>
