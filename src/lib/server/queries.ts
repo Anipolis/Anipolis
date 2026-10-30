@@ -122,6 +122,32 @@ function normalizeScore(score: number | null | undefined): number | null {
 	return score;
 }
 
+/** 自分のマイリストの1件を読む列。見始めた日・見終えた日と、本人だけが読めるメモ（180）も含む */
+const OWN_ENTRY_COLUMNS = "status, score, progress, updated_at, started_on, finished_on, note:user_anime_notes(body)";
+
+type OwnEntryRow = {
+	status: string;
+	score: number | null;
+	progress: number;
+	updated_at: string;
+	started_on: string | null;
+	finished_on: string | null;
+	note: { body: string } | { body: string }[] | null;
+};
+
+function toOwnUserAnimeEntry(row: OwnEntryRow): UserAnimeEntry {
+	const note = Array.isArray(row.note) ? row.note[0] : row.note;
+	return {
+		status: row.status as AnimeStatus,
+		score: normalizeScore(row.score),
+		progress: row.progress,
+		updated_at: row.updated_at,
+		started_on: row.started_on,
+		finished_on: row.finished_on,
+		note: note?.body ?? null,
+	};
+}
+
 function normalizeAverageScore(score: number | null | undefined, count: number | null | undefined): number | null {
 	if ((count ?? 0) <= 0) return null;
 	return normalizeScore(score);
@@ -3292,18 +3318,11 @@ export async function getAnime(
 	if (userId) {
 		const { data: entry } = await supabase
 			.from("user_anime_list")
-			.select("status, score, progress, updated_at")
+			.select(`${OWN_ENTRY_COLUMNS}`)
 			.eq("anime_id", Number(animeId))
 			.eq("user_id", userId)
 			.maybeSingle();
-		anime.user_entry = entry
-			? ({
-					status: entry.status as AnimeStatus,
-					score: normalizeScore(entry.score),
-					progress: entry.progress,
-					updated_at: entry.updated_at,
-				} satisfies UserAnimeEntry)
-			: null;
+		anime.user_entry = entry ? toOwnUserAnimeEntry(entry) : null;
 	}
 
 	return anime;
@@ -4087,21 +4106,11 @@ export async function enrichAnimeWithUserEntries(
 	const animeIds = animes.map((a) => a.id);
 	const { data } = await supabase
 		.from("user_anime_list")
-		.select("anime_id, status, score, progress, updated_at")
+		.select(`anime_id, ${OWN_ENTRY_COLUMNS}`)
 		.eq("user_id", userId)
 		.in("anime_id", animeIds.map(Number));
 
-	const entryMap = new Map(
-		(data ?? []).map((e) => [
-			Number(e.anime_id),
-			{
-				status: e.status as AnimeStatus,
-				score: e.score as number | null,
-				progress: e.progress,
-				updated_at: e.updated_at,
-			} satisfies UserAnimeEntry,
-		]),
-	);
+	const entryMap = new Map((data ?? []).map((e) => [Number(e.anime_id), toOwnUserAnimeEntry(e)]));
 
 	return animes.map((a) => ({ ...a, user_entry: entryMap.get(Number(a.id)) ?? null }));
 }
