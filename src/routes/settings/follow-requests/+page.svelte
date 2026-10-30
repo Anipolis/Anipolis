@@ -61,7 +61,7 @@ let { data, form }: PageProps = $props();
 								</form>
 								<form method="POST" action="?/reject" use:enhance>
 									<input type="hidden" name="requester_id" value={request.requester_id}>
-									<button type="submit" class="btn btn-outline">拒否</button>
+									<button type="submit" class="btn btn-secondary">拒否</button>
 								</form>
 							</div>
 						</article>

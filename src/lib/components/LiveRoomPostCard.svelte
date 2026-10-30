@@ -11,14 +11,16 @@ interface Props {
 	currentUserId?: string | null;
 	broadcastStartAt?: string | null;
 	timelineTimeMode?: boolean;
-	continuation?: boolean;
+	joinPrevious?: boolean;
+	joinNext?: boolean;
 }
 let {
 	post,
 	currentUserId = null,
 	broadcastStartAt = null,
 	timelineTimeMode = false,
-	continuation = false,
+	joinPrevious = false,
+	joinNext = false,
 }: Props = $props();
 let expanded = $state(false);
 let replies = $state<Post[]>([]);
@@ -158,7 +160,8 @@ async function loadMoreReplies(event: MouseEvent) {
 <PostRow
 	{post}
 	{currentUserId}
-	{continuation}
+	{joinPrevious}
+	{joinNext}
 	insideRoom
 	broadcastStartAt={timelineTimeMode ? null : broadcastStartAt}
 	{expanded}

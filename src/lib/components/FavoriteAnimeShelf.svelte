@@ -1,0 +1,271 @@
+<script lang="ts">
+import { invalidateAll } from "$app/navigation";
+import { toAnimePick } from "$lib/anime-picker";
+import AnimePickerModal from "$lib/components/AnimePickerModal.svelte";
+import { MAX_FAVORITE_ANIME } from "$lib/favorite-anime";
+import type { Anime } from "$lib/types";
+
+// favorites が null のときは読み込みに失敗している（未登録の [] とは別）。中身が分からないので編集させない
+let { favorites, isOwn }: { favorites: Anime[] | null; isOwn: boolean } = $props();
+
+let editing = $state(false);
+// プロフィールの横一列。左右に続きがあるかで送りボタンを出し分ける
+let shelfRow = $state<HTMLOListElement | null>(null);
+let canScrollPrev = $state(false);
+let canScrollNext = $state(false);
+
+function updateShelfArrows() {
+	if (!shelfRow) return;
+	const { scrollLeft, scrollWidth, clientWidth } = shelfRow;
+	canScrollPrev = scrollLeft > 1;
+	canScrollNext = scrollLeft + clientWidth < scrollWidth - 1;
+}
+
+// 幅が変わったとき・作品が入れ替わったときも、送りボタンの出し分けを取り直す
+$effect(() => {
+	if (!shelfRow) return;
+	void favorites;
+	updateShelfArrows();
+	const observer = new ResizeObserver(updateShelfArrows);
+	observer.observe(shelfRow);
+	return () => observer.disconnect();
+});
+
+function scrollShelf(direction: -1 | 1) {
+	if (!shelfRow) return;
+	const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+	// 見えている幅の8割ずつ送る（端の作品が少し残って、どこまで見たか分かる）
+	shelfRow.scrollBy({ left: direction * shelfRow.clientWidth * 0.8, behavior: reduceMotion ? "auto" : "smooth" });
+}
+
+function openEditor() {
+	if (!favorites) return;
+	editing = true;
+}
+
+async function saveFavorites(animeIds: number[]) {
+	const response = await fetch("/api/favorite-anime", {
+		method: "PUT",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ animeIds }),
+	});
+	const res = (await response.json().catch(() => ({}))) as { message?: string };
+	if (!response.ok) throw new Error(res.message ?? "ベスト作品の保存に失敗しました");
+	await invalidateAll();
+}
+</script>
+
+{#if favorites === null}
+	{#if isOwn}
+		<p class="favorite-shelf-error" role="status">
+			ベスト作品を読み込めませんでした。ページを再読み込みしてください
+		</p>
+	{/if}
+{:else if favorites.length > 0}
+	<section class="favorite-shelf" aria-labelledby="favorite-shelf-title">
+		<div class="favorite-shelf-header">
+			<h2 id="favorite-shelf-title" class="favorite-shelf-title">ベスト作品</h2>
+			{#if isOwn}
+				<button type="button" class="btn btn-ghost favorite-shelf-edit" onclick={openEditor}>編集</button>
+			{/if}
+		</div>
+		<div class="favorite-shelf-scroller">
+			<ol class="favorite-shelf-row" bind:this={shelfRow} onscroll={updateShelfArrows}>
+				{#each favorites as anime (anime.id)}
+					<li>
+						<a href="/anime/{anime.id}" class="favorite-card">
+							<span class="favorite-card-cover">
+								{#if anime.cover_url}
+									<img src={anime.cover_url} alt="" loading="lazy">
+								{:else}
+									<span class="favorite-cover-empty i-lucide-clapperboard" aria-hidden="true"></span>
+								{/if}
+							</span>
+							<span class="favorite-card-title">{anime.title}</span>
+						</a>
+					</li>
+				{/each}
+			</ol>
+			<!-- マウスで使う画面だけに出す（スマホは指で送る） -->
+			{#if canScrollPrev}
+				<button
+					type="button"
+					class="favorite-shelf-arrow favorite-shelf-arrow--prev"
+					aria-label="前の作品を表示"
+					onclick={() => scrollShelf(-1)}
+				>
+					<span class="i-lucide-chevron-left" aria-hidden="true"></span>
+				</button>
+			{/if}
+			{#if canScrollNext}
+				<button
+					type="button"
+					class="favorite-shelf-arrow favorite-shelf-arrow--next"
+					aria-label="次の作品を表示"
+					onclick={() => scrollShelf(1)}
+				>
+					<span class="i-lucide-chevron-right" aria-hidden="true"></span>
+				</button>
+			{/if}
+		</div>
+	</section>
+{:else if isOwn}
+	<!-- 本人にだけ入口を出す。ほかの人には何も出さない -->
+	<button type="button" class="favorite-shelf-empty" onclick={openEditor}>
+		<span class="i-lucide-plus" aria-hidden="true"></span>
+		ベスト作品を選ぶ
+	</button>
+{/if}
+
+{#if editing && favorites}
+	<AnimePickerModal
+		title="ベスト作品を選ぶ"
+		max={MAX_FAVORITE_ANIME}
+		initial={favorites.map(toAnimePick)}
+		onsave={saveFavorites}
+		onclose={() => {
+			editing = false;
+		}}
+	/>
+{/if}
+
+<style>
+.favorite-shelf {
+	margin-top: 16px;
+}
+.favorite-shelf-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	margin-bottom: 8px;
+}
+.favorite-shelf-title {
+	margin: 0;
+	font-size: 14px;
+	font-weight: 800;
+}
+.favorite-shelf-edit {
+	padding: 4px 10px;
+	font-size: 13px;
+}
+/* 一列に並べて横に送る。スクロールバーは出さず、スマホは指で、マウスの画面は左右のボタンで送る。
+   右端の作品が切れて見えるので、続きがあることは分かる */
+.favorite-shelf-scroller {
+	position: relative;
+}
+.favorite-shelf-row {
+	scroll-snap-type: x proximity;
+	display: flex;
+	gap: 10px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+.favorite-shelf-row::-webkit-scrollbar {
+	display: none;
+}
+.favorite-shelf-row > li {
+	scroll-snap-align: start;
+}
+.favorite-shelf-arrow {
+	position: absolute;
+	/* カバーの縦の真ん中（カバーの高さ 92 × 566 / 400 ≒ 130px の半分） */
+	top: 65px;
+	display: none;
+	align-items: center;
+	justify-content: center;
+	width: 34px;
+	height: 34px;
+	border: 1px solid var(--color-border-hover);
+	border-radius: 999px;
+	corner-shape: round;
+	background: var(--color-surface);
+	box-shadow: 0 2px 8px rgb(0 0 0 / 0.3);
+	color: var(--color-text);
+	cursor: pointer;
+	transform: translateY(-50%);
+}
+.favorite-shelf-arrow:hover {
+	background: var(--color-surface-hover);
+}
+.favorite-shelf-arrow--prev {
+	left: -10px;
+}
+.favorite-shelf-arrow--next {
+	right: -10px;
+}
+@media (hover: hover) and (pointer: fine) {
+	.favorite-shelf-arrow {
+		display: flex;
+	}
+}
+.favorite-card {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	width: 92px;
+	color: var(--color-text);
+	text-decoration: none;
+}
+.favorite-card-cover {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	aspect-ratio: 400 / 566;
+	overflow: hidden;
+	border: 1px solid var(--color-border);
+	border-radius: 8px;
+	background: var(--color-bg-card);
+	transition: opacity 0.15s;
+}
+.favorite-card:hover .favorite-card-cover {
+	opacity: 0.85;
+}
+.favorite-card-cover img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+.favorite-cover-empty {
+	width: 24px;
+	height: 24px;
+	color: var(--color-text-muted);
+}
+.favorite-card-title {
+	display: -webkit-box;
+	overflow: hidden;
+	font-size: 12px;
+	line-height: 1.35;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	line-clamp: 2;
+}
+.favorite-shelf-error {
+	margin: 16px 0 0;
+	color: var(--color-text-muted);
+	font-size: 13px;
+}
+.favorite-shelf-empty {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	width: 100%;
+	margin-top: 16px;
+	padding: 12px;
+	border: 1px dashed var(--color-border-hover);
+	border-radius: 10px;
+	background: transparent;
+	color: var(--color-text-muted);
+	cursor: pointer;
+	font: inherit;
+	font-size: 13px;
+}
+.favorite-shelf-empty:hover {
+	background: var(--color-surface-hover);
+	color: var(--color-text);
+}
+</style>

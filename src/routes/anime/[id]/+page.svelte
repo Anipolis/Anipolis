@@ -1,17 +1,19 @@
 <script lang="ts">
 import type { SubmitFunction } from "@sveltejs/kit";
-import { tick } from "svelte";
+import { tick, untrack } from "svelte";
 import { fade, scale } from "svelte/transition";
 import { enhance } from "$app/forms";
 import { page } from "$app/state";
 import { trapFocus } from "$lib/actions/trapFocus";
 import { isCoverHiddenWithoutCopyright } from "$lib/anime-cover";
+import { animeRelationLabel, animeSeasonLabel, animeTypeLabel } from "$lib/anime-labels";
+import AddToCollectionModal from "$lib/components/AddToCollectionModal.svelte";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
-import InfoTip from "$lib/components/InfoTip.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
+import MyListStatusPopover from "$lib/components/MyListStatusPopover.svelte";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import { episodeRoomEntryState, formatAiringTime, isEpisodeRoomEntryLive } from "$lib/episode-room";
-import type { BroadcastRoomOverride } from "$lib/types";
+import type { AnimeStatus, BroadcastRoomOverride } from "$lib/types";
 import {
 	type BroadcastOverrideKind,
 	formatBroadcastEpisodeNumber,
@@ -49,20 +51,29 @@ const displayResources = $derived(
 		data.anime.official_x_url,
 	),
 );
-// スマホ版左カラム用: ラベルを廃した、タップ検索可能な静的メタ情報チップ
-const compactMetaLinks = $derived([
-	...displayStudios.map((s) => ({ text: s, href: `/anime?studio=${encodeURIComponent(s)}` })),
-	...(data.anime.source
-		? [{ text: data.anime.source, href: `/anime?source=${encodeURIComponent(data.anime.source)}` }]
-		: []),
-	...displayGenres.map((g) => ({ text: g, href: `/anime?genre=${encodeURIComponent(g)}` })),
-	...(data.anime.producer ?? []).map((p) => ({ text: p, href: `/anime?producer=${encodeURIComponent(p)}` })),
-]);
+const hasWorkInfo = $derived(
+	displayStudios.length > 0 ||
+		(data.anime.producer?.length ?? 0) > 0 ||
+		!!data.anime.source ||
+		displayGenres.length > 0,
+);
+const hasEntryInfo = $derived(
+	(data.anime.official_hashtag?.length ?? 0) > 0 || displayOfficialLinks.length > 0 || displayResources.length > 0,
+);
 const prequelRelations = $derived(data.relations.filter((relation) => relation.relation_type === "Prequel"));
 const sequelRelations = $derived(data.relations.filter((relation) => relation.relation_type === "Sequel"));
 const otherRelations = $derived(
 	data.relations.filter((relation) => relation.relation_type !== "Prequel" && relation.relation_type !== "Sequel"),
 );
+const relationGroups = $derived(
+	[
+		{ key: "prequel", label: "前作", relations: prequelRelations },
+		{ key: "sequel", label: "続編", relations: sequelRelations },
+		{ key: "other", label: "その他", relations: otherRelations },
+	].filter((group) => group.relations.length > 0),
+);
+// 「その他」だけのときは、見出し「関連作品」の下に同じような小見出しを重ねない
+const showRelationGroupLabels = $derived(relationGroups.length > 1 || relationGroups[0]?.key !== "other");
 const animeListHref = $derived(getAnimeListHref());
 const sortedRoomLogs = $derived([...data.episodes].sort((a, b) => a.date.localeCompare(b.date)));
 const latestRoomLog = $derived(sortedRoomLogs.at(-1));
@@ -108,18 +119,40 @@ function getAnimeListHref() {
 	}
 }
 
+/** 「2026年10月3日〜」「2024年4月6日〜6月29日」（同じ年なら終わりの年を省く） */
 function formatAiredPeriod(airedFrom: string | null, airedTo: string | null): string | null {
-	if (!airedFrom) return null;
-	return `${airedFrom.slice(0, 10)} 〜 ${airedTo ? airedTo.slice(0, 10) : "未定"}`;
+	const from = parseDateParts(airedFrom);
+	if (!from) return null;
+	const to = parseDateParts(airedTo);
+	const start = `${from.year}年${from.month}月${from.day}日`;
+	if (!to) return `${start}〜`;
+	return `${start}〜${to.year === from.year ? "" : `${to.year}年`}${to.month}月${to.day}日`;
 }
 
+function parseDateParts(value: string | null): { year: number; month: number; day: number } | null {
+	const match = value?.match(/^(\d{4})-(\d{2})-(\d{2})/);
+	return match ? { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) } : null;
+}
+
+/** 話数ルームの日付「10月24日」（年はタイトル下の放送期間で分かるので省く） */
+function formatRoomDate(value: string | null): string {
+	const date = parseDateParts(value);
+	return date ? `${date.month}月${date.day}日` : "";
+}
+
+/** 「全12話」。話数が数字でなければそのまま「〜話」 */
+function formatEpisodeCount(value: string): string {
+	return /^\d+$/.test(value) ? `全${value}話` : `${value}話`;
+}
+
+import { formatCompactCount, formatCount } from "$lib/utils/format";
 import { isHttpUrl, isMalUrl } from "$lib/utils/url";
 
 function buildDisplayOfficialLinks(officialSiteUrl: string | null, officialXUrl: string | null) {
 	const links: { name: string; url: string }[] = [];
 
 	if (isHttpUrl(officialSiteUrl)) links.push({ name: "公式サイト", url: officialSiteUrl });
-	if (isHttpUrl(officialXUrl)) links.push({ name: "X (Twitter)", url: officialXUrl });
+	if (isHttpUrl(officialXUrl)) links.push({ name: "公式X", url: officialXUrl });
 
 	return dedupeLinks(links);
 }
@@ -166,8 +199,32 @@ function dedupeLinks(links: { name: string; url: string }[]) {
 }
 
 let myListModalOpen = $state(false);
+// マイリストのボタンの左側から開く、状態だけを選ぶ欄
+let myListStatusOpen = $state(false);
+let myListStatusAnchor = $state<HTMLElement | null>(null);
+// マイリストのボタンは、アニメ一覧のカードと同じく登録したかどうかを形と色で示す
+const myListStatusLabels: Record<AnimeStatus, string> = {
+	plan_to_watch: "視聴予定",
+	watching: "視聴中",
+	completed: "完了",
+	on_hold: "中断",
+	dropped: "断念",
+};
+const myListLabel = $derived.by(() => {
+	const status = data.anime.user_entry?.status as AnimeStatus | undefined;
+	return status ? `マイリスト: ${myListStatusLabels[status]}` : "マイリストに追加";
+});
 let showUserListModal = $state(false);
 let recommendModalOpen = $state(false);
+let collectionModalOpen = $state(false);
+// 別の作品へ移ったら閉じる（ページが使い回されると、前の作品のチェック状態のまま新しい作品に保存してしまう）
+$effect(() => {
+	void data.anime.id;
+	untrack(() => {
+		collectionModalOpen = false;
+		myListStatusOpen = false;
+	});
+});
 let hideRecommendFormResult = $state(false);
 const recommendFormMessage = $derived(hideRecommendFormResult ? "" : (form?.recommendMessage ?? ""));
 const recommendFormSuccess = $derived(!hideRecommendFormResult && Boolean(form?.recommendSuccess));
@@ -440,52 +497,35 @@ $effect(() => {
 	{#if data.relations.length > 0}
 		<section class="relations-section">
 			<h2>関連作品</h2>
-			{#each [
-				{ label: '前作', relations: prequelRelations },
-				{ label: '続編', relations: sequelRelations },
-				{ label: '関連作品', relations: otherRelations },
-			] as group (group.label)}
+			{#each relationGroups as group (group.key)}
 				{#if group.relations.length > 0}
 					<div class="relation-group">
-						<h3>{group.label}</h3>
+						{#if showRelationGroupLabels}
+							<h3>{group.label}</h3>
+						{/if}
 						<div class="relation-list">
 							{#each group.relations as relation (`${relation.relation_type}-${relation.related_anime_mal_id}`)}
-								{#if relation.anime}
-									<a href="/anime/{relation.anime.id}" class="relation-card">
-										{#if relation.anime.cover_url}
-											<img
-												class="relation-card-thumb"
-												src={coverThumbSrc(relation.anime.cover_url)}
-												{@attach coverThumbFallback(relation.anime.cover_url)}
-												alt=""
-											>
-										{:else}
-											<span
-												class="relation-card-thumb relation-card-thumb--placeholder"
-												aria-hidden="true"
-											></span>
-										{/if}
-										<span class="relation-card-body">
-											<strong>{relation.anime.title}</strong>
-											{#if group.label === '関連作品'}
-												<small>{relation.relation_type}</small>
-											{/if}
-										</span>
-									</a>
-								{:else}
-									<div class="relation-card relation-card--unavailable">
+								<a href="/anime/{relation.anime.id}" class="relation-card">
+									{#if relation.anime.cover_url}
+										<img
+											class="relation-card-thumb"
+											src={coverThumbSrc(relation.anime.cover_url)}
+											{@attach coverThumbFallback(relation.anime.cover_url)}
+											alt=""
+										>
+									{:else}
 										<span
 											class="relation-card-thumb relation-card-thumb--placeholder"
 											aria-hidden="true"
 										></span>
-										<span class="relation-card-body">
-											<strong>{relation.related_title}</strong>
-											<small>
-												{group.label === '関連作品' ? relation.relation_type : '未登録'}
-											</small>
-										</span>
-									</div>
-								{/if}
+									{/if}
+									<span class="relation-card-body">
+										<strong>{relation.anime.title}</strong>
+										{#if group.key === 'other' && animeRelationLabel(relation.relation_type)}
+											<small>{animeRelationLabel(relation.relation_type)}</small>
+										{/if}
+									</span>
+								</a>
 							{/each}
 						</div>
 					</div>
@@ -504,25 +544,27 @@ $effect(() => {
 			{#if data.anime.title_en}
 				<p class="anime-title-en">{data.anime.title_en}</p>
 			{/if}
+			<!-- 押せない情報（放送状態・種別・話数・放送期間）は「·」で区切った文字にし、押せるシーズン（一覧へのリンク）だけチップにする。
+			     放送状態は色の点で示す -->
 			<div class="meta-row">
-				<span class="status-badge status-{data.anime.computed_broadcast_status}">
-					{broadcastLabels[data.anime.computed_broadcast_status] ?? data.anime.computed_broadcast_status}
+				<span class="meta-text">
+					<span class="meta-status status-{data.anime.computed_broadcast_status}">
+						{broadcastLabels[data.anime.computed_broadcast_status] ?? data.anime.computed_broadcast_status}
+					</span>
+					{#if data.anime.type}
+						<span>{animeTypeLabel(data.anime.type)}</span>
+					{/if}
+					{#if data.anime.episode_count}
+						<span>{formatEpisodeCount(data.anime.episode_count)}</span>
+					{/if}
+					{#if data.anime.aired_from}
+						<span>{formatAiredPeriod(data.anime.aired_from, data.anime.aired_to)}</span>
+					{/if}
 				</span>
-				{#if data.anime.type}
-					<span class="meta-chip">{data.anime.type}</span>
-				{/if}
 				{#if data.anime.season}
 					<a href="/anime?season={encodeURIComponent(data.anime.season)}" class="meta-chip meta-chip--link"
-						>{data.anime.season}</a
+						>{animeSeasonLabel(data.anime.season)}</a
 					>
-				{/if}
-				{#if data.anime.episode_count}
-					<span class="meta-chip">{data.anime.episode_count}話</span>
-				{/if}
-				{#if data.anime.aired_from}
-					<span class="meta-chip aired">
-						{formatAiredPeriod(data.anime.aired_from, data.anime.aired_to)}
-					</span>
 				{/if}
 			</div>
 		</div>
@@ -581,45 +623,6 @@ $effect(() => {
 					<p class="copyright-notice">{data.anime.copyright}</p>
 				{/if}
 			</div>
-			<!-- スマホ版のみ: 画像下に圧縮メタ＋ハッシュタグ＋公式アイコンを集約（PC版は .prod-info を使用） -->
-			<div class="mobile-meta">
-				{#if compactMetaLinks.length}
-					<div class="mobile-meta-chips">
-						{#each compactMetaLinks as item (item.href + item.text)}
-							<a href={item.href} class="mobile-meta-chip">{item.text}</a>
-						{/each}
-					</div>
-				{/if}
-				{#if data.anime.official_hashtag?.length}
-					<div class="mobile-hashtags">
-						{#each data.anime.official_hashtag as tag}
-							<a href="/hashtag/{tag.replace(/^#/, '')}" class="mobile-hashtag"
-								>#{tag.replace(/^#/, '')}</a
-							>
-						{/each}
-					</div>
-				{/if}
-				{#if displayOfficialLinks.length}
-					<div class="mobile-official-icons">
-						{#each displayOfficialLinks as link (link.url)}
-							<a
-								href={link.url}
-								target="_blank"
-								rel="noopener noreferrer"
-								class="mobile-icon-link"
-								aria-label={link.name}
-								title={link.name}
-							>
-								{#if link.name.includes("公式サイト")}
-									<span class="i-lucide-globe-2" aria-hidden="true"></span>
-								{:else}
-									𝕏
-								{/if}
-							</a>
-						{/each}
-					</div>
-				{/if}
-			</div>
 			<div class="left-panel-info">
 				{#if coverError}
 					<p class="cover-error">{coverError}</p>
@@ -628,136 +631,227 @@ $effect(() => {
 					<p class="cover-hidden-note">権利表記（©）が未設定のため、カバー画像は表示されていません。</p>
 				{/if}
 
-				<!-- Production info below cover -->
-				{#if displayStudios.length || data.anime.producer?.length || data.anime.source || displayGenres.length || data.anime.official_hashtag?.length || displayOfficialLinks.length}
-					<dl class="prod-info">
-						{#if displayStudios.length}
-							<div class="prod-row prod-row--wrap">
-								<dt>スタジオ</dt>
-								<dd class="genre-list">
-									{#each displayStudios as s}
-										<a href="/anime?studio={encodeURIComponent(s)}" class="genre-chip">{s}</a>
-									{/each}
-								</dd>
-							</div>
+				<!-- 作品情報。左の列は作品の中身（スタジオ・制作・原作・ジャンル）、右の列は外への入口
+				     （ハッシュタグ・公式リンク・関連リンク）。PC は縦に続け、スマホは左右に並べる -->
+				{#if hasWorkInfo || hasEntryInfo}
+					<!-- スマホではカードをやめ、話数ルーム・関連作品と同じ段の見出しで区切る（PC は左の列のカード） -->
+					<h2 class="info-heading">作品情報</h2>
+					<div class="prod-info">
+						{#if hasWorkInfo}
+							<dl class="prod-col">
+								{#if displayStudios.length}
+									<div class="prod-row prod-row--wrap">
+										<dt>スタジオ</dt>
+										<dd class="genre-list">
+											{#each displayStudios as s}
+												<a href="/anime?studio={encodeURIComponent(s)}" class="genre-chip"
+													>{s}</a
+												>
+											{/each}
+										</dd>
+									</div>
+								{/if}
+								{#if data.anime.producer?.length}
+									<div class="prod-row prod-row--wrap">
+										<dt>制作</dt>
+										<dd class="genre-list">
+											{#each data.anime.producer as p}
+												<a href="/anime?producer={encodeURIComponent(p)}" class="genre-chip"
+													>{p}</a
+												>
+											{/each}
+										</dd>
+									</div>
+								{/if}
+								{#if data.anime.source}
+									<div class="prod-row">
+										<dt>原作</dt>
+										<dd>
+											<a
+												href="/anime?source={encodeURIComponent(data.anime.source)}"
+												class="genre-chip"
+												>{data.anime.source}</a
+											>
+										</dd>
+									</div>
+								{/if}
+								{#if displayGenres.length}
+									<div class="prod-row prod-row--wrap">
+										<dt>ジャンル</dt>
+										<dd class="genre-list">
+											{#each displayGenres as g}
+												<a href="/anime?genre={encodeURIComponent(g)}" class="genre-chip"
+													>{g}</a
+												>
+											{/each}
+										</dd>
+									</div>
+								{/if}
+							</dl>
 						{/if}
-						{#if data.anime.producer?.length}
-							<div class="prod-row prod-row--wrap">
-								<dt>制作</dt>
-								<dd class="genre-list">
-									{#each data.anime.producer as p}
-										<a href="/anime?producer={encodeURIComponent(p)}" class="genre-chip">{p}</a>
-									{/each}
-								</dd>
-							</div>
+						{#if hasEntryInfo}
+							<dl class="prod-col">
+								{#if data.anime.official_hashtag?.length}
+									<div class="prod-row prod-row--wrap">
+										<dt>ハッシュタグ</dt>
+										<dd class="genre-list">
+											{#each data.anime.official_hashtag as tag}
+												<a href="/hashtag/{tag.replace(/^#/, '')}" class="hashtag-link"
+													>#{tag.replace(/^#/, '')}</a
+												>
+											{/each}
+										</dd>
+									</div>
+								{/if}
+								{#if displayOfficialLinks.length}
+									<div class="prod-row prod-row--wrap">
+										<dt>公式リンク</dt>
+										<dd class="links-list">
+											{#each displayOfficialLinks as resource (resource.url)}
+												<a
+													href={resource.url}
+													target="_blank"
+													rel="noopener noreferrer"
+													class="external-link"
+													>{resource.name}
+													<span class="i-lucide-arrow-up-right" aria-hidden="true"></span></a
+												>
+											{/each}
+										</dd>
+									</div>
+								{/if}
+								{#if displayResources.length}
+									<div class="prod-row prod-row--wrap">
+										<dt>関連リンク</dt>
+										<dd class="links-list">
+											{#each displayResources as resource (resource.url)}
+												<a
+													href={resource.url}
+													target="_blank"
+													rel="noopener noreferrer"
+													class="external-link"
+													>{resource.name}
+													<span class="i-lucide-arrow-up-right" aria-hidden="true"></span></a
+												>
+											{/each}
+										</dd>
+									</div>
+								{/if}
+							</dl>
 						{/if}
-						{#if data.anime.source}
-							<div class="prod-row">
-								<dt>原作</dt>
-								<dd>
-									<a href="/anime?source={encodeURIComponent(data.anime.source)}" class="genre-chip"
-										>{data.anime.source}</a
-									>
-								</dd>
-							</div>
-						{/if}
-						{#if displayGenres.length}
-							<div class="prod-row prod-row--wrap">
-								<dt>ジャンル</dt>
-								<dd class="genre-list">
-									{#each displayGenres as g}
-										<a href="/anime?genre={encodeURIComponent(g)}" class="genre-chip">{g}</a>
-									{/each}
-								</dd>
-							</div>
-						{/if}
-						{#if data.anime.official_hashtag?.length}
-							<div class="prod-row prod-row--wrap">
-								<dt>ハッシュタグ</dt>
-								<dd class="genre-list">
-									{#each data.anime.official_hashtag as tag}
-										<a href="/hashtag/{tag.replace(/^#/, '')}" class="hashtag-link"
-											>#{tag.replace(/^#/, '')}</a
-										>
-									{/each}
-								</dd>
-							</div>
-						{/if}
-						{#if displayOfficialLinks.length}
-							<div class="prod-row prod-row--wrap">
-								<dt>公式リンク</dt>
-								<dd class="links-list">
-									{#each displayOfficialLinks as resource (resource.url)}
-										<a
-											href={resource.url}
-											target="_blank"
-											rel="noopener noreferrer"
-											class="official-link"
-											>{resource.name}</a
-										>
-									{/each}
-								</dd>
-							</div>
-						{/if}
-					</dl>
-				{/if}
-				{#if displayResources.length}
-					<div class="resource-links">
-						<div class="resource-links-title">関連リンク</div>
-						<div class="links-list">
-							{#each displayResources as resource (resource.url)}
-								<a
-									href={resource.url}
-									target="_blank"
-									rel="noopener noreferrer"
-									class="official-link resource-link"
-									>{resource.name}</a
-								>
-							{/each}
-						</div>
 					</div>
 				{/if}
 			</div>
+			<!-- スマホでは作品情報の後ろに関連作品を出す（PC では右の列の下。中身は同じスニペット） -->
+			{#if data.relations.length > 0}
+				<div class="relations-slot relations-slot--mobile">
+					{@render relationsSection()}
+				</div>
+			{/if}
 		</aside>
 
 		<!-- Right column: スマホ版はアクション専用リモコン / PC版はmain上部に従来配置 -->
 		<div class="remote">
-			<!-- Score hero -->
-			<div class="stats-grid">
-				<div class="stat-card stat-card--score">
-					<span class="stat-card-label with-info-tip">
-						スコア
-						<InfoTip label="スコアとリスト登録">
-							<p>スコアは、公開マイリストで付けられた点数（1〜10）の平均です。</p>
-							<p>リスト登録は、この作品を公開マイリストに入れている人の数です。</p>
-						</InfoTip>
-					</span>
+			<!-- スコアと登録者数をカードにせず、大きい数字の下に説明を添えて並べる -->
+			<div class="stats-line">
+				<span class="stat">
 					{#if data.anime.avg_score != null && (data.anime.score_count ?? 0) > 0}
-						<span class="stat-card-value">★ {data.anime.avg_score.toFixed(2)}</span>
-						<span class="stat-card-sub">{data.anime.score_count}件の評価</span>
+						<span class="stat-value stat-value--score">★ {data.anime.avg_score.toFixed(2)}</span>
+						<span class="stat-label">
+							<!-- スマホでは大きな数を「1.2万」と縮める（PC はそのまま） -->
+							<span
+								><span class="count-full">{formatCount(data.anime.score_count ?? 0)}</span
+								><span class="count-compact"
+									>{formatCompactCount(data.anime.score_count ?? 0)}</span
+								>人が評価</span
+							>
+						</span>
 					{:else}
-						<span class="stat-card-value">—</span>
-						<span class="stat-card-sub">まだ評価がありません</span>
+						<span class="stat-value stat-value--empty">★ —</span>
+						<span class="stat-label"> 評価なし </span>
 					{/if}
-				</div>
+				</span>
 				{#if data.anime.list_count}
 					<button
 						type="button"
-						class="stat-card stat-card--interactive"
+						class="stat stat--link"
 						onclick={() => (showUserListModal = true)}
 						aria-haspopup="dialog"
 					>
-						<span class="stat-card-label">リスト登録</span>
-						<span class="stat-card-value">{data.anime.list_count}</span>
-						<span class="stat-card-sub">ユーザー</span>
+						<!-- スマホでは大きな数を「1.2万」と縮める（PC はそのまま） -->
+						<span class="stat-value">
+							<span class="count-full">{formatCount(data.anime.list_count)}</span>
+							<span class="count-compact">{formatCompactCount(data.anime.list_count)}</span>
+						</span>
+						<span class="stat-label"
+							>人が登録<span class="i-lucide-chevron-right" aria-hidden="true"></span></span
+						>
 					</button>
+				{:else}
+					<span class="stat">
+						<span class="stat-value">0</span>
+						<span class="stat-label">人が登録</span>
+					</span>
 				{/if}
 			</div>
 			<!-- アクションバー -->
 
 			{#if data.user}
 				<div class="action-bar">
-					<a href="/?quote_anime={data.anime.id}#compose" class="action-bar-btn action-bar-btn--link">
+					<!-- マイリストはいちばん大事なので、先頭のいちばん目立つ青いボタンにする。
+					     左（文字）で状態だけを選び（その場で保存）、右（アイコン）でスコア・進捗まで入れる大きいモーダルを開く -->
+					<div class="mylist-split">
+						<button
+							type="button"
+							class="mylist-split-main"
+							bind:this={myListStatusAnchor}
+							onclick={() => (myListStatusOpen = !myListStatusOpen)}
+							aria-haspopup="dialog"
+							aria-expanded={myListStatusOpen}
+							aria-label={myListLabel}
+							title={myListLabel}
+						>
+							<span class="mylist-split-label" aria-hidden="true">
+								{#if data.anime.user_entry}
+									{myListStatusLabels[data.anime.user_entry.status as AnimeStatus]}
+								{:else}
+									<!-- スマホの細い列では「マイリストに追加」が入らないので短くする -->
+									<span class="mylist-label-long">マイリストに追加</span>
+									<span class="mylist-label-short">リストに追加</span>
+								{/if}
+							</span>
+							<span class="i-lucide-chevron-down mylist-split-caret" aria-hidden="true"></span>
+						</button>
+						<button
+							type="button"
+							class="mylist-split-detail"
+							class:active={myListModalOpen}
+							onclick={() => (myListModalOpen = true)}
+							aria-haspopup="dialog"
+							aria-label={data.anime.user_entry ? 'スコア・進捗を編集' : 'スコア・進捗も入れて登録'}
+							title={data.anime.user_entry ? 'スコア・進捗を編集' : 'スコア・進捗も入れて登録'}
+						>
+							<!-- 未登録は list-plus、登録済みは list-check（アニメ一覧のカードと同じ） -->
+							{#if data.anime.user_entry}
+								<span class="i-lucide-list-check mylist-split-icon" aria-hidden="true"></span>
+							{:else}
+								<span class="i-lucide-list-plus mylist-split-icon" aria-hidden="true"></span>
+							{/if}
+						</button>
+					</div>
+					<!-- コレクション（マイリストと同じく手元に集める）→ 引用（自分で語る）→ 推薦（人に勧める）の順 -->
+					<button
+						type="button"
+						class="action-bar-btn"
+						class:active={collectionModalOpen}
+						onclick={() => (collectionModalOpen = true)}
+						aria-haspopup="dialog"
+						aria-expanded={collectionModalOpen}
+					>
+						<span class="i-lucide-folder-plus action-bar-icon" aria-hidden="true"></span>
+						<span>コレクション</span>
+					</button>
+					<a href="/?quote_anime={data.anime.id}#compose" class="action-bar-btn">
 						<svg
 							width="18"
 							height="18"
@@ -772,36 +866,9 @@ $effect(() => {
 							<path d="M12 20h9" />
 							<path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
 						</svg>
-						<span>投稿する</span>
+						<!-- 作品を引用した投稿欄を開く（「投稿」だとレビューを書くように見える） -->
+						<span>引用する</span>
 					</a>
-					<button
-						type="button"
-						class="action-bar-btn"
-						class:active={myListModalOpen}
-						onclick={() => (myListModalOpen = true)}
-						aria-pressed={myListModalOpen}
-					>
-						<svg
-							width="18"
-							height="18"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							aria-hidden="true"
-						>
-							<!-- サイドバーのマイリストと同じリストのアイコン（しおり形はブックマークと紛らわしいため） -->
-							<path d="M4 6h.01" />
-							<path d="M4 12h.01" />
-							<path d="M4 18h.01" />
-							<path d="M8 6h12" />
-							<path d="M8 12h12" />
-							<path d="M8 18h12" />
-						</svg>
-						<span>マイリスト</span>
-					</button>
 					<button
 						type="button"
 						class="action-bar-btn"
@@ -824,7 +891,7 @@ $effect(() => {
 							<line x1="22" y1="2" x2="11" y2="13" />
 							<polygon points="22 2 15 22 11 13 2 9 22 2" />
 						</svg>
-						<span>推薦</span>
+						<span>推薦する</span>
 					</button>
 				</div>
 			{/if}
@@ -845,11 +912,6 @@ $effect(() => {
 				>
 					{adminEditOpen ? "作品情報フォームを閉じる" : "作品情報を編集"}
 				</button>
-			{/if}
-			{#if data.relations.length > 0}
-				<div class="mobile-relations-slot">
-					{@render relationsSection()}
-				</div>
 			{/if}
 		</div>
 
@@ -1619,41 +1681,48 @@ $effect(() => {
 												href={latestEpisodeRoom.href ?? undefined}
 												class="room-log-item room-log-item--latest"
 											>
-												<!-- 放送中は右上の「LIVE」と重なって隠れるので、「Latest」は出さない（#433） -->
-												{#if !liveEpisodeRoomKeys.has(latestEpisodeRoom.key)}
-													<span class="room-log-latest-label">
-														<span class="i-lucide-zap" aria-hidden="true"></span>
-														Latest
-													</span>
-												{/if}
+												<!-- 最新話は青い横長のボタンにし、「最新話 第4話 10月24日」を1行で出す。放送中は「LIVE」も並べる -->
+												<span class="room-log-latest-label">最新話</span>
 												<span class="room-log-ep">{latestEpisodeRoom.label}</span>
-												<span class="room-log-ep-compact">{latestEpisodeRoom.label}</span>
 												{#if liveEpisodeRoomKeys.has(latestEpisodeRoom.key)}
 													<span class="room-log-live-badge">LIVE</span>
 												{/if}
 												<span class="room-log-date"
-													>{latestEpisodeRoom.firstAiredOn ?? ""}</span
+													>{formatRoomDate(latestEpisodeRoom.firstAiredOn)}</span
 												>
+												<span
+													class="i-lucide-arrow-right room-log-latest-arrow"
+													aria-hidden="true"
+												></span>
 											</a>
 										</li>
 									{/if}
 									{#each data.episodeRooms as entry (entry.key)}
 										{@const entryState = episodeRoomEntryState(entry, episodeRoomNow)}
+										{@const entryDetail = liveEpisodeRoomKeys.has(entry.key)
+											? "放送中"
+											: entryState !== "open"
+												? "未放送"
+												: formatRoomDate(entry.firstAiredOn)}
 										<li>
+											<!-- 各話は数字だけの小さいボタン（未放送は暗くして見分ける）。話数と日付は読み上げとホバーで伝える -->
 											<svelte:element
 												this={entry.href ? "a" : "span"}
 												href={entry.href ?? undefined}
 												class="room-log-item"
 												class:room-log-item--unaired={entryState !== "open"}
+												class:room-log-item--special={entry.episodeNumber == null}
+												title={entryDetail ? `${entry.label}（${entryDetail}）` : entry.label}
 											>
-												<span class="room-log-ep">{entry.label}</span>
-												<span class="room-log-ep-compact">{entry.label}</span>
+												<span class="room-log-ep-compact" aria-hidden="true"
+													>{entry.episodeNumber ?? entry.label}</span
+												>
+												<span class="sr-only"
+													>{entryDetail ? `${entry.label}（${entryDetail}）` : entry.label}</span
+												>
 												{#if liveEpisodeRoomKeys.has(entry.key)}
-													<span class="room-log-live-badge">LIVE</span>
-												{:else if entryState !== "open"}
-													<span class="room-log-unaired-label">未放送</span>
+													<span class="room-log-live-dot" aria-hidden="true"></span>
 												{/if}
-												<span class="room-log-date">{entry.firstAiredOn ?? ""}</span>
 											</svelte:element>
 										</li>
 									{/each}
@@ -1669,37 +1738,37 @@ $effect(() => {
 												href="/rooms/anime/{data.anime.id}/{latestRoomLog.date}"
 												class="room-log-item room-log-item--latest"
 											>
-												<!-- 放送中は「LIVE」だけを出す（#433） -->
-												{#if !liveRoomDates.has(latestRoomLog.date)}
-													<span class="room-log-latest-label">
-														<span class="i-lucide-zap" aria-hidden="true"></span>
-														Latest
-													</span>
-												{/if}
+												<span class="room-log-latest-label">最新話</span>
 												<span class="room-log-ep"
 													>{formatBroadcastEpisodeSlot(latestRoomLog)}</span
-												>
-												<span class="room-log-ep-compact"
-													>{formatBroadcastEpisodeNumber(latestRoomLog)}</span
 												>
 												{#if liveRoomDates.has(latestRoomLog.date)}
 													<span class="room-log-live-badge">LIVE</span>
 												{/if}
-												<span class="room-log-date">{latestRoomLog.date}</span>
+												<span class="room-log-date">{formatRoomDate(latestRoomLog.date)}</span>
+												<span
+													class="i-lucide-arrow-right room-log-latest-arrow"
+													aria-hidden="true"
+												></span>
 											</a>
 										</li>
 									{/if}
 									{#each sortedRoomLogs as ep (ep.date)}
 										<li>
-											<a href="/rooms/anime/{data.anime.id}/{ep.date}" class="room-log-item">
-												<span class="room-log-ep">{formatBroadcastEpisodeSlot(ep)}</span>
-												<span class="room-log-ep-compact"
+											<a
+												href="/rooms/anime/{data.anime.id}/{ep.date}"
+												class="room-log-item"
+												title="{formatBroadcastEpisodeSlot(ep)}（{formatRoomDate(ep.date)}）"
+											>
+												<span class="room-log-ep-compact" aria-hidden="true"
 													>{formatBroadcastEpisodeNumber(ep)}</span
 												>
+												<span class="sr-only"
+													>{formatBroadcastEpisodeSlot(ep)}（{formatRoomDate(ep.date)}）</span
+												>
 												{#if liveRoomDates.has(ep.date)}
-													<span class="room-log-live-badge">LIVE</span>
+													<span class="room-log-live-dot" aria-hidden="true"></span>
 												{/if}
-												<span class="room-log-date">{ep.date}</span>
 											</a>
 										</li>
 									{/each}
@@ -1742,7 +1811,7 @@ $effect(() => {
 			</section>
 
 			{#if data.relations.length > 0}
-				<div class="desktop-relations-slot">
+				<div class="relations-slot relations-slot--desktop">
 					{@render relationsSection()}
 				</div>
 			{/if}
@@ -1809,6 +1878,31 @@ $effect(() => {
 			</div>
 		</div>
 	</div>
+{/if}
+
+{#if myListStatusOpen && myListStatusAnchor && data.user}
+	<MyListStatusPopover
+		anchor={myListStatusAnchor}
+		animeId={data.anime.id}
+		animeTitle={data.anime.title}
+		entry={data.anime.user_entry}
+		removeAction="?/removeWatchlist"
+		onclose={() => {
+			myListStatusOpen = false;
+		}}
+	/>
+{/if}
+
+{#if collectionModalOpen && data.user}
+	{#key data.anime.id}
+		<AddToCollectionModal
+			animeId={Number(data.anime.id)}
+			animeTitle={data.anime.title}
+			onclose={() => {
+				collectionModalOpen = false;
+			}}
+		/>
+	{/key}
 {/if}
 
 {#if recommendModalOpen}
@@ -1918,6 +2012,7 @@ $effect(() => {
 	animeTitle={data.anime.title}
 	episodeCount={data.anime.episode_count}
 	entry={data.anime.user_entry}
+	removeAction="?/removeWatchlist"
 	onclose={() => { myListModalOpen = false; }}
 />
 <style>
@@ -2064,6 +2159,18 @@ $effect(() => {
 	border: 1px solid var(--color-border);
 	border-radius: 12px;
 }
+/* 「作品情報」の見出しはスマホだけ（PC は左の列のカードで分かる） */
+.info-heading {
+	display: none;
+}
+/* 作品情報の左右の列（PC では縦に続く） */
+.prod-col {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	min-width: 0;
+	margin: 0;
+}
 .prod-row {
 	display: flex;
 	flex-direction: column;
@@ -2073,7 +2180,7 @@ $effect(() => {
 .prod-row dt {
 	color: var(--color-text-muted);
 	font-weight: 600;
-	font-size: 0.72rem;
+	font-size: 0.75rem;
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
 }
@@ -2104,56 +2211,32 @@ $effect(() => {
 	color: #fff;
 	border-color: var(--accent);
 }
+/* 公式サイト・X・関連リンクは外部サイトなので、チップではなく下線の文字リンクにし、矢印で外へ出ることを示す */
+.external-link {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	color: var(--color-text-muted);
+	font-size: 0.8rem;
+	text-decoration: underline;
+	text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+	text-underline-offset: 3px;
+	white-space: nowrap;
+}
+.external-link:hover {
+	color: var(--accent);
+	text-decoration-color: currentColor;
+}
+.external-link [class^="i-lucide"] {
+	width: 12px;
+	height: 12px;
+}
 .links-list {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 6px;
 }
-.official-link {
-	font-size: 0.78rem;
-	color: var(--accent);
-	text-decoration: none;
-	padding: 2px 8px;
-	border: 1px solid var(--accent);
-	border-radius: 4px;
-}
-.official-link:hover {
-	background: var(--accent);
-	color: #fff;
-}
-.resource-link {
-	border-color: var(--border);
-	color: var(--text-muted);
-	/* 「しょぼいカレンダー」などが折り返すとボタンの形が崩れるので、1行に保つ */
-	white-space: nowrap;
-}
-.resource-link:hover {
-	background: var(--hover-bg);
-	border-color: var(--border);
-	color: var(--text);
-}
-.resource-links {
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-	padding: 0 14px;
-}
-.resource-links-title {
-	color: var(--text-muted);
-	font-size: 0.72rem;
-	font-weight: 600;
-	letter-spacing: 0.04em;
-}
-/* スマホ幅では表紙の下の狭い列に入るので、余白と字間を詰めて「しょぼいカレンダー」も1行で収める */
-@media (max-width: 768px) {
-	.resource-links {
-		padding: 0;
-	}
-	.resource-link {
-		padding: 2px 6px;
-		letter-spacing: 0;
-	}
-}
+
 .copyright {
 	font-size: 0.72rem;
 	color: var(--color-text-muted);
@@ -2197,11 +2280,6 @@ $effect(() => {
 	display: none;
 }
 
-/* スマホ版のみ表示する画像下の圧縮メタ（PC版は .prod-info を使用） */
-.mobile-meta {
-	display: none;
-}
-
 .title-block {
 	grid-area: title;
 	display: flex;
@@ -2226,108 +2304,121 @@ $effect(() => {
 	gap: 6px;
 	align-items: center;
 }
-.status-badge {
-	font-size: 0.75rem;
-	padding: 3px 10px;
-	border-radius: 4px;
-	font-weight: 600;
-}
-.status-airing {
-	background: color-mix(in srgb, var(--status-watching) 15%, transparent);
-	color: var(--status-watching);
-}
-.status-upcoming {
-	background: color-mix(in srgb, var(--status-plan) 15%, transparent);
-	color: var(--status-plan);
-}
-.status-finished {
-	background: var(--color-surface-hover);
-	color: var(--color-text-muted);
-}
-.status-unknown {
-	background: var(--hover-bg);
-	color: var(--text-muted);
-}
+/* 左の情報欄のチップ（.genre-chip）と同じ形にそろえる */
 .meta-chip {
-	font-size: 0.78rem;
-	padding: 3px 9px;
-	border-radius: 4px;
+	font-size: 0.75rem;
+	padding: 2px 9px;
+	border-radius: 14px;
 	background: var(--color-surface-hover);
 	color: var(--color-text-muted);
+	border: 1px solid var(--color-border);
 }
-.meta-chip.aired {
-	font-size: 0.75rem;
+/* 押せない情報は「·」で区切った文字。放送状態は先頭の点の色で示す */
+.meta-text {
+	display: inline-flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0 6px;
+	color: var(--color-text-muted);
+	font-size: 0.8rem;
 }
+.meta-text > span + span::before {
+	content: "·";
+	margin-right: 6px;
+}
+.meta-status {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+.meta-status::before {
+	content: "";
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--color-text-muted);
+}
+.meta-status.status-airing::before {
+	background: var(--status-watching);
+}
+.meta-status.status-upcoming::before {
+	background: var(--status-plan);
+}
+/* シーズンは一覧へのリンク。ふだんはほかのタグと同じで、ホバー・フォーカスしたときだけ左のチップと同じく色を付ける */
 .meta-chip--link {
 	text-decoration: none;
-	color: var(--accent);
-	background: color-mix(in srgb, var(--accent) 10%, var(--color-surface-hover));
 	transition:
 		background 0.15s,
 		color 0.15s;
 }
-.meta-chip--link:hover {
+.meta-chip--link:hover,
+.meta-chip--link:focus-visible {
 	background: var(--accent);
 	color: #fff;
-}
-
-/* Stats cards */
-.stats-grid {
-	display: flex;
-	gap: 12px;
-	flex-wrap: wrap;
-}
-.stat-card {
-	display: flex;
-	flex-direction: column;
-	gap: 4px;
-	padding: 16px 24px;
-	background: var(--color-surface);
-	border: 1px solid var(--color-border);
-	border-radius: 14px;
-	min-width: 120px;
-}
-.stat-card--interactive {
-	font: inherit;
-	color: inherit;
-	text-align: left;
-	cursor: pointer;
-	transition:
-		transform 0.15s,
-		background 0.15s,
-		border-color 0.15s;
-}
-.stat-card--interactive:hover {
-	background: var(--hover-bg);
-	border-color: var(--color-border-hover);
-}
-.stat-card--interactive:active {
-	transform: scale(0.95);
-}
-.stat-card--interactive:focus-visible {
-	outline: 2px solid var(--accent);
-	outline-offset: 2px;
-	background: var(--hover-bg);
 	border-color: var(--accent);
 }
-.stat-card-label {
-	font-size: 0.72rem;
-	font-weight: 600;
-	text-transform: uppercase;
-	letter-spacing: 0.05em;
-	color: var(--color-text-muted);
+
+/* 登録者数とスコア（カードにしない）。大きい数字の下に小さい説明を置いて左右に並べる */
+.stats-line {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-start;
+	gap: 8px 28px;
 }
-.stat-card-value {
-	font-size: 1.8rem;
-	font-weight: 700;
+.stat {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 4px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+}
+/* 登録者数は押せるかたまり。ホバーで数字も含めた全体をうっすら明るくする（下線は付けない） */
+.stat--link {
+	margin: -6px -10px;
+	padding: 6px 10px;
+	border-radius: 10px;
+	cursor: pointer;
+	transition: background 0.12s;
+}
+.stat--link:hover,
+.stat--link:focus-visible {
+	background: color-mix(in srgb, var(--color-text) 8%, transparent);
+	outline: none;
+}
+.stat--link:focus-visible {
+	box-shadow: 0 0 0 2px var(--accent);
+}
+.count-compact {
+	display: none;
+}
+.stat-value {
+	font-size: 1.5rem;
+	font-weight: 800;
 	line-height: 1;
+	white-space: nowrap;
 }
-.stat-card--score .stat-card-value {
+.stat-value--score {
 	color: var(--status-score);
 }
-.stat-card-sub {
-	font-size: 0.75rem;
+.stat-value--empty {
 	color: var(--color-text-muted);
+}
+.stat-label {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	color: var(--color-text-muted);
+	font-size: 0.75rem;
+	white-space: nowrap;
+}
+.stat-label [class^="i-lucide"] {
+	width: 13px;
+	height: 13px;
 }
 
 /* Synopsis */
@@ -2782,7 +2873,7 @@ $effect(() => {
 .relations-section h2 {
 	grid-column: 1 / -1;
 	font-size: 1rem;
-	font-weight: 600;
+	font-weight: 700;
 	margin: 0;
 }
 .relation-group {
@@ -2791,7 +2882,7 @@ $effect(() => {
 	gap: 7px;
 }
 .relation-group h3 {
-	font-size: 0.76rem;
+	font-size: 0.75rem;
 	color: var(--text-muted);
 	margin: 0;
 	font-weight: 600;
@@ -2856,16 +2947,14 @@ a.relation-card:hover {
 	font-size: 0.72rem;
 	color: var(--text-muted);
 }
-.relation-card--unavailable {
-	color: var(--text-muted);
-}
-.mobile-relations-slot {
+.relations-slot--mobile {
 	display: none;
 }
-
 /* Action bar */
+/* マイリストを先頭で大きく、残り（コレクション・引用・推薦）は控えめに並べる */
 .action-bar {
-	display: flex;
+	display: grid;
+	grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr));
 	gap: 10px;
 	width: 100%;
 	min-width: 0;
@@ -2874,11 +2963,10 @@ a.relation-card:hover {
 	flex: 1;
 	min-width: 0;
 	display: flex;
-	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-	gap: 4px;
-	padding: 12px 8px;
+	gap: 6px;
+	padding: 8px;
 	background: var(--card-bg);
 	border: 1px solid var(--border);
 	border-radius: 14px;
@@ -2900,8 +2988,78 @@ a.relation-card:hover {
 	background: var(--accent);
 	color: #fff;
 }
-.action-bar-btn--link {
-	border-style: dashed;
+.action-bar-icon {
+	width: 18px;
+	height: 18px;
+}
+.mylist-label-short {
+	display: none;
+}
+/* マイリスト: 左（状態を選ぶ）と右（スコア・進捗の詳細）をくっつけた青いボタン。
+   文字は背景色にする（青の上の白い文字はダークテーマで読みにくい、#500） */
+.mylist-split {
+	display: flex;
+	min-width: 0;
+	overflow: hidden;
+	border-radius: 14px;
+	box-shadow: 0 4px 14px color-mix(in srgb, var(--color-accent) 25%, transparent);
+}
+.mylist-split-main,
+.mylist-split-detail {
+	display: flex;
+	align-items: center;
+	padding: 8px 14px;
+	border: 0;
+	background: var(--color-accent);
+	color: var(--color-bg);
+	cursor: pointer;
+	font: inherit;
+	transition: background 0.12s;
+}
+.mylist-split-main:hover,
+.mylist-split-detail:hover,
+.mylist-split-main[aria-expanded="true"],
+.mylist-split-detail.active {
+	background: var(--color-accent-hover);
+}
+.mylist-split-main:focus-visible,
+.mylist-split-detail:focus-visible {
+	outline: 2px solid var(--color-text);
+	outline-offset: -4px;
+}
+/* 状態の文字はボタンの真ん中に置き、▾ は右端に寄せる（並べると文字が左にずれる） */
+.mylist-split-main {
+	position: relative;
+	flex: 1;
+	justify-content: center;
+	min-width: 0;
+	padding-inline: 30px;
+}
+.mylist-split-detail {
+	flex-shrink: 0;
+	padding-inline: 12px;
+	border-left: 1px solid color-mix(in srgb, var(--color-bg) 35%, transparent);
+}
+.mylist-split-icon {
+	flex-shrink: 0;
+	width: 20px;
+	height: 20px;
+}
+.mylist-split-caret {
+	position: absolute;
+	top: 50%;
+	right: 10px;
+	width: 16px;
+	height: 16px;
+	opacity: 0.8;
+	transform: translateY(-50%);
+}
+.mylist-split-label {
+	overflow: hidden;
+	font-size: 0.92rem;
+	font-weight: 800;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 .form-row {
 	display: flex;
@@ -3301,14 +3459,16 @@ a.relation-card:hover {
 	gap: 6px;
 	border-bottom: 1px solid var(--border);
 }
+/* 見出しは2段階にそろえる。段の見出し（タブ・作品情報・関連作品）は 1rem の太字、
+   その中の小見出し（話数ルーム・スタジオなど・前作／続編）は 0.75rem の薄い色 */
 .room-tab {
 	appearance: none;
 	background: none;
 	border: none;
 	border-bottom: 2px solid transparent;
 	padding: 8px 4px;
-	font-size: 0.9rem;
-	font-weight: 600;
+	font-size: 1rem;
+	font-weight: 700;
 	color: var(--text-muted);
 	cursor: pointer;
 }
@@ -3380,32 +3540,25 @@ a.relation-card:hover {
 }
 
 /* Room log */
-.room-log-item--unaired {
-	opacity: 0.6;
-}
-
-.room-log-unaired-label {
-	font-size: 11px;
-	color: var(--color-text-secondary);
-}
-
 .room-log-section {
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
 }
 .room-log-heading {
-	font-size: 1rem;
+	font-size: 0.75rem;
 	font-weight: 600;
+	color: var(--text-muted);
 	margin: 0;
 }
+/* 各話は数字だけの小さい正方形のボタン。最新話だけは1段目に大きく出す */
 .room-log-list {
 	list-style: none;
 	padding: 0;
 	margin: 0;
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
-	gap: 8px;
+	grid-template-columns: repeat(auto-fill, 44px);
+	gap: 6px;
 }
 .room-log-item {
 	position: relative;
@@ -3413,10 +3566,10 @@ a.relation-card:hover {
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-	gap: 7px;
+	gap: 6px;
 	aspect-ratio: 1;
-	padding: 10px 6px;
-	border-radius: 14px;
+	padding: 0;
+	border-radius: 10px;
 	text-decoration: none;
 	color: var(--text);
 	border: 1px solid var(--border);
@@ -3432,25 +3585,54 @@ a.relation-card:hover {
 	border-color: var(--text-muted);
 	transform: translateY(-2px);
 }
+/* 未放送は色の薄さだけでなく形でも分ける。放送済みは背景と実線の枠、未放送は背景なしの点線の枠と薄い数字 */
+.room-log-item.room-log-item--unaired {
+	border-style: dashed;
+	background: transparent;
+	color: var(--color-text-muted);
+	font-weight: 500;
+}
+.room-log-item.room-log-item--unaired:hover {
+	background: transparent;
+	border-color: var(--color-text-muted);
+}
+/* 特番は数字が無いので名前を出す（2マス分の幅） */
+.room-log-item--special {
+	grid-column: span 2;
+	aspect-ratio: auto;
+	height: 44px;
+	padding: 0 6px;
+}
+/* 最新話はマイリストと同じ目立つ青の横長ボタン（文字は背景色、#500） */
 .room-log-item--latest {
-	border-color: color-mix(in srgb, #2dd4bf 50%, var(--border));
-	background: color-mix(in srgb, #2dd4bf 6%, var(--card-bg));
+	flex-direction: row;
+	gap: 10px;
+	aspect-ratio: auto;
+	width: fit-content;
+	padding: 9px 18px;
+	border-radius: 12px;
+	border-color: var(--color-accent);
+	background: var(--color-accent);
+	color: var(--color-bg);
+	box-shadow: 0 4px 14px color-mix(in srgb, var(--color-accent) 25%, transparent);
 }
 .room-log-item--latest:hover {
-	border-color: color-mix(in srgb, #2dd4bf 70%, var(--border));
-	background: color-mix(in srgb, #2dd4bf 10%, var(--card-bg));
+	border-color: var(--color-accent-hover);
+	background: var(--color-accent-hover);
 }
-.room-log-latest-slot + li {
-	grid-column-start: 1;
+.room-log-latest-slot {
+	grid-column: 1 / -1;
+}
+/* 押すと話数ルームへ移ることを示す */
+.room-log-latest-arrow {
+	width: 16px;
+	height: 16px;
 }
 .room-log-latest-label {
-	display: inline-flex;
-	align-items: center;
-	gap: 3px;
-	color: #5eead4;
-	font-size: 0.65rem;
-	font-weight: 750;
+	font-size: 0.78rem;
+	font-weight: 700;
 	line-height: 1;
+	opacity: 0.85;
 }
 .room-log-ep {
 	font-size: 1rem;
@@ -3458,9 +3640,31 @@ a.relation-card:hover {
 	line-height: 1.2;
 	text-align: center;
 }
-/* スマホ版のみ使用する数字のみの短縮表示 */
 .room-log-ep-compact {
-	display: none;
+	font-size: 0.9rem;
+	font-weight: 750;
+	line-height: 1;
+	text-align: center;
+}
+.room-log-item--special .room-log-ep-compact {
+	overflow: hidden;
+	max-width: 100%;
+	font-size: 0.72rem;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.room-log-item.room-log-item--unaired .room-log-ep-compact {
+	font-weight: 500;
+}
+/* 放送中の話は右上の赤い点で示す（小さいボタンに「LIVE」の文字は入らない） */
+.room-log-live-dot {
+	position: absolute;
+	top: 4px;
+	right: 4px;
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: #ef4444;
 }
 .room-log-live-badge {
 	position: absolute;
@@ -3486,169 +3690,128 @@ a.relation-card:hover {
 
 /* Responsive */
 @media (max-width: 768px) {
-	/* 左=情報カラム / 右=アクションリモコン の2カラム。title/mainは全幅 */
+	/* 上だけ 左=表紙 / 右=スコアとボタン に分け、そこから下（話数ルーム・関連作品・作品情報）は全幅の1列にする。
+	   作品情報まで左の列に入れると、その長さの分だけ話数ルームが押し下げられて最初の画面に入らない */
 	.anime-layout {
 		display: grid;
-		grid-template-columns: minmax(0, 150px) minmax(0, 1fr);
-		grid-template-rows: auto auto auto;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		grid-template-rows: auto auto auto auto auto;
 		grid-template-areas:
 			"title title"
 			"left remote"
-			"main main";
+			"main main"
+			"info info"
+			"rel rel";
 		align-items: start;
-		column-gap: 14px;
+		column-gap: 16px;
 		row-gap: 16px;
 	}
-	/* 左カラム: カバー画像の下に静的データを縦積み */
+	/* 左の列の中身（表紙と作品情報）を別々の段に置く */
 	.left-panel {
-		flex-direction: column;
-		align-items: stretch;
-		gap: 10px;
+		display: contents;
 	}
 	.cover-col {
+		grid-area: left;
 		width: 100%;
+	}
+	.left-panel-info {
+		grid-area: info;
+		gap: 12px;
+	}
+	/* 作品情報は全幅になるので、左（作品の中身）と右（外への入口）の列を左右に並べる。
+	   列ごとに縦に積むので、片方の段の高さがもう片方の間隔に響かない。
+	   カードはやめ、話数ルーム・関連作品と同じく上の区切り線と段の見出しで分ける */
+	.left-panel-info .prod-info {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		align-items: start;
+		gap: 16px;
+		padding: 0;
+		border: 0;
+		background: transparent;
+	}
+	.info-heading {
+		display: block;
+		margin: 0;
+		font-size: 1rem;
+		font-weight: 700;
+	}
+	.room-tabs-section,
+	.left-panel-info,
+	.relations-slot--mobile {
+		padding-top: 16px;
+		border-top: 1px solid var(--border);
+	}
+	.relations-slot--mobile {
+		display: block;
+		grid-area: rel;
+		min-width: 0;
+	}
+	.relations-slot--desktop {
+		display: none;
 	}
 	.anime-cover {
 		max-width: none;
-	}
-	/* PC版の冗長なラベル付きdlは隠し、圧縮メタを表示（Resourcesは維持） */
-	.left-panel-info .prod-info {
-		display: none;
-	}
-	.mobile-meta {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-		margin-top: 8px;
-	}
-	.mobile-meta-chips {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 5px;
-	}
-	.mobile-meta-chip {
-		font-size: 11px;
-		line-height: 1.3;
-		padding: 2px 7px;
-		border-radius: 14px;
-		background: var(--hover-bg);
-		color: var(--text-muted);
-		border: 1px solid var(--border);
-		text-decoration: none;
-		transition:
-			background 0.15s,
-			color 0.15s,
-			border-color 0.15s;
-	}
-	.mobile-meta-chip:hover,
-	.mobile-meta-chip:active {
-		background: var(--accent);
-		color: #fff;
-		border-color: var(--accent);
-	}
-	.mobile-hashtags {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 6px;
-	}
-	.mobile-hashtag {
-		font-size: 11px;
-		color: var(--accent);
-		text-decoration: none;
-	}
-	.mobile-hashtag:hover {
-		text-decoration: underline;
-	}
-	.mobile-official-icons {
-		display: flex;
-		align-items: center;
-		gap: 12px;
-		margin-top: 2px;
-	}
-	.mobile-icon-link {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 30px;
-		height: 30px;
-		border-radius: 50%;
-		corner-shape: round;
-		border: 1px solid var(--border);
-		background: var(--hover-bg);
-		color: var(--text);
-		font-size: 0.95rem;
-		text-decoration: none;
-		transition:
-			background 0.15s,
-			border-color 0.15s;
-	}
-	.mobile-icon-link [class^="i-lucide"] {
-		width: 1em;
-		height: 1em;
-	}
-	.mobile-icon-link:hover {
-		border-color: var(--accent);
-		background: var(--card-bg);
 	}
 	/* 右カラム: 純粋なアクションリモコン化（スコア＋リストを横並び→ボタン→管理者） */
 	.remote {
 		gap: 12px;
 	}
-	.remote .stats-grid {
-		gap: 8px;
-		flex-wrap: nowrap;
+	/* 表紙（列の半分）の横では、マイリストの下に残りの3つを縦に積み、アイコンと文字を横に並べる
+	   （横に3つ並べると「コレクション」が入らない） */
+	.remote .mylist-split {
+		grid-column: 1 / -1;
 	}
-	.remote .stat-card {
-		flex: 1 1 0;
-		min-width: 0;
-		padding: 10px 12px;
+	.remote .mylist-split-main {
+		padding: 7px 22px;
 	}
-	.remote .stat-card-value {
-		font-size: 1.35rem;
+	.remote .mylist-split-detail {
+		padding: 7px 10px;
 	}
-	.remote .action-bar {
-		gap: 8px;
+	.remote .mylist-split-caret {
+		right: 6px;
 	}
-	.remote .action-bar-btn {
-		padding: 10px 4px;
-		font-size: 0.68rem;
+	/* 細い列なので、スコアと登録者数は縦に積み、数字と説明を横に並べる */
+	.remote .stats-line {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 14px;
+		padding-block: 4px;
 	}
-	.mobile-relations-slot {
-		display: block;
-		min-width: 0;
-	}
-	.desktop-relations-slot {
-		display: none;
-	}
-	.remote .relations-section {
-		gap: 10px;
-	}
-	.remote .relations-section h2 {
-		font-size: 0.9rem;
-	}
-	.remote .relation-group {
+	.remote .stat {
+		flex-direction: row;
+		align-items: baseline;
 		gap: 6px;
 	}
-	.remote .relation-list {
-		display: grid;
+	.remote .stat-value {
+		font-size: 1.25rem;
+	}
+	/* 右の列の文字は少し小さくして、「リストに追加」などが切れないようにする */
+	.remote .mylist-split-label {
+		font-size: 0.78rem;
+	}
+	.remote .mylist-label-long {
+		display: none;
+	}
+	.count-full {
+		display: none;
+	}
+	.count-compact {
+		display: inline;
+	}
+	.remote .mylist-label-short {
+		display: inline;
+	}
+	.remote .action-bar {
 		grid-template-columns: minmax(0, 1fr);
 		gap: 6px;
 	}
-	.remote .relation-card {
-		width: 100%;
-		height: 56px;
-		max-width: none;
-		min-width: 0;
-		min-height: 48px;
-		padding: 6px 8px 6px 6px;
-	}
-	.remote .relation-card-thumb {
-		width: 30px;
-	}
-	.remote .relation-card strong,
-	.remote .relation-card small {
-		overflow: hidden;
-		text-overflow: ellipsis;
+	/* 縦に積んだ3つのボタンは左寄せにして、アイコンを縦一列にそろえる */
+	.remote .action-bar-btn {
+		justify-content: flex-start;
+		gap: 8px;
+		padding: 7px 14px;
+		font-size: 0.72rem;
 		white-space: nowrap;
 	}
 	.remote-admin-btn {
@@ -3685,28 +3848,6 @@ a.relation-card:hover {
 	.recommend-submit {
 		width: 100%;
 	}
-	/* ルームログ: 数字のみの小型ボックスで一覧性を向上 */
-	.room-log-list {
-		grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
-		gap: 6px;
-	}
-	.room-log-item {
-		gap: 0;
-		padding: 4px;
-		border-radius: 12px;
-	}
-	.room-log-ep,
-	.room-log-date,
-	.room-log-latest-label {
-		display: none;
-	}
-	.room-log-ep-compact {
-		display: block;
-		font-size: 0.9rem;
-		font-weight: 750;
-		line-height: 1.1;
-		text-align: center;
-	}
 	.room-log-live-badge {
 		top: 3px;
 		right: 3px;
@@ -3718,8 +3859,7 @@ a.relation-card:hover {
 
 @media (max-width: 480px) {
 	.anime-layout {
-		grid-template-columns: minmax(0, 128px) minmax(0, 1fr);
-		column-gap: 10px;
+		column-gap: 16px;
 	}
 	.anime-title {
 		font-size: 1.1rem;
@@ -3728,5 +3868,23 @@ a.relation-card:hover {
 		padding-left: 8px;
 		padding-right: 8px;
 	}
+}
+
+/* 幅 320 前後の小さい端末では、「リストに追加」が切れないよう表紙を少し小さくする */
+@media (max-width: 340px) {
+	.anime-layout {
+		grid-template-columns: minmax(0, 42%) minmax(0, 1fr);
+	}
+	.remote .mylist-split-main {
+		padding-inline: 18px;
+	}
+}
+/* 最新話の青いボタンの中の日付と LIVE（ほかの指定より後ろに置く） */
+.room-log-item--latest .room-log-date {
+	color: inherit;
+	opacity: 0.8;
+}
+.room-log-item--latest .room-log-live-badge {
+	position: static;
 }
 </style>

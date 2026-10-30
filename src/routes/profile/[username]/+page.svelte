@@ -5,9 +5,13 @@ import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
 import AnimeStatusSection from "$lib/components/AnimeStatusSection.svelte";
+import CollectionFormModal from "$lib/components/CollectionFormModal.svelte";
+import FavoriteAnimeShelf from "$lib/components/FavoriteAnimeShelf.svelte";
+import ImageCropper from "$lib/components/ImageCropper.svelte";
 import PostRow from "$lib/components/PostRow.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
+import { checkCropSource } from "$lib/image-crop";
 import { timelineCursorHref } from "$lib/timeline-cursor";
 import type { Anime, AnimeStatus } from "$lib/types";
 import type { PageProps } from "./$types";
@@ -20,9 +24,11 @@ const listPosts = $derived(data.listPosts);
 const displayName = $derived(profile.display_name ?? profile.username);
 const profileSocialImage = $derived(profile.header_url ?? profile.avatar_url);
 
-let isFollowing = $state(false);
-let followRequestStatus = $state<"none" | "pending">("none");
-let followerCount = $state(0);
+// 最初からサーバーの値で始める（false で始めると、サーバーで出す HTML と開いた直後に「フォローする」が一瞬見える）。
+// そのあとの変化は下の $effect で合わせる
+let isFollowing = $state(untrack(() => data.isFollowing));
+let followRequestStatus = $state<"none" | "pending">(untrack(() => data.followRequestStatus));
+let followerCount = $state(untrack(() => data.followCounts.followers));
 let isProcessing = $state(false);
 let editDisplayName = $state(untrack(() => data.profile.display_name ?? ""));
 let editBio = $state(untrack(() => data.profile.bio ?? ""));
@@ -37,6 +43,7 @@ let avatarUploading = $state(false);
 let avatarMessage = $state("");
 let avatarPreviewUrl = $state<string | null>(null);
 let avatarPendingFile = $state<File | null>(null);
+let avatarPendingDelete = $state(false);
 let showProfileEditModal = $state(false);
 let showUserReportModal = $state(false);
 let reportReason = $state("harassment");
@@ -45,6 +52,34 @@ let reportSubmitting = $state(false);
 let reportMessage = $state("");
 let showKebabMenu = $state(false);
 let blocking = $state(false);
+let creatingCollection = $state(false);
+// タブが入りきらない幅（320px など）では横に送る。続きがある側の端をぼかして知らせる
+let tabsNav = $state<HTMLElement | null>(null);
+let tabsMoreLeft = $state(false);
+let tabsMoreRight = $state(false);
+
+function updateTabsOverflow() {
+	if (!tabsNav) return;
+	tabsMoreLeft = tabsNav.scrollLeft > 1;
+	tabsMoreRight = tabsNav.scrollLeft + tabsNav.clientWidth < tabsNav.scrollWidth - 1;
+}
+
+$effect(() => {
+	if (!tabsNav) return;
+	// 開いているタブが見える位置まで送る（右端の「いいね」などを開いたとき）
+	void activeTab;
+	// scrollIntoView はページごと縦にも動かすので、タブの並びだけを横に送る
+	const active = tabsNav.querySelector<HTMLElement>(".profile-tab.active");
+	if (active) {
+		const overRight = active.offsetLeft + active.offsetWidth - (tabsNav.scrollLeft + tabsNav.clientWidth);
+		if (overRight > 0) tabsNav.scrollLeft += overRight;
+		else if (active.offsetLeft < tabsNav.scrollLeft) tabsNav.scrollLeft = active.offsetLeft;
+	}
+	updateTabsOverflow();
+	const observer = new ResizeObserver(updateTabsOverflow);
+	observer.observe(tabsNav);
+	return () => observer.disconnect();
+});
 
 $effect(() => {
 	isFollowing = data.isFollowing;
@@ -61,10 +96,13 @@ $effect(() => {
 
 const requestedTab = $derived(page.url.searchParams.get("tab"));
 const activeTab = $derived(
-	requestedTab === "images" || requestedTab === "list" || requestedTab === "likes" ? requestedTab : "posts",
+	requestedTab === "images" || requestedTab === "list" || requestedTab === "collections" || requestedTab === "likes"
+		? requestedTab
+		: "posts",
 );
 const bioRemaining = $derived(160 - editBio.length);
 const editableHeaderUrl = $derived(headerPreviewUrl ?? (headerPendingDelete ? null : profile.header_url));
+const editableAvatarUrl = $derived(avatarPreviewUrl ?? (avatarPendingDelete ? null : profile.avatar_url));
 
 const submitBlock: SubmitFunction = ({ cancel }) => {
 	if (!data.isBlocked && !window.confirm(`@${profile.username} をブロックします。フォロー関係も解除されます。`)) {
@@ -81,11 +119,36 @@ const submitBlock: SubmitFunction = ({ cancel }) => {
 	};
 };
 
+/** 画像を先に読み込んでおく（読み込めなくても、待ちすぎないよう 5 秒で先へ進む） */
+function preloadImage(url: string | null | undefined): Promise<void> {
+	if (!url) return Promise.resolve();
+	const image = new Image();
+	image.src = url;
+	return Promise.race([image.decode().catch(() => {}), new Promise<void>((resolve) => setTimeout(resolve, 5000))]);
+}
+
 const handleProfileSubmit: SubmitFunction = () => {
 	// 保存中に選択が変わっても送信開始時点の画像状態を使う
 	const pendingHeaderFile = headerPendingFile;
 	const shouldDeleteHeader = headerPendingDelete;
 	const pendingAvatarFile = avatarPendingFile;
+	const shouldDeleteAvatar = avatarPendingDelete;
+	// 保存できた画像。手元のプレビュー（または「削除する」の表示）は、ページを読み直すまで残す。
+	// 先に片付けると、読み直すまでのあいだ前の画像に一瞬戻ってしまう
+	let headerSaved = false;
+	let avatarSaved = false;
+	const settleSavedImages = () => {
+		if (headerSaved) {
+			if (headerPreviewUrl) URL.revokeObjectURL(headerPreviewUrl);
+			headerPreviewUrl = null;
+			headerPendingDelete = false;
+		}
+		if (avatarSaved) {
+			if (avatarPreviewUrl) URL.revokeObjectURL(avatarPreviewUrl);
+			avatarPreviewUrl = null;
+			avatarPendingDelete = false;
+		}
+	};
 	profileSubmitting = true;
 	return async ({ result, update }) => {
 		// プロフィールテキストの保存が失敗した場合は画像処理をスキップ
@@ -104,16 +167,14 @@ const handleProfileSubmit: SubmitFunction = () => {
 				const response = await fetch("/api/upload/profile-header", { method: "POST", body });
 				const res = (await response.json().catch(() => ({}))) as { message?: string };
 				if (!response.ok) throw new Error(res.message ?? "ヘッダー画像の更新に失敗しました");
-				if (headerPreviewUrl) {
-					URL.revokeObjectURL(headerPreviewUrl);
-					headerPreviewUrl = null;
-				}
 				headerPendingFile = null;
+				headerSaved = true;
 			} catch (uploadError) {
 				headerMessage = uploadError instanceof Error ? uploadError.message : "ヘッダー画像の更新に失敗しました";
 				headerUploading = false;
 				profileSubmitting = false;
 				await update({ reset: false });
+				settleSavedImages();
 				return;
 			}
 			headerUploading = false;
@@ -124,12 +185,13 @@ const handleProfileSubmit: SubmitFunction = () => {
 				const response = await fetch("/api/upload/profile-header", { method: "DELETE" });
 				const res = (await response.json().catch(() => ({}))) as { message?: string };
 				if (!response.ok) throw new Error(res.message ?? "ヘッダー画像の削除に失敗しました");
-				headerPendingDelete = false;
+				headerSaved = true;
 			} catch (deleteError) {
 				headerMessage = deleteError instanceof Error ? deleteError.message : "ヘッダー画像の削除に失敗しました";
 				headerUploading = false;
 				profileSubmitting = false;
 				await update({ reset: false });
+				settleSavedImages();
 				return;
 			}
 			headerUploading = false;
@@ -144,23 +206,44 @@ const handleProfileSubmit: SubmitFunction = () => {
 				const response = await fetch("/api/upload/avatar", { method: "POST", body });
 				const res = (await response.json().catch(() => ({}))) as { message?: string };
 				if (!response.ok) throw new Error(res.message ?? "アイコン画像の更新に失敗しました");
-				if (avatarPreviewUrl) {
-					URL.revokeObjectURL(avatarPreviewUrl);
-					avatarPreviewUrl = null;
-				}
 				avatarPendingFile = null;
+				avatarSaved = true;
 			} catch (uploadError) {
 				avatarMessage = uploadError instanceof Error ? uploadError.message : "アイコン画像の更新に失敗しました";
 				avatarUploading = false;
 				profileSubmitting = false;
 				await update({ reset: false });
+				settleSavedImages();
+				return;
+			}
+			avatarUploading = false;
+		} else if (shouldDeleteAvatar) {
+			avatarUploading = true;
+			avatarMessage = "";
+			try {
+				const response = await fetch("/api/upload/avatar", { method: "DELETE" });
+				const res = (await response.json().catch(() => ({}))) as { message?: string };
+				if (!response.ok) throw new Error(res.message ?? "アイコン画像の削除に失敗しました");
+				avatarSaved = true;
+			} catch (deleteError) {
+				avatarMessage = deleteError instanceof Error ? deleteError.message : "アイコン画像の削除に失敗しました";
+				avatarUploading = false;
+				profileSubmitting = false;
+				await update({ reset: false });
+				settleSavedImages();
 				return;
 			}
 			avatarUploading = false;
 		}
 
-		profileSubmitting = false;
 		await update({ reset: false });
+		// 新しい画像を読み込み終えてから閉じる。閉じた直後にプロフィールで前の画像が一瞬見えないように
+		await Promise.all([
+			headerSaved ? preloadImage(data.profile.header_url) : null,
+			avatarSaved ? preloadImage(data.profile.avatar_url) : null,
+		]);
+		settleSavedImages();
+		profileSubmitting = false;
 		editDisplayName = data.profile.display_name ?? "";
 		editBio = data.profile.bio ?? "";
 		showProfileEditModal = false;
@@ -195,53 +278,73 @@ function closeProfileEditModal() {
 		avatarPreviewUrl = null;
 	}
 	avatarPendingFile = null;
+	avatarPendingDelete = false;
 	editDisplayName = data.profile.display_name ?? "";
 	editBio = data.profile.bio ?? "";
 }
 
+// 選んだ画像は、まず切り抜きの画面（ImageCropper）に回し、決めた範囲の画像を保存のときに送る
+let avatarCropSource = $state<File | null>(null);
+let headerCropSource = $state<File | null>(null);
+
 function updateHeaderImage(event: Event) {
 	const input = event.currentTarget as HTMLInputElement;
 	const file = input.files?.[0];
+	// 同じ画像を選び直しても選んだことになるように、欄はすぐ空に戻す
+	input.value = "";
 	if (!file) return;
 
 	headerMessage = "";
-	if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-		headerMessage = "JPEG、PNG、WebP形式の画像を選択してください。";
-		input.value = "";
+	// 決まりは画面に書かず、外れたときだけ伝える（ux-guidelines）
+	const problem = checkCropSource(file);
+	if (problem) {
+		headerMessage = problem;
 		return;
 	}
-	if (file.size > 5 * 1024 * 1024) {
-		headerMessage = "画像は5MB以内にしてください。";
-		input.value = "";
-		return;
-	}
+	headerCropSource = file;
+}
 
+function applyCroppedHeader(cropped: File) {
+	headerCropSource = null;
 	if (headerPreviewUrl) URL.revokeObjectURL(headerPreviewUrl);
-	headerPreviewUrl = URL.createObjectURL(file);
-	headerPendingFile = file;
+	headerPreviewUrl = URL.createObjectURL(cropped);
+	headerPendingFile = cropped;
 	headerPendingDelete = false;
 }
 
 function updateAvatarImage(event: Event) {
 	const input = event.currentTarget as HTMLInputElement;
 	const file = input.files?.[0];
+	// 同じ画像を選び直しても選んだことになるように、欄はすぐ空に戻す
+	input.value = "";
 	if (!file) return;
 
 	avatarMessage = "";
-	if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-		avatarMessage = "JPEG、PNG、WebP形式の画像を選択してください。";
-		input.value = "";
+	const problem = checkCropSource(file);
+	if (problem) {
+		avatarMessage = problem;
 		return;
 	}
-	if (file.size > 2 * 1024 * 1024) {
-		avatarMessage = "画像は2MB以内にしてください。";
-		input.value = "";
-		return;
-	}
+	avatarCropSource = file;
+}
 
+function applyCroppedAvatar(cropped: File) {
+	avatarCropSource = null;
 	if (avatarPreviewUrl) URL.revokeObjectURL(avatarPreviewUrl);
-	avatarPreviewUrl = URL.createObjectURL(file);
-	avatarPendingFile = file;
+	avatarPreviewUrl = URL.createObjectURL(cropped);
+	avatarPendingFile = cropped;
+	avatarPendingDelete = false;
+}
+
+/** アイコン画像を外す（頭文字のアイコンに戻す）。保存したときに消す */
+function removeAvatarImage() {
+	if (avatarPreviewUrl) {
+		URL.revokeObjectURL(avatarPreviewUrl);
+		avatarPreviewUrl = null;
+	}
+	avatarPendingFile = null;
+	avatarPendingDelete = true;
+	avatarMessage = "";
 }
 
 function removeHeaderImage() {
@@ -355,7 +458,7 @@ const grouped = $derived(
 						{#if isOwn}
 							<button
 								type="button"
-								class="btn btn-outline"
+								class="btn btn-secondary"
 								style="font-size: 13px;"
 								onclick={openProfileEditModal}
 							>
@@ -364,7 +467,7 @@ const grouped = $derived(
 						{:else if data.user}
 							{#if data.isBlocked}
 								<!-- ブロック中はフォローできない（RLS で拒否される）ので、操作の代わりに状態を示す -->
-								<span class="btn btn-outline" style="font-size: 13px;">ブロック中</span>
+								<span class="btn btn-secondary profile-blocked-label">ブロック中</span>
 							{:else}
 								<form
 									method="POST"
@@ -396,7 +499,7 @@ const grouped = $derived(
 									<input type="hidden" name="target_id" value={profile.id}>
 									<button
 										type="submit"
-										class="btn {isFollowing || followRequestStatus === 'pending' ? 'btn-outline' : 'btn-primary'}"
+										class="btn {isFollowing || followRequestStatus === 'pending' ? 'btn-secondary' : 'btn-primary'}"
 										disabled={isProcessing || followRequestStatus === 'pending'}
 										style="font-size: 13px;"
 									>
@@ -488,6 +591,9 @@ const grouped = $derived(
 							</span>
 						{/if}
 					</div>
+					{#if canViewContent && !data.isBlocked}
+						<FavoriteAnimeShelf favorites={data.favoriteAnime} {isOwn} />
+					{/if}
 				</div>
 			</div>
 		</div>
@@ -581,7 +687,7 @@ const grouped = $derived(
 						action="?/updateProfile"
 						use:enhance={handleProfileSubmit}
 					>
-						<div class="profile-edit-modal-body">
+						<div class="profile-edit-modal-body scrollbar-thin-muted">
 							{#if form?.success}
 								<div class="flash-success">プロフィールを更新しました。</div>
 							{/if}
@@ -592,43 +698,58 @@ const grouped = $derived(
 
 							<div class="field">
 								<span class="field-label">アイコン画像</span>
+								<!-- 左にアイコン、右にボタン（初期設定と同じ並び）。アイコンを押しても選べる。Tab の移動先と読み上げはボタンだけ -->
 								<div class="profile-avatar-editor">
-									<UserAvatar
-										src={avatarPreviewUrl ?? profile.avatar_url}
-										username={profile.username}
-										size="lg"
-									/>
-								</div>
-								<div class="profile-header-editor-actions">
-									<label class="btn btn-outline profile-header-file-button">
-										{avatarUploading ? '処理中...' : '画像を選択'}
-										<input
-											type="file"
-											accept="image/jpeg,image/png,image/webp"
-											disabled={profileSubmitting || avatarUploading}
-											onchange={updateAvatarImage}
-										>
+									<label for="profile-avatar-input" class="avatar-pick" aria-hidden="true">
+										<UserAvatar
+											src={editableAvatarUrl}
+											username={profile.display_name || profile.username}
+											size="lg"
+										/>
 									</label>
+									<div class="profile-image-actions">
+										<label class="btn btn-secondary profile-image-button">
+											{avatarUploading ? '処理中...' : editableAvatarUrl ? '画像を変更' : '画像を選択'}
+											<input
+												id="profile-avatar-input"
+												type="file"
+												accept="image/jpeg,image/png,image/webp"
+												disabled={profileSubmitting || avatarUploading}
+												onchange={updateAvatarImage}
+											>
+										</label>
+										{#if editableAvatarUrl}
+											<button
+												type="button"
+												class="btn btn-ghost"
+												disabled={profileSubmitting || avatarUploading}
+												onclick={removeAvatarImage}
+											>
+												削除
+											</button>
+										{/if}
+									</div>
 								</div>
-								<p class="field-hint">JPEG、PNG、WebP・最大2MB。</p>
 								{#if avatarMessage}
-									<p class="profile-header-editor-message" aria-live="polite">{avatarMessage}</p>
+									<p class="field-error-msg" role="alert">{avatarMessage}</p>
 								{/if}
 							</div>
 
 							<div class="field">
 								<span class="field-label">ヘッダー画像</span>
-								<div class="profile-header-editor">
+								<!-- プレビューを押しても選べる（読み上げはボタンだけ） -->
+								<label for="profile-header-input" class="profile-header-editor" aria-hidden="true">
 									{#if editableHeaderUrl}
-										<img src={editableHeaderUrl} alt="ヘッダー画像のプレビュー">
+										<img src={editableHeaderUrl} alt="">
 									{:else}
-										<div class="profile-header-editor-empty">ヘッダー画像は未設定です</div>
+										<span class="profile-header-editor-empty">ヘッダー画像は未設定です</span>
 									{/if}
-								</div>
-								<div class="profile-header-editor-actions">
-									<label class="btn btn-outline profile-header-file-button">
-										{headerUploading ? '処理中...' : '画像を選択'}
+								</label>
+								<div class="profile-image-actions profile-header-actions-row">
+									<label class="btn btn-secondary profile-image-button">
+										{headerUploading ? '処理中...' : editableHeaderUrl ? '画像を変更' : '画像を選択'}
 										<input
+											id="profile-header-input"
 											type="file"
 											accept="image/jpeg,image/png,image/webp"
 											disabled={profileSubmitting || headerUploading}
@@ -646,9 +767,8 @@ const grouped = $derived(
 										</button>
 									{/if}
 								</div>
-								<p class="field-hint">横長の画像を推奨します。JPEG、PNG、WebP・最大5MB。</p>
 								{#if headerMessage}
-									<p class="profile-header-editor-message" aria-live="polite">{headerMessage}</p>
+									<p class="field-error-msg" role="alert">{headerMessage}</p>
 								{/if}
 							</div>
 
@@ -660,14 +780,11 @@ const grouped = $derived(
 									type="text"
 									class="field-input"
 									class:field-error={form && 'field' in form && form.field === 'display_name'}
-									placeholder="アニメ太郎"
 									maxlength="50"
 									bind:value={editDisplayName}
 								>
 								{#if form && 'field' in form && form.field === 'display_name'}
 									<p class="field-error-msg">{form.message}</p>
-								{:else}
-									<p class="field-hint">タイムラインやプロフィールで表示される名前です。</p>
 								{/if}
 							</div>
 
@@ -716,7 +833,14 @@ const grouped = $derived(
 		{/if}
 
 		<!-- タブ -->
-		<nav class="profile-tabs" aria-label="プロフィールタブ">
+		<nav
+			class="profile-tabs"
+			class:profile-tabs--more-left={tabsMoreLeft}
+			class:profile-tabs--more-right={tabsMoreRight}
+			aria-label="プロフィールタブ"
+			bind:this={tabsNav}
+			onscroll={updateTabsOverflow}
+		>
 			<a href="/profile/{profile.username}" class="profile-tab" class:active={activeTab === 'posts'}>投稿</a>
 			<a href="/profile/{profile.username}?tab=images" class="profile-tab" class:active={activeTab === 'images'}
 				>画像</a
@@ -726,6 +850,13 @@ const grouped = $derived(
 				{#if !canViewContent || (!profile.list_is_public && !isOwn)}
 					<span class="tab-lock i-lucide-lock-keyhole" aria-hidden="true"></span>
 				{/if}
+			</a>
+			<a
+				href="/profile/{profile.username}?tab=collections"
+				class="profile-tab"
+				class:active={activeTab === 'collections'}
+			>
+				コレクション
 			</a>
 			{#if isOwn}
 				<a href="/profile/{profile.username}?tab=likes" class="profile-tab" class:active={activeTab === 'likes'}
@@ -827,6 +958,76 @@ const grouped = $derived(
 			{/if}
 		{/if}
 
+		<!-- コレクションタブ（#515） -->
+		{#if activeTab === 'collections'}
+			{#if !canViewContent}
+				<div class="empty-state profile-private-state">
+					<p>このアカウントのコレクションはフォロワーだけが見ることができます</p>
+				</div>
+			{:else if data.collections === null}
+				<div class="empty-state">
+					<p>コレクションを読み込めませんでした。ページを再読み込みしてください</p>
+				</div>
+			{:else}
+				{#if isOwn && data.collections.length > 0}
+					<div class="collections-toolbar">
+						<button
+							type="button"
+							class="btn btn-secondary collections-new"
+							onclick={() => (creatingCollection = true)}
+						>
+							<span class="i-lucide-plus" aria-hidden="true"></span>
+							新しいコレクション
+						</button>
+					</div>
+				{/if}
+				{#if data.collections.length === 0}
+					{#if isOwn}
+						<button type="button" class="collections-empty-add" onclick={() => (creatingCollection = true)}>
+							<span class="i-lucide-plus" aria-hidden="true"></span>
+							コレクションを作る
+						</button>
+					{:else}
+						<div class="empty-state"><p>まだコレクションがありません</p></div>
+					{/if}
+				{:else}
+					<ul class="collections-list">
+						{#each data.collections as collection (collection.id)}
+							<li>
+								<a href="/collections/{collection.id}" class="collection-item">
+									<!-- 先頭の4作品のカバー（足りない分は空の枠） -->
+									<span class="collection-item-covers" aria-hidden="true">
+										{#each [0, 1, 2, 3] as slot (slot)}
+											<span class="collection-item-cover">
+												{#if collection.covers[slot]}
+													<img src={collection.covers[slot]} alt="" loading="lazy">
+												{/if}
+											</span>
+										{/each}
+									</span>
+									<span class="collection-item-body">
+										<span class="collection-item-title">
+											{collection.title}
+											{#if !collection.is_public}
+												<span class="collection-item-private">
+													<span class="i-lucide-lock-keyhole" aria-hidden="true"></span>
+													非公開
+												</span>
+											{/if}
+										</span>
+										{#if collection.description}
+											<span class="collection-item-description">{collection.description}</span>
+										{/if}
+										<span class="collection-item-meta">{collection.item_count}作品</span>
+									</span>
+								</a>
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			{/if}
+		{/if}
+
 		<!-- いいねタブ -->
 		{#if activeTab === 'likes'}
 			{#if !isOwn}
@@ -852,6 +1053,37 @@ const grouped = $derived(
 		<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
 	</aside>
 </div>
+
+{#if creatingCollection && isOwn}
+	<CollectionFormModal
+		mode="create"
+		action="?/createCollection"
+		onclose={() => {
+			creatingCollection = false;
+		}}
+	/>
+{/if}
+
+{#if avatarCropSource}
+	<ImageCropper
+		file={avatarCropSource}
+		onconfirm={applyCroppedAvatar}
+		oncancel={() => {
+			avatarCropSource = null;
+		}}
+	/>
+{/if}
+
+{#if headerCropSource}
+	<ImageCropper
+		file={headerCropSource}
+		kind="header"
+		onconfirm={applyCroppedHeader}
+		oncancel={() => {
+			headerCropSource = null;
+		}}
+	/>
+{/if}
 
 <style>
 .load-more-btn {
@@ -947,6 +1179,7 @@ const grouped = $derived(
 }
 
 .profile-tabs {
+	position: relative;
 	display: flex;
 	border-bottom: 1px solid var(--color-border);
 	margin: 16px 0 0;
@@ -973,10 +1206,24 @@ const grouped = $derived(
 	white-space: nowrap;
 }
 
+/* スマホでは詰めて、5つのタブが 360px 幅に収まるようにする（余った幅は均等に分ける） */
 @media (max-width: 480px) {
 	.profile-tab {
-		padding: 10px 12px;
+		flex: 1 0 auto;
+		justify-content: center;
+		padding: 10px 4px;
+		font-size: 0.85rem;
 	}
+}
+
+.profile-tabs--more-right {
+	mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
+}
+.profile-tabs--more-left {
+	mask-image: linear-gradient(to left, #000 calc(100% - 32px), transparent);
+}
+.profile-tabs--more-left.profile-tabs--more-right {
+	mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent);
 }
 
 .profile-tab:hover {
@@ -1171,13 +1418,21 @@ const grouped = $derived(
 	overflow-y: auto;
 }
 
+/* 欄どうしの間は .profile-edit-modal-body の gap だけにする（.field の下の余白と重なって広がっていた） */
+.profile-edit-modal-body :global(.field) {
+	margin-bottom: 0;
+}
+
 .profile-avatar-editor {
 	display: flex;
 	align-items: center;
-	gap: 12px;
+	gap: 14px;
 }
 
 .profile-header-editor {
+	display: block;
+	cursor: pointer;
+	transition: opacity 0.15s;
 	overflow: hidden;
 	width: 100%;
 	aspect-ratio: 3 / 1;
@@ -1201,20 +1456,144 @@ const grouped = $derived(
 	font-size: 13px;
 }
 
-.profile-header-editor-actions {
+.profile-header-editor:hover {
+	opacity: 0.8;
+}
+
+.profile-image-actions {
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	margin-top: 10px;
 }
 
-.profile-header-file-button {
+.profile-header-actions-row {
+	margin-top: 8px;
+}
+
+/* コレクションタブ（#515） */
+.collections-toolbar {
+	display: flex;
+	justify-content: flex-end;
+	padding: 12px 16px 0;
+}
+.collections-new {
+	font-size: 13px;
+}
+.collections-empty-add {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	width: calc(100% - 32px);
+	margin: 16px;
+	padding: 20px;
+	border: 1px dashed var(--color-border-hover);
+	border-radius: 12px;
+	background: transparent;
+	color: var(--color-text-muted);
+	cursor: pointer;
+	font: inherit;
+	font-size: 14px;
+}
+.collections-empty-add:hover {
+	background: var(--color-surface-hover);
+	color: var(--color-text);
+}
+.collections-list {
+	display: flex;
+	flex-direction: column;
+	margin: 0;
+	padding: 8px 0;
+	list-style: none;
+}
+.collection-item {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	padding: 12px 16px;
+	color: var(--color-text);
+	text-decoration: none;
+}
+.collection-item:hover {
+	background: var(--color-surface-hover);
+}
+.collection-item-covers {
+	display: grid;
+	flex-shrink: 0;
+	grid-template-columns: repeat(2, 1fr);
+	gap: 2px;
+	width: 72px;
+	overflow: hidden;
+	border-radius: 8px;
+	background: var(--color-border);
+}
+.collection-item-cover {
+	display: block;
+	aspect-ratio: 400 / 566;
+	background: var(--color-bg-card);
+}
+.collection-item-cover img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+.collection-item-body {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+}
+.collection-item-title {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	font-size: 15px;
+	font-weight: 700;
+	overflow-wrap: anywhere;
+}
+.collection-item-private {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	color: var(--color-text-muted);
+	font-size: 12px;
+	font-weight: 600;
+}
+.collection-item-description {
+	display: -webkit-box;
+	overflow: hidden;
+	color: var(--color-text-muted);
+	font-size: 13px;
+	line-height: 1.5;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	line-clamp: 2;
+}
+.collection-item-meta {
+	color: var(--color-text-muted);
+	font-size: 12px;
+}
+
+/* 「ブロック中」は押せない状態の表示なので、灰色の枠にして押せる見た目（カーソル・ホバー）を消す */
+.profile-blocked-label {
+	cursor: default;
+	font-size: 13px;
+}
+
+.profile-blocked-label:hover:not(:disabled) {
+	background: transparent;
+}
+
+/* 画像のボタンは補助の操作なので灰色の枠（.btn-secondary）にし、青は「保存する」だけに残す */
+.profile-image-button {
 	position: relative;
 	cursor: pointer;
 	font-size: 13px;
 }
 
-.profile-header-file-button input {
+.profile-image-button input {
 	position: absolute;
 	width: 1px;
 	height: 1px;
@@ -1222,12 +1601,6 @@ const grouped = $derived(
 	clip: rect(0 0 0 0);
 	clip-path: inset(50%);
 	white-space: nowrap;
-}
-
-.profile-header-editor-message {
-	margin: 6px 0 0;
-	color: var(--color-text-secondary, var(--fg-muted, #94a3b8));
-	font-size: 13px;
 }
 
 .tab-lock {

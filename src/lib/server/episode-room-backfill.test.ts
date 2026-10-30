@@ -34,6 +34,7 @@ function weekly(
 			posting_closes_at: `${date}T16:00:00Z`,
 			schedule_source: options.source === undefined ? "syobocal" : options.source,
 			episode_anomaly_applied: false,
+			has_posts: false,
 		};
 	});
 }
@@ -112,6 +113,7 @@ describe("planEpisodeRoomBackfill（#484）", () => {
 			posting_closes_at: "2026-04-30T16:00:00Z",
 			schedule_source: "syobocal",
 			episode_anomaly_applied: false,
+			has_posts: false,
 		});
 		const plan = planEpisodeRoomBackfill(TV, sessions, [], NOW);
 		for (const item of plan.assign) expect(item.episodeNumber).not.toBe(2);
@@ -140,6 +142,15 @@ describe("planEpisodeRoomBackfill（#484）", () => {
 		expect(plan.assign).toHaveLength(10);
 		expect(plan.special).toEqual([]);
 		expect(plan.leave.map((item) => item.date)).toEqual(["2026-06-11", "2026-06-18"]);
+	});
+
+	it("締め切った古い枠でも、投稿が残っていれば特番ルームに入れる（ルームログからたどれるように）", () => {
+		const sessions = weekly(12, { source: null }).map((session, index) =>
+			index === 10 ? { ...session, has_posts: true } : session,
+		);
+		const plan = planEpisodeRoomBackfill({ ...TV, episode_total: 10 }, sessions, [], NOW);
+		expect(plan.special.map((item) => item.date)).toEqual(["2026-06-11"]);
+		expect(plan.leave.map((item) => item.date)).toEqual(["2026-06-18"]);
 	});
 
 	it("しょぼい由来の枠や、まだ投稿を受け付ける古い枠は、推定できなければ特番ルームに入れる", () => {

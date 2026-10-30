@@ -1,6 +1,8 @@
 // Annict (api.annict.com) の作品データを Anipolis のカタログ値へ整形する純関数群。
 // 取り込みスクリプト scripts/import-annict.ts から使う。
 
+import { isHashtagName } from "./utils/hashtag.ts";
+
 const COPYRIGHT_MARKER_AT_START = /^(©|Ⓒ|\(C\)|（C）)/i;
 
 /**
@@ -77,4 +79,21 @@ export function annictTwitterUrl(username: string | null | undefined): string | 
 	const handle = username?.trim().replace(/^@/, "");
 	if (!handle || !/^[A-Za-z0-9_]{1,15}$/.test(handle)) return null;
 	return `https://x.com/${handle}`;
+}
+
+/**
+ * Annict の公式ハッシュタグ（twitterHashtag）を anime.official_hashtag の書式（# なしの配列）に揃える。
+ * 空白や読点で区切られた複数のタグも分け、投稿のハッシュタグとして通らないもの（記号入りなど）は
+ * rejected に回す（そのまま入れると投稿でハッシュタグにならない）
+ */
+export function normalizeAnnictHashtags(value: string | null | undefined): { tags: string[]; rejected: string[] } {
+	const tags: string[] = [];
+	const rejected: string[] = [];
+	for (const part of (value ?? "").split(/[\s,、]+/)) {
+		const tag = part.replace(/^[#＃]+/, "");
+		if (!tag) continue;
+		const bucket = isHashtagName(tag) ? tags : rejected;
+		if (!bucket.includes(tag)) bucket.push(tag);
+	}
+	return { tags, rejected };
 }

@@ -26,15 +26,15 @@ describe("normalizeEmail / isPlausibleEmail", () => {
 
 describe("validateNewPassword", () => {
 	it("requires the same minimum length as signup", () => {
-		expect(validateNewPassword("12345", "12345")).toEqual({
+		expect(validateNewPassword("1234567", "1234567")).toEqual({
 			ok: false,
 			field: "password",
-			message: "パスワードは6文字以上で入力してください",
+			message: "パスワードは8文字以上で入力してください",
 		});
 	});
 
 	it("requires the confirmation to match", () => {
-		expect(validateNewPassword("secret1", "secret2")).toEqual({
+		expect(validateNewPassword("secret-1", "secret-2")).toEqual({
 			ok: false,
 			field: "confirm",
 			message: "パスワードが一致しません",
@@ -42,7 +42,7 @@ describe("validateNewPassword", () => {
 	});
 
 	it("accepts a matching password of sufficient length", () => {
-		expect(validateNewPassword("secret1", "secret1")).toEqual({ ok: true });
+		expect(validateNewPassword("secret-1", "secret-1")).toEqual({ ok: true });
 	});
 });
 

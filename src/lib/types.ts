@@ -265,7 +265,7 @@ export interface AnimeRelation {
 		id: string;
 		title: string;
 		cover_url: string | null;
-	} | null;
+	};
 }
 
 export interface Anime {
@@ -335,6 +335,8 @@ export type AnimeListItem = Pick<
 	| "broadcast_day"
 	| "computed_broadcast_status"
 	| "user_entry"
+	| "avg_score"
+	| "score_count"
 >;
 
 export interface AnimeExchangeItem {

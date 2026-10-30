@@ -9,22 +9,17 @@ import {
 	setInviteCodeCookie,
 	validateInviteCode,
 } from "$lib/server/invites";
+import { getLastLoginMethod, setLastLoginMethod } from "$lib/server/last-login-method";
 import { getExtraAccounts, setExtraAccounts } from "$lib/server/multi-account";
 import { isPasskeyEnabled } from "$lib/server/passkey";
-import { isUsernameAvailable } from "$lib/server/queries";
 import { getClientKey, isRateLimited } from "$lib/server/rate-limit";
 import { createServiceRoleClient } from "$lib/server/supabase-admin";
+import { MIN_PASSWORD_LENGTH } from "$lib/utils/password-reset";
 import { sanitizeInternalRedirect } from "$lib/utils/url";
 import type { Actions, PageServerLoad, RequestEvent } from "./$types";
 
-const MIN_PASSWORD_LENGTH = 6;
-
 function getSafeNext(raw: FormDataEntryValue | string | null): string {
 	return sanitizeInternalRedirect(typeof raw === "string" ? raw : "/");
-}
-
-function normalizeUsername(value: FormDataEntryValue | null): string {
-	return (typeof value === "string" ? value : "").trim().toLowerCase();
 }
 
 function getInviteCodeInput(form: FormData): string {
@@ -88,6 +83,8 @@ export const load: PageServerLoad = async ({ url, cookies, locals: { supabase, s
 		inviteCode,
 		inviteCodeValid,
 		passkeyEnabled: isPasskeyEnabled(),
+		// この端末で前回ログインに使った方法（ボタンに「前回のログイン」と出す）
+		lastLoginMethod: getLastLoginMethod(cookies),
 		error: url.searchParams.get("error"),
 		// OAuth の失敗理由（/auth/callback が付ける）。URL から来るので符号の形のものだけ見せる
 		errorReason: /^[a-z0-9_]{1,40}$/.test(url.searchParams.get("reason") ?? "")
@@ -196,6 +193,7 @@ export const actions: Actions = {
 			clearInviteCodeCookie(cookies);
 		}
 
+		setLastLoginMethod(cookies, "email");
 		redirect(303, next);
 	},
 
@@ -208,27 +206,17 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const email = (form.get("email") as string | null)?.trim() ?? "";
 		const password = (form.get("password") as string | null) ?? "";
-		const username = normalizeUsername(form.get("username"));
-		const displayName = (form.get("display_name") as string | null)?.trim() ?? "";
 		const next = getSafeNext(form.get("next"));
 		const inviteCodeInput = getInviteCodeInput(form) || getInviteCodeCookie(cookies) || "";
 
-		const values = { email, username, display_name: displayName };
+		// ユーザー名・表示名・アイコンは、Discord などで登録した人と同じく登録後の初期設定画面で決める（176）
+		const values = { email };
 
-		if (!email || !password || !username) {
+		if (!email || !password) {
 			return fail(400, {
 				mode: "register",
 				...values,
-				message: "メールアドレス、パスワード、ユーザー名を入力してください",
-			});
-		}
-
-		if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
-			return fail(400, {
-				mode: "register",
-				...values,
-				field: "username",
-				message: "ユーザー名は3〜20文字の半角英数字とアンダースコアのみ使えます",
+				message: "メールアドレスとパスワードを入力してください",
 			});
 		}
 
@@ -262,23 +250,11 @@ export const actions: Actions = {
 			}
 		}
 
-		// 使用中の名前に加えて、退会から30日以内の名前も使えない（#363）
-		if (!(await isUsernameAvailable(supabase, username))) {
-			return fail(400, {
-				mode: "register",
-				...values,
-				field: "username",
-				message: "このユーザー名は使えません（使用中か、退会から30日以内のユーザー名です）",
-			});
-		}
-
 		const { data, error } = await supabase.auth.signUp({
 			email,
 			password,
 			options: {
 				data: {
-					user_name: username,
-					full_name: displayName || username,
 					// 確認のリンクを別のブラウザで開いても招待コードを使えるよう、アカウントにも残す（/auth/confirm）
 					...(isBetaGateEnabled() && inviteCodeInput ? { invite_code: inviteCodeInput } : {}),
 				},

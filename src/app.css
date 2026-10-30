@@ -1,4 +1,6 @@
 ﻿:root {
+	/* ブラウザが描く部品（スクロールバー・入力の部品など）も暗い色にする。ライトテーマでは light に戻す */
+	color-scheme: dark;
 	--color-bg: #0d0d0d;
 	--color-surface: #161616;
 	--color-surface-hover: #1c1c1c;
@@ -50,6 +52,10 @@
 	--status-on-hold: #fbbf24;
 	--status-dropped: #f87171;
 	--status-score: #f59e0b;
+	/* 作品カードの画像に重ねるリボン。白い文字で 4.5:1 以上になる濃さにする */
+	--ribbon-today: #dc2626;
+	--ribbon-airing: #15803d;
+	--ribbon-text: #fff;
 }
 
 /* 角丸は全てスクワークル。円とピルだけは round に戻す */
@@ -64,6 +70,7 @@
 }
 
 [data-theme="light"] {
+	color-scheme: light;
 	--color-bg: #ffffff;
 	--color-surface: #ffffff;
 	--color-surface-hover: #f1f5f9;
@@ -555,6 +562,19 @@ textarea {
 	text-decoration: none;
 }
 
+/* 補助の操作のボタン（灰色の枠・本文の色）。青（.btn-primary・.btn-outline）は、その画面でいちばん押してほしい操作だけに使う（ux-guidelines） */
+.btn-secondary {
+	background: transparent;
+	color: var(--color-text);
+	border: 1.5px solid var(--color-border-hover);
+}
+
+.btn-secondary:hover:not(:disabled) {
+	background: var(--color-surface-hover);
+	color: var(--color-text);
+	text-decoration: none;
+}
+
 .btn-ghost {
 	background: transparent;
 	color: var(--color-text-muted);
@@ -994,6 +1014,19 @@ textarea {
 	color: #ffffff;
 }
 
+/* アイコンを押して画像を選べる場所（初期設定・プロフィールの編集）。ファイル選択の label として使う */
+.avatar-pick {
+	display: inline-flex;
+	border-radius: 50%;
+	corner-shape: round;
+	cursor: pointer;
+	transition: opacity 0.15s;
+}
+
+.avatar-pick:hover {
+	opacity: 0.8;
+}
+
 .avatar img {
 	width: 100%;
 	aspect-ratio: 1;
@@ -1376,6 +1409,7 @@ textarea {
 	overflow: hidden;
 }
 
+/* 編集で切り抜く範囲（3:1、ImageCropper）と同じ比率で、どの画面幅でも見せる */
 .profile-header-image {
 	display: block;
 	width: 100%;
@@ -1862,6 +1896,15 @@ textarea {
 }
 
 .field-input-prefix:has(.field-error) {
+	border-color: var(--color-danger);
+}
+
+/* エラー中の欄は、カーソルの枠も赤にする（赤い枠と青い枠が二重に見えないように） */
+.field-input-prefix:has(.field-error:focus-visible) {
+	outline-color: var(--color-danger);
+}
+
+.field-input.field-error:focus {
 	border-color: var(--color-danger);
 }
 
@@ -3529,10 +3572,6 @@ form + .repost-menu-item {
 
 	.profile-header-top {
 		margin-bottom: 10px;
-	}
-
-	.profile-header-image {
-		aspect-ratio: 2 / 1;
 	}
 
 	.profile-stats {

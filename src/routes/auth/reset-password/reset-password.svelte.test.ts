@@ -30,7 +30,7 @@ describe("reset password page", () => {
 
 		const form = target.querySelector<HTMLFormElement>('form[action="?/setPassword"]');
 		expect(form).not.toBeNull();
-		expect(form?.querySelector<HTMLInputElement>('input[name="password"]')?.minLength).toBe(6);
+		expect(form?.querySelector<HTMLInputElement>('input[name="password"]')?.minLength).toBe(8);
 		expect(form?.querySelector<HTMLInputElement>('input[name="confirm"]')).not.toBeNull();
 		expect(target.textContent).toContain("user@example.com");
 
@@ -67,7 +67,7 @@ describe("reset password page", () => {
 		expect(target.querySelector('form[action="?/setPassword"]')).toBeNull();
 		// テンプレート整形で改行が入るため、描画時と同じく空白を畳んでから比較する
 		expect(target.textContent?.replace(/\s+/g, " ")).toContain("Google / Discord でのログインに使われています");
-		expect(target.querySelector<HTMLAnchorElement>('a[href="/auth?mode=login"]')).not.toBeNull();
+		expect(target.querySelector<HTMLAnchorElement>('a[href="/auth?mode=login&method=email"]')).not.toBeNull();
 
 		await cleanup();
 	});

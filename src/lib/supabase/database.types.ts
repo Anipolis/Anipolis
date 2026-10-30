@@ -3444,6 +3444,200 @@ export type Database = {
 					},
 				];
 			};
+			user_collection_items: {
+				Row: {
+					anime_id: number;
+					collection_id: string;
+					created_at: string;
+					position: number;
+				};
+				Insert: {
+					anime_id: number;
+					collection_id: string;
+					created_at?: string;
+					position: number;
+				};
+				Update: {
+					anime_id?: number;
+					collection_id?: string;
+					created_at?: string;
+					position?: number;
+				};
+				Relationships: [
+					{
+						foreignKeyName: "user_collection_items_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "user_collection_items_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_genre_ranked";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "user_collection_items_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_sortable";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "user_collection_items_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_popularity";
+						referencedColumns: ["anime_id"];
+					},
+					{
+						foreignKeyName: "user_collection_items_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_top_rated";
+						referencedColumns: ["anime_id"];
+					},
+					{
+						foreignKeyName: "user_collection_items_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_trending";
+						referencedColumns: ["anime_id"];
+					},
+					{
+						foreignKeyName: "user_collection_items_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_with_computed_broadcast_status";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "user_collection_items_collection_id_fkey";
+						columns: ["collection_id"];
+						isOneToOne: false;
+						referencedRelation: "user_collections";
+						referencedColumns: ["id"];
+					},
+				];
+			};
+			user_collections: {
+				Row: {
+					created_at: string;
+					description: string | null;
+					id: string;
+					is_public: boolean;
+					title: string;
+					updated_at: string;
+					user_id: string;
+				};
+				Insert: {
+					created_at?: string;
+					description?: string | null;
+					id?: string;
+					is_public?: boolean;
+					title: string;
+					updated_at?: string;
+					user_id: string;
+				};
+				Update: {
+					created_at?: string;
+					description?: string | null;
+					id?: string;
+					is_public?: boolean;
+					title?: string;
+					updated_at?: string;
+					user_id?: string;
+				};
+				Relationships: [
+					{
+						foreignKeyName: "user_collections_user_id_fkey";
+						columns: ["user_id"];
+						isOneToOne: false;
+						referencedRelation: "profiles";
+						referencedColumns: ["id"];
+					},
+				];
+			};
+			user_favorite_anime: {
+				Row: {
+					anime_id: number;
+					created_at: string;
+					position: number;
+					user_id: string;
+				};
+				Insert: {
+					anime_id: number;
+					created_at?: string;
+					position: number;
+					user_id: string;
+				};
+				Update: {
+					anime_id?: number;
+					created_at?: string;
+					position?: number;
+					user_id?: string;
+				};
+				Relationships: [
+					{
+						foreignKeyName: "user_favorite_anime_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "user_favorite_anime_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_genre_ranked";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "user_favorite_anime_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_sortable";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "user_favorite_anime_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_popularity";
+						referencedColumns: ["anime_id"];
+					},
+					{
+						foreignKeyName: "user_favorite_anime_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_top_rated";
+						referencedColumns: ["anime_id"];
+					},
+					{
+						foreignKeyName: "user_favorite_anime_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_trending";
+						referencedColumns: ["anime_id"];
+					},
+					{
+						foreignKeyName: "user_favorite_anime_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_with_computed_broadcast_status";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "user_favorite_anime_user_id_fkey";
+						columns: ["user_id"];
+						isOneToOne: false;
+						referencedRelation: "profiles";
+						referencedColumns: ["id"];
+					},
+				];
+			};
 		};
 		Views: {
 			anime_list_genre_ranked: {
@@ -3953,6 +4147,14 @@ export type Database = {
 				Returns: undefined;
 			};
 			revoke_invite: { Args: { p_invite_id: string }; Returns: undefined };
+			set_collection_items: {
+				Args: { p_anime_ids: number[]; p_collection_id: string };
+				Returns: undefined;
+			};
+			set_favorite_anime: {
+				Args: { p_anime_ids: number[] };
+				Returns: undefined;
+			};
 			show_limit: { Args: never; Returns: number };
 			show_trgm: { Args: { "": string }; Returns: string[] };
 			unlock_episode_room_opens_at: {
@@ -3961,6 +4163,10 @@ export type Database = {
 			};
 			upsert_episode_room_for_airing: {
 				Args: { p_anime_id: number; p_episode_number: number };
+				Returns: string;
+			};
+			upsert_special_room_for_airing: {
+				Args: { p_anime_id: number; p_label: string; p_room_date: string };
 				Returns: string;
 			};
 		};

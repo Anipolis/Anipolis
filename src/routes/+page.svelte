@@ -5,10 +5,12 @@ import LiveRoomsPanel from "$lib/components/LiveRoomsPanel.svelte";
 import PostCardSkeleton from "$lib/components/PostCardSkeleton.svelte";
 import PostComposer from "$lib/components/PostComposer.svelte";
 import PostRow from "$lib/components/PostRow.svelte";
+import TimelineLiveRun from "$lib/components/TimelineLiveRun.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
+import WelcomeCard from "$lib/components/WelcomeCard.svelte";
 import { createLatestResolved } from "$lib/latest-resolved.svelte";
 import { composeOpen } from "$lib/stores/compose";
-import { isPostContinuation } from "$lib/utils/post-presentation";
+import { groupLiveRuns } from "$lib/utils/live-runs";
 import type { PageProps } from "./$types";
 
 /** スケルトンの枚数（タイムラインの典型的な表示密度に合わせた仮枠） */
@@ -133,6 +135,7 @@ $effect(() => {
 					{@const extras = pageExtras.value}
 					<PostComposer
 						username={data.profile.username}
+						displayName={data.profile.display_name}
 						avatarUrl={data.profile.avatar_url}
 						initialAnime={extras.initialAnime}
 						initialContent={extras.initialContent}
@@ -208,6 +211,10 @@ $effect(() => {
 			</div>
 		{/if}
 
+		{#if data.user && pageExtras.value?.newcomer}
+			<WelcomeCard userId={data.user.id} />
+		{/if}
+
 		{#if data.user}
 			<div class="timeline-tabs">
 				<a href="/" class="timeline-tab" class:active={data.tab === 'all'}> 全体 </a>
@@ -256,12 +263,13 @@ $effect(() => {
 						<p>このページの投稿はミュート設定によりすべて非表示です。</p>
 					</div>
 				{/if}
-				{#each posts as post, index (post.id)}
-					<PostRow
-						{post}
-						currentUserId={data.user?.id ?? null}
-						continuation={isPostContinuation(post, posts[index - 1])}
-					/>
+				<!-- 同じ人の同じルームへの実況が続いたら 1 つにたたむ（読み飛ばしやすく、開けば続けて読める） -->
+				{#each groupLiveRuns(posts) as item (item.kind === "run" ? item.key : item.post.id)}
+					{#if item.kind === "run"}
+						<TimelineLiveRun posts={item.posts} room={item.room} currentUserId={data.user?.id ?? null} />
+					{:else}
+						<PostRow post={item.post} currentUserId={data.user?.id ?? null} />
+					{/if}
 				{/each}
 				{#if nextCursor}
 					<a href={loadMoreHref(nextCursor.createdAt, nextCursor.id)} class="load-more-btn">
@@ -336,6 +344,7 @@ $effect(() => {
 				{@const extras = pageExtras.value}
 				<PostComposer
 					username={data.profile.username}
+					displayName={data.profile.display_name}
 					avatarUrl={data.profile.avatar_url}
 					initialAnime={extras.initialAnime}
 					initialContent={extras.initialContent}

@@ -5,6 +5,7 @@ import {
 	dedupeCopyrightCandidates,
 	looseCopyrightKey,
 	normalizeAnnictCopyright,
+	normalizeAnnictHashtags,
 	normalizeAnnictOfficialSiteUrl,
 } from "./annict";
 
@@ -79,5 +80,31 @@ describe("Annict links", () => {
 		expect(normalizeAnnictOfficialSiteUrl("example.com")).toBeNull();
 		expect(annictTwitterUrl("@keroro_anime")).toBe("https://x.com/keroro_anime");
 		expect(annictTwitterUrl("bad handle")).toBeNull();
+	});
+});
+
+describe("normalizeAnnictHashtags", () => {
+	it("# を外して配列にする", () => {
+		expect(normalizeAnnictHashtags("アニメ生穴る")).toEqual({ tags: ["アニメ生穴る"], rejected: [] });
+		expect(normalizeAnnictHashtags("#anime_eupho")).toEqual({ tags: ["anime_eupho"], rejected: [] });
+	});
+
+	it("空白や読点で区切られた複数のタグを分け、重複を除く", () => {
+		expect(normalizeAnnictHashtags("#少女共棲 #とある、少女共棲")).toEqual({
+			tags: ["少女共棲", "とある"],
+			rejected: [],
+		});
+	});
+
+	it("投稿のハッシュタグとして通らないものは rejected に回す", () => {
+		expect(normalizeAnnictHashtags("ゆるキャン△ ゆるキャン")).toEqual({
+			tags: ["ゆるキャン"],
+			rejected: ["ゆるキャン△"],
+		});
+	});
+
+	it("空なら何も返さない", () => {
+		expect(normalizeAnnictHashtags(null)).toEqual({ tags: [], rejected: [] });
+		expect(normalizeAnnictHashtags("  ")).toEqual({ tags: [], rejected: [] });
 	});
 });

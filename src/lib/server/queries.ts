@@ -2,8 +2,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { isRepeatMuteActive } from "$lib/anime-mute-schedule";
 import { groupGenreFilters, translateAnimeGenres } from "$lib/anime-vocabulary";
 import { computeBroadcastStatus } from "$lib/broadcast-status";
+import type { CollectionMembership } from "$lib/collections";
 import { toValidExchangeSubjectiveTags } from "$lib/exchange-tags";
 import { isOwnPostImage, postImageMediaUrl } from "$lib/post-image-url";
+import { getAssuranceLevel, isAdminMfaRequired } from "$lib/server/mfa";
 import { signPostImageUrls } from "$lib/server/post-image-signing";
 import { buildPostCardSelect, POST_CW_ANIME_SELECT } from "$lib/server/post-selects";
 import { failQuery, logQueryFailure } from "$lib/server/query-failure";
@@ -1640,9 +1642,21 @@ export async function getPendingFollowRequestCount(
 	return count ?? 0;
 }
 
-export async function isAdminUser(supabase: SupabaseClient<Database>, userId: string): Promise<boolean> {
+/** 管理者のアカウントか（二段階認証を済ませたかは見ない）。管理画面の入口で設定へ案内するかの判定に使う */
+export async function isAdminAccount(supabase: SupabaseClient<Database>, userId: string): Promise<boolean> {
 	const { data } = await supabase.from("profiles").select("is_admin").eq("id", userId).maybeSingle();
 	return data?.is_admin === true;
+}
+
+/**
+ * 管理者として扱ってよいか。管理者のアカウントで、かつ今のログインが二段階認証済み（aal2）のときだけ true。
+ * DB の is_current_user_admin() と同じ決まり（migration 177）。service role で書き込む前の確認にも使うので、
+ * パスワードだけで入ったログインを管理者として通さない。ADMIN_MFA_REQUIRED がオフの間は aal2 を求めない
+ */
+export async function isAdminUser(supabase: SupabaseClient<Database>, userId: string): Promise<boolean> {
+	if (!isAdminMfaRequired()) return isAdminAccount(supabase, userId);
+	const [admin, level] = await Promise.all([isAdminAccount(supabase, userId), getAssuranceLevel(supabase)]);
+	return admin && level.current === "aal2";
 }
 
 export type InviteRow = {
@@ -3152,6 +3166,31 @@ async function sortAnimeListItems(
 	});
 }
 
+/**
+ * 一覧カードに出す平均スコア（公開リストの評価のみ。作品ページの値と同じ anime_top_rated）。
+ * 取得に失敗したときは score_count を入れずに返す（「評価なし」と区別するため）
+ */
+export async function attachAnimeAverageScores(supabase: SupabaseClient<Database>, animes: Anime[]): Promise<void> {
+	const missing = animes.filter((anime) => anime.score_count == null);
+	const ids = missing.map((anime) => Number(anime.id)).filter((id) => Number.isFinite(id));
+	if (ids.length === 0) return;
+	const { data, error } = await supabase
+		.from("anime_top_rated")
+		.select("anime_id, avg_score, score_count")
+		.in("anime_id", ids);
+	if (error) {
+		console.error("[attachAnimeAverageScores]", error);
+		return;
+	}
+	const rows = new Map((data ?? []).map((row) => [String(row.anime_id), row]));
+	for (const anime of missing) {
+		const row = rows.get(anime.id);
+		const count = Number(row?.score_count ?? 0);
+		anime.score_count = count;
+		anime.avg_score = normalizeAverageScore(Number(row?.avg_score ?? 0), count);
+	}
+}
+
 async function getAnimeRankingMetrics(
 	supabase: SupabaseClient<Database>,
 	animeIds: string[],
@@ -3317,10 +3356,11 @@ export async function getAnimeRelations(
 			]),
 	);
 
-	return rows.map((row) => ({
-		...row,
-		anime: animesByMalId.get(row.related_anime_mal_id) ?? null,
-	}));
+	// 読めない作品（未取り込み・非公開・情報未整備）は、MAL の題名だけの枠になるので出さない
+	return rows.flatMap((row) => {
+		const anime = animesByMalId.get(row.related_anime_mal_id);
+		return anime ? [{ ...row, anime }] : [];
+	});
 }
 
 /**
@@ -3482,6 +3522,152 @@ export async function getUserAnimeList(
 				updated_at: row.updated_at as string,
 			} satisfies UserAnimeEntry,
 		}));
+}
+
+/** プロフィールの「コレクション」タブに並べる要約（#515） */
+export interface CollectionSummary {
+	id: string;
+	title: string;
+	description: string | null;
+	is_public: boolean;
+	updated_at: string;
+	item_count: number;
+	/** 先頭の作品のカバー（最大4枚。カバーの無い作品は飛ばす） */
+	covers: string[];
+}
+
+/** 自分のコレクションを新しく更新した順に読み、その作品が入っているかを添える */
+export async function getCollectionsForAnime(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+	animeId: number,
+): Promise<CollectionMembership[]> {
+	const { data, error } = await supabase
+		.from("user_collections")
+		.select("id, title, is_public, item_count:user_collection_items(count), hit:user_collection_items(anime_id)")
+		.eq("user_id", userId)
+		.eq("hit.anime_id", animeId)
+		.order("updated_at", { ascending: false });
+	if (error) failQuery("getCollectionsForAnime", error);
+
+	type Row = {
+		id: string;
+		title: string;
+		is_public: boolean;
+		item_count: { count: number }[];
+		hit: { anime_id: number }[];
+	};
+	return ((data ?? []) as unknown as Row[]).map((row) => ({
+		id: row.id,
+		title: row.title,
+		is_public: row.is_public,
+		item_count: row.item_count[0]?.count ?? 0,
+		has_anime: row.hit.length > 0,
+	}));
+}
+
+/** その人のコレクションを新しく更新した順に読む。非公開のものは本人にだけ返る（RLS） */
+export async function getUserCollections(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+): Promise<CollectionSummary[]> {
+	const { data, error } = await supabase
+		.from("user_collections")
+		.select(
+			"id, title, description, is_public, updated_at, item_count:user_collection_items(count), preview:user_collection_items(position, anime:anime_id(cover_url))",
+		)
+		.eq("user_id", userId)
+		.order("updated_at", { ascending: false })
+		.order("position", { referencedTable: "preview" })
+		.limit(8, { referencedTable: "preview" });
+	if (error) failQuery("getUserCollections", error);
+
+	type Row = {
+		id: string;
+		title: string;
+		description: string | null;
+		is_public: boolean;
+		updated_at: string;
+		item_count: { count: number }[];
+		preview: { anime: { cover_url: string | null } | null }[];
+	};
+	return ((data ?? []) as unknown as Row[]).map((row) => ({
+		id: row.id,
+		title: row.title,
+		description: row.description,
+		is_public: row.is_public,
+		updated_at: row.updated_at,
+		item_count: row.item_count[0]?.count ?? 0,
+		covers: row.preview.flatMap((item) => (item.anime?.cover_url ? [item.anime.cover_url] : [])).slice(0, 4),
+	}));
+}
+
+export interface CollectionDetail {
+	id: string;
+	title: string;
+	description: string | null;
+	is_public: boolean;
+	created_at: string;
+	updated_at: string;
+	owner: { id: string; username: string; display_name: string | null; avatar_url: string | null };
+	items: Anime[];
+}
+
+/** コレクションを作品の並び順つきで読む。見えない（非公開・鍵・ブロック）・無いときは null */
+export async function getCollection(supabase: SupabaseClient<Database>, id: string): Promise<CollectionDetail | null> {
+	const { data, error } = await supabase
+		.from("user_collections")
+		.select(
+			`id, title, description, is_public, created_at, updated_at, owner:profiles!user_collections_user_id_fkey(id, username, display_name, avatar_url), items:user_collection_items(position, anime:anime_id(${ANIME_LIST_BASE_COLUMNS}))`,
+		)
+		.eq("id", id)
+		.order("position", { referencedTable: "items" })
+		.maybeSingle();
+	if (error) failQuery("getCollection", error);
+	if (!data) return null;
+
+	const row = data as unknown as Omit<CollectionDetail, "items"> & {
+		items: { anime: Record<string, unknown> | null }[];
+	};
+	return {
+		...row,
+		// 後から非公開になった作品などは anime が読めずに null になるので、飛ばす
+		items: row.items.flatMap((item) => (item.anime ? [toAnime(item.anime)] : [])),
+	};
+}
+
+/** 見ている人のマイリストでの状態（作品 ID → ステータス）。コレクションの作品に添えて出す */
+export async function getMyListStatuses(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+	animeIds: string[],
+): Promise<Record<string, AnimeStatus>> {
+	if (animeIds.length === 0) return {};
+	const { data, error } = await supabase
+		.from("user_anime_list")
+		.select("anime_id, status")
+		.eq("user_id", userId)
+		.in("anime_id", animeIds.map(Number));
+	if (error) {
+		logQueryFailure("getMyListStatuses", error);
+		return {};
+	}
+	return Object.fromEntries((data ?? []).map((row) => [String(row.anime_id), row.status as AnimeStatus]));
+}
+
+/** プロフィールのベスト作品を並び順で読む（#361）。見える相手かどうかは RLS が判定する */
+export async function getFavoriteAnime(supabase: SupabaseClient<Database>, userId: string): Promise<Anime[]> {
+	const { data, error } = await supabase
+		.from("user_favorite_anime")
+		.select(`position, anime:anime_id(${ANIME_LIST_BASE_COLUMNS})`)
+		.eq("user_id", userId)
+		.order("position", { ascending: true });
+	if (error) failQuery("getFavoriteAnime", error);
+
+	// 後から非公開になった作品などは anime が読めずに null になるので、飛ばす
+	return ((data ?? []) as unknown as { anime: Record<string, unknown> | null }[]).flatMap((row) =>
+		row.anime ? [toAnime(row.anime)] : [],
+	);
 }
 
 export interface AnimeListUser {
@@ -3893,7 +4079,7 @@ async function fetchAnimesByIds(supabase: SupabaseClient<Database>, ids: string[
 	return ids.map((id) => map.get(id)).filter((a): a is Anime => a !== undefined);
 }
 
-async function enrichAnimeWithUserEntries(
+export async function enrichAnimeWithUserEntries(
 	supabase: SupabaseClient<Database>,
 	animes: Anime[],
 	userId: string,
@@ -4411,9 +4597,11 @@ export async function getOpenBroadcastRoomSessions(
 	};
 	return rows
 		.filter((row) => {
-			if (row.room_kind !== "episode") return true;
+			// 作品を読めない（情報がまだそろっていない・管理者が隠した）ルームは出さない。総合ロビーも同じ
+			// （作品名が「不明」のまま一覧に出て、開いても見つからなかった）
 			const anime = rawAnimeForRow(row.anime);
 			if (!anime) return false;
+			if (row.room_kind !== "episode") return true;
 			const override = overrideBySessionKey.get(`${row.anime_id}:${row.room_date.slice(0, 10)}`);
 			if (override?.is_cancelled) return false;
 			if (row.schedule_source === "syobocal") return true;

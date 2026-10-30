@@ -37,6 +37,8 @@ import {
 	type RoomConnectionEvent,
 	reduceRoomConnection,
 	shouldOfferManualReconnect,
+	shouldShowRoomConnectionStatus,
+	shouldShowRoomLastUpdate,
 } from "$lib/utils/room-connection";
 
 let { data, form, headerActions }: { data: LiveRoomData; form: LiveRoomActionData; headerActions?: Snippet } = $props();
@@ -794,6 +796,15 @@ function airingHeadingBefore(post: Post, previous: Post | undefined): RoomAiring
 	return previous && airingOfPost(previous)?.id === airing.id ? null : airing;
 }
 
+/**
+ * 時系列順で見ているときは、どのルーム（話数ルーム・ロビー・イベント）でも同じ人の連投（isPostContinuation）を
+ * Discord のように 1 つにまとめる。新しい順ではまとめない。放送枠の見出しをまたぐ投稿もまとめない
+ */
+function joinsPrevious(post: Post | undefined, previous: Post | undefined): boolean {
+	if (postOrder !== "oldest" || !post || !previous) return false;
+	return !airingHeadingBefore(post, previous) && isPostContinuation(post, previous);
+}
+
 /** 放送枠の最初の投稿までスクロールする。null や投稿の無い放送枠なら先頭（放送中の枠なら最新）へ */
 async function scrollToAiring(airing: RoomAiring | null) {
 	await tick();
@@ -1025,7 +1036,8 @@ function formatCompactDate(iso: string) {
 
 		<div class="event-posts-header">
 			<span class="event-posts-count">{allPosts.length}件の実況</span>
-			{#if status === "open"}
+			<!-- 接続状態は、問題があるとき（15秒ごとの更新に落ちた・止まった・失敗・オフライン・再接続中）だけ出す -->
+			{#if status === "open" && (shouldShowRoomConnectionStatus(connectionPhase) || reconnecting)}
 				<div class="room-connection room-connection--{connectionTone}">
 					<span class="room-connection-status">
 						<span class="room-connection-dot" aria-hidden="true"></span>
@@ -1033,7 +1045,9 @@ function formatCompactDate(iso: string) {
 						<span class="room-connection-label" role="status" aria-live="polite" aria-atomic="true"
 							>{connectionLabel}</span
 						>
-						<span class="room-connection-updated">最終更新 {lastUpdateLabel}</span>
+						{#if shouldShowRoomLastUpdate(connectionPhase)}
+							<span class="room-connection-updated">最終更新 {lastUpdateLabel}</span>
+						{/if}
 					</span>
 					<!-- リアルタイムでつながっている間は押す必要が無いので出さない（#432）。定期取得（polling）に
 					     落ちたときはリアルタイムに戻せるよう出す（目立たせるのは要対応のときだけ） -->
@@ -1117,7 +1131,8 @@ function formatCompactDate(iso: string) {
 							<div class="anime-room-post" data-post-id={post.id}>
 								<LiveRoomPostCard
 									{post}
-									continuation={!heading && isPostContinuation(post, displayedPosts[index - 1])}
+									joinPrevious={joinsPrevious(post, displayedPosts[index - 1])}
+									joinNext={joinsPrevious(displayedPosts[index + 1], post)}
 									currentUserId={data.user?.id ?? null}
 									broadcastStartAt={postAiring?.scheduled_at ?? data.room.scheduled_at}
 									timelineTimeMode={isGlobalLobby || (isEpisodeRoom && !postAiring)}
