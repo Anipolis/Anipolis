@@ -1,5 +1,9 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const env = vi.hoisted((): Record<string, string | undefined> => ({ ADMIN_MFA_REQUIRED: "true" }));
+vi.mock("$env/dynamic/private", () => ({ env }));
+
 import { getAssuranceLevel, isMfaExemptPath, isTotpCodeShape, needsMfaChallenge, normalizeTotpCode } from "./mfa";
 import { isAdminUser } from "./queries";
 
@@ -76,6 +80,24 @@ describe("isAdminUser（管理者は二段階認証済みのログインだけ�
 	it("管理者でない人は aal2 でも管理者として扱わない", async () => {
 		const supabase = makeSupabase({ level: { currentLevel: "aal2", nextLevel: "aal2" }, isAdmin: false });
 		expect(await isAdminUser(supabase, "user-1")).toBe(false);
+	});
+
+	describe("ADMIN_MFA_REQUIRED がオフのとき", () => {
+		afterEach(() => {
+			env["ADMIN_MFA_REQUIRED"] = "true";
+		});
+
+		it("管理者はパスワードだけのログイン（aal1）でも管理者として扱う", async () => {
+			env["ADMIN_MFA_REQUIRED"] = undefined;
+			const supabase = makeSupabase({ level: { currentLevel: "aal1", nextLevel: "aal1" }, isAdmin: true });
+			expect(await isAdminUser(supabase, "user-1")).toBe(true);
+		});
+
+		it("管理者でない人は管理者として扱わない", async () => {
+			env["ADMIN_MFA_REQUIRED"] = "false";
+			const supabase = makeSupabase({ level: { currentLevel: "aal1", nextLevel: "aal1" }, isAdmin: false });
+			expect(await isAdminUser(supabase, "user-1")).toBe(false);
+		});
 	});
 });
 

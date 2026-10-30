@@ -3,7 +3,7 @@ import { type Handle, json, redirect } from "@sveltejs/kit";
 import { dev } from "$app/environment";
 import { env as publicEnv } from "$env/dynamic/public";
 import { isBetaGateEnabled, isBetaMember } from "$lib/server/discord";
-import { getAssuranceLevel, isMfaExemptPath, needsMfaChallenge } from "$lib/server/mfa";
+import { getAssuranceLevel, isAdminMfaRequired, isMfaExemptPath, needsMfaChallenge } from "$lib/server/mfa";
 import { isAdminAccount } from "$lib/server/queries";
 import { isApiRateLimited } from "$lib/server/rate-limit";
 import { supabaseTarget } from "$lib/supabase-target";
@@ -87,7 +87,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 	}
 
 	// 二段階認証: 設定済みの人は、コードを入れるまで /auth/mfa に回す。
-	// 管理者は二段階認証を済ませたログインでないと管理画面に入れない（設定がまだなら設定画面へ案内する）
+	// 管理者は二段階認証を済ませたログインでないと管理画面に入れない（設定がまだなら設定画面へ案内する）。
+	// 管理者への要求は ADMIN_MFA_REQUIRED=true のときだけ
 	if (event.route.id && !isMfaExemptPath(event.url.pathname)) {
 		const { user } = await event.locals.safeGetSession();
 		if (user) {
@@ -95,7 +96,12 @@ export const handle: Handle = async ({ event, resolve }) => {
 			const here = `${event.url.pathname}${event.url.search}`;
 			if (needsMfaChallenge(level)) redirect(303, `/auth/mfa?next=${encodeURIComponent(here)}`);
 			const inAdmin = event.url.pathname === "/admin" || event.url.pathname.startsWith("/admin/");
-			if (inAdmin && level.current !== "aal2" && (await isAdminAccount(event.locals.supabase, user.id))) {
+			if (
+				inAdmin &&
+				isAdminMfaRequired() &&
+				level.current !== "aal2" &&
+				(await isAdminAccount(event.locals.supabase, user.id))
+			) {
 				redirect(303, `/settings/security?required=admin&next=${encodeURIComponent(here)}`);
 			}
 		}

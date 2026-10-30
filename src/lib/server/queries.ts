@@ -5,7 +5,7 @@ import { computeBroadcastStatus } from "$lib/broadcast-status";
 import type { CollectionMembership } from "$lib/collections";
 import { toValidExchangeSubjectiveTags } from "$lib/exchange-tags";
 import { isOwnPostImage, postImageMediaUrl } from "$lib/post-image-url";
-import { getAssuranceLevel } from "$lib/server/mfa";
+import { getAssuranceLevel, isAdminMfaRequired } from "$lib/server/mfa";
 import { signPostImageUrls } from "$lib/server/post-image-signing";
 import { buildPostCardSelect, POST_CW_ANIME_SELECT } from "$lib/server/post-selects";
 import { failQuery, logQueryFailure } from "$lib/server/query-failure";
@@ -1651,9 +1651,10 @@ export async function isAdminAccount(supabase: SupabaseClient<Database>, userId:
 /**
  * 管理者として扱ってよいか。管理者のアカウントで、かつ今のログインが二段階認証済み（aal2）のときだけ true。
  * DB の is_current_user_admin() と同じ決まり（migration 177）。service role で書き込む前の確認にも使うので、
- * パスワードだけで入ったログインを管理者として通さない
+ * パスワードだけで入ったログインを管理者として通さない。ADMIN_MFA_REQUIRED がオフの間は aal2 を求めない
  */
 export async function isAdminUser(supabase: SupabaseClient<Database>, userId: string): Promise<boolean> {
+	if (!isAdminMfaRequired()) return isAdminAccount(supabase, userId);
 	const [admin, level] = await Promise.all([isAdminAccount(supabase, userId), getAssuranceLevel(supabase)]);
 	return admin && level.current === "aal2";
 }

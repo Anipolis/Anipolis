@@ -1,14 +1,24 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { env } from "$env/dynamic/private";
 import type { Database } from "$lib/supabase/database.types";
 
 /**
  * 二段階認証（認証アプリの 6 桁のコード、TOTP）。Supabase Auth の MFA を使う。
  *
- * - 管理者は二段階認証を済ませたログイン（aal2）でだけ管理者として扱う（isAdminUser・migration 177）
+ * - 管理者は二段階認証を済ませたログイン（aal2）でだけ管理者として扱う（isAdminUser・migration 177）。
+ *   ADMIN_MFA_REQUIRED=true のときだけ。管理者全員の設定が済むまではオフにしておく
  * - 二段階認証を設定した人は、パスワードや Discord などでログインしたあと /auth/mfa でコードを入れる
  */
 
 export type AssuranceLevel = "aal1" | "aal2" | null;
+
+/**
+ * 管理者に二段階認証を求めるか。オンにする順番: 管理者全員が /settings/security で設定 →
+ * このスイッチを true → migration 177 を適用（177 が先だと DB で管理者の権限が使えなくなる）
+ */
+export function isAdminMfaRequired(): boolean {
+	return env["ADMIN_MFA_REQUIRED"] === "true";
+}
 
 /**
  * 今のログインの確かさ（current）と、設定済みの認証で上げられる上限（next）。
