@@ -1,6 +1,13 @@
 import { error, json } from "@sveltejs/kit";
-import { isCollectionId, MAX_COLLECTION_ITEMS, withAnimeAdded, withAnimeRemoved } from "$lib/collections";
+import {
+	firstCollectionCover,
+	isCollectionId,
+	MAX_COLLECTION_ITEMS,
+	withAnimeAdded,
+	withAnimeRemoved,
+} from "$lib/collections";
 import { requireAccountCanWrite } from "$lib/server/actions";
+import { getAnimeCoverUrl } from "$lib/server/queries";
 import type { RequestEvent, RequestHandler } from "./$types";
 
 /**
@@ -8,7 +15,8 @@ import type { RequestEvent, RequestHandler } from "./$types";
  * 今の並びを読んで1作品を足し引きし、set_collection_items で丸ごと置き換える。
  * 同じ人が別の画面で同時に並びを保存すると後の保存が勝つが、コレクションの編集画面と同じ扱いにする。
  * 後から非表示になった作品は読めず、残すと set_collection_items が全体を断るので、並びから外して保存する
- * （編集画面も読めない作品を除いて保存するのと同じ）
+ * （編集画面も読めない作品を除いて保存するのと同じ）。
+ * 応答には、保存後の作品数とサムネイル（並びで最初のカバー）を返す
  */
 async function updateMembership(event: RequestEvent, mode: "add" | "remove") {
 	const {
@@ -24,7 +32,7 @@ async function updateMembership(event: RequestEvent, mode: "add" | "remove") {
 
 	const { data: collection, error: readError } = await supabase
 		.from("user_collections")
-		.select("id, items:user_collection_items(anime_id, position, anime:anime_id(id))")
+		.select("id, items:user_collection_items(anime_id, position, anime:anime_id(id, cover_url))")
 		.eq("id", params.id)
 		.eq("user_id", user.id)
 		.order("position", { referencedTable: "items" })
@@ -35,9 +43,13 @@ async function updateMembership(event: RequestEvent, mode: "add" | "remove") {
 	}
 	if (!collection) error(404, "コレクションが見つかりません");
 
-	const current = collection.items.filter((item) => item.anime !== null).map((item) => Number(item.anime_id));
+	const readable = collection.items.filter((item) => item.anime !== null);
+	const current = readable.map((item) => Number(item.anime_id));
+	const covers = new Map(readable.map((item) => [Number(item.anime_id), item.anime?.cover_url ?? null]));
 	const next = mode === "add" ? withAnimeAdded(current, animeId) : withAnimeRemoved(current, animeId);
-	if (next.length === current.length) return json({ success: true, itemCount: current.length });
+	if (next.length === current.length) {
+		return json({ success: true, itemCount: current.length, cover: firstCollectionCover(current, covers) });
+	}
 	if (next.length > MAX_COLLECTION_ITEMS) error(400, `コレクションには${MAX_COLLECTION_ITEMS}作品まで入れられます`);
 
 	const { error: rpcError } = await supabase.rpc("set_collection_items", {
@@ -50,7 +62,10 @@ async function updateMembership(event: RequestEvent, mode: "add" | "remove") {
 		if (rpcError.code === "22023") error(400, "この作品はコレクションに入れられません");
 		error(500, "コレクションの保存に失敗しました");
 	}
-	return json({ success: true, itemCount: next.length });
+	// 足した作品のカバーは、それより前にカバーのある作品が無いときだけ要る
+	let cover = firstCollectionCover(next, covers);
+	if (cover === null && mode === "add") cover = await getAnimeCoverUrl(supabase, animeId);
+	return json({ success: true, itemCount: next.length, cover });
 }
 
 export const POST: RequestHandler = (event) => updateMembership(event, "add");
