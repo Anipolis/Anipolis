@@ -2102,8 +2102,9 @@ export async function getFollowingActivity(
 		getActiveAnimeMuteIdsCached(supabase, currentUserId),
 	]);
 	if (detailResult.error) return { posts: [], error: detailResult.error, nextCursor: null };
-	// 自分のいいねが読めなくても一覧は出す（ボタンが「いいねしていない」に見えるだけ）
-	if (likedResult.error) logQueryFailure("getFollowingActivity:liked", likedResult.error);
+	// 自分のいいねが読めないまま出すと、いいね済みが「いいねしていない」に見え、押すと取り消せずに
+	// もう一度付けようとしてしまう。一覧ごと失敗として扱い、再読み込みを促す
+	if (likedResult.error) return { posts: [], error: likedResult.error, nextCursor: null };
 	const liked = new Set((likedResult.data ?? []).map((row) => row.activity_id));
 
 	type Row = {
