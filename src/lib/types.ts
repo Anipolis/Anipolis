@@ -1,3 +1,4 @@
+import type { ActivityStatus } from "$lib/activity";
 // ================================================================
 // アプリ共通型定義
 // ================================================================
@@ -158,8 +159,8 @@ export interface Notification {
 		| "follow_request"
 		| "anime_recommendation"
 		| "broadcast"
-		| "mylist_status"
-		| "exchange_matched";
+		| "exchange_matched"
+		| "activity_like";
 	post_id: string | null;
 	anime_recommendation_id: string | null;
 	broadcast_anime_id: string | null;
@@ -188,10 +189,12 @@ export interface Notification {
 	broadcast_anime_cover_url: string | null;
 	event_id: string | null;
 	event_title: string | null;
-	mylist_anime_id: string | null;
-	mylist_status: AnimeStatus | null;
-	mylist_anime_title: string | null;
-	mylist_anime_cover_url: string | null;
+	/** アクティビティへのいいね（181）: いいねされた記録の作品とステータス */
+	activity_id: string | null;
+	activity_status: ActivityStatus | null;
+	activity_anime_id: string | null;
+	activity_anime_title: string | null;
+	activity_anime_cover_url: string | null;
 	exchange_anime_id: string | null;
 	exchange_anime_title: string | null;
 	exchange_anime_cover_url: string | null;

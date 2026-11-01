@@ -1,4 +1,5 @@
 ﻿import { fail } from "@sveltejs/kit";
+import type { MylistActivity } from "$lib/activity";
 import {
 	deletePostAction,
 	insertPostWithHashtags,
@@ -11,6 +12,7 @@ import {
 	fillTimelinePage,
 	getAnimeExchangeShareForUser,
 	getAnimeRankingTrending,
+	getFollowingActivity,
 	getFollowingTimelinePosts,
 	getHomeTimelinePosts,
 	getOpenBroadcastRoomSessions,
@@ -30,7 +32,9 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	// parent()を早めに発火（まだawaitしない）し、キャッシュ済みのsafeGetSessionでuserを並列取得
 	const [{ profile }, { user }] = await Promise.all([parent(), safeGetSession()]);
 
-	const tab = url.searchParams.get("tab") === "following" && user ? "following" : "all";
+	const tabParam = url.searchParams.get("tab");
+	const tab: "all" | "following" | "activity" =
+		user && (tabParam === "following" || tabParam === "activity") ? tabParam : "all";
 	const quoteAnimeId = url.searchParams.get("quote_anime");
 	const shareExchangeId = url.searchParams.get("share_exchange");
 	// before / before_id は PostgREST のフィルタに埋め込むので、形を厳密に確かめる（#243）
@@ -76,6 +80,18 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		// 取得の失敗を「投稿がありません」と見せない。Promise を失敗させ、画面の再読み込みの表示に任せる（#262）
 		if (page.error) failQuery(`homeTimeline:${tab}`, page.error);
 		return { posts: page.posts, nextCursor: page.nextCursor };
+	};
+
+	// アクティビティ（181）: フォロー中の人のマイリストの動き。ミュートで減ったページは投稿と同じく取り足す
+	type ActivityPage = { items: MylistActivity[]; nextCursor: TimelineCursor | null };
+	const fetchActivity = async (): Promise<ActivityPage> => {
+		if (!user) return { items: [], nextCursor: null };
+		const page = await fillTimelinePage(
+			(cursor) => getFollowingActivity(supabase, user.id, cursor ? { before: cursor } : {}),
+			before,
+		);
+		if (page.error) failQuery("homeTimeline:activity", page.error);
+		return { items: page.posts, nextCursor: page.nextCursor };
 	};
 
 	const buildExchangeInitialContent = (_exchangeShare: AnimeExchangeShare | null) =>
@@ -136,7 +152,9 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	);
 
 	return {
-		timeline: fetchTimeline(),
+		// アクティビティのタブでは投稿を読まない
+		timeline: tab === "activity" ? Promise.resolve<TimelinePage>({ posts: [], nextCursor: null }) : fetchTimeline(),
+		activity: tab === "activity" ? fetchActivity() : null,
 		pageExtras,
 		profile,
 		user,
