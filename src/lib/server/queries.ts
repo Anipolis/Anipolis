@@ -3544,10 +3544,14 @@ export async function getCollectionsForAnime(
 ): Promise<CollectionMembership[]> {
 	const { data, error } = await supabase
 		.from("user_collections")
-		.select("id, title, is_public, item_count:user_collection_items(count), hit:user_collection_items(anime_id)")
+		.select(
+			"id, title, is_public, item_count:user_collection_items(count), hit:user_collection_items(anime_id), preview:user_collection_items(position, anime:anime_id(cover_url))",
+		)
 		.eq("user_id", userId)
 		.eq("hit.anime_id", animeId)
-		.order("updated_at", { ascending: false });
+		.order("updated_at", { ascending: false })
+		.order("position", { referencedTable: "preview" })
+		.limit(8, { referencedTable: "preview" });
 	if (error) failQuery("getCollectionsForAnime", error);
 
 	type Row = {
@@ -3556,6 +3560,7 @@ export async function getCollectionsForAnime(
 		is_public: boolean;
 		item_count: { count: number }[];
 		hit: { anime_id: number }[];
+		preview: { anime: { cover_url: string | null } | null }[];
 	};
 	return ((data ?? []) as unknown as Row[]).map((row) => ({
 		id: row.id,
@@ -3563,7 +3568,15 @@ export async function getCollectionsForAnime(
 		is_public: row.is_public,
 		item_count: row.item_count[0]?.count ?? 0,
 		has_anime: row.hit.length > 0,
+		cover: row.preview.find((item) => item.anime?.cover_url)?.anime?.cover_url ?? null,
 	}));
+}
+
+/** 作品のカバー（読めない・無ければ null）。コレクションのサムネイル用 */
+export async function getAnimeCoverUrl(supabase: SupabaseClient<Database>, animeId: number): Promise<string | null> {
+	const { data, error } = await supabase.from("anime").select("cover_url").eq("id", animeId).maybeSingle();
+	if (error) logQueryFailure("getAnimeCoverUrl", error);
+	return data?.cover_url ?? null;
 }
 
 /** その人のコレクションを新しく更新した順に読む。非公開のものは本人にだけ返る（RLS） */

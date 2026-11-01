@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("$lib/server/actions", () => ({ requireAccountCanWrite: vi.fn() }));
+vi.mock("$lib/server/queries", () => ({ getAnimeCoverUrl: vi.fn(async (_supabase, id: number) => `cover-${id}`) }));
 
 import { DELETE, POST } from "./+server";
 
@@ -15,6 +16,8 @@ type Options = {
 	items?: number[] | null;
 	/** 中にあるが、非表示などで読めない作品 */
 	hidden?: number[];
+	/** カバーの無い作品 */
+	noCover?: number[];
 	rpcError?: { code: string };
 };
 
@@ -32,7 +35,12 @@ function makeEvent(options: Options = {}) {
 						items: items.map((anime_id, position) => ({
 							anime_id,
 							position,
-							anime: options.hidden?.includes(anime_id) ? null : { id: anime_id },
+							anime: options.hidden?.includes(anime_id)
+								? null
+								: {
+										id: anime_id,
+										cover_url: options.noCover?.includes(anime_id) ? null : `cover-${anime_id}`,
+									},
 						})),
 					}
 				: null,
@@ -68,10 +76,23 @@ describe("コレクションへの1作品の出し入れ", () => {
 	it("足すときは今の並びの末尾に足して保存する", async () => {
 		const { event, calls } = makeEvent();
 		const response = await POST(event);
-		expect(await response.json()).toEqual({ success: true, itemCount: 3 });
+		expect(await response.json()).toEqual({ success: true, itemCount: 3, cover: "cover-10" });
 		expect(calls).toEqual([
 			{ name: "set_collection_items", args: { p_collection_id: COLLECTION, p_anime_ids: [10, 20, 30] } },
 		]);
+	});
+
+	it("サムネイルは並びで最初の、カバーのある作品のカバー", async () => {
+		const added = makeEvent({ items: [10, 20], noCover: [10] });
+		expect(await (await POST(added.event)).json()).toMatchObject({ cover: "cover-20" });
+		// 前にカバーのある作品が無ければ、足した作品のカバー
+		const first = makeEvent({ items: [] });
+		expect(await (await POST(first.event)).json()).toMatchObject({ itemCount: 1, cover: "cover-30" });
+		// 外したら残りの先頭、空になれば null
+		const removed = makeEvent({ animeId: "10" });
+		expect(await (await DELETE(removed.event)).json()).toMatchObject({ cover: "cover-20" });
+		const emptied = makeEvent({ items: [10], animeId: "10" });
+		expect(await (await DELETE(emptied.event)).json()).toMatchObject({ itemCount: 0, cover: null });
 	});
 
 	it("外すときは並びを保ったまま抜いて保存する", async () => {
@@ -93,7 +114,7 @@ describe("コレクションへの1作品の出し入れ", () => {
 	it("後から読めなくなった作品は並びから外して保存する（残すと DB が全体を断る）", async () => {
 		const { event, calls } = makeEvent({ items: [10, 20, 40], hidden: [20] });
 		const response = await POST(event);
-		expect(await response.json()).toEqual({ success: true, itemCount: 3 });
+		expect(await response.json()).toEqual({ success: true, itemCount: 3, cover: "cover-10" });
 		expect(calls).toEqual([
 			{ name: "set_collection_items", args: { p_collection_id: COLLECTION, p_anime_ids: [10, 40, 30] } },
 		]);
