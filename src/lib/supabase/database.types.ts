@@ -3330,24 +3330,30 @@ export type Database = {
 			user_anime_list: {
 				Row: {
 					anime_id: number;
+					finished_on: string | null;
 					progress: number;
 					score: number | null;
+					started_on: string | null;
 					status: string;
 					updated_at: string;
 					user_id: string;
 				};
 				Insert: {
 					anime_id: number;
+					finished_on?: string | null;
 					progress?: number;
 					score?: number | null;
+					started_on?: string | null;
 					status: string;
 					updated_at?: string;
 					user_id: string;
 				};
 				Update: {
 					anime_id?: number;
+					finished_on?: string | null;
 					progress?: number;
 					score?: number | null;
+					started_on?: string | null;
 					status?: string;
 					updated_at?: string;
 					user_id?: string;
@@ -3408,6 +3414,35 @@ export type Database = {
 						isOneToOne: false;
 						referencedRelation: "profiles";
 						referencedColumns: ["id"];
+					},
+				];
+			};
+			user_anime_notes: {
+				Row: {
+					anime_id: number;
+					body: string;
+					updated_at: string;
+					user_id: string;
+				};
+				Insert: {
+					anime_id: number;
+					body: string;
+					updated_at?: string;
+					user_id: string;
+				};
+				Update: {
+					anime_id?: number;
+					body?: string;
+					updated_at?: string;
+					user_id?: string;
+				};
+				Relationships: [
+					{
+						foreignKeyName: "user_anime_notes_entry_fkey";
+						columns: ["user_id", "anime_id"];
+						isOneToOne: true;
+						referencedRelation: "user_anime_list";
+						referencedColumns: ["user_id", "anime_id"];
 					},
 				];
 			};

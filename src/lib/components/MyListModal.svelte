@@ -3,8 +3,10 @@ import type { SubmitFunction } from "@sveltejs/kit";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
 import { trapFocus } from "$lib/actions/trapFocus";
-import { entryFromForm } from "$lib/mylist/entry-from-form";
+import { MYLIST_NOTE_MAX_LENGTH } from "$lib/mylist/entry-details";
+import { savedEntryFromResult } from "$lib/mylist/entry-from-form";
 import type { AnimeStatus, UserAnimeEntry } from "$lib/types";
+import { jstDateKey } from "$lib/utils/jst";
 
 type Props = {
 	open: boolean;
@@ -47,11 +49,42 @@ const statusOptions: { value: AnimeStatus; label: string }[] = [
 let selectedStatus = $state<AnimeStatus | null>(null);
 let score = $state<number | null>(null);
 let progress = $state(0);
+// 見始めた日・見終えた日・メモ（180）。日付は input[type=date] の値（YYYY-MM-DD、空なら未入力）
+let startedOn = $state("");
+let finishedOn = $state("");
+let note = $state("");
+// 視聴ステータスを選んだときに今日で埋めた日付。別のステータスに選び直したら消す（手で直したら残す）
+let autoStarted = false;
+let autoFinished = false;
+// 開くかどうかはモーダルを開いたときにだけ決める（自動入力で開くと、保存ボタンが下へ押し出される）
+let recordOpen = $state(false);
 let submitting = $state(false);
 let errorMessage = $state("");
 let initializedFor: string | null = null;
 let totalEpisodes = $derived(parseEpisodeCount(episodeCount));
 let statusOnly = $derived(variant === "status-only");
+// 登録済みなのに日付・メモを読み込んでいない画面では、欄を出さない（送らなければ保存でも触らない）
+let showRecord = $derived(!statusOnly && (entry == null || entry.note !== undefined));
+// 作品ページではモーダルが閉じていても残るので、開くたびに今日を取り直す（日付をまたいでも前日を入れない）
+let today = $state(jstDateKey(new Date()));
+$effect(() => {
+	if (open) today = jstDateKey(new Date());
+});
+// 閉じているときも中身が分かるよう、見出しの横に短く出す（今年の日付は月/日だけ）
+let recordSummary = $derived(
+	[
+		startedOn && `見始めた日 ${shortDate(startedOn)}`,
+		finishedOn && `見終えた日 ${shortDate(finishedOn)}`,
+		note.trim() && "メモあり",
+	]
+		.filter(Boolean)
+		.join(" · "),
+);
+
+function shortDate(value: string): string {
+	const [year, month, day] = value.split("-").map(Number);
+	return value.slice(0, 4) === today.slice(0, 4) ? `${month}/${day}` : `${year}/${month}/${day}`;
+}
 
 function parseEpisodeCount(value: string | null): number | null {
 	if (!value) return null;
@@ -66,7 +99,29 @@ function clampProgress(value: number): number {
 
 function setProgress(value: number) {
 	progress = clampProgress(value);
-	if (totalEpisodes != null && progress === totalEpisodes) selectedStatus = "completed";
+	if (totalEpisodes != null && progress === totalEpisodes) selectStatus("completed");
+}
+
+// 「視聴中」で見始めた日、「完了」で見終えた日が空なら今日を入れる（保存時に DB のトリガーも同じことをする）
+function selectStatus(value: AnimeStatus) {
+	selectedStatus = value;
+	if (autoStarted && value !== "watching") {
+		startedOn = "";
+		autoStarted = false;
+	}
+	if (autoFinished && value !== "completed") {
+		finishedOn = "";
+		autoFinished = false;
+	}
+	if (value === entry?.status) return;
+	if (value === "watching" && !startedOn && (!finishedOn || finishedOn >= today)) {
+		startedOn = today;
+		autoStarted = true;
+	}
+	if (value === "completed" && !finishedOn && (!startedOn || startedOn <= today)) {
+		finishedOn = today;
+		autoFinished = true;
+	}
 }
 
 function handleProgressInput(event: Event) {
@@ -88,7 +143,13 @@ const handleSubmit: SubmitFunction = ({ formData, submitter }) => {
 			return;
 		}
 		// 保存した作品の ID も渡す（応答が来るまでに親が別の作品へ移っていることがある）
-		if (onsaved) onsaved(removing ? null : entryFromForm(formData), String(formData.get("anime_id")));
+		if (onsaved)
+			onsaved(
+				removing
+					? null
+					: savedEntryFromResult(result.type === "success" ? result.data : undefined, formData, entry),
+				String(formData.get("anime_id")),
+			);
 		else await invalidateAll();
 		onclose();
 	};
@@ -99,6 +160,12 @@ function resetFromEntry(key: string) {
 	selectedStatus = entry?.status ?? null;
 	score = entry?.score != null && entry.score > 0 ? Math.round(entry.score) : null;
 	progress = clampProgress(entry?.progress ?? 0);
+	startedOn = entry?.started_on ?? "";
+	finishedOn = entry?.finished_on ?? "";
+	note = entry?.note ?? "";
+	autoStarted = false;
+	autoFinished = false;
+	recordOpen = Boolean(startedOn || finishedOn || note);
 	errorMessage = "";
 }
 
@@ -152,101 +219,151 @@ $effect(() => {
 				<input type="hidden" name="status" value={selectedStatus ?? ""}>
 				<input type="hidden" name="score" value={score ?? ""}>
 				<input type="hidden" name="progress" value={progress}>
+				<!-- 中身だけをスクロールさせ、見出しと保存・キャンセルはいつも見えるようにする -->
+				<div class="modal-body">
+					{#if !statusOnly}
+						<section class="field-section" aria-labelledby="score-label">
+							<div class="section-heading">
+								<h3 id="score-label">スコア</h3>
+								<span>{score ?? "未評価"}</span>
+							</div>
+							<div class="score-grid">
+								{#each Array.from({ length: 10 }, (_, i) => i + 1) as value}
+									<button
+										type="button"
+										class:active={score === value}
+										aria-pressed={score === value}
+										onclick={() => (score = score === value ? null : value)}
+									>
+										{value}
+									</button>
+								{/each}
+							</div>
+						</section>
 
-				{#if !statusOnly}
-					<section class="field-section" aria-labelledby="score-label">
-						<div class="section-heading">
-							<h3 id="score-label">スコア</h3>
-							<span>{score ?? "未評価"}</span>
-						</div>
-						<div class="score-grid">
-							{#each Array.from({ length: 10 }, (_, i) => i + 1) as value}
+						<section class="field-section" aria-labelledby="progress-label">
+							<div class="section-heading"><h3 id="progress-label">視聴進捗</h3></div>
+							<div class="stepper">
 								<button
 									type="button"
-									class:active={score === value}
-									aria-pressed={score === value}
-									onclick={() => (score = score === value ? null : value)}
+									aria-label="進捗を1話戻す"
+									disabled={progress <= 0}
+									onclick={() => setProgress(progress - 1)}
 								>
-									{value}
+									−
+								</button>
+								<label>
+									<span class="sr-only">現在の話数</span>
+									<input
+										type="number"
+										min="0"
+										max={totalEpisodes ?? undefined}
+										value={progress}
+										oninput={handleProgressInput}
+									>
+								</label>
+								<button
+									type="button"
+									aria-label="進捗を1話進める"
+									disabled={totalEpisodes != null && progress >= totalEpisodes}
+									onclick={() => setProgress(progress + 1)}
+								>
+									＋
+								</button>
+								<span class="episode-total"
+									>/ {totalEpisodes != null ? `${totalEpisodes}話` : "全話数未定"}</span
+								>
+							</div>
+						</section>
+					{/if}
+
+					<section class="field-section" aria-labelledby="status-label">
+						<div class="section-heading"><h3 id="status-label">視聴ステータス</h3></div>
+						<div class="status-grid">
+							{#each statusOptions as option}
+								<button
+									type="button"
+									data-status={option.value}
+									class:active={selectedStatus === option.value}
+									aria-pressed={selectedStatus === option.value}
+									onclick={() => selectStatus(option.value)}
+								>
+									{option.label}
 								</button>
 							{/each}
 						</div>
 					</section>
 
-					<section class="field-section" aria-labelledby="progress-label">
-						<div class="section-heading"><h3 id="progress-label">視聴進捗</h3></div>
-						<div class="stepper">
-							<button
-								type="button"
-								aria-label="進捗を1話戻す"
-								disabled={progress <= 0}
-								onclick={() => setProgress(progress - 1)}
-							>
-								−
-							</button>
-							<label>
-								<span class="sr-only">現在の話数</span>
-								<input
-									type="number"
-									min="0"
-									max={totalEpisodes ?? undefined}
-									value={progress}
-									oninput={handleProgressInput}
-								>
+					{#if showRecord}
+						<!-- ふだんは閉じておく。日付かメモが入っていれば開いた状態で出す -->
+						<details class="record-details" bind:open={recordOpen}>
+							<summary>
+								日付・メモ
+								{#if !recordOpen && recordSummary}
+									<span class="record-summary">{recordSummary}</span>
+								{/if}
+							</summary>
+							<div class="date-row">
+								<label class="date-field">
+									<span>見始めた日</span>
+									<input
+										type="date"
+										name="started_on"
+										max={finishedOn || today}
+										bind:value={startedOn}
+										oninput={() => (autoStarted = false)}
+									>
+								</label>
+								<label class="date-field">
+									<span>見終えた日</span>
+									<input
+										type="date"
+										name="finished_on"
+										min={startedOn || undefined}
+										max={today}
+										bind:value={finishedOn}
+										oninput={() => (autoFinished = false)}
+									>
+								</label>
+							</div>
+							<label class="note-field">
+								<span class="note-label">
+									メモ
+									<small>自分だけに見えます</small>
+								</span>
+								<textarea
+									name="note"
+									rows="3"
+									maxlength={MYLIST_NOTE_MAX_LENGTH}
+									placeholder="見たきっかけ、止めた理由など"
+									bind:value={note}
+								></textarea>
+								<span class="note-count">{[...note].length} / {MYLIST_NOTE_MAX_LENGTH}</span>
 							</label>
+						</details>
+					{/if}
+
+					{#if entry && removeAction}
+						<!-- 保存・キャンセルと並べるとスマホで入りきらないので、別の行にする -->
+						<div class="remove-row">
 							<button
-								type="button"
-								aria-label="進捗を1話進める"
-								disabled={totalEpisodes != null && progress >= totalEpisodes}
-								onclick={() => setProgress(progress + 1)}
+								type="submit"
+								formaction={removeAction}
+								class="remove-button"
+								data-remove
+								disabled={submitting}
 							>
-								＋
+								マイリストから外す
 							</button>
-							<span class="episode-total"
-								>/ {totalEpisodes != null ? `${totalEpisodes}話` : "全話数未定"}</span
-							>
 						</div>
-					</section>
-				{/if}
+					{/if}
 
-				<section class="field-section" aria-labelledby="status-label">
-					<div class="section-heading"><h3 id="status-label">視聴ステータス</h3></div>
-					<div class="status-grid">
-						{#each statusOptions as option}
-							<button
-								type="button"
-								data-status={option.value}
-								class:active={selectedStatus === option.value}
-								aria-pressed={selectedStatus === option.value}
-								onclick={() => (selectedStatus = option.value)}
-							>
-								{option.label}
-							</button>
-						{/each}
-					</div>
-				</section>
-
-				{#if entry && removeAction}
-					<!-- 保存・キャンセルと並べるとスマホで入りきらないので、別の行にする -->
-					<div class="remove-row">
-						<button
-							type="submit"
-							formaction={removeAction}
-							class="remove-button"
-							data-remove
-							disabled={submitting}
-						>
-							マイリストから外す
-						</button>
-					</div>
-				{/if}
-
-				{#if errorMessage}
-					<p class="form-error" role="alert">{errorMessage}</p>
-				{:else if selectedStatus === null}
-					<p class="status-hint">視聴ステータスを選んでください</p>
-				{/if}
-
+					{#if errorMessage}
+						<p class="form-error" role="alert">{errorMessage}</p>
+					{:else if selectedStatus === null}
+						<p class="status-hint">視聴ステータスを選んでください</p>
+					{/if}
+				</div>
 				<footer class="modal-footer">
 					<button type="button" class="cancel-button" disabled={submitting} onclick={onclose}>
 						キャンセル
@@ -277,9 +394,11 @@ $effect(() => {
 	backdrop-filter: blur(6px);
 }
 .modal-card {
+	display: flex;
+	flex-direction: column;
 	width: min(100%, 520px);
 	max-height: min(760px, calc(100dvh - 32px));
-	overflow-y: auto;
+	overflow: hidden;
 	border: 1px solid var(--color-border);
 	border-radius: 24px;
 	background: var(--color-bg);
@@ -307,9 +426,16 @@ $effect(() => {
 	white-space: nowrap;
 }
 form {
-	padding: 4px 24px 22px;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
 }
-.modal-card--compact form {
+.modal-body {
+	min-height: 0;
+	overflow-y: auto;
+	padding: 4px 24px 0;
+}
+.modal-card--compact .modal-body {
 	padding-top: 2px;
 }
 .field-section {
@@ -466,11 +592,16 @@ form {
 	color: var(--color-error-text);
 	font-size: 0.82rem;
 }
+/* 中身が長くても保存・キャンセルはいつも見えるよう、スクロールの外（モーダルの下）に置く */
 .modal-footer {
+	flex-shrink: 0;
 	display: flex;
 	justify-content: flex-end;
 	gap: 10px;
-	padding-top: 20px;
+	margin-top: 16px;
+	padding: 14px 24px 20px;
+	border-top: 1px solid var(--color-border);
+	background: var(--color-bg);
 }
 .modal-footer button {
 	min-height: 44px;
@@ -550,8 +681,8 @@ form {
 	.modal-header {
 		padding: 20px 18px 16px;
 	}
-	form {
-		padding: 2px 18px 18px;
+	.modal-body {
+		padding: 2px 18px 0;
 	}
 	.score-grid {
 		justify-content: space-between;
@@ -560,12 +691,88 @@ form {
 		width: calc(20% - 5px);
 	}
 	.modal-footer {
-		position: sticky;
-		bottom: -18px;
-		margin: 0 -18px -18px;
 		padding: 14px 18px calc(14px + env(safe-area-inset-bottom));
-		border-top: 1px solid var(--color-border);
-		background: var(--color-bg);
 	}
+}
+/* 下は保存・キャンセルの段の線で区切られるので、線を重ねない */
+.record-details {
+	padding: 14px 0 0;
+}
+.record-details summary {
+	width: fit-content;
+	color: var(--color-text-muted);
+	cursor: pointer;
+	font-size: 0.82rem;
+	font-weight: 650;
+	letter-spacing: 0.04em;
+}
+.record-details summary:hover {
+	color: var(--color-text);
+}
+.record-summary {
+	margin-left: 8px;
+	color: var(--color-text-muted);
+	font-size: 0.76rem;
+	font-weight: 500;
+	letter-spacing: 0;
+}
+.date-row {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 10px;
+	margin-top: 12px;
+}
+.date-field,
+.note-field {
+	display: grid;
+	gap: 6px;
+	color: var(--color-text-muted);
+	font-size: 0.76rem;
+	font-weight: 650;
+}
+.date-field input,
+.note-field textarea {
+	width: 100%;
+	min-width: 0;
+	box-sizing: border-box;
+	border: 1px solid var(--color-border);
+	border-radius: 12px;
+	background: var(--color-surface);
+	color: var(--color-text);
+	font: inherit;
+	font-size: 0.9rem;
+	font-weight: 500;
+	color-scheme: inherit;
+}
+.date-field input {
+	height: 40px;
+	padding: 0 10px;
+}
+.note-field {
+	margin-top: 12px;
+}
+.note-label {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+}
+.note-label small {
+	font-size: 0.72rem;
+	font-weight: 500;
+}
+.note-field textarea {
+	padding: 9px 11px;
+	line-height: 1.5;
+	resize: vertical;
+}
+.date-field input:focus-visible,
+.note-field textarea:focus-visible {
+	border-color: var(--color-accent);
+	outline: none;
+}
+.note-count {
+	justify-self: end;
+	font-size: 0.7rem;
+	font-weight: 500;
 }
 </style>
