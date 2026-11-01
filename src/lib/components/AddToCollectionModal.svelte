@@ -194,11 +194,9 @@ function close() {
 										{/if}
 									</span>
 								</span>
+								<!-- 入っているコレクションにだけチェックの印を出す（入っていなければ空けておく） -->
 								<span
-									class={[
-										'add-collection-mark',
-										collection.has_anime ? 'i-lucide-bookmark-check' : 'i-lucide-bookmark',
-									]}
+									class={['add-collection-mark', collection.has_anime && 'i-lucide-check']}
 									aria-hidden="true"
 								></span>
 							</button>
@@ -361,9 +359,6 @@ function close() {
 	flex-shrink: 0;
 	width: 20px;
 	height: 20px;
-	color: var(--color-text-muted);
-}
-.add-collection-row[aria-pressed="true"] .add-collection-mark {
 	color: var(--color-accent);
 }
 .add-collection-message {
