@@ -71,7 +71,7 @@ async function copyLink() {
 <div class="page-container">
 	<main class="feed-column collection-page">
 		<header class="collection-header">
-			<a href="/profile/{collection.owner.username}?tab=collections" class="collection-owner">
+			<a href={data.isOwn ? '/collections' : `/profile/${collection.owner.username}`} class="collection-owner">
 				<UserAvatar src={collection.owner.avatar_url} username={ownerName} size="xs" />
 				<span>{ownerName}のコレクション</span>
 			</a>

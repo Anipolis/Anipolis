@@ -100,8 +100,7 @@ async function create(event: SubmitEvent) {
 	const form = new FormData();
 	form.set("anime_id", String(animeId));
 	form.set("title", newTitle);
-	// 公開設定はここでは聞かない。コレクションのページの作成と同じく公開で作る
-	form.set("is_public", "on");
+	// 公開設定はここでは聞かない。非公開で作り、見せたくなったらコレクションのページで公開にする
 	try {
 		const response = await fetch("/api/collections", { method: "POST", body: form });
 		if (!response.ok) {

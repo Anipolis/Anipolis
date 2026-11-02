@@ -73,7 +73,6 @@ export const actions: Actions = {
 		}
 		if (!data) return fail(404, { message: "コレクションが見つかりません" });
 
-		const { data: profile } = await supabase.from("profiles").select("username").eq("id", user.id).maybeSingle();
-		redirect(303, profile ? `/profile/${profile.username}?tab=collections` : "/");
+		redirect(303, "/collections");
 	},
 };
