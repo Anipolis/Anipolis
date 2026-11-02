@@ -22,7 +22,8 @@ let { mode, action, initial, deleteAction, onclose }: Props = $props();
 
 let title = $state(untrack(() => initial?.title ?? ""));
 let description = $state(untrack(() => initial?.description ?? ""));
-let isPublic = $state(untrack(() => initial?.is_public ?? true));
+// 作るときは非公開から始める（YouTube の再生リストと同じ。見せたいものだけ公開にしてリンクを渡す）
+let isPublic = $state(untrack(() => initial?.is_public ?? false));
 let submitting = $state(false);
 let error = $state<{ field?: "title" | "description"; message: string } | null>(null);
 let titleInput = $state<HTMLInputElement | null>(null);
@@ -161,7 +162,9 @@ const handleDelete: SubmitFunction = ({ cancel }) => {
 						>
 						<span>
 							<span class="collection-form-option-title">公開</span>
-							<span class="collection-form-option-hint">プロフィールを見られる人に見せる</span>
+							<span class="collection-form-option-hint"
+								>リンクを知っている人が見られる（鍵アカウントはフォロワーだけ）</span
+							>
 						</span>
 					</label>
 					<label class="collection-form-option">

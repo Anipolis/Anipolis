@@ -327,9 +327,9 @@ function isActive(path: string): boolean {
 				</a>
 
 				<a
-					href="/bookmarks"
+					href="/collections"
 					class="mobile-drawer-btn"
-					class:active={isActive('/bookmarks')}
+					class:active={isActive('/collections')}
 					onclick={closeDrawer}
 				>
 					<svg
@@ -343,9 +343,13 @@ function isActive(path: string): boolean {
 						stroke-linejoin="round"
 						aria-hidden="true"
 					>
-						<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+						<rect width="8" height="18" x="3" y="3" rx="1" />
+						<path d="M7 3v18" />
+						<path
+							d="M20.4 18.9c.2.5-.1 1.1-.6 1.3l-1.9.7c-.5.2-1.1-.1-1.3-.6L11.1 5.1c-.2-.5.1-1.1.6-1.3l1.9-.7c.5-.2 1.1.1 1.3.6Z"
+						/>
 					</svg>
-					ブックマーク
+					コレクション
 				</a>
 
 				<a
@@ -692,11 +696,11 @@ function isActive(path: string): boolean {
 				</a>
 
 				<a
-					href="/bookmarks"
+					href="/collections"
 					class="sidebar-btn"
-					class:active={isActive('/bookmarks')}
-					aria-label="ブックマーク"
-					title="ブックマーク"
+					class:active={isActive('/collections')}
+					aria-label="コレクション"
+					title="コレクション"
 				>
 					<svg
 						width="22"
@@ -709,9 +713,13 @@ function isActive(path: string): boolean {
 						stroke-linejoin="round"
 						aria-hidden="true"
 					>
-						<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+						<rect width="8" height="18" x="3" y="3" rx="1" />
+						<path d="M7 3v18" />
+						<path
+							d="M20.4 18.9c.2.5-.1 1.1-.6 1.3l-1.9.7c-.5.2-1.1-.1-1.3-.6L11.1 5.1c-.2-.5.1-1.1.6-1.3l1.9-.7c.5-.2 1.1.1 1.3.6Z"
+						/>
 					</svg>
-					<span class="sidebar-btn-label">ブックマーク</span>
+					<span class="sidebar-btn-label">コレクション</span>
 				</a>
 
 				<a

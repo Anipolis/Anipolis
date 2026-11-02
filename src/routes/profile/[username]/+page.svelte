@@ -5,7 +5,6 @@ import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
 import AnimeStatusSection from "$lib/components/AnimeStatusSection.svelte";
-import CollectionFormModal from "$lib/components/CollectionFormModal.svelte";
 import FavoriteAnimeShelf from "$lib/components/FavoriteAnimeShelf.svelte";
 import ImageCropper from "$lib/components/ImageCropper.svelte";
 import PostRow from "$lib/components/PostRow.svelte";
@@ -19,7 +18,7 @@ import type { PageProps } from "./$types";
 let { data, form }: PageProps = $props();
 
 const { profile, isOwn, canViewContent } = $derived(data);
-// 開いているタブ（投稿・画像・いいね）の一覧。サーバーは開いているタブの分だけを読む（#250）
+// 開いているタブ（投稿・画像・いいね・ブックマーク）の一覧。サーバーは開いているタブの分だけを読む（#250）
 const listPosts = $derived(data.listPosts);
 const displayName = $derived(profile.display_name ?? profile.username);
 const profileSocialImage = $derived(profile.header_url ?? profile.avatar_url);
@@ -52,7 +51,6 @@ let reportSubmitting = $state(false);
 let reportMessage = $state("");
 let showKebabMenu = $state(false);
 let blocking = $state(false);
-let creatingCollection = $state(false);
 // タブが入りきらない幅（320px など）では横に送る。続きがある側の端をぼかして知らせる
 let tabsNav = $state<HTMLElement | null>(null);
 let tabsMoreLeft = $state(false);
@@ -96,7 +94,7 @@ $effect(() => {
 
 const requestedTab = $derived(page.url.searchParams.get("tab"));
 const activeTab = $derived(
-	requestedTab === "images" || requestedTab === "list" || requestedTab === "collections" || requestedTab === "likes"
+	requestedTab === "images" || requestedTab === "list" || requestedTab === "likes" || requestedTab === "bookmarks"
 		? requestedTab
 		: "posts",
 );
@@ -851,17 +849,17 @@ const grouped = $derived(
 					<span class="tab-lock i-lucide-lock-keyhole" aria-hidden="true"></span>
 				{/if}
 			</a>
-			<a
-				href="/profile/{profile.username}?tab=collections"
-				class="profile-tab"
-				class:active={activeTab === 'collections'}
-			>
-				コレクション
-			</a>
 			{#if isOwn}
 				<a href="/profile/{profile.username}?tab=likes" class="profile-tab" class:active={activeTab === 'likes'}
 					>いいね</a
 				>
+				<a
+					href="/profile/{profile.username}?tab=bookmarks"
+					class="profile-tab"
+					class:active={activeTab === 'bookmarks'}
+				>
+					ブックマーク
+				</a>
 			{/if}
 		</nav>
 
@@ -958,76 +956,6 @@ const grouped = $derived(
 			{/if}
 		{/if}
 
-		<!-- コレクションタブ（#515） -->
-		{#if activeTab === 'collections'}
-			{#if !canViewContent}
-				<div class="empty-state profile-private-state">
-					<p>このアカウントのコレクションはフォロワーだけが見ることができます</p>
-				</div>
-			{:else if data.collections === null}
-				<div class="empty-state">
-					<p>コレクションを読み込めませんでした。ページを再読み込みしてください</p>
-				</div>
-			{:else}
-				{#if isOwn && data.collections.length > 0}
-					<div class="collections-toolbar">
-						<button
-							type="button"
-							class="btn btn-secondary collections-new"
-							onclick={() => (creatingCollection = true)}
-						>
-							<span class="i-lucide-plus" aria-hidden="true"></span>
-							新しいコレクション
-						</button>
-					</div>
-				{/if}
-				{#if data.collections.length === 0}
-					{#if isOwn}
-						<button type="button" class="collections-empty-add" onclick={() => (creatingCollection = true)}>
-							<span class="i-lucide-plus" aria-hidden="true"></span>
-							コレクションを作る
-						</button>
-					{:else}
-						<div class="empty-state"><p>まだコレクションがありません</p></div>
-					{/if}
-				{:else}
-					<ul class="collections-list">
-						{#each data.collections as collection (collection.id)}
-							<li>
-								<a href="/collections/{collection.id}" class="collection-item">
-									<!-- 先頭の4作品のカバー（足りない分は空の枠） -->
-									<span class="collection-item-covers" aria-hidden="true">
-										{#each [0, 1, 2, 3] as slot (slot)}
-											<span class="collection-item-cover">
-												{#if collection.covers[slot]}
-													<img src={collection.covers[slot]} alt="" loading="lazy">
-												{/if}
-											</span>
-										{/each}
-									</span>
-									<span class="collection-item-body">
-										<span class="collection-item-title">
-											{collection.title}
-											{#if !collection.is_public}
-												<span class="collection-item-private">
-													<span class="i-lucide-lock-keyhole" aria-hidden="true"></span>
-													非公開
-												</span>
-											{/if}
-										</span>
-										{#if collection.description}
-											<span class="collection-item-description">{collection.description}</span>
-										{/if}
-										<span class="collection-item-meta">{collection.item_count}作品</span>
-									</span>
-								</a>
-							</li>
-						{/each}
-					</ul>
-				{/if}
-			{/if}
-		{/if}
-
 		<!-- いいねタブ -->
 		{#if activeTab === 'likes'}
 			{#if !isOwn}
@@ -1047,22 +975,28 @@ const grouped = $derived(
 				{/if}
 			{/if}
 		{/if}
+
+		<!-- ブックマークタブ（自分だけ） -->
+		{#if activeTab === 'bookmarks' && isOwn}
+			{#if listPosts.length === 0 && !data.listNextCursor}
+				<div class="empty-state">
+					<p>保存した投稿はまだありません</p>
+				</div>
+			{:else}
+				{#each listPosts as post (post.id)}
+					<PostRow {post} currentUserId={data.user?.id ?? null} />
+				{/each}
+				{#if data.listNextCursor}
+					<a href={timelineCursorHref(page.url, data.listNextCursor)} class="load-more-btn">さらに読み込む</a>
+				{/if}
+			{/if}
+		{/if}
 	</main>
 
 	<aside class="sidebar-column">
 		<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
 	</aside>
 </div>
-
-{#if creatingCollection && isOwn}
-	<CollectionFormModal
-		mode="create"
-		action="?/createCollection"
-		onclose={() => {
-			creatingCollection = false;
-		}}
-	/>
-{/if}
 
 {#if avatarCropSource}
 	<ImageCropper
@@ -1468,112 +1402,6 @@ const grouped = $derived(
 
 .profile-header-actions-row {
 	margin-top: 8px;
-}
-
-/* コレクションタブ（#515） */
-.collections-toolbar {
-	display: flex;
-	justify-content: flex-end;
-	padding: 12px 16px 0;
-}
-.collections-new {
-	font-size: 13px;
-}
-.collections-empty-add {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	gap: 6px;
-	width: calc(100% - 32px);
-	margin: 16px;
-	padding: 20px;
-	border: 1px dashed var(--color-border-hover);
-	border-radius: 12px;
-	background: transparent;
-	color: var(--color-text-muted);
-	cursor: pointer;
-	font: inherit;
-	font-size: 14px;
-}
-.collections-empty-add:hover {
-	background: var(--color-surface-hover);
-	color: var(--color-text);
-}
-.collections-list {
-	display: flex;
-	flex-direction: column;
-	margin: 0;
-	padding: 8px 0;
-	list-style: none;
-}
-.collection-item {
-	display: flex;
-	align-items: center;
-	gap: 14px;
-	padding: 12px 16px;
-	color: var(--color-text);
-	text-decoration: none;
-}
-.collection-item:hover {
-	background: var(--color-surface-hover);
-}
-.collection-item-covers {
-	display: grid;
-	flex-shrink: 0;
-	grid-template-columns: repeat(2, 1fr);
-	gap: 2px;
-	width: 72px;
-	overflow: hidden;
-	border-radius: 8px;
-	background: var(--color-border);
-}
-.collection-item-cover {
-	display: block;
-	aspect-ratio: 400 / 566;
-	background: var(--color-bg-card);
-}
-.collection-item-cover img {
-	display: block;
-	width: 100%;
-	height: 100%;
-	object-fit: cover;
-}
-.collection-item-body {
-	display: flex;
-	flex-direction: column;
-	gap: 4px;
-	min-width: 0;
-}
-.collection-item-title {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 6px;
-	font-size: 15px;
-	font-weight: 700;
-	overflow-wrap: anywhere;
-}
-.collection-item-private {
-	display: inline-flex;
-	align-items: center;
-	gap: 3px;
-	color: var(--color-text-muted);
-	font-size: 12px;
-	font-weight: 600;
-}
-.collection-item-description {
-	display: -webkit-box;
-	overflow: hidden;
-	color: var(--color-text-muted);
-	font-size: 13px;
-	line-height: 1.5;
-	-webkit-box-orient: vertical;
-	-webkit-line-clamp: 2;
-	line-clamp: 2;
-}
-.collection-item-meta {
-	color: var(--color-text-muted);
-	font-size: 12px;
 }
 
 /* 「ブロック中」は押せない状態の表示なので、灰色の枠にして押せる見た目（カーソル・ホバー）を消す */

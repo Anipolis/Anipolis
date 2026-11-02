@@ -1,9 +1,7 @@
 import { error, fail, redirect } from "@sveltejs/kit";
-import { MAX_COLLECTIONS_PER_USER, parseCollectionInput } from "$lib/collections";
 import {
 	blockUserAction,
 	deletePostAction,
-	ensureAccountCanWrite,
 	toggleBookmarkAction,
 	toggleFollowAction,
 	toggleLikeAction,
@@ -14,6 +12,7 @@ import {
 	checkIsFollowing,
 	fillTimelinePage,
 	getAnimeRankingTrending,
+	getBookmarkedPostsPage,
 	getFavoriteAnime,
 	getFollowCounts,
 	getFollowRequestStatus,
@@ -23,7 +22,6 @@ import {
 	getProfileTimelinePage,
 	getTrendingHashtags,
 	getUserAnimeList,
-	getUserCollections,
 	isBlockedByMe,
 } from "$lib/server/queries";
 import { parseTimelineCursor, type TimelineCursor } from "$lib/timeline-cursor";
@@ -56,11 +54,10 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 	const canViewContent = isOwn || !profile.is_private || isFollowing;
 	// 画面のタブの決め方（+page.svelte の activeTab）と合わせる。開いているタブの一覧だけを読む
 	const requestedTab = url.searchParams.get("tab");
+	// コレクションはプロフィールに並べず、自分用の /collections で管理する。前のリンクはそちらへ送る
+	if (requestedTab === "collections") redirect(303, isOwn ? "/collections" : `/profile/${profile.username}`);
 	const activeTab =
-		requestedTab === "images" ||
-		requestedTab === "list" ||
-		requestedTab === "collections" ||
-		requestedTab === "likes"
+		requestedTab === "images" || requestedTab === "list" || requestedTab === "likes" || requestedTab === "bookmarks"
 			? requestedTab
 			: "posts";
 	const cursor = parseTimelineCursor(url.searchParams);
@@ -87,6 +84,8 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 			);
 		} else if (activeTab === "likes" && isOwn) {
 			page = await getLikedPostsPage(supabase, profile.id, viewerId, cursor);
+		} else if (activeTab === "bookmarks" && isOwn) {
+			page = await getBookmarkedPostsPage(supabase, profile.id, cursor);
 		} else {
 			return EMPTY_PAGE;
 		}
@@ -94,7 +93,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 		return { posts: page.posts, nextCursor: page.nextCursor };
 	};
 
-	const [activeList, postCount, followCounts, trendingResult, animeTrending, animeList, favoriteAnime, collections] =
+	const [activeList, postCount, followCounts, trendingResult, animeTrending, animeList, favoriteAnime] =
 		await Promise.all([
 			loadActiveList(),
 
@@ -117,17 +116,11 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 			// ベスト作品（#361）。投稿と同じ相手に見せる。読めなくてもプロフィールは出すが、失敗は null で
 			// 「未登録（[]）」と分ける。空と取り違えて編集・保存すると、保存済みの選択を消してしまう
 			canViewContent ? getFavoriteAnime(supabase, profile.id).catch((): null => null) : Promise.resolve([]),
-
-			// コレクション（#515）はタブを開いたときだけ読む。非公開のものは本人にだけ返る（RLS）。
-			// 読めなかったときは null にして、「まだ無い」と見せない
-			activeTab === "collections" && canViewContent
-				? getUserCollections(supabase, profile.id).catch((): null => null)
-				: Promise.resolve([]),
 		]);
 
 	return {
 		profile: profileWithHeader,
-		// 開いているタブ（投稿・画像・いいね）の一覧と、その続きの目印
+		// 開いているタブ（投稿・画像・いいね・ブックマーク）の一覧と、その続きの目印
 		listPosts: activeList.posts,
 		listNextCursor: activeList.nextCursor,
 		postCount,
@@ -141,7 +134,6 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 		animeTrending,
 		animeList,
 		favoriteAnime,
-		collections,
 		user,
 	};
 };
@@ -177,36 +169,6 @@ export const actions: Actions = {
 		if (error) return fail(500, { message: "プロフィールの更新に失敗しました" });
 
 		return { success: true };
-	},
-
-	createCollection: async ({ request, locals: { supabase, safeGetSession } }) => {
-		const { user } = await safeGetSession();
-		if (!user) return fail(401, { message: "ログインが必要です" });
-		const moderationFailure = await ensureAccountCanWrite(supabase, user.id);
-		if (moderationFailure) return moderationFailure;
-
-		const parsed = parseCollectionInput(await request.formData());
-		if (!parsed.ok) return fail(400, { field: parsed.field, message: parsed.message });
-
-		const { data, error: insertError } = await supabase
-			.from("user_collections")
-			.insert({
-				user_id: user.id,
-				title: parsed.value.title,
-				description: parsed.value.description,
-				is_public: parsed.value.isPublic,
-			})
-			.select("id")
-			.single();
-		if (insertError || !data) {
-			// 上限（179 のトリガー）
-			if (insertError?.code === "22023") {
-				return fail(400, { message: `コレクションは${MAX_COLLECTIONS_PER_USER}個まで作れます` });
-			}
-			console.error("collection create error:", insertError);
-			return fail(500, { message: "コレクションの作成に失敗しました" });
-		}
-		redirect(303, `/collections/${data.id}`);
 	},
 
 	follow: async ({ request, locals: { supabase, safeGetSession } }) => {
