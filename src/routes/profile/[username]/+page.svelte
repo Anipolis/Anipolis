@@ -4,6 +4,7 @@ import { untrack } from "svelte";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
+import ActivityFeed from "$lib/components/ActivityFeed.svelte";
 import AnimeStatusSection from "$lib/components/AnimeStatusSection.svelte";
 import FavoriteAnimeShelf from "$lib/components/FavoriteAnimeShelf.svelte";
 import ImageCropper from "$lib/components/ImageCropper.svelte";
@@ -94,7 +95,11 @@ $effect(() => {
 
 const requestedTab = $derived(page.url.searchParams.get("tab"));
 const activeTab = $derived(
-	requestedTab === "images" || requestedTab === "list" || requestedTab === "likes" || requestedTab === "bookmarks"
+	requestedTab === "images" ||
+		requestedTab === "list" ||
+		requestedTab === "activity" ||
+		requestedTab === "likes" ||
+		requestedTab === "bookmarks"
 		? requestedTab
 		: "posts",
 );
@@ -849,6 +854,16 @@ const grouped = $derived(
 					<span class="tab-lock i-lucide-lock-keyhole" aria-hidden="true"></span>
 				{/if}
 			</a>
+			<a
+				href="/profile/{profile.username}?tab=activity"
+				class="profile-tab"
+				class:active={activeTab === 'activity'}
+			>
+				アクティビティ
+				{#if !canViewContent || (!profile.list_is_public && !isOwn)}
+					<span class="tab-lock i-lucide-lock-keyhole" aria-hidden="true"></span>
+				{/if}
+			</a>
 			{#if isOwn}
 				<a href="/profile/{profile.username}?tab=likes" class="profile-tab" class:active={activeTab === 'likes'}
 					>いいね</a
@@ -953,6 +968,34 @@ const grouped = $derived(
 						/>
 					{/if}
 				{/each}
+			{/if}
+		{/if}
+
+		<!-- アクティビティタブ（181）。マイリストと同じ相手に見せる -->
+		{#if activeTab === 'activity'}
+			{#if !canViewContent || (!profile.list_is_public && !isOwn)}
+				<div class="empty-state profile-private-state">
+					<p>
+						{!canViewContent ? 'このアカウントのアクティビティはフォロワーだけが見ることができます' : 'このユーザーのマイリストは非公開です'}
+					</p>
+				</div>
+			{:else if data.activity === null}
+				<div class="empty-state">
+					<p>アクティビティを読み込めませんでした。ページを再読み込みしてください</p>
+				</div>
+			{:else if data.activity.items.length === 0 && !data.activity.nextCursor}
+				<div class="empty-state">
+					<p>
+						{isOwn ? 'マイリストを視聴予定・視聴中・完了にすると、ここに流れます' : 'まだアクティビティがありません'}
+					</p>
+				</div>
+			{:else}
+				<ActivityFeed items={data.activity.items} canLike={Boolean(data.user) && !isOwn} showUser={false} />
+				{#if data.activity.nextCursor}
+					<a href={timelineCursorHref(page.url, data.activity.nextCursor)} class="load-more-btn"
+						>さらに読み込む</a
+					>
+				{/if}
 			{/if}
 		{/if}
 

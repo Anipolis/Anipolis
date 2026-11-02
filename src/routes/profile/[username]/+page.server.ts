@@ -1,4 +1,5 @@
 import { error, fail, redirect } from "@sveltejs/kit";
+import type { MylistActivity } from "$lib/activity";
 import {
 	blockUserAction,
 	deletePostAction,
@@ -21,6 +22,7 @@ import {
 	getProfilePostCount,
 	getProfileTimelinePage,
 	getTrendingHashtags,
+	getUserActivityPage,
 	getUserAnimeList,
 	isBlockedByMe,
 } from "$lib/server/queries";
@@ -57,7 +59,11 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 	// コレクションはプロフィールに並べず、自分用の /collections で管理する。前のリンクはそちらへ送る
 	if (requestedTab === "collections") redirect(303, isOwn ? "/collections" : `/profile/${profile.username}`);
 	const activeTab =
-		requestedTab === "images" || requestedTab === "list" || requestedTab === "likes" || requestedTab === "bookmarks"
+		requestedTab === "images" ||
+		requestedTab === "list" ||
+		requestedTab === "activity" ||
+		requestedTab === "likes" ||
+		requestedTab === "bookmarks"
 			? requestedTab
 			: "posts";
 	const cursor = parseTimelineCursor(url.searchParams);
@@ -93,7 +99,22 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 		return { posts: page.posts, nextCursor: page.nextCursor };
 	};
 
-	const [activeList, postCount, followCounts, trendingResult, animeTrending, animeList, favoriteAnime] =
+	// アクティビティ（181）はマイリストと同じ相手に見せる。読めなかったときは null にして、「まだ無い」と見せない
+	const canViewList = canViewContent && (isOwn || profile.list_is_public);
+	const loadActivity = async (): Promise<{ items: MylistActivity[]; nextCursor: TimelineCursor | null } | null> => {
+		if (activeTab !== "activity" || !canViewList) return { items: [], nextCursor: null };
+		const page = await fillTimelinePage(
+			(next) => getUserActivityPage(supabase, profile.id, viewerId, next ? { before: next } : {}),
+			cursor,
+		);
+		if (page.error) {
+			console.error("[profile] activity query failed:", page.error);
+			return null;
+		}
+		return { items: page.posts, nextCursor: page.nextCursor };
+	};
+
+	const [activeList, postCount, followCounts, trendingResult, animeTrending, animeList, favoriteAnime, activity] =
 		await Promise.all([
 			loadActiveList(),
 
@@ -107,7 +128,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 
 			// マイリストのタブを開いているときは、読めなければ失敗として扱う（空のリストと見せない、#262）。
 			// ほかのタブでは件数の表示に使うだけなので、読めなくてもプロフィールは出す
-			canViewContent && (isOwn || profile.list_is_public)
+			canViewList
 				? activeTab === "list"
 					? getUserAnimeList(supabase, profile.id)
 					: getUserAnimeList(supabase, profile.id).catch(() => [])
@@ -116,6 +137,8 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 			// ベスト作品（#361）。投稿と同じ相手に見せる。読めなくてもプロフィールは出すが、失敗は null で
 			// 「未登録（[]）」と分ける。空と取り違えて編集・保存すると、保存済みの選択を消してしまう
 			canViewContent ? getFavoriteAnime(supabase, profile.id).catch((): null => null) : Promise.resolve([]),
+
+			loadActivity(),
 		]);
 
 	return {
@@ -134,6 +157,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 		animeTrending,
 		animeList,
 		favoriteAnime,
+		activity,
 		user,
 	};
 };

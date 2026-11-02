@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isActivityStatus, type MylistActivity } from "$lib/activity";
 import { isRepeatMuteActive } from "$lib/anime-mute-schedule";
 import { groupGenreFilters, translateAnimeGenres } from "$lib/anime-vocabulary";
 import { computeBroadcastStatus } from "$lib/broadcast-status";
@@ -69,6 +70,8 @@ type NotificationBroadcastAnime = {
 
 type NotificationEvent = { id: string; title: string };
 
+type NotificationActivity = { status: string; anime: NotificationBroadcastAnime | null };
+
 type NotificationRow = {
 	id: string;
 	type: string;
@@ -85,9 +88,8 @@ type NotificationRow = {
 	recommendation: NotificationRecommendation | NotificationRecommendation[] | null;
 	broadcast_anime: NotificationBroadcastAnime | NotificationBroadcastAnime[] | null;
 	event: NotificationEvent | NotificationEvent[] | null;
-	mylist_anime_id: number | null;
-	mylist_status: string | null;
-	mylist_anime: NotificationBroadcastAnime | NotificationBroadcastAnime[] | null;
+	activity_id: string | null;
+	activity: NotificationActivity | NotificationActivity[] | null;
 	exchange_anime_id: number | null;
 	exchange_anime: NotificationBroadcastAnime | NotificationBroadcastAnime[] | null;
 };
@@ -661,8 +663,7 @@ export async function getNotifications(
             broadcast_scheduled_at,
             broadcast_room_date,
             event_id,
-            mylist_anime_id,
-            mylist_status,
+            activity_id,
             exchange_anime_id,
             read,
             created_at,
@@ -696,10 +697,13 @@ export async function getNotifications(
                 id,
                 title
             ),
-            mylist_anime:anime!notifications_mylist_anime_id_fkey (
-                id,
-                title,
-                cover_url
+            activity:mylist_activities!notifications_activity_id_fkey (
+                status,
+                anime:anime!mylist_activities_anime_id_fkey (
+                    id,
+                    title,
+                    cover_url
+                )
             ),
             exchange_anime:anime!notifications_exchange_anime_id_fkey (
                 id,
@@ -732,7 +736,7 @@ export async function getNotifications(
 		const recommendation = Array.isArray(row.recommendation) ? row.recommendation[0] : row.recommendation;
 		const broadcastAnime = Array.isArray(row.broadcast_anime) ? row.broadcast_anime[0] : row.broadcast_anime;
 		const event = Array.isArray(row.event) ? row.event[0] : row.event;
-		const mylistAnime = Array.isArray(row.mylist_anime) ? row.mylist_anime[0] : row.mylist_anime;
+		const activity = Array.isArray(row.activity) ? row.activity[0] : row.activity;
 		const exchangeAnime = Array.isArray(row.exchange_anime) ? row.exchange_anime[0] : row.exchange_anime;
 		return {
 			id: row["id"],
@@ -763,10 +767,11 @@ export async function getNotifications(
 			broadcast_anime_cover_url: broadcastAnime?.cover_url ?? null,
 			event_id: row.event_id,
 			event_title: event?.title ?? null,
-			mylist_anime_id: row.mylist_anime_id != null ? String(row.mylist_anime_id) : null,
-			mylist_status: (row.mylist_status as Notification["mylist_status"]) ?? null,
-			mylist_anime_title: mylistAnime?.title ?? null,
-			mylist_anime_cover_url: mylistAnime?.cover_url ?? null,
+			activity_id: row.activity_id,
+			activity_status: isActivityStatus(activity?.status) ? activity.status : null,
+			activity_anime_id: activity?.anime ? String(activity.anime.id) : null,
+			activity_anime_title: activity?.anime?.title ?? null,
+			activity_anime_cover_url: activity?.anime?.cover_url ?? null,
 			exchange_anime_id: row.exchange_anime_id != null ? String(row.exchange_anime_id) : null,
 			exchange_anime_title: exchangeAnime?.title ?? null,
 			exchange_anime_cover_url: exchangeAnime?.cover_url ?? null,
@@ -783,8 +788,7 @@ export async function getUnreadNotificationCount(supabase: SupabaseClient<Databa
 		.select("id", { count: "exact", head: true })
 		.eq("recipient_id", userId)
 		.eq("read", false)
-		// マイリスト通知は大量生成され得るため、ナビの合計バッジには含めない
-		// （マイリストタブ側の個別バッジでのみ表示する）
+		// 181 より前のマイリスト通知（フォロー中の人の動き）は、もう画面に出さないので数えない
 		.neq("type", "mylist_status" as never);
 
 	return count ?? 0;
@@ -807,35 +811,24 @@ export async function getUnreadBroadcastNotificationCount(
 export interface NotificationCategoryCounts {
 	normal: number;
 	room: number;
-	mylist: number;
 }
 
 /**
  * 通知タブごとの未読数を返す。
  * - room   = broadcast
- * - mylist = mylist_status
- * - normal = 上記以外（total - room - mylist）
+ * - normal = 上記以外（181 より前のマイリスト通知は数えない）
  */
 export async function getUnreadNotificationCountsByCategory(
 	supabase: SupabaseClient<Database>,
 	userId: string,
 ): Promise<NotificationCategoryCounts> {
 	// getUnreadNotificationCount は mylist_status を除外済み（= normal + room 相当）
-	const [nonMylistTotal, room, mylist] = await Promise.all([
+	const [nonMylistTotal, room] = await Promise.all([
 		getUnreadNotificationCount(supabase, userId),
 		getUnreadBroadcastNotificationCount(supabase, userId),
-		(async () => {
-			const { count } = await supabase
-				.from("notifications")
-				.select("id", { count: "exact", head: true })
-				.eq("recipient_id", userId)
-				.eq("read", false)
-				.eq("type", "mylist_status" as never);
-			return count ?? 0;
-		})(),
 	]);
 
-	return { normal: Math.max(0, nonMylistTotal - room), room, mylist };
+	return { normal: Math.max(0, nonMylistTotal - room), room };
 }
 
 // ================================================================
@@ -2063,6 +2056,131 @@ type TimelinePostsWithRepostsResult = {
 	posts: Post[];
 	error: unknown | null;
 };
+
+/** アクティビティ1ページ分（181）。目印はミュートで間引く前の最後の記録から作る */
+export type FollowingActivityPage = {
+	posts: MylistActivity[];
+	error: unknown | null;
+	nextCursor: TimelineCursor | null;
+};
+
+/**
+ * フォロー中の人のマイリストの動きを新しい順に読む（181）。見えるかどうか（マイリストの公開設定・
+ * 鍵アカウント・ブロック）は記録の RLS が決める。ミュート中の作品の記録は出さない。
+ * 読めない作品（非表示など）の記録も出さない。
+ */
+export async function getFollowingActivity(
+	supabase: SupabaseClient<Database>,
+	currentUserId: string,
+	options: { limit?: number; before?: TimelineCursor } = {},
+): Promise<FollowingActivityPage> {
+	const limit = options.limit ?? 50;
+	const { data: rows, error } = await supabase.rpc("get_following_activity", {
+		p_limit: limit,
+		...(options.before ? { p_before: options.before.createdAt, p_before_id: options.before.id } : {}),
+	});
+	if (error) return { posts: [], error, nextCursor: null };
+	if (!rows || rows.length === 0) return { posts: [], error: null, nextCursor: null };
+	const nextCursor = buildTimelineNextCursor(rows, limit, (row) => ({
+		createdAt: row.created_at,
+		id: row.activity_id,
+	}));
+	const hydrated = await hydrateActivities(
+		supabase,
+		currentUserId,
+		rows.map((row) => row.activity_id),
+	);
+	return hydrated.error ? { posts: [], error: hydrated.error, nextCursor: null } : { ...hydrated, nextCursor };
+}
+
+/**
+ * プロフィールの「アクティビティ」（181）。その人の記録を新しい順に読む。見える範囲は記録の RLS
+ * （マイリストのタブと同じ）が決め、見ている人がミュートしている作品の記録は出さない
+ */
+export async function getUserActivityPage(
+	supabase: SupabaseClient<Database>,
+	profileId: string,
+	viewerId: string | null,
+	options: { limit?: number; before?: TimelineCursor } = {},
+): Promise<FollowingActivityPage> {
+	const limit = options.limit ?? 50;
+	let query = supabase
+		.from("mylist_activities")
+		.select("id, created_at")
+		.eq("user_id", profileId)
+		.order("created_at", { ascending: false })
+		.order("id", { ascending: false })
+		.limit(limit);
+	if (options.before) query = query.or(timelineCursorFilter(options.before, "id"));
+	const { data: rows, error } = await query;
+	if (error) return { posts: [], error, nextCursor: null };
+	if (!rows || rows.length === 0) return { posts: [], error: null, nextCursor: null };
+	const nextCursor = buildTimelineNextCursor(rows, limit, (row) => ({ createdAt: row.created_at, id: row.id }));
+	const hydrated = await hydrateActivities(
+		supabase,
+		viewerId,
+		rows.map((row) => row.id),
+	);
+	return hydrated.error ? { posts: [], error: hydrated.error, nextCursor: null } : { ...hydrated, nextCursor };
+}
+
+/** 記録の ID から、人・作品・いいねの数と自分のいいねを付けた記録にする（並びは ids のまま） */
+async function hydrateActivities(
+	supabase: SupabaseClient<Database>,
+	viewerId: string | null,
+	ids: string[],
+): Promise<{ posts: MylistActivity[]; error: unknown | null }> {
+	const [detailResult, likedResult, mutedAnimeIds] = await Promise.all([
+		supabase
+			.from("mylist_activities")
+			.select(
+				"id, created_at, status, score, user:profiles!mylist_activities_user_id_fkey(id, username, display_name, avatar_url), anime:anime!mylist_activities_anime_id_fkey(id, title, cover_url), likes:mylist_activity_likes(count)",
+			)
+			.in("id", ids),
+		viewerId
+			? supabase
+					.from("mylist_activity_likes")
+					.select("activity_id")
+					.eq("user_id", viewerId)
+					.in("activity_id", ids)
+			: Promise.resolve({ data: [] as { activity_id: string }[], error: null }),
+		getActiveAnimeMuteIdsCached(supabase, viewerId),
+	]);
+	if (detailResult.error) return { posts: [], error: detailResult.error };
+	// 自分のいいねが読めないまま出すと、いいね済みが「いいねしていない」に見え、押すと取り消せずに
+	// もう一度付けようとしてしまう。一覧ごと失敗として扱い、再読み込みを促す
+	if (likedResult.error) return { posts: [], error: likedResult.error };
+	const liked = new Set((likedResult.data ?? []).map((row) => row.activity_id));
+
+	type Row = {
+		id: string;
+		created_at: string;
+		status: string;
+		score: number | null;
+		user: { id: string; username: string; display_name: string | null; avatar_url: string | null } | null;
+		anime: { id: number; title: string; cover_url: string | null } | null;
+		likes: { count: number }[];
+	};
+	const byId = new Map(((detailResult.data ?? []) as unknown as Row[]).map((row) => [row.id, row]));
+	const posts = ids.flatMap((id): MylistActivity[] => {
+		const row = byId.get(id);
+		if (!row?.user || !row.anime || !isActivityStatus(row.status)) return [];
+		if (mutedAnimeIds.has(String(row.anime.id))) return [];
+		return [
+			{
+				id: row.id,
+				created_at: row.created_at,
+				status: row.status,
+				score: normalizeScore(row.score),
+				user: row.user,
+				anime: { id: String(row.anime.id), title: row.anime.title, cover_url: row.anime.cover_url },
+				like_count: row.likes[0]?.count ?? 0,
+				liked: liked.has(row.id),
+			},
+		];
+	});
+	return { posts, error: null };
+}
 
 type FollowingTimelineResult = TimelinePostsWithRepostsResult & { nextCursor: TimelineCursor | null };
 

@@ -560,13 +560,12 @@ export async function markAllNotificationsRead(supabase: SupabaseClient<Database
 	await supabase.from("notifications").update({ read: true }).eq("recipient_id", userId).eq("read", false);
 }
 
-export type NotificationCategory = "normal" | "room" | "mylist";
+export type NotificationCategory = "normal" | "room";
 
 /**
  * 通知タブのカテゴリ単位で既読にする
  * - room   = broadcast
- * - mylist = mylist_status
- * - normal = 上記以外
+ * - normal = 上記以外（181 より前のマイリスト通知 mylist_status は含めない）
  */
 export async function markCategoryNotificationsRead(
 	supabase: SupabaseClient<Database>,
@@ -578,9 +577,7 @@ export async function markCategoryNotificationsRead(
 	const { error } =
 		category === "room"
 			? await query.eq("type", "broadcast" as never)
-			: category === "mylist"
-				? await query.eq("type", "mylist_status" as never)
-				: await query.not("type", "in", "(broadcast,mylist_status)");
+			: await query.not("type", "in", "(broadcast,mylist_status)");
 	return { error: error?.message ?? null };
 }
 
