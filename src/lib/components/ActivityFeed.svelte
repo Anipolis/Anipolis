@@ -6,16 +6,19 @@ import { formatRelativeTime } from "$lib/utils/format";
 import UserAvatar from "./UserAvatar.svelte";
 
 /**
- * タイムラインの「アクティビティ」（181）。フォロー中の人のマイリストの動きを並べる。
+ * 「アクティビティ」（181）。タイムラインではフォロー中の人の、プロフィールではその人のマイリストの動きを並べる。
  * 同じ人が同じステータスに続けて入れた分は1行にまとめ、まとまりは広げてから作品ごとにいいねする
  * （まとまり全体へのいいねは、何に共感したのかが伝わらないため置かない）
  */
 interface Props {
 	items: MylistActivity[];
+	/** いいねを押せるか。押せないとき（未ログイン・自分の記録）はいいねの数だけ出す */
 	canLike: boolean;
+	/** 行ごとに人のアイコンと名前を出すか。プロフィールでは全部同じ人なので出さない */
+	showUser?: boolean;
 }
 
-let { items, canLike }: Props = $props();
+let { items, canLike, showUser = true }: Props = $props();
 
 const groups = $derived(groupActivities(items));
 const expanded = new SvelteSet<string>();
@@ -88,38 +91,47 @@ function userName(group: ActivityGroup): string {
 
 {#snippet likeButton(item: MylistActivity)}
 	{@const state = likeState(item)}
-	<span class="activity-like">
-		<button
-			type="button"
-			class="post-action-btn post-like-btn reaction-icon-hitbox activity-like-btn"
-			class:active={state.liked}
-			class:popping={popping === item.id}
-			aria-pressed={state.liked}
-			aria-label={state.liked ? `「${item.anime.title}」へのいいねを取り消す` : `「${item.anime.title}」にいいね`}
-			disabled={!canLike}
-			onclick={() => void toggleLike(item)}
-			onanimationend={() => (popping = null)}
-		>
-			<svg
-				width="17"
-				height="17"
-				viewBox="0 0 24 24"
-				fill={state.liked ? 'currentColor' : 'none'}
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-				aria-hidden="true"
+	{#if !canLike}
+		{#if state.count > 0}
+			<span class="activity-like activity-like--static" aria-label="いいね {state.count}">
+				<span class="i-lucide-heart" aria-hidden="true"></span>
+				{state.count}
+			</span>
+		{/if}
+	{:else}
+		<span class="activity-like">
+			<button
+				type="button"
+				class="post-action-btn post-like-btn reaction-icon-hitbox activity-like-btn"
+				class:active={state.liked}
+				class:popping={popping === item.id}
+				aria-pressed={state.liked}
+				aria-label={state.liked ? `「${item.anime.title}」へのいいねを取り消す` : `「${item.anime.title}」にいいね`}
+				disabled={!canLike}
+				onclick={() => void toggleLike(item)}
+				onanimationend={() => (popping = null)}
 			>
-				<path
-					d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
-				/>
-			</svg>
-		</button>
-		<span class="activity-like-count" class:activity-like-count--active={state.liked}>
-			{state.count > 0 ? state.count : ''}
+				<svg
+					width="17"
+					height="17"
+					viewBox="0 0 24 24"
+					fill={state.liked ? 'currentColor' : 'none'}
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
+					<path
+						d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
+					/>
+				</svg>
+			</button>
+			<span class="activity-like-count" class:activity-like-count--active={state.liked}>
+				{state.count > 0 ? state.count : ''}
+			</span>
 		</span>
-	</span>
+	{/if}
 {/snippet}
 
 {#snippet animeRow(item: MylistActivity)}
@@ -147,15 +159,24 @@ function userName(group: ActivityGroup): string {
 		{@const isOpen = expanded.has(group.key)}
 		{#if first}
 			<li class="activity-item">
-				<a href="/profile/{group.user.username}" class="activity-avatar" aria-label={userName(group)}>
-					<UserAvatar src={group.user.avatar_url} username={group.user.username} size="sm" />
-				</a>
+				{#if showUser}
+					<a href="/profile/{group.user.username}" class="activity-avatar" aria-label={userName(group)}>
+						<UserAvatar src={group.user.avatar_url} username={group.user.username} size="sm" />
+					</a>
+				{/if}
 				<div class="activity-body">
 					<p class="activity-text">
-						<a href="/profile/{group.user.username}" class="activity-user">{userName(group)}</a>
-						<span>
-							が{isGroup ? `${group.items.length}作品を` : ''}{activityStatusPhrase(group.status)}
-						</span>
+						{#if showUser}
+							<a href="/profile/{group.user.username}" class="activity-user">{userName(group)}</a>
+							<span>
+								が{isGroup ? `${group.items.length}作品を` : ''}{activityStatusPhrase(group.status)}
+							</span>
+						{:else}
+							<span
+								>{isGroup ? `${group.items.length}作品を` : ''}
+								{activityStatusPhrase(group.status)}</span
+							>
+						{/if}
 						<time class="activity-time" datetime={first.created_at}
 							>{formatRelativeTime(first.created_at)}</time
 						>
@@ -321,6 +342,17 @@ function userName(group: ActivityGroup): string {
 	display: inline-flex;
 	flex-shrink: 0;
 	align-items: center;
+}
+.activity-like--static {
+	gap: 3px;
+	padding-right: 4px;
+	color: var(--color-text-muted);
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+}
+.activity-like--static span {
+	width: 14px;
+	height: 14px;
 }
 .activity-like-btn {
 	position: relative;

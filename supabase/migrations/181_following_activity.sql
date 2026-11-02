@@ -58,8 +58,9 @@ CREATE POLICY "mylist_activities: マイリストが見える相手だけ読め�
     );
 
 -- 書き込みはトリガーだけが行う（クライアントには INSERT/UPDATE/DELETE を許さない）
+-- プロフィールのアクティビティのタブは、ログインしていない人にも公開のマイリストと同じ範囲で見せる
 REVOKE ALL ON public.mylist_activities FROM anon, authenticated;
-GRANT SELECT ON public.mylist_activities TO authenticated;
+GRANT SELECT ON public.mylist_activities TO anon, authenticated;
 
 -- ---------- マイリストの保存から記録を作る ----------
 CREATE OR REPLACE FUNCTION public.record_mylist_activity()
@@ -141,6 +142,7 @@ CREATE POLICY "mylist_activity_likes: 本人だけ外せる"
     USING (auth.uid() = user_id);
 
 REVOKE ALL ON public.mylist_activity_likes FROM anon, authenticated;
+GRANT SELECT ON public.mylist_activity_likes TO anon;
 GRANT SELECT, INSERT, DELETE ON public.mylist_activity_likes TO authenticated;
 
 -- 記録のトリガーは、いいねの表を参照するので表を作った後に付ける

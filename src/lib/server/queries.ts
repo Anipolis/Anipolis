@@ -2057,7 +2057,7 @@ type TimelinePostsWithRepostsResult = {
 	error: unknown | null;
 };
 
-/** タイムラインの「アクティビティ」1ページ分（181）。目印はミュートで間引く前の最後の記録から作る */
+/** アクティビティ1ページ分（181）。目印はミュートで間引く前の最後の記録から作る */
 export type FollowingActivityPage = {
 	posts: MylistActivity[];
 	error: unknown | null;
@@ -2085,8 +2085,51 @@ export async function getFollowingActivity(
 		createdAt: row.created_at,
 		id: row.activity_id,
 	}));
+	const hydrated = await hydrateActivities(
+		supabase,
+		currentUserId,
+		rows.map((row) => row.activity_id),
+	);
+	return hydrated.error ? { posts: [], error: hydrated.error, nextCursor: null } : { ...hydrated, nextCursor };
+}
 
-	const ids = rows.map((row) => row.activity_id);
+/**
+ * プロフィールの「アクティビティ」（181）。その人の記録を新しい順に読む。見える範囲は記録の RLS
+ * （マイリストのタブと同じ）が決め、見ている人がミュートしている作品の記録は出さない
+ */
+export async function getUserActivityPage(
+	supabase: SupabaseClient<Database>,
+	profileId: string,
+	viewerId: string | null,
+	options: { limit?: number; before?: TimelineCursor } = {},
+): Promise<FollowingActivityPage> {
+	const limit = options.limit ?? 50;
+	let query = supabase
+		.from("mylist_activities")
+		.select("id, created_at")
+		.eq("user_id", profileId)
+		.order("created_at", { ascending: false })
+		.order("id", { ascending: false })
+		.limit(limit);
+	if (options.before) query = query.or(timelineCursorFilter(options.before, "id"));
+	const { data: rows, error } = await query;
+	if (error) return { posts: [], error, nextCursor: null };
+	if (!rows || rows.length === 0) return { posts: [], error: null, nextCursor: null };
+	const nextCursor = buildTimelineNextCursor(rows, limit, (row) => ({ createdAt: row.created_at, id: row.id }));
+	const hydrated = await hydrateActivities(
+		supabase,
+		viewerId,
+		rows.map((row) => row.id),
+	);
+	return hydrated.error ? { posts: [], error: hydrated.error, nextCursor: null } : { ...hydrated, nextCursor };
+}
+
+/** 記録の ID から、人・作品・いいねの数と自分のいいねを付けた記録にする（並びは ids のまま） */
+async function hydrateActivities(
+	supabase: SupabaseClient<Database>,
+	viewerId: string | null,
+	ids: string[],
+): Promise<{ posts: MylistActivity[]; error: unknown | null }> {
 	const [detailResult, likedResult, mutedAnimeIds] = await Promise.all([
 		supabase
 			.from("mylist_activities")
@@ -2094,17 +2137,19 @@ export async function getFollowingActivity(
 				"id, created_at, status, score, user:profiles!mylist_activities_user_id_fkey(id, username, display_name, avatar_url), anime:anime!mylist_activities_anime_id_fkey(id, title, cover_url), likes:mylist_activity_likes(count)",
 			)
 			.in("id", ids),
-		supabase
-			.from("mylist_activity_likes")
-			.select("activity_id")
-			.eq("user_id", currentUserId)
-			.in("activity_id", ids),
-		getActiveAnimeMuteIdsCached(supabase, currentUserId),
+		viewerId
+			? supabase
+					.from("mylist_activity_likes")
+					.select("activity_id")
+					.eq("user_id", viewerId)
+					.in("activity_id", ids)
+			: Promise.resolve({ data: [] as { activity_id: string }[], error: null }),
+		getActiveAnimeMuteIdsCached(supabase, viewerId),
 	]);
-	if (detailResult.error) return { posts: [], error: detailResult.error, nextCursor: null };
+	if (detailResult.error) return { posts: [], error: detailResult.error };
 	// 自分のいいねが読めないまま出すと、いいね済みが「いいねしていない」に見え、押すと取り消せずに
 	// もう一度付けようとしてしまう。一覧ごと失敗として扱い、再読み込みを促す
-	if (likedResult.error) return { posts: [], error: likedResult.error, nextCursor: null };
+	if (likedResult.error) return { posts: [], error: likedResult.error };
 	const liked = new Set((likedResult.data ?? []).map((row) => row.activity_id));
 
 	type Row = {
@@ -2134,7 +2179,7 @@ export async function getFollowingActivity(
 			},
 		];
 	});
-	return { posts, error: null, nextCursor };
+	return { posts, error: null };
 }
 
 type FollowingTimelineResult = TimelinePostsWithRepostsResult & { nextCursor: TimelineCursor | null };

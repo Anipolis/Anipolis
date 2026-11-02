@@ -1,4 +1,5 @@
 import { error, fail, redirect } from "@sveltejs/kit";
+import type { MylistActivity } from "$lib/activity";
 import { MAX_COLLECTIONS_PER_USER, parseCollectionInput } from "$lib/collections";
 import {
 	blockUserAction,
@@ -22,6 +23,7 @@ import {
 	getProfilePostCount,
 	getProfileTimelinePage,
 	getTrendingHashtags,
+	getUserActivityPage,
 	getUserAnimeList,
 	getUserCollections,
 	isBlockedByMe,
@@ -59,6 +61,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 	const activeTab =
 		requestedTab === "images" ||
 		requestedTab === "list" ||
+		requestedTab === "activity" ||
 		requestedTab === "collections" ||
 		requestedTab === "likes"
 			? requestedTab
@@ -94,36 +97,62 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 		return { posts: page.posts, nextCursor: page.nextCursor };
 	};
 
-	const [activeList, postCount, followCounts, trendingResult, animeTrending, animeList, favoriteAnime, collections] =
-		await Promise.all([
-			loadActiveList(),
+	// アクティビティ（181）はマイリストと同じ相手に見せる。読めなかったときは null にして、「まだ無い」と見せない
+	const canViewList = canViewContent && (isOwn || profile.list_is_public);
+	const loadActivity = async (): Promise<{ items: MylistActivity[]; nextCursor: TimelineCursor | null } | null> => {
+		if (activeTab !== "activity" || !canViewList) return { items: [], nextCursor: null };
+		const page = await fillTimelinePage(
+			(next) => getUserActivityPage(supabase, profile.id, viewerId, next ? { before: next } : {}),
+			cursor,
+		);
+		if (page.error) {
+			console.error("[profile] activity query failed:", page.error);
+			return null;
+		}
+		return { items: page.posts, nextCursor: page.nextCursor };
+	};
 
-			canViewContent ? getProfilePostCount(supabase, profile.id) : Promise.resolve(0),
+	const [
+		activeList,
+		postCount,
+		followCounts,
+		trendingResult,
+		animeTrending,
+		animeList,
+		favoriteAnime,
+		collections,
+		activity,
+	] = await Promise.all([
+		loadActiveList(),
 
-			getFollowCounts(supabase, profile.id),
+		canViewContent ? getProfilePostCount(supabase, profile.id) : Promise.resolve(0),
 
-			getTrendingHashtags(supabase, 10),
+		getFollowCounts(supabase, profile.id),
 
-			getAnimeRankingTrending(supabase, 5),
+		getTrendingHashtags(supabase, 10),
 
-			// マイリストのタブを開いているときは、読めなければ失敗として扱う（空のリストと見せない、#262）。
-			// ほかのタブでは件数の表示に使うだけなので、読めなくてもプロフィールは出す
-			canViewContent && (isOwn || profile.list_is_public)
-				? activeTab === "list"
-					? getUserAnimeList(supabase, profile.id)
-					: getUserAnimeList(supabase, profile.id).catch(() => [])
-				: Promise.resolve([]),
+		getAnimeRankingTrending(supabase, 5),
 
-			// ベスト作品（#361）。投稿と同じ相手に見せる。読めなくてもプロフィールは出すが、失敗は null で
-			// 「未登録（[]）」と分ける。空と取り違えて編集・保存すると、保存済みの選択を消してしまう
-			canViewContent ? getFavoriteAnime(supabase, profile.id).catch((): null => null) : Promise.resolve([]),
+		// マイリストのタブを開いているときは、読めなければ失敗として扱う（空のリストと見せない、#262）。
+		// ほかのタブでは件数の表示に使うだけなので、読めなくてもプロフィールは出す
+		canViewList
+			? activeTab === "list"
+				? getUserAnimeList(supabase, profile.id)
+				: getUserAnimeList(supabase, profile.id).catch(() => [])
+			: Promise.resolve([]),
 
-			// コレクション（#515）はタブを開いたときだけ読む。非公開のものは本人にだけ返る（RLS）。
-			// 読めなかったときは null にして、「まだ無い」と見せない
-			activeTab === "collections" && canViewContent
-				? getUserCollections(supabase, profile.id).catch((): null => null)
-				: Promise.resolve([]),
-		]);
+		// ベスト作品（#361）。投稿と同じ相手に見せる。読めなくてもプロフィールは出すが、失敗は null で
+		// 「未登録（[]）」と分ける。空と取り違えて編集・保存すると、保存済みの選択を消してしまう
+		canViewContent ? getFavoriteAnime(supabase, profile.id).catch((): null => null) : Promise.resolve([]),
+
+		// コレクション（#515）はタブを開いたときだけ読む。非公開のものは本人にだけ返る（RLS）。
+		// 読めなかったときは null にして、「まだ無い」と見せない
+		activeTab === "collections" && canViewContent
+			? getUserCollections(supabase, profile.id).catch((): null => null)
+			: Promise.resolve([]),
+
+		loadActivity(),
+	]);
 
 	return {
 		profile: profileWithHeader,
@@ -142,6 +171,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 		animeList,
 		favoriteAnime,
 		collections,
+		activity,
 		user,
 	};
 };
