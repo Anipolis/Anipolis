@@ -1,6 +1,6 @@
 import type { NotificationCategory } from "./actions";
 
-const CATEGORIES: readonly NotificationCategory[] = ["normal", "room", "mylist"];
+const CATEGORIES: readonly NotificationCategory[] = ["normal", "room"];
 
 /** 通知ページのタブ／既読 API が受け取るカテゴリ文字列を検証する */
 export function parseNotificationCategory(value: unknown): NotificationCategory | null {

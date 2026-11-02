@@ -2008,8 +2008,133 @@ export type Database = {
 					},
 				];
 			};
+			mylist_activities: {
+				Row: {
+					anime_id: number;
+					created_at: string;
+					id: string;
+					score: number | null;
+					status: string;
+					user_id: string;
+				};
+				Insert: {
+					anime_id: number;
+					created_at?: string;
+					id?: string;
+					score?: number | null;
+					status: string;
+					user_id: string;
+				};
+				Update: {
+					anime_id?: number;
+					created_at?: string;
+					id?: string;
+					score?: number | null;
+					status?: string;
+					user_id?: string;
+				};
+				Relationships: [
+					{
+						foreignKeyName: "mylist_activities_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "mylist_activities_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_genre_ranked";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "mylist_activities_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_list_sortable";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "mylist_activities_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_popularity";
+						referencedColumns: ["anime_id"];
+					},
+					{
+						foreignKeyName: "mylist_activities_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_top_rated";
+						referencedColumns: ["anime_id"];
+					},
+					{
+						foreignKeyName: "mylist_activities_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_trending";
+						referencedColumns: ["anime_id"];
+					},
+					{
+						foreignKeyName: "mylist_activities_anime_id_fkey";
+						columns: ["anime_id"];
+						isOneToOne: false;
+						referencedRelation: "anime_with_computed_broadcast_status";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "mylist_activities_entry_fkey";
+						columns: ["user_id", "anime_id"];
+						isOneToOne: false;
+						referencedRelation: "user_anime_list";
+						referencedColumns: ["user_id", "anime_id"];
+					},
+					{
+						foreignKeyName: "mylist_activities_user_id_fkey";
+						columns: ["user_id"];
+						isOneToOne: false;
+						referencedRelation: "profiles";
+						referencedColumns: ["id"];
+					},
+				];
+			};
+			mylist_activity_likes: {
+				Row: {
+					activity_id: string;
+					created_at: string;
+					user_id: string;
+				};
+				Insert: {
+					activity_id: string;
+					created_at?: string;
+					user_id: string;
+				};
+				Update: {
+					activity_id?: string;
+					created_at?: string;
+					user_id?: string;
+				};
+				Relationships: [
+					{
+						foreignKeyName: "mylist_activity_likes_activity_id_fkey";
+						columns: ["activity_id"];
+						isOneToOne: false;
+						referencedRelation: "mylist_activities";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "mylist_activity_likes_user_id_fkey";
+						columns: ["user_id"];
+						isOneToOne: false;
+						referencedRelation: "profiles";
+						referencedColumns: ["id"];
+					},
+				];
+			};
 			notifications: {
 				Row: {
+					activity_id: string | null;
 					actor_id: string | null;
 					anime_recommendation_id: string | null;
 					broadcast_anime_id: number | null;
@@ -2028,6 +2153,7 @@ export type Database = {
 					type: string;
 				};
 				Insert: {
+					activity_id?: string | null;
 					actor_id?: string | null;
 					anime_recommendation_id?: string | null;
 					broadcast_anime_id?: number | null;
@@ -2046,6 +2172,7 @@ export type Database = {
 					type: string;
 				};
 				Update: {
+					activity_id?: string | null;
 					actor_id?: string | null;
 					anime_recommendation_id?: string | null;
 					broadcast_anime_id?: number | null;
@@ -2064,6 +2191,13 @@ export type Database = {
 					type?: string;
 				};
 				Relationships: [
+					{
+						foreignKeyName: "notifications_activity_id_fkey";
+						columns: ["activity_id"];
+						isOneToOne: false;
+						referencedRelation: "mylist_activities";
+						referencedColumns: ["id"];
+					},
 					{
 						foreignKeyName: "notifications_actor_id_fkey";
 						columns: ["actor_id"];
@@ -4105,6 +4239,13 @@ export type Database = {
 				Args: never;
 				Returns: {
 					user_id: string;
+				}[];
+			};
+			get_following_activity: {
+				Args: { p_before?: string; p_before_id?: string; p_limit?: number };
+				Returns: {
+					activity_id: string;
+					created_at: string;
 				}[];
 			};
 			get_following_timeline: {

@@ -12,13 +12,13 @@ const NORMAL_TYPES = [
 	"follow_request",
 	"anime_recommendation",
 	"exchange_matched",
+	"activity_like",
 ] as const;
 const ROOM_TYPES = ["broadcast"] as const;
-const MYLIST_TYPES = ["mylist_status"] as const;
 
 function resolveTab(value: string | null): NotificationCategory {
-	if (value === "room" || value === "mylist") return value;
-	return "normal";
+	// 「マイリスト」のタブは 181 でなくした（フォロー中の人の動きはタイムラインのアクティビティへ）
+	return value === "room" ? "room" : "normal";
 }
 
 export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession }, url, parent }) => {
@@ -36,7 +36,7 @@ export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession 
 	// タブは通常リンク遷移で毎回 load が走るため、表示するタブの一覧だけ取得する
 	// （非表示タブの分まで毎回50件×2カテゴリを取得しない）。未読バッジはカウント
 	// クエリ（getUnreadNotificationCountsByCategory）だけで賄える。
-	const typesByTab = { normal: NORMAL_TYPES, room: ROOM_TYPES, mylist: MYLIST_TYPES } as const;
+	const typesByTab = { normal: NORMAL_TYPES, room: ROOM_TYPES } as const;
 	const [activeList, unreadCounts, trendingResult, animeTrending] = await Promise.all([
 		getNotifications(supabase, user.id, 50, typesByTab[tab]),
 		getUnreadNotificationCountsByCategory(supabase, user.id),
@@ -46,7 +46,7 @@ export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession 
 
 	return {
 		tab,
-		notifications: { normal: [], room: [], mylist: [], [tab]: activeList },
+		notifications: { normal: [], room: [], [tab]: activeList },
 		unreadCounts,
 		trending: trendingResult.data ?? [],
 		animeTrending,
