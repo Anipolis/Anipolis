@@ -1,6 +1,7 @@
 <script lang="ts">
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
+import SelectControl from "$lib/components/SelectControl.svelte";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import type { RowSaveState } from "$lib/mylist/save-queue";
 import type { Anime, AnimeStatus } from "$lib/types";
@@ -89,8 +90,7 @@ function confirmRemove() {
 		</div>
 
 		<div class="edit-controls">
-			<select
-				class="edit-select status-select"
+			<SelectControl
 				value={entry.status}
 				onchange={(event) => onAutoSave({ status: event.currentTarget.value as AnimeStatus })}
 				aria-label="ステータス"
@@ -98,7 +98,7 @@ function confirmRemove() {
 				{#each statusOrder as status}
 					<option value={status}>{statusLabel[status]}</option>
 				{/each}
-			</select>
+			</SelectControl>
 
 			<div class="control-secondary-row">
 				<div class="progress-group">
@@ -111,8 +111,7 @@ function confirmRemove() {
 					</button>
 				</div>
 
-				<select
-					class="edit-select score-select"
+				<SelectControl
 					value={entry.score}
 					onchange={(event) => onAutoSave({ score: event.currentTarget.value })}
 					aria-label="スコア"
@@ -121,7 +120,7 @@ function confirmRemove() {
 					{#each [10, 9, 8, 7, 6, 5, 4, 3, 2, 1] as score}
 						<option value={score.toString()}>★{score}</option>
 					{/each}
-				</select>
+				</SelectControl>
 			</div>
 		</div>
 	</div>
@@ -316,28 +315,11 @@ function confirmRemove() {
 	gap: 8px;
 }
 
-.edit-select {
-	min-height: 34px;
-	padding: 6px 9px;
-	border: 1px solid var(--border, #334155);
-	border-radius: 7px;
-	background: var(--surface, #1e293b);
-	color: var(--fg, #e2e8f0);
-	font-size: 0.8rem;
-	cursor: pointer;
+.edit-controls :global(.select-control) {
+	height: 34px;
 }
 
-.edit-select:focus {
-	border-color: var(--accent, #6366f1);
-	outline: none;
-}
-
-.edit-select:focus-visible {
-	outline: 2px solid var(--accent, #6366f1);
-	outline-offset: 2px;
-}
-
-.score-select {
+.control-secondary-row :global(.select-control) {
 	min-width: 70px;
 }
 
@@ -534,7 +516,11 @@ function confirmRemove() {
 		gap: 8px;
 	}
 
-	.status-select {
+	.edit-controls :global(.select-control) {
+		height: 36px;
+	}
+
+	.edit-controls > :global(.select-control) {
 		width: 100%;
 	}
 
@@ -547,15 +533,9 @@ function confirmRemove() {
 		flex: 0 0 auto;
 	}
 
-	.score-select {
+	.control-secondary-row :global(.select-control) {
 		width: 72px;
 		min-width: 72px;
-	}
-
-	.edit-select {
-		min-height: 36px;
-		padding: 6px 8px;
-		font-size: 0.78rem;
 	}
 
 	.stepper-btn {
