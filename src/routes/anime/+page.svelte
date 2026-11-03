@@ -1296,6 +1296,8 @@ $effect(() => {
 	align-items: center;
 	width: 100%;
 	min-width: 0;
+	/* 数字バー（無ければ最後の段のカード）が画面の下端にくっつかないように */
+	padding-bottom: 32px;
 	transition: opacity 0.15s ease;
 }
 
@@ -1405,11 +1407,14 @@ $effect(() => {
 	}
 }
 
-@media (max-width: 768px) {
+/* 下のナビバー（MobileBottomNav、幅 960px 以下なら向きによらず出る）に隠れないようにする */
+@media (max-width: 960px) {
 	.anime-list-surface {
 		padding-bottom: calc(72px + env(safe-area-inset-bottom));
 	}
+}
 
+@media (max-width: 768px) {
 	.anime-grid {
 		grid-template-columns: repeat(3, minmax(0, 1fr));
 		gap: 10px;
@@ -1444,12 +1449,6 @@ $effect(() => {
 @media (max-width: 420px) {
 	.anime-grid {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
-	}
-}
-
-@media (max-width: 768px) and (orientation: landscape) {
-	.anime-list-surface {
-		padding-bottom: 0;
 	}
 }
 
