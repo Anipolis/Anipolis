@@ -3464,6 +3464,7 @@ export type Database = {
 			user_anime_list: {
 				Row: {
 					anime_id: number;
+					created_at: string;
 					finished_on: string | null;
 					progress: number;
 					score: number | null;
@@ -3474,6 +3475,7 @@ export type Database = {
 				};
 				Insert: {
 					anime_id: number;
+					created_at?: string;
 					finished_on?: string | null;
 					progress?: number;
 					score?: number | null;
@@ -3484,6 +3486,7 @@ export type Database = {
 				};
 				Update: {
 					anime_id?: number;
+					created_at?: string;
 					finished_on?: string | null;
 					progress?: number;
 					score?: number | null;

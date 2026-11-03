@@ -8,6 +8,7 @@ let {
 	statusLabel,
 	statusIcon,
 	headingLevel = 2,
+	showHeading = true,
 	scoreLabel,
 	scoreButtonFor,
 	listButtonFor,
@@ -17,6 +18,8 @@ let {
 	statusLabel: Record<AnimeStatus, string>;
 	statusIcon: Record<AnimeStatus, string>;
 	headingLevel?: 2 | 3;
+	/** 見出し（ステータス名と件数）。タブで切り替えるマイリストでは出さない */
+	showHeading?: boolean;
 	/** 左のマスに出すリストの持ち主のスコアの名前（「自分のスコア」「〇〇さんのスコア」） */
 	scoreLabel: string;
 	/** 自分のマイリストのとき、左のマスを押してスコアを変えるボタンにする */
@@ -36,7 +39,9 @@ function progressOf(anime: Anime): NonNullable<AnimeCardProps["progress"]> | nul
 </script>
 
 <section class="status-section status-section--{status}">
-	{#if headingLevel === 2}
+	{#if !showHeading}
+	<!-- 見出しはタブが兼ねる -->
+	{:else if headingLevel === 2}
 		<h2 class="status-heading">
 			<span class="status-icon {statusIcon[status]}" aria-hidden="true"></span>
 			{statusLabel[status]}

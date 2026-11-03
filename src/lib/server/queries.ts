@@ -105,6 +105,7 @@ type UserAnimeListWithAnimeRow = {
 	score: number | null;
 	progress: number;
 	updated_at: string;
+	created_at: string;
 	anime: Record<string, unknown> | null;
 };
 type UserAnimeListWithProfileRow = {
@@ -3636,7 +3637,7 @@ export async function getUserAnimeList(
 ): Promise<Anime[]> {
 	let query = supabase
 		.from("user_anime_list")
-		.select(`status, score, progress, updated_at, anime:anime_id(${ANIME_LIST_BASE_COLUMNS})`)
+		.select(`status, score, progress, updated_at, created_at, anime:anime_id(${ANIME_LIST_BASE_COLUMNS})`)
 		.eq("user_id", userId)
 		.order("updated_at", { ascending: false });
 
@@ -3657,6 +3658,7 @@ export async function getUserAnimeList(
 				score: normalizeScore(row.score as number | null),
 				progress: row.progress as number,
 				updated_at: row.updated_at as string,
+				created_at: row.created_at,
 			} satisfies UserAnimeEntry,
 		}));
 }

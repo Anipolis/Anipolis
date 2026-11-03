@@ -2,7 +2,7 @@
 import type { ActionResult, SubmitFunction } from "@sveltejs/kit";
 import { onDestroy, untrack } from "svelte";
 import { applyAction, deserialize, enhance } from "$app/forms";
-import { beforeNavigate, invalidateAll } from "$app/navigation";
+import { beforeNavigate, invalidateAll, replaceState } from "$app/navigation";
 import { page } from "$app/state";
 import AnimeEditRow from "$lib/components/AnimeEditRow.svelte";
 import AnimeStatusSection from "$lib/components/AnimeStatusSection.svelte";
@@ -15,6 +15,7 @@ import {
 	type RowSaveState,
 	type SaveResult,
 } from "$lib/mylist/save-queue";
+import { DEFAULT_MYLIST_SORT, MYLIST_SORTS, type MylistSort, parseMylistSort, sortMylist } from "$lib/mylist/sort";
 import type { Anime, AnimeStatus } from "$lib/types";
 import type { PageProps } from "./$types";
 
@@ -101,19 +102,44 @@ function retryVisibility() {
 	visibilityForm?.requestSubmit();
 }
 
-const grouped = $derived(
-	statusOrder.reduce<Record<AnimeStatus, Anime[]>>(
+// 開いているタブと並び順は URL（?status= と ?sort=）に残し、再読み込みや戻るでも同じ表示にする
+function parseStatus(value: string | null): AnimeStatus {
+	return statusOrder.find((status) => status === value) ?? "watching";
+}
+let selectedStatus = $state<AnimeStatus>(parseStatus(page.url.searchParams.get("status")));
+let sort = $state<MylistSort>(parseMylistSort(page.url.searchParams.get("sort")));
+
+function syncUrl() {
+	const url = new URL(page.url);
+	if (selectedStatus === "watching") url.searchParams.delete("status");
+	else url.searchParams.set("status", selectedStatus);
+	if (sort === DEFAULT_MYLIST_SORT) url.searchParams.delete("sort");
+	else url.searchParams.set("sort", sort);
+	replaceState(url, page.state);
+}
+
+function selectStatus(status: AnimeStatus) {
+	selectedStatus = status;
+	syncUrl();
+}
+
+function changeSort(event: Event) {
+	sort = parseMylistSort((event.currentTarget as HTMLSelectElement).value);
+	syncUrl();
+}
+
+const grouped = $derived.by(() => {
+	const sorted = sortMylist(data.animeList, sort);
+	return statusOrder.reduce<Record<AnimeStatus, Anime[]>>(
 		(acc, status) => {
-			acc[status] = data.animeList.filter((e) => e.user_entry?.status === status);
+			acc[status] = sorted.filter((e) => e.user_entry?.status === status);
 			return acc;
 		},
 		{ watching: [], completed: [], plan_to_watch: [], on_hold: [], dropped: [] },
-	),
-);
+	);
+});
 
 const totalCount = $derived(data.animeList.length);
-
-let selectedStatus = $state<AnimeStatus>("watching");
 
 // カードのマイリストボタン・スコアから開く欄。保存したら読み込み直して、状態の変わった作品を別の段へ移す
 let quickEdit = $state<MyListQuickEdit>();
@@ -485,14 +511,16 @@ $effect(() => {
 				{/if}
 			</header>
 
-			<!-- モバイル用ステータスタブバー -->
-			<div class="status-tab-bar">
+			<!-- ステータスのタブ。一覧も編集も、選んだステータスの作品だけを並べる -->
+			<div class="status-tab-bar" role="tablist" aria-label="視聴ステータス">
 				{#each statusOrder as status}
 					<button
 						type="button"
+						role="tab"
 						class="status-tab status-tab--{status}"
 						class:active={selectedStatus === status}
-						onclick={() => (selectedStatus = status)}
+						aria-selected={selectedStatus === status}
+						onclick={() => selectStatus(status)}
 					>
 						<span class="tab-icon {statusIcon[status]}" aria-hidden="true"></span>
 						<span class="tab-label desktop-tab-label">{statusLabel[status]}</span>
@@ -507,53 +535,54 @@ $effect(() => {
 					<p>まだアニメがありません。<a href="/anime">アニメを探す</a></p>
 				</div>
 			{:else}
-				{#if grouped[selectedStatus].length === 0}
-					<div class="mobile-status-empty">
-						<p>{statusLabel[selectedStatus]}にはまだ登録がありません</p>
-					</div>
-				{/if}
-				{#each statusOrder as status}
-					{#if grouped[status].length > 0}
-						<div class:mobile-hidden={selectedStatus !== status}>
-							{#if viewMode === 'list'}
-								<AnimeStatusSection
-									{status}
-									animes={grouped[status]}
-									{statusLabel}
-									{statusIcon}
-									scoreLabel="自分のスコア"
-									{scoreButtonFor}
-									{listButtonFor}
-								/>
-							{:else}
-								<section class="status-section status-section--{status}">
-									<h2 class="status-heading">
-										<span class="status-icon {statusIcon[status]}" aria-hidden="true"></span>
-										{statusLabel[status]}
-										<span class="status-count">{grouped[status].length}</span>
-									</h2>
-									<div class="anime-list anime-list--edit">
-										{#each grouped[status] as anime (anime.id)}
-											{@const editRow = editRows[anime.id]}
-											{#if editRow}
-												<AnimeEditRow
-													{anime}
-													bind:entry={editRow.entry}
-													{statusOrder}
-													{statusLabel}
-													saveState={saveStates[anime.id]}
-													onAutoSave={(updatedFields) => handleAutoSave(anime.id, updatedFields)}
-													onRetry={() => retryAutoSave(anime.id)}
-													onRemove={() => cancelAutoSave(anime.id)}
-												/>
-											{/if}
-										{/each}
-									</div>
-								</section>
-							{/if}
+				<div class="mylist-toolbar">
+					<label class="sort-control">
+						<span class="i-lucide-arrow-down-wide-narrow sort-icon" aria-hidden="true"></span>
+						<span class="sr-only">並び替え</span>
+						<select class="sort-select" value={sort} onchange={changeSort}>
+							{#each MYLIST_SORTS as option (option.value)}
+								<option value={option.value}>{option.label}</option>
+							{/each}
+						</select>
+					</label>
+				</div>
+
+				<div role="tabpanel" aria-label={statusLabel[selectedStatus]}>
+					{#if grouped[selectedStatus].length === 0}
+						<div class="status-empty">
+							<p>{statusLabel[selectedStatus]}にはまだ登録がありません</p>
+						</div>
+					{:else if viewMode === 'list'}
+						<AnimeStatusSection
+							status={selectedStatus}
+							animes={grouped[selectedStatus]}
+							{statusLabel}
+							{statusIcon}
+							showHeading={false}
+							scoreLabel="自分のスコア"
+							{scoreButtonFor}
+							{listButtonFor}
+						/>
+					{:else}
+						<div class="anime-list anime-list--edit">
+							{#each grouped[selectedStatus] as anime (anime.id)}
+								{@const editRow = editRows[anime.id]}
+								{#if editRow}
+									<AnimeEditRow
+										{anime}
+										bind:entry={editRow.entry}
+										{statusOrder}
+										{statusLabel}
+										saveState={saveStates[anime.id]}
+										onAutoSave={(updatedFields) => handleAutoSave(anime.id, updatedFields)}
+										onRetry={() => retryAutoSave(anime.id)}
+										onRemove={() => cancelAutoSave(anime.id)}
+									/>
+								{/if}
+							{/each}
 						</div>
 					{/if}
-				{/each}
+				</div>
 			{/if}
 		</div>
 	</main>
@@ -747,58 +776,14 @@ $effect(() => {
 	color: var(--color-text-muted);
 }
 
-.mobile-status-empty {
-	display: none;
-}
-
 .mylist-empty a {
 	color: var(--color-accent);
 }
 
-.status-section {
-	margin-bottom: 32px;
-}
-
-.status-heading {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	font-size: 0.95rem;
-	font-weight: 700;
-	padding: 8px 0;
-	margin: 0 0 8px;
-	border-bottom: 1px solid var(--color-border);
-	color: var(--color-text);
-}
-
-.status-icon,
 .tab-icon {
 	width: 1em;
 	height: 1em;
 	flex: 0 0 auto;
-}
-
-.status-section--watching .status-icon {
-	color: var(--status-watching);
-}
-.status-section--completed .status-icon {
-	color: var(--status-completed);
-}
-.status-section--plan_to_watch .status-icon {
-	color: var(--watch-status-plan);
-}
-.status-section--on_hold .status-icon {
-	color: var(--status-on-hold);
-}
-.status-section--dropped .status-icon {
-	color: var(--status-dropped);
-}
-
-.status-count {
-	margin-left: auto;
-	font-size: 0.8rem;
-	color: var(--color-text-muted);
-	font-weight: 400;
 }
 
 .anime-list--edit {
@@ -807,76 +792,126 @@ $effect(() => {
 	gap: 4px;
 }
 
-/* ---- モバイル用ステータスタブバー ---- */
+/* ---- ステータスのタブ（PC もスマホも同じ。スマホは短い名前だけ） ---- */
 .status-tab-bar {
-	display: none;
-	overflow-x: auto;
-	gap: 8px;
-	padding: 0 0 16px;
-	scrollbar-width: none;
-	margin-bottom: 4px;
-}
-
-.status-tab-bar::-webkit-scrollbar {
-	display: none;
+	display: flex;
+	width: 100%;
+	margin-bottom: 8px;
+	border-bottom: 1px solid var(--color-border);
 }
 
 .status-tab {
-	display: inline-flex;
+	position: relative;
+	display: flex;
+	flex: 1 1 20%;
 	align-items: center;
-	gap: 5px;
-	padding: 8px 14px;
-	border-radius: 28px;
+	justify-content: center;
+	min-width: 0;
+	gap: 6px;
+	padding: 10px 0;
 	border: none;
+	background: transparent;
+	color: var(--color-text-muted);
 	cursor: pointer;
-	font-size: 0.82rem;
+	font-size: 0.85rem;
 	font-weight: 600;
-	background: color-mix(in srgb, var(--fg, #e2e8f0) 8%, transparent);
-	color: var(--fg-muted, #94a3b8);
-	transition:
-		background 0.15s,
-		color 0.15s;
+	line-height: 1;
 	white-space: nowrap;
-	flex-shrink: 0;
+	transition: color 0.15s;
+}
+
+.status-tab:hover {
+	color: var(--color-text);
 }
 
 .status-tab.active {
-	background: color-mix(in srgb, var(--color-accent) 20%, transparent);
 	color: var(--color-accent);
 }
-
 .status-tab--watching.active {
-	background: color-mix(in srgb, var(--status-watching) 20%, transparent);
 	color: var(--status-watching);
 }
-
 .status-tab--on_hold.active {
-	background: color-mix(in srgb, var(--status-on-hold) 20%, transparent);
 	color: var(--status-on-hold);
 }
-
 .status-tab--dropped.active {
-	background: color-mix(in srgb, var(--status-dropped) 20%, transparent);
 	color: var(--status-dropped);
 }
-
 .status-tab--completed.active {
-	background: color-mix(in srgb, var(--status-completed) 20%, transparent);
 	color: var(--status-completed);
 }
-
 .status-tab--plan_to_watch.active {
-	background: color-mix(in srgb, var(--watch-status-plan) 20%, transparent);
 	color: var(--watch-status-plan);
 }
 
+.status-tab.active::after {
+	position: absolute;
+	right: 8px;
+	bottom: -1px;
+	left: 8px;
+	height: 2px;
+	border-radius: 2px 2px 0 0;
+	background: currentColor;
+	content: "";
+}
+
 .tab-icon {
-	font-size: 0.75rem;
+	font-size: 0.9rem;
 }
 
 .tab-count {
-	font-size: 0.72rem;
+	font-size: 0.75rem;
+	font-weight: 500;
 	opacity: 0.8;
+}
+
+/* ---- 並び替え ---- */
+.mylist-toolbar {
+	display: flex;
+	justify-content: flex-end;
+	margin-bottom: 12px;
+}
+
+.sort-control {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--color-text-muted);
+}
+
+.sort-icon {
+	width: 16px;
+	height: 16px;
+}
+
+.sort-select {
+	height: 32px;
+	padding: 0 8px;
+	border: 1px solid var(--color-border);
+	border-radius: 8px;
+	background: var(--color-surface);
+	color: var(--color-text);
+	font: inherit;
+	font-size: 0.82rem;
+	cursor: pointer;
+}
+
+.status-empty {
+	text-align: center;
+	padding: 48px 16px;
+	color: var(--color-text-muted);
+	font-size: 0.9rem;
+}
+
+.sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
 }
 
 @media (max-width: 600px) {
@@ -972,49 +1007,15 @@ $effect(() => {
 		color: var(--color-accent);
 	}
 
-	.status-tab-bar {
-		display: flex;
-		width: 100%;
-		overflow: hidden;
-		gap: 0;
-		padding: 0;
-		margin-bottom: 8px;
-		border-bottom: 1px solid var(--border, #334155);
-	}
-
 	.status-tab {
-		position: relative;
-		display: flex;
-		flex: 1 1 20%;
-		justify-content: center;
-		min-width: 0;
 		gap: 3px;
 		padding: 8px 0;
-		border-radius: 0;
-		background: transparent;
 		font-size: 11px;
-		line-height: 1;
-		text-align: center;
-	}
-
-	.status-tab.active,
-	.status-tab--watching.active,
-	.status-tab--completed.active,
-	.status-tab--plan_to_watch.active,
-	.status-tab--on_hold.active,
-	.status-tab--dropped.active {
-		background: transparent;
 	}
 
 	.status-tab.active::after {
-		position: absolute;
 		right: 5px;
-		bottom: -1px;
 		left: 5px;
-		height: 2px;
-		border-radius: 2px 2px 0 0;
-		background: currentColor;
-		content: "";
 	}
 
 	.tab-icon,
@@ -1031,16 +1032,8 @@ $effect(() => {
 		opacity: 0.75;
 	}
 
-	.mobile-hidden {
-		display: none;
-	}
-
-	.mobile-status-empty {
-		display: block;
-		text-align: center;
-		padding: 40px 16px;
-		color: var(--fg-muted, #94a3b8);
-		font-size: 0.9rem;
+	.mylist-toolbar {
+		margin-bottom: 8px;
 	}
 }
 </style>
