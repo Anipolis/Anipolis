@@ -8,6 +8,7 @@ import AnimeEditRow from "$lib/components/AnimeEditRow.svelte";
 import AnimeStatusSection from "$lib/components/AnimeStatusSection.svelte";
 import InfoTip from "$lib/components/InfoTip.svelte";
 import MyListQuickEdit from "$lib/components/MyListQuickEdit.svelte";
+import MylistSortSelect from "$lib/components/MylistSortSelect.svelte";
 import MylistStatusTabs from "$lib/components/MylistStatusTabs.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import {
@@ -19,9 +20,11 @@ import {
 import {
 	countMylistByStatus,
 	groupMylistByStatus,
+	MYLIST_TAB_LABELS,
 	type MylistSort,
+	type MylistTab,
 	parseMylistSort,
-	parseMylistStatus,
+	parseMylistTab,
 	sortMylist,
 } from "$lib/mylist/sort";
 import type { Anime, AnimeStatus } from "$lib/types";
@@ -37,14 +40,6 @@ const statusLabel: Record<AnimeStatus, string> = {
 	plan_to_watch: "視聴予定",
 	on_hold: "中断",
 	dropped: "断念",
-};
-
-const statusIcon: Record<AnimeStatus, string> = {
-	watching: "i-lucide-circle-play",
-	completed: "i-lucide-circle-check",
-	plan_to_watch: "i-lucide-clipboard-list",
-	on_hold: "i-lucide-circle-pause",
-	dropped: "i-lucide-circle-x",
 };
 
 let isPublic = $state(false);
@@ -102,8 +97,8 @@ function retryVisibility() {
 	visibilityForm?.requestSubmit();
 }
 
-// 開いているタブと並び順（URL の ?status= と ?sort=。切り替えは MylistStatusTabs が URL に残す）
-let selectedStatus = $state<AnimeStatus>(parseMylistStatus(page.url.searchParams.get("status")));
+// 開いているタブと並び順（URL の ?status= と ?sort=。切り替えは MylistStatusTabs と MylistSortSelect が URL に残す）
+let selectedStatus = $state<MylistTab>(parseMylistTab(page.url.searchParams.get("status")));
 let sort = $state<MylistSort>(parseMylistSort(page.url.searchParams.get("sort")));
 
 const grouped = $derived(groupMylistByStatus(sortMylist(data.animeList, sort)));
@@ -283,60 +278,35 @@ $effect(() => {
 	<main class="feed-column mylist-page">
 		<div class="mylist-container">
 			<header class="mylist-header">
-				<h1 class="mylist-title">マイリスト</h1>
 				<div class="mylist-title-row">
+					<h1 class="mylist-title">マイリスト</h1>
 					<div class="header-actions">
-						<!-- 表示切り替え -->
-						<div class="view-toggle">
-							<button
-								type="button"
-								class="view-btn"
-								class:active={viewMode === 'list'}
-								onclick={() => (viewMode = 'list')}
-							>
-								<svg
-									width="14"
-									height="14"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									aria-hidden="true"
+						{#if totalCount > 0}
+							<div class="view-toggle" role="group" aria-label="表示の切り替え">
+								<button
+									type="button"
+									class="view-btn"
+									class:active={viewMode === 'list'}
+									onclick={() => (viewMode = 'list')}
+									aria-label="カードで表示"
+									aria-pressed={viewMode === 'list'}
+									title="カードで表示"
 								>
-									<line x1="8" y1="6" x2="21" y2="6" />
-									<line x1="8" y1="12" x2="21" y2="12" />
-									<line x1="8" y1="18" x2="21" y2="18" />
-									<line x1="3" y1="6" x2="3.01" y2="6" />
-									<line x1="3" y1="12" x2="3.01" y2="12" />
-									<line x1="3" y1="18" x2="3.01" y2="18" />
-								</svg>
-								一覧
-							</button>
-							<button
-								type="button"
-								class="view-btn"
-								class:active={viewMode === 'edit'}
-								onclick={() => (viewMode = 'edit')}
-							>
-								<svg
-									width="14"
-									height="14"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									aria-hidden="true"
+									<span class="i-lucide-layout-grid" aria-hidden="true"></span>
+								</button>
+								<button
+									type="button"
+									class="view-btn"
+									class:active={viewMode === 'edit'}
+									onclick={() => (viewMode = 'edit')}
+									aria-label="まとめて編集"
+									aria-pressed={viewMode === 'edit'}
+									title="まとめて編集"
 								>
-									<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-									<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-								</svg>
-								編集
-							</button>
-						</div>
+									<span class="i-lucide-pencil" aria-hidden="true"></span>
+								</button>
+							</div>
+						{/if}
 
 						<!-- 公開/非公開切り替え -->
 						<form
@@ -347,115 +317,28 @@ $effect(() => {
 						>
 							<button
 								type="submit"
-								class="visibility-btn"
-								class:public={isPublic}
-								class:private={!isPublic}
-								class:saving={visibilityState === 'saving'}
+								class="btn-secondary visibility-btn"
 								disabled={visibilityState === 'saving'}
 								aria-busy={visibilityState === 'saving'}
-								title={isPublic ? '非公開にする' : '公開する'}
+								aria-label={isPublic ? 'マイリストは公開中。非公開にする' : 'マイリストは非公開。公開する'}
+								title={isPublic ? '公開中（押すと非公開にする）' : '非公開（押すと公開する）'}
 							>
 								{#if visibilityState === 'saving'}
 									<span class="visibility-spinner" aria-hidden="true"></span>
-									切替中…
-								{:else if isPublic}
-									<svg
-										width="14"
-										height="14"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="2"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										aria-hidden="true"
-									>
-										<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-										<circle cx="12" cy="12" r="3" />
-									</svg>
-									公開中
 								{:else}
-									<svg
-										width="14"
-										height="14"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="2"
-										stroke-linecap="round"
-										stroke-linejoin="round"
+									<span
+										class={isPublic ? 'i-lucide-lock-open' : 'i-lucide-lock'}
 										aria-hidden="true"
-									>
-										<path
-											d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
-										/>
-										<line x1="1" y1="1" x2="23" y2="23" />
-									</svg>
-									非公開
+									></span>
 								{/if}
-							</button>
-						</form>
-						<InfoTip label="マイリストの公開設定">{@render visibilityHelp()}</InfoTip>
-					</div>
-				</div>
-
-				<div class="mobile-header-row">
-					<div class="mobile-header-controls">
-						<form
-							class="mobile-visibility-form"
-							class:saving={visibilityState === 'saving'}
-							method="POST"
-							action="?/toggleVisibility"
-							use:enhance={enhanceVisibility}
-							aria-busy={visibilityState === 'saving'}
-						>
-							<button
-								type="submit"
-								class="mobile-visibility-btn"
-								class:active={isPublic}
-								disabled={isPublic || visibilityState === 'saving'}
-								aria-label="マイリストを公開する"
-								aria-pressed={isPublic}
-							>
-								公開
-							</button>
-							<button
-								type="submit"
-								class="mobile-visibility-btn"
-								class:active={!isPublic}
-								disabled={!isPublic || visibilityState === 'saving'}
-								aria-label="マイリストを非公開にする"
-								aria-pressed={!isPublic}
-							>
-								非公開
+								<span class="visibility-label">{isPublic ? '公開' : '非公開'}</span>
 							</button>
 						</form>
 						<InfoTip label="マイリストの公開設定">{@render visibilityHelp()}</InfoTip>
 
-						<div class="mobile-view-toggle" aria-label="表示モード">
-							<button
-								type="button"
-								class="mobile-view-btn"
-								class:active={viewMode === 'list'}
-								onclick={() => (viewMode = 'list')}
-								aria-label="一覧表示"
-								aria-pressed={viewMode === 'list'}
-								title="一覧"
-							>
-								<span class="i-lucide-list" aria-hidden="true"></span>
-							</button>
-							<button
-								type="button"
-								class="mobile-view-btn"
-								class:active={viewMode === 'edit'}
-								onclick={() => (viewMode = 'edit')}
-								aria-label="編集表示"
-								aria-pressed={viewMode === 'edit'}
-								title="編集"
-							>
-								<span class="i-lucide-pencil" aria-hidden="true"></span>
-							</button>
-						</div>
+						{#if totalCount > 0}
+							<MylistSortSelect bind:sort compactOnMobile />
+						{/if}
 					</div>
 				</div>
 
@@ -485,21 +368,17 @@ $effect(() => {
 					<p>まだアニメがありません。<a href="/anime">アニメを探す</a></p>
 				</div>
 			{:else}
-				<!-- ステータスのタブと並び替え。一覧も編集も、選んだステータスの作品だけを並べる -->
-				<MylistStatusTabs counts={countMylistByStatus(grouped)} bind:status={selectedStatus} bind:sort />
+				<!-- ステータスのタブ。一覧も編集も、選んだタブの作品だけを並べる -->
+				<MylistStatusTabs counts={countMylistByStatus(grouped)} bind:status={selectedStatus} />
 
-				<div role="tabpanel" aria-label={statusLabel[selectedStatus]}>
+				<div role="tabpanel" aria-label={MYLIST_TAB_LABELS[selectedStatus]}>
 					{#if grouped[selectedStatus].length === 0}
 						<div class="status-empty">
-							<p>{statusLabel[selectedStatus]}にはまだ登録がありません</p>
+							<p>{MYLIST_TAB_LABELS[selectedStatus]}にはまだ登録がありません</p>
 						</div>
 					{:else if viewMode === 'list'}
 						<AnimeStatusSection
-							status={selectedStatus}
 							animes={grouped[selectedStatus]}
-							{statusLabel}
-							{statusIcon}
-							showHeading={false}
 							scoreLabel="自分のスコア"
 							{scoreButtonFor}
 							{listButtonFor}
@@ -549,53 +428,49 @@ $effect(() => {
 }
 
 .mylist-header {
-	margin-bottom: 28px;
+	margin-bottom: 4px;
+}
+
+.mylist-title-row {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px 10px;
+	margin-bottom: 12px;
 }
 
 /* ほかの画面（通知など）と同じく、ページの見出しを出す（#438） */
 .mylist-title {
 	font-size: 1.25rem;
 	font-weight: 700;
-	margin: 0 0 12px;
-}
-
-.mylist-title-row {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	flex-wrap: wrap;
-	gap: 10px;
-	margin-bottom: 14px;
+	margin: 0;
+	white-space: nowrap;
 }
 
 .header-actions {
 	display: flex;
 	align-items: center;
-	gap: 10px;
+	gap: 8px;
 	margin-left: auto;
-}
-
-.mobile-header-row {
-	display: none;
 }
 
 /* 表示切り替え */
 .view-toggle {
 	display: flex;
+	flex-shrink: 0;
+	height: 32px;
 	background: color-mix(in srgb, var(--color-text) 8%, transparent);
-	border-radius: 12px;
+	border-radius: 8px;
 	padding: 3px;
 	gap: 2px;
 }
 
 .view-btn {
-	display: inline-flex;
-	align-items: center;
-	gap: 5px;
-	padding: 5px 12px;
+	display: inline-grid;
+	place-items: center;
+	width: 30px;
 	border-radius: 6px;
-	font-size: 0.8rem;
-	font-weight: 500;
+	font-size: 0.9rem;
 	cursor: pointer;
 	border: none;
 	background: transparent;
@@ -618,30 +493,14 @@ $effect(() => {
 .visibility-btn {
 	display: inline-flex;
 	align-items: center;
-	gap: 6px;
-	padding: 6px 14px;
-	border-radius: 28px;
+	gap: 5px;
+	height: 32px;
+	padding: 0 10px;
+	border-radius: 8px;
 	font-size: 0.8rem;
 	font-weight: 600;
+	white-space: nowrap;
 	cursor: pointer;
-	border: none;
-	transition:
-		background 0.15s,
-		color 0.15s;
-}
-
-.visibility-btn.public {
-	background: color-mix(in srgb, var(--color-accent) 15%, transparent);
-	color: var(--color-accent);
-}
-
-.visibility-btn.private {
-	background: color-mix(in srgb, var(--color-text) 10%, transparent);
-	color: var(--color-text-muted);
-}
-
-.visibility-btn:hover:not(:disabled) {
-	filter: brightness(1.1);
 }
 
 .visibility-btn:disabled {
@@ -670,6 +529,7 @@ $effect(() => {
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
+	padding-bottom: 8px;
 }
 
 .visibility-error,
@@ -733,97 +593,28 @@ $effect(() => {
 	font-size: 0.9rem;
 }
 
-@media (max-width: 600px) {
-	.mylist-header {
-		margin-bottom: 2px;
-	}
-
-	.mylist-title-row {
-		display: none;
-	}
-
-	.mobile-header-row {
-		display: flex;
-		align-items: center;
-		justify-content: flex-end;
-		min-height: 34px;
-		padding: 2px 0 5px;
-	}
-
-	.mobile-header-controls {
-		display: flex;
-		align-items: center;
+/* 見出しの行に入るよう、狭い幅では詰める。さらに狭いと公開設定をアイコンだけにする（読み上げは aria-label） */
+@media (max-width: 389px) {
+	.header-actions {
 		gap: 6px;
 	}
 
-	.mobile-visibility-btn,
-	.mobile-view-btn {
-		display: inline-grid;
-		place-items: center;
-		height: 30px;
-		padding: 0;
-		border: 0;
-		border-radius: 0;
-		background: transparent;
-		color: var(--fg-muted, #94a3b8);
-		cursor: pointer;
-		font-size: 0.82rem;
-		line-height: 1;
+	.view-btn {
+		width: 28px;
 	}
 
-	.mobile-visibility-form {
-		display: flex;
-		overflow: hidden;
-		border: 1px solid var(--border, #334155);
-		border-radius: 7px;
+	.visibility-btn {
+		padding: 0 8px;
+	}
+}
+
+@media (max-width: 359px) {
+	.mylist-title {
+		font-size: 1.125rem;
 	}
 
-	.mobile-visibility-btn {
-		width: 44px;
-		font-size: 11px;
-		font-weight: 600;
-	}
-
-	.mobile-visibility-btn + .mobile-visibility-btn {
-		border-left: 1px solid var(--border, #334155);
-	}
-
-	.mobile-visibility-btn.active {
-		background: color-mix(in srgb, var(--color-accent) 16%, transparent);
-		color: var(--color-accent);
-		cursor: default;
-		opacity: 1;
-	}
-
-	.mobile-visibility-form.saving {
-		opacity: 0.6;
-		cursor: progress;
-	}
-
-	.mylist-notices {
-		padding-bottom: 8px;
-	}
-
-	.mobile-view-toggle {
-		display: flex;
-		flex: 0 0 auto;
-		overflow: hidden;
-		border: 1px solid var(--border, #334155);
-		border-radius: 7px;
-	}
-
-	.mobile-view-btn {
-		width: 34px;
-		font-size: 0.9rem;
-	}
-
-	.mobile-view-btn + .mobile-view-btn {
-		border-left: 1px solid var(--border, #334155);
-	}
-
-	.mobile-view-btn.active {
-		background: color-mix(in srgb, var(--color-accent) 16%, transparent);
-		color: var(--color-accent);
+	.visibility-label {
+		display: none;
 	}
 }
 </style>

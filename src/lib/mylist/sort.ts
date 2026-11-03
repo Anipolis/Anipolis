@@ -1,23 +1,31 @@
 import type { Anime, AnimeStatus } from "$lib/types";
 
-/** マイリストのステータスのタブの並び。URL の ?status= に入れる値 */
-export const MYLIST_STATUS_ORDER: readonly AnimeStatus[] = [
-	"watching",
-	"completed",
-	"plan_to_watch",
-	"on_hold",
-	"dropped",
-];
+/** マイリストのタブ。全部を並べる「すべて」と、ステータスごと。URL の ?status= に入れる値 */
+export type MylistTab = AnimeStatus | "all";
 
-export const DEFAULT_MYLIST_STATUS: AnimeStatus = "watching";
+const MYLIST_STATUS_ORDER: readonly AnimeStatus[] = ["watching", "completed", "plan_to_watch", "on_hold", "dropped"];
 
-export function parseMylistStatus(value: string | null | undefined): AnimeStatus {
-	return MYLIST_STATUS_ORDER.find((status) => status === value) ?? DEFAULT_MYLIST_STATUS;
+export const MYLIST_TAB_ORDER: readonly MylistTab[] = ["all", ...MYLIST_STATUS_ORDER];
+
+export const DEFAULT_MYLIST_TAB: MylistTab = "all";
+
+export const MYLIST_TAB_LABELS: Record<MylistTab, string> = {
+	all: "すべて",
+	watching: "視聴中",
+	completed: "完了",
+	plan_to_watch: "視聴予定",
+	on_hold: "中断",
+	dropped: "断念",
+};
+
+export function parseMylistTab(value: string | null | undefined): MylistTab {
+	return MYLIST_TAB_ORDER.find((tab) => tab === value) ?? DEFAULT_MYLIST_TAB;
 }
 
-/** ステータスごとに分ける（それぞれの中の順は並べ替え済みの順のまま） */
-export function groupMylistByStatus(animes: readonly Anime[]): Record<AnimeStatus, Anime[]> {
-	const grouped: Record<AnimeStatus, Anime[]> = {
+/** タブごとに分ける（それぞれの中の順は並べ替え済みの順のまま） */
+export function groupMylistByStatus(animes: readonly Anime[]): Record<MylistTab, Anime[]> {
+	const grouped: Record<MylistTab, Anime[]> = {
+		all: [],
 		watching: [],
 		completed: [],
 		plan_to_watch: [],
@@ -26,15 +34,19 @@ export function groupMylistByStatus(animes: readonly Anime[]): Record<AnimeStatu
 	};
 	for (const anime of animes) {
 		const status = anime.user_entry?.status;
-		// 知らないステータスの行は、どのタブにも入れない
-		if (status && Object.hasOwn(grouped, status)) grouped[status].push(anime);
+		// 知らないステータスの行は、どのタブにも入れない（「すべて」の件数を各タブの合計とそろえる）
+		if (status && MYLIST_STATUS_ORDER.includes(status)) {
+			grouped[status].push(anime);
+			grouped.all.push(anime);
+		}
 	}
 	return grouped;
 }
 
 /** タブに出す件数 */
-export function countMylistByStatus(grouped: Record<AnimeStatus, Anime[]>): Record<AnimeStatus, number> {
+export function countMylistByStatus(grouped: Record<MylistTab, Anime[]>): Record<MylistTab, number> {
 	return {
+		all: grouped.all.length,
 		watching: grouped.watching.length,
 		completed: grouped.completed.length,
 		plan_to_watch: grouped.plan_to_watch.length,
