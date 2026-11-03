@@ -5,7 +5,8 @@ import type { UserAnimeEntry } from "$lib/types";
 
 /**
  * 作品カードのマイリストボタンから開く欄。マウスで操作する PC は状態だけを選ぶ小さな欄（MyListStatusPopover）、
- * タッチ端末は押しやすい大きいモーダル（MyListModal）を出す。
+ * タッチ端末は押しやすい大きいモーダル（MyListModal）を出す。PC の欄は、状態（右のマス）とスコア（自分のマイリストの
+ * 左のマス）のどちらかを選ぶ。
  * 親は bind:this で受け取り、ボタンの onclick で open を呼ぶ
  */
 type QuickEditAnime = { id: string; title: string; episode_count: string | null };
@@ -29,10 +30,11 @@ const optionalProps = (anime: QuickEditAnime) => ({
 });
 
 let modalAnime = $state<QuickEditAnime | null>(null);
-let popover = $state<{ anime: QuickEditAnime; anchor: HTMLElement } | null>(null);
+type Field = "status" | "score";
+let popover = $state<{ anime: QuickEditAnime; anchor: HTMLElement; field: Field } | null>(null);
 let popoverSaving = $state(false);
 
-export function open(e: MouseEvent, anime: QuickEditAnime) {
+export function open(e: MouseEvent, anime: QuickEditAnime, field: Field = "status") {
 	// カードはリンクなので、ボタンを押しても作品ページへ移らないようにする
 	e.preventDefault();
 	e.stopPropagation();
@@ -40,15 +42,15 @@ export function open(e: MouseEvent, anime: QuickEditAnime) {
 	if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
 		// 保存中は欄を閉じたり別の作品へ切り替えたりしない（応答が別の作品に反映されるため）
 		if (popoverSaving) return;
-		popover = popover?.anchor === anchor ? null : { anime, anchor };
+		popover = popover?.anchor === anchor ? null : { anime, anchor, field };
 		return;
 	}
 	modalAnime = anime;
 }
 
-/** PC の小さな欄をこの作品で開いているか（ボタンの aria-expanded に使う） */
-export function isOpenFor(animeId: string): boolean {
-	return popover?.anime.id === animeId;
+/** PC の小さな欄をこの作品のこの欄で開いているか（ボタンの aria-expanded に使う） */
+export function isOpenFor(animeId: string, field: Field = "status"): boolean {
+	return popover?.anime.id === animeId && popover.field === field;
 }
 </script>
 
@@ -60,6 +62,7 @@ export function isOpenFor(animeId: string): boolean {
 		animeTitle={popoverAnime.title}
 		entry={entryOf(popoverAnime)}
 		{action}
+		field={popover.field}
 		{...optionalProps(popoverAnime)}
 		onclose={() => {
 			popover = null;

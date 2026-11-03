@@ -9,6 +9,7 @@ let {
 	statusIcon,
 	headingLevel = 2,
 	scoreLabel,
+	scoreButtonFor,
 	listButtonFor,
 }: {
 	status: AnimeStatus;
@@ -18,6 +19,8 @@ let {
 	headingLevel?: 2 | 3;
 	/** 左のマスに出すリストの持ち主のスコアの名前（「自分のスコア」「〇〇さんのスコア」） */
 	scoreLabel: string;
+	/** 自分のマイリストのとき、左のマスを押してスコアを変えるボタンにする */
+	scoreButtonFor?: ((anime: Anime) => { expanded: boolean; onclick: (e: MouseEvent) => void }) | undefined;
 	/** 右のマスの自分のマイリスト。渡さなければ（未ログイン）スコアだけにする */
 	listButtonFor?: ((anime: Anime) => AnimeCardProps["listButton"]) | undefined;
 } = $props();
@@ -52,7 +55,13 @@ function progressOf(anime: Anime): NonNullable<AnimeCardProps["progress"]> | nul
 			<AnimeCard
 				{anime}
 				href="/anime/{anime.id}"
-				score={{ kind: 'personal', value: anime.user_entry?.score ?? null, label: scoreLabel }}
+				score={{
+					kind: 'personal',
+					value: anime.user_entry?.score ?? null,
+					label: scoreLabel,
+					mine: scoreButtonFor != null,
+					...scoreButtonFor?.(anime),
+				}}
 				progress={progressOf(anime)}
 				listButton={listButtonFor?.(anime) ?? null}
 			/>

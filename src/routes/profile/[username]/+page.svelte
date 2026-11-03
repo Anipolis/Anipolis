@@ -456,6 +456,13 @@ function rememberViewerEntry(anime: { id: string }, entry: UserAnimeEntry | null
 	savedViewerEntries = { base: data.viewerEntries, entries: { ...entries, [anime.id]: entry } };
 }
 
+function scoreButtonFor(anime: Anime) {
+	return {
+		expanded: quickEdit?.isOpenFor(anime.id, "score") ?? false,
+		onclick: (e: MouseEvent) => quickEdit?.open(e, anime, "score"),
+	};
+}
+
 const showListButtons = $derived(Boolean(data.user) && (isOwn || data.viewerEntries != null));
 
 function listButtonFor(anime: Anime) {
@@ -1011,6 +1018,7 @@ function listButtonFor(anime: Anime) {
 							{statusIcon}
 							headingLevel={3}
 							scoreLabel={isOwn ? '自分のスコア' : `${displayName}のスコア`}
+							scoreButtonFor={isOwn ? scoreButtonFor : undefined}
 							listButtonFor={showListButtons ? listButtonFor : undefined}
 						/>
 					{/if}

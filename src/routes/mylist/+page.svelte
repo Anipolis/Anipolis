@@ -115,8 +115,15 @@ const totalCount = $derived(data.animeList.length);
 
 let selectedStatus = $state<AnimeStatus>("watching");
 
-// カードのマイリストボタンから開く欄。保存したら読み込み直して、状態の変わった作品を別の段へ移す
+// カードのマイリストボタン・スコアから開く欄。保存したら読み込み直して、状態の変わった作品を別の段へ移す
 let quickEdit = $state<MyListQuickEdit>();
+
+function scoreButtonFor(anime: Anime) {
+	return {
+		expanded: quickEdit?.isOpenFor(anime.id, "score") ?? false,
+		onclick: (e: MouseEvent) => quickEdit?.open(e, anime, "score"),
+	};
+}
 
 function listButtonFor(anime: Anime) {
 	const status = anime.user_entry?.status;
@@ -515,6 +522,7 @@ $effect(() => {
 									{statusLabel}
 									{statusIcon}
 									scoreLabel="自分のスコア"
+									{scoreButtonFor}
 									{listButtonFor}
 								/>
 							{:else}

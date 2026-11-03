@@ -16,7 +16,15 @@ type CardAnime = Pick<
  */
 export type AnimeCardScore =
 	| { kind: "average"; value: number | null; count: number | null | undefined }
-	| { kind: "personal"; value: number | null; label: string };
+	| {
+			kind: "personal";
+			value: number | null;
+			label: string;
+			/** 自分のスコアなら青で示し、onclick を渡すとその場で変えられるボタンにする */
+			mine?: boolean;
+			expanded?: boolean;
+			onclick?: ((e: MouseEvent) => void) | undefined;
+	  };
 
 export type AnimeCardProps = {
 	anime: CardAnime;
@@ -107,8 +115,27 @@ function isAiringToday(): boolean {
 		{#if score.kind === 'average' && score.count == null}
 			<!-- スコアを読み込めなかった（評価なしとは区別して何も出さない） -->
 			<span class="anime-score"><span class="sr-only">スコアを読み込めませんでした</span></span>
+		{:else if score.kind === 'personal' && score.onclick}
+			<!-- 自分のスコア。押すとその場で変える欄を開く -->
+			<button
+				type="button"
+				class="anime-score anime-score--mine anime-score-btn"
+				class:anime-score--none={score.value == null}
+				onclick={score.onclick}
+				aria-label={score.value != null ? `${score.label}: ${score.value}（変更）` : `${score.label}を付ける`}
+				aria-haspopup="dialog"
+				aria-expanded={score.expanded ?? false}
+				title={score.value != null ? `${score.label}（押して変更）` : `${score.label}を付ける`}
+			>
+				<span class="anime-score-star" aria-hidden="true">★</span>
+				<span aria-hidden="true">{score.value ?? '—'}</span>
+			</button>
 		{:else}
-			<span class="anime-score" class:anime-score--none={score.value == null}>
+			<span
+				class="anime-score"
+				class:anime-score--mine={score.kind === 'personal' && score.mine}
+				class:anime-score--none={score.value == null}
+			>
 				<span class="anime-score-star" aria-hidden="true">★</span>
 				{#if score.value != null}
 					{#if score.kind === 'average'}
@@ -175,7 +202,7 @@ function isAiringToday(): boolean {
 }
 .anime-card:hover,
 /* 状態の欄はカードの外に出すので、開いている間も持ち上げたままにする（ずれて隙間が出ないように） */
-.anime-card:has(.quick-add-btn[aria-expanded="true"]) {
+.anime-card:has([aria-expanded="true"]) {
 	border-color: var(--color-accent);
 	transform: translateY(-2px);
 }
@@ -328,6 +355,22 @@ function isAiringToday(): boolean {
 }
 .anime-score-star {
 	color: var(--status-score);
+}
+/* 自分のスコアは青（右のマスの登録済みと同じ「自分のもの」の色）。みんなの平均や他の人のスコアは黄色 */
+.anime-score--mine .anime-score-star {
+	color: var(--color-accent);
+}
+.anime-score-btn {
+	border: 0;
+	background: transparent;
+	color: inherit;
+	cursor: pointer;
+	font-family: inherit;
+	transition: background 0.15s;
+}
+.anime-score-btn:hover,
+.anime-score-btn[aria-expanded="true"] {
+	background: var(--color-surface-hover);
 }
 .anime-score--none {
 	color: var(--color-text-muted);
