@@ -4229,6 +4229,36 @@ async function fetchAnimesByIds(supabase: SupabaseClient<Database>, ids: string[
 	return ids.map((id) => map.get(id)).filter((a): a is Anime => a !== undefined);
 }
 
+/**
+ * 作品ごとの自分のマイリスト（登録していない作品は入れない）。他の人のマイリストのカードに
+ * 見ている人自身の登録を出すのに使う。読めなければ投げる（未登録と見せない）
+ */
+export async function getOwnEntriesForAnime(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+	animeIds: string[],
+): Promise<Record<string, UserAnimeEntry>> {
+	// 長い一覧でも URL が長くなりすぎないよう分けて読む
+	const CHUNK = 300;
+	const chunks: number[][] = [];
+	for (let i = 0; i < animeIds.length; i += CHUNK) chunks.push(animeIds.slice(i, i + CHUNK).map(Number));
+	const results = await Promise.all(
+		chunks.map((ids) =>
+			supabase
+				.from("user_anime_list")
+				.select(`anime_id, ${OWN_ENTRY_COLUMNS}`)
+				.eq("user_id", userId)
+				.in("anime_id", ids),
+		),
+	);
+	const entries: Record<string, UserAnimeEntry> = {};
+	for (const { data, error } of results) {
+		if (error) failQuery("getOwnEntriesForAnime", error);
+		for (const row of data ?? []) entries[String(row.anime_id)] = toOwnUserAnimeEntry(row);
+	}
+	return entries;
+}
+
 export async function enrichAnimeWithUserEntries(
 	supabase: SupabaseClient<Database>,
 	animes: Anime[],

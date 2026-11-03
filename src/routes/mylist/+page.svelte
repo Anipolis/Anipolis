@@ -7,6 +7,7 @@ import { page } from "$app/state";
 import AnimeEditRow from "$lib/components/AnimeEditRow.svelte";
 import AnimeStatusSection from "$lib/components/AnimeStatusSection.svelte";
 import InfoTip from "$lib/components/InfoTip.svelte";
+import MyListQuickEdit from "$lib/components/MyListQuickEdit.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import {
 	createSaveQueue,
@@ -113,6 +114,19 @@ const grouped = $derived(
 const totalCount = $derived(data.animeList.length);
 
 let selectedStatus = $state<AnimeStatus>("watching");
+
+// カードのマイリストボタンから開く欄。保存したら読み込み直して、状態の変わった作品を別の段へ移す
+let quickEdit = $state<MyListQuickEdit>();
+
+function listButtonFor(anime: Anime) {
+	const status = anime.user_entry?.status;
+	return {
+		status,
+		label: status ? `マイリスト: ${statusLabel[status]}` : "マイリストに追加",
+		expanded: quickEdit?.isOpenFor(anime.id) ?? false,
+		onclick: (e: MouseEvent) => quickEdit?.open(e, anime),
+	};
+}
 
 // 各エントリのローカル状態（編集用）
 type EntryState = { status: AnimeStatus; score: string; progress: number };
@@ -229,10 +243,17 @@ onDestroy(() => saveQueue.dispose());
 
 $effect(() => {
 	const currentRows = untrack(() => editRows);
+	const currentSaves = untrack(() => saveStates);
+	// 保存し終えた行は読み込み直した内容に合わせる（一覧のボタンで変えた分を編集の画面にも出す）。
+	// 保存待ち・保存中・失敗の行は、手元の編集を残す
+	const keepsLocal = (animeId: string) => {
+		const state = currentSaves[animeId]?.status;
+		return state === "pending" || state === "saving" || state === "failed";
+	};
 	editRows = Object.fromEntries(
 		data.animeList.map((anime) => [
 			anime.id,
-			currentRows[anime.id] ?? {
+			(keepsLocal(anime.id) ? currentRows[anime.id] : undefined) ?? {
 				entry: {
 					status: anime.user_entry?.status ?? "plan_to_watch",
 					score:
@@ -251,8 +272,8 @@ $effect(() => {
 
 {#snippet visibilityHelp()}
 	<p>公開: プロフィールの「マイリスト」タブで誰でも見られます（鍵アカウントならフォロワーだけ）。</p>
-	<p>作品を視聴予定・視聴中・完了にすると、フォロワーにお知らせが届きます。</p>
-	<p>非公開: 自分だけが見られます。フォロワーへのお知らせも届きません。</p>
+	<p>作品を視聴予定・視聴中・完了にすると、プロフィールやフォロワーのタイムラインの「アクティビティ」にも出ます。</p>
+	<p>非公開: 自分だけが見られます。アクティビティも自分にしか見えません。</p>
 	<p>非公開のマイリストは、作品のスコアやランキングに数えません。</p>
 {/snippet}
 
@@ -488,7 +509,14 @@ $effect(() => {
 					{#if grouped[status].length > 0}
 						<div class:mobile-hidden={selectedStatus !== status}>
 							{#if viewMode === 'list'}
-								<AnimeStatusSection {status} animes={grouped[status]} {statusLabel} {statusIcon} />
+								<AnimeStatusSection
+									{status}
+									animes={grouped[status]}
+									{statusLabel}
+									{statusIcon}
+									scoreLabel="自分のスコア"
+									{listButtonFor}
+								/>
 							{:else}
 								<section class="status-section status-section--{status}">
 									<h2 class="status-heading">
@@ -521,6 +549,12 @@ $effect(() => {
 			{/if}
 		</div>
 	</main>
+
+	<MyListQuickEdit
+		bind:this={quickEdit}
+		entryOf={(anime) => (anime as Anime).user_entry}
+		removeAction="?/removeWatchlist"
+	/>
 
 	<aside class="sidebar-column">
 		<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
