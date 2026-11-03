@@ -9,10 +9,19 @@ import AnimeStatusSection from "$lib/components/AnimeStatusSection.svelte";
 import FavoriteAnimeShelf from "$lib/components/FavoriteAnimeShelf.svelte";
 import ImageCropper from "$lib/components/ImageCropper.svelte";
 import MyListQuickEdit from "$lib/components/MyListQuickEdit.svelte";
+import MylistStatusTabs from "$lib/components/MylistStatusTabs.svelte";
 import PostRow from "$lib/components/PostRow.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
 import { checkCropSource } from "$lib/image-crop";
+import {
+	countMylistByStatus,
+	groupMylistByStatus,
+	type MylistSort,
+	parseMylistSort,
+	parseMylistStatus,
+	sortMylist,
+} from "$lib/mylist/sort";
 import { timelineCursorHref } from "$lib/timeline-cursor";
 import type { Anime, AnimeStatus, UserAnimeEntry } from "$lib/types";
 import type { PageProps } from "./$types";
@@ -403,8 +412,6 @@ function handleReportModalKeydown(event: KeyboardEvent) {
 	}
 }
 
-const statusOrder: AnimeStatus[] = ["watching", "completed", "plan_to_watch", "on_hold", "dropped"];
-
 const statusLabel: Record<AnimeStatus, string> = {
 	watching: "視聴中",
 	completed: "完了",
@@ -423,15 +430,11 @@ const statusIcon: Record<AnimeStatus, string> = {
 
 const animeList = $derived((data.animeList ?? []) as Anime[]);
 
-const grouped = $derived(
-	statusOrder.reduce<Record<AnimeStatus, Anime[]>>(
-		(acc, status) => {
-			acc[status] = animeList.filter((e) => e.user_entry?.status === status);
-			return acc;
-		},
-		{ watching: [], completed: [], plan_to_watch: [], on_hold: [], dropped: [] },
-	),
-);
+// マイリストのタブで開いているステータスと並び順（URL の ?status= と ?sort=。切り替えは MylistStatusTabs が URL に残す）
+let selectedStatus = $state<AnimeStatus>(parseMylistStatus(page.url.searchParams.get("status")));
+let listSort = $state<MylistSort>(parseMylistSort(page.url.searchParams.get("sort")));
+
+const grouped = $derived(groupMylistByStatus(sortMylist(animeList, listSort)));
 
 // カードの右のマスは見ている人自身のマイリスト。自分のプロフィールなら並んでいる登録そのもの、
 // 他の人なら別に読んだ自分の登録（読めなかったときは null でボタンを出さない）
@@ -1002,27 +1005,41 @@ function listButtonFor(anime: Anime) {
 					<p>まだアニメがありません</p>
 				</div>
 			{:else}
-				<div class="list-summary">
-					<span class="list-total">合計 <strong>{animeList.length}</strong> 作品</span>
-					{#if isOwn}
-						<a href="/mylist" class="list-manage-link">リストを管理</a>
-					{/if}
-				</div>
+				<div class="profile-mylist">
+					<MylistStatusTabs
+						counts={countMylistByStatus(grouped)}
+						bind:status={selectedStatus}
+						bind:sort={listSort}
+					>
+						{#snippet toolbarStart()}
+							<span class="list-summary">
+								合計 <strong>{animeList.length}</strong> 作品
+								{#if isOwn}
+									<a href="/mylist" class="list-manage-link">リストを管理</a>
+								{/if}
+							</span>
+						{/snippet}
+					</MylistStatusTabs>
 
-				{#each statusOrder as status}
-					{#if grouped[status].length > 0}
-						<AnimeStatusSection
-							{status}
-							animes={grouped[status]}
-							{statusLabel}
-							{statusIcon}
-							headingLevel={3}
-							scoreLabel={isOwn ? '自分のスコア' : `${displayName}のスコア`}
-							scoreButtonFor={isOwn ? scoreButtonFor : undefined}
-							listButtonFor={showListButtons ? listButtonFor : undefined}
-						/>
-					{/if}
-				{/each}
+					<div role="tabpanel" aria-label={statusLabel[selectedStatus]}>
+						{#if grouped[selectedStatus].length === 0}
+							<div class="empty-state">
+								<p>{statusLabel[selectedStatus]}の作品はありません</p>
+							</div>
+						{:else}
+							<AnimeStatusSection
+								status={selectedStatus}
+								animes={grouped[selectedStatus]}
+								{statusLabel}
+								{statusIcon}
+								showHeading={false}
+								scoreLabel={isOwn ? '自分のスコア' : `${displayName}のスコア`}
+								scoreButtonFor={isOwn ? scoreButtonFor : undefined}
+								listButtonFor={showListButtons ? listButtonFor : undefined}
+							/>
+						{/if}
+					</div>
+				</div>
 			{/if}
 		{/if}
 
@@ -1545,13 +1562,17 @@ function listButtonFor(anime: Anime) {
 	align-items: center;
 }
 
+.profile-mylist {
+	padding-top: 12px;
+}
+
 .list-summary {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	padding: 12px 4px;
+	display: inline-flex;
+	align-items: baseline;
+	gap: 4px;
 	font-size: 0.85rem;
 	color: var(--color-text-muted);
+	white-space: nowrap;
 }
 
 .list-summary strong {
@@ -1563,6 +1584,7 @@ function listButtonFor(anime: Anime) {
 }
 
 .list-manage-link {
+	margin-left: 10px;
 	font-size: 0.8rem;
 	color: var(--color-accent);
 	text-decoration: none;

@@ -1,4 +1,47 @@
-import type { Anime } from "$lib/types";
+import type { Anime, AnimeStatus } from "$lib/types";
+
+/** マイリストのステータスのタブの並び。URL の ?status= に入れる値 */
+export const MYLIST_STATUS_ORDER: readonly AnimeStatus[] = [
+	"watching",
+	"completed",
+	"plan_to_watch",
+	"on_hold",
+	"dropped",
+];
+
+export const DEFAULT_MYLIST_STATUS: AnimeStatus = "watching";
+
+export function parseMylistStatus(value: string | null | undefined): AnimeStatus {
+	return MYLIST_STATUS_ORDER.find((status) => status === value) ?? DEFAULT_MYLIST_STATUS;
+}
+
+/** ステータスごとに分ける（それぞれの中の順は並べ替え済みの順のまま） */
+export function groupMylistByStatus(animes: readonly Anime[]): Record<AnimeStatus, Anime[]> {
+	const grouped: Record<AnimeStatus, Anime[]> = {
+		watching: [],
+		completed: [],
+		plan_to_watch: [],
+		on_hold: [],
+		dropped: [],
+	};
+	for (const anime of animes) {
+		const status = anime.user_entry?.status;
+		// 知らないステータスの行は、どのタブにも入れない
+		if (status && Object.hasOwn(grouped, status)) grouped[status].push(anime);
+	}
+	return grouped;
+}
+
+/** タブに出す件数 */
+export function countMylistByStatus(grouped: Record<AnimeStatus, Anime[]>): Record<AnimeStatus, number> {
+	return {
+		watching: grouped.watching.length,
+		completed: grouped.completed.length,
+		plan_to_watch: grouped.plan_to_watch.length,
+		on_hold: grouped.on_hold.length,
+		dropped: grouped.dropped.length,
+	};
+}
 
 /** マイリストの並び替え。URL の ?sort= に入れる値 */
 export const MYLIST_SORTS = [
