@@ -330,6 +330,7 @@ function isAiringToday(): boolean {
 }
 .cover-ribbon--airing {
 	background: var(--ribbon-airing);
+	color: var(--ribbon-airing-text);
 }
 
 /* ─── 画像の下の行: 左にスコア、右にマイリストの状態 ─── */
