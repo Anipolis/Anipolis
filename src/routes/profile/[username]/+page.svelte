@@ -900,7 +900,7 @@ function listButtonFor(anime: Anime) {
 			>
 			<a href="/profile/{profile.username}?tab=list" class="profile-tab" class:active={activeTab === 'list'}>
 				マイリスト
-				{#if !canViewContent || (!profile.list_is_public && !isOwn)}
+				{#if !canViewContent || !profile.list_is_public}
 					<span class="tab-lock i-lucide-lock-keyhole" aria-hidden="true"></span>
 				{/if}
 			</a>
@@ -910,7 +910,7 @@ function listButtonFor(anime: Anime) {
 				class:active={activeTab === 'activity'}
 			>
 				アクティビティ
-				{#if !canViewContent || (!profile.list_is_public && !isOwn)}
+				{#if !canViewContent || !profile.list_is_public}
 					<span class="tab-lock i-lucide-lock-keyhole" aria-hidden="true"></span>
 				{/if}
 			</a>

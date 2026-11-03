@@ -1,12 +1,11 @@
 <script lang="ts">
-import type { ActionResult, SubmitFunction } from "@sveltejs/kit";
+import type { ActionResult } from "@sveltejs/kit";
 import { onDestroy, untrack } from "svelte";
-import { applyAction, deserialize, enhance } from "$app/forms";
+import { deserialize } from "$app/forms";
 import { beforeNavigate, invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
 import AnimeEditRow from "$lib/components/AnimeEditRow.svelte";
 import AnimeStatusSection from "$lib/components/AnimeStatusSection.svelte";
-import InfoTip from "$lib/components/InfoTip.svelte";
 import MyListQuickEdit from "$lib/components/MyListQuickEdit.svelte";
 import MylistSortSelect from "$lib/components/MylistSortSelect.svelte";
 import MylistStatusTabs from "$lib/components/MylistStatusTabs.svelte";
@@ -30,7 +29,7 @@ import {
 import type { Anime, AnimeStatus } from "$lib/types";
 import type { PageProps } from "./$types";
 
-let { data, form }: PageProps = $props();
+let { data }: PageProps = $props();
 
 const statusOrder: AnimeStatus[] = ["watching", "completed", "plan_to_watch", "on_hold", "dropped"];
 
@@ -42,60 +41,7 @@ const statusLabel: Record<AnimeStatus, string> = {
 	dropped: "断念",
 };
 
-let isPublic = $state(false);
 let viewMode = $state<"list" | "edit">("list");
-
-$effect(() => {
-	isPublic = data.profile.list_is_public;
-});
-
-$effect(() => {
-	if (form && "list_is_public" in form) {
-		isPublic = (form as { list_is_public: boolean }).list_is_public;
-	}
-});
-
-// 公開切替の送信状態。切替中は重複送信を防ぎ、失敗時は現在の状態と再試行を案内する
-let visibilityState = $state<"idle" | "saving" | "failed">("idle");
-let visibilityError = $state<string | null>(null);
-let visibilityForm: HTMLFormElement | undefined = $state();
-const VISIBILITY_ERROR_MESSAGE = "公開設定を切り替えられませんでした";
-
-const enhanceVisibility: SubmitFunction = ({ cancel }) => {
-	if (visibilityState === "saving") {
-		cancel();
-		return;
-	}
-	visibilityState = "saving";
-	visibilityError = null;
-
-	return async ({ result }) => {
-		if (result.type === "success") {
-			if (result.data && "list_is_public" in result.data) {
-				isPublic = Boolean(result.data["list_is_public"]);
-			}
-			visibilityState = "idle";
-			return;
-		}
-		if (result.type === "failure") {
-			visibilityState = "failed";
-			visibilityError = (result.data as { message?: string } | undefined)?.message ?? VISIBILITY_ERROR_MESSAGE;
-			return;
-		}
-		if (result.type === "error") {
-			visibilityState = "failed";
-			visibilityError = VISIBILITY_ERROR_MESSAGE;
-			return;
-		}
-		// redirect（未ログインなど）は SvelteKit 標準の遷移に任せる
-		visibilityState = "idle";
-		await applyAction(result);
-	};
-};
-
-function retryVisibility() {
-	visibilityForm?.requestSubmit();
-}
 
 // 開いているタブと並び順（URL の ?status= と ?sort=。切り替えは MylistStatusTabs と MylistSortSelect が URL に残す）
 let selectedStatus = $state<MylistTab>(parseMylistTab(page.url.searchParams.get("status")));
@@ -267,19 +213,25 @@ $effect(() => {
 
 <svelte:head> <title>マイリスト - Anipolis</title> </svelte:head>
 
-{#snippet visibilityHelp()}
-	<p>公開: プロフィールの「マイリスト」タブで誰でも見られます（鍵アカウントならフォロワーだけ）。</p>
-	<p>作品を視聴予定・視聴中・完了にすると、プロフィールやフォロワーのタイムラインの「アクティビティ」にも出ます。</p>
-	<p>非公開: 自分だけが見られます。アクティビティも自分にしか見えません。</p>
-	<p>非公開のマイリストは、作品のスコアやランキングに数えません。</p>
-{/snippet}
-
 <div class="page-container">
 	<main class="feed-column mylist-page">
 		<div class="mylist-container">
 			<header class="mylist-header">
 				<div class="mylist-title-row">
-					<h1 class="mylist-title">マイリスト</h1>
+					<div class="mylist-title-group">
+						<h1 class="mylist-title">マイリスト</h1>
+						{#if !data.profile.list_is_public}
+							<a
+								href="/settings/privacy"
+								class="private-badge"
+								title="非公開（設定を開く）"
+								aria-label="非公開（設定を開く）"
+							>
+								<span class="i-lucide-lock-keyhole" aria-hidden="true"></span>
+								<span class="private-badge-label">非公開</span>
+							</a>
+						{/if}
+					</div>
 					<div class="header-actions">
 						{#if totalCount > 0}
 							<div class="view-toggle" role="group" aria-label="表示の切り替え">
@@ -308,64 +260,30 @@ $effect(() => {
 							</div>
 						{/if}
 
-						<!-- 公開/非公開切り替え -->
-						<form
-							bind:this={visibilityForm}
-							method="POST"
-							action="?/toggleVisibility"
-							use:enhance={enhanceVisibility}
-						>
-							<button
-								type="submit"
-								class="btn-secondary visibility-btn"
-								disabled={visibilityState === 'saving'}
-								aria-busy={visibilityState === 'saving'}
-								aria-label={isPublic ? 'マイリストは公開中。非公開にする' : 'マイリストは非公開。公開する'}
-								title={isPublic ? '公開中（押すと非公開にする）' : '非公開（押すと公開する）'}
-							>
-								{#if visibilityState === 'saving'}
-									<span class="visibility-spinner" aria-hidden="true"></span>
-								{:else}
-									<span
-										class={isPublic ? 'i-lucide-lock-open' : 'i-lucide-lock'}
-										aria-hidden="true"
-									></span>
-								{/if}
-								<span class="visibility-label">{isPublic ? '公開' : '非公開'}</span>
-							</button>
-						</form>
-						<InfoTip label="マイリストの公開設定">{@render visibilityHelp()}</InfoTip>
-
 						{#if totalCount > 0}
-							<MylistSortSelect bind:sort compactOnMobile />
+							<MylistSortSelect bind:sort />
 						{/if}
 					</div>
 				</div>
 
-				<!-- 公開設定の切替結果・未保存の案内 -->
-				{#if visibilityState === 'failed' || unsavedCount > 0}
-					<div class="mylist-notices">
-						{#if visibilityState === 'failed'}
-							<p class="visibility-error" role="alert">
-								<span class="i-lucide-triangle-alert" aria-hidden="true"></span>
-								<span>
-									{visibilityError ?? VISIBILITY_ERROR_MESSAGE}。現在は「{isPublic ? '公開中' : '非公開'}」のままです。
-								</span>
-								<button type="button" class="retry-btn" onclick={retryVisibility}>再試行</button>
-							</p>
-						{/if}
-						{#if unsavedCount > 0}
-							<p class="unsaved-note" role="status" aria-live="polite">
-								未保存の変更が{unsavedCount}件あります。画面を移動すると保存待ちの変更は自動で送信されますが、失敗した変更は再試行するまで保存されません。
-							</p>
-						{/if}
-					</div>
+				<!-- 未保存の案内 -->
+				{#if unsavedCount > 0}
+					<p class="unsaved-note" role="status" aria-live="polite">
+						未保存の変更が{unsavedCount}件あります。画面を移動すると保存待ちの変更は自動で送信されますが、失敗した変更は再試行するまで保存されません。
+					</p>
 				{/if}
 			</header>
 
 			{#if totalCount === 0}
 				<div class="mylist-empty">
 					<p>まだアニメがありません。<a href="/anime">アニメを探す</a></p>
+					{#if data.profile.list_is_public}
+						<p class="mylist-empty-note">
+							マイリストは他の人もプロフィールで見られます。<a href="/settings/privacy"
+								>設定</a
+							>で非公開にできます
+						</p>
+					{/if}
 				</div>
 			{:else}
 				<!-- ステータスのタブ。一覧も編集も、選んだタブの作品だけを並べる -->
@@ -434,9 +352,30 @@ $effect(() => {
 .mylist-title-row {
 	display: flex;
 	align-items: center;
-	flex-wrap: wrap;
-	gap: 8px 10px;
+	gap: 10px;
 	margin-bottom: 12px;
+}
+
+.mylist-title-group {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 8px;
+}
+
+/* 非公開のときだけ出す印。公開が既定なので、公開中は何も出さない */
+.private-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	color: var(--color-text-muted);
+	font-size: 0.75rem;
+	font-weight: 600;
+	text-decoration: none;
+}
+
+.private-badge:hover {
+	color: var(--color-text);
 }
 
 /* ほかの画面（通知など）と同じく、ページの見出しを出す（#438） */
@@ -450,6 +389,7 @@ $effect(() => {
 .header-actions {
 	display: flex;
 	align-items: center;
+	min-width: 0;
 	gap: 8px;
 	margin-left: auto;
 }
@@ -490,84 +430,12 @@ $effect(() => {
 	color: var(--color-text);
 }
 
-.visibility-btn {
-	display: inline-flex;
-	align-items: center;
-	gap: 5px;
-	height: 32px;
-	padding: 0 10px;
-	border-radius: 8px;
-	font-size: 0.8rem;
-	font-weight: 600;
-	white-space: nowrap;
-	cursor: pointer;
-}
-
-.visibility-btn:disabled {
-	cursor: progress;
-	opacity: 0.75;
-}
-
-.visibility-spinner {
-	width: 12px;
-	height: 12px;
-	border: 2px solid currentColor;
-	border-right-color: transparent;
-	border-radius: 50%;
-	corner-shape: round;
-	animation: visibility-spin 0.8s linear infinite;
-}
-
-@keyframes visibility-spin {
-	to {
-		transform: rotate(360deg);
-	}
-}
-
-/* 公開設定の切替結果・未保存の案内 */
-.mylist-notices {
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-	padding-bottom: 8px;
-}
-
-.visibility-error,
 .unsaved-note {
 	margin: 0;
+	padding-bottom: 8px;
+	color: var(--color-text-muted);
 	font-size: 0.78rem;
 	line-height: 1.5;
-}
-
-.visibility-error {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 6px 8px;
-	padding: 8px 10px;
-	border: 1px solid color-mix(in srgb, var(--color-danger, #f87171) 40%, transparent);
-	border-radius: 12px;
-	background: color-mix(in srgb, var(--color-danger, #f87171) 12%, transparent);
-	color: var(--color-danger, #f87171);
-}
-
-.unsaved-note {
-	color: var(--color-text-muted);
-}
-
-.retry-btn {
-	padding: 3px 10px;
-	border: 1px solid currentColor;
-	border-radius: 6px;
-	background: transparent;
-	color: inherit;
-	font-size: 0.75rem;
-	font-weight: 600;
-	cursor: pointer;
-}
-
-.retry-btn:hover {
-	background: color-mix(in srgb, currentColor 12%, transparent);
 }
 
 .mylist-empty {
@@ -578,6 +446,11 @@ $effect(() => {
 
 .mylist-empty a {
 	color: var(--color-accent);
+}
+
+.mylist-empty-note {
+	margin: 8px 0 0;
+	font-size: 0.8rem;
 }
 
 .anime-list--edit {
@@ -593,28 +466,29 @@ $effect(() => {
 	font-size: 0.9rem;
 }
 
-/* 見出しの行に入るよう、狭い幅では詰める。さらに狭いと公開設定をアイコンだけにする（読み上げは aria-label） */
+/* 見出しの行に入るよう、スマホでは非公開の印をアイコンだけにする（読み上げは aria-label） */
+@media (max-width: 600px) {
+	.private-badge-label {
+		display: none;
+	}
+}
+
+/* 並び替えの文字が切れないよう、狭い幅では詰める */
 @media (max-width: 389px) {
+	.mylist-title-row {
+		gap: 6px;
+	}
+
+	.mylist-title-group {
+		gap: 4px;
+	}
+
 	.header-actions {
 		gap: 6px;
 	}
 
 	.view-btn {
-		width: 28px;
-	}
-
-	.visibility-btn {
-		padding: 0 8px;
-	}
-}
-
-@media (max-width: 359px) {
-	.mylist-title {
-		font-size: 1.125rem;
-	}
-
-	.visibility-label {
-		display: none;
+		width: 26px;
 	}
 }
 </style>
