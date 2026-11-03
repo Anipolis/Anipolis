@@ -174,7 +174,7 @@ function close() {
 											loading="lazy"
 										>
 									{:else}
-										<span class="i-lucide-library-big"></span>
+										<span class="i-lucide-folder"></span>
 									{/if}
 								</span>
 								<span class="add-collection-row-body">
