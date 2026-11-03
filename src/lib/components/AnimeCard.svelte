@@ -330,8 +330,8 @@ function isAiringToday(): boolean {
 }
 .cover-ribbon--airing {
 	/* 枠の分だけ内側を詰め、本日放送のリボンと大きさをそろえる */
-	padding: 2px 5px;
-	border: 1px solid var(--ribbon-airing);
+	padding: 1px 4px;
+	border: 2px solid var(--ribbon-airing);
 	background: var(--ribbon-airing-bg);
 	color: var(--ribbon-airing);
 }
