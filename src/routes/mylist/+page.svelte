@@ -7,6 +7,8 @@ import { page } from "$app/state";
 import AnimeEditRow from "$lib/components/AnimeEditRow.svelte";
 import AnimeStatusSection from "$lib/components/AnimeStatusSection.svelte";
 import InfoTip from "$lib/components/InfoTip.svelte";
+import MyListQuickEdit from "$lib/components/MyListQuickEdit.svelte";
+import MylistStatusTabs from "$lib/components/MylistStatusTabs.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import {
 	createSaveQueue,
@@ -14,6 +16,14 @@ import {
 	type RowSaveState,
 	type SaveResult,
 } from "$lib/mylist/save-queue";
+import {
+	countMylistByStatus,
+	groupMylistByStatus,
+	type MylistSort,
+	parseMylistSort,
+	parseMylistStatus,
+	sortMylist,
+} from "$lib/mylist/sort";
 import type { Anime, AnimeStatus } from "$lib/types";
 import type { PageProps } from "./$types";
 
@@ -25,14 +35,6 @@ const statusLabel: Record<AnimeStatus, string> = {
 	watching: "視聴中",
 	completed: "完了",
 	plan_to_watch: "視聴予定",
-	on_hold: "中断",
-	dropped: "断念",
-};
-
-const mobileStatusLabel: Record<AnimeStatus, string> = {
-	watching: "視聴中",
-	completed: "完了",
-	plan_to_watch: "予定",
 	on_hold: "中断",
 	dropped: "断念",
 };
@@ -100,19 +102,33 @@ function retryVisibility() {
 	visibilityForm?.requestSubmit();
 }
 
-const grouped = $derived(
-	statusOrder.reduce<Record<AnimeStatus, Anime[]>>(
-		(acc, status) => {
-			acc[status] = data.animeList.filter((e) => e.user_entry?.status === status);
-			return acc;
-		},
-		{ watching: [], completed: [], plan_to_watch: [], on_hold: [], dropped: [] },
-	),
-);
+// 開いているタブと並び順（URL の ?status= と ?sort=。切り替えは MylistStatusTabs が URL に残す）
+let selectedStatus = $state<AnimeStatus>(parseMylistStatus(page.url.searchParams.get("status")));
+let sort = $state<MylistSort>(parseMylistSort(page.url.searchParams.get("sort")));
+
+const grouped = $derived(groupMylistByStatus(sortMylist(data.animeList, sort)));
 
 const totalCount = $derived(data.animeList.length);
 
-let selectedStatus = $state<AnimeStatus>("watching");
+// カードのマイリストボタン・スコアから開く欄。保存したら読み込み直して、状態の変わった作品を別の段へ移す
+let quickEdit = $state<MyListQuickEdit>();
+
+function scoreButtonFor(anime: Anime) {
+	return {
+		expanded: quickEdit?.isOpenFor(anime.id, "score") ?? false,
+		onclick: (e: MouseEvent) => quickEdit?.open(e, anime, "score"),
+	};
+}
+
+function listButtonFor(anime: Anime) {
+	const status = anime.user_entry?.status;
+	return {
+		status,
+		label: status ? `マイリスト: ${statusLabel[status]}` : "マイリストに追加",
+		expanded: quickEdit?.isOpenFor(anime.id) ?? false,
+		onclick: (e: MouseEvent) => quickEdit?.open(e, anime),
+	};
+}
 
 // 各エントリのローカル状態（編集用）
 type EntryState = { status: AnimeStatus; score: string; progress: number };
@@ -229,10 +245,17 @@ onDestroy(() => saveQueue.dispose());
 
 $effect(() => {
 	const currentRows = untrack(() => editRows);
+	const currentSaves = untrack(() => saveStates);
+	// 保存し終えた行は読み込み直した内容に合わせる（一覧のボタンで変えた分を編集の画面にも出す）。
+	// 保存待ち・保存中・失敗の行は、手元の編集を残す
+	const keepsLocal = (animeId: string) => {
+		const state = currentSaves[animeId]?.status;
+		return state === "pending" || state === "saving" || state === "failed";
+	};
 	editRows = Object.fromEntries(
 		data.animeList.map((anime) => [
 			anime.id,
-			currentRows[anime.id] ?? {
+			(keepsLocal(anime.id) ? currentRows[anime.id] : undefined) ?? {
 				entry: {
 					status: anime.user_entry?.status ?? "plan_to_watch",
 					score:
@@ -251,8 +274,8 @@ $effect(() => {
 
 {#snippet visibilityHelp()}
 	<p>公開: プロフィールの「マイリスト」タブで誰でも見られます（鍵アカウントならフォロワーだけ）。</p>
-	<p>作品を視聴予定・視聴中・完了にすると、フォロワーにお知らせが届きます。</p>
-	<p>非公開: 自分だけが見られます。フォロワーへのお知らせも届きません。</p>
+	<p>作品を視聴予定・視聴中・完了にすると、プロフィールやフォロワーのタイムラインの「アクティビティ」にも出ます。</p>
+	<p>非公開: 自分だけが見られます。アクティビティも自分にしか見えません。</p>
 	<p>非公開のマイリストは、作品のスコアやランキングに数えません。</p>
 {/snippet}
 
@@ -457,70 +480,59 @@ $effect(() => {
 				{/if}
 			</header>
 
-			<!-- モバイル用ステータスタブバー -->
-			<div class="status-tab-bar">
-				{#each statusOrder as status}
-					<button
-						type="button"
-						class="status-tab status-tab--{status}"
-						class:active={selectedStatus === status}
-						onclick={() => (selectedStatus = status)}
-					>
-						<span class="tab-icon {statusIcon[status]}" aria-hidden="true"></span>
-						<span class="tab-label desktop-tab-label">{statusLabel[status]}</span>
-						<span class="tab-label mobile-tab-label">{mobileStatusLabel[status]}</span>
-						<span class="tab-count">{grouped[status].length}</span>
-					</button>
-				{/each}
-			</div>
-
 			{#if totalCount === 0}
 				<div class="mylist-empty">
 					<p>まだアニメがありません。<a href="/anime">アニメを探す</a></p>
 				</div>
 			{:else}
-				{#if grouped[selectedStatus].length === 0}
-					<div class="mobile-status-empty">
-						<p>{statusLabel[selectedStatus]}にはまだ登録がありません</p>
-					</div>
-				{/if}
-				{#each statusOrder as status}
-					{#if grouped[status].length > 0}
-						<div class:mobile-hidden={selectedStatus !== status}>
-							{#if viewMode === 'list'}
-								<AnimeStatusSection {status} animes={grouped[status]} {statusLabel} {statusIcon} />
-							{:else}
-								<section class="status-section status-section--{status}">
-									<h2 class="status-heading">
-										<span class="status-icon {statusIcon[status]}" aria-hidden="true"></span>
-										{statusLabel[status]}
-										<span class="status-count">{grouped[status].length}</span>
-									</h2>
-									<div class="anime-list anime-list--edit">
-										{#each grouped[status] as anime (anime.id)}
-											{@const editRow = editRows[anime.id]}
-											{#if editRow}
-												<AnimeEditRow
-													{anime}
-													bind:entry={editRow.entry}
-													{statusOrder}
-													{statusLabel}
-													saveState={saveStates[anime.id]}
-													onAutoSave={(updatedFields) => handleAutoSave(anime.id, updatedFields)}
-													onRetry={() => retryAutoSave(anime.id)}
-													onRemove={() => cancelAutoSave(anime.id)}
-												/>
-											{/if}
-										{/each}
-									</div>
-								</section>
-							{/if}
+				<!-- ステータスのタブと並び替え。一覧も編集も、選んだステータスの作品だけを並べる -->
+				<MylistStatusTabs counts={countMylistByStatus(grouped)} bind:status={selectedStatus} bind:sort />
+
+				<div role="tabpanel" aria-label={statusLabel[selectedStatus]}>
+					{#if grouped[selectedStatus].length === 0}
+						<div class="status-empty">
+							<p>{statusLabel[selectedStatus]}にはまだ登録がありません</p>
+						</div>
+					{:else if viewMode === 'list'}
+						<AnimeStatusSection
+							status={selectedStatus}
+							animes={grouped[selectedStatus]}
+							{statusLabel}
+							{statusIcon}
+							showHeading={false}
+							scoreLabel="自分のスコア"
+							{scoreButtonFor}
+							{listButtonFor}
+						/>
+					{:else}
+						<div class="anime-list anime-list--edit">
+							{#each grouped[selectedStatus] as anime (anime.id)}
+								{@const editRow = editRows[anime.id]}
+								{#if editRow}
+									<AnimeEditRow
+										{anime}
+										bind:entry={editRow.entry}
+										{statusOrder}
+										{statusLabel}
+										saveState={saveStates[anime.id]}
+										onAutoSave={(updatedFields) => handleAutoSave(anime.id, updatedFields)}
+										onRetry={() => retryAutoSave(anime.id)}
+										onRemove={() => cancelAutoSave(anime.id)}
+									/>
+								{/if}
+							{/each}
 						</div>
 					{/if}
-				{/each}
+				</div>
 			{/if}
 		</div>
 	</main>
+
+	<MyListQuickEdit
+		bind:this={quickEdit}
+		entryOf={(anime) => (anime as Anime).user_entry}
+		removeAction="?/removeWatchlist"
+	/>
 
 	<aside class="sidebar-column">
 		<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
@@ -563,8 +575,7 @@ $effect(() => {
 	margin-left: auto;
 }
 
-.mobile-header-row,
-.mobile-tab-label {
+.mobile-header-row {
 	display: none;
 }
 
@@ -705,58 +716,8 @@ $effect(() => {
 	color: var(--color-text-muted);
 }
 
-.mobile-status-empty {
-	display: none;
-}
-
 .mylist-empty a {
 	color: var(--color-accent);
-}
-
-.status-section {
-	margin-bottom: 32px;
-}
-
-.status-heading {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	font-size: 0.95rem;
-	font-weight: 700;
-	padding: 8px 0;
-	margin: 0 0 8px;
-	border-bottom: 1px solid var(--color-border);
-	color: var(--color-text);
-}
-
-.status-icon,
-.tab-icon {
-	width: 1em;
-	height: 1em;
-	flex: 0 0 auto;
-}
-
-.status-section--watching .status-icon {
-	color: var(--status-watching);
-}
-.status-section--completed .status-icon {
-	color: var(--status-completed);
-}
-.status-section--plan_to_watch .status-icon {
-	color: var(--watch-status-plan);
-}
-.status-section--on_hold .status-icon {
-	color: var(--status-on-hold);
-}
-.status-section--dropped .status-icon {
-	color: var(--status-dropped);
-}
-
-.status-count {
-	margin-left: auto;
-	font-size: 0.8rem;
-	color: var(--color-text-muted);
-	font-weight: 400;
 }
 
 .anime-list--edit {
@@ -765,76 +726,11 @@ $effect(() => {
 	gap: 4px;
 }
 
-/* ---- モバイル用ステータスタブバー ---- */
-.status-tab-bar {
-	display: none;
-	overflow-x: auto;
-	gap: 8px;
-	padding: 0 0 16px;
-	scrollbar-width: none;
-	margin-bottom: 4px;
-}
-
-.status-tab-bar::-webkit-scrollbar {
-	display: none;
-}
-
-.status-tab {
-	display: inline-flex;
-	align-items: center;
-	gap: 5px;
-	padding: 8px 14px;
-	border-radius: 28px;
-	border: none;
-	cursor: pointer;
-	font-size: 0.82rem;
-	font-weight: 600;
-	background: color-mix(in srgb, var(--fg, #e2e8f0) 8%, transparent);
-	color: var(--fg-muted, #94a3b8);
-	transition:
-		background 0.15s,
-		color 0.15s;
-	white-space: nowrap;
-	flex-shrink: 0;
-}
-
-.status-tab.active {
-	background: color-mix(in srgb, var(--color-accent) 20%, transparent);
-	color: var(--color-accent);
-}
-
-.status-tab--watching.active {
-	background: color-mix(in srgb, var(--status-watching) 20%, transparent);
-	color: var(--status-watching);
-}
-
-.status-tab--on_hold.active {
-	background: color-mix(in srgb, var(--status-on-hold) 20%, transparent);
-	color: var(--status-on-hold);
-}
-
-.status-tab--dropped.active {
-	background: color-mix(in srgb, var(--status-dropped) 20%, transparent);
-	color: var(--status-dropped);
-}
-
-.status-tab--completed.active {
-	background: color-mix(in srgb, var(--status-completed) 20%, transparent);
-	color: var(--status-completed);
-}
-
-.status-tab--plan_to_watch.active {
-	background: color-mix(in srgb, var(--watch-status-plan) 20%, transparent);
-	color: var(--watch-status-plan);
-}
-
-.tab-icon {
-	font-size: 0.75rem;
-}
-
-.tab-count {
-	font-size: 0.72rem;
-	opacity: 0.8;
+.status-empty {
+	text-align: center;
+	padding: 48px 16px;
+	color: var(--color-text-muted);
+	font-size: 0.9rem;
 }
 
 @media (max-width: 600px) {
@@ -928,77 +824,6 @@ $effect(() => {
 	.mobile-view-btn.active {
 		background: color-mix(in srgb, var(--color-accent) 16%, transparent);
 		color: var(--color-accent);
-	}
-
-	.status-tab-bar {
-		display: flex;
-		width: 100%;
-		overflow: hidden;
-		gap: 0;
-		padding: 0;
-		margin-bottom: 8px;
-		border-bottom: 1px solid var(--border, #334155);
-	}
-
-	.status-tab {
-		position: relative;
-		display: flex;
-		flex: 1 1 20%;
-		justify-content: center;
-		min-width: 0;
-		gap: 3px;
-		padding: 8px 0;
-		border-radius: 0;
-		background: transparent;
-		font-size: 11px;
-		line-height: 1;
-		text-align: center;
-	}
-
-	.status-tab.active,
-	.status-tab--watching.active,
-	.status-tab--completed.active,
-	.status-tab--plan_to_watch.active,
-	.status-tab--on_hold.active,
-	.status-tab--dropped.active {
-		background: transparent;
-	}
-
-	.status-tab.active::after {
-		position: absolute;
-		right: 5px;
-		bottom: -1px;
-		left: 5px;
-		height: 2px;
-		border-radius: 2px 2px 0 0;
-		background: currentColor;
-		content: "";
-	}
-
-	.tab-icon,
-	.desktop-tab-label {
-		display: none;
-	}
-
-	.mobile-tab-label {
-		display: inline;
-	}
-
-	.tab-count {
-		font-size: 10px;
-		opacity: 0.75;
-	}
-
-	.mobile-hidden {
-		display: none;
-	}
-
-	.mobile-status-empty {
-		display: block;
-		text-align: center;
-		padding: 40px 16px;
-		color: var(--fg-muted, #94a3b8);
-		font-size: 0.9rem;
 	}
 }
 </style>

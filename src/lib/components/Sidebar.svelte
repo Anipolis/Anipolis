@@ -302,6 +302,30 @@ function isActive(path: string): boolean {
 				{/if}
 
 				<a
+					href="/collections"
+					class="mobile-drawer-btn"
+					class:active={isActive('/collections')}
+					onclick={closeDrawer}
+				>
+					<svg
+						width="20"
+						height="20"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<path
+							d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"
+						/>
+					</svg>
+					コレクション
+				</a>
+
+				<a
 					href="/exchange"
 					class="mobile-drawer-btn"
 					class:active={isActive('/exchange')}
@@ -324,32 +348,6 @@ function isActive(path: string): boolean {
 						<path d="M4 17h16" />
 					</svg>
 					トレード
-				</a>
-
-				<a
-					href="/collections"
-					class="mobile-drawer-btn"
-					class:active={isActive('/collections')}
-					onclick={closeDrawer}
-				>
-					<svg
-						width="20"
-						height="20"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						aria-hidden="true"
-					>
-						<rect width="8" height="18" x="3" y="3" rx="1" />
-						<path d="M7 3v18" />
-						<path
-							d="M20.4 18.9c.2.5-.1 1.1-.6 1.3l-1.9.7c-.5.2-1.1-.1-1.3-.6L11.1 5.1c-.2-.5.1-1.1.6-1.3l1.9-.7c.5-.2 1.1.1 1.3.6Z"
-						/>
-					</svg>
-					コレクション
 				</a>
 
 				<a
@@ -610,36 +608,6 @@ function isActive(path: string): boolean {
 				<span class="sidebar-btn-label">アニメ</span>
 			</a>
 
-			{#if session}
-				<a
-					href="/mylist"
-					class="sidebar-btn"
-					class:active={isActive('/mylist')}
-					aria-label="マイリスト"
-					title="マイリスト"
-				>
-					<svg
-						width="22"
-						height="22"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						aria-hidden="true"
-					>
-						<path d="M4 6h.01" />
-						<path d="M4 12h.01" />
-						<path d="M4 18h.01" />
-						<path d="M8 6h12" />
-						<path d="M8 12h12" />
-						<path d="M8 18h12" />
-					</svg>
-					<span class="sidebar-btn-label">マイリスト</span>
-				</a>
-			{/if}
-
 			<a
 				href="/schedule"
 				class="sidebar-btn"
@@ -669,6 +637,59 @@ function isActive(path: string): boolean {
 
 			{#if session}
 				<a
+					href="/mylist"
+					class="sidebar-btn"
+					class:active={isActive('/mylist')}
+					aria-label="マイリスト"
+					title="マイリスト"
+				>
+					<svg
+						width="22"
+						height="22"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<path d="M4 6h.01" />
+						<path d="M4 12h.01" />
+						<path d="M4 18h.01" />
+						<path d="M8 6h12" />
+						<path d="M8 12h12" />
+						<path d="M8 18h12" />
+					</svg>
+					<span class="sidebar-btn-label">マイリスト</span>
+				</a>
+
+				<a
+					href="/collections"
+					class="sidebar-btn"
+					class:active={isActive('/collections')}
+					aria-label="コレクション"
+					title="コレクション"
+				>
+					<svg
+						width="22"
+						height="22"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<path
+							d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"
+						/>
+					</svg>
+					<span class="sidebar-btn-label">コレクション</span>
+				</a>
+
+				<a
 					href="/exchange"
 					class="sidebar-btn"
 					class:active={isActive('/exchange')}
@@ -693,33 +714,6 @@ function isActive(path: string): boolean {
 						<path d="M4 17h16" />
 					</svg>
 					<span class="sidebar-btn-label">トレード</span>
-				</a>
-
-				<a
-					href="/collections"
-					class="sidebar-btn"
-					class:active={isActive('/collections')}
-					aria-label="コレクション"
-					title="コレクション"
-				>
-					<svg
-						width="22"
-						height="22"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						aria-hidden="true"
-					>
-						<rect width="8" height="18" x="3" y="3" rx="1" />
-						<path d="M7 3v18" />
-						<path
-							d="M20.4 18.9c.2.5-.1 1.1-.6 1.3l-1.9.7c-.5.2-1.1-.1-1.3-.6L11.1 5.1c-.2-.5.1-1.1.6-1.3l1.9-.7c.5-.2 1.1.1 1.3.6Z"
-						/>
-					</svg>
-					<span class="sidebar-btn-label">コレクション</span>
 				</a>
 
 				<a

@@ -105,6 +105,7 @@ type UserAnimeListWithAnimeRow = {
 	score: number | null;
 	progress: number;
 	updated_at: string;
+	created_at: string;
 	anime: Record<string, unknown> | null;
 };
 type UserAnimeListWithProfileRow = {
@@ -3636,7 +3637,7 @@ export async function getUserAnimeList(
 ): Promise<Anime[]> {
 	let query = supabase
 		.from("user_anime_list")
-		.select(`status, score, progress, updated_at, anime:anime_id(${ANIME_LIST_BASE_COLUMNS})`)
+		.select(`status, score, progress, updated_at, created_at, anime:anime_id(${ANIME_LIST_BASE_COLUMNS})`)
 		.eq("user_id", userId)
 		.order("updated_at", { ascending: false });
 
@@ -3657,6 +3658,7 @@ export async function getUserAnimeList(
 				score: normalizeScore(row.score as number | null),
 				progress: row.progress as number,
 				updated_at: row.updated_at as string,
+				created_at: row.created_at,
 			} satisfies UserAnimeEntry,
 		}));
 }
@@ -4227,6 +4229,36 @@ async function fetchAnimesByIds(supabase: SupabaseClient<Database>, ids: string[
 	if (!rows) return [];
 	const map = new Map((rows as unknown as Record<string, unknown>[]).map((a) => [String(a["id"]), toAnime(a)]));
 	return ids.map((id) => map.get(id)).filter((a): a is Anime => a !== undefined);
+}
+
+/**
+ * 作品ごとの自分のマイリスト（登録していない作品は入れない）。他の人のマイリストのカードに
+ * 見ている人自身の登録を出すのに使う。読めなければ投げる（未登録と見せない）
+ */
+export async function getOwnEntriesForAnime(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+	animeIds: string[],
+): Promise<Record<string, UserAnimeEntry>> {
+	// 長い一覧でも URL が長くなりすぎないよう分けて読む
+	const CHUNK = 300;
+	const chunks: number[][] = [];
+	for (let i = 0; i < animeIds.length; i += CHUNK) chunks.push(animeIds.slice(i, i + CHUNK).map(Number));
+	const results = await Promise.all(
+		chunks.map((ids) =>
+			supabase
+				.from("user_anime_list")
+				.select(`anime_id, ${OWN_ENTRY_COLUMNS}`)
+				.eq("user_id", userId)
+				.in("anime_id", ids),
+		),
+	);
+	const entries: Record<string, UserAnimeEntry> = {};
+	for (const { data, error } of results) {
+		if (error) failQuery("getOwnEntriesForAnime", error);
+		for (const row of data ?? []) entries[String(row.anime_id)] = toOwnUserAnimeEntry(row);
+	}
+	return entries;
 }
 
 export async function enrichAnimeWithUserEntries(

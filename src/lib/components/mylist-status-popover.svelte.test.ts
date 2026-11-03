@@ -67,6 +67,30 @@ describe("MyListStatusPopover", () => {
 		expect(removeButton(mountPopover({ entry }).target)).toBeNull();
 	});
 
+	it("スコアを選ぶ欄は、今の状態と進捗をそのまま送り、外すボタンは出さない", () => {
+		const { target } = mountPopover({
+			field: "score",
+			entry: { status: "completed", score: 7, progress: 12, updated_at: "2026-10-28T00:00:00Z" },
+			removeAction: "?/removeWatchlist",
+		});
+		expect(hiddenValue(target, "status")).toBe("completed");
+		expect(hiddenValue(target, "progress")).toBe("12");
+		// スコアは押したボタンの値で送る（隠し欄で送ると二重になる）
+		expect(target.querySelector("input[type=hidden][name=score]")).toBeNull();
+		const values = [...target.querySelectorAll<HTMLButtonElement>("button[name=score]")].map((b) => b.value);
+		expect(values).toEqual(["10", "9", "8", "7", "6", "5", "4", "3", "2", "1", ""]);
+		expect(target.querySelector('[aria-current="true"]')?.getAttribute("value")).toBe("7");
+		expect(target.querySelector("button[data-remove]")).toBeNull();
+	});
+
+	it("スコアが無ければ「なし」が選ばれている", () => {
+		const { target } = mountPopover({
+			field: "score",
+			entry: { status: "watching", score: null, progress: 0, updated_at: "2026-10-28T00:00:00Z" },
+		});
+		expect(target.querySelector('[aria-current="true"]')?.getAttribute("value")).toBe("");
+	});
+
 	it("外側を押すと閉じ、ボタン自身を押したときは閉じない（開け閉めはボタン側）", () => {
 		const { anchor, onclose } = mountPopover();
 		anchor.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));

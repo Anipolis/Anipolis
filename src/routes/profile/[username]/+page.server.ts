@@ -3,11 +3,13 @@ import type { MylistActivity } from "$lib/activity";
 import {
 	blockUserAction,
 	deletePostAction,
+	removeUserAnimeEntry,
 	toggleBookmarkAction,
 	toggleFollowAction,
 	toggleLikeAction,
 	toggleRepostAction,
 	unblockUserAction,
+	upsertUserAnimeEntry,
 } from "$lib/server/actions";
 import {
 	checkIsFollowing,
@@ -18,6 +20,7 @@ import {
 	getFollowCounts,
 	getFollowRequestStatus,
 	getLikedPostsPage,
+	getOwnEntriesForAnime,
 	getProfileImagePostsPage,
 	getProfilePostCount,
 	getProfileTimelinePage,
@@ -141,6 +144,17 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 			loadActivity(),
 		]);
 
+	// 他の人のマイリストのカードでは、右のマスに見ている人自身のマイリストを出す。
+	// 読めなければ null にしてボタンを出さない（未登録と取り違えて二重に登録させない）
+	const viewerEntries =
+		myId && !isOwn && activeTab === "list" && animeList.length > 0
+			? await getOwnEntriesForAnime(
+					supabase,
+					myId,
+					animeList.map((anime) => anime.id),
+				).catch((): null => null)
+			: null;
+
 	return {
 		profile: profileWithHeader,
 		// 開いているタブ（投稿・画像・いいね・ブックマーク）の一覧と、その続きの目印
@@ -156,6 +170,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 		trending: trendingResult,
 		animeTrending,
 		animeList,
+		viewerEntries,
 		favoriteAnime,
 		activity,
 		user,
@@ -163,6 +178,19 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 };
 
 export const actions: Actions = {
+	// マイリストのタブのカードから自分のマイリストを変える（アニメ一覧と同じ）
+	upsertWatchlist: async ({ request, locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { message: "ログインが必要です" });
+		return upsertUserAnimeEntry(supabase, request, user.id);
+	},
+
+	removeWatchlist: async ({ request, locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { message: "ログインが必要です" });
+		return removeUserAnimeEntry(supabase, request, user.id);
+	},
+
 	updateProfile: async ({ request, params, locals: { supabase, safeGetSession } }) => {
 		const { user } = await safeGetSession();
 		if (!user) return fail(401, { message: "ログインが必要です" });

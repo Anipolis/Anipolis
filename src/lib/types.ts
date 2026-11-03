@@ -236,6 +236,8 @@ export interface UserAnimeEntry {
 	score: number | null;
 	progress: number;
 	updated_at: string;
+	/** マイリストに登録した日時（182）。読み込んでいないときは undefined */
+	created_at?: string;
 	/** 見始めた日・見終えた日（YYYY-MM-DD、日本時間の日付）。読み込んでいないときは undefined */
 	started_on?: string | null;
 	finished_on?: string | null;

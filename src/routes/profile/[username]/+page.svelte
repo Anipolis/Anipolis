@@ -8,12 +8,22 @@ import ActivityFeed from "$lib/components/ActivityFeed.svelte";
 import AnimeStatusSection from "$lib/components/AnimeStatusSection.svelte";
 import FavoriteAnimeShelf from "$lib/components/FavoriteAnimeShelf.svelte";
 import ImageCropper from "$lib/components/ImageCropper.svelte";
+import MyListQuickEdit from "$lib/components/MyListQuickEdit.svelte";
+import MylistStatusTabs from "$lib/components/MylistStatusTabs.svelte";
 import PostRow from "$lib/components/PostRow.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
 import { checkCropSource } from "$lib/image-crop";
+import {
+	countMylistByStatus,
+	groupMylistByStatus,
+	type MylistSort,
+	parseMylistSort,
+	parseMylistStatus,
+	sortMylist,
+} from "$lib/mylist/sort";
 import { timelineCursorHref } from "$lib/timeline-cursor";
-import type { Anime, AnimeStatus } from "$lib/types";
+import type { Anime, AnimeStatus, UserAnimeEntry } from "$lib/types";
 import type { PageProps } from "./$types";
 
 let { data, form }: PageProps = $props();
@@ -402,8 +412,6 @@ function handleReportModalKeydown(event: KeyboardEvent) {
 	}
 }
 
-const statusOrder: AnimeStatus[] = ["watching", "completed", "plan_to_watch", "on_hold", "dropped"];
-
 const statusLabel: Record<AnimeStatus, string> = {
 	watching: "視聴中",
 	completed: "完了",
@@ -422,15 +430,53 @@ const statusIcon: Record<AnimeStatus, string> = {
 
 const animeList = $derived((data.animeList ?? []) as Anime[]);
 
-const grouped = $derived(
-	statusOrder.reduce<Record<AnimeStatus, Anime[]>>(
-		(acc, status) => {
-			acc[status] = animeList.filter((e) => e.user_entry?.status === status);
-			return acc;
-		},
-		{ watching: [], completed: [], plan_to_watch: [], on_hold: [], dropped: [] },
-	),
-);
+// マイリストのタブで開いているステータスと並び順（URL の ?status= と ?sort=。切り替えは MylistStatusTabs が URL に残す）
+let selectedStatus = $state<AnimeStatus>(parseMylistStatus(page.url.searchParams.get("status")));
+let listSort = $state<MylistSort>(parseMylistSort(page.url.searchParams.get("sort")));
+
+const grouped = $derived(groupMylistByStatus(sortMylist(animeList, listSort)));
+
+// カードの右のマスは見ている人自身のマイリスト。自分のプロフィールなら並んでいる登録そのもの、
+// 他の人なら別に読んだ自分の登録（読めなかったときは null でボタンを出さない）
+let quickEdit = $state<MyListQuickEdit>();
+// 他の人のプロフィールで保存した自分の登録。読み込み直すと並び順が変わらないよう、ページは読み直さず表示だけ変える
+// 外した作品は null を入れる。読み込み直し（data.viewerEntries が変わる）で捨てる
+let savedViewerEntries = $state.raw<{
+	base: Record<string, UserAnimeEntry> | null;
+	entries: Record<string, UserAnimeEntry | null>;
+} | null>(null);
+
+function myEntryOf(anime: { id: string }): UserAnimeEntry | null | undefined {
+	if (isOwn) return animeList.find((a) => a.id === anime.id)?.user_entry;
+	if (savedViewerEntries?.base === data.viewerEntries && anime.id in savedViewerEntries.entries) {
+		return savedViewerEntries.entries[anime.id];
+	}
+	return data.viewerEntries?.[anime.id] ?? null;
+}
+
+function rememberViewerEntry(anime: { id: string }, entry: UserAnimeEntry | null) {
+	const entries = savedViewerEntries?.base === data.viewerEntries ? savedViewerEntries.entries : {};
+	savedViewerEntries = { base: data.viewerEntries, entries: { ...entries, [anime.id]: entry } };
+}
+
+function scoreButtonFor(anime: Anime) {
+	return {
+		expanded: quickEdit?.isOpenFor(anime.id, "score") ?? false,
+		onclick: (e: MouseEvent) => quickEdit?.open(e, anime, "score"),
+	};
+}
+
+const showListButtons = $derived(Boolean(data.user) && (isOwn || data.viewerEntries != null));
+
+function listButtonFor(anime: Anime) {
+	const status = myEntryOf(anime)?.status;
+	return {
+		status,
+		label: status ? `自分のマイリスト: ${statusLabel[status]}` : "自分のマイリストに追加",
+		expanded: quickEdit?.isOpenFor(anime.id) ?? false,
+		onclick: (e: MouseEvent) => quickEdit?.open(e, anime),
+	};
+}
 </script>
 
 <svelte:head>
@@ -655,6 +701,15 @@ const grouped = $derived(
 					</div>
 				</div>
 			</div>
+		{/if}
+
+		{#if showListButtons}
+			<MyListQuickEdit
+				bind:this={quickEdit}
+				entryOf={myEntryOf}
+				removeAction="?/removeWatchlist"
+				onsaved={isOwn ? undefined : rememberViewerEntry}
+			/>
 		{/if}
 
 		{#if showProfileEditModal && isOwn}
@@ -950,24 +1005,41 @@ const grouped = $derived(
 					<p>まだアニメがありません</p>
 				</div>
 			{:else}
-				<div class="list-summary">
-					<span class="list-total">合計 <strong>{animeList.length}</strong> 作品</span>
-					{#if isOwn}
-						<a href="/mylist" class="list-manage-link">リストを管理</a>
-					{/if}
-				</div>
+				<div class="profile-mylist">
+					<MylistStatusTabs
+						counts={countMylistByStatus(grouped)}
+						bind:status={selectedStatus}
+						bind:sort={listSort}
+					>
+						{#snippet toolbarStart()}
+							<span class="list-summary">
+								合計 <strong>{animeList.length}</strong> 作品
+								{#if isOwn}
+									<a href="/mylist" class="list-manage-link">リストを管理</a>
+								{/if}
+							</span>
+						{/snippet}
+					</MylistStatusTabs>
 
-				{#each statusOrder as status}
-					{#if grouped[status].length > 0}
-						<AnimeStatusSection
-							{status}
-							animes={grouped[status]}
-							{statusLabel}
-							{statusIcon}
-							headingLevel={3}
-						/>
-					{/if}
-				{/each}
+					<div role="tabpanel" aria-label={statusLabel[selectedStatus]}>
+						{#if grouped[selectedStatus].length === 0}
+							<div class="empty-state">
+								<p>{statusLabel[selectedStatus]}の作品はありません</p>
+							</div>
+						{:else}
+							<AnimeStatusSection
+								status={selectedStatus}
+								animes={grouped[selectedStatus]}
+								{statusLabel}
+								{statusIcon}
+								showHeading={false}
+								scoreLabel={isOwn ? '自分のスコア' : `${displayName}のスコア`}
+								scoreButtonFor={isOwn ? scoreButtonFor : undefined}
+								listButtonFor={showListButtons ? listButtonFor : undefined}
+							/>
+						{/if}
+					</div>
+				</div>
 			{/if}
 		{/if}
 
@@ -1490,13 +1562,17 @@ const grouped = $derived(
 	align-items: center;
 }
 
+.profile-mylist {
+	padding-top: 12px;
+}
+
 .list-summary {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	padding: 12px 4px;
+	display: inline-flex;
+	align-items: baseline;
+	gap: 4px;
 	font-size: 0.85rem;
 	color: var(--color-text-muted);
+	white-space: nowrap;
 }
 
 .list-summary strong {
@@ -1508,6 +1584,7 @@ const grouped = $derived(
 }
 
 .list-manage-link {
+	margin-left: 10px;
 	font-size: 0.8rem;
 	color: var(--color-accent);
 	text-decoration: none;
