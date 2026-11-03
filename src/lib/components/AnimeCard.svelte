@@ -329,8 +329,11 @@ function isAiringToday(): boolean {
 	background: var(--ribbon-today);
 }
 .cover-ribbon--airing {
-	background: var(--ribbon-airing);
-	color: var(--ribbon-airing-text);
+	/* 枠の分だけ内側を詰め、本日放送のリボンと大きさをそろえる */
+	padding: 2px 5px;
+	border: 1px solid var(--ribbon-airing);
+	background: var(--ribbon-airing-bg);
+	color: var(--ribbon-airing);
 }
 
 /* ─── 画像の下の行: 左にスコア、右にマイリストの状態 ─── */

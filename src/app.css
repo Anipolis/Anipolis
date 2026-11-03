@@ -53,11 +53,11 @@
 	--status-dropped: #f87171;
 	--status-score: #f59e0b;
 	/* 作品カードの画像に重ねるリボン。文字との差は 4.5:1 以上にする。
-	   放送中は明るい緑にするので、白ではなく濃い緑の文字を載せる */
+	   本日放送は赤地に白い文字、放送中は白地に緑の枠と緑の文字 */
 	--ribbon-today: #dc2626;
-	--ribbon-airing: #22c55e;
+	--ribbon-airing: #15803d;
+	--ribbon-airing-bg: #fff;
 	--ribbon-text: #fff;
-	--ribbon-airing-text: #052e16;
 }
 
 /* 角丸は全てスクワークル。円とピルだけは round に戻す */
