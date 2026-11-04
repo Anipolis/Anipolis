@@ -1,7 +1,8 @@
 <script lang="ts">
+import { tick } from "svelte";
 import { animeCardMeta } from "$lib/anime-labels";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
-import { stepProgress } from "$lib/mylist/progress";
+import { changeProgress } from "$lib/mylist/progress";
 import type { RowSaveState } from "$lib/mylist/save-queue";
 import { parseEpisodeCount } from "$lib/syobocal-episodes";
 import type { Anime, AnimeStatus } from "$lib/types";
@@ -39,11 +40,36 @@ const meta = $derived([animeCardMeta(anime), statusLabel[entry.status]].filter(B
 // 話数に連動してステータスが変わったら、保存の知らせで伝える
 let changedStatus = $state<AnimeStatus | null>(null);
 
-function step(delta: 1 | -1) {
-	const changes = stepProgress(entry, delta, episodeTotal);
+function setProgress(value: number) {
+	const changes = changeProgress(entry, value, episodeTotal);
 	if (!changes) return;
 	changedStatus = changes.status ?? null;
 	onAutoSave(changes);
+}
+
+// 話数の数字を押すと入力欄にする（まとめて進めるとき用）
+let editingProgress = $state(false);
+let progressButton = $state<HTMLButtonElement>();
+
+async function finishProgressInput(input: HTMLInputElement | null, { returnFocus = false } = {}) {
+	// 入力欄が消えるときの blur で二重に動かない
+	if (!editingProgress) return;
+	editingProgress = false;
+	// 空や数字でない入力は、変えない
+	if (input && input.value.trim() !== "" && Number.isFinite(input.valueAsNumber)) setProgress(input.valueAsNumber);
+	if (returnFocus) {
+		await tick();
+		progressButton?.focus();
+	}
+}
+
+function handleProgressKeydown(event: KeyboardEvent & { currentTarget: HTMLInputElement }) {
+	if (event.key === "Enter") {
+		// 止めないと、フォーカスが戻ったボタンを同じ Enter が押して入力欄がまた開く
+		event.preventDefault();
+		void finishProgressInput(event.currentTarget, { returnFocus: true });
+	}
+	if (event.key === "Escape") void finishProgressInput(null, { returnFocus: true });
 }
 </script>
 
@@ -72,17 +98,48 @@ function step(delta: 1 | -1) {
 					type="button"
 					class="row-btn"
 					disabled={entry.progress <= 0}
-					onclick={() => step(-1)}
+					onclick={() => setProgress(entry.progress - 1)}
 					aria-label="1話戻す"
 				>
 					<span class="i-lucide-minus" aria-hidden="true"></span>
 				</button>
-				<span class="progress-display">{entry.progress}/{anime.episode_count ?? "−"}</span>
+				{#if editingProgress}
+					<span class="progress-display">
+						<input
+							class="progress-input"
+							type="number"
+							inputmode="numeric"
+							min="0"
+							max={episodeTotal ?? undefined}
+							value={entry.progress}
+							aria-label="見た話数"
+							onkeydown={handleProgressKeydown}
+							onblur={(event) => finishProgressInput(event.currentTarget)}
+							{@attach (input) => {
+								input.focus();
+								input.select();
+							}}
+						>/{anime.episode_count ?? "−"}
+					</span>
+				{:else}
+					<button
+						type="button"
+						class="progress-display progress-edit"
+						bind:this={progressButton}
+						onclick={() => {
+							editingProgress = true;
+						}}
+						aria-label="話数を入力（今は{entry.progress}話）"
+						title="押すと話数を入力"
+					>
+						<span class="progress-current">{entry.progress}</span>/{anime.episode_count ?? "−"}
+					</button>
+				{/if}
 				<button
 					type="button"
 					class="row-btn"
 					disabled={episodeTotal != null && entry.progress >= episodeTotal}
-					onclick={() => step(1)}
+					onclick={() => setProgress(entry.progress + 1)}
 					aria-label="1話進める"
 				>
 					<span class="i-lucide-plus" aria-hidden="true"></span>
@@ -232,6 +289,47 @@ function step(delta: 1 | -1) {
 	white-space: nowrap;
 }
 
+.progress-edit {
+	min-height: 36px;
+	padding: 0 4px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	font-family: inherit;
+	cursor: text;
+}
+
+.progress-edit:hover {
+	background: var(--color-surface-hover);
+}
+
+/* 押せることが分かるよう、数字に点線を引く */
+.progress-current {
+	text-decoration: underline dotted;
+	text-underline-offset: 3px;
+}
+
+.progress-input {
+	width: 44px;
+	height: 34px;
+	margin-right: 2px;
+	padding: 0 2px;
+	border: 1.5px solid var(--color-accent);
+	border-radius: 6px;
+	outline: none;
+	background: transparent;
+	color: var(--color-text);
+	font: inherit;
+	text-align: center;
+	appearance: textfield;
+}
+
+.progress-input::-webkit-outer-spin-button,
+.progress-input::-webkit-inner-spin-button {
+	margin: 0;
+	appearance: none;
+}
+
 /* 行ごとの保存状態。押したボタンのそばに出す */
 .save-status {
 	display: flex;
@@ -304,6 +402,11 @@ function step(delta: 1 | -1) {
 	.progress-display {
 		min-width: 48px;
 	}
+
+	/* 16px 未満だと iPhone が入力時に画面を拡大する */
+	.progress-input {
+		font-size: 16px;
+	}
 }
 
 @media (max-width: 359px) {
@@ -313,6 +416,14 @@ function step(delta: 1 | -1) {
 
 	.progress-display {
 		min-width: 40px;
+	}
+
+	.row-controls {
+		gap: 6px;
+	}
+
+	.progress-input {
+		width: 32px;
 	}
 }
 </style>

@@ -3,6 +3,7 @@ import type { SubmitFunction } from "@sveltejs/kit";
 import { tick, untrack } from "svelte";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
+import MyListRemoveConfirm from "$lib/components/MyListRemoveConfirm.svelte";
 import { savedEntryFromResult } from "$lib/mylist/entry-from-form";
 import type { AnimeStatus, UserAnimeEntry } from "$lib/types";
 
@@ -59,6 +60,7 @@ const MARGIN = 8;
 let popover = $state<HTMLDivElement | null>(null);
 let position = $state<{ top: number; left: number; width: number; placement: "above" | "below" } | null>(null);
 let errorMessage = $state("");
+let removeConfirming = $state(false);
 
 // 状態だけを変えるので、スコアと進捗は今の値のまま送る（送らないと消える）
 const currentScore = $derived(entry?.score != null && entry.score > 0 ? Math.round(entry.score) : "");
@@ -109,7 +111,13 @@ $effect(() => {
 		close();
 	};
 	const handleKeydown = (event: KeyboardEvent) => {
-		if (event.key === "Escape") close({ returnFocus: true });
+		if (event.key !== "Escape") return;
+		// 確認を出しているときは、確認だけを閉じる
+		if (removeConfirming) {
+			if (!submitting) removeConfirming = false;
+			return;
+		}
+		close({ returnFocus: true });
 	};
 	// 位置は開いたときに決めるので、スクロールや幅の変化で閉じる
 	const handleMove = () => close();
@@ -235,17 +243,28 @@ const handleSubmit: SubmitFunction = ({ formData, submitter, cancel }) => {
 		{/if}
 		{#if field === "status" && entry && removeAction}
 			<button
-				type="submit"
-				formaction={removeAction}
+				type="button"
 				class="status-popover-remove"
-				data-remove
 				disabled={submitting}
+				onclick={() => {
+					removeConfirming = true;
+				}}
 				aria-label="マイリストから外す"
 				title="マイリストから外す"
 			>
 				<!-- 欄はカードのボタンと同じ幅で狭いので、短く書く -->
 				外す
 			</button>
+		{/if}
+		{#if removeConfirming && removeAction}
+			<MyListRemoveConfirm
+				{animeTitle}
+				{removeAction}
+				{submitting}
+				oncancel={() => {
+					removeConfirming = false;
+				}}
+			/>
 		{/if}
 	</form>
 	{#if errorMessage}

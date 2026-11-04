@@ -119,7 +119,7 @@ describe("MyListModal の「マイリストから外す」", () => {
 		expect(buttons[buttons.length - 1]?.classList.contains("remove-button")).toBe(true);
 	});
 
-	it("やめると確認を閉じ、Esc でも確認だけを閉じる", () => {
+	it("キャンセルすると確認を閉じ、Esc でも確認だけを閉じる", () => {
 		const onclose = vi.fn();
 		const target = document.createElement("div");
 		document.body.appendChild(target);
@@ -147,7 +147,7 @@ describe("MyListModal の「マイリストから外す」", () => {
 		};
 
 		openConfirm();
-		target.querySelector<HTMLButtonElement>(".remove-cancel-button")?.click();
+		target.querySelector<HTMLButtonElement>(".confirm-cancel")?.click();
 		flushSync();
 		expect(target.querySelector("[role='alertdialog']")).toBeNull();
 
