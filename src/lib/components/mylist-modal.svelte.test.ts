@@ -25,7 +25,7 @@ function entry(overrides: Partial<UserAnimeEntry> = {}): UserAnimeEntry {
 	} as UserAnimeEntry;
 }
 
-function renderModal(props: { open: boolean; entry?: UserAnimeEntry | null }) {
+function renderModal(props: { open: boolean; entry?: UserAnimeEntry | null; removeAction?: string }) {
 	const target = document.createElement("div");
 	document.body.appendChild(target);
 	const component = mount(MyListModal, {
@@ -76,6 +76,46 @@ describe("MyListModal の初期表示", () => {
 		target.querySelector<HTMLButtonElement>(".status-grid button[data-status='completed']")?.click();
 		flushSync();
 		expect(pressedStatus(target)).toBe("completed");
+	});
+});
+
+describe("MyListModal の「マイリストから外す」", () => {
+	const openWithRemove = () => {
+		const target = renderModal({ open: true, entry: entry(), removeAction: "?/removeWatchlist" });
+		flushSync();
+		return target;
+	};
+	const removeSubmit = (target: HTMLElement) => target.querySelector<HTMLButtonElement>("button[data-remove]");
+
+	it("押してもすぐには外さず、確認を出す", () => {
+		const target = openWithRemove();
+		expect(removeSubmit(target)).toBeNull();
+
+		target.querySelector<HTMLButtonElement>(".remove-button")?.click();
+		flushSync();
+		expect(removeSubmit(target)?.getAttribute("formaction")).toBe("?/removeWatchlist");
+		expect(target.querySelector(".remove-warning")?.textContent).toContain("メモ");
+		expect(document.activeElement).toBe(target.querySelector(".remove-cancel-button"));
+	});
+
+	it("確認を出す前は、入力欄の Enter で押されるフォームの先頭の送信ボタンが「保存する」", () => {
+		const target = openWithRemove();
+		expect(target.querySelector("form button[type='submit']")?.classList.contains("save-button")).toBe(true);
+	});
+
+	it("確認中は入力欄の Enter で外さず、やめると元に戻る", async () => {
+		const target = openWithRemove();
+		target.querySelector<HTMLButtonElement>(".remove-button")?.click();
+		flushSync();
+
+		const enter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+		target.querySelector("input[type='number']")?.dispatchEvent(enter);
+		expect(enter.defaultPrevented).toBe(true);
+
+		target.querySelector<HTMLButtonElement>(".remove-cancel-button")?.click();
+		flushSync();
+		expect(removeSubmit(target)).toBeNull();
+		expect(target.querySelector(".remove-button")).not.toBeNull();
 	});
 });
 

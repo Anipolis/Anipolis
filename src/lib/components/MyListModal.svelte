@@ -1,5 +1,6 @@
 <script lang="ts">
 import type { SubmitFunction } from "@sveltejs/kit";
+import { tick } from "svelte";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
 import { trapFocus } from "$lib/actions/trapFocus";
@@ -58,6 +59,9 @@ let autoStarted = false;
 let autoFinished = false;
 // 開くかどうかはモーダルを開いたときにだけ決める（自動入力で開くと、保存ボタンが下へ押し出される）
 let recordOpen = $state(false);
+// 「マイリストから外す」の確認を出しているか。スコアやメモごと消えるので、1回押しただけでは外さない
+let removeConfirming = $state(false);
+let removeTrigger = $state<HTMLButtonElement>();
 let submitting = $state(false);
 let errorMessage = $state("");
 let initializedFor: string | null = null;
@@ -124,6 +128,12 @@ function selectStatus(value: AnimeStatus) {
 	}
 }
 
+async function cancelRemove() {
+	removeConfirming = false;
+	await tick();
+	removeTrigger?.focus();
+}
+
 function handleProgressInput(event: Event) {
 	setProgress(Number((event.currentTarget as HTMLInputElement).value));
 }
@@ -166,6 +176,7 @@ function resetFromEntry(key: string) {
 	autoStarted = false;
 	autoFinished = false;
 	recordOpen = Boolean(startedOn || finishedOn || note);
+	removeConfirming = false;
 	errorMessage = "";
 }
 
@@ -189,7 +200,14 @@ $effect(() => {
 $effect(() => {
 	if (!open) return;
 	const handleKeydown = (event: KeyboardEvent) => {
-		if (event.key === "Escape" && !submitting) onclose();
+		if (event.key === "Escape" && !submitting) {
+			if (removeConfirming) void cancelRemove();
+			else onclose();
+		}
+		// 確認中は「外す」がフォームの既定の送信ボタンになる。入力欄の Enter で外さない
+		if (event.key === "Enter" && removeConfirming && event.target instanceof HTMLInputElement) {
+			event.preventDefault();
+		}
 	};
 	window.addEventListener("keydown", handleKeydown);
 	return () => window.removeEventListener("keydown", handleKeydown);
@@ -346,15 +364,44 @@ $effect(() => {
 					{#if entry && removeAction}
 						<!-- 保存・キャンセルと並べるとスマホで入りきらないので、別の行にする -->
 						<div class="remove-row">
-							<button
-								type="submit"
-								formaction={removeAction}
-								class="remove-button"
-								data-remove
-								disabled={submitting}
-							>
-								マイリストから外す
-							</button>
+							{#if removeConfirming}
+								<p class="remove-warning" role="alert">
+									スコア、話数、日付、メモの記録も消えます。元に戻せません。
+								</p>
+								<div class="remove-confirm-actions">
+									<button
+										type="button"
+										class="remove-cancel-button"
+										disabled={submitting}
+										onclick={cancelRemove}
+										{@attach (button) => button.focus()}
+									>
+										やめる
+									</button>
+									<button
+										type="submit"
+										formaction={removeAction}
+										class="remove-confirm-button"
+										data-remove
+										disabled={submitting}
+									>
+										{submitting ? "外しています…" : "外す"}
+									</button>
+								</div>
+							{:else}
+								<!-- 送信ボタンにしない。フォームの先頭の送信ボタンは、入力欄で Enter を押すと押される -->
+								<button
+									type="button"
+									class="remove-button"
+									disabled={submitting}
+									bind:this={removeTrigger}
+									onclick={() => {
+										removeConfirming = true;
+									}}
+								>
+									マイリストから外す
+								</button>
+							{/if}
 						</div>
 					{/if}
 
@@ -621,8 +668,50 @@ form {
 }
 .remove-row {
 	display: flex;
-	justify-content: center;
+	flex-direction: column;
+	align-items: center;
+	gap: 8px;
 	padding-top: 12px;
+}
+.remove-warning {
+	margin: 0;
+	color: var(--color-text-muted);
+	font-size: 0.82rem;
+	text-align: center;
+}
+.remove-confirm-actions {
+	display: flex;
+	gap: 8px;
+}
+.remove-cancel-button,
+.remove-confirm-button {
+	min-height: 36px;
+	padding: 0 16px;
+	border-radius: 12px;
+	cursor: pointer;
+	font-size: 0.82rem;
+	font-weight: 600;
+}
+.remove-cancel-button {
+	border: 1.5px solid var(--color-border-hover);
+	background: transparent;
+	color: var(--color-text);
+}
+.remove-cancel-button:hover:not(:disabled) {
+	background: var(--color-surface-hover);
+}
+.remove-confirm-button {
+	border: 1px solid var(--color-danger);
+	background: var(--color-danger);
+	color: var(--color-bg);
+}
+.remove-confirm-button:hover:not(:disabled) {
+	filter: brightness(1.08);
+}
+.remove-cancel-button:disabled,
+.remove-confirm-button:disabled {
+	cursor: wait;
+	opacity: 0.6;
 }
 .remove-button {
 	min-height: 36px;
