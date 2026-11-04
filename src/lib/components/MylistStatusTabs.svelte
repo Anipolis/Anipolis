@@ -1,5 +1,6 @@
 <script lang="ts">
 import { page } from "$app/state";
+import { scrollableTabs } from "$lib/actions/scrollableTabs";
 import {
 	DEFAULT_MYLIST_TAB,
 	MYLIST_TAB_LABELS,
@@ -21,8 +22,6 @@ type Props = {
 
 let { counts, status = $bindable() }: Props = $props();
 
-const shortLabels: Record<MylistTab, string> = { ...MYLIST_TAB_LABELS, plan_to_watch: "予定" };
-
 // 別のページへ移ったとき（他の人のプロフィールへ移るなど）は URL から読み直す。
 // replaceState は page.url を変えないので、タブを押しただけではここは走らない
 const locationKey = $derived(page.url.pathname + page.url.search);
@@ -31,15 +30,18 @@ $effect(() => {
 	status = parseMylistTab(new URL(location.href).searchParams.get("status"));
 });
 
-function selectTab(event: MouseEvent, next: MylistTab) {
+function selectTab(next: MylistTab) {
 	status = next;
 	replaceMylistParam("status", status, DEFAULT_MYLIST_TAB);
-	// 幅が足りず横に送っているとき、押したタブを見える位置へ
-	(event.currentTarget as HTMLElement).scrollIntoView({ block: "nearest", inline: "nearest" });
 }
 </script>
 
-<div class="status-tab-bar" role="tablist" aria-label="視聴ステータス">
+<div
+	class="status-tab-bar"
+	role="tablist"
+	aria-label="視聴ステータス"
+	{@attach scrollableTabs(".status-tab.active", status)}
+>
 	{#each MYLIST_TAB_ORDER as option (option)}
 		<button
 			type="button"
@@ -47,17 +49,16 @@ function selectTab(event: MouseEvent, next: MylistTab) {
 			class="status-tab"
 			class:active={status === option}
 			aria-selected={status === option}
-			onclick={(event) => selectTab(event, option)}
+			onclick={() => selectTab(option)}
 		>
-			<span class="desktop-tab-label">{MYLIST_TAB_LABELS[option]}</span>
-			<span class="mobile-tab-label">{shortLabels[option]}</span>
+			{MYLIST_TAB_LABELS[option]}
 			<span class="tab-count">{counts[option]}</span>
 		</button>
 	{/each}
 </div>
 
 <style>
-/* ---- ステータスのタブ（PC もスマホも同じ。スマホは短い名前だけ。入らない幅では横に送る） ---- */
+/* ---- ステータスのタブ（PC もスマホも同じ。入らない幅では横に送る） ---- */
 .status-tab-bar {
 	display: flex;
 	width: 100%;
@@ -107,10 +108,6 @@ function selectTab(event: MouseEvent, next: MylistTab) {
 	content: "";
 }
 
-.mobile-tab-label {
-	display: none;
-}
-
 .tab-count {
 	font-size: 0.75rem;
 	font-weight: 500;
@@ -123,27 +120,18 @@ function selectTab(event: MouseEvent, next: MylistTab) {
 	}
 
 	.status-tab {
-		gap: 3px;
-		padding: 8px 4px;
-		font-size: 11px;
+		gap: 4px;
+		padding: 10px 12px;
+		font-size: 0.8rem;
 	}
 
 	.status-tab.active::after {
-		right: 4px;
-		left: 4px;
-	}
-
-	.desktop-tab-label {
-		display: none;
-	}
-
-	.mobile-tab-label {
-		display: inline;
+		right: 12px;
+		left: 12px;
 	}
 
 	.tab-count {
-		font-size: 10px;
-		opacity: 0.75;
+		font-size: 0.7rem;
 	}
 }
 </style>
