@@ -1,6 +1,5 @@
 <script lang="ts">
 import type { SubmitFunction } from "@sveltejs/kit";
-import { tick } from "svelte";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
 import { trapFocus } from "$lib/actions/trapFocus";
@@ -61,7 +60,6 @@ let autoFinished = false;
 let recordOpen = $state(false);
 // 「マイリストから外す」の確認を出しているか。スコアやメモごと消えるので、1回押しただけでは外さない
 let removeConfirming = $state(false);
-let removeTrigger = $state<HTMLButtonElement>();
 let submitting = $state(false);
 let errorMessage = $state("");
 let initializedFor: string | null = null;
@@ -126,12 +124,6 @@ function selectStatus(value: AnimeStatus) {
 		finishedOn = today;
 		autoFinished = true;
 	}
-}
-
-async function cancelRemove() {
-	removeConfirming = false;
-	await tick();
-	removeTrigger?.focus();
 }
 
 function handleProgressInput(event: Event) {
@@ -200,14 +192,9 @@ $effect(() => {
 $effect(() => {
 	if (!open) return;
 	const handleKeydown = (event: KeyboardEvent) => {
-		if (event.key === "Escape" && !submitting) {
-			if (removeConfirming) void cancelRemove();
-			else onclose();
-		}
-		// 確認中は「外す」がフォームの既定の送信ボタンになる。入力欄の Enter で外さない
-		if (event.key === "Enter" && removeConfirming && event.target instanceof HTMLInputElement) {
-			event.preventDefault();
-		}
+		if (event.key !== "Escape" || submitting) return;
+		if (removeConfirming) removeConfirming = false;
+		else onclose();
 	};
 	window.addEventListener("keydown", handleKeydown);
 	return () => window.removeEventListener("keydown", handleKeydown);
@@ -227,7 +214,7 @@ $effect(() => {
 			use:trapFocus
 			onclick={(e) => e.stopPropagation()}
 		>
-			<header class="modal-header">
+			<header class="modal-header" class:modal-header--removable={Boolean(entry && removeAction)}>
 				<h2 id="mylist-modal-title">{statusOnly ? "マイリストに追加" : "マイリスト登録・編集"}</h2>
 				<p>{animeTitle}</p>
 			</header>
@@ -361,50 +348,6 @@ $effect(() => {
 						</details>
 					{/if}
 
-					{#if entry && removeAction}
-						<!-- 保存・キャンセルと並べるとスマホで入りきらないので、別の行にする -->
-						<div class="remove-row">
-							{#if removeConfirming}
-								<p class="remove-warning" role="alert">
-									スコア、話数、日付、メモの記録も消えます。元に戻せません。
-								</p>
-								<div class="remove-confirm-actions">
-									<button
-										type="button"
-										class="remove-cancel-button"
-										disabled={submitting}
-										onclick={cancelRemove}
-										{@attach (button) => button.focus()}
-									>
-										やめる
-									</button>
-									<button
-										type="submit"
-										formaction={removeAction}
-										class="remove-confirm-button"
-										data-remove
-										disabled={submitting}
-									>
-										{submitting ? "外しています…" : "外す"}
-									</button>
-								</div>
-							{:else}
-								<!-- 送信ボタンにしない。フォームの先頭の送信ボタンは、入力欄で Enter を押すと押される -->
-								<button
-									type="button"
-									class="remove-button"
-									disabled={submitting}
-									bind:this={removeTrigger}
-									onclick={() => {
-										removeConfirming = true;
-									}}
-								>
-									マイリストから外す
-								</button>
-							{/if}
-						</div>
-					{/if}
-
 					{#if errorMessage}
 						<p class="form-error" role="alert">{errorMessage}</p>
 					{:else if selectedStatus === null}
@@ -419,7 +362,72 @@ $effect(() => {
 						{submitting ? "保存中…" : "✓ 保存する"}
 					</button>
 				</footer>
+
+				<!-- 「外す」は「保存する」より後ろに置く。フォームの先頭の送信ボタンは、入力欄で Enter を押すと押される -->
+				{#if removeConfirming}
+					<div class="confirm-layer">
+						<button
+							type="button"
+							class="confirm-backdrop"
+							aria-label="確認を閉じる"
+							disabled={submitting}
+							onclick={() => {
+								removeConfirming = false;
+							}}
+						></button>
+						<div
+							class="confirm-dialog"
+							role="alertdialog"
+							aria-modal="true"
+							aria-labelledby="mylist-remove-title"
+							aria-describedby="mylist-remove-description"
+							use:trapFocus
+						>
+							<h3 id="mylist-remove-title">マイリストから外しますか？</h3>
+							<p id="mylist-remove-description">
+								「{animeTitle}」のスコア、話数、日付、メモの記録も消えます。元に戻せません。
+							</p>
+							<div class="confirm-actions">
+								<button
+									type="button"
+									class="remove-cancel-button"
+									disabled={submitting}
+									onclick={() => {
+										removeConfirming = false;
+									}}
+								>
+									やめる
+								</button>
+								<button
+									type="submit"
+									formaction={removeAction}
+									class="remove-confirm-button"
+									data-remove
+									disabled={submitting}
+								>
+									{submitting ? "外しています…" : "外す"}
+								</button>
+							</div>
+						</div>
+					</div>
+				{/if}
 			</form>
+
+			<!-- 見た目は右上だが、開いたときの最初のフォーカスが削除に当たらないよう、最後に置く -->
+			{#if entry && removeAction}
+				<button
+					type="button"
+					class="remove-button"
+					disabled={submitting}
+					aria-label="マイリストから外す"
+					title="マイリストから外す"
+					onclick={() => {
+						removeConfirming = true;
+					}}
+				>
+					<span class="i-lucide-trash-2" aria-hidden="true"></span>
+				</button>
+			{/if}
 		</div>
 	</div>
 {/if}
@@ -441,6 +449,7 @@ $effect(() => {
 	backdrop-filter: blur(6px);
 }
 .modal-card {
+	position: relative;
 	display: flex;
 	flex-direction: column;
 	width: min(100%, 520px);
@@ -463,6 +472,9 @@ $effect(() => {
 	margin: 0;
 	font-size: 1.15rem;
 	letter-spacing: 0.01em;
+}
+.modal-header--removable {
+	padding-right: 64px;
 }
 .modal-header p {
 	margin: 5px 0 0;
@@ -666,30 +678,78 @@ form {
 	background: var(--color-hover);
 	color: var(--color-text);
 }
-.remove-row {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	gap: 8px;
-	padding-top: 12px;
-}
-.remove-warning {
-	margin: 0;
+.remove-button {
+	position: absolute;
+	top: 14px;
+	right: 14px;
+	display: grid;
+	width: 40px;
+	height: 40px;
+	place-items: center;
+	padding: 0;
+	border: 0;
+	border-radius: 10px;
+	background: transparent;
 	color: var(--color-text-muted);
-	font-size: 0.82rem;
+	cursor: pointer;
+	font-size: 1.1rem;
+}
+.remove-button:hover:not(:disabled) {
+	background: var(--color-surface-hover);
+	color: var(--color-danger);
+}
+.remove-button:disabled {
+	cursor: wait;
+	opacity: 0.6;
+}
+.confirm-layer {
+	position: fixed;
+	z-index: 10;
+	inset: 0;
+	display: grid;
+	place-items: center;
+	padding: 20px;
+}
+.confirm-backdrop {
+	position: absolute;
+	inset: 0;
+	padding: 0;
+	border: 0;
+	background: color-mix(in srgb, var(--color-bg) 65%, transparent);
+	cursor: default;
+}
+.confirm-dialog {
+	position: relative;
+	width: min(100%, 360px);
+	padding: 22px;
+	border: 1px solid var(--color-border-hover);
+	border-radius: 16px;
+	background: var(--color-surface);
 	text-align: center;
 }
-.remove-confirm-actions {
-	display: flex;
-	gap: 8px;
+.confirm-dialog h3 {
+	margin: 0;
+	color: var(--color-text);
+	font-size: 1rem;
+}
+.confirm-dialog p {
+	margin: 10px 0 18px;
+	color: var(--color-text-muted);
+	font-size: 0.84rem;
+	line-height: 1.6;
+	overflow-wrap: anywhere;
+}
+.confirm-actions {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 10px;
 }
 .remove-cancel-button,
 .remove-confirm-button {
-	min-height: 36px;
-	padding: 0 16px;
+	min-height: 40px;
 	border-radius: 12px;
 	cursor: pointer;
-	font-size: 0.82rem;
+	font-size: 0.86rem;
 	font-weight: 600;
 }
 .remove-cancel-button {
@@ -710,25 +770,6 @@ form {
 }
 .remove-cancel-button:disabled,
 .remove-confirm-button:disabled {
-	cursor: wait;
-	opacity: 0.6;
-}
-.remove-button {
-	min-height: 36px;
-	padding: 0 12px;
-	border: 0;
-	border-radius: 12px;
-	background: transparent;
-	color: var(--color-text-muted);
-	cursor: pointer;
-	font-size: 0.82rem;
-	font-weight: 600;
-}
-.remove-button:hover:not(:disabled) {
-	background: var(--color-hover);
-	color: var(--color-error-text);
-}
-.remove-button:disabled {
 	cursor: wait;
 	opacity: 0.6;
 }
@@ -769,6 +810,9 @@ form {
 	}
 	.modal-header {
 		padding: 20px 18px 16px;
+	}
+	.modal-header--removable {
+		padding-right: 64px;
 	}
 	.modal-body {
 		padding: 2px 18px 0;

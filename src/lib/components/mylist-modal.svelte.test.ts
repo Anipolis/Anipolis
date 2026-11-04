@@ -87,35 +87,78 @@ describe("MyListModal の「マイリストから外す」", () => {
 	};
 	const removeSubmit = (target: HTMLElement) => target.querySelector<HTMLButtonElement>("button[data-remove]");
 
-	it("押してもすぐには外さず、確認を出す", () => {
+	const firstSubmit = (target: HTMLElement) => target.querySelector("form button[type='submit']");
+
+	it("ゴミ箱を押してもすぐには外さず、確認のポップアップを出す", () => {
 		const target = openWithRemove();
 		expect(removeSubmit(target)).toBeNull();
+		expect(target.querySelector("[role='alertdialog']")).toBeNull();
 
 		target.querySelector<HTMLButtonElement>(".remove-button")?.click();
 		flushSync();
 		expect(removeSubmit(target)?.getAttribute("formaction")).toBe("?/removeWatchlist");
-		expect(target.querySelector(".remove-warning")?.textContent).toContain("メモ");
-		expect(document.activeElement).toBe(target.querySelector(".remove-cancel-button"));
+		expect(target.querySelector("[role='alertdialog']")?.textContent).toContain("メモ");
 	});
 
-	it("確認を出す前は、入力欄の Enter で押されるフォームの先頭の送信ボタンが「保存する」", () => {
+	it("入力欄の Enter で押される先頭の送信ボタンは、確認中も「保存する」", () => {
 		const target = openWithRemove();
-		expect(target.querySelector("form button[type='submit']")?.classList.contains("save-button")).toBe(true);
-	});
+		expect(firstSubmit(target)?.classList.contains("save-button")).toBe(true);
 
-	it("確認中は入力欄の Enter で外さず、やめると元に戻る", async () => {
-		const target = openWithRemove();
 		target.querySelector<HTMLButtonElement>(".remove-button")?.click();
 		flushSync();
+		expect(firstSubmit(target)?.classList.contains("save-button")).toBe(true);
+	});
 
-		const enter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
-		target.querySelector("input[type='number']")?.dispatchEvent(enter);
-		expect(enter.defaultPrevented).toBe(true);
+	it("ゴミ箱は登録済みの作品にだけ出し、開いたときの最初のフォーカスにしない", () => {
+		const target = renderModal({ open: true, entry: null, removeAction: "?/removeWatchlist" });
+		flushSync();
+		expect(target.querySelector(".remove-button")).toBeNull();
 
+		const registered = openWithRemove();
+		const buttons = registered.querySelectorAll("[role='dialog'] button");
+		expect(buttons[buttons.length - 1]?.classList.contains("remove-button")).toBe(true);
+	});
+
+	it("やめると確認を閉じ、Esc でも確認だけを閉じる", () => {
+		const onclose = vi.fn();
+		const target = document.createElement("div");
+		document.body.appendChild(target);
+		const component = mount(MyListModal, {
+			target,
+			props: {
+				open: true,
+				animeId: 1,
+				animeTitle: "テスト",
+				episodeCount: "12",
+				entry: entry(),
+				removeAction: "?/removeWatchlist",
+				onclose,
+			},
+		});
+		cleanup = async () => {
+			await unmount(component);
+			target.remove();
+		};
+		flushSync();
+		const openConfirm = () => {
+			target.querySelector<HTMLButtonElement>(".remove-button")?.click();
+			flushSync();
+			expect(target.querySelector("[role='alertdialog']")).not.toBeNull();
+		};
+
+		openConfirm();
 		target.querySelector<HTMLButtonElement>(".remove-cancel-button")?.click();
 		flushSync();
-		expect(removeSubmit(target)).toBeNull();
-		expect(target.querySelector(".remove-button")).not.toBeNull();
+		expect(target.querySelector("[role='alertdialog']")).toBeNull();
+
+		openConfirm();
+		window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+		flushSync();
+		expect(target.querySelector("[role='alertdialog']")).toBeNull();
+		expect(onclose).not.toHaveBeenCalled();
+
+		window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+		expect(onclose).toHaveBeenCalledTimes(1);
 	});
 });
 
