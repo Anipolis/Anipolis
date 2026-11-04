@@ -91,11 +91,7 @@ let editRows = $state<Record<string, EditRow>>({});
 
 // 行ごとの保存状態（保存待ち・保存中・保存済み・失敗）。表示と再試行に使う
 let saveStates = $state<Record<string, RowSaveState<EntryState>>>({});
-const unsavedCount = $derived(
-	Object.values(saveStates).filter(
-		(state) => state.status === "pending" || state.status === "saving" || state.status === "failed",
-	).length,
-);
+const failedSaveCount = $derived(Object.values(saveStates).filter((state) => state.status === "failed").length);
 
 // 保存キューは画面を離れたあとも送信中の行の後続編集を送り切る（save-queue の dispose）。
 // そのため送信先は送る時点の URL に依存させず固定し、編集したユーザーにも紐付ける。
@@ -312,10 +308,10 @@ $effect(() => {
 					</div>
 				</div>
 
-				<!-- 未保存の案内 -->
-				{#if unsavedCount > 0}
+				<!-- 失敗したときだけ出す。保存待ちや保存中で出すと、話数を押すたびに一覧がずれて次のボタンを押し損ねる -->
+				{#if failedSaveCount > 0}
 					<p class="unsaved-note" role="status" aria-live="polite">
-						未保存の変更が{unsavedCount}件あります。画面を移動すると保存待ちの変更は自動で送信されますが、失敗した変更は再試行するまで保存されません。
+						保存できなかった変更が{failedSaveCount}件あります。再試行するまで保存されません。
 					</p>
 				{/if}
 			</header>
@@ -516,7 +512,6 @@ $effect(() => {
 .anime-list--progress {
 	display: flex;
 	flex-direction: column;
-	gap: 6px;
 }
 
 .status-empty {

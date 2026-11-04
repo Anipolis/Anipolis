@@ -1,4 +1,4 @@
-import { flushSync, mount, unmount } from "svelte";
+import { flushSync, mount, tick, unmount } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Anime, AnimeStatus } from "$lib/types";
 import AnimeProgressRow from "./AnimeProgressRow.svelte";
@@ -48,11 +48,10 @@ function renderRow(status: AnimeStatus = "plan_to_watch", progress = 0) {
 	return { target, onAutoSave };
 }
 
-function openInput(target: HTMLElement) {
-	target.querySelector<HTMLButtonElement>(".progress-edit")?.click();
-	flushSync();
+function inputOf(target: HTMLElement) {
 	const input = target.querySelector<HTMLInputElement>(".progress-input");
-	if (!input) throw new Error("入力欄が開いていない");
+	if (!input) throw new Error("入力欄がない");
+	input.focus();
 	return input;
 }
 
@@ -66,42 +65,48 @@ function press(input: HTMLInputElement, key: string) {
 describe("AnimeProgressRow の話数の入力", () => {
 	it("Enter で確定し、話数に合わせてステータスも変える", () => {
 		const { target, onAutoSave } = renderRow();
-		const input = openInput(target);
+		const input = inputOf(target);
 		input.value = "8";
 
 		press(input, "Enter");
 		expect(onAutoSave).toHaveBeenCalledWith({ progress: 8, status: "watching" });
-		expect(target.querySelector(".progress-input")).toBeNull();
 	});
 
-	it("Enter を止める（止めないと、フォーカスが戻った数字のボタンを押して入力欄がまた開く）", () => {
-		const { target } = renderRow();
-		const input = openInput(target);
-		input.value = "8";
-
-		expect(press(input, "Enter").defaultPrevented).toBe(true);
-	});
-
-	it("Esc と空の入力では変えない", () => {
+	it("Esc と空の入力では変えず、今の話数を出し直す", async () => {
 		const { target, onAutoSave } = renderRow("watching", 3);
-		const typed = openInput(target);
-		typed.value = "8";
-		press(typed, "Escape");
+		const input = inputOf(target);
+		input.value = "8";
+		press(input, "Escape");
+		await tick();
+		expect(input.value).toBe("3");
 
-		const empty = openInput(target);
-		empty.value = "";
-		press(empty, "Enter");
+		input.focus();
+		input.value = "";
+		press(input, "Enter");
+		await tick();
+		expect(input.value).toBe("3");
 
 		expect(onAutoSave).not.toHaveBeenCalled();
 	});
 
-	it("入力欄から離れると確定する", () => {
+	it("入力欄から離れると確定し、範囲の外は端の値にする", () => {
 		const { target, onAutoSave } = renderRow("watching", 3);
-		const input = openInput(target);
+		const input = inputOf(target);
 		input.value = "99";
 
-		input.dispatchEvent(new FocusEvent("blur"));
+		input.blur();
 		flushSync();
 		expect(onAutoSave).toHaveBeenCalledWith({ progress: 12, status: "completed" });
+	});
+
+	it("確定しても話数が変わらないときは、入力した文字を残さない", async () => {
+		const { target, onAutoSave } = renderRow("completed", 12);
+		const input = inputOf(target);
+		input.value = "99";
+
+		input.blur();
+		await tick();
+		expect(onAutoSave).not.toHaveBeenCalled();
+		expect(input.value).toBe("12");
 	});
 });

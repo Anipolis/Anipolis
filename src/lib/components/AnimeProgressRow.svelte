@@ -47,29 +47,21 @@ function setProgress(value: number) {
 	onAutoSave(changes);
 }
 
-// 話数の数字を押すと入力欄にする（まとめて進めるとき用）
-let editingProgress = $state(false);
-let progressButton = $state<HTMLButtonElement>();
-
-async function finishProgressInput(input: HTMLInputElement | null, { returnFocus = false } = {}) {
-	// 入力欄が消えるときの blur で二重に動かない
-	if (!editingProgress) return;
-	editingProgress = false;
-	// 空や数字でない入力は、変えない
-	if (input && input.value.trim() !== "" && Number.isFinite(input.valueAsNumber)) setProgress(input.valueAsNumber);
-	if (returnFocus) {
-		await tick();
-		progressButton?.focus();
-	}
+// 話数の入力欄は、離れたときに確定する（入力の途中の数字で保存やステータスの連動を動かさない）
+async function commitProgressInput(input: HTMLInputElement) {
+	if (input.value.trim() !== "" && Number.isFinite(input.valueAsNumber)) setProgress(input.valueAsNumber);
+	// 空欄や範囲の外では話数が変わらず、入力した文字が残るので、今の話数を出し直す
+	await tick();
+	input.value = String(entry.progress);
 }
 
 function handleProgressKeydown(event: KeyboardEvent & { currentTarget: HTMLInputElement }) {
-	if (event.key === "Enter") {
-		// 止めないと、フォーカスが戻ったボタンを同じ Enter が押して入力欄がまた開く
-		event.preventDefault();
-		void finishProgressInput(event.currentTarget, { returnFocus: true });
+	const input = event.currentTarget;
+	if (event.key === "Enter") input.blur();
+	if (event.key === "Escape") {
+		input.value = String(entry.progress);
+		input.blur();
 	}
-	if (event.key === "Escape") void finishProgressInput(null, { returnFocus: true });
 }
 </script>
 
@@ -89,64 +81,10 @@ function handleProgressKeydown(event: KeyboardEvent & { currentTarget: HTMLInput
 	</a>
 
 	<div class="row-main">
-		<div class="row-title">{anime.title}</div>
-		<p class="row-meta">{meta}</p>
-
-		<div class="row-controls">
-			<div class="progress-group">
-				<button
-					type="button"
-					class="row-btn"
-					disabled={entry.progress <= 0}
-					onclick={() => setProgress(entry.progress - 1)}
-					aria-label="1話戻す"
-				>
-					<span class="i-lucide-minus" aria-hidden="true"></span>
-				</button>
-				{#if editingProgress}
-					<span class="progress-display">
-						<input
-							class="progress-input"
-							type="number"
-							inputmode="numeric"
-							min="0"
-							max={episodeTotal ?? undefined}
-							value={entry.progress}
-							aria-label="見た話数"
-							onkeydown={handleProgressKeydown}
-							onblur={(event) => finishProgressInput(event.currentTarget)}
-							{@attach (input) => {
-								input.focus();
-								input.select();
-							}}
-						>/{anime.episode_count ?? "−"}
-					</span>
-				{:else}
-					<button
-						type="button"
-						class="progress-display progress-edit"
-						bind:this={progressButton}
-						onclick={() => {
-							editingProgress = true;
-						}}
-						aria-label="話数を入力（今は{entry.progress}話）"
-						title="押すと話数を入力"
-					>
-						<span class="progress-current">{entry.progress}</span>/{anime.episode_count ?? "−"}
-					</button>
-				{/if}
-				<button
-					type="button"
-					class="row-btn"
-					disabled={episodeTotal != null && entry.progress >= episodeTotal}
-					onclick={() => setProgress(entry.progress + 1)}
-					aria-label="1話進める"
-				>
-					<span class="i-lucide-plus" aria-hidden="true"></span>
-				</button>
-			</div>
-
-			<!-- 行ごとの保存状態。失敗時は編集値を保持したまま再試行できる -->
+		<div class="row-title" title={anime.title}>{anime.title}</div>
+		<div class="row-meta-line">
+			<p class="row-meta" class:row-meta--hidden={saveStatus !== "idle"}>{meta}</p>
+			<!-- 行ごとの保存状態。失敗時は編集値を保持したまま再試行できる。行の高さを変えないようメタの行に重ね、出ている間はメタを隠す -->
 			<div class="save-status save-status--{saveStatus}" role="status" aria-live="polite">
 				{#if saveStatus === "pending"}
 					<span>まもなく保存</span>
@@ -162,10 +100,46 @@ function handleProgressKeydown(event: KeyboardEvent & { currentTarget: HTMLInput
 					<button type="button" class="save-retry-btn" onclick={onRetry}>再試行</button>
 				{/if}
 			</div>
+		</div>
+
+		<div class="row-controls">
+			<div class="progress-group">
+				<button
+					type="button"
+					class="row-btn"
+					disabled={entry.progress <= 0}
+					onclick={() => setProgress(entry.progress - 1)}
+					aria-label="1話戻す"
+				>
+					<span class="i-lucide-minus" aria-hidden="true"></span>
+				</button>
+				<input
+					class="progress-input"
+					type="number"
+					inputmode="numeric"
+					min="0"
+					max={episodeTotal ?? undefined}
+					value={entry.progress}
+					aria-label="見た話数"
+					onfocus={(event) => event.currentTarget.select()}
+					onkeydown={handleProgressKeydown}
+					onblur={(event) => commitProgressInput(event.currentTarget)}
+				>
+				<button
+					type="button"
+					class="row-btn"
+					disabled={episodeTotal != null && entry.progress >= episodeTotal}
+					onclick={() => setProgress(entry.progress + 1)}
+					aria-label="1話進める"
+				>
+					<span class="i-lucide-plus" aria-hidden="true"></span>
+				</button>
+				<span class="progress-total">/ {episodeTotal ?? "−"}</span>
+			</div>
 
 			<button
 				type="button"
-				class="row-btn"
+				class="row-btn row-detail"
 				onclick={onOpenDetail}
 				aria-label="「{anime.title}」の詳細を編集"
 				title="詳細を編集"
@@ -181,9 +155,11 @@ function handleProgressKeydown(event: KeyboardEvent & { currentTarget: HTMLInput
 	display: flex;
 	align-items: stretch;
 	gap: 14px;
-	padding: 10px 12px;
-	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	padding: 10px 0;
+}
+
+.progress-row:not(:last-child) {
+	border-bottom: 1px solid var(--color-border);
 }
 
 .row-cover {
@@ -233,6 +209,18 @@ function handleProgressKeydown(event: KeyboardEvent & { currentTarget: HTMLInput
 	line-clamp: 2;
 }
 
+.row-meta-line {
+	display: grid;
+}
+
+.row-meta-line > * {
+	grid-area: 1 / 1;
+}
+
+.row-meta--hidden {
+	visibility: hidden;
+}
+
 .row-meta {
 	margin: 0;
 	color: var(--color-text-muted);
@@ -270,6 +258,10 @@ function handleProgressKeydown(event: KeyboardEvent & { currentTarget: HTMLInput
 	cursor: pointer;
 }
 
+.row-detail {
+	margin-left: auto;
+}
+
 .row-btn:hover:not(:disabled) {
 	background: var(--color-surface-hover);
 }
@@ -279,49 +271,27 @@ function handleProgressKeydown(event: KeyboardEvent & { currentTarget: HTMLInput
 	cursor: not-allowed;
 }
 
-.progress-display {
-	min-width: 56px;
+.progress-input {
+	width: 44px;
+	height: 36px;
+	padding: 0 2px;
+	border: 1.5px solid var(--color-border-hover);
+	border-radius: 8px;
+	outline: none;
+	background: var(--color-bg);
 	color: var(--color-text);
+	font-family: inherit;
 	font-size: 0.86rem;
 	font-weight: 600;
 	font-variant-numeric: tabular-nums;
 	text-align: center;
-	white-space: nowrap;
-}
-
-.progress-edit {
-	min-height: 36px;
-	padding: 0 4px;
-	border: 0;
-	border-radius: 6px;
-	background: transparent;
-	font-family: inherit;
-	cursor: text;
-}
-
-.progress-edit:hover {
-	background: var(--color-surface-hover);
-}
-
-/* 押せることが分かるよう、数字に点線を引く */
-.progress-current {
-	text-decoration: underline dotted;
-	text-underline-offset: 3px;
-}
-
-.progress-input {
-	width: 44px;
-	height: 34px;
-	margin-right: 2px;
-	padding: 0 2px;
-	border: 1.5px solid var(--color-accent);
-	border-radius: 6px;
-	outline: none;
-	background: transparent;
-	color: var(--color-text);
-	font: inherit;
-	text-align: center;
+	/* ブラウザ標準の上下矢印は出さない（−/＋ボタンがあり、矢印の分だけ数字が左に寄るため） */
 	appearance: textfield;
+}
+
+.progress-input:focus {
+	border-color: var(--color-accent);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 15%, transparent);
 }
 
 .progress-input::-webkit-outer-spin-button,
@@ -330,19 +300,24 @@ function handleProgressKeydown(event: KeyboardEvent & { currentTarget: HTMLInput
 	appearance: none;
 }
 
-/* 行ごとの保存状態。押したボタンのそばに出す */
+.progress-total {
+	flex: 0 0 auto;
+	margin-left: 4px;
+	color: var(--color-text-muted);
+	font-size: 0.8rem;
+	white-space: nowrap;
+}
+
+/* 行ごとの保存状態。押したボタンのすぐ上に出す */
 .save-status {
 	display: flex;
-	flex: 1;
 	flex-wrap: wrap;
-	justify-content: flex-end;
 	align-items: center;
 	min-width: 0;
 	gap: 2px 4px;
 	color: var(--color-text-muted);
 	font-size: 0.72rem;
 	line-height: 1.3;
-	text-align: right;
 }
 
 .save-status--failed {
@@ -381,10 +356,50 @@ function handleProgressKeydown(event: KeyboardEvent & { currentTarget: HTMLInput
 	background: color-mix(in srgb, currentColor 12%, transparent);
 }
 
+/* PCは横に余裕があるので1段にして、一度に多くの行を見せる */
+@media (min-width: 769px) {
+	.progress-row {
+		align-items: center;
+		padding: 4px 0;
+	}
+
+	.row-cover {
+		width: 48px;
+	}
+
+	.row-main {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		align-items: center;
+		column-gap: 16px;
+	}
+
+	.row-title {
+		-webkit-line-clamp: 1;
+		line-clamp: 1;
+	}
+
+	.row-meta-line {
+		grid-column: 1;
+	}
+
+	.row-controls {
+		grid-column: 2;
+		grid-row: 1 / span 2;
+		margin-top: 0;
+		padding-top: 0;
+	}
+
+	/* 話数の桁が違っても、行どうしでボタンの位置をそろえる */
+	.progress-total {
+		min-width: 40px;
+	}
+}
+
 @media (max-width: 768px) {
 	.progress-row {
 		gap: 10px;
-		padding: 8px;
+		padding: 8px 0;
 	}
 
 	.row-cover {
@@ -399,10 +414,6 @@ function handleProgressKeydown(event: KeyboardEvent & { currentTarget: HTMLInput
 		font-size: 0.72rem;
 	}
 
-	.progress-display {
-		min-width: 48px;
-	}
-
 	/* 16px 未満だと iPhone が入力時に画面を拡大する */
 	.progress-input {
 		font-size: 16px;
@@ -414,16 +425,18 @@ function handleProgressKeydown(event: KeyboardEvent & { currentTarget: HTMLInput
 		width: 52px;
 	}
 
-	.progress-display {
-		min-width: 40px;
-	}
-
 	.row-controls {
 		gap: 6px;
 	}
 
-	.progress-input {
+	.row-btn {
 		width: 32px;
+		height: 32px;
+	}
+
+	.progress-input {
+		width: 36px;
+		height: 32px;
 	}
 }
 </style>
