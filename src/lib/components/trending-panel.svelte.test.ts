@@ -33,15 +33,15 @@ describe("アニメトレンドの画像の並び", () => {
 		const target = renderPanel([
 			{ id: "1", title: "作品A", cover_url: "https://example.com/a.avif", recent_count: 12 },
 		]);
-		const tile = target.querySelector(".anime-trending-tile");
+		const tile = target.querySelector(".poster-tile");
 		expect(tile?.getAttribute("aria-label")).toBe("1位 作品A 12件");
 		expect(tile?.getAttribute("href")).toBe("/anime/1");
 	});
 
 	it("カバーを出さない作品は題名を文字で出す枠にする", () => {
 		const target = renderPanel([{ id: "1", title: "作品A", cover_url: null, recent_count: 3 }]);
-		const tile = target.querySelector(".anime-trending-tile");
-		expect(tile?.classList.contains("anime-trending-tile--no-cover")).toBe(true);
+		const tile = target.querySelector(".poster-tile");
+		expect(tile?.classList.contains("poster-tile--no-cover")).toBe(true);
 		expect(tile?.querySelector("img")).toBeNull();
 		expect(tile?.textContent).toContain("作品A");
 	});
