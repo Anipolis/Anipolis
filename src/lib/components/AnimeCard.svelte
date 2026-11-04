@@ -43,6 +43,8 @@ export type AnimeCardProps = {
 		expanded: boolean;
 		onclick: (e: MouseEvent) => void;
 	} | null;
+	/** スマホの3列のように狭いカードでは、英題とタイプ・シーズンを出さず題名だけにする */
+	titleOnlyOnPhone?: boolean;
 };
 </script>
 
@@ -58,6 +60,7 @@ let {
 	hideAiringRibbon = false,
 	progress = null,
 	listButton = null,
+	titleOnlyOnPhone = false,
 }: AnimeCardProps = $props();
 
 const meta = $derived(animeCardMeta(anime));
@@ -171,7 +174,7 @@ function isAiringToday(): boolean {
 			</button>
 		{/if}
 	</div>
-	<div class="anime-info">
+	<div class="anime-info" class:anime-info--title-only={titleOnlyOnPhone}>
 		<p class="anime-title">{anime.title}</p>
 		<p
 			class="anime-title-en"
@@ -310,6 +313,12 @@ function isAiringToday(): boolean {
 }
 .anime-meta--placeholder {
 	visibility: hidden;
+}
+@media (max-width: 600px) {
+	.anime-info--title-only .anime-title-en,
+	.anime-info--title-only .anime-meta {
+		display: none;
+	}
 }
 
 /* 画像の右上に重ねるリボン（本日放送・放送中） */

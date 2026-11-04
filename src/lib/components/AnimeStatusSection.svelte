@@ -33,6 +33,7 @@ function progressOf(anime: Anime): NonNullable<AnimeCardProps["progress"]> | nul
 		{#each animes as anime (anime.id)}
 			<AnimeCard
 				{anime}
+				titleOnlyOnPhone
 				href="/anime/{anime.id}"
 				score={{
 					kind: 'personal',
