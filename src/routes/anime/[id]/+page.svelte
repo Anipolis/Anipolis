@@ -1720,11 +1720,10 @@ $effect(() => {
 												href={entry.href ?? undefined}
 												class="room-log-item"
 												class:room-log-item--unaired={entryState !== "open"}
-												class:room-log-item--special={entry.episodeNumber == null}
 												title={entryDetail ? `${entry.label}（${entryDetail}）` : entry.label}
 											>
 												<span class="room-log-ep-compact" aria-hidden="true"
-													>{entry.episodeNumber ?? entry.label}</span
+													>{entry.episodeNumber ?? "特"}</span
 												>
 												<span class="sr-only"
 													>{entryDetail ? `${entry.label}（${entryDetail}）` : entry.label}</span
@@ -3557,13 +3556,6 @@ $effect(() => {
 	background: transparent;
 	border-color: var(--color-text-muted);
 }
-/* 特番は数字が無いので名前を出す（2マス分の幅） */
-.room-log-item--special {
-	grid-column: span 2;
-	aspect-ratio: auto;
-	height: 44px;
-	padding: 0 6px;
-}
 /* 最新話はマイリストと同じ目立つ青の横長ボタン（文字は背景色、#500） */
 .room-log-item--latest {
 	flex-direction: row;
@@ -3606,13 +3598,6 @@ $effect(() => {
 	font-weight: 750;
 	line-height: 1;
 	text-align: center;
-}
-.room-log-item--special .room-log-ep-compact {
-	overflow: hidden;
-	max-width: 100%;
-	font-size: 0.72rem;
-	text-overflow: ellipsis;
-	white-space: nowrap;
 }
 .room-log-item.room-log-item--unaired .room-log-ep-compact {
 	font-weight: 500;
