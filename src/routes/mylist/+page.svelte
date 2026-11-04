@@ -512,7 +512,6 @@ $effect(() => {
 .anime-list--progress {
 	display: flex;
 	flex-direction: column;
-	gap: 6px;
 }
 
 .status-empty {

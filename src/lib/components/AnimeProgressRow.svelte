@@ -155,9 +155,11 @@ function handleProgressKeydown(event: KeyboardEvent & { currentTarget: HTMLInput
 	display: flex;
 	align-items: stretch;
 	gap: 14px;
-	padding: 10px 12px;
-	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	padding: 10px 0;
+}
+
+.progress-row:not(:last-child) {
+	border-bottom: 1px solid var(--color-border);
 }
 
 .row-cover {
@@ -358,11 +360,11 @@ function handleProgressKeydown(event: KeyboardEvent & { currentTarget: HTMLInput
 @media (min-width: 769px) {
 	.progress-row {
 		align-items: center;
-		padding: 6px 12px;
+		padding: 4px 0;
 	}
 
 	.row-cover {
-		width: 40px;
+		width: 48px;
 	}
 
 	.row-main {
@@ -397,7 +399,7 @@ function handleProgressKeydown(event: KeyboardEvent & { currentTarget: HTMLInput
 @media (max-width: 768px) {
 	.progress-row {
 		gap: 10px;
-		padding: 8px;
+		padding: 8px 0;
 	}
 
 	.row-cover {
