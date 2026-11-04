@@ -81,7 +81,7 @@ function handleProgressKeydown(event: KeyboardEvent & { currentTarget: HTMLInput
 	</a>
 
 	<div class="row-main">
-		<div class="row-title">{anime.title}</div>
+		<div class="row-title" title={anime.title}>{anime.title}</div>
 		<div class="row-meta-line">
 			<p class="row-meta" class:row-meta--hidden={saveStatus !== "idle"}>{meta}</p>
 			<!-- 行ごとの保存状態。失敗時は編集値を保持したまま再試行できる。行の高さを変えないようメタの行に重ね、出ている間はメタを隠す -->
@@ -352,6 +352,46 @@ function handleProgressKeydown(event: KeyboardEvent & { currentTarget: HTMLInput
 
 .save-retry-btn:hover {
 	background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+/* PCは横に余裕があるので1段にして、一度に多くの行を見せる */
+@media (min-width: 769px) {
+	.progress-row {
+		align-items: center;
+		padding: 6px 12px;
+	}
+
+	.row-cover {
+		width: 40px;
+	}
+
+	.row-main {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		align-items: center;
+		column-gap: 16px;
+	}
+
+	.row-title {
+		-webkit-line-clamp: 1;
+		line-clamp: 1;
+	}
+
+	.row-meta-line {
+		grid-column: 1;
+	}
+
+	.row-controls {
+		grid-column: 2;
+		grid-row: 1 / span 2;
+		margin-top: 0;
+		padding-top: 0;
+	}
+
+	/* 話数の桁が違っても、行どうしでボタンの位置をそろえる */
+	.progress-total {
+		min-width: 40px;
+	}
 }
 
 @media (max-width: 768px) {
