@@ -22,4 +22,19 @@ export const actions: Actions = {
 
 		return { privacySuccess: true };
 	},
+
+	// 鍵アカウントとは別に送る。項目の無い古いフォームが届いても、もう一方の設定を変えないように
+	updateListVisibility: async ({ request, locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { message: "ログインが必要です" });
+
+		const form = await request.formData();
+		const isListPrivate = form.get("list_private") === "on";
+
+		const { error } = await supabase.from("profiles").update({ list_is_public: !isListPrivate }).eq("id", user.id);
+
+		if (error) return fail(500, { message: "マイリストの公開設定の更新に失敗しました" });
+
+		return { privacySuccess: true };
+	},
 };

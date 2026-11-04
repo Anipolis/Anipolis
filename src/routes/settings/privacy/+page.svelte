@@ -12,11 +12,16 @@ let { data, form }: PageProps = $props();
 let isPrivate = $state(untrack(() => data.profile?.is_private ?? false));
 let saving = $state(false);
 let justSaved = $state(false);
-let formEl = $state<HTMLFormElement | null>(null);
+let isListPrivate = $state(untrack(() => !(data.profile?.list_is_public ?? true)));
 let savedTimer: ReturnType<typeof setTimeout> | undefined;
 
-function autoSave() {
-	formEl?.requestSubmit();
+function syncFromServer() {
+	isPrivate = data.profile?.is_private ?? false;
+	isListPrivate = !(data.profile?.list_is_public ?? true);
+}
+
+function autoSave(event: Event) {
+	(event.currentTarget as HTMLInputElement).form?.requestSubmit();
 }
 
 const privacySubmit: SubmitFunction = () => {
@@ -25,13 +30,10 @@ const privacySubmit: SubmitFunction = () => {
 	return async ({ result, update }) => {
 		saving = false;
 		await update({ reset: false });
-		if (result.type === "failure" || result.type === "error") {
-			// 保存に失敗したらサーバー状態へ巻き戻す
-			isPrivate = data.profile?.is_private ?? false;
-			return;
-		}
+		// 失敗したらサーバー状態へ巻き戻す。成功時も読み直した値にそろえる
+		syncFromServer();
 		// 成功判定は result.type のみで行う(data.profile の再取得有無に依存させない)
-		if (data.profile) isPrivate = data.profile.is_private ?? false;
+		if (result.type === "failure" || result.type === "error") return;
 		justSaved = true;
 		if (savedTimer) clearTimeout(savedTimer);
 		savedTimer = setTimeout(() => {
@@ -62,7 +64,7 @@ const privacySubmit: SubmitFunction = () => {
 				<div class="flash-error" role="alert">{form.message}</div>
 			{/if}
 
-			<form method="POST" action="?/updatePrivacy" use:enhance={privacySubmit} bind:this={formEl}>
+			<form method="POST" action="?/updatePrivacy" use:enhance={privacySubmit}>
 				<div class="toggle-row">
 					<span class="toggle-row-text">
 						<span class="with-info-tip">
@@ -80,6 +82,35 @@ const privacySubmit: SubmitFunction = () => {
 						bind:checked={isPrivate}
 						disabled={saving}
 						label="鍵アカウントにする"
+						onchange={autoSave}
+					/>
+				</div>
+			</form>
+
+			<form method="POST" action="?/updateListVisibility" use:enhance={privacySubmit}>
+				<div class="toggle-row">
+					<span class="toggle-row-text">
+						<span class="with-info-tip">
+							<strong>マイリストを非公開にする</strong>
+							<InfoTip label="マイリストの公開設定">
+								<p>
+									公開:
+									プロフィールの「マイリスト」タブで誰でも見られます（鍵アカウントならフォロワーだけ）。
+								</p>
+								<p>
+									作品を視聴予定・視聴中・完了にすると、プロフィールやフォロワーのタイムラインの「アクティビティ」にも出ます。
+								</p>
+								<p>非公開: 自分だけが見られます。アクティビティも自分にしか見えません。</p>
+								<p>非公開のマイリストは、作品のスコアやランキングに数えません。</p>
+							</InfoTip>
+						</span>
+						<small>マイリストとアクティビティを自分だけに見せます。</small>
+					</span>
+					<ToggleSwitch
+						name="list_private"
+						bind:checked={isListPrivate}
+						disabled={saving}
+						label="マイリストを非公開にする"
 						onchange={autoSave}
 					/>
 				</div>

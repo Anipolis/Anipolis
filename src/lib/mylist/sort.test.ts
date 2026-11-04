@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Anime } from "$lib/types";
-import { parseMylistSort, sortMylist } from "./sort";
+import { countMylistByStatus, groupMylistByStatus, parseMylistSort, parseMylistTab, sortMylist } from "./sort";
 
 function anime(
 	id: string,
@@ -17,6 +17,36 @@ function anime(
 }
 
 const ids = (list: Anime[]) => list.map((a) => a.id);
+
+describe("parseMylistTab", () => {
+	it("知らない値や指定なしは「すべて」にする", () => {
+		expect(parseMylistTab(null)).toBe("all");
+		expect(parseMylistTab("unknown")).toBe("all");
+		expect(parseMylistTab("completed")).toBe("completed");
+	});
+});
+
+describe("groupMylistByStatus", () => {
+	const withStatus = (id: string, status: string) => ({ id, user_entry: { status } }) as unknown as Anime;
+
+	it("「すべて」は並べ替え済みの順のまま、ステータスをまたいで並べる", () => {
+		const grouped = groupMylistByStatus([
+			withStatus("a", "completed"),
+			withStatus("b", "watching"),
+			withStatus("c", "completed"),
+		]);
+		expect(ids(grouped.all)).toEqual(["a", "b", "c"]);
+		expect(ids(grouped.completed)).toEqual(["a", "c"]);
+	});
+
+	it("知らないステータスの行はどのタブにも入れず、「すべて」の件数は各タブの合計とそろう", () => {
+		const counts = countMylistByStatus(
+			groupMylistByStatus([withStatus("a", "watching"), withStatus("b", "unknown"), withStatus("c", "all")]),
+		);
+		expect(counts.all).toBe(1);
+		expect(counts.watching).toBe(1);
+	});
+});
 
 describe("parseMylistSort", () => {
 	it("知らない値や空は更新が新しい順にする", () => {

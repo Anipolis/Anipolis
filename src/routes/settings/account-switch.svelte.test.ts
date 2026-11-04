@@ -68,15 +68,15 @@ describe("settings after an account switch (#298)", () => {
 		const { props, target } = render({
 			userId: "a",
 			page: PrivacyPage,
-			pageProps: { data: { profile: { is_private: true } }, form: null },
+			pageProps: { data: { profile: { is_private: true, list_is_public: false } }, form: null },
 		});
-		expect(checkboxes(target)).toEqual([true]);
+		expect(checkboxes(target)).toEqual([true, true]);
 
 		props.userId = "b";
-		props.pageProps = { data: { profile: { is_private: false } }, form: null };
+		props.pageProps = { data: { profile: { is_private: false, list_is_public: true } }, form: null };
 		flushSync();
 
-		expect(checkboxes(target)).toEqual([false]);
+		expect(checkboxes(target)).toEqual([false, false]);
 	});
 
 	it("shows the new account's username", () => {
