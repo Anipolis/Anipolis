@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { isHttpError } from "@sveltejs/kit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "$lib/supabase/database.types";
-import { getEvent, getNotifications, getUserAnimeList } from "./queries";
+import { getEvent, getNotifications, getOwnAnimeList, getUserAnimeList } from "./queries";
 import { failQuery, QUERY_FAILED_MESSAGE } from "./query-failure";
 
 type Result = { data: unknown; error: { code?: string; message: string } | null };
@@ -67,5 +67,6 @@ describe("主要な中身の取得の失敗を、空・見つからないと区�
 	it("マイリスト: 失敗は 503、0 件は空の配列", async () => {
 		await expectQueryFailed(getUserAnimeList(fakeSupabase({ data: null, error: DB_ERROR }), "me"));
 		expect(await getUserAnimeList(fakeSupabase({ data: [], error: null }), "me")).toEqual([]);
+		await expectQueryFailed(getOwnAnimeList(fakeSupabase({ data: null, error: DB_ERROR }), "me"));
 	});
 });

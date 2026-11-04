@@ -3663,6 +3663,24 @@ export async function getUserAnimeList(
 		}));
 }
 
+/** 自分のマイリスト全件。詳細のモーダルで直せるよう、日付とメモも読む */
+export async function getOwnAnimeList(supabase: SupabaseClient<Database>, userId: string): Promise<Anime[]> {
+	const { data, error } = await supabase
+		.from("user_anime_list")
+		.select(`${OWN_ENTRY_COLUMNS}, created_at, anime:anime_id(${ANIME_LIST_BASE_COLUMNS})`)
+		.eq("user_id", userId)
+		.order("updated_at", { ascending: false });
+	if (error) failQuery("getOwnAnimeList", error);
+	if (!data) return [];
+
+	type Row = OwnEntryRow & { created_at: string; anime: Record<string, unknown> | null };
+	return (data as unknown as Row[]).flatMap((row) =>
+		row.anime
+			? [{ ...toAnime(row.anime), user_entry: { ...toOwnUserAnimeEntry(row), created_at: row.created_at } }]
+			: [],
+	);
+}
+
 /** プロフィールの「コレクション」タブに並べる要約（#515） */
 export interface CollectionSummary {
 	id: string;
