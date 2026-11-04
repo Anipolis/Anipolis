@@ -4,8 +4,9 @@ import { onDestroy, untrack } from "svelte";
 import { deserialize } from "$app/forms";
 import { beforeNavigate, invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
-import AnimeEditRow from "$lib/components/AnimeEditRow.svelte";
+import AnimeProgressRow from "$lib/components/AnimeProgressRow.svelte";
 import AnimeStatusSection from "$lib/components/AnimeStatusSection.svelte";
+import MyListModal from "$lib/components/MyListModal.svelte";
 import MyListQuickEdit from "$lib/components/MyListQuickEdit.svelte";
 import MylistSortSelect from "$lib/components/MylistSortSelect.svelte";
 import MylistStatusTabs from "$lib/components/MylistStatusTabs.svelte";
@@ -31,8 +32,6 @@ import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();
 
-const statusOrder: AnimeStatus[] = ["watching", "completed", "plan_to_watch", "on_hold", "dropped"];
-
 const statusLabel: Record<AnimeStatus, string> = {
 	watching: "視聴中",
 	completed: "完了",
@@ -41,13 +40,27 @@ const statusLabel: Record<AnimeStatus, string> = {
 	dropped: "断念",
 };
 
-let viewMode = $state<"list" | "edit">("list");
+let viewMode = $state<"list" | "progress">("list");
 
 // 開いているタブと並び順（URL の ?status= と ?sort=。切り替えは MylistStatusTabs と MylistSortSelect が URL に残す）
 let selectedStatus = $state<MylistTab>(parseMylistTab(page.url.searchParams.get("status")));
 let sort = $state<MylistSort>(parseMylistSort(page.url.searchParams.get("sort")));
 
 const grouped = $derived(groupMylistByStatus(sortMylist(data.animeList, sort)));
+
+// 話数を記録している間は、行の顔ぶれと並びを止める。保存のたびに行が先頭へ動いたり、完了にした行が消えたりすると、
+// 続けて押せず、押し間違いも戻せない。タブ・並び順・表示を切り替えたら、その時の内容で並べ直す
+const progressRowIds = $derived.by(() => {
+	void viewMode;
+	void sort;
+	const tab = selectedStatus;
+	return untrack(() => grouped[tab].map((anime) => anime.id));
+});
+const visibleAnimes = $derived.by(() => {
+	if (viewMode === "list") return grouped[selectedStatus];
+	const byId = new Map(data.animeList.map((anime) => [anime.id, anime]));
+	return progressRowIds.flatMap((id) => byId.get(id) ?? []);
+});
 
 const totalCount = $derived(data.animeList.length);
 
@@ -159,6 +172,39 @@ function cancelAutoSave(animeId: string) {
 	delete saveStates[animeId];
 }
 
+// 行の鉛筆から開く詳細のモーダル
+let detailAnimeId = $state<string | null>(null);
+const detailAnime = $derived(data.animeList.find((anime) => anime.id === detailAnimeId) ?? null);
+// モーダルは渡した内容を全項目送るので、まだ保存し終えていない行の値を渡して古い値で上書きしない
+const detailEntry = $derived.by(() => {
+	const saved = detailAnime?.user_entry;
+	const local = detailAnime ? editRows[detailAnime.id]?.entry : undefined;
+	if (!saved || !local) return saved;
+	return {
+		...saved,
+		status: local.status,
+		score: local.score ? Number(local.score) : null,
+		progress: local.progress,
+	};
+});
+
+// 行の保存を送っている間にモーダルで保存や削除をすると、後から届いた行の保存に上書きされたり、外した作品が
+// 登録し直されたりする。行の保存を送り切ってから開く
+let detailRequest = 0;
+
+async function openDetail(animeId: string) {
+	saveQueue.flush();
+	const request = ++detailRequest;
+	await saveQueue.settled(animeId);
+	if (request === detailRequest) detailAnimeId = animeId;
+}
+
+async function handleDetailSaved(animeId: string) {
+	// 行に残っていた保存待ち・失敗は、モーダルの内容に置き換わった
+	cancelAutoSave(animeId);
+	await invalidateAll();
+}
+
 // 未保存のまま画面移動する場合の扱い:
 // - 保存待ち（デバウンス中）の行は即時送信する。keepalive 付きなので移動後も送信は完了する。
 // - 保存に失敗したままの行がある場合は、移動前に確認して意図しない消失を防ぐ。
@@ -249,13 +295,13 @@ $effect(() => {
 								<button
 									type="button"
 									class="view-btn"
-									class:active={viewMode === 'edit'}
-									onclick={() => (viewMode = 'edit')}
-									aria-label="まとめて編集"
-									aria-pressed={viewMode === 'edit'}
-									title="まとめて編集"
+									class:active={viewMode === 'progress'}
+									onclick={() => (viewMode = 'progress')}
+									aria-label="話数を記録"
+									aria-pressed={viewMode === 'progress'}
+									title="話数を記録"
 								>
-									<span class="i-lucide-pencil" aria-hidden="true"></span>
+									<span class="i-lucide-list" aria-hidden="true"></span>
 								</button>
 							</div>
 						{/if}
@@ -290,31 +336,30 @@ $effect(() => {
 				<MylistStatusTabs counts={countMylistByStatus(grouped)} bind:status={selectedStatus} />
 
 				<div role="tabpanel" aria-label={MYLIST_TAB_LABELS[selectedStatus]}>
-					{#if grouped[selectedStatus].length === 0}
+					{#if visibleAnimes.length === 0}
 						<div class="status-empty">
 							<p>{MYLIST_TAB_LABELS[selectedStatus]}にはまだ登録がありません</p>
 						</div>
 					{:else if viewMode === 'list'}
 						<AnimeStatusSection
-							animes={grouped[selectedStatus]}
+							animes={visibleAnimes}
 							scoreLabel="自分のスコア"
 							{scoreButtonFor}
 							{listButtonFor}
 						/>
 					{:else}
-						<div class="anime-list anime-list--edit">
-							{#each grouped[selectedStatus] as anime (anime.id)}
+						<div class="anime-list anime-list--progress">
+							{#each visibleAnimes as anime (anime.id)}
 								{@const editRow = editRows[anime.id]}
 								{#if editRow}
-									<AnimeEditRow
+									<AnimeProgressRow
 										{anime}
-										bind:entry={editRow.entry}
-										{statusOrder}
+										entry={editRow.entry}
 										{statusLabel}
 										saveState={saveStates[anime.id]}
 										onAutoSave={(updatedFields) => handleAutoSave(anime.id, updatedFields)}
 										onRetry={() => retryAutoSave(anime.id)}
-										onRemove={() => cancelAutoSave(anime.id)}
+										onOpenDetail={() => openDetail(anime.id)}
 									/>
 								{/if}
 							{/each}
@@ -330,6 +375,21 @@ $effect(() => {
 		entryOf={(anime) => (anime as Anime).user_entry}
 		removeAction="?/removeWatchlist"
 	/>
+
+	{#if detailAnime}
+		<MyListModal
+			open
+			animeId={detailAnime.id}
+			animeTitle={detailAnime.title}
+			episodeCount={detailAnime.episode_count}
+			entry={detailEntry}
+			removeAction="?/removeWatchlist"
+			onsaved={(_entry, animeId) => handleDetailSaved(animeId)}
+			onclose={() => {
+				detailAnimeId = null;
+			}}
+		/>
+	{/if}
 
 	<aside class="sidebar-column">
 		<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
@@ -453,10 +513,10 @@ $effect(() => {
 	font-size: 0.8rem;
 }
 
-.anime-list--edit {
+.anime-list--progress {
 	display: flex;
 	flex-direction: column;
-	gap: 4px;
+	gap: 6px;
 }
 
 .status-empty {

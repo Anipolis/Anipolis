@@ -3,6 +3,7 @@ import type { SubmitFunction } from "@sveltejs/kit";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
 import { trapFocus } from "$lib/actions/trapFocus";
+import MyListRemoveConfirm from "$lib/components/MyListRemoveConfirm.svelte";
 import { MYLIST_NOTE_MAX_LENGTH } from "$lib/mylist/entry-details";
 import { savedEntryFromResult } from "$lib/mylist/entry-from-form";
 import type { AnimeStatus, UserAnimeEntry } from "$lib/types";
@@ -58,6 +59,8 @@ let autoStarted = false;
 let autoFinished = false;
 // 開くかどうかはモーダルを開いたときにだけ決める（自動入力で開くと、保存ボタンが下へ押し出される）
 let recordOpen = $state(false);
+// 「マイリストから外す」の確認を出しているか。スコアやメモごと消えるので、1回押しただけでは外さない
+let removeConfirming = $state(false);
 let submitting = $state(false);
 let errorMessage = $state("");
 let initializedFor: string | null = null;
@@ -166,6 +169,7 @@ function resetFromEntry(key: string) {
 	autoStarted = false;
 	autoFinished = false;
 	recordOpen = Boolean(startedOn || finishedOn || note);
+	removeConfirming = false;
 	errorMessage = "";
 }
 
@@ -189,7 +193,9 @@ $effect(() => {
 $effect(() => {
 	if (!open) return;
 	const handleKeydown = (event: KeyboardEvent) => {
-		if (event.key === "Escape" && !submitting) onclose();
+		if (event.key !== "Escape" || submitting) return;
+		if (removeConfirming) removeConfirming = false;
+		else onclose();
 	};
 	window.addEventListener("keydown", handleKeydown);
 	return () => window.removeEventListener("keydown", handleKeydown);
@@ -209,7 +215,7 @@ $effect(() => {
 			use:trapFocus
 			onclick={(e) => e.stopPropagation()}
 		>
-			<header class="modal-header">
+			<header class="modal-header" class:modal-header--removable={Boolean(entry && removeAction)}>
 				<h2 id="mylist-modal-title">{statusOnly ? "マイリストに追加" : "マイリスト登録・編集"}</h2>
 				<p>{animeTitle}</p>
 			</header>
@@ -343,21 +349,6 @@ $effect(() => {
 						</details>
 					{/if}
 
-					{#if entry && removeAction}
-						<!-- 保存・キャンセルと並べるとスマホで入りきらないので、別の行にする -->
-						<div class="remove-row">
-							<button
-								type="submit"
-								formaction={removeAction}
-								class="remove-button"
-								data-remove
-								disabled={submitting}
-							>
-								マイリストから外す
-							</button>
-						</div>
-					{/if}
-
 					{#if errorMessage}
 						<p class="form-error" role="alert">{errorMessage}</p>
 					{:else if selectedStatus === null}
@@ -372,7 +363,35 @@ $effect(() => {
 						{submitting ? "保存中…" : "✓ 保存する"}
 					</button>
 				</footer>
+
+				<!-- 「外す」は「保存する」より後ろに置く。フォームの先頭の送信ボタンは、入力欄で Enter を押すと押される -->
+				{#if removeConfirming && removeAction}
+					<MyListRemoveConfirm
+						{animeTitle}
+						{removeAction}
+						{submitting}
+						oncancel={() => {
+							removeConfirming = false;
+						}}
+					/>
+				{/if}
 			</form>
+
+			<!-- 見た目は右上だが、開いたときの最初のフォーカスが削除に当たらないよう、最後に置く -->
+			{#if entry && removeAction}
+				<button
+					type="button"
+					class="remove-button"
+					disabled={submitting}
+					aria-label="マイリストから外す"
+					title="マイリストから外す"
+					onclick={() => {
+						removeConfirming = true;
+					}}
+				>
+					<span class="i-lucide-trash-2" aria-hidden="true"></span>
+				</button>
+			{/if}
 		</div>
 	</div>
 {/if}
@@ -394,6 +413,7 @@ $effect(() => {
 	backdrop-filter: blur(6px);
 }
 .modal-card {
+	position: relative;
 	display: flex;
 	flex-direction: column;
 	width: min(100%, 520px);
@@ -416,6 +436,9 @@ $effect(() => {
 	margin: 0;
 	font-size: 1.15rem;
 	letter-spacing: 0.01em;
+}
+.modal-header--removable {
+	padding-right: 64px;
 }
 .modal-header p {
 	margin: 5px 0 0;
@@ -619,25 +642,25 @@ form {
 	background: var(--color-hover);
 	color: var(--color-text);
 }
-.remove-row {
-	display: flex;
-	justify-content: center;
-	padding-top: 12px;
-}
 .remove-button {
-	min-height: 36px;
-	padding: 0 12px;
+	position: absolute;
+	top: 14px;
+	right: 14px;
+	display: grid;
+	width: 40px;
+	height: 40px;
+	place-items: center;
+	padding: 0;
 	border: 0;
-	border-radius: 12px;
+	border-radius: 10px;
 	background: transparent;
 	color: var(--color-text-muted);
 	cursor: pointer;
-	font-size: 0.82rem;
-	font-weight: 600;
+	font-size: 1.1rem;
 }
 .remove-button:hover:not(:disabled) {
-	background: var(--color-hover);
-	color: var(--color-error-text);
+	background: var(--color-surface-hover);
+	color: var(--color-danger);
 }
 .remove-button:disabled {
 	cursor: wait;
@@ -680,6 +703,9 @@ form {
 	}
 	.modal-header {
 		padding: 20px 18px 16px;
+	}
+	.modal-header--removable {
+		padding-right: 64px;
 	}
 	.modal-body {
 		padding: 2px 18px 0;
