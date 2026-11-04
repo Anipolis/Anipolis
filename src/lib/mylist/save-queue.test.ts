@@ -166,6 +166,39 @@ describe("createSaveQueue", () => {
 		expect(queue.unsavedKeys()).toEqual([]);
 	});
 
+	it("settled waits for the in-flight save and the edit that arrived during it", async () => {
+		const first = deferred<SaveResult>();
+		const second = deferred<SaveResult>();
+		const save = vi
+			.fn<(key: string, value: Entry) => Promise<SaveResult>>()
+			.mockReturnValueOnce(first.promise)
+			.mockReturnValueOnce(second.promise);
+		const queue = createSaveQueue<Entry>({ save, debounceMs: 500, savedTtlMs: 0 });
+
+		queue.schedule("1", { progress: 1 });
+		queue.flush();
+		let settled = false;
+		void queue.settled("1").then(() => {
+			settled = true;
+		});
+		queue.schedule("1", { progress: 2 });
+		queue.flush();
+
+		first.resolve({ ok: true });
+		await flushMicrotasks();
+		expect(save).toHaveBeenCalledTimes(2);
+		expect(settled).toBe(false);
+
+		second.resolve({ ok: false, message: "失敗" });
+		await flushMicrotasks();
+		expect(settled).toBe(true);
+	});
+
+	it("settled resolves at once for a row with nothing sent", async () => {
+		const queue = createSaveQueue<Entry>({ save: vi.fn(), debounceMs: 500, savedTtlMs: 0 });
+		await expect(queue.settled("1")).resolves.toBeUndefined();
+	});
+
 	it("cancel drops the pending save and ignores a late response", async () => {
 		const first = deferred<SaveResult>();
 		const save = vi.fn<(key: string, value: Entry) => Promise<SaveResult>>().mockReturnValueOnce(first.promise);

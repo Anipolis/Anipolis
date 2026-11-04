@@ -188,9 +188,15 @@ const detailEntry = $derived.by(() => {
 	};
 });
 
-function openDetail(animeId: string) {
+// 行の保存を送っている間にモーダルで保存や削除をすると、後から届いた行の保存に上書きされたり、外した作品が
+// 登録し直されたりする。行の保存を送り切ってから開く
+let detailRequest = 0;
+
+async function openDetail(animeId: string) {
 	saveQueue.flush();
-	detailAnimeId = animeId;
+	const request = ++detailRequest;
+	await saveQueue.settled(animeId);
+	if (request === detailRequest) detailAnimeId = animeId;
 }
 
 async function handleDetailSaved(animeId: string) {
