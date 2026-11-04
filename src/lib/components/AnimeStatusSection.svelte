@@ -33,6 +33,7 @@ function progressOf(anime: Anime): NonNullable<AnimeCardProps["progress"]> | nul
 		{#each animes as anime (anime.id)}
 			<AnimeCard
 				{anime}
+				titleOnlyOnPhone
 				href="/anime/{anime.id}"
 				score={{
 					kind: 'personal',
@@ -63,12 +64,6 @@ function progressOf(anime: Anime): NonNullable<AnimeCardProps["progress"]> | nul
 	.anime-grid {
 		grid-template-columns: repeat(3, minmax(0, 1fr));
 		gap: 10px;
-	}
-}
-
-@media (max-width: 420px) {
-	.anime-grid {
-		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
 }
 </style>

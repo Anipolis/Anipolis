@@ -4,6 +4,7 @@ import { untrack } from "svelte";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
+import { scrollableTabs } from "$lib/actions/scrollableTabs";
 import ActivityFeed from "$lib/components/ActivityFeed.svelte";
 import AnimeStatusSection from "$lib/components/AnimeStatusSection.svelte";
 import FavoriteAnimeShelf from "$lib/components/FavoriteAnimeShelf.svelte";
@@ -65,34 +66,6 @@ let reportSubmitting = $state(false);
 let reportMessage = $state("");
 let showKebabMenu = $state(false);
 let blocking = $state(false);
-// タブが入りきらない幅（320px など）では横に送る。続きがある側の端をぼかして知らせる
-let tabsNav = $state<HTMLElement | null>(null);
-let tabsMoreLeft = $state(false);
-let tabsMoreRight = $state(false);
-
-function updateTabsOverflow() {
-	if (!tabsNav) return;
-	tabsMoreLeft = tabsNav.scrollLeft > 1;
-	tabsMoreRight = tabsNav.scrollLeft + tabsNav.clientWidth < tabsNav.scrollWidth - 1;
-}
-
-$effect(() => {
-	if (!tabsNav) return;
-	// 開いているタブが見える位置まで送る（右端の「いいね」などを開いたとき）
-	void activeTab;
-	// scrollIntoView はページごと縦にも動かすので、タブの並びだけを横に送る
-	const active = tabsNav.querySelector<HTMLElement>(".profile-tab.active");
-	if (active) {
-		const overRight = active.offsetLeft + active.offsetWidth - (tabsNav.scrollLeft + tabsNav.clientWidth);
-		if (overRight > 0) tabsNav.scrollLeft += overRight;
-		else if (active.offsetLeft < tabsNav.scrollLeft) tabsNav.scrollLeft = active.offsetLeft;
-	}
-	updateTabsOverflow();
-	const observer = new ResizeObserver(updateTabsOverflow);
-	observer.observe(tabsNav);
-	return () => observer.disconnect();
-});
-
 $effect(() => {
 	isFollowing = data.isFollowing;
 	followRequestStatus = data.followRequestStatus;
@@ -888,11 +861,8 @@ function listButtonFor(anime: Anime) {
 		<!-- タブ -->
 		<nav
 			class="profile-tabs"
-			class:profile-tabs--more-left={tabsMoreLeft}
-			class:profile-tabs--more-right={tabsMoreRight}
 			aria-label="プロフィールタブ"
-			bind:this={tabsNav}
-			onscroll={updateTabsOverflow}
+			{@attach scrollableTabs(".profile-tab.active", activeTab)}
 		>
 			<a href="/profile/{profile.username}" class="profile-tab" class:active={activeTab === 'posts'}>投稿</a>
 			<a href="/profile/{profile.username}?tab=images" class="profile-tab" class:active={activeTab === 'images'}
@@ -1239,24 +1209,14 @@ function listButtonFor(anime: Anime) {
 	white-space: nowrap;
 }
 
-/* スマホでは詰めて、5つのタブが 360px 幅に収まるようにする（余った幅は均等に分ける） */
+/* スマホでは入りきる幅なら余りを均等に分け、入らなければ横に送る */
 @media (max-width: 480px) {
 	.profile-tab {
 		flex: 1 0 auto;
 		justify-content: center;
-		padding: 10px 4px;
+		padding: 10px 14px;
 		font-size: 0.85rem;
 	}
-}
-
-.profile-tabs--more-right {
-	mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
-}
-.profile-tabs--more-left {
-	mask-image: linear-gradient(to left, #000 calc(100% - 32px), transparent);
-}
-.profile-tabs--more-left.profile-tabs--more-right {
-	mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent);
 }
 
 .profile-tab:hover {

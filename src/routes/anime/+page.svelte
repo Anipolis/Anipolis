@@ -714,6 +714,7 @@ $effect(() => {
 						{@const entryStatus = entryOf(anime)?.status as AnimeStatus | undefined}
 						<AnimeCard
 							{anime}
+							titleOnlyOnPhone
 							href={buildAnimeDetailUrl(anime.id)}
 							score={{ kind: 'average', value: anime.avg_score ?? null, count: anime.score_count }}
 							rank={data.tab === 'popular' || data.tab === 'trending' || data.tab === 'top_rated' ? rankIndex + 1 : null}
@@ -1443,12 +1444,6 @@ $effect(() => {
 
 	.anime-section-page--mobile {
 		display: inline-flex;
-	}
-}
-
-@media (max-width: 420px) {
-	.anime-grid {
-		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
 }
 
