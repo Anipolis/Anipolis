@@ -40,10 +40,10 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 		getEventsForAnime(supabase, Number(anime.id)),
 	]);
 
-	// 話数ルーム（153）の一覧。話数のある作品だけ（映画・特番・1話だけの配信作品は無し）。
+	// ルームの一覧。話数のある作品だけ話数を並べ、映画や1話だけの配信作品は特番ルームだけ出す（総合ロビーの作品は対象外）
 	// 取得に失敗したら、全話未放送と見せずに読み込めなかったと伝える
-	const roomLog = hasEpisodeRooms(anime) ? await getEpisodeRoomLog(supabase, Number(anime.id)) : null;
-	const episodeRooms = roomLog
+	const roomLog = anime.room_type === "global" ? null : await getEpisodeRoomLog(supabase, Number(anime.id));
+	const roomEntries = roomLog
 		? buildEpisodeRoomList({
 				animeId: anime.id,
 				...roomLog,
@@ -51,6 +51,8 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 				openableUpTo: openableEpisodeLimit({ anime, ...roomLog, now: Date.now() }),
 			})
 		: [];
+	const episodeRooms = hasEpisodeRooms(anime) ? roomEntries : roomEntries.filter((entry) => entry.kind === "special");
+
 	// 管理タブ用: 話数ルームの一覧（開く時刻の固定・統合を含む）
 	const adminEpisodeRooms = isAdmin ? await getAdminEpisodeRooms(supabase, Number(anime.id)) : [];
 
@@ -62,7 +64,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 		relations,
 		syobocalUrl,
 		episodeRooms,
-		episodeRoomsFailed: hasEpisodeRooms(anime) && roomLog === null,
+		episodeRoomsFailed: anime.room_type !== "global" && roomLog === null,
 		adminEpisodeRooms,
 		broadcastOverrides,
 		events,

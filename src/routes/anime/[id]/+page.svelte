@@ -1630,7 +1630,9 @@ $effect(() => {
 							</section>
 						{:else if data.episodeRooms.length > 0}
 							<section class="room-log-section">
-								<h2 class="room-log-heading">話数ルーム</h2>
+								<h2 class="room-log-heading">
+									{data.episodeRooms.some((entry) => entry.kind === "episode") ? "話数ルーム" : "特番ルーム"}
+								</h2>
 								<ol class="room-log-list">
 									{#if isAnimeAiring && latestEpisodeRoom}
 										<li class="room-log-latest-slot">
