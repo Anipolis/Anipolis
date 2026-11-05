@@ -1,6 +1,6 @@
 import { fail, redirect } from "@sveltejs/kit";
 import { removeUserAnimeEntry, upsertUserAnimeEntry } from "$lib/server/actions";
-import { getAnimeRankingTrending, getUserAnimeList } from "$lib/server/queries";
+import { getAnimeRankingTrending, getOwnAnimeList } from "$lib/server/queries";
 import { redirectToLogin } from "$lib/server/require-login";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -17,7 +17,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	if (!profile) redirect(302, "/");
 
 	const [animeList, trendingResult, animeTrending] = await Promise.all([
-		getUserAnimeList(supabase, user.id),
+		getOwnAnimeList(supabase, user.id),
 		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
 		getAnimeRankingTrending(supabase, 5),
 	]);
@@ -42,23 +42,5 @@ export const actions: Actions = {
 		const { user } = await safeGetSession();
 		if (!user) return fail(401, { message: "ログインが必要です" });
 		return removeUserAnimeEntry(supabase, request, user.id);
-	},
-
-	toggleVisibility: async ({ locals: { supabase, safeGetSession } }) => {
-		const { user } = await safeGetSession();
-		if (!user) return fail(401, { message: "ログインが必要です" });
-
-		const { data: current } = await supabase.from("profiles").select("list_is_public").eq("id", user.id).single();
-
-		if (!current) return fail(404, { message: "プロフィールが見つかりません" });
-
-		const { error } = await supabase
-			.from("profiles")
-			.update({ list_is_public: !current.list_is_public })
-			.eq("id", user.id);
-
-		if (error) return fail(500, { message: "更新に失敗しました" });
-
-		return { list_is_public: !current.list_is_public };
 	},
 };

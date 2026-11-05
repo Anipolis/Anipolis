@@ -1,7 +1,7 @@
 import { error, json } from "@sveltejs/kit";
 import { MAX_COLLECTIONS_PER_USER, parseCollectionInput } from "$lib/collections";
 import { requireAccountCanWrite } from "$lib/server/actions";
-import { getCollectionsForAnime } from "$lib/server/queries";
+import { getAnimeCoverUrl, getCollectionsForAnime } from "$lib/server/queries";
 import type { RequestHandler } from "./$types";
 
 function parseAnimeId(value: unknown): number {
@@ -19,7 +19,7 @@ export const GET: RequestHandler = async ({ url, locals: { supabase, safeGetSess
 	return json({ collections, limit: MAX_COLLECTIONS_PER_USER });
 };
 
-// 作品ページから、コレクションを作ってその作品を入れる（題名と公開設定だけ。説明はコレクションのページで書く）
+// 作品ページから、コレクションを作ってその作品を入れる（題名だけ。公開設定と説明はコレクションのページで決める）
 export const POST: RequestHandler = async ({ request, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 	if (!user) error(401, "ログインが必要です");
@@ -55,8 +55,9 @@ export const POST: RequestHandler = async ({ request, locals: { supabase, safeGe
 	});
 	if (rpcError) console.error("set_collection_items error:", rpcError);
 	// 作品を入れられなくてもコレクションはできているので、一覧には入っていない状態で返す
+	const cover = rpcError ? null : await getAnimeCoverUrl(supabase, animeId);
 	return json({
-		collection: { ...data, item_count: rpcError ? 0 : 1, has_anime: !rpcError },
+		collection: { ...data, item_count: rpcError ? 0 : 1, has_anime: !rpcError, cover },
 		...(rpcError ? { message: "コレクションは作りましたが、作品を入れられませんでした" } : {}),
 	});
 };

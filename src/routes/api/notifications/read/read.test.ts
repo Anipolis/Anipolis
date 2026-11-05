@@ -33,10 +33,11 @@ function makeEvent(body: unknown, user: { id: string } | null, client: unknown) 
 }
 
 describe("parseNotificationCategory", () => {
-	it("accepts the three known categories only", () => {
+	it("accepts the two known categories only", () => {
 		expect(parseNotificationCategory("normal")).toBe("normal");
 		expect(parseNotificationCategory("room")).toBe("room");
-		expect(parseNotificationCategory("mylist")).toBe("mylist");
+		// マイリストのタブは 181 でなくした
+		expect(parseNotificationCategory("mylist")).toBeNull();
 		expect(parseNotificationCategory("all")).toBeNull();
 		expect(parseNotificationCategory(1)).toBeNull();
 		expect(parseNotificationCategory(undefined)).toBeNull();
@@ -73,7 +74,7 @@ describe("POST /api/notifications/read", () => {
 		]);
 	});
 
-	it("excludes room and mylist types when marking the normal category", async () => {
+	it("excludes room and legacy mylist types when marking the normal category", async () => {
 		const { client, calls } = notificationsClient();
 		await POST(makeEvent({ category: "normal" }, { id: "u1" }, client));
 		expect(calls.at(-1)).toEqual({ method: "not", args: ["type", "in", "(broadcast,mylist_status)"] });
@@ -81,7 +82,7 @@ describe("POST /api/notifications/read", () => {
 
 	it("surfaces a database failure instead of reporting success", async () => {
 		const { client } = notificationsClient({ error: { message: "boom" } });
-		await expect(POST(makeEvent({ category: "mylist" }, { id: "u1" }, client))).rejects.toMatchObject({
+		await expect(POST(makeEvent({ category: "normal" }, { id: "u1" }, client))).rejects.toMatchObject({
 			status: 500,
 		});
 	});

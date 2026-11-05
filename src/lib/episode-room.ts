@@ -100,36 +100,17 @@ export interface EpisodeRoomListEntry {
 }
 
 /** room_date は放送日（朝4時区切り）。無ければ開始時刻の JST の日付を使う */
-type RoomAiringWithRoom = RoomAiring & { episode_room_id: string; room_date?: string };
+export type RoomAiringWithRoom = RoomAiring & { episode_room_id: string; room_date?: string };
 
-/** まだルームが無いが、開けば DB（153 の ensure_episode_room）がすぐ作って開く話に付ける開く時刻 */
-const OPENABLE_WITHOUT_ROOM = new Date(0).toISOString();
+/** まだルームが無いが、最初の投稿で DB（ensure_episode_room）が作る話の opens_at（過去の時刻で「開いている」扱いにする） */
+export const OPENABLE_WITHOUT_ROOM = new Date(0).toISOString();
 
-/**
- * ルームがまだ無くても開ける最後の話数（153 の ensure_episode_room と同じ判断）。
- *   * 放送枠のある作品: 開場済みの放送枠の最大話数まで
- *   * 放送枠の無い作品: 放送終了（finished）か、配信開始日を過ぎた ONA / OVA なら作品の話数まで
- */
-export function openableEpisodeLimit(input: {
-	anime: { type: string | null; status: string | null; aired_from: string | null; episode_total: number | null };
-	rooms: readonly EpisodeRoom[];
-	airings: readonly RoomAiringWithRoom[];
-	now: number;
-}): number {
-	const { anime, rooms, airings, now } = input;
-	const roomNumber = new Map(rooms.map((room) => [room.id, room.episode_number]));
-	const airedNumbers = airings
-		.filter((airing) => Date.parse(airing.posting_opens_at) <= now)
-		.map((airing) => roomNumber.get(airing.episode_room_id))
-		.filter((n): n is number => n != null);
-	if (airedNumbers.length > 0) return Math.max(...airedNumbers);
-	if (anime.episode_total == null) return 0;
-	if (anime.status === "finished") return anime.episode_total;
-	const todayJst = new Date(now + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
-	if ((anime.type === "ONA" || anime.type === "OVA") && anime.aired_from && anime.aired_from <= todayJst) {
-		return anime.episode_total;
-	}
-	return 0;
+/** 話数ルームの範囲と開ける話数。計算は DB の 1 か所（186 の episode_room_bounds）で、ここでは表示に使うだけ */
+export interface EpisodeRoomBounds {
+	/** 通算の話数の作品のシーズンの範囲。通算でなければ null */
+	season: { first: number; last: number } | null;
+	/** ルームがまだ無くても開ける最後の話数 */
+	openableUpTo: number;
 }
 
 /**
@@ -142,9 +123,11 @@ export function buildEpisodeRoomList(input: {
 	rooms: readonly EpisodeRoom[];
 	airings: readonly RoomAiringWithRoom[];
 	episodeTotal: number | null;
-	openableUpTo?: number;
+	bounds?: EpisodeRoomBounds | undefined;
 }): EpisodeRoomListEntry[] {
-	const { animeId, rooms, airings, episodeTotal, openableUpTo = 0 } = input;
+	const { animeId, rooms, airings, episodeTotal, bounds } = input;
+	const season = bounds?.season ?? null;
+	const openableUpTo = bounds?.openableUpTo ?? 0;
 	const live = rooms.filter((room) => !room.merged_into);
 	const airingsByRoom = new Map<string, RoomAiringWithRoom[]>();
 	for (const airing of airings) {
@@ -184,11 +167,13 @@ export function buildEpisodeRoomList(input: {
 	);
 	const maxRoomNumber = Math.max(0, ...[...byNumber.keys()].filter((n): n is number => n != null));
 	// 誤った話数のデータで一覧を際限なく作らないよう、URL で開ける話数までにする
-	const lastEpisode = Math.min(MAX_EPISODE_NUMBER, Math.max(episodeTotal ?? 0, maxRoomNumber));
+	// 通算の話数の作品は、そのシーズンの範囲だけ並べる（範囲の外でも、実在するルームは入口を残す）
+	const lastEpisode = Math.min(MAX_EPISODE_NUMBER, Math.max(episodeTotal ?? 0, maxRoomNumber, season?.last ?? 0));
 
 	const entries: EpisodeRoomListEntry[] = [];
 	for (let n = 1; n <= lastEpisode; n += 1) {
 		if (mergedNumbers.has(n)) continue;
+		if (season && (n < season.first || n > season.last) && !byNumber.has(n)) continue;
 		entries.push(
 			toEntry(byNumber.get(n), {
 				key: `ep-${n}`,
@@ -199,9 +184,10 @@ export function buildEpisodeRoomList(input: {
 			}),
 		);
 	}
+	const specials: EpisodeRoomListEntry[] = [];
 	for (const room of live) {
 		if (room.kind !== "special" || !room.special_key) continue;
-		entries.push(
+		specials.push(
 			toEntry(room, {
 				key: `sp-${room.special_key}`,
 				kind: "special",
@@ -211,7 +197,28 @@ export function buildEpisodeRoomList(input: {
 			}),
 		);
 	}
-	return entries;
+	// 特番は放送順に並べる。放送枠がまだ無い特番は後ろ
+	specials.sort((a, b) => (a.firstAiredOn ?? "9999").localeCompare(b.firstAiredOn ?? "9999"));
+	return [...entries, ...specials];
+}
+
+/**
+ * 話数ルームのマスに出す短い文字（entry.key ごと）。話は番号、特番は「特」。
+ * 特番が複数あると、スマホでは開くまで見分けられないので「特1」「特2」と番号を振る
+ */
+export function episodeRoomChipLabels(entries: readonly EpisodeRoomListEntry[]): Map<string, string> {
+	const specialCount = entries.filter((entry) => entry.episodeNumber == null).length;
+	const labels = new Map<string, string>();
+	let specialIndex = 0;
+	for (const entry of entries) {
+		if (entry.episodeNumber != null) {
+			labels.set(entry.key, String(entry.episodeNumber));
+			continue;
+		}
+		specialIndex += 1;
+		labels.set(entry.key, specialCount > 1 ? `特${specialIndex}` : "特");
+	}
+	return labels;
 }
 
 /** 行の状態。open: 投稿できる / upcoming: 開く時刻が決まっている / unaired: まだ決まっていない */

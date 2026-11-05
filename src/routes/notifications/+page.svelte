@@ -1,27 +1,29 @@
 <script lang="ts">
 import { untrack } from "svelte";
+import { activityStatusPhrase } from "$lib/activity";
 import InfoTip from "$lib/components/InfoTip.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
+import { groupActivityLikes } from "$lib/notification-groups";
 import { notificationPostPreview } from "$lib/notification-post-preview";
 import { requestNotificationCountsRefresh } from "$lib/stores/notifications";
-import type { AnimeStatus, Notification } from "$lib/types";
+import type { Notification } from "$lib/types";
 import { formatRelativeTime } from "$lib/utils/format";
 import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();
 
-type TabId = "normal" | "room" | "mylist";
+type TabId = "normal" | "room";
 
 const tabs: { id: TabId; label: string }[] = [
 	{ id: "normal", label: "通常" },
 	{ id: "room", label: "ルーム" },
-	{ id: "mylist", label: "マイリスト" },
 ];
 
 const activeTab = $derived(data.tab as TabId);
-const activeNotifications = $derived(data.notifications[activeTab] as Notification[]);
+// アクティビティへのいいねは、同じ記録への分を1件にまとめて出す
+const activeEntries = $derived(groupActivityLikes((data.notifications[activeTab] ?? []) as Notification[]));
 
 // 既読化はページが実際に描画された後にだけ行う。server load で既読化すると、
 // hover プリロードやブラウザの先読みで load が走っただけで未読が消える（#242）。
@@ -64,13 +66,6 @@ function notificationLabel(type: string): string {
 	return "";
 }
 
-function mylistStatusLabel(status: AnimeStatus | null): string {
-	if (status === "plan_to_watch") return "を視聴予定に追加しました";
-	if (status === "watching") return "を視聴中にしました";
-	if (status === "completed") return "を完了にしました";
-	return "のステータスを変更しました";
-}
-
 function formatBroadcastTime(value: string | null): string {
 	if (!value) return "";
 	return new Date(value).toLocaleString("ja-JP", {
@@ -93,7 +88,6 @@ function eventBroadcastLabel(value: string | null): string {
 
 function emptyMessage(tab: TabId): string {
 	if (tab === "room") return "ルームの通知はまだありません";
-	if (tab === "mylist") return "フォロー中ユーザーのマイリスト通知はまだありません";
 	return "通知はまだありません";
 }
 </script>
@@ -108,7 +102,7 @@ function emptyMessage(tab: TabId): string {
 				<InfoTip label="通知のタブ">
 					<p>通常: いいね・リポスト・返信・メンション・フォロー・作品のおすすめ・トレードの成立</p>
 					<p>ルーム: カレンダーでベルを付けた番組が始まる前のお知らせ</p>
-					<p>マイリスト: フォロー中の人が作品をマイリストに入れたお知らせ</p>
+					<p>フォロー中の人のマイリストの動きは、タイムラインの「アクティビティ」で見られます</p>
 				</InfoTip>
 			</h1>
 		</header>
@@ -130,13 +124,13 @@ function emptyMessage(tab: TabId): string {
 			{/each}
 		</nav>
 
-		{#if activeNotifications.length === 0}
+		{#if activeEntries.length === 0}
 			<div class="notifications-empty">
 				<p>{emptyMessage(activeTab)}</p>
 			</div>
 		{:else}
 			<ul class="notification-list">
-				{#each activeNotifications as notif (notif.id)}
+				{#each activeEntries as { notif, others } (notif.id)}
 					<li class="notification-item">
 						{#if notif.type === 'broadcast'}
 							<div class="notification-room-icon" aria-hidden="true">
@@ -201,7 +195,7 @@ function emptyMessage(tab: TabId): string {
 								</a>
 								<span class="notification-time">{formatRelativeTime(notif.created_at)}</span>
 							</div>
-						{:else if notif.type === 'mylist_status'}
+						{:else if notif.type === 'activity_like'}
 							<a href="/profile/{notif.actor_username}" class="notification-avatar">
 								<UserAvatar src={notif.actor_avatar_url} username={notif.actor_username} size="md" />
 							</a>
@@ -210,19 +204,26 @@ function emptyMessage(tab: TabId): string {
 									<a href="/profile/{notif.actor_username}" class="notification-actor">
 										{notif.actor_display_name ?? notif.actor_username}
 									</a>
-									<strong>{notif.mylist_anime_title ?? '作品'}</strong>
-									{mylistStatusLabel(notif.mylist_status)}
+									{#if others.length > 0}
+										ほか{others.length}人
+									{/if}
+									があなたのアクティビティにいいねしました
 								</p>
-								{#if notif.mylist_anime_id}
-									<a href="/anime/{notif.mylist_anime_id}" class="notification-anime-preview">
-										{#if notif.mylist_anime_cover_url}
+								{#if notif.activity_anime_id}
+									<a href="/anime/{notif.activity_anime_id}" class="notification-anime-preview">
+										{#if notif.activity_anime_cover_url}
 											<img
-												src={coverThumbSrc(notif.mylist_anime_cover_url)}
-												{@attach coverThumbFallback(notif.mylist_anime_cover_url)}
-												alt={notif.mylist_anime_title ?? '作品'}
+												src={coverThumbSrc(notif.activity_anime_cover_url)}
+												{@attach coverThumbFallback(notif.activity_anime_cover_url)}
+												alt={notif.activity_anime_title ?? '作品'}
 											>
 										{/if}
-										<span> <strong>{notif.mylist_anime_title ?? '作品'}</strong> </span>
+										<span>
+											<strong>{notif.activity_anime_title ?? '作品'}</strong>
+											{#if notif.activity_status}
+												<small>を{activityStatusPhrase(notif.activity_status)}</small>
+											{/if}
+										</span>
 									</a>
 								{/if}
 								<span class="notification-time">{formatRelativeTime(notif.created_at)}</span>

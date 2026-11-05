@@ -2,7 +2,13 @@ import { error, fail, redirect } from "@sveltejs/kit";
 import { episodeRoomPath, hasEpisodeRooms, parseEpisodeNumberParam } from "$lib/episode-room";
 import { deletePostAction, toggleBookmarkAction, toggleLikeAction, toggleRepostAction } from "$lib/server/actions";
 import { buildEpisodeRoomPageData, createEpisodeRoomPost } from "$lib/server/episode-room-page";
-import { ensureEpisodeRoom, getAnime, getEpisodeRoomById, getEpisodeRoomByNumber } from "$lib/server/queries";
+import {
+	ensureEpisodeRoom,
+	getAnime,
+	getEpisodeRoomBounds,
+	getEpisodeRoomById,
+	getEpisodeRoomByNumber,
+} from "$lib/server/queries";
 import type { EpisodeRoom } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -11,15 +17,14 @@ import type { Actions, PageServerLoad } from "./$types";
  * 放送枠（初回・再放送・イベント）はルームの中の区切りとして見出しに使う。
  */
 
-/** 話数ルームを探し、無ければ開いてよいか DB に判断させて作る。統合済みなら統合先を返す */
-async function resolveEpisodeRoom(
+/** 話数ルームを探す。統合済みなら統合先を返す。ページを開くだけではルームを作らない */
+async function findEpisodeRoom(
 	supabase: App.Locals["supabase"],
 	animeId: number,
 	episodeNumber: number,
 ): Promise<EpisodeRoom | null> {
-	let room = await getEpisodeRoomByNumber(supabase, animeId, episodeNumber);
-	if (!room) room = await ensureEpisodeRoom(supabase, animeId, episodeNumber);
-	if (room?.merged_into) room = (await getEpisodeRoomById(supabase, room.merged_into)) ?? room;
+	const room = await getEpisodeRoomByNumber(supabase, animeId, episodeNumber);
+	if (room?.merged_into) return (await getEpisodeRoomById(supabase, room.merged_into)) ?? room;
 	return room;
 }
 
@@ -32,15 +37,23 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 	if (!anime) throw error(404, "アニメが見つかりません");
 	const animeId = Number(anime.id);
 
-	const room = await resolveEpisodeRoom(supabase, animeId, episodeNumber);
+	const room = await findEpisodeRoom(supabase, animeId, episodeNumber);
 	if (room && room.kind === "episode" && room.episode_number != null && room.episode_number !== episodeNumber) {
 		// 統合先の話数へ（元の URL のクエリは引き継がない）
 		redirect(302, episodeRoomPath(animeId, room.episode_number));
 	}
+	let openable = false;
 	if (!room) {
-		// ルームがまだ無い話: 話数のある作品の範囲内なら「まだ投稿できない」ページとして見せる
-		const inRange = hasEpisodeRooms(anime) && (anime.episode_total == null || episodeNumber <= anime.episode_total);
+		// ルームがまだ無い話: 範囲内のページだけ出す。開ける話は最初の投稿でルームを作り、それ以外は「まだ投稿できない」
+		const bounds = await getEpisodeRoomBounds(supabase, animeId);
+		const season = bounds?.season ?? null;
+		const inRange =
+			hasEpisodeRooms(anime) &&
+			(season
+				? episodeNumber >= season.first && episodeNumber <= season.last
+				: anime.episode_total == null || episodeNumber <= anime.episode_total);
 		if (!inRange) throw error(404, "ルームが見つかりません");
+		openable = bounds != null && episodeNumber <= bounds.openableUpTo;
 	}
 
 	return buildEpisodeRoomPageData({
@@ -49,6 +62,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 		url,
 		anime,
 		room,
+		openable,
 		title: `${anime.title} 第${episodeNumber}話`,
 		episodeNumber,
 	});
@@ -63,7 +77,10 @@ export const actions: Actions = {
 		const anime = episodeNumber == null ? null : await getAnime(supabase, params.id, user.id);
 		if (!anime || episodeNumber == null) return fail(404, { message: "ルームが見つかりません" });
 
-		const room = await resolveEpisodeRoom(supabase, Number(anime.id), episodeNumber);
+		// 最初の投稿でルームを作る（開いてよいかは DB が判断する）
+		const animeId = Number(anime.id);
+		const found = await findEpisodeRoom(supabase, animeId, episodeNumber);
+		const room = found ?? (await ensureEpisodeRoom(supabase, animeId, episodeNumber));
 		return createEpisodeRoomPost({ supabase, userId: user.id, request, anime, room });
 	},
 

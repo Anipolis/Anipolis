@@ -4,22 +4,36 @@ import { untrack } from "svelte";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
+import { scrollableTabs } from "$lib/actions/scrollableTabs";
+import ActivityFeed from "$lib/components/ActivityFeed.svelte";
 import AnimeStatusSection from "$lib/components/AnimeStatusSection.svelte";
-import CollectionFormModal from "$lib/components/CollectionFormModal.svelte";
 import FavoriteAnimeShelf from "$lib/components/FavoriteAnimeShelf.svelte";
 import ImageCropper from "$lib/components/ImageCropper.svelte";
+import MyListQuickEdit from "$lib/components/MyListQuickEdit.svelte";
+import MylistSortSelect from "$lib/components/MylistSortSelect.svelte";
+import MylistStatusTabs from "$lib/components/MylistStatusTabs.svelte";
 import PostRow from "$lib/components/PostRow.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
 import { checkCropSource } from "$lib/image-crop";
+import {
+	countMylistByStatus,
+	groupMylistByStatus,
+	MYLIST_TAB_LABELS,
+	type MylistSort,
+	type MylistTab,
+	parseMylistSort,
+	parseMylistTab,
+	sortMylist,
+} from "$lib/mylist/sort";
 import { timelineCursorHref } from "$lib/timeline-cursor";
-import type { Anime, AnimeStatus } from "$lib/types";
+import type { Anime, AnimeStatus, UserAnimeEntry } from "$lib/types";
 import type { PageProps } from "./$types";
 
 let { data, form }: PageProps = $props();
 
 const { profile, isOwn, canViewContent } = $derived(data);
-// 開いているタブ（投稿・画像・いいね）の一覧。サーバーは開いているタブの分だけを読む（#250）
+// 開いているタブ（投稿・画像・いいね・ブックマーク）の一覧。サーバーは開いているタブの分だけを読む（#250）
 const listPosts = $derived(data.listPosts);
 const displayName = $derived(profile.display_name ?? profile.username);
 const profileSocialImage = $derived(profile.header_url ?? profile.avatar_url);
@@ -52,35 +66,6 @@ let reportSubmitting = $state(false);
 let reportMessage = $state("");
 let showKebabMenu = $state(false);
 let blocking = $state(false);
-let creatingCollection = $state(false);
-// タブが入りきらない幅（320px など）では横に送る。続きがある側の端をぼかして知らせる
-let tabsNav = $state<HTMLElement | null>(null);
-let tabsMoreLeft = $state(false);
-let tabsMoreRight = $state(false);
-
-function updateTabsOverflow() {
-	if (!tabsNav) return;
-	tabsMoreLeft = tabsNav.scrollLeft > 1;
-	tabsMoreRight = tabsNav.scrollLeft + tabsNav.clientWidth < tabsNav.scrollWidth - 1;
-}
-
-$effect(() => {
-	if (!tabsNav) return;
-	// 開いているタブが見える位置まで送る（右端の「いいね」などを開いたとき）
-	void activeTab;
-	// scrollIntoView はページごと縦にも動かすので、タブの並びだけを横に送る
-	const active = tabsNav.querySelector<HTMLElement>(".profile-tab.active");
-	if (active) {
-		const overRight = active.offsetLeft + active.offsetWidth - (tabsNav.scrollLeft + tabsNav.clientWidth);
-		if (overRight > 0) tabsNav.scrollLeft += overRight;
-		else if (active.offsetLeft < tabsNav.scrollLeft) tabsNav.scrollLeft = active.offsetLeft;
-	}
-	updateTabsOverflow();
-	const observer = new ResizeObserver(updateTabsOverflow);
-	observer.observe(tabsNav);
-	return () => observer.disconnect();
-});
-
 $effect(() => {
 	isFollowing = data.isFollowing;
 	followRequestStatus = data.followRequestStatus;
@@ -96,7 +81,11 @@ $effect(() => {
 
 const requestedTab = $derived(page.url.searchParams.get("tab"));
 const activeTab = $derived(
-	requestedTab === "images" || requestedTab === "list" || requestedTab === "collections" || requestedTab === "likes"
+	requestedTab === "images" ||
+		requestedTab === "list" ||
+		requestedTab === "activity" ||
+		requestedTab === "likes" ||
+		requestedTab === "bookmarks"
 		? requestedTab
 		: "posts",
 );
@@ -399,8 +388,6 @@ function handleReportModalKeydown(event: KeyboardEvent) {
 	}
 }
 
-const statusOrder: AnimeStatus[] = ["watching", "completed", "plan_to_watch", "on_hold", "dropped"];
-
 const statusLabel: Record<AnimeStatus, string> = {
 	watching: "視聴中",
 	completed: "完了",
@@ -409,25 +396,55 @@ const statusLabel: Record<AnimeStatus, string> = {
 	dropped: "断念",
 };
 
-const statusIcon: Record<AnimeStatus, string> = {
-	watching: "i-lucide-circle-play",
-	completed: "i-lucide-circle-check",
-	plan_to_watch: "i-lucide-clipboard-list",
-	on_hold: "i-lucide-circle-pause",
-	dropped: "i-lucide-circle-x",
-};
-
 const animeList = $derived((data.animeList ?? []) as Anime[]);
 
-const grouped = $derived(
-	statusOrder.reduce<Record<AnimeStatus, Anime[]>>(
-		(acc, status) => {
-			acc[status] = animeList.filter((e) => e.user_entry?.status === status);
-			return acc;
-		},
-		{ watching: [], completed: [], plan_to_watch: [], on_hold: [], dropped: [] },
-	),
-);
+// マイリストのタブで開いているステータスと並び順（URL の ?status= と ?sort=。切り替えは MylistStatusTabs と MylistSortSelect が URL に残す）
+let selectedStatus = $state<MylistTab>(parseMylistTab(page.url.searchParams.get("status")));
+let listSort = $state<MylistSort>(parseMylistSort(page.url.searchParams.get("sort")));
+
+const grouped = $derived(groupMylistByStatus(sortMylist(animeList, listSort)));
+
+// カードの右のマスは見ている人自身のマイリスト。自分のプロフィールなら並んでいる登録そのもの、
+// 他の人なら別に読んだ自分の登録（読めなかったときは null でボタンを出さない）
+let quickEdit = $state<MyListQuickEdit>();
+// 他の人のプロフィールで保存した自分の登録。読み込み直すと並び順が変わらないよう、ページは読み直さず表示だけ変える
+// 外した作品は null を入れる。読み込み直し（data.viewerEntries が変わる）で捨てる
+let savedViewerEntries = $state.raw<{
+	base: Record<string, UserAnimeEntry> | null;
+	entries: Record<string, UserAnimeEntry | null>;
+} | null>(null);
+
+function myEntryOf(anime: { id: string }): UserAnimeEntry | null | undefined {
+	if (isOwn) return animeList.find((a) => a.id === anime.id)?.user_entry;
+	if (savedViewerEntries?.base === data.viewerEntries && anime.id in savedViewerEntries.entries) {
+		return savedViewerEntries.entries[anime.id];
+	}
+	return data.viewerEntries?.[anime.id] ?? null;
+}
+
+function rememberViewerEntry(anime: { id: string }, entry: UserAnimeEntry | null) {
+	const entries = savedViewerEntries?.base === data.viewerEntries ? savedViewerEntries.entries : {};
+	savedViewerEntries = { base: data.viewerEntries, entries: { ...entries, [anime.id]: entry } };
+}
+
+function scoreButtonFor(anime: Anime) {
+	return {
+		expanded: quickEdit?.isOpenFor(anime.id, "score") ?? false,
+		onclick: (e: MouseEvent) => quickEdit?.open(e, anime, "score"),
+	};
+}
+
+const showListButtons = $derived(Boolean(data.user) && (isOwn || data.viewerEntries != null));
+
+function listButtonFor(anime: Anime) {
+	const status = myEntryOf(anime)?.status;
+	return {
+		status,
+		label: status ? `自分のマイリスト: ${statusLabel[status]}` : "自分のマイリストに追加",
+		expanded: quickEdit?.isOpenFor(anime.id) ?? false,
+		onclick: (e: MouseEvent) => quickEdit?.open(e, anime),
+	};
+}
 </script>
 
 <svelte:head>
@@ -654,6 +671,15 @@ const grouped = $derived(
 			</div>
 		{/if}
 
+		{#if showListButtons}
+			<MyListQuickEdit
+				bind:this={quickEdit}
+				entryOf={myEntryOf}
+				removeAction="?/removeWatchlist"
+				onsaved={isOwn ? undefined : rememberViewerEntry}
+			/>
+		{/if}
+
 		{#if showProfileEditModal && isOwn}
 			<div class="profile-edit-modal-overlay" role="presentation" onclick={closeProfileEditModal}>
 				<div
@@ -835,11 +861,8 @@ const grouped = $derived(
 		<!-- タブ -->
 		<nav
 			class="profile-tabs"
-			class:profile-tabs--more-left={tabsMoreLeft}
-			class:profile-tabs--more-right={tabsMoreRight}
 			aria-label="プロフィールタブ"
-			bind:this={tabsNav}
-			onscroll={updateTabsOverflow}
+			{@attach scrollableTabs(".profile-tab.active", activeTab)}
 		>
 			<a href="/profile/{profile.username}" class="profile-tab" class:active={activeTab === 'posts'}>投稿</a>
 			<a href="/profile/{profile.username}?tab=images" class="profile-tab" class:active={activeTab === 'images'}
@@ -847,21 +870,31 @@ const grouped = $derived(
 			>
 			<a href="/profile/{profile.username}?tab=list" class="profile-tab" class:active={activeTab === 'list'}>
 				マイリスト
-				{#if !canViewContent || (!profile.list_is_public && !isOwn)}
+				{#if !canViewContent || !profile.list_is_public}
 					<span class="tab-lock i-lucide-lock-keyhole" aria-hidden="true"></span>
 				{/if}
 			</a>
 			<a
-				href="/profile/{profile.username}?tab=collections"
+				href="/profile/{profile.username}?tab=activity"
 				class="profile-tab"
-				class:active={activeTab === 'collections'}
+				class:active={activeTab === 'activity'}
 			>
-				コレクション
+				アクティビティ
+				{#if !canViewContent || !profile.list_is_public}
+					<span class="tab-lock i-lucide-lock-keyhole" aria-hidden="true"></span>
+				{/if}
 			</a>
 			{#if isOwn}
 				<a href="/profile/{profile.username}?tab=likes" class="profile-tab" class:active={activeTab === 'likes'}
 					>いいね</a
 				>
+				<a
+					href="/profile/{profile.username}?tab=bookmarks"
+					class="profile-tab"
+					class:active={activeTab === 'bookmarks'}
+				>
+					ブックマーク
+				</a>
 			{/if}
 		</nav>
 
@@ -937,93 +970,57 @@ const grouped = $derived(
 					<p>まだアニメがありません</p>
 				</div>
 			{:else}
-				<div class="list-summary">
-					<span class="list-total">合計 <strong>{animeList.length}</strong> 作品</span>
-					{#if isOwn}
-						<a href="/mylist" class="list-manage-link">リストを管理</a>
-					{/if}
-				</div>
+				<div class="profile-mylist">
+					<div class="profile-list-controls">
+						{#if isOwn}
+							<a href="/mylist" class="list-manage-link">リストを管理</a>
+						{/if}
+						<MylistSortSelect bind:sort={listSort} />
+					</div>
+					<MylistStatusTabs counts={countMylistByStatus(grouped)} bind:status={selectedStatus} />
 
-				{#each statusOrder as status}
-					{#if grouped[status].length > 0}
-						<AnimeStatusSection
-							{status}
-							animes={grouped[status]}
-							{statusLabel}
-							{statusIcon}
-							headingLevel={3}
-						/>
-					{/if}
-				{/each}
+					<div role="tabpanel" aria-label={MYLIST_TAB_LABELS[selectedStatus]}>
+						{#if grouped[selectedStatus].length === 0}
+							<div class="empty-state">
+								<p>{MYLIST_TAB_LABELS[selectedStatus]}の作品はありません</p>
+							</div>
+						{:else}
+							<AnimeStatusSection
+								animes={grouped[selectedStatus]}
+								scoreLabel={isOwn ? '自分のスコア' : `${displayName}のスコア`}
+								scoreButtonFor={isOwn ? scoreButtonFor : undefined}
+								listButtonFor={showListButtons ? listButtonFor : undefined}
+							/>
+						{/if}
+					</div>
+				</div>
 			{/if}
 		{/if}
 
-		<!-- コレクションタブ（#515） -->
-		{#if activeTab === 'collections'}
-			{#if !canViewContent}
+		<!-- アクティビティタブ（181）。マイリストと同じ相手に見せる -->
+		{#if activeTab === 'activity'}
+			{#if !canViewContent || (!profile.list_is_public && !isOwn)}
 				<div class="empty-state profile-private-state">
-					<p>このアカウントのコレクションはフォロワーだけが見ることができます</p>
+					<p>
+						{!canViewContent ? 'このアカウントのアクティビティはフォロワーだけが見ることができます' : 'このユーザーのマイリストは非公開です'}
+					</p>
 				</div>
-			{:else if data.collections === null}
+			{:else if data.activity === null}
 				<div class="empty-state">
-					<p>コレクションを読み込めませんでした。ページを再読み込みしてください</p>
+					<p>アクティビティを読み込めませんでした。ページを再読み込みしてください</p>
+				</div>
+			{:else if data.activity.items.length === 0 && !data.activity.nextCursor}
+				<div class="empty-state">
+					<p>
+						{isOwn ? 'マイリストを視聴予定・視聴中・完了にすると、ここに流れます' : 'まだアクティビティがありません'}
+					</p>
 				</div>
 			{:else}
-				{#if isOwn && data.collections.length > 0}
-					<div class="collections-toolbar">
-						<button
-							type="button"
-							class="btn btn-secondary collections-new"
-							onclick={() => (creatingCollection = true)}
-						>
-							<span class="i-lucide-plus" aria-hidden="true"></span>
-							新しいコレクション
-						</button>
-					</div>
-				{/if}
-				{#if data.collections.length === 0}
-					{#if isOwn}
-						<button type="button" class="collections-empty-add" onclick={() => (creatingCollection = true)}>
-							<span class="i-lucide-plus" aria-hidden="true"></span>
-							コレクションを作る
-						</button>
-					{:else}
-						<div class="empty-state"><p>まだコレクションがありません</p></div>
-					{/if}
-				{:else}
-					<ul class="collections-list">
-						{#each data.collections as collection (collection.id)}
-							<li>
-								<a href="/collections/{collection.id}" class="collection-item">
-									<!-- 先頭の4作品のカバー（足りない分は空の枠） -->
-									<span class="collection-item-covers" aria-hidden="true">
-										{#each [0, 1, 2, 3] as slot (slot)}
-											<span class="collection-item-cover">
-												{#if collection.covers[slot]}
-													<img src={collection.covers[slot]} alt="" loading="lazy">
-												{/if}
-											</span>
-										{/each}
-									</span>
-									<span class="collection-item-body">
-										<span class="collection-item-title">
-											{collection.title}
-											{#if !collection.is_public}
-												<span class="collection-item-private">
-													<span class="i-lucide-lock-keyhole" aria-hidden="true"></span>
-													非公開
-												</span>
-											{/if}
-										</span>
-										{#if collection.description}
-											<span class="collection-item-description">{collection.description}</span>
-										{/if}
-										<span class="collection-item-meta">{collection.item_count}作品</span>
-									</span>
-								</a>
-							</li>
-						{/each}
-					</ul>
+				<ActivityFeed items={data.activity.items} canLike={Boolean(data.user) && !isOwn} showUser={false} />
+				{#if data.activity.nextCursor}
+					<a href={timelineCursorHref(page.url, data.activity.nextCursor)} class="load-more-btn"
+						>さらに読み込む</a
+					>
 				{/if}
 			{/if}
 		{/if}
@@ -1047,22 +1044,28 @@ const grouped = $derived(
 				{/if}
 			{/if}
 		{/if}
+
+		<!-- ブックマークタブ（自分だけ） -->
+		{#if activeTab === 'bookmarks' && isOwn}
+			{#if listPosts.length === 0 && !data.listNextCursor}
+				<div class="empty-state">
+					<p>保存した投稿はまだありません</p>
+				</div>
+			{:else}
+				{#each listPosts as post (post.id)}
+					<PostRow {post} currentUserId={data.user?.id ?? null} />
+				{/each}
+				{#if data.listNextCursor}
+					<a href={timelineCursorHref(page.url, data.listNextCursor)} class="load-more-btn">さらに読み込む</a>
+				{/if}
+			{/if}
+		{/if}
 	</main>
 
 	<aside class="sidebar-column">
 		<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
 	</aside>
 </div>
-
-{#if creatingCollection && isOwn}
-	<CollectionFormModal
-		mode="create"
-		action="?/createCollection"
-		onclose={() => {
-			creatingCollection = false;
-		}}
-	/>
-{/if}
 
 {#if avatarCropSource}
 	<ImageCropper
@@ -1206,24 +1209,14 @@ const grouped = $derived(
 	white-space: nowrap;
 }
 
-/* スマホでは詰めて、5つのタブが 360px 幅に収まるようにする（余った幅は均等に分ける） */
+/* スマホでは入りきる幅なら余りを均等に分け、入らなければ横に送る */
 @media (max-width: 480px) {
 	.profile-tab {
 		flex: 1 0 auto;
 		justify-content: center;
-		padding: 10px 4px;
+		padding: 10px 14px;
 		font-size: 0.85rem;
 	}
-}
-
-.profile-tabs--more-right {
-	mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
-}
-.profile-tabs--more-left {
-	mask-image: linear-gradient(to left, #000 calc(100% - 32px), transparent);
-}
-.profile-tabs--more-left.profile-tabs--more-right {
-	mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent);
 }
 
 .profile-tab:hover {
@@ -1470,112 +1463,6 @@ const grouped = $derived(
 	margin-top: 8px;
 }
 
-/* コレクションタブ（#515） */
-.collections-toolbar {
-	display: flex;
-	justify-content: flex-end;
-	padding: 12px 16px 0;
-}
-.collections-new {
-	font-size: 13px;
-}
-.collections-empty-add {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	gap: 6px;
-	width: calc(100% - 32px);
-	margin: 16px;
-	padding: 20px;
-	border: 1px dashed var(--color-border-hover);
-	border-radius: 12px;
-	background: transparent;
-	color: var(--color-text-muted);
-	cursor: pointer;
-	font: inherit;
-	font-size: 14px;
-}
-.collections-empty-add:hover {
-	background: var(--color-surface-hover);
-	color: var(--color-text);
-}
-.collections-list {
-	display: flex;
-	flex-direction: column;
-	margin: 0;
-	padding: 8px 0;
-	list-style: none;
-}
-.collection-item {
-	display: flex;
-	align-items: center;
-	gap: 14px;
-	padding: 12px 16px;
-	color: var(--color-text);
-	text-decoration: none;
-}
-.collection-item:hover {
-	background: var(--color-surface-hover);
-}
-.collection-item-covers {
-	display: grid;
-	flex-shrink: 0;
-	grid-template-columns: repeat(2, 1fr);
-	gap: 2px;
-	width: 72px;
-	overflow: hidden;
-	border-radius: 8px;
-	background: var(--color-border);
-}
-.collection-item-cover {
-	display: block;
-	aspect-ratio: 400 / 566;
-	background: var(--color-bg-card);
-}
-.collection-item-cover img {
-	display: block;
-	width: 100%;
-	height: 100%;
-	object-fit: cover;
-}
-.collection-item-body {
-	display: flex;
-	flex-direction: column;
-	gap: 4px;
-	min-width: 0;
-}
-.collection-item-title {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 6px;
-	font-size: 15px;
-	font-weight: 700;
-	overflow-wrap: anywhere;
-}
-.collection-item-private {
-	display: inline-flex;
-	align-items: center;
-	gap: 3px;
-	color: var(--color-text-muted);
-	font-size: 12px;
-	font-weight: 600;
-}
-.collection-item-description {
-	display: -webkit-box;
-	overflow: hidden;
-	color: var(--color-text-muted);
-	font-size: 13px;
-	line-height: 1.5;
-	-webkit-box-orient: vertical;
-	-webkit-line-clamp: 2;
-	line-clamp: 2;
-}
-.collection-item-meta {
-	color: var(--color-text-muted);
-	font-size: 12px;
-}
-
 /* 「ブロック中」は押せない状態の表示なので、灰色の枠にして押せる見た目（カーソル・ホバー）を消す */
 .profile-blocked-label {
 	cursor: default;
@@ -1619,17 +1506,16 @@ const grouped = $derived(
 	align-items: center;
 }
 
-.list-summary {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	padding: 12px 4px;
-	font-size: 0.85rem;
-	color: var(--color-text-muted);
+.profile-mylist {
+	padding-top: 12px;
 }
 
-.list-summary strong {
-	color: var(--color-text);
+.profile-list-controls {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 12px;
+	margin-bottom: 8px;
 }
 
 .profile-stat--link:hover strong {
@@ -1637,6 +1523,7 @@ const grouped = $derived(
 }
 
 .list-manage-link {
+	margin-right: auto;
 	font-size: 0.8rem;
 	color: var(--color-accent);
 	text-decoration: none;

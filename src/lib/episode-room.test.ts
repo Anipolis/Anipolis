@@ -5,6 +5,7 @@ import {
 	airingOnAirAt,
 	buildEpisodeRoomList,
 	type EpisodeRoomListEntry,
+	episodeRoomChipLabels,
 	episodeRoomEntryState,
 	episodeRoomPath,
 	formatAiringDate,
@@ -12,7 +13,6 @@ import {
 	hasEpisodeRooms,
 	isEpisodeRoomEntryLive,
 	MAX_EPISODE_NUMBER,
-	openableEpisodeLimit,
 	parseEpisodeNumberParam,
 } from "./episode-room";
 import type { EpisodeRoom, RoomAiring } from "./types";
@@ -144,7 +144,13 @@ describe("buildEpisodeRoomList（作品ページの話数ルーム一覧）", ()
 	});
 
 	it("ルームが無くても開ける話（ensure_episode_room がすぐ作る話）は投稿できる行にする", () => {
-		const list = buildEpisodeRoomList({ animeId: 1, rooms: [], airings: [], episodeTotal: 3, openableUpTo: 2 });
+		const list = buildEpisodeRoomList({
+			animeId: 1,
+			rooms: [],
+			airings: [],
+			episodeTotal: 3,
+			bounds: { season: null, openableUpTo: 2 },
+		});
 		expect(list.map((entry) => episodeRoomEntryState(entry, now))).toEqual(["open", "open", "unaired"]);
 	});
 
@@ -163,6 +169,36 @@ describe("buildEpisodeRoomList（作品ページの話数ルーム一覧）", ()
 		});
 		expect(list.map((entry) => entry.label)).toEqual(["第1話", "第2話", "第3話", "総集編"]);
 		expect(list.at(-1)?.href).toBe("/rooms/anime/1/sp/recap");
+	});
+
+	it("特番が1つなら「特」、複数なら放送順に「特1」「特2」", () => {
+		const entry = (key: string, episodeNumber: number | null) => ({ key, episodeNumber }) as EpisodeRoomListEntry;
+		expect([...episodeRoomChipLabels([entry("ep-1", 1), entry("sp-a", null)]).values()]).toEqual(["1", "特"]);
+		expect([
+			...episodeRoomChipLabels([entry("ep-1", 1), entry("sp-a", null), entry("sp-b", null)]).values(),
+		]).toEqual(["1", "特1", "特2"]);
+	});
+
+	it("通算の話数の作品はシーズンの範囲だけ並べ、範囲外でも実在するルームは残す", () => {
+		const list = buildEpisodeRoomList({
+			animeId: 1,
+			rooms: [room("r1", 1, "2026-10-01T00:00:00Z"), room("r85", 85, "2026-10-01T00:00:00Z")],
+			airings: [],
+			episodeTotal: 3,
+			bounds: { season: { first: 83, last: 85 }, openableUpTo: 85 },
+		});
+		expect(list.map((entry) => entry.episodeNumber)).toEqual([1, 83, 84, 85]);
+	});
+
+	it("開ける話数までは、ルームが無くても開ける扱いにする", () => {
+		const list = buildEpisodeRoomList({
+			animeId: 1,
+			rooms: [],
+			airings: [],
+			episodeTotal: 3,
+			bounds: { season: null, openableUpTo: 2 },
+		});
+		expect(list.map((entry) => entry.opensAt != null)).toEqual([true, true, false]);
 	});
 
 	it("話数が不明なら作られたルームの最大話数まで。ルームも話数も無ければ空", () => {
@@ -200,37 +236,5 @@ describe("buildEpisodeRoomList（作品ページの話数ルーム一覧）", ()
 			episodeTotal: 1,
 		});
 		expect(withoutDate[0]?.firstAiredOn).toBe("2026-10-14");
-	});
-});
-
-describe("openableEpisodeLimit（ensure_episode_room と同じ判断）", () => {
-	const now = Date.parse("2026-10-14T00:00:00Z");
-	const base = { type: "TV", status: "airing", aired_from: "2026-10-01", episode_total: 12 };
-	const r = (id: string, n: number): EpisodeRoom => ({
-		id,
-		anime_id: 1,
-		kind: "episode",
-		episode_number: n,
-		special_key: null,
-		label: null,
-		opens_at: null,
-		merged_into: null,
-	});
-
-	it("放送枠のある作品は開場済みの最大話数まで", () => {
-		const airings = [
-			{ ...airing("a", "2026-10-07T14:25:00Z", "2026-10-07T15:30:00Z"), episode_room_id: "r2" },
-			{ ...airing("b", "2026-10-21T14:25:00Z", "2026-10-21T15:30:00Z"), episode_room_id: "r4" },
-		];
-		expect(openableEpisodeLimit({ anime: base, rooms: [r("r2", 2), r("r4", 4)], airings, now })).toBe(2);
-	});
-
-	it("放送枠の無い作品は、放送終了か配信開始済みの ONA / OVA なら話数まで", () => {
-		const none = { rooms: [], airings: [], now };
-		expect(openableEpisodeLimit({ anime: { ...base, status: "finished" }, ...none })).toBe(12);
-		expect(openableEpisodeLimit({ anime: { ...base, type: "ONA" }, ...none })).toBe(12);
-		expect(openableEpisodeLimit({ anime: { ...base, type: "ONA", aired_from: "2026-11-01" }, ...none })).toBe(0);
-		expect(openableEpisodeLimit({ anime: base, ...none })).toBe(0);
-		expect(openableEpisodeLimit({ anime: { ...base, status: "finished", episode_total: null }, ...none })).toBe(0);
 	});
 });

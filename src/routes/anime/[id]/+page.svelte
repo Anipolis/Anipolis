@@ -3,21 +3,25 @@ import type { SubmitFunction } from "@sveltejs/kit";
 import { tick, untrack } from "svelte";
 import { fade, scale } from "svelte/transition";
 import { enhance } from "$app/forms";
+import { invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
 import { trapFocus } from "$lib/actions/trapFocus";
 import { isCoverHiddenWithoutCopyright } from "$lib/anime-cover";
 import { animeRelationLabel, animeSeasonLabel, animeTypeLabel } from "$lib/anime-labels";
 import AddToCollectionModal from "$lib/components/AddToCollectionModal.svelte";
+import AnimePosterTile from "$lib/components/AnimePosterTile.svelte";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
 import MyListStatusPopover from "$lib/components/MyListStatusPopover.svelte";
-import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
-import { episodeRoomEntryState, formatAiringTime, isEpisodeRoomEntryLive } from "$lib/episode-room";
-import type { AnimeStatus, BroadcastRoomOverride } from "$lib/types";
+import {
+	episodeRoomChipLabels,
+	episodeRoomEntryState,
+	formatAiringTime,
+	isEpisodeRoomEntryLive,
+} from "$lib/episode-room";
+import type { AnimeStatus, UserAnimeEntry } from "$lib/types";
 import {
 	type BroadcastOverrideKind,
-	formatBroadcastEpisodeNumber,
-	formatBroadcastEpisodeSlot,
 	formatBroadcastOverrideEpisodeSummary,
 	formatBroadcastOverrideKindLabel,
 } from "$lib/utils/broadcast-episodes";
@@ -75,14 +79,13 @@ const relationGroups = $derived(
 // 「その他」だけのときは、見出し「関連作品」の下に同じような小見出しを重ねない
 const showRelationGroupLabels = $derived(relationGroups.length > 1 || relationGroups[0]?.key !== "other");
 const animeListHref = $derived(getAnimeListHref());
-const sortedRoomLogs = $derived([...data.episodes].sort((a, b) => a.date.localeCompare(b.date)));
-const latestRoomLog = $derived(sortedRoomLogs.at(-1));
 // 話数ルームの「Latest」: 放送中の作品で、投稿できる最も新しい話
 const latestEpisodeRoom = $derived(
 	[...data.episodeRooms]
 		.reverse()
 		.find((entry) => entry.kind === "episode" && episodeRoomEntryState(entry, episodeRoomNow) === "open"),
 );
+const episodeRoomChips = $derived(episodeRoomChipLabels(data.episodeRooms));
 const isAnimeAiring = $derived(data.anime.computed_broadcast_status === "airing");
 
 const broadcastLabels: Record<string, string> = {
@@ -210,8 +213,29 @@ const myListStatusLabels: Record<AnimeStatus, string> = {
 	on_hold: "中断",
 	dropped: "断念",
 };
+// 保存の応答が来たら、マイリストのボタンと登録者数をすぐ変える（ページの読み直しは裏で待つ）
+let savedMyList = $state.raw<{
+	animeId: typeof data.anime.id;
+	entry: UserAnimeEntry | null;
+	listCount: number;
+} | null>(null);
+const userEntry = $derived(savedMyList?.animeId === data.anime.id ? savedMyList.entry : data.anime.user_entry);
+const listCount = $derived(
+	savedMyList?.animeId === data.anime.id ? savedMyList.listCount : (data.anime.list_count ?? 0),
+);
+function handleMyListSaved(entry: UserAnimeEntry | null, savedAnimeId: string) {
+	// 保存中に別の作品へ移っていたら、その作品の表示には使わない
+	if (savedAnimeId !== String(data.anime.id)) return;
+	const delta = (entry ? 1 : 0) - (userEntry ? 1 : 0);
+	const saved = { animeId: data.anime.id, entry, listCount: Math.max(0, listCount + delta) };
+	savedMyList = saved;
+	// 読み直しが済んだらページのデータに戻す（その間にもう一度保存していたら、新しい方を残す）
+	void invalidateAll().finally(() => {
+		if (savedMyList === saved) savedMyList = null;
+	});
+}
 const myListLabel = $derived.by(() => {
-	const status = data.anime.user_entry?.status as AnimeStatus | undefined;
+	const status = userEntry?.status as AnimeStatus | undefined;
 	return status ? `マイリスト: ${myListStatusLabels[status]}` : "マイリストに追加";
 });
 let showUserListModal = $state(false);
@@ -351,7 +375,6 @@ let recipientDebounce = $state<ReturnType<typeof setTimeout> | null>(null);
 let recommendSubmitting = $state(false);
 let recommendFeedback = $state("");
 let recommendError = $state("");
-let liveRoomDates = $state(new Set<string>());
 let liveEpisodeRoomKeys = $state(new Set<string>());
 // 一覧の状態（投稿できる／未放送）を開く時刻で計算し直すための現在時刻（30秒ごとに更新）
 let episodeRoomNow = $state(Date.now());
@@ -411,61 +434,8 @@ const handleRecommendSubmit: SubmitFunction = () => {
 	};
 };
 
-function parseDateInput(value: string): Date {
-	return new Date(`${value}T00:00:00`);
-}
-
-function overrideForDate(dateStr: string): BroadcastRoomOverride | null {
-	return data.broadcastOverrides.find((override) => override.room_date.slice(0, 10) === dateStr) ?? null;
-}
-
-function effectiveBroadcastTime(dateStr: string): string | null {
-	return overrideForDate(dateStr)?.broadcast_time ?? data.anime.broadcast_time;
-}
-
-function effectiveDurationMinutes(dateStr: string): number {
-	const overrideDuration = overrideForDate(dateStr)?.duration_minutes;
-	return overrideDuration != null && overrideDuration > 0 ? overrideDuration : data.anime.broadcast_duration_minutes;
-}
-
-function effectivePostCloseMinutes(dateStr: string): number {
-	const overridePostClose = overrideForDate(dateStr)?.post_close_minutes;
-	return overridePostClose != null && overridePostClose >= 0
-		? overridePostClose
-		: data.anime.broadcast_room_post_close_minutes;
-}
-
-function minutesUntilBroadcast(now: Date, roomDate: string): number | null {
-	const broadcastTime = effectiveBroadcastTime(roomDate);
-	if (!broadcastTime) return null;
-	const match = broadcastTime.match(/^(\d{1,2}):(\d{2})/);
-	if (!match) return null;
-
-	const broadcastHour = Number(match[1]);
-	const broadcastMin = Number(match[2]);
-	const scheduledAt = parseDateInput(roomDate);
-	scheduledAt.setHours(broadcastHour, broadcastMin, 0, 0);
-	return Math.round((scheduledAt.getTime() - now.getTime()) / 60_000);
-}
-
-function getLiveWindowMinutes(roomDate: string): number {
-	const durationMinutes = effectiveDurationMinutes(roomDate) > 0 ? effectiveDurationMinutes(roomDate) : 30;
-	const postCloseMinutes = effectivePostCloseMinutes(roomDate) >= 0 ? effectivePostCloseMinutes(roomDate) : 30;
-	return durationMinutes + postCloseMinutes;
-}
-
-function isRoomLive(now: Date, roomDate: string): boolean {
-	const mins = minutesUntilBroadcast(now, roomDate);
-	return mins !== null && mins <= 0 && mins > -getLiveWindowMinutes(roomDate);
-}
-
-function refreshLiveRoomDates() {
+function refreshLiveEpisodeRooms() {
 	const now = new Date();
-	const next = new Set<string>();
-	for (const episode of data.episodes) {
-		if (isRoomLive(now, episode.date)) next.add(episode.date);
-	}
-	liveRoomDates = next;
 	const nowMs = now.getTime();
 	episodeRoomNow = nowMs;
 	liveEpisodeRoomKeys = new Set(
@@ -475,8 +445,8 @@ function refreshLiveRoomDates() {
 
 $effect(() => {
 	data.anime.id;
-	refreshLiveRoomDates();
-	const id = setInterval(refreshLiveRoomDates, 30_000);
+	refreshLiveEpisodeRooms();
+	const id = setInterval(refreshLiveEpisodeRooms, 30_000);
 	return () => clearInterval(id);
 });
 </script>
@@ -505,27 +475,14 @@ $effect(() => {
 						{/if}
 						<div class="relation-list">
 							{#each group.relations as relation (`${relation.relation_type}-${relation.related_anime_mal_id}`)}
-								<a href="/anime/{relation.anime.id}" class="relation-card">
-									{#if relation.anime.cover_url}
-										<img
-											class="relation-card-thumb"
-											src={coverThumbSrc(relation.anime.cover_url)}
-											{@attach coverThumbFallback(relation.anime.cover_url)}
-											alt=""
-										>
-									{:else}
-										<span
-											class="relation-card-thumb relation-card-thumb--placeholder"
-											aria-hidden="true"
-										></span>
-									{/if}
-									<span class="relation-card-body">
-										<strong>{relation.anime.title}</strong>
-										{#if group.key === 'other' && animeRelationLabel(relation.relation_type)}
-											<small>{animeRelationLabel(relation.relation_type)}</small>
-										{/if}
-									</span>
-								</a>
+								<div class="relation-item">
+									<AnimePosterTile
+										href="/anime/{relation.anime.id}"
+										title={relation.anime.title}
+										coverUrl={relation.anime.cover_url}
+										note={group.key === 'other' ? animeRelationLabel(relation.relation_type) || undefined : undefined}
+									/>
+								</div>
 							{/each}
 						</div>
 					</div>
@@ -771,7 +728,7 @@ $effect(() => {
 						<span class="stat-label"> 評価なし </span>
 					{/if}
 				</span>
-				{#if data.anime.list_count}
+				{#if listCount}
 					<button
 						type="button"
 						class="stat stat--link"
@@ -780,8 +737,8 @@ $effect(() => {
 					>
 						<!-- スマホでは大きな数を「1.2万」と縮める（PC はそのまま） -->
 						<span class="stat-value">
-							<span class="count-full">{formatCount(data.anime.list_count)}</span>
-							<span class="count-compact">{formatCompactCount(data.anime.list_count)}</span>
+							<span class="count-full">{formatCount(listCount)}</span>
+							<span class="count-compact">{formatCompactCount(listCount)}</span>
 						</span>
 						<span class="stat-label"
 							>人が登録<span class="i-lucide-chevron-right" aria-hidden="true"></span></span
@@ -812,8 +769,8 @@ $effect(() => {
 							title={myListLabel}
 						>
 							<span class="mylist-split-label" aria-hidden="true">
-								{#if data.anime.user_entry}
-									{myListStatusLabels[data.anime.user_entry.status as AnimeStatus]}
+								{#if userEntry}
+									{myListStatusLabels[userEntry.status as AnimeStatus]}
 								{:else}
 									<!-- スマホの細い列では「マイリストに追加」が入らないので短くする -->
 									<span class="mylist-label-long">マイリストに追加</span>
@@ -828,11 +785,11 @@ $effect(() => {
 							class:active={myListModalOpen}
 							onclick={() => (myListModalOpen = true)}
 							aria-haspopup="dialog"
-							aria-label={data.anime.user_entry ? 'スコア・進捗を編集' : 'スコア・進捗も入れて登録'}
-							title={data.anime.user_entry ? 'スコア・進捗を編集' : 'スコア・進捗も入れて登録'}
+							aria-label={userEntry ? 'スコア・進捗を編集' : 'スコア・進捗も入れて登録'}
+							title={userEntry ? 'スコア・進捗を編集' : 'スコア・進捗も入れて登録'}
 						>
 							<!-- 未登録は list-plus、登録済みは list-check（アニメ一覧のカードと同じ） -->
-							{#if data.anime.user_entry}
+							{#if userEntry}
 								<span class="i-lucide-list-check mylist-split-icon" aria-hidden="true"></span>
 							{:else}
 								<span class="i-lucide-list-plus mylist-split-icon" aria-hidden="true"></span>
@@ -1640,7 +1597,7 @@ $effect(() => {
 						aria-controls="room-tabpanel"
 						onclick={() => (activeRoomTab = "log")}
 					>
-						ルームログ
+						ルーム
 					</button>
 					<button
 						type="button"
@@ -1673,7 +1630,9 @@ $effect(() => {
 							</section>
 						{:else if data.episodeRooms.length > 0}
 							<section class="room-log-section">
-								<h2 class="room-log-heading">話数ルーム</h2>
+								<h2 class="room-log-heading">
+									{data.episodeRooms.some((entry) => entry.kind === "episode") ? "話数ルーム" : "特番ルーム"}
+								</h2>
 								<ol class="room-log-list">
 									{#if isAnimeAiring && latestEpisodeRoom}
 										<li class="room-log-latest-slot">
@@ -1711,11 +1670,10 @@ $effect(() => {
 												href={entry.href ?? undefined}
 												class="room-log-item"
 												class:room-log-item--unaired={entryState !== "open"}
-												class:room-log-item--special={entry.episodeNumber == null}
 												title={entryDetail ? `${entry.label}（${entryDetail}）` : entry.label}
 											>
 												<span class="room-log-ep-compact" aria-hidden="true"
-													>{entry.episodeNumber ?? entry.label}</span
+													>{episodeRoomChips.get(entry.key)}</span
 												>
 												<span class="sr-only"
 													>{entryDetail ? `${entry.label}（${entryDetail}）` : entry.label}</span
@@ -1728,52 +1686,10 @@ $effect(() => {
 									{/each}
 								</ol>
 							</section>
-						{:else if data.episodes.length > 0}
-							<section class="room-log-section">
-								<h2 class="room-log-heading">ルームログ</h2>
-								<ol class="room-log-list">
-									{#if isAnimeAiring && latestRoomLog}
-										<li class="room-log-latest-slot">
-											<a
-												href="/rooms/anime/{data.anime.id}/{latestRoomLog.date}"
-												class="room-log-item room-log-item--latest"
-											>
-												<span class="room-log-latest-label">最新話</span>
-												<span class="room-log-ep"
-													>{formatBroadcastEpisodeSlot(latestRoomLog)}</span
-												>
-												{#if liveRoomDates.has(latestRoomLog.date)}
-													<span class="room-log-live-badge">LIVE</span>
-												{/if}
-												<span class="room-log-date">{formatRoomDate(latestRoomLog.date)}</span>
-												<span
-													class="i-lucide-arrow-right room-log-latest-arrow"
-													aria-hidden="true"
-												></span>
-											</a>
-										</li>
-									{/if}
-									{#each sortedRoomLogs as ep (ep.date)}
-										<li>
-											<a
-												href="/rooms/anime/{data.anime.id}/{ep.date}"
-												class="room-log-item"
-												title="{formatBroadcastEpisodeSlot(ep)}（{formatRoomDate(ep.date)}）"
-											>
-												<span class="room-log-ep-compact" aria-hidden="true"
-													>{formatBroadcastEpisodeNumber(ep)}</span
-												>
-												<span class="sr-only"
-													>{formatBroadcastEpisodeSlot(ep)}（{formatRoomDate(ep.date)}）</span
-												>
-												{#if liveRoomDates.has(ep.date)}
-													<span class="room-log-live-dot" aria-hidden="true"></span>
-												{/if}
-											</a>
-										</li>
-									{/each}
-								</ol>
-							</section>
+						{:else if data.episodeRoomsFailed}
+							<p class="room-tab-empty" role="alert">
+								話数ルームを読み込めませんでした。ページを読み込み直してください。
+							</p>
 						{:else}
 							<p class="room-tab-empty">このアニメにはルームがありません。</p>
 						{/if}
@@ -1885,8 +1801,9 @@ $effect(() => {
 		anchor={myListStatusAnchor}
 		animeId={data.anime.id}
 		animeTitle={data.anime.title}
-		entry={data.anime.user_entry}
+		entry={userEntry}
 		removeAction="?/removeWatchlist"
+		onsaved={handleMyListSaved}
 		onclose={() => {
 			myListStatusOpen = false;
 		}}
@@ -2011,8 +1928,9 @@ $effect(() => {
 	animeId={data.anime.id}
 	animeTitle={data.anime.title}
 	episodeCount={data.anime.episode_count}
-	entry={data.anime.user_entry}
+	entry={userEntry}
 	removeAction="?/removeWatchlist"
+	onsaved={handleMyListSaved}
 	onclose={() => { myListModalOpen = false; }}
 />
 <style>
@@ -2865,13 +2783,14 @@ $effect(() => {
 }
 
 /* Related anime */
+/* 前作・続編・その他は幅が許す限り横に流し、作品が多いグループだけ折り返す */
 .relations-section {
-	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
-	gap: 12px;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px 20px;
 }
 .relations-section h2 {
-	grid-column: 1 / -1;
+	flex-basis: 100%;
 	font-size: 1rem;
 	font-weight: 700;
 	margin: 0;
@@ -2880,6 +2799,7 @@ $effect(() => {
 	display: flex;
 	flex-direction: column;
 	gap: 7px;
+	min-width: 0;
 }
 .relation-group h3 {
 	font-size: 0.75rem;
@@ -2892,60 +2812,8 @@ $effect(() => {
 	flex-wrap: wrap;
 	gap: 8px;
 }
-.relation-card {
-	display: flex;
-	gap: 9px;
-	align-items: center;
-	box-sizing: border-box;
-	height: 64px;
-	min-height: 52px;
-	max-width: 290px;
-	padding: 7px 10px 7px 7px;
-	background: var(--card-bg);
-	border: 1px solid var(--border);
-	border-radius: 12px;
-	color: var(--text);
-	text-decoration: none;
-}
-a.relation-card:hover {
-	border-color: var(--accent);
-	background: var(--hover-bg);
-}
-.relation-card-thumb {
-	width: 34px;
-	aspect-ratio: 1 / 1.414;
-	display: block;
-	image-rendering: auto;
-	border-radius: 4px;
-	flex-shrink: 0;
-	object-fit: cover;
-}
-.relation-card-thumb--placeholder {
-	background: var(--hover-bg);
-	border: 1px solid var(--border);
-}
-.relation-card-body {
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
-	min-width: 0;
-}
-.relation-card strong {
-	display: -webkit-box;
-	overflow: hidden;
-	font-size: 0.84rem;
-	line-height: 1.35;
-	font-weight: 600;
-	-webkit-box-orient: vertical;
-	-webkit-line-clamp: 2;
-	line-clamp: 2;
-}
-.relation-card small {
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-	font-size: 0.72rem;
-	color: var(--text-muted);
+.relation-item {
+	flex: 0 0 104px;
 }
 .relations-slot--mobile {
 	display: none;
@@ -3448,7 +3316,7 @@ a.relation-card:hover {
 	font-weight: 600;
 }
 
-/* Room tabs (ルームログ / イベント) */
+/* Room tabs (ルーム / イベント) */
 .room-tabs-section {
 	display: flex;
 	flex-direction: column;
@@ -3596,13 +3464,6 @@ a.relation-card:hover {
 	background: transparent;
 	border-color: var(--color-text-muted);
 }
-/* 特番は数字が無いので名前を出す（2マス分の幅） */
-.room-log-item--special {
-	grid-column: span 2;
-	aspect-ratio: auto;
-	height: 44px;
-	padding: 0 6px;
-}
 /* 最新話はマイリストと同じ目立つ青の横長ボタン（文字は背景色、#500） */
 .room-log-item--latest {
 	flex-direction: row;
@@ -3645,13 +3506,6 @@ a.relation-card:hover {
 	font-weight: 750;
 	line-height: 1;
 	text-align: center;
-}
-.room-log-item--special .room-log-ep-compact {
-	overflow: hidden;
-	max-width: 100%;
-	font-size: 0.72rem;
-	text-overflow: ellipsis;
-	white-space: nowrap;
 }
 .room-log-item.room-log-item--unaired .room-log-ep-compact {
 	font-weight: 500;

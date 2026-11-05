@@ -12,6 +12,17 @@ export interface CollectionMembership {
 	item_count: number;
 	/** この作品が入っているか */
 	has_anime: boolean;
+	/** 並びで最初の、カバーのある作品のカバー（サムネイルに使う。無ければ null） */
+	cover: string | null;
+}
+
+/** 並びで最初の、カバーのある作品のカバー */
+export function firstCollectionCover(animeIds: number[], covers: ReadonlyMap<number, string | null>): string | null {
+	for (const id of animeIds) {
+		const cover = covers.get(id);
+		if (cover) return cover;
+	}
+	return null;
 }
 
 export interface CollectionInput {

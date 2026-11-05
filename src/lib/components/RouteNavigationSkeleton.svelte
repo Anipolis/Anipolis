@@ -263,12 +263,6 @@ const kind = $derived(resolveKind(pathname));
 	}
 }
 
-@media (max-width: 420px) {
-	.route-navigation-anime-grid {
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-	}
-}
-
 @media (prefers-reduced-motion: reduce) {
 	.route-navigation-skeleton {
 		animation: none;

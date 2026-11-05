@@ -1,12 +1,15 @@
 <script lang="ts">
-import type { ActionResult, SubmitFunction } from "@sveltejs/kit";
+import type { ActionResult } from "@sveltejs/kit";
 import { onDestroy, untrack } from "svelte";
-import { applyAction, deserialize, enhance } from "$app/forms";
+import { deserialize } from "$app/forms";
 import { beforeNavigate, invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
-import AnimeEditRow from "$lib/components/AnimeEditRow.svelte";
+import AnimeProgressRow from "$lib/components/AnimeProgressRow.svelte";
 import AnimeStatusSection from "$lib/components/AnimeStatusSection.svelte";
-import InfoTip from "$lib/components/InfoTip.svelte";
+import MyListModal from "$lib/components/MyListModal.svelte";
+import MyListQuickEdit from "$lib/components/MyListQuickEdit.svelte";
+import MylistSortSelect from "$lib/components/MylistSortSelect.svelte";
+import MylistStatusTabs from "$lib/components/MylistStatusTabs.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import {
 	createSaveQueue,
@@ -14,12 +17,20 @@ import {
 	type RowSaveState,
 	type SaveResult,
 } from "$lib/mylist/save-queue";
+import {
+	countMylistByStatus,
+	groupMylistByStatus,
+	MYLIST_TAB_LABELS,
+	type MylistSort,
+	type MylistTab,
+	parseMylistSort,
+	parseMylistTab,
+	sortMylist,
+} from "$lib/mylist/sort";
 import type { Anime, AnimeStatus } from "$lib/types";
 import type { PageProps } from "./$types";
 
-let { data, form }: PageProps = $props();
-
-const statusOrder: AnimeStatus[] = ["watching", "completed", "plan_to_watch", "on_hold", "dropped"];
+let { data }: PageProps = $props();
 
 const statusLabel: Record<AnimeStatus, string> = {
 	watching: "視聴中",
@@ -29,90 +40,49 @@ const statusLabel: Record<AnimeStatus, string> = {
 	dropped: "断念",
 };
 
-const mobileStatusLabel: Record<AnimeStatus, string> = {
-	watching: "視聴中",
-	completed: "完了",
-	plan_to_watch: "予定",
-	on_hold: "中断",
-	dropped: "断念",
-};
+let viewMode = $state<"list" | "progress">("list");
 
-const statusIcon: Record<AnimeStatus, string> = {
-	watching: "i-lucide-circle-play",
-	completed: "i-lucide-circle-check",
-	plan_to_watch: "i-lucide-clipboard-list",
-	on_hold: "i-lucide-circle-pause",
-	dropped: "i-lucide-circle-x",
-};
+// 開いているタブと並び順（URL の ?status= と ?sort=。切り替えは MylistStatusTabs と MylistSortSelect が URL に残す）
+let selectedStatus = $state<MylistTab>(parseMylistTab(page.url.searchParams.get("status")));
+let sort = $state<MylistSort>(parseMylistSort(page.url.searchParams.get("sort")));
 
-let isPublic = $state(false);
-let viewMode = $state<"list" | "edit">("list");
+const grouped = $derived(groupMylistByStatus(sortMylist(data.animeList, sort)));
 
-$effect(() => {
-	isPublic = data.profile.list_is_public;
+// 話数を記録している間は、行の顔ぶれと並びを止める。保存のたびに行が先頭へ動いたり、完了にした行が消えたりすると、
+// 続けて押せず、押し間違いも戻せない。タブ・並び順・表示を切り替えたら、その時の内容で並べ直す
+const progressRowIds = $derived.by(() => {
+	void viewMode;
+	void sort;
+	const tab = selectedStatus;
+	return untrack(() => grouped[tab].map((anime) => anime.id));
 });
-
-$effect(() => {
-	if (form && "list_is_public" in form) {
-		isPublic = (form as { list_is_public: boolean }).list_is_public;
-	}
+const visibleAnimes = $derived.by(() => {
+	if (viewMode === "list") return grouped[selectedStatus];
+	const byId = new Map(data.animeList.map((anime) => [anime.id, anime]));
+	return progressRowIds.flatMap((id) => byId.get(id) ?? []);
 });
-
-// 公開切替の送信状態。切替中は重複送信を防ぎ、失敗時は現在の状態と再試行を案内する
-let visibilityState = $state<"idle" | "saving" | "failed">("idle");
-let visibilityError = $state<string | null>(null);
-let visibilityForm: HTMLFormElement | undefined = $state();
-const VISIBILITY_ERROR_MESSAGE = "公開設定を切り替えられませんでした";
-
-const enhanceVisibility: SubmitFunction = ({ cancel }) => {
-	if (visibilityState === "saving") {
-		cancel();
-		return;
-	}
-	visibilityState = "saving";
-	visibilityError = null;
-
-	return async ({ result }) => {
-		if (result.type === "success") {
-			if (result.data && "list_is_public" in result.data) {
-				isPublic = Boolean(result.data["list_is_public"]);
-			}
-			visibilityState = "idle";
-			return;
-		}
-		if (result.type === "failure") {
-			visibilityState = "failed";
-			visibilityError = (result.data as { message?: string } | undefined)?.message ?? VISIBILITY_ERROR_MESSAGE;
-			return;
-		}
-		if (result.type === "error") {
-			visibilityState = "failed";
-			visibilityError = VISIBILITY_ERROR_MESSAGE;
-			return;
-		}
-		// redirect（未ログインなど）は SvelteKit 標準の遷移に任せる
-		visibilityState = "idle";
-		await applyAction(result);
-	};
-};
-
-function retryVisibility() {
-	visibilityForm?.requestSubmit();
-}
-
-const grouped = $derived(
-	statusOrder.reduce<Record<AnimeStatus, Anime[]>>(
-		(acc, status) => {
-			acc[status] = data.animeList.filter((e) => e.user_entry?.status === status);
-			return acc;
-		},
-		{ watching: [], completed: [], plan_to_watch: [], on_hold: [], dropped: [] },
-	),
-);
 
 const totalCount = $derived(data.animeList.length);
 
-let selectedStatus = $state<AnimeStatus>("watching");
+// カードのマイリストボタン・スコアから開く欄。保存したら読み込み直して、状態の変わった作品を別の段へ移す
+let quickEdit = $state<MyListQuickEdit>();
+
+function scoreButtonFor(anime: Anime) {
+	return {
+		expanded: quickEdit?.isOpenFor(anime.id, "score") ?? false,
+		onclick: (e: MouseEvent) => quickEdit?.open(e, anime, "score"),
+	};
+}
+
+function listButtonFor(anime: Anime) {
+	const status = anime.user_entry?.status;
+	return {
+		status,
+		label: status ? `マイリスト: ${statusLabel[status]}` : "マイリストに追加",
+		expanded: quickEdit?.isOpenFor(anime.id) ?? false,
+		onclick: (e: MouseEvent) => quickEdit?.open(e, anime),
+	};
+}
 
 // 各エントリのローカル状態（編集用）
 type EntryState = { status: AnimeStatus; score: string; progress: number };
@@ -121,11 +91,7 @@ let editRows = $state<Record<string, EditRow>>({});
 
 // 行ごとの保存状態（保存待ち・保存中・保存済み・失敗）。表示と再試行に使う
 let saveStates = $state<Record<string, RowSaveState<EntryState>>>({});
-const unsavedCount = $derived(
-	Object.values(saveStates).filter(
-		(state) => state.status === "pending" || state.status === "saving" || state.status === "failed",
-	).length,
-);
+const failedSaveCount = $derived(Object.values(saveStates).filter((state) => state.status === "failed").length);
 
 // 保存キューは画面を離れたあとも送信中の行の後続編集を送り切る（save-queue の dispose）。
 // そのため送信先は送る時点の URL に依存させず固定し、編集したユーザーにも紐付ける。
@@ -202,6 +168,39 @@ function cancelAutoSave(animeId: string) {
 	delete saveStates[animeId];
 }
 
+// 行の鉛筆から開く詳細のモーダル
+let detailAnimeId = $state<string | null>(null);
+const detailAnime = $derived(data.animeList.find((anime) => anime.id === detailAnimeId) ?? null);
+// モーダルは渡した内容を全項目送るので、まだ保存し終えていない行の値を渡して古い値で上書きしない
+const detailEntry = $derived.by(() => {
+	const saved = detailAnime?.user_entry;
+	const local = detailAnime ? editRows[detailAnime.id]?.entry : undefined;
+	if (!saved || !local) return saved;
+	return {
+		...saved,
+		status: local.status,
+		score: local.score ? Number(local.score) : null,
+		progress: local.progress,
+	};
+});
+
+// 行の保存を送っている間にモーダルで保存や削除をすると、後から届いた行の保存に上書きされたり、外した作品が
+// 登録し直されたりする。行の保存を送り切ってから開く
+let detailRequest = 0;
+
+async function openDetail(animeId: string) {
+	saveQueue.flush();
+	const request = ++detailRequest;
+	await saveQueue.settled(animeId);
+	if (request === detailRequest) detailAnimeId = animeId;
+}
+
+async function handleDetailSaved(animeId: string) {
+	// 行に残っていた保存待ち・失敗は、モーダルの内容に置き換わった
+	cancelAutoSave(animeId);
+	await invalidateAll();
+}
+
 // 未保存のまま画面移動する場合の扱い:
 // - 保存待ち（デバウンス中）の行は即時送信する。keepalive 付きなので移動後も送信は完了する。
 // - 保存に失敗したままの行がある場合は、移動前に確認して意図しない消失を防ぐ。
@@ -229,10 +228,17 @@ onDestroy(() => saveQueue.dispose());
 
 $effect(() => {
 	const currentRows = untrack(() => editRows);
+	const currentSaves = untrack(() => saveStates);
+	// 保存し終えた行は読み込み直した内容に合わせる（一覧のボタンで変えた分を編集の画面にも出す）。
+	// 保存待ち・保存中・失敗の行は、手元の編集を残す
+	const keepsLocal = (animeId: string) => {
+		const state = currentSaves[animeId]?.status;
+		return state === "pending" || state === "saving" || state === "failed";
+	};
 	editRows = Object.fromEntries(
 		data.animeList.map((anime) => [
 			anime.id,
-			currentRows[anime.id] ?? {
+			(keepsLocal(anime.id) ? currentRows[anime.id] : undefined) ?? {
 				entry: {
 					status: anime.user_entry?.status ?? "plan_to_watch",
 					score:
@@ -249,278 +255,137 @@ $effect(() => {
 
 <svelte:head> <title>マイリスト - Anipolis</title> </svelte:head>
 
-{#snippet visibilityHelp()}
-	<p>公開: プロフィールの「マイリスト」タブで誰でも見られます（鍵アカウントならフォロワーだけ）。</p>
-	<p>作品を視聴予定・視聴中・完了にすると、フォロワーにお知らせが届きます。</p>
-	<p>非公開: 自分だけが見られます。フォロワーへのお知らせも届きません。</p>
-	<p>非公開のマイリストは、作品のスコアやランキングに数えません。</p>
-{/snippet}
-
 <div class="page-container">
 	<main class="feed-column mylist-page">
 		<div class="mylist-container">
 			<header class="mylist-header">
-				<h1 class="mylist-title">マイリスト</h1>
 				<div class="mylist-title-row">
+					<div class="mylist-title-group">
+						<h1 class="mylist-title">マイリスト</h1>
+						{#if !data.profile.list_is_public}
+							<a
+								href="/settings/privacy"
+								class="private-badge"
+								title="非公開（設定を開く）"
+								aria-label="非公開（設定を開く）"
+							>
+								<span class="i-lucide-lock-keyhole" aria-hidden="true"></span>
+								<span class="private-badge-label">非公開</span>
+							</a>
+						{/if}
+					</div>
 					<div class="header-actions">
-						<!-- 表示切り替え -->
-						<div class="view-toggle">
-							<button
-								type="button"
-								class="view-btn"
-								class:active={viewMode === 'list'}
-								onclick={() => (viewMode = 'list')}
-							>
-								<svg
-									width="14"
-									height="14"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									aria-hidden="true"
+						{#if totalCount > 0}
+							<div class="view-toggle" role="group" aria-label="表示の切り替え">
+								<button
+									type="button"
+									class="view-btn"
+									class:active={viewMode === 'list'}
+									onclick={() => (viewMode = 'list')}
+									aria-label="カードで表示"
+									aria-pressed={viewMode === 'list'}
+									title="カードで表示"
 								>
-									<line x1="8" y1="6" x2="21" y2="6" />
-									<line x1="8" y1="12" x2="21" y2="12" />
-									<line x1="8" y1="18" x2="21" y2="18" />
-									<line x1="3" y1="6" x2="3.01" y2="6" />
-									<line x1="3" y1="12" x2="3.01" y2="12" />
-									<line x1="3" y1="18" x2="3.01" y2="18" />
-								</svg>
-								一覧
-							</button>
-							<button
-								type="button"
-								class="view-btn"
-								class:active={viewMode === 'edit'}
-								onclick={() => (viewMode = 'edit')}
-							>
-								<svg
-									width="14"
-									height="14"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									aria-hidden="true"
+									<span class="i-lucide-layout-grid" aria-hidden="true"></span>
+								</button>
+								<button
+									type="button"
+									class="view-btn"
+									class:active={viewMode === 'progress'}
+									onclick={() => (viewMode = 'progress')}
+									aria-label="話数を記録"
+									aria-pressed={viewMode === 'progress'}
+									title="話数を記録"
 								>
-									<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-									<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-								</svg>
-								編集
-							</button>
-						</div>
+									<span class="i-lucide-list" aria-hidden="true"></span>
+								</button>
+							</div>
+						{/if}
 
-						<!-- 公開/非公開切り替え -->
-						<form
-							bind:this={visibilityForm}
-							method="POST"
-							action="?/toggleVisibility"
-							use:enhance={enhanceVisibility}
-						>
-							<button
-								type="submit"
-								class="visibility-btn"
-								class:public={isPublic}
-								class:private={!isPublic}
-								class:saving={visibilityState === 'saving'}
-								disabled={visibilityState === 'saving'}
-								aria-busy={visibilityState === 'saving'}
-								title={isPublic ? '非公開にする' : '公開する'}
-							>
-								{#if visibilityState === 'saving'}
-									<span class="visibility-spinner" aria-hidden="true"></span>
-									切替中…
-								{:else if isPublic}
-									<svg
-										width="14"
-										height="14"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="2"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										aria-hidden="true"
-									>
-										<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-										<circle cx="12" cy="12" r="3" />
-									</svg>
-									公開中
-								{:else}
-									<svg
-										width="14"
-										height="14"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="2"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										aria-hidden="true"
-									>
-										<path
-											d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
-										/>
-										<line x1="1" y1="1" x2="23" y2="23" />
-									</svg>
-									非公開
-								{/if}
-							</button>
-						</form>
-						<InfoTip label="マイリストの公開設定">{@render visibilityHelp()}</InfoTip>
+						{#if totalCount > 0}
+							<MylistSortSelect bind:sort />
+						{/if}
 					</div>
 				</div>
 
-				<div class="mobile-header-row">
-					<div class="mobile-header-controls">
-						<form
-							class="mobile-visibility-form"
-							class:saving={visibilityState === 'saving'}
-							method="POST"
-							action="?/toggleVisibility"
-							use:enhance={enhanceVisibility}
-							aria-busy={visibilityState === 'saving'}
-						>
-							<button
-								type="submit"
-								class="mobile-visibility-btn"
-								class:active={isPublic}
-								disabled={isPublic || visibilityState === 'saving'}
-								aria-label="マイリストを公開する"
-								aria-pressed={isPublic}
-							>
-								公開
-							</button>
-							<button
-								type="submit"
-								class="mobile-visibility-btn"
-								class:active={!isPublic}
-								disabled={!isPublic || visibilityState === 'saving'}
-								aria-label="マイリストを非公開にする"
-								aria-pressed={!isPublic}
-							>
-								非公開
-							</button>
-						</form>
-						<InfoTip label="マイリストの公開設定">{@render visibilityHelp()}</InfoTip>
-
-						<div class="mobile-view-toggle" aria-label="表示モード">
-							<button
-								type="button"
-								class="mobile-view-btn"
-								class:active={viewMode === 'list'}
-								onclick={() => (viewMode = 'list')}
-								aria-label="一覧表示"
-								aria-pressed={viewMode === 'list'}
-								title="一覧"
-							>
-								<span class="i-lucide-list" aria-hidden="true"></span>
-							</button>
-							<button
-								type="button"
-								class="mobile-view-btn"
-								class:active={viewMode === 'edit'}
-								onclick={() => (viewMode = 'edit')}
-								aria-label="編集表示"
-								aria-pressed={viewMode === 'edit'}
-								title="編集"
-							>
-								<span class="i-lucide-pencil" aria-hidden="true"></span>
-							</button>
-						</div>
-					</div>
-				</div>
-
-				<!-- 公開設定の切替結果・未保存の案内 -->
-				{#if visibilityState === 'failed' || unsavedCount > 0}
-					<div class="mylist-notices">
-						{#if visibilityState === 'failed'}
-							<p class="visibility-error" role="alert">
-								<span class="i-lucide-triangle-alert" aria-hidden="true"></span>
-								<span>
-									{visibilityError ?? VISIBILITY_ERROR_MESSAGE}。現在は「{isPublic ? '公開中' : '非公開'}」のままです。
-								</span>
-								<button type="button" class="retry-btn" onclick={retryVisibility}>再試行</button>
-							</p>
-						{/if}
-						{#if unsavedCount > 0}
-							<p class="unsaved-note" role="status" aria-live="polite">
-								未保存の変更が{unsavedCount}件あります。画面を移動すると保存待ちの変更は自動で送信されますが、失敗した変更は再試行するまで保存されません。
-							</p>
-						{/if}
-					</div>
+				<!-- 失敗したときだけ出す。保存待ちや保存中で出すと、話数を押すたびに一覧がずれて次のボタンを押し損ねる -->
+				{#if failedSaveCount > 0}
+					<p class="unsaved-note" role="status" aria-live="polite">
+						保存できなかった変更が{failedSaveCount}件あります。再試行するまで保存されません。
+					</p>
 				{/if}
 			</header>
-
-			<!-- モバイル用ステータスタブバー -->
-			<div class="status-tab-bar">
-				{#each statusOrder as status}
-					<button
-						type="button"
-						class="status-tab status-tab--{status}"
-						class:active={selectedStatus === status}
-						onclick={() => (selectedStatus = status)}
-					>
-						<span class="tab-icon {statusIcon[status]}" aria-hidden="true"></span>
-						<span class="tab-label desktop-tab-label">{statusLabel[status]}</span>
-						<span class="tab-label mobile-tab-label">{mobileStatusLabel[status]}</span>
-						<span class="tab-count">{grouped[status].length}</span>
-					</button>
-				{/each}
-			</div>
 
 			{#if totalCount === 0}
 				<div class="mylist-empty">
 					<p>まだアニメがありません。<a href="/anime">アニメを探す</a></p>
+					{#if data.profile.list_is_public}
+						<p class="mylist-empty-note">
+							マイリストは他の人もプロフィールで見られます。<a href="/settings/privacy"
+								>設定</a
+							>で非公開にできます
+						</p>
+					{/if}
 				</div>
 			{:else}
-				{#if grouped[selectedStatus].length === 0}
-					<div class="mobile-status-empty">
-						<p>{statusLabel[selectedStatus]}にはまだ登録がありません</p>
-					</div>
-				{/if}
-				{#each statusOrder as status}
-					{#if grouped[status].length > 0}
-						<div class:mobile-hidden={selectedStatus !== status}>
-							{#if viewMode === 'list'}
-								<AnimeStatusSection {status} animes={grouped[status]} {statusLabel} {statusIcon} />
-							{:else}
-								<section class="status-section status-section--{status}">
-									<h2 class="status-heading">
-										<span class="status-icon {statusIcon[status]}" aria-hidden="true"></span>
-										{statusLabel[status]}
-										<span class="status-count">{grouped[status].length}</span>
-									</h2>
-									<div class="anime-list anime-list--edit">
-										{#each grouped[status] as anime (anime.id)}
-											{@const editRow = editRows[anime.id]}
-											{#if editRow}
-												<AnimeEditRow
-													{anime}
-													bind:entry={editRow.entry}
-													{statusOrder}
-													{statusLabel}
-													saveState={saveStates[anime.id]}
-													onAutoSave={(updatedFields) => handleAutoSave(anime.id, updatedFields)}
-													onRetry={() => retryAutoSave(anime.id)}
-													onRemove={() => cancelAutoSave(anime.id)}
-												/>
-											{/if}
-										{/each}
-									</div>
-								</section>
-							{/if}
+				<!-- ステータスのタブ。一覧も編集も、選んだタブの作品だけを並べる -->
+				<MylistStatusTabs counts={countMylistByStatus(grouped)} bind:status={selectedStatus} />
+
+				<div role="tabpanel" aria-label={MYLIST_TAB_LABELS[selectedStatus]}>
+					{#if visibleAnimes.length === 0}
+						<div class="status-empty">
+							<p>{MYLIST_TAB_LABELS[selectedStatus]}にはまだ登録がありません</p>
+						</div>
+					{:else if viewMode === 'list'}
+						<AnimeStatusSection
+							animes={visibleAnimes}
+							scoreLabel="自分のスコア"
+							{scoreButtonFor}
+							{listButtonFor}
+						/>
+					{:else}
+						<div class="anime-list anime-list--progress">
+							{#each visibleAnimes as anime (anime.id)}
+								{@const editRow = editRows[anime.id]}
+								{#if editRow}
+									<AnimeProgressRow
+										{anime}
+										entry={editRow.entry}
+										{statusLabel}
+										saveState={saveStates[anime.id]}
+										onAutoSave={(updatedFields) => handleAutoSave(anime.id, updatedFields)}
+										onRetry={() => retryAutoSave(anime.id)}
+										onOpenDetail={() => openDetail(anime.id)}
+									/>
+								{/if}
+							{/each}
 						</div>
 					{/if}
-				{/each}
+				</div>
 			{/if}
 		</div>
 	</main>
+
+	<MyListQuickEdit
+		bind:this={quickEdit}
+		entryOf={(anime) => (anime as Anime).user_entry}
+		removeAction="?/removeWatchlist"
+	/>
+
+	{#if detailAnime}
+		<MyListModal
+			open
+			animeId={detailAnime.id}
+			animeTitle={detailAnime.title}
+			episodeCount={detailAnime.episode_count}
+			entry={detailEntry}
+			removeAction="?/removeWatchlist"
+			onsaved={(_entry, animeId) => handleDetailSaved(animeId)}
+			onclose={() => {
+				detailAnimeId = null;
+			}}
+		/>
+	{/if}
 
 	<aside class="sidebar-column">
 		<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
@@ -537,54 +402,71 @@ $effect(() => {
 }
 
 .mylist-header {
-	margin-bottom: 28px;
+	margin-bottom: 4px;
+}
+
+.mylist-title-row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-bottom: 12px;
+}
+
+.mylist-title-group {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 8px;
+}
+
+/* 非公開のときだけ出す印。公開が既定なので、公開中は何も出さない */
+.private-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	color: var(--color-text-muted);
+	font-size: 0.75rem;
+	font-weight: 600;
+	text-decoration: none;
+}
+
+.private-badge:hover {
+	color: var(--color-text);
 }
 
 /* ほかの画面（通知など）と同じく、ページの見出しを出す（#438） */
 .mylist-title {
 	font-size: 1.25rem;
 	font-weight: 700;
-	margin: 0 0 12px;
-}
-
-.mylist-title-row {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	flex-wrap: wrap;
-	gap: 10px;
-	margin-bottom: 14px;
+	margin: 0;
+	white-space: nowrap;
 }
 
 .header-actions {
 	display: flex;
 	align-items: center;
-	gap: 10px;
+	min-width: 0;
+	gap: 8px;
 	margin-left: auto;
-}
-
-.mobile-header-row,
-.mobile-tab-label {
-	display: none;
 }
 
 /* 表示切り替え */
 .view-toggle {
 	display: flex;
+	flex-shrink: 0;
+	height: 32px;
 	background: color-mix(in srgb, var(--color-text) 8%, transparent);
-	border-radius: 12px;
+	border-radius: 8px;
 	padding: 3px;
 	gap: 2px;
 }
 
 .view-btn {
-	display: inline-flex;
-	align-items: center;
-	gap: 5px;
-	padding: 5px 12px;
+	display: inline-grid;
+	place-items: center;
+	width: 30px;
 	border-radius: 6px;
-	font-size: 0.8rem;
-	font-weight: 500;
+	font-size: 0.9rem;
 	cursor: pointer;
 	border: none;
 	background: transparent;
@@ -604,99 +486,12 @@ $effect(() => {
 	color: var(--color-text);
 }
 
-.visibility-btn {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	padding: 6px 14px;
-	border-radius: 28px;
-	font-size: 0.8rem;
-	font-weight: 600;
-	cursor: pointer;
-	border: none;
-	transition:
-		background 0.15s,
-		color 0.15s;
-}
-
-.visibility-btn.public {
-	background: color-mix(in srgb, var(--color-accent) 15%, transparent);
-	color: var(--color-accent);
-}
-
-.visibility-btn.private {
-	background: color-mix(in srgb, var(--color-text) 10%, transparent);
-	color: var(--color-text-muted);
-}
-
-.visibility-btn:hover:not(:disabled) {
-	filter: brightness(1.1);
-}
-
-.visibility-btn:disabled {
-	cursor: progress;
-	opacity: 0.75;
-}
-
-.visibility-spinner {
-	width: 12px;
-	height: 12px;
-	border: 2px solid currentColor;
-	border-right-color: transparent;
-	border-radius: 50%;
-	corner-shape: round;
-	animation: visibility-spin 0.8s linear infinite;
-}
-
-@keyframes visibility-spin {
-	to {
-		transform: rotate(360deg);
-	}
-}
-
-/* 公開設定の切替結果・未保存の案内 */
-.mylist-notices {
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-}
-
-.visibility-error,
 .unsaved-note {
 	margin: 0;
+	padding-bottom: 8px;
+	color: var(--color-text-muted);
 	font-size: 0.78rem;
 	line-height: 1.5;
-}
-
-.visibility-error {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 6px 8px;
-	padding: 8px 10px;
-	border: 1px solid color-mix(in srgb, var(--color-danger, #f87171) 40%, transparent);
-	border-radius: 12px;
-	background: color-mix(in srgb, var(--color-danger, #f87171) 12%, transparent);
-	color: var(--color-danger, #f87171);
-}
-
-.unsaved-note {
-	color: var(--color-text-muted);
-}
-
-.retry-btn {
-	padding: 3px 10px;
-	border: 1px solid currentColor;
-	border-radius: 6px;
-	background: transparent;
-	color: inherit;
-	font-size: 0.75rem;
-	font-weight: 600;
-	cursor: pointer;
-}
-
-.retry-btn:hover {
-	background: color-mix(in srgb, currentColor 12%, transparent);
 }
 
 .mylist-empty {
@@ -705,300 +500,50 @@ $effect(() => {
 	color: var(--color-text-muted);
 }
 
-.mobile-status-empty {
-	display: none;
-}
-
 .mylist-empty a {
 	color: var(--color-accent);
 }
 
-.status-section {
-	margin-bottom: 32px;
-}
-
-.status-heading {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	font-size: 0.95rem;
-	font-weight: 700;
-	padding: 8px 0;
-	margin: 0 0 8px;
-	border-bottom: 1px solid var(--color-border);
-	color: var(--color-text);
-}
-
-.status-icon,
-.tab-icon {
-	width: 1em;
-	height: 1em;
-	flex: 0 0 auto;
-}
-
-.status-section--watching .status-icon {
-	color: var(--status-watching);
-}
-.status-section--completed .status-icon {
-	color: var(--status-completed);
-}
-.status-section--plan_to_watch .status-icon {
-	color: var(--watch-status-plan);
-}
-.status-section--on_hold .status-icon {
-	color: var(--status-on-hold);
-}
-.status-section--dropped .status-icon {
-	color: var(--status-dropped);
-}
-
-.status-count {
-	margin-left: auto;
+.mylist-empty-note {
+	margin: 8px 0 0;
 	font-size: 0.8rem;
-	color: var(--color-text-muted);
-	font-weight: 400;
 }
 
-.anime-list--edit {
+.anime-list--progress {
 	display: flex;
 	flex-direction: column;
-	gap: 4px;
 }
 
-/* ---- モバイル用ステータスタブバー ---- */
-.status-tab-bar {
-	display: none;
-	overflow-x: auto;
-	gap: 8px;
-	padding: 0 0 16px;
-	scrollbar-width: none;
-	margin-bottom: 4px;
+.status-empty {
+	text-align: center;
+	padding: 48px 16px;
+	color: var(--color-text-muted);
+	font-size: 0.9rem;
 }
 
-.status-tab-bar::-webkit-scrollbar {
-	display: none;
-}
-
-.status-tab {
-	display: inline-flex;
-	align-items: center;
-	gap: 5px;
-	padding: 8px 14px;
-	border-radius: 28px;
-	border: none;
-	cursor: pointer;
-	font-size: 0.82rem;
-	font-weight: 600;
-	background: color-mix(in srgb, var(--fg, #e2e8f0) 8%, transparent);
-	color: var(--fg-muted, #94a3b8);
-	transition:
-		background 0.15s,
-		color 0.15s;
-	white-space: nowrap;
-	flex-shrink: 0;
-}
-
-.status-tab.active {
-	background: color-mix(in srgb, var(--color-accent) 20%, transparent);
-	color: var(--color-accent);
-}
-
-.status-tab--watching.active {
-	background: color-mix(in srgb, var(--status-watching) 20%, transparent);
-	color: var(--status-watching);
-}
-
-.status-tab--on_hold.active {
-	background: color-mix(in srgb, var(--status-on-hold) 20%, transparent);
-	color: var(--status-on-hold);
-}
-
-.status-tab--dropped.active {
-	background: color-mix(in srgb, var(--status-dropped) 20%, transparent);
-	color: var(--status-dropped);
-}
-
-.status-tab--completed.active {
-	background: color-mix(in srgb, var(--status-completed) 20%, transparent);
-	color: var(--status-completed);
-}
-
-.status-tab--plan_to_watch.active {
-	background: color-mix(in srgb, var(--watch-status-plan) 20%, transparent);
-	color: var(--watch-status-plan);
-}
-
-.tab-icon {
-	font-size: 0.75rem;
-}
-
-.tab-count {
-	font-size: 0.72rem;
-	opacity: 0.8;
-}
-
+/* 見出しの行に入るよう、スマホでは非公開の印をアイコンだけにする（読み上げは aria-label） */
 @media (max-width: 600px) {
-	.mylist-header {
-		margin-bottom: 2px;
-	}
-
-	.mylist-title-row {
+	.private-badge-label {
 		display: none;
 	}
+}
 
-	.mobile-header-row {
-		display: flex;
-		align-items: center;
-		justify-content: flex-end;
-		min-height: 34px;
-		padding: 2px 0 5px;
-	}
-
-	.mobile-header-controls {
-		display: flex;
-		align-items: center;
+/* 並び替えの文字が切れないよう、狭い幅では詰める */
+@media (max-width: 389px) {
+	.mylist-title-row {
 		gap: 6px;
 	}
 
-	.mobile-visibility-btn,
-	.mobile-view-btn {
-		display: inline-grid;
-		place-items: center;
-		height: 30px;
-		padding: 0;
-		border: 0;
-		border-radius: 0;
-		background: transparent;
-		color: var(--fg-muted, #94a3b8);
-		cursor: pointer;
-		font-size: 0.82rem;
-		line-height: 1;
+	.mylist-title-group {
+		gap: 4px;
 	}
 
-	.mobile-visibility-form {
-		display: flex;
-		overflow: hidden;
-		border: 1px solid var(--border, #334155);
-		border-radius: 7px;
+	.header-actions {
+		gap: 6px;
 	}
 
-	.mobile-visibility-btn {
-		width: 44px;
-		font-size: 11px;
-		font-weight: 600;
-	}
-
-	.mobile-visibility-btn + .mobile-visibility-btn {
-		border-left: 1px solid var(--border, #334155);
-	}
-
-	.mobile-visibility-btn.active {
-		background: color-mix(in srgb, var(--color-accent) 16%, transparent);
-		color: var(--color-accent);
-		cursor: default;
-		opacity: 1;
-	}
-
-	.mobile-visibility-form.saving {
-		opacity: 0.6;
-		cursor: progress;
-	}
-
-	.mylist-notices {
-		padding-bottom: 8px;
-	}
-
-	.mobile-view-toggle {
-		display: flex;
-		flex: 0 0 auto;
-		overflow: hidden;
-		border: 1px solid var(--border, #334155);
-		border-radius: 7px;
-	}
-
-	.mobile-view-btn {
-		width: 34px;
-		font-size: 0.9rem;
-	}
-
-	.mobile-view-btn + .mobile-view-btn {
-		border-left: 1px solid var(--border, #334155);
-	}
-
-	.mobile-view-btn.active {
-		background: color-mix(in srgb, var(--color-accent) 16%, transparent);
-		color: var(--color-accent);
-	}
-
-	.status-tab-bar {
-		display: flex;
-		width: 100%;
-		overflow: hidden;
-		gap: 0;
-		padding: 0;
-		margin-bottom: 8px;
-		border-bottom: 1px solid var(--border, #334155);
-	}
-
-	.status-tab {
-		position: relative;
-		display: flex;
-		flex: 1 1 20%;
-		justify-content: center;
-		min-width: 0;
-		gap: 3px;
-		padding: 8px 0;
-		border-radius: 0;
-		background: transparent;
-		font-size: 11px;
-		line-height: 1;
-		text-align: center;
-	}
-
-	.status-tab.active,
-	.status-tab--watching.active,
-	.status-tab--completed.active,
-	.status-tab--plan_to_watch.active,
-	.status-tab--on_hold.active,
-	.status-tab--dropped.active {
-		background: transparent;
-	}
-
-	.status-tab.active::after {
-		position: absolute;
-		right: 5px;
-		bottom: -1px;
-		left: 5px;
-		height: 2px;
-		border-radius: 2px 2px 0 0;
-		background: currentColor;
-		content: "";
-	}
-
-	.tab-icon,
-	.desktop-tab-label {
-		display: none;
-	}
-
-	.mobile-tab-label {
-		display: inline;
-	}
-
-	.tab-count {
-		font-size: 10px;
-		opacity: 0.75;
-	}
-
-	.mobile-hidden {
-		display: none;
-	}
-
-	.mobile-status-empty {
-		display: block;
-		text-align: center;
-		padding: 40px 16px;
-		color: var(--fg-muted, #94a3b8);
-		font-size: 0.9rem;
+	.view-btn {
+		width: 26px;
 	}
 }
 </style>

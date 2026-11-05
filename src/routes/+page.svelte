@@ -1,6 +1,7 @@
 <script lang="ts">
 import { replaceState } from "$app/navigation";
 import { trapFocus } from "$lib/actions/trapFocus";
+import ActivityFeed from "$lib/components/ActivityFeed.svelte";
 import LiveRoomsPanel from "$lib/components/LiveRoomsPanel.svelte";
 import PostCardSkeleton from "$lib/components/PostCardSkeleton.svelte";
 import PostComposer from "$lib/components/PostComposer.svelte";
@@ -15,6 +16,10 @@ import type { PageProps } from "./$types";
 
 /** スケルトンの枚数（タイムラインの典型的な表示密度に合わせた仮枠） */
 const SKELETON_COUNT = 12;
+const NO_ACTIVITY = { items: [], nextCursor: null };
+
+/** タブごとの先頭のページ */
+const TAB_HREFS = { all: "/", following: "/?tab=following", activity: "/?tab=activity" } as const;
 
 let { data }: PageProps = $props();
 
@@ -36,6 +41,12 @@ const timeline = createLatestResolved(
 const pageExtras = createLatestResolved(
 	() => data.pageExtras,
 	() => data.user?.id ?? "",
+);
+
+// アクティビティ（181）。アクティビティのタブ以外では null
+const activity = createLatestResolved(
+	() => data.activity ?? NO_ACTIVITY,
+	() => `${data.user?.id ?? ""}:${data.tab}:${data.before ?? ""}`,
 );
 
 let onboardingDismissed = $state(true);
@@ -67,7 +78,7 @@ function handleModalKeydown(e: KeyboardEvent) {
 }
 
 function loadMoreHref(lastCreatedAt: string, lastPostId: string): string {
-	const base = data.tab === "following" ? "/?tab=following" : "/";
+	const base = TAB_HREFS[data.tab];
 	const separator = base.includes("?") ? "&" : "?";
 	return `${base}${separator}before=${encodeURIComponent(lastCreatedAt)}&before_id=${encodeURIComponent(lastPostId)}`;
 }
@@ -219,62 +230,103 @@ $effect(() => {
 			<div class="timeline-tabs">
 				<a href="/" class="timeline-tab" class:active={data.tab === 'all'}> 全体 </a>
 				<a href="/?tab=following" class="timeline-tab" class:active={data.tab === 'following'}> フォロー中 </a>
+				<a href="/?tab=activity" class="timeline-tab" class:active={data.tab === 'activity'}>
+					アクティビティ
+				</a>
 			</div>
 		{/if}
 
-		<!--
+		{#if data.tab === 'activity'}
+			<!-- フォロー中の人のマイリストの動き（181） -->
+			{#if activity.error}
+				<div class="home-deferred-error" role="alert" data-deferred-error="true">
+					アクティビティを読み込めませんでした。<a href={TAB_HREFS.activity}>再読み込み</a>
+				</div>
+			{:else if activity.value === null}
+				<div class="posts-loading-spinner" aria-label="アクティビティを読み込み中">
+					<div class="spinner" aria-hidden="true"></div>
+					<span>読み込み中…</span>
+				</div>
+			{:else}
+				{@const page = activity.value}
+				{#if data.before}
+					<a href={TAB_HREFS.activity} class="timeline-back-link">← 新しいアクティビティに戻る</a>
+				{/if}
+				{#if page.items.length === 0 && !page.nextCursor}
+					<div class="empty-state">
+						<p>
+							フォロー中の人のマイリストの動きはまだありません。<br>
+							フォローしている人が作品を視聴予定・視聴中・完了にすると、ここに流れます。
+						</p>
+					</div>
+				{:else}
+					<ActivityFeed items={page.items} canLike={Boolean(data.profile)} />
+					{#if page.nextCursor}
+						<a href={loadMoreHref(page.nextCursor.createdAt, page.nextCursor.id)} class="load-more-btn">
+							さらに読み込む
+						</a>
+					{/if}
+				{/if}
+			{/if}
+		{:else}
+			<!--
 			data.timeline は deferred Promise（{ posts, nextCursor }）。
 			- 初回の待機中: スピナー + スケルトンカードを表示してレイアウトシフトを最小化
 			- 解決後: 実際の投稿カードに差し替え。再取得中は前回の一覧を保持する
 			- エラー時: 再読み込みを促すメッセージ
 		-->
-		{#if timeline.error}
-			<div class="home-deferred-error" role="alert" data-deferred-error="true">
-				投稿を読み込めませんでした。<a href={data.tab === "following" ? "/?tab=following" : "/"}>再読み込み</a>
-			</div>
-		{:else if timeline.value === null}
-			<div class="posts-loading-spinner" aria-label="投稿を読み込み中">
-				<div class="spinner" aria-hidden="true"></div>
-				<span>読み込み中…</span>
-			</div>
-			{#each { length: SKELETON_COUNT } as _, i (i)}
-				<PostCardSkeleton />
-			{/each}
-		{:else}
-			{@const posts = timeline.value.posts}
-			{@const nextCursor = timeline.value.nextCursor}
-			{#if data.before}
-				<a href={data.tab === "following" ? "/?tab=following" : "/"} class="timeline-back-link"
-					>← 新しい投稿に戻る</a
-				>
-			{/if}
-			{#if posts.length === 0 && !nextCursor}
-				<div class="empty-state">
-					{#if data.tab === 'following'}
-						<p>フォロー中のユーザーの投稿がありません。<br>気になるユーザーをフォローしてみましょう！</p>
-					{:else}
-						<p>まだ投稿がありません。最初の投稿をしてみましょう！</p>
-					{/if}
+			{#if timeline.error}
+				<div class="home-deferred-error" role="alert" data-deferred-error="true">
+					投稿を読み込めませんでした。<a href={TAB_HREFS[data.tab]}>再読み込み</a>
 				</div>
-			{:else}
-				{#if posts.length === 0}
-					<!-- 取得した分がすべてミュートで除外された。空状態ではなく続きの導線を出す（#35） -->
-					<div class="empty-state">
-						<p>このページの投稿はミュート設定によりすべて非表示です。</p>
-					</div>
-				{/if}
-				<!-- 同じ人の同じルームへの実況が続いたら 1 つにたたむ（読み飛ばしやすく、開けば続けて読める） -->
-				{#each groupLiveRuns(posts) as item (item.kind === "run" ? item.key : item.post.id)}
-					{#if item.kind === "run"}
-						<TimelineLiveRun posts={item.posts} room={item.room} currentUserId={data.user?.id ?? null} />
-					{:else}
-						<PostRow post={item.post} currentUserId={data.user?.id ?? null} />
-					{/if}
+			{:else if timeline.value === null}
+				<div class="posts-loading-spinner" aria-label="投稿を読み込み中">
+					<div class="spinner" aria-hidden="true"></div>
+					<span>読み込み中…</span>
+				</div>
+				{#each { length: SKELETON_COUNT } as _, i (i)}
+					<PostCardSkeleton />
 				{/each}
-				{#if nextCursor}
-					<a href={loadMoreHref(nextCursor.createdAt, nextCursor.id)} class="load-more-btn">
-						さらに読み込む
-					</a>
+			{:else}
+				{@const posts = timeline.value.posts}
+				{@const nextCursor = timeline.value.nextCursor}
+				{#if data.before}
+					<a href={TAB_HREFS[data.tab]} class="timeline-back-link">← 新しい投稿に戻る</a>
+				{/if}
+				{#if posts.length === 0 && !nextCursor}
+					<div class="empty-state">
+						{#if data.tab === 'following'}
+							<p>
+								フォロー中のユーザーの投稿がありません。<br>気になるユーザーをフォローしてみましょう！
+							</p>
+						{:else}
+							<p>まだ投稿がありません。最初の投稿をしてみましょう！</p>
+						{/if}
+					</div>
+				{:else}
+					{#if posts.length === 0}
+						<!-- 取得した分がすべてミュートで除外された。空状態ではなく続きの導線を出す（#35） -->
+						<div class="empty-state">
+							<p>このページの投稿はミュート設定によりすべて非表示です。</p>
+						</div>
+					{/if}
+					<!-- 同じ人の同じルームへの実況が続いたら 1 つにたたむ（読み飛ばしやすく、開けば続けて読める） -->
+					{#each groupLiveRuns(posts) as item (item.kind === "run" ? item.key : item.post.id)}
+						{#if item.kind === "run"}
+							<TimelineLiveRun
+								posts={item.posts}
+								room={item.room}
+								currentUserId={data.user?.id ?? null}
+							/>
+						{:else}
+							<PostRow post={item.post} currentUserId={data.user?.id ?? null} />
+						{/if}
+					{/each}
+					{#if nextCursor}
+						<a href={loadMoreHref(nextCursor.createdAt, nextCursor.id)} class="load-more-btn">
+							さらに読み込む
+						</a>
+					{/if}
 				{/if}
 			{/if}
 		{/if}

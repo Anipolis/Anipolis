@@ -25,7 +25,7 @@ function entry(overrides: Partial<UserAnimeEntry> = {}): UserAnimeEntry {
 	} as UserAnimeEntry;
 }
 
-function renderModal(props: { open: boolean; entry?: UserAnimeEntry | null }) {
+function renderModal(props: { open: boolean; entry?: UserAnimeEntry | null; removeAction?: string }) {
 	const target = document.createElement("div");
 	document.body.appendChild(target);
 	const component = mount(MyListModal, {
@@ -76,6 +76,89 @@ describe("MyListModal の初期表示", () => {
 		target.querySelector<HTMLButtonElement>(".status-grid button[data-status='completed']")?.click();
 		flushSync();
 		expect(pressedStatus(target)).toBe("completed");
+	});
+});
+
+describe("MyListModal の「マイリストから外す」", () => {
+	const openWithRemove = () => {
+		const target = renderModal({ open: true, entry: entry(), removeAction: "?/removeWatchlist" });
+		flushSync();
+		return target;
+	};
+	const removeSubmit = (target: HTMLElement) => target.querySelector<HTMLButtonElement>("button[data-remove]");
+
+	const firstSubmit = (target: HTMLElement) => target.querySelector("form button[type='submit']");
+
+	it("ゴミ箱を押してもすぐには外さず、確認のポップアップを出す", () => {
+		const target = openWithRemove();
+		expect(removeSubmit(target)).toBeNull();
+		expect(target.querySelector("[role='alertdialog']")).toBeNull();
+
+		target.querySelector<HTMLButtonElement>(".remove-button")?.click();
+		flushSync();
+		expect(removeSubmit(target)?.getAttribute("formaction")).toBe("?/removeWatchlist");
+		expect(target.querySelector("[role='alertdialog']")?.textContent).toContain("メモ");
+	});
+
+	it("入力欄の Enter で押される先頭の送信ボタンは、確認中も「保存する」", () => {
+		const target = openWithRemove();
+		expect(firstSubmit(target)?.classList.contains("save-button")).toBe(true);
+
+		target.querySelector<HTMLButtonElement>(".remove-button")?.click();
+		flushSync();
+		expect(firstSubmit(target)?.classList.contains("save-button")).toBe(true);
+	});
+
+	it("ゴミ箱は登録済みの作品にだけ出し、開いたときの最初のフォーカスにしない", () => {
+		const target = renderModal({ open: true, entry: null, removeAction: "?/removeWatchlist" });
+		flushSync();
+		expect(target.querySelector(".remove-button")).toBeNull();
+
+		const registered = openWithRemove();
+		const buttons = registered.querySelectorAll("[role='dialog'] button");
+		expect(buttons[buttons.length - 1]?.classList.contains("remove-button")).toBe(true);
+	});
+
+	it("キャンセルすると確認を閉じ、Esc でも確認だけを閉じる", () => {
+		const onclose = vi.fn();
+		const target = document.createElement("div");
+		document.body.appendChild(target);
+		const component = mount(MyListModal, {
+			target,
+			props: {
+				open: true,
+				animeId: 1,
+				animeTitle: "テスト",
+				episodeCount: "12",
+				entry: entry(),
+				removeAction: "?/removeWatchlist",
+				onclose,
+			},
+		});
+		cleanup = async () => {
+			await unmount(component);
+			target.remove();
+		};
+		flushSync();
+		const openConfirm = () => {
+			target.querySelector<HTMLButtonElement>(".remove-button")?.click();
+			flushSync();
+			expect(target.querySelector("[role='alertdialog']")).not.toBeNull();
+		};
+
+		openConfirm();
+		target.querySelector<HTMLButtonElement>(".confirm-cancel")?.click();
+		flushSync();
+		expect(target.querySelector("[role='alertdialog']")).toBeNull();
+
+		openConfirm();
+		window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+		flushSync();
+		expect(target.querySelector("[role='alertdialog']")).toBeNull();
+		expect(onclose).not.toHaveBeenCalled();
+
+		window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+		expect(onclose).toHaveBeenCalledTimes(1);
 	});
 });
 

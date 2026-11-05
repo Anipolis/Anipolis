@@ -7,7 +7,7 @@ import type { Anime, Post, RoomAiring, TrendingHashtag } from "$lib/types";
  * どちらのローダーもこの形状に合わせて返す。
  * anime はイベントにアニメが紐づいていない場合 null になりうる。
  */
-type RoomRealtimeClient = Pick<SupabaseClient, "channel" | "removeChannel">;
+type RoomRealtimeClient = Pick<SupabaseClient, "channel" | "removeChannel" | "from">;
 
 export type LiveRoomData = {
 	supabase: RoomRealtimeClient;

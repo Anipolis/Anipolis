@@ -25,7 +25,21 @@ describe("parseMylistScore（#355）", () => {
 
 describe("upsertUserAnimeEntry のスコア検証（#355）", () => {
 	function fakeSupabase() {
-		const upsert = vi.fn(async (_row: { score: number | null }) => ({ error: null }));
+		const upsert = vi.fn((row: { score: number | null }) => ({
+			select: () => ({
+				single: async () => ({
+					data: {
+						status: "watching",
+						progress: 0,
+						updated_at: "",
+						started_on: null,
+						finished_on: null,
+						...row,
+					},
+					error: null,
+				}),
+			}),
+		}));
 		const client = {
 			from: vi.fn((table: string) => {
 				if (table === "account_moderation") {

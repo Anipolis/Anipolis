@@ -2,16 +2,14 @@
 import { onDestroy } from "svelte";
 import { beforeNavigate, goto } from "$app/navigation";
 import { navigating } from "$app/state";
-import { animeCardMeta } from "$lib/anime-labels";
 import { ANIME_GENRE_FILTER_HELP, ANIME_GENRE_GROUPS, ANIME_GENRES, ANIME_SOURCE_OPTIONS } from "$lib/anime-vocabulary";
+import AnimeCard from "$lib/components/AnimeCard.svelte";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
 import InfoTip from "$lib/components/InfoTip.svelte";
-import MyListModal from "$lib/components/MyListModal.svelte";
-import MyListStatusPopover from "$lib/components/MyListStatusPopover.svelte";
+import MyListQuickEdit from "$lib/components/MyListQuickEdit.svelte";
 import { createDebouncedCommit } from "$lib/debounced-commit";
 import { isSamePageRefresh } from "$lib/navigation-skeleton";
 import type { ActiveAnimeSeasonChip, AnimeListItem, AnimeStatus, UserAnimeEntry } from "$lib/types";
-import { dateKeyWeekday, jstBroadcastDateKey } from "$lib/utils/jst";
 import type { PageProps } from "./$types";
 
 let { data, form }: PageProps = $props();
@@ -51,10 +49,7 @@ const statusLabels: Record<AnimeStatus, string> = {
 	on_hold: "中断",
 };
 
-let quickAddAnime = $state<AnimeListItem | null>(null);
-/** PC: カードのボタンの近くに出す小さな視聴ステータス欄 */
-let statusPopover = $state<{ anime: AnimeListItem; anchor: HTMLElement } | null>(null);
-let statusPopoverSaving = $state(false);
+let quickEdit = $state<MyListQuickEdit>();
 // マイリストに保存した作品の新しい状態。保存のたびに読み込み直すと人気順などでカードが動くので、
 // 並び順はそのままにカードの表示だけを変える。読み込み直し（タブ・ページ・絞り込みの切り替えやリロード）で捨てる
 // 外した作品は null を入れる
@@ -294,33 +289,6 @@ function getVisibleAnimeSectionPages(pageCount: number, currentIndex: number, vi
 	return pages;
 }
 
-function openQuickAdd(e: MouseEvent, anime: AnimeListItem) {
-	e.preventDefault();
-	e.stopPropagation();
-	const anchor = e.currentTarget as HTMLElement;
-	// マウスで操作する PC は状態だけを選ぶ小さな欄、タッチ端末は押しやすい大きいモーダル
-	if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
-		// 保存中は欄を閉じたり別の作品へ切り替えたりしない（応答が別の作品に反映されるため）
-		if (statusPopoverSaving) return;
-		statusPopover = statusPopover?.anchor === anchor ? null : { anime, anchor };
-		return;
-	}
-	quickAddAnime = anime;
-}
-
-function closeQuickAdd() {
-	quickAddAnime = null;
-}
-
-$effect(() => {
-	if (!quickAddAnime) return;
-	const handler = (e: KeyboardEvent) => {
-		if (e.key === "Escape") closeQuickAdd();
-	};
-	window.addEventListener("keydown", handler);
-	return () => window.removeEventListener("keydown", handler);
-});
-
 function openFilterSheet() {
 	pendingGenreMap = buildGenreMap(data.genres ?? data.genre?.split(",").filter(Boolean) ?? []);
 	pendingYear = data.broadcastYear ?? "";
@@ -418,12 +386,6 @@ $effect(() => {
 		controller.abort();
 	};
 });
-
-function isAiringToday(anime: AnimeListItem): boolean {
-	if (anime.broadcast_day == null || anime.computed_broadcast_status !== "airing") return false;
-	// 放送日は午前4時境界（26時制）。放送中タブで先頭に寄せる基準（+page.server.ts）と同じ
-	return anime.broadcast_day === dateKeyWeekday(jstBroadcastDateKey(Date.now()));
-}
 </script>
 
 <svelte:head> <title>アニメ - Anipolis</title> </svelte:head>
@@ -749,100 +711,23 @@ function isAiringToday(anime: AnimeListItem): boolean {
 				<div class="anime-grid">
 					{#each data.animes as anime, sectionItemIndex}
 						{@const rankIndex = pageStartRank + sectionItemIndex}
-						{@const meta = animeCardMeta(anime)}
-						<a href={buildAnimeDetailUrl(anime.id)} class="anime-card">
-							<div class="anime-cover">
-								{#if anime.cover_url}
-									<img src={anime.cover_url ?? ''} alt={anime.title} loading="lazy">
-								{:else}
-									<div class="anime-cover-placeholder">
-										<svg
-											width="32"
-											height="32"
-											viewBox="0 0 24 24"
-											fill="none"
-											stroke="currentColor"
-											stroke-width="1.5"
-											aria-hidden="true"
-										>
-											<rect x="2" y="2" width="20" height="20" rx="2" />
-											<path d="M10 8l6 4-6 4V8z" />
-										</svg>
-									</div>
-								{/if}
-								{#if data.tab === 'popular' || data.tab === 'trending' || data.tab === 'top_rated'}
-									<span class="rank-badge">#{rankIndex + 1}</span>
-								{/if}
-								<!-- 放送中の作品は右上のリボンで示す。今日放送があれば「本日放送」を優先し、
-								     どれも放送中の「放送中」タブでは「放送中」は出さない -->
-								{#if isAiringToday(anime)}
-									<span class="cover-ribbon cover-ribbon--today">本日放送</span>
-								{:else if anime.computed_broadcast_status === 'airing' && data.tab !== 'airing'}
-									<span class="cover-ribbon cover-ribbon--airing">放送中</span>
-								{/if}
-							</div>
-							<!-- 画像の下: 左に平均スコア、右にマイリストの状態（2マスに仕切る） -->
-							<div class="anime-card-actions" class:anime-card-actions--split={data.user}>
-								{#if anime.score_count == null}
-									<!-- スコアを読み込めなかった（評価なしとは区別して何も出さない） -->
-									<span class="anime-score"
-										><span class="sr-only">スコアを読み込めませんでした</span></span
-									>
-								{:else}
-									<span class="anime-score" class:anime-score--none={anime.avg_score == null}>
-										<span class="anime-score-star" aria-hidden="true">★</span>
-										{#if anime.avg_score != null}
-											<span class="sr-only">平均スコア</span>
-											<span title="{anime.score_count}人の評価の平均"
-												>{anime.avg_score.toFixed(2)}</span
-											>
-										{:else}
-											<span class="sr-only">評価なし</span>
-											<span aria-hidden="true">—</span>
-										{/if}
-									</span>
-								{/if}
-								{#if data.user}
-									{@const entryStatus = entryOf(anime)?.status as AnimeStatus | undefined}
-									{@const quickAddLabel = entryStatus ? `マイリスト: ${statusLabels[entryStatus]}` : 'マイリストに追加'}
-									<!-- 一覧では登録したかどうかだけを示す（状態の名前はマウスを乗せたときと読み上げで伝える） -->
-									<button
-										type="button"
-										class="quick-add-btn"
-										class:quick-add-btn--listed={entryStatus}
-										onclick={(e) => openQuickAdd(e, anime)}
-										aria-label={quickAddLabel}
-										aria-haspopup="dialog"
-										aria-expanded={statusPopover?.anime.id === anime.id}
-										title={quickAddLabel}
-									>
-										{#if entryStatus}
-											<span class="i-lucide-list-check" aria-hidden="true"></span>
-										{:else}
-											<span class="i-lucide-list-plus" aria-hidden="true"></span>
-										{/if}
-									</button>
-								{/if}
-							</div>
-							<div class="anime-info">
-								<p class="anime-title">{anime.title}</p>
-								<p
-									class="anime-title-en"
-									class:anime-title-en--placeholder={!anime.title_en}
-									aria-hidden={anime.title_en ? undefined : "true"}
-								>
-									{anime.title_en ?? '\u00A0'}
-								</p>
-								<!-- 種別と時期（「TV・2026年春」、映画は年だけ）を1行で -->
-								<p
-									class="anime-meta"
-									class:anime-meta--placeholder={!meta}
-									aria-hidden={meta ? undefined : "true"}
-								>
-									{meta || ' '}
-								</p>
-							</div>
-						</a>
+						{@const entryStatus = entryOf(anime)?.status as AnimeStatus | undefined}
+						<AnimeCard
+							{anime}
+							titleOnlyOnPhone
+							href={buildAnimeDetailUrl(anime.id)}
+							score={{ kind: 'average', value: anime.avg_score ?? null, count: anime.score_count }}
+							rank={data.tab === 'popular' || data.tab === 'trending' || data.tab === 'top_rated' ? rankIndex + 1 : null}
+							hideAiringRibbon={data.tab === 'airing'}
+							listButton={data.user
+								? {
+										status: entryStatus,
+										label: entryStatus ? `マイリスト: ${statusLabels[entryStatus]}` : 'マイリストに追加',
+										expanded: quickEdit?.isOpenFor(anime.id) ?? false,
+										onclick: (e) => quickEdit?.open(e, anime),
+									}
+								: null}
+						/>
 					{/each}
 				</div>
 
@@ -914,32 +799,12 @@ function isAiringToday(anime: AnimeListItem): boolean {
 		{/if}
 	</main>
 
-	{#if statusPopover && data.user}
-		{@const popoverAnime = statusPopover.anime}
-		<MyListStatusPopover
-			anchor={statusPopover.anchor}
-			animeId={popoverAnime.id}
-			animeTitle={popoverAnime.title}
-			entry={entryOf(popoverAnime)}
+	{#if data.user}
+		<MyListQuickEdit
+			bind:this={quickEdit}
+			entryOf={(anime) => entryOf(anime as AnimeListItem)}
 			removeAction="?/removeWatchlist"
-			onsaved={(entry) => rememberSavedEntry(popoverAnime, entry)}
-			onclose={() => {
-				statusPopover = null;
-			}}
-			bind:submitting={statusPopoverSaving}
-		/>
-	{/if}
-
-	{#if quickAddAnime && data.user}
-		<MyListModal
-			open
-			animeId={quickAddAnime.id}
-			animeTitle={quickAddAnime.title}
-			episodeCount={quickAddAnime.episode_count}
-			entry={entryOf(quickAddAnime)}
-			removeAction="?/removeWatchlist"
-			onsaved={(entry) => quickAddAnime && rememberSavedEntry(quickAddAnime, entry)}
-			onclose={closeQuickAdd}
+			onsaved={(anime, entry) => rememberSavedEntry(anime as AnimeListItem, entry)}
 		/>
 	{/if}
 
@@ -1432,6 +1297,8 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	align-items: center;
 	width: 100%;
 	min-width: 0;
+	/* 数字バー（無ければ最後の段のカード）が画面の下端にくっつかないように */
+	padding-bottom: 32px;
 	transition: opacity 0.15s ease;
 }
 
@@ -1541,11 +1408,14 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	}
 }
 
-@media (max-width: 768px) {
+/* 下のナビバー（MobileBottomNav、幅 960px 以下なら向きによらず出る）に隠れないようにする */
+@media (max-width: 960px) {
 	.anime-list-surface {
 		padding-bottom: calc(72px + env(safe-area-inset-bottom));
 	}
+}
 
+@media (max-width: 768px) {
 	.anime-grid {
 		grid-template-columns: repeat(3, minmax(0, 1fr));
 		gap: 10px;
@@ -1577,134 +1447,6 @@ function isAiringToday(anime: AnimeListItem): boolean {
 	}
 }
 
-@media (max-width: 420px) {
-	.anime-grid {
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-	}
-}
-
-@media (max-width: 768px) and (orientation: landscape) {
-	.anime-list-surface {
-		padding-bottom: 0;
-	}
-}
-.anime-card {
-	display: flex;
-	flex-direction: column;
-	text-decoration: none;
-	color: var(--color-text);
-	border-radius: 12px;
-	overflow: hidden;
-	border: 1px solid var(--color-border);
-	transition:
-		border-color 0.15s,
-		transform 0.15s;
-}
-.anime-card:hover,
-/* 状態の欄はカードの外に出すので、開いている間も持ち上げたままにする（ずれて隙間が出ないように） */
-.anime-card:has(.quick-add-btn[aria-expanded="true"]) {
-	border-color: var(--color-accent);
-	transform: translateY(-2px);
-}
-
-.anime-cover {
-	position: relative;
-	aspect-ratio: 1 / 1.414;
-	background: var(--color-surface);
-	overflow: hidden;
-}
-.anime-cover img {
-	width: 100%;
-	display: block;
-	image-rendering: auto;
-}
-.anime-cover-placeholder {
-	width: 100%;
-	height: 100%;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	color: var(--color-text-muted);
-	background: var(--color-surface-hover);
-}
-.rank-badge {
-	position: absolute;
-	top: 6px;
-	left: 6px;
-	background: rgba(0, 0, 0, 0.7);
-	color: #fff;
-	font-size: 0.75rem;
-	font-weight: 700;
-	padding: 2px 6px;
-	border-radius: 4px;
-}
-
-.anime-info {
-	padding: 8px;
-	display: flex;
-	flex-direction: column;
-	gap: 4px;
-	flex: 1;
-}
-.anime-title {
-	font-size: 0.85rem;
-	font-weight: 600;
-	line-height: 1.3;
-	height: calc(0.85rem * 1.3 * 2);
-	margin: 0;
-	display: -webkit-box;
-	-webkit-line-clamp: 2;
-	line-clamp: 2;
-	-webkit-box-orient: vertical;
-	overflow: hidden;
-}
-.anime-title-en {
-	font-size: 0.72rem;
-	line-height: 1.2;
-	height: calc(0.72rem * 1.2);
-	color: var(--text-muted);
-	margin: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-.anime-title-en--placeholder {
-	visibility: hidden;
-}
-/* 種別と時期の1行 */
-.anime-meta {
-	margin: 0;
-	font-size: 0.72rem;
-	line-height: 1.6;
-	color: var(--color-text-muted);
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-.anime-meta--placeholder {
-	visibility: hidden;
-}
-
-/* 画像の右上に重ねるリボン（本日放送・放送中） */
-.cover-ribbon {
-	position: absolute;
-	top: 6px;
-	right: 6px;
-	font-size: 0.7rem;
-	font-weight: 700;
-	padding: 3px 6px;
-	border-radius: 4px;
-	color: var(--ribbon-text);
-	letter-spacing: 0.02em;
-	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
-}
-.cover-ribbon--today {
-	background: var(--ribbon-today);
-}
-.cover-ribbon--airing {
-	background: var(--ribbon-airing);
-}
-
 .empty-state {
 	text-align: center;
 	padding: 60px 20px;
@@ -1723,77 +1465,6 @@ function isAiringToday(anime: AnimeListItem): boolean {
 .tab-btn--add.active {
 	background: var(--color-accent);
 	color: #fff;
-}
-
-/* ─── 画像の下の行: 左に平均スコア、右にマイリストの状態 ─── */
-.anime-card-actions {
-	display: grid;
-	grid-template-columns: 1fr;
-	height: 34px;
-	border-bottom: 1px solid var(--color-border);
-}
-.anime-card-actions--split {
-	grid-template-columns: 1fr 1fr;
-}
-.anime-score {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	gap: 3px;
-	min-width: 0;
-	font-size: 0.82rem;
-	font-weight: 700;
-	font-variant-numeric: tabular-nums;
-	white-space: nowrap;
-}
-.anime-score-star {
-	color: var(--status-score);
-}
-.anime-score--none {
-	color: var(--color-text-muted);
-	font-weight: 500;
-}
-.anime-score--none .anime-score-star {
-	color: inherit;
-	opacity: 0.6;
-}
-.quick-add-btn {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	min-width: 0;
-	padding: 0 4px;
-	overflow: hidden;
-	border: 0;
-	border-left: 1px solid var(--color-border);
-	background: transparent;
-	color: var(--color-text-muted);
-	cursor: pointer;
-	font: inherit;
-	font-size: 0.75rem;
-	font-weight: 700;
-	white-space: nowrap;
-	transition:
-		background 0.15s,
-		color 0.15s;
-}
-.quick-add-btn:hover {
-	background: var(--color-surface-hover);
-	color: var(--color-text);
-}
-.quick-add-btn .i-lucide-list-plus,
-.quick-add-btn .i-lucide-list-check {
-	width: 18px;
-	height: 18px;
-}
-/* 登録済みは状態によらず同じ色にする（一覧では登録したかどうかが分かればよい） */
-.quick-add-btn--listed {
-	background: color-mix(in srgb, var(--color-accent) 12%, transparent);
-	color: var(--color-accent);
-}
-.quick-add-btn--listed:hover {
-	background: color-mix(in srgb, var(--color-accent) 20%, transparent);
-	color: var(--color-accent);
 }
 
 /* ─── クイック追加モーダル ─── */

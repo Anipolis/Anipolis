@@ -3,13 +3,15 @@ import type { SubmitFunction } from "@sveltejs/kit";
 import { tick, untrack } from "svelte";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
-import { entryFromForm } from "$lib/mylist/entry-from-form";
+import MyListRemoveConfirm from "$lib/components/MyListRemoveConfirm.svelte";
+import { savedEntryFromResult } from "$lib/mylist/entry-from-form";
 import type { AnimeStatus, UserAnimeEntry } from "$lib/types";
 
 /**
  * PC のアニメ一覧で、カードのボタンから開く小さな視聴ステータス欄。
  * ボタンと同じ幅で、ボタンの上（入りきらなければ下）へそのまま伸ばし、選んだらその場で保存する。
- * スコアや進捗は作品ページや大きいモーダル（MyListModal）で直す。
+ * field="score" では、登録済みの作品のスコアを同じ形で選ぶ（マイリストのカードの左のマス）。
+ * 進捗は作品ページや大きいモーダル（MyListModal）で直す。
  * 選んでいる状態は、状態ごとの色ではなく共通の色で示す（一覧では登録したかどうかが分かればよい）
  */
 type Props = {
@@ -21,10 +23,12 @@ type Props = {
 	/** 渡すと、登録済みの作品に「マイリストから外す」を出す */
 	removeAction?: string;
 	/** 渡すと保存後にページを読み込み直さず、保存した内容を知らせる（外したときは null） */
-	onsaved?: (entry: UserAnimeEntry | null) => void;
+	onsaved?: (entry: UserAnimeEntry | null, animeId: string) => void;
 	onclose: () => void;
 	/** 保存中かどうか。親は保存中に別の作品へ切り替えない（応答が切り替え先に反映されるため） */
 	submitting?: boolean;
+	/** 選ぶもの。score は登録済みの作品だけで使う */
+	field?: "status" | "score";
 };
 
 let {
@@ -37,6 +41,7 @@ let {
 	onsaved,
 	onclose,
 	submitting = $bindable(false),
+	field = "status",
 }: Props = $props();
 
 const statusOptions: { value: AnimeStatus; label: string }[] = [
@@ -47,11 +52,15 @@ const statusOptions: { value: AnimeStatus; label: string }[] = [
 	{ value: "dropped", label: "断念" },
 ];
 
+// スコアは高い順に並べ、最後に「なし」（スコアを外す）
+const scoreOptions = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
+
 const MARGIN = 8;
 
 let popover = $state<HTMLDivElement | null>(null);
 let position = $state<{ top: number; left: number; width: number; placement: "above" | "below" } | null>(null);
 let errorMessage = $state("");
+let removeConfirming = $state(false);
 
 // 状態だけを変えるので、スコアと進捗は今の値のまま送る（送らないと消える）
 const currentScore = $derived(entry?.score != null && entry.score > 0 ? Math.round(entry.score) : "");
@@ -72,10 +81,10 @@ function place() {
 
 function close({ returnFocus = false } = {}) {
 	if (submitting) return;
-	// 閉じると親が anchor を外すので、先に控えておく
+	// 閉じると親が anchor を外すので、先に控えておく（保存中に別の作品へ移ると、もう無いこともある）
 	const button = anchor;
 	onclose();
-	if (returnFocus) button.focus();
+	if (returnFocus) button?.focus();
 }
 
 $effect(() => {
@@ -102,7 +111,13 @@ $effect(() => {
 		close();
 	};
 	const handleKeydown = (event: KeyboardEvent) => {
-		if (event.key === "Escape") close({ returnFocus: true });
+		if (event.key !== "Escape") return;
+		// 確認を出しているときは、確認だけを閉じる
+		if (removeConfirming) {
+			if (!submitting) removeConfirming = false;
+			return;
+		}
+		close({ returnFocus: true });
 	};
 	// 位置は開いたときに決めるので、スクロールや幅の変化で閉じる
 	const handleMove = () => close();
@@ -125,7 +140,9 @@ $effect(() => () => {
 
 const handleSubmit: SubmitFunction = ({ formData, submitter, cancel }) => {
 	const removing = submitter?.hasAttribute("data-remove") === true;
-	if (!removing && formData.get("status") === entry?.status) {
+	const unchanged =
+		field === "score" ? formData.get("score") === String(currentScore) : formData.get("status") === entry?.status;
+	if (!removing && unchanged) {
 		cancel();
 		close({ returnFocus: true });
 		return;
@@ -142,7 +159,14 @@ const handleSubmit: SubmitFunction = ({ formData, submitter, cancel }) => {
 			errorMessage = "マイリストの保存に失敗しました";
 			return;
 		}
-		if (onsaved) onsaved(removing ? null : entryFromForm(formData));
+		// 保存した作品の ID も渡す（応答が来るまでに親が別の作品へ移っていることがある）
+		if (onsaved)
+			onsaved(
+				removing
+					? null
+					: savedEntryFromResult(result.type === "success" ? result.data : undefined, formData, entry),
+				String(formData.get("anime_id")),
+			);
 		else await invalidateAll();
 		close({ returnFocus: true });
 	};
@@ -158,42 +182,89 @@ const handleSubmit: SubmitFunction = ({ formData, submitter, cancel }) => {
 	style:left={position ? `${position.left}px` : undefined}
 	style:width={position ? `${position.width}px` : `${anchor.offsetWidth}px`}
 	role="dialog"
-	aria-label="{animeTitle}の視聴ステータス"
+	aria-label={field === "score" ? `${animeTitle}のスコア` : `${animeTitle}の視聴ステータス`}
 >
 	<form method="POST" {action} use:enhance={handleSubmit}>
 		<input type="hidden" name="anime_id" value={animeId}>
-		<input type="hidden" name="score" value={currentScore}>
 		<input type="hidden" name="progress" value={currentProgress}>
-		<ul class="status-popover-list">
-			{#each statusOptions as option (option.value)}
-				{@const selected = entry?.status === option.value}
+		{#if field === "score"}
+			<!-- スコアだけを変えるので、状態は今のまま送る -->
+			<input type="hidden" name="status" value={entry?.status ?? ""}>
+			<ul class="status-popover-list">
+				{#each scoreOptions as option (option)}
+					{@const selected = currentScore === option}
+					<li>
+						<button
+							type="submit"
+							name="score"
+							value={option}
+							class="status-popover-option"
+							aria-current={selected ? "true" : undefined}
+							aria-label="スコア {option}"
+							disabled={submitting}
+						>
+							★{option}
+						</button>
+					</li>
+				{/each}
 				<li>
 					<button
 						type="submit"
-						name="status"
-						value={option.value}
-						class="status-popover-option"
-						aria-current={selected ? "true" : undefined}
+						name="score"
+						value=""
+						class="status-popover-option status-popover-option--clear"
+						aria-current={currentScore === "" ? "true" : undefined}
+						aria-label="スコアなし"
 						disabled={submitting}
 					>
-						{option.label}
+						なし
 					</button>
 				</li>
-			{/each}
-		</ul>
-		{#if entry && removeAction}
+			</ul>
+		{:else}
+			<input type="hidden" name="score" value={currentScore}>
+			<ul class="status-popover-list">
+				{#each statusOptions as option (option.value)}
+					{@const selected = entry?.status === option.value}
+					<li>
+						<button
+							type="submit"
+							name="status"
+							value={option.value}
+							class="status-popover-option"
+							aria-current={selected ? "true" : undefined}
+							disabled={submitting}
+						>
+							{option.label}
+						</button>
+					</li>
+				{/each}
+			</ul>
+		{/if}
+		{#if field === "status" && entry && removeAction}
 			<button
-				type="submit"
-				formaction={removeAction}
+				type="button"
 				class="status-popover-remove"
-				data-remove
 				disabled={submitting}
+				onclick={() => {
+					removeConfirming = true;
+				}}
 				aria-label="マイリストから外す"
 				title="マイリストから外す"
 			>
 				<!-- 欄はカードのボタンと同じ幅で狭いので、短く書く -->
 				外す
 			</button>
+		{/if}
+		{#if removeConfirming && removeAction}
+			<MyListRemoveConfirm
+				{animeTitle}
+				{removeAction}
+				{submitting}
+				oncancel={() => {
+					removeConfirming = false;
+				}}
+			/>
 		{/if}
 	</form>
 	{#if errorMessage}
@@ -264,7 +335,8 @@ const handleSubmit: SubmitFunction = ({ formData, submitter, cancel }) => {
 	background: color-mix(in srgb, var(--color-accent) 24%, transparent);
 	color: var(--color-accent);
 }
-.status-popover-remove {
+.status-popover-remove,
+.status-popover-option--clear {
 	border-top: 1px solid var(--color-border);
 	font-weight: 500;
 }

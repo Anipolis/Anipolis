@@ -52,9 +52,11 @@
 	--status-on-hold: #fbbf24;
 	--status-dropped: #f87171;
 	--status-score: #f59e0b;
-	/* 作品カードの画像に重ねるリボン。白い文字で 4.5:1 以上になる濃さにする */
+	/* 作品カードの画像に重ねるリボン。文字との差は 4.5:1 以上にする。
+	   本日放送は赤地に白い文字、放送中は白地に緑の枠と緑の文字 */
 	--ribbon-today: #dc2626;
 	--ribbon-airing: #15803d;
+	--ribbon-airing-bg: #fff;
 	--ribbon-text: #fff;
 }
 
@@ -1126,30 +1128,6 @@ textarea {
 	flex-shrink: 0;
 	font-size: 12px;
 	color: var(--color-text-muted);
-}
-
-.anime-trending-item {
-	gap: 8px;
-}
-
-.anime-trending-cover {
-	width: 44px;
-	flex-shrink: 0;
-	border-radius: 4px;
-	display: block;
-	image-rendering: auto;
-	background: var(--color-border);
-}
-
-.anime-trending-title {
-	flex: 1;
-	min-width: 0;
-	color: var(--color-text);
-	font-size: 14px;
-	font-weight: 600;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
 }
 
 .trending-panel-footer-links {

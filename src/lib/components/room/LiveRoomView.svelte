@@ -3,7 +3,7 @@ import type { SubmitFunction } from "@sveltejs/kit";
 import type { Snippet } from "svelte";
 import { onDestroy, onMount, tick, untrack } from "svelte";
 import { enhance } from "$app/forms";
-import { goto } from "$app/navigation";
+import { goto, invalidateAll } from "$app/navigation";
 import { autosize } from "$lib/actions/autosize";
 import { timelineScroll } from "$lib/actions/timelineScroll";
 import ExitSurveyModal from "$lib/components/ExitSurveyModal.svelte";
@@ -404,6 +404,8 @@ const handleCreatePost: SubmitFunction = ({ cancel, formData }) => {
 			// update()（applyAction）は成功時にフォーカスをリセットして入力欄から外すので呼ばない。
 			// 連投中にフォーカスが外れ、その間に打った文字が入力欄に入らなくなるため
 			localSurveyPostCount += 1;
+			// 最初の投稿でルームができたときは、ルームの ID から読み直す
+			if (!data.room.session_id) await invalidateAll();
 			// 自分の投稿は、ライブ更新と同じ差分APIで反映する（invalidateAll は load 全体の再実行で重い）
 			void fetchNewPosts();
 			isPosting = false;
@@ -450,6 +452,8 @@ function liveDiffQueryParam() {
 
 /** 差分 API を1ページ分叩く。非成功応答・例外・タイムアウトは null */
 async function fetchRoomPostPage(cursor: RoomPostCursor | null): Promise<RoomPostPage | null> {
+	// ルームがまだ無い話は、読み足すものが無い
+	if (!data.room.session_id) return null;
 	const params = new URLSearchParams({ [liveDiffQueryParam()]: data.room.session_id });
 	if (cursor) {
 		params.set("after_created_at", cursor.createdAt);
@@ -695,11 +699,31 @@ $effect(() => {
 	}
 });
 
+// ルームがまだ無い話を開いている間に、ほかの人の最初の投稿でルームができたら読み直して、ライブ更新に移る。
+// 投稿の Realtime はルームの ID で絞るので、できるまでは低頻度で確かめる
+$effect(() => {
+	const animeId = data.anime?.id;
+	const episodeNumber = data.room.episode_number;
+	if (!mounted || status !== "open" || data.room.session_id || !isEpisodeRoom) return;
+	if (animeId == null || episodeNumber == null) return;
+	const pollId = setInterval(async () => {
+		const { data: found } = await data.supabase
+			.from("episode_rooms")
+			.select("id")
+			.eq("anime_id", Number(animeId))
+			.eq("kind", "episode")
+			.eq("episode_number", episodeNumber)
+			.maybeSingle();
+		if (found) await invalidateAll();
+	}, EPISODE_ROOM_IDLE_POLL_MS);
+	return () => clearInterval(pollId);
+});
+
 // 受付中はライブ更新: Realtime の INSERT を購読し、受信をトリガーに差分APIを叩く。
 // Realtime が無効な環境向けに低頻度ポーリングをフォールバックとして併用する。
 // 購読状態はコールバックで接続状態に反映し、realtimeGeneration の更新で張り直せる。
 $effect(() => {
-	if (!mounted || status !== "open") return;
+	if (!mounted || status !== "open" || !data.room.session_id) return;
 	// 手動再接続のトリガーを依存に含める(値自体は使わない)
 	void realtimeGeneration;
 

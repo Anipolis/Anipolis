@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("$lib/server/actions", () => ({ markCategoryNotificationsRead: vi.fn() }));
 vi.mock("$lib/server/queries", () => ({
 	getNotifications: vi.fn(async () => [{ id: "n1" }]),
-	getUnreadNotificationCountsByCategory: vi.fn(async () => ({ normal: 2, room: 1, mylist: 0 })),
+	getUnreadNotificationCountsByCategory: vi.fn(async () => ({ normal: 2, room: 1 })),
 	getAnimeRankingTrending: vi.fn(async () => []),
 }));
 
@@ -14,8 +14,8 @@ import { load } from "./+page.server";
 // load の戻り値型には Record の索引シグネチャが混ざるため、検証したい形に絞って扱う
 type LoadResult = {
 	tab: string;
-	unreadCounts: { normal: number; room: number; mylist: number };
-	notifications: { normal: unknown[]; room: unknown[]; mylist: unknown[] };
+	unreadCounts: { normal: number; room: number };
+	notifications: { normal: unknown[]; room: unknown[] };
 };
 
 function makeEvent(tab: string | null, user: { id: string } | null = { id: "u1" }) {
@@ -36,9 +36,20 @@ describe("notifications page load", () => {
 
 		expect(markCategoryNotificationsRead).not.toHaveBeenCalled();
 		expect(result.tab).toBe("room");
-		expect(result.unreadCounts).toEqual({ normal: 2, room: 1, mylist: 0 });
+		expect(result.unreadCounts).toEqual({ normal: 2, room: 1 });
 		expect(getNotifications).toHaveBeenCalledWith(expect.anything(), "u1", 50, ["broadcast"]);
 		expect(result.notifications.room).toEqual([{ id: "n1" }]);
+	});
+
+	it("なくしたマイリストのタブは通常のタブで開く", async () => {
+		const result = (await load(makeEvent("mylist"))) as unknown as LoadResult;
+		expect(result.tab).toBe("normal");
+		expect(getNotifications).toHaveBeenLastCalledWith(
+			expect.anything(),
+			"u1",
+			50,
+			expect.arrayContaining(["like", "activity_like"]),
+		);
 	});
 
 	it("falls back to the normal tab for unknown values", async () => {

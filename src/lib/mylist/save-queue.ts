@@ -43,6 +43,8 @@ type RowEntry<T> = {
 	dirty: boolean;
 	/** 送信ループが動作中か */
 	running: boolean;
+	/** 動作中または最後の送信ループ。終わるのを待つのに使う */
+	runPromise: Promise<void> | null;
 	debounceTimer: ReturnType<typeof setTimeout> | null;
 	savedTimer: ReturnType<typeof setTimeout> | null;
 };
@@ -127,7 +129,7 @@ export function createSaveQueue<T>(options: SaveQueueOptions<T>) {
 		entry.debounceTimer = null;
 		entry.dirty = true;
 		// 送信ループが動いていれば dirty を見て最新値を送り直す
-		if (!entry.running) void run(key, entry);
+		if (!entry.running) entry.runPromise = run(key, entry);
 	}
 
 	function ensure(key: string, value: T): RowEntry<T> {
@@ -138,6 +140,7 @@ export function createSaveQueue<T>(options: SaveQueueOptions<T>) {
 				seq: 0,
 				dirty: false,
 				running: false,
+				runPromise: null,
 				debounceTimer: null,
 				savedTimer: null,
 			};
@@ -173,6 +176,11 @@ export function createSaveQueue<T>(options: SaveQueueOptions<T>) {
 			for (const [key, entry] of rows) {
 				if (entry.debounceTimer) start(key, entry);
 			}
+		},
+
+		/** 送信中の行の保存が終わるのを待つ（成功でも失敗でも）。デバウンス待ちは含まないので、先に flush する */
+		settled(key: string): Promise<void> {
+			return rows.get(key)?.runPromise ?? Promise.resolve();
 		},
 
 		/** 行の保存予定を取り消して状態を破棄する（行削除時に使う） */

@@ -6,6 +6,7 @@ import {
 	toExchangeSubjectiveTags,
 	validateExchangeSubjectiveTags,
 } from "$lib/exchange-tags";
+import { parseMylistNote, parseWatchDates } from "$lib/mylist/entry-details";
 import { normalizePostContent } from "$lib/post-content";
 import { isPostImageUsable } from "$lib/post-image-lifetime";
 import { ownedPostImagePath } from "$lib/post-image-url";
@@ -14,9 +15,10 @@ import { getEvent, isAdminUser, USERNAME_HELD_ERROR_MESSAGE, USERNAME_HELD_USER_
 import { createServiceRoleClient } from "$lib/server/supabase-admin";
 import { MULTIPART_OVERHEAD_BYTES, readFormDataWithLimit, validateImageBuffer } from "$lib/server/upload";
 import type { Database, Json } from "$lib/supabase/database.types";
-import type { AnimeExchangeShare, AnimeStatus, BroadcastRoomMuteDuration } from "$lib/types";
+import type { AnimeExchangeShare, AnimeStatus, BroadcastRoomMuteDuration, UserAnimeEntry } from "$lib/types";
 import { eventScheduledAtIsoFromBroadcastInput } from "$lib/utils/event-time";
 import { extractHashtags } from "$lib/utils/hashtag";
+import { jstDateKey } from "$lib/utils/jst";
 import { MIN_PASSWORD_LENGTH } from "$lib/utils/password-reset";
 
 const MAX_POST_IMAGES = 4;
@@ -558,13 +560,12 @@ export async function markAllNotificationsRead(supabase: SupabaseClient<Database
 	await supabase.from("notifications").update({ read: true }).eq("recipient_id", userId).eq("read", false);
 }
 
-export type NotificationCategory = "normal" | "room" | "mylist";
+export type NotificationCategory = "normal" | "room";
 
 /**
  * 通知タブのカテゴリ単位で既読にする
  * - room   = broadcast
- * - mylist = mylist_status
- * - normal = 上記以外
+ * - normal = 上記以外（181 より前のマイリスト通知 mylist_status は含めない）
  */
 export async function markCategoryNotificationsRead(
 	supabase: SupabaseClient<Database>,
@@ -576,9 +577,7 @@ export async function markCategoryNotificationsRead(
 	const { error } =
 		category === "room"
 			? await query.eq("type", "broadcast" as never)
-			: category === "mylist"
-				? await query.eq("type", "mylist_status" as never)
-				: await query.not("type", "in", "(broadcast,mylist_status)");
+			: await query.not("type", "in", "(broadcast,mylist_status)");
 	return { error: error?.message ?? null };
 }
 
@@ -1099,16 +1098,51 @@ export async function upsertUserAnimeEntry(supabase: SupabaseClient<Database>, r
 	if (!parsedScore.ok) return fail(400, { message: MYLIST_SCORE_INVALID_MESSAGE });
 	const score = parsedScore.score;
 	const progress = progressRaw ? parseInt(progressRaw, 10) : 0;
+	const dates = parseWatchDates(form, jstDateKey(new Date()));
+	if (!dates.ok) return fail(400, { message: dates.message });
+	const note = parseMylistNote(form);
+	if (!note.ok) return fail(400, { message: note.message });
 
-	const { error } = await supabase
+	// 日付は欄を送ったときだけ書く。空の日付は、視聴ステータスが変わればトリガーが今日で埋める（180）
+	const { data: saved, error } = await supabase
 		.from("user_anime_list")
 		.upsert(
-			{ user_id: userId, anime_id: Number(animeId), status, score, progress },
+			{ user_id: userId, anime_id: Number(animeId), status, score, progress, ...dates.values },
 			{ onConflict: "user_id,anime_id" },
-		);
+		)
+		.select("status, score, progress, updated_at, started_on, finished_on")
+		.single();
 
-	if (error) return fail(500, { message: "マイリストの更新に失敗しました" });
-	return { success: true };
+	if (error || !saved) return fail(500, { message: "マイリストの更新に失敗しました" });
+
+	// メモは欄を送ったときだけ書く（本人だけが読める別の表。マイリストの行より後に書く）
+	if (note.value !== undefined) {
+		const { error: noteError } =
+			note.value === null
+				? await supabase.from("user_anime_notes").delete().eq("user_id", userId).eq("anime_id", Number(animeId))
+				: await supabase.from("user_anime_notes").upsert(
+						{
+							user_id: userId,
+							anime_id: Number(animeId),
+							body: note.value,
+							updated_at: new Date().toISOString(),
+						},
+						{ onConflict: "user_id,anime_id" },
+					);
+		if (noteError) return fail(500, { message: "メモの保存に失敗しました（ほかの内容は保存しました）" });
+	}
+
+	// 保存した内容を返し、画面は読み直さずにこれで表示を変える（トリガーが埋めた日付も含む）
+	const entry: UserAnimeEntry = {
+		status: saved.status as AnimeStatus,
+		score: saved.score,
+		progress: saved.progress,
+		updated_at: saved.updated_at,
+		started_on: saved.started_on,
+		finished_on: saved.finished_on,
+		...(note.value !== undefined ? { note: note.value } : {}),
+	};
+	return { success: true, entry };
 }
 
 export async function removeUserAnimeEntry(supabase: SupabaseClient<Database>, request: Request, userId: string) {
