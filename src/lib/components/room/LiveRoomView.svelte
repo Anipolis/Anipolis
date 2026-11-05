@@ -453,13 +453,15 @@ const handleCreatePost: SubmitFunction = ({ cancel, formData }) => {
 
 const handleUndoProgress: SubmitFunction = () => {
 	isUndoingProgress = true;
+	// 応答を待つ間の投稿でも進め直さないよう、押した時点で止める（失敗したら戻す）
+	keepProgress = true;
 	composerError = null;
 	return async ({ result }) => {
 		isUndoingProgress = false;
 		if (result.type === "success") {
-			keepProgress = true;
 			progressAdvance = null;
 		} else {
+			keepProgress = false;
 			composerError = "話数を元に戻せませんでした";
 		}
 	};
@@ -1016,7 +1018,11 @@ function formatCompactDate(iso: string) {
 						<form method="POST" action="?/undoProgress" use:enhance={handleUndoProgress}>
 							<input type="hidden" name="from" value={progressAdvance.from}>
 							<input type="hidden" name="to" value={progressAdvance.to}>
-							<button type="submit" class="progress-advance-undo" disabled={isUndoingProgress}>
+							<button
+								type="submit"
+								class="progress-advance-undo"
+								disabled={isUndoingProgress || isPosting}
+							>
 								元に戻す
 							</button>
 						</form>
