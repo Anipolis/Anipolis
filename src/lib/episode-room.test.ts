@@ -4,6 +4,7 @@ import {
 	airingHeading,
 	airingOnAirAt,
 	buildEpisodeRoomList,
+	cumulativeSeasonRange,
 	type EpisodeRoomListEntry,
 	episodeRoomChipLabels,
 	episodeRoomEntryState,
@@ -174,6 +175,43 @@ describe("buildEpisodeRoomList（作品ページの話数ルーム一覧）", ()
 		]).toEqual(["1", "特1", "特2"]);
 	});
 
+	it("通算の話数の作品はシーズンの範囲だけ並べ、範囲外でも実在するルームは残す", () => {
+		const now = Date.parse("2026-11-05T00:00:00Z");
+		const finished = buildEpisodeRoomList({
+			animeId: 1,
+			rooms: [room("r33", 33, "2026-10-01T00:00:00Z"), room("r36", 36, "2026-10-01T00:00:00Z")],
+			airings: [],
+			episodeTotal: 12,
+			airedTo: "2026-09-20",
+			now,
+		});
+		expect(finished.map((entry) => entry.episodeNumber)).toEqual([25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36]);
+
+		const mixed = buildEpisodeRoomList({
+			animeId: 1,
+			rooms: [room("r1", 1, "2026-10-01T00:00:00Z"), room("r85", 85, "2026-10-01T00:00:00Z")],
+			airings: [],
+			episodeTotal: 3,
+			airedTo: "2026-09-30",
+			now,
+		});
+		expect(mixed.map((entry) => entry.episodeNumber)).toEqual([1, 83, 84, 85]);
+	});
+
+	it("総話数を超える話は、ルームが無ければ開ける扱いにしない（DB が作らない）", () => {
+		const list = buildEpisodeRoomList({
+			animeId: 1,
+			rooms: [room("r36", 36, "2026-10-01T00:00:00Z")],
+			airings: [],
+			episodeTotal: 12,
+			openableUpTo: 36,
+			airedTo: "2026-09-20",
+			now: Date.parse("2026-11-05T00:00:00Z"),
+		});
+		expect(list.find((entry) => entry.episodeNumber === 30)?.opensAt).toBeNull();
+		expect(list.at(-1)?.opensAt).not.toBeNull();
+	});
+
 	it("話数が不明なら作られたルームの最大話数まで。ルームも話数も無ければ空", () => {
 		const list = buildEpisodeRoomList({
 			animeId: 1,
@@ -241,5 +279,33 @@ describe("openableEpisodeLimit（ensure_episode_room と同じ判断）", () => 
 		expect(openableEpisodeLimit({ anime: { ...base, type: "ONA", aired_from: "2026-11-01" }, ...none })).toBe(0);
 		expect(openableEpisodeLimit({ anime: base, ...none })).toBe(0);
 		expect(openableEpisodeLimit({ anime: { ...base, status: "finished", episode_total: null }, ...none })).toBe(0);
+	});
+});
+
+describe("cumulativeSeasonRange", () => {
+	const now = Date.parse("2026-11-05T00:00:00Z");
+
+	it("総話数を超える話数が無ければ通算とみなさない", () => {
+		expect(cumulativeSeasonRange({ episodeTotal: 12, roomNumbers: [1, 12], airedTo: null, now })).toBeNull();
+		expect(cumulativeSeasonRange({ episodeTotal: null, roomNumbers: [80], airedTo: null, now })).toBeNull();
+		expect(cumulativeSeasonRange({ episodeTotal: 12, roomNumbers: [], airedTo: null, now })).toBeNull();
+	});
+
+	it("放送が終わった作品は最後の話数から総話数ぶん戻る", () => {
+		expect(cumulativeSeasonRange({ episodeTotal: 12, roomNumbers: [33, 36], airedTo: "2026-09-20", now })).toEqual({
+			first: 25,
+			last: 36,
+		});
+	});
+
+	it("放送中は最初の話数から総話数ぶん進む", () => {
+		expect(cumulativeSeasonRange({ episodeTotal: 13, roomNumbers: [51, 52], airedTo: "2026-12-30", now })).toEqual({
+			first: 51,
+			last: 63,
+		});
+		expect(cumulativeSeasonRange({ episodeTotal: 13, roomNumbers: [51, 52], airedTo: null, now })).toEqual({
+			first: 51,
+			last: 63,
+		});
 	});
 });

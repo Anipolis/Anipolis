@@ -133,6 +133,43 @@ export function openableEpisodeLimit(input: {
 }
 
 /**
+ * しょぼいカレンダーの話数が通算の続編（全12話で第25〜36話など）の、そのシーズンの話数の範囲。
+ * 総話数を超える話数のルームが無ければ通算とみなさず null。
+ * 放送が終わった作品は最後の話数から、放送中は最初の話数から総話数ぶんを数える
+ */
+export function cumulativeSeasonRange(input: {
+	episodeTotal: number | null;
+	roomNumbers: readonly number[];
+	airedTo: string | null;
+	now: number;
+}): { first: number; last: number } | null {
+	const { episodeTotal, roomNumbers, airedTo, now } = input;
+	if (episodeTotal == null || episodeTotal < 1 || roomNumbers.length === 0) return null;
+	const max = Math.max(...roomNumbers);
+	if (max <= episodeTotal) return null;
+	const todayJst = new Date(now + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+	if (airedTo && airedTo < todayJst) return { first: Math.max(1, max - episodeTotal + 1), last: max };
+	const first = Math.min(...roomNumbers);
+	return { first, last: Math.max(max, first + episodeTotal - 1) };
+}
+
+/** ルームの一覧から通算の範囲を求める（統合済みと特番は数えない） */
+export function cumulativeSeasonRangeOf(
+	anime: { episode_total: number | null; aired_to: string | null },
+	rooms: readonly Pick<EpisodeRoom, "kind" | "episode_number" | "merged_into">[],
+	now: number,
+): { first: number; last: number } | null {
+	return cumulativeSeasonRange({
+		episodeTotal: anime.episode_total,
+		roomNumbers: rooms
+			.filter((room) => room.kind === "episode" && !room.merged_into && room.episode_number != null)
+			.map((room) => room.episode_number as number),
+		airedTo: anime.aired_to,
+		now,
+	});
+}
+
+/**
  * 作品ページに並べる話数ルームの一覧。第1話から作品の話数（無ければ作られたルームの最大話数）までと、特番。
  * ルームがまだ無い話は、開ける話（openableUpTo 以下）なら投稿できる行、それ以外は未放送の行として出す。
  * 統合済みのルームの話数は出さない（開くと統合先へ転送される）。
@@ -143,8 +180,10 @@ export function buildEpisodeRoomList(input: {
 	airings: readonly RoomAiringWithRoom[];
 	episodeTotal: number | null;
 	openableUpTo?: number;
+	airedTo?: string | null;
+	now?: number;
 }): EpisodeRoomListEntry[] {
-	const { animeId, rooms, airings, episodeTotal, openableUpTo = 0 } = input;
+	const { animeId, rooms, airings, episodeTotal, openableUpTo = 0, airedTo = null, now = Date.now() } = input;
 	const live = rooms.filter((room) => !room.merged_into);
 	const airingsByRoom = new Map<string, RoomAiringWithRoom[]>();
 	for (const airing of airings) {
@@ -161,7 +200,12 @@ export function buildEpisodeRoomList(input: {
 		const first = roomAirings
 			.filter((airing) => airing.airing_kind === "first")
 			.sort((a, b) => Date.parse(a.scheduled_at) - Date.parse(b.scheduled_at))[0];
-		const openable = !room && base.episodeNumber != null && base.episodeNumber <= openableUpTo;
+		// 総話数を超える話は DB（ensure_episode_room）がルームを作らないので、開ける扱いにしない
+		const openable =
+			!room &&
+			base.episodeNumber != null &&
+			base.episodeNumber <= openableUpTo &&
+			(episodeTotal == null || base.episodeNumber <= episodeTotal);
 		return {
 			...base,
 			opensAt: room?.opens_at ?? (openable ? OPENABLE_WITHOUT_ROOM : null),
@@ -184,11 +228,14 @@ export function buildEpisodeRoomList(input: {
 	);
 	const maxRoomNumber = Math.max(0, ...[...byNumber.keys()].filter((n): n is number => n != null));
 	// 誤った話数のデータで一覧を際限なく作らないよう、URL で開ける話数までにする
-	const lastEpisode = Math.min(MAX_EPISODE_NUMBER, Math.max(episodeTotal ?? 0, maxRoomNumber));
+	// 通算の話数の作品は、そのシーズンの範囲だけ並べる（範囲の外でも、実在するルームは入口を残す）
+	const season = cumulativeSeasonRangeOf({ episode_total: episodeTotal, aired_to: airedTo }, live, now);
+	const lastEpisode = Math.min(MAX_EPISODE_NUMBER, Math.max(episodeTotal ?? 0, maxRoomNumber, season?.last ?? 0));
 
 	const entries: EpisodeRoomListEntry[] = [];
 	for (let n = 1; n <= lastEpisode; n += 1) {
 		if (mergedNumbers.has(n)) continue;
+		if (season && (n < season.first || n > season.last) && !byNumber.has(n)) continue;
 		entries.push(
 			toEntry(byNumber.get(n), {
 				key: `ep-${n}`,
