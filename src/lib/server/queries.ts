@@ -4,6 +4,7 @@ import { isRepeatMuteActive } from "$lib/anime-mute-schedule";
 import { groupGenreFilters, translateAnimeGenres } from "$lib/anime-vocabulary";
 import { computeBroadcastStatus } from "$lib/broadcast-status";
 import type { CollectionMembership } from "$lib/collections";
+import type { EpisodeRoomBounds } from "$lib/episode-room";
 import { toValidExchangeSubjectiveTags } from "$lib/exchange-tags";
 import { isOwnPostImage, postImageMediaUrl } from "$lib/post-image-url";
 import { getAssuranceLevel, isAdminMfaRequired } from "$lib/server/mfa";
@@ -1140,6 +1141,27 @@ export async function ensureEpisodeRoom(
 		return null;
 	}
 	return roomId ? getEpisodeRoomById(supabase, roomId) : null;
+}
+
+/** 話数ルームの範囲と開ける話数（186 の episode_room_bounds）。取得に失敗したら null */
+export async function getEpisodeRoomBounds(
+	supabase: SupabaseClient<Database>,
+	animeId: number,
+): Promise<EpisodeRoomBounds | null> {
+	const { data, error } = await supabase.rpc("episode_room_bounds", { p_anime_id: animeId });
+	if (error) {
+		console.error("getEpisodeRoomBounds error:", error);
+		return null;
+	}
+	const row = data?.[0];
+	if (!row) return { season: null, openableUpTo: 0 };
+	return {
+		season:
+			row.season_first != null && row.season_last != null
+				? { first: row.season_first, last: row.season_last }
+				: null,
+		openableUpTo: row.openable_up_to ?? 0,
+	};
 }
 
 /** 管理者が休止にした放送日（broadcast_room_overrides.is_cancelled）。話数ルームの放送枠から除く（156） */

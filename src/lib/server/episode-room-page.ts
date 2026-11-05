@@ -1,5 +1,5 @@
 import { fail } from "@sveltejs/kit";
-import { airingOnAirAt } from "$lib/episode-room";
+import { airingOnAirAt, OPENABLE_WITHOUT_ROOM } from "$lib/episode-room";
 import { insertPostWithHashtags } from "$lib/server/actions";
 import { getAnimeRankingTrending, getEpisodeRoomAirings, getEpisodeRoomPosts } from "$lib/server/queries";
 import { roomHashtag, stripTrailingRoomHashtag } from "$lib/server/room-hashtag";
@@ -23,10 +23,12 @@ export async function buildEpisodeRoomPageData(input: {
 	url: URL;
 	anime: Anime;
 	room: EpisodeRoom | null;
+	/** ルームがまだ無いが、最初の投稿で作れる */
+	openable?: boolean;
 	title: string;
 	episodeNumber: number | null;
 }) {
-	const { supabase, user, url, anime, room, title, episodeNumber } = input;
+	const { supabase, user, url, anime, room, openable = false, title, episodeNumber } = input;
 	const airings = room ? await getEpisodeRoomAirings(supabase, room.id) : [];
 	const now = Date.now();
 	const liveAiring = airingOnAirAt(airings, now);
@@ -61,8 +63,8 @@ export async function buildEpisodeRoomPageData(input: {
 	const hasOlderPosts = since ? olderExists : from === "latest" && postPage.hasMore;
 
 	// 開く時刻が決まっていない話は「まだ投稿できない」状態にする（開場は十分先として渡す）
-	const opensAt = room?.opens_at ?? NEVER_CLOSES;
-	const scheduledAt = firstAiring?.scheduled_at ?? room?.opens_at ?? NEVER_CLOSES;
+	const opensAt = room?.opens_at ?? (openable ? OPENABLE_WITHOUT_ROOM : NEVER_CLOSES);
+	const scheduledAt = firstAiring?.scheduled_at ?? opensAt;
 
 	return {
 		anime,
@@ -79,7 +81,7 @@ export async function buildEpisodeRoomPageData(input: {
 				: null,
 			title,
 			...(episodeNumber != null ? { episode_number: episodeNumber } : {}),
-			opens_at_known: room?.opens_at != null,
+			opens_at_known: room?.opens_at != null || openable,
 			airings,
 			initial_airing_id: initialAiringId,
 			has_older_posts: hasOlderPosts,

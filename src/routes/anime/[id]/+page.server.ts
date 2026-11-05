@@ -1,5 +1,5 @@
 import { error, fail } from "@sveltejs/kit";
-import { buildEpisodeRoomList, hasEpisodeRooms, openableEpisodeLimit } from "$lib/episode-room";
+import { buildEpisodeRoomList, hasEpisodeRooms } from "$lib/episode-room";
 import { recommendAnimeAction, removeUserAnimeEntry, upsertUserAnimeEntry } from "$lib/server/actions";
 import { addBroadcastOverrideAction, deleteBroadcastOverrideAction, updateAnimeAction } from "$lib/server/anime-admin";
 import {
@@ -14,6 +14,7 @@ import {
 	getAnimeRelations,
 	getAnimeSyobocalUrl,
 	getBroadcastRoomOverridesForAnime,
+	getEpisodeRoomBounds,
 	getEpisodeRoomLog,
 	getEventsForAnime,
 	getUsersWhoListedAnime,
@@ -42,15 +43,19 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 
 	// ルームの一覧。話数のある作品だけ話数を並べ、映画や1話だけの配信作品は特番ルームだけ出す（総合ロビーの作品は対象外）
 	// 取得に失敗したら、全話未放送と見せずに読み込めなかったと伝える
-	const roomLog = anime.room_type === "global" ? null : await getEpisodeRoomLog(supabase, Number(anime.id));
+	const [roomLog, roomBounds] =
+		anime.room_type === "global"
+			? [null, null]
+			: await Promise.all([
+					getEpisodeRoomLog(supabase, Number(anime.id)),
+					getEpisodeRoomBounds(supabase, Number(anime.id)),
+				]);
 	const roomEntries = roomLog
 		? buildEpisodeRoomList({
 				animeId: anime.id,
 				...roomLog,
 				episodeTotal: anime.episode_total,
-				airedFrom: anime.aired_from,
-				airedTo: anime.aired_to,
-				openableUpTo: openableEpisodeLimit({ anime, ...roomLog, now: Date.now() }),
+				bounds: roomBounds ?? undefined,
 			})
 		: [];
 	const episodeRooms = hasEpisodeRooms(anime) ? roomEntries : roomEntries.filter((entry) => entry.kind === "special");
@@ -66,7 +71,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 		relations,
 		syobocalUrl,
 		episodeRooms,
-		episodeRoomsFailed: anime.room_type !== "global" && roomLog === null,
+		episodeRoomsFailed: anime.room_type !== "global" && (roomLog === null || roomBounds === null),
 		adminEpisodeRooms,
 		broadcastOverrides,
 		events,
