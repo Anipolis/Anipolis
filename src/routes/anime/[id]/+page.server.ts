@@ -48,6 +48,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 				animeId: anime.id,
 				...roomLog,
 				episodeTotal: anime.episode_total,
+				airedTo: anime.aired_to,
 				openableUpTo: openableEpisodeLimit({ anime, ...roomLog, now: Date.now() }),
 			})
 		: [];
