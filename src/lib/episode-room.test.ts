@@ -5,6 +5,7 @@ import {
 	airingOnAirAt,
 	buildEpisodeRoomList,
 	type EpisodeRoomListEntry,
+	episodeRoomChipLabels,
 	episodeRoomEntryState,
 	episodeRoomPath,
 	formatAiringDate,
@@ -163,6 +164,14 @@ describe("buildEpisodeRoomList（作品ページの話数ルーム一覧）", ()
 		});
 		expect(list.map((entry) => entry.label)).toEqual(["第1話", "第2話", "第3話", "総集編"]);
 		expect(list.at(-1)?.href).toBe("/rooms/anime/1/sp/recap");
+	});
+
+	it("特番が1つなら「特」、複数なら放送順に「特1」「特2」", () => {
+		const entry = (key: string, episodeNumber: number | null) => ({ key, episodeNumber }) as EpisodeRoomListEntry;
+		expect([...episodeRoomChipLabels([entry("ep-1", 1), entry("sp-a", null)]).values()]).toEqual(["1", "特"]);
+		expect([
+			...episodeRoomChipLabels([entry("ep-1", 1), entry("sp-a", null), entry("sp-b", null)]).values(),
+		]).toEqual(["1", "特1", "特2"]);
 	});
 
 	it("話数が不明なら作られたルームの最大話数まで。ルームも話数も無ければ空", () => {

@@ -13,7 +13,12 @@ import AnimePosterTile from "$lib/components/AnimePosterTile.svelte";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
 import MyListStatusPopover from "$lib/components/MyListStatusPopover.svelte";
-import { episodeRoomEntryState, formatAiringTime, isEpisodeRoomEntryLive } from "$lib/episode-room";
+import {
+	episodeRoomChipLabels,
+	episodeRoomEntryState,
+	formatAiringTime,
+	isEpisodeRoomEntryLive,
+} from "$lib/episode-room";
 import type { AnimeStatus, BroadcastRoomOverride, UserAnimeEntry } from "$lib/types";
 import {
 	type BroadcastOverrideKind,
@@ -84,6 +89,7 @@ const latestEpisodeRoom = $derived(
 		.reverse()
 		.find((entry) => entry.kind === "episode" && episodeRoomEntryState(entry, episodeRoomNow) === "open"),
 );
+const episodeRoomChips = $derived(episodeRoomChipLabels(data.episodeRooms));
 const isAnimeAiring = $derived(data.anime.computed_broadcast_status === "airing");
 
 const broadcastLabels: Record<string, string> = {
@@ -1723,7 +1729,7 @@ $effect(() => {
 												title={entryDetail ? `${entry.label}（${entryDetail}）` : entry.label}
 											>
 												<span class="room-log-ep-compact" aria-hidden="true"
-													>{entry.episodeNumber ?? "特"}</span
+													>{episodeRoomChips.get(entry.key)}</span
 												>
 												<span class="sr-only"
 													>{entryDetail ? `${entry.label}（${entryDetail}）` : entry.label}</span

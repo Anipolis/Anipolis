@@ -199,9 +199,10 @@ export function buildEpisodeRoomList(input: {
 			}),
 		);
 	}
+	const specials: EpisodeRoomListEntry[] = [];
 	for (const room of live) {
 		if (room.kind !== "special" || !room.special_key) continue;
-		entries.push(
+		specials.push(
 			toEntry(room, {
 				key: `sp-${room.special_key}`,
 				kind: "special",
@@ -211,7 +212,28 @@ export function buildEpisodeRoomList(input: {
 			}),
 		);
 	}
-	return entries;
+	// 特番は放送順に並べる。放送枠がまだ無い特番は後ろ
+	specials.sort((a, b) => (a.firstAiredOn ?? "9999").localeCompare(b.firstAiredOn ?? "9999"));
+	return [...entries, ...specials];
+}
+
+/**
+ * 話数ルームのマスに出す短い文字（entry.key ごと）。話は番号、特番は「特」。
+ * 特番が複数あると、スマホでは開くまで見分けられないので「特1」「特2」と番号を振る
+ */
+export function episodeRoomChipLabels(entries: readonly EpisodeRoomListEntry[]): Map<string, string> {
+	const specialCount = entries.filter((entry) => entry.episodeNumber == null).length;
+	const labels = new Map<string, string>();
+	let specialIndex = 0;
+	for (const entry of entries) {
+		if (entry.episodeNumber != null) {
+			labels.set(entry.key, String(entry.episodeNumber));
+			continue;
+		}
+		specialIndex += 1;
+		labels.set(entry.key, specialCount > 1 ? `特${specialIndex}` : "特");
+	}
+	return labels;
 }
 
 /** 行の状態。open: 投稿できる / upcoming: 開く時刻が決まっている / unaired: まだ決まっていない */
