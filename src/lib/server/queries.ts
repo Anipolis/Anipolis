@@ -1164,6 +1164,24 @@ export async function getEpisodeRoomBounds(
 	};
 }
 
+/** 話数ルームへの投稿でマイリストの話数を進める（188）。進まなかったとき・失敗したときは null */
+export async function advanceMylistProgressFromRoom(
+	supabase: SupabaseClient<Database>,
+	animeId: number,
+	episodeNumber: number,
+): Promise<{ from: number; to: number } | null> {
+	const { data, error } = await supabase.rpc("advance_mylist_progress_from_room", {
+		p_anime_id: animeId,
+		p_episode_number: episodeNumber,
+	});
+	if (error) {
+		console.error("advanceMylistProgressFromRoom error:", error);
+		return null;
+	}
+	const row = data?.[0];
+	return row ? { from: row.previous_progress, to: row.new_progress } : null;
+}
+
 /** 管理者が休止にした放送日（broadcast_room_overrides.is_cancelled）。話数ルームの放送枠から除く（156） */
 async function getCancelledRoomDates(supabase: SupabaseClient<Database>, animeId: number): Promise<Set<string> | null> {
 	const { data, error } = await supabase
