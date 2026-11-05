@@ -4063,6 +4063,10 @@ export type Database = {
 			};
 		};
 		Functions: {
+			advance_mylist_progress_from_room: {
+				Args: { p_anime_id: number; p_episode_number: number };
+				Returns: { new_progress: number; previous_progress: number }[];
+			};
 			anime_list_with_genre_match: {
 				Args: { p_genres: string[] };
 				Returns: {

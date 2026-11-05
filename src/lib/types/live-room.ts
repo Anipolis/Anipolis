@@ -52,6 +52,13 @@ export type LiveRoomData = {
 	};
 };
 
+/** 話数ルームへの投稿で進んだマイリストの話数（188） */
+export type RoomProgressAdvance = {
+	from: number;
+	to: number;
+	total: number | null;
+};
+
 export type LiveRoomActionData =
 	| {
 			message?: string;
