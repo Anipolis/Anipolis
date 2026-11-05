@@ -23,18 +23,18 @@ import type { Actions, PageServerLoad } from "./$types";
  */
 async function isInCumulativeSeason(
 	supabase: App.Locals["supabase"],
-	anime: Pick<Anime, "id" | "episode_total" | "aired_to">,
+	anime: Pick<Anime, "id" | "episode_total" | "aired_from" | "aired_to">,
 	episodeNumber: number,
 ): Promise<boolean | null> {
 	const log = await getEpisodeRoomLog(supabase, Number(anime.id));
-	const season = log ? cumulativeSeasonRangeOf(anime, log.rooms, Date.now()) : null;
+	const season = log ? cumulativeSeasonRangeOf(anime, log.rooms, log.airings, Date.now()) : null;
 	return season ? episodeNumber >= season.first && episodeNumber <= season.last : null;
 }
 
 /** 話数ルームを探し、無ければ開いてよいか DB に判断させて作る。統合済みなら統合先を返す */
 async function resolveEpisodeRoom(
 	supabase: App.Locals["supabase"],
-	anime: Pick<Anime, "id" | "episode_total" | "aired_to">,
+	anime: Pick<Anime, "id" | "episode_total" | "aired_from" | "aired_to">,
 	episodeNumber: number,
 ): Promise<{ room: EpisodeRoom | null; inCumulativeSeason: boolean | null }> {
 	const animeId = Number(anime.id);

@@ -16,6 +16,7 @@ import {
 	MAX_EPISODE_NUMBER,
 	openableEpisodeLimit,
 	parseEpisodeNumberParam,
+	type RoomAiringWithRoom,
 } from "./episode-room";
 import type { EpisodeRoom, RoomAiring } from "./types";
 
@@ -212,6 +213,33 @@ describe("buildEpisodeRoomList（作品ページの話数ルーム一覧）", ()
 		expect(list.at(-1)?.opensAt).not.toBeNull();
 	});
 
+	it("放送が終わった通算の作品は、放送枠が抜けた最終話も開ける扱いにする", () => {
+		const list = buildEpisodeRoomList({
+			animeId: 1,
+			rooms: [room("r13", 13, "2026-07-01T00:00:00Z"), room("r24", 24, "2026-09-01T00:00:00Z")],
+			airings: [
+				{
+					id: "a13",
+					episode_room_id: "r13",
+					room_date: "2026-07-03",
+					scheduled_at: "2026-07-03T15:00:00Z",
+					ends_at: "2026-07-03T15:30:00Z",
+					posting_opens_at: "2026-07-03T14:55:00Z",
+					posting_closes_at: "2026-07-03T16:00:00Z",
+					airing_kind: "first",
+				} as RoomAiringWithRoom,
+			],
+			episodeTotal: 13,
+			openableUpTo: 24,
+			airedFrom: "2026-07-03",
+			airedTo: "2026-09-25",
+			now: Date.parse("2026-11-05T00:00:00Z"),
+		});
+		expect(list[0]?.episodeNumber).toBe(13);
+		expect(list.at(-1)?.episodeNumber).toBe(25);
+		expect(list.at(-1)?.opensAt).not.toBeNull();
+	});
+
 	it("話数が不明なら作られたルームの最大話数まで。ルームも話数も無ければ空", () => {
 		const list = buildEpisodeRoomList({
 			animeId: 1,
@@ -296,6 +324,36 @@ describe("cumulativeSeasonRange", () => {
 			first: 25,
 			last: 36,
 		});
+	});
+
+	it("放送枠のある最も早いルームが放送開始の週の放送なら、最終話の枠が抜けていても初回から数える", () => {
+		const base = {
+			episodeTotal: 13,
+			roomNumbers: [13, 21, 24],
+			airedFrom: "2026-07-03",
+			airedTo: "2026-09-25",
+			now,
+		};
+		const on = (airedOn: string) => ({ ...base, earliestAiring: { episodeNumber: 13, airedOn } });
+		expect(cumulativeSeasonRange(on("2026-07-03"))).toEqual({ first: 13, last: 25 });
+		expect(cumulativeSeasonRange(on("2026-07-02"))).toEqual({ first: 13, last: 25 });
+		expect(cumulativeSeasonRange(on("2026-07-09"))).toEqual({ first: 13, last: 25 });
+		// 7 日後は第2話なので初回とみなさない
+		expect(cumulativeSeasonRange(on("2026-07-10"))).toEqual({ first: 12, last: 24 });
+		expect(cumulativeSeasonRange({ ...base, earliestAiring: null })).toEqual({ first: 12, last: 24 });
+	});
+
+	it("放送枠の無いルームが初回より小さい番号にあっても、範囲はずれない", () => {
+		expect(
+			cumulativeSeasonRange({
+				episodeTotal: 13,
+				roomNumbers: [12, 13, 24],
+				airedFrom: "2026-07-03",
+				airedTo: "2026-09-25",
+				earliestAiring: { episodeNumber: 13, airedOn: "2026-07-03" },
+				now,
+			}),
+		).toEqual({ first: 13, last: 25 });
 	});
 
 	it("放送中は最初の話数から総話数ぶん進む", () => {
