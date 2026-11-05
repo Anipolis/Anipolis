@@ -198,7 +198,7 @@ describe("buildEpisodeRoomList（作品ページの話数ルーム一覧）", ()
 		expect(mixed.map((entry) => entry.episodeNumber)).toEqual([1, 83, 84, 85]);
 	});
 
-	it("総話数を超える話は、ルームが無ければ開ける扱いにしない（DB が作らない）", () => {
+	it("通算の話数の作品は、ルームが無くても放送済みの話を開ける扱いにする（183 の ensure_episode_room と同じ）", () => {
 		const list = buildEpisodeRoomList({
 			animeId: 1,
 			rooms: [room("r36", 36, "2026-10-01T00:00:00Z")],
@@ -208,7 +208,7 @@ describe("buildEpisodeRoomList（作品ページの話数ルーム一覧）", ()
 			airedTo: "2026-09-20",
 			now: Date.parse("2026-11-05T00:00:00Z"),
 		});
-		expect(list.find((entry) => entry.episodeNumber === 30)?.opensAt).toBeNull();
+		expect(list.find((entry) => entry.episodeNumber === 30)?.opensAt).not.toBeNull();
 		expect(list.at(-1)?.opensAt).not.toBeNull();
 	});
 

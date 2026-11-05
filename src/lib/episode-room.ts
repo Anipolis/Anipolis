@@ -200,12 +200,7 @@ export function buildEpisodeRoomList(input: {
 		const first = roomAirings
 			.filter((airing) => airing.airing_kind === "first")
 			.sort((a, b) => Date.parse(a.scheduled_at) - Date.parse(b.scheduled_at))[0];
-		// 総話数を超える話は DB（ensure_episode_room）がルームを作らないので、開ける扱いにしない
-		const openable =
-			!room &&
-			base.episodeNumber != null &&
-			base.episodeNumber <= openableUpTo &&
-			(episodeTotal == null || base.episodeNumber <= episodeTotal);
+		const openable = !room && base.episodeNumber != null && base.episodeNumber <= openableUpTo;
 		return {
 			...base,
 			opensAt: room?.opens_at ?? (openable ? OPENABLE_WITHOUT_ROOM : null),
