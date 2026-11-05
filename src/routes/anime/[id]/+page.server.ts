@@ -2,7 +2,6 @@ import { error, fail } from "@sveltejs/kit";
 import { buildEpisodeRoomList, hasEpisodeRooms, openableEpisodeLimit } from "$lib/episode-room";
 import { recommendAnimeAction, removeUserAnimeEntry, upsertUserAnimeEntry } from "$lib/server/actions";
 import { addBroadcastOverrideAction, deleteBroadcastOverrideAction, updateAnimeAction } from "$lib/server/anime-admin";
-import { buildBroadcastEpisodeLog } from "$lib/server/broadcast-episode-log";
 import {
 	addEpisodeAiringAction,
 	addSpecialRoomAction,
@@ -15,7 +14,6 @@ import {
 	getAnimeRelations,
 	getAnimeSyobocalUrl,
 	getBroadcastRoomOverridesForAnime,
-	getBroadcastRoomScheduleSnapshotsForAnime,
 	getEpisodeRoomLog,
 	getEventsForAnime,
 	getUsersWhoListedAnime,
@@ -35,16 +33,15 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 
 	if (!anime) throw error(404, "アニメが見つかりません");
 
-	const [relations, syobocalUrl, broadcastOverrides, events, scheduleSnapshots] = await Promise.all([
+	const [relations, syobocalUrl, broadcastOverrides, events] = await Promise.all([
 		getAnimeRelations(supabase, anime.mal_id),
 		getAnimeSyobocalUrl(supabase, anime.mal_id),
 		getBroadcastRoomOverridesForAnime(supabase, params.id),
 		getEventsForAnime(supabase, Number(anime.id)),
-		getBroadcastRoomScheduleSnapshotsForAnime(supabase, Number(anime.id)),
 	]);
 
 	// 話数ルーム（153）の一覧。話数のある作品だけ（映画・特番・1話だけの配信作品は無し）。
-	// 取得に失敗したら空にして、今の日付のルームログを出す（失敗を「全話未放送」と見せないため）
+	// 取得に失敗したら、全話未放送と見せずに読み込めなかったと伝える
 	const roomLog = hasEpisodeRooms(anime) ? await getEpisodeRoomLog(supabase, Number(anime.id)) : null;
 	const episodeRooms = roomLog
 		? buildEpisodeRoomList({
@@ -54,13 +51,6 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 				openableUpTo: openableEpisodeLimit({ anime, ...roomLog, now: Date.now() }),
 			})
 		: [];
-	// 各話ルームの履歴タイムライン（実在セッション+同期前の合成補完+アンカー逆算）
-	// の構築は buildBroadcastEpisodeLog に集約。未開場セッションは逆算のアンカー
-	// としてだけ使い、ログには開場済み（opened）の日付のみ載せる。
-	const episodes = buildBroadcastEpisodeLog(anime, scheduleSnapshots, broadcastOverrides)
-		.filter((slot) => slot.opened)
-		.sort((left, right) => right.date.localeCompare(left.date));
-
 	// 管理タブ用: 話数ルームの一覧（開く時刻の固定・統合を含む）
 	const adminEpisodeRooms = isAdmin ? await getAdminEpisodeRooms(supabase, Number(anime.id)) : [];
 
@@ -71,8 +61,8 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 		listedUsers,
 		relations,
 		syobocalUrl,
-		episodes,
 		episodeRooms,
+		episodeRoomsFailed: hasEpisodeRooms(anime) && roomLog === null,
 		adminEpisodeRooms,
 		broadcastOverrides,
 		events,

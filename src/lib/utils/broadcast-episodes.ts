@@ -313,14 +313,3 @@ export function resolveBroadcastEpisodeSlot(input: ResolveBroadcastEpisodeInput)
 	const slots = generateBroadcastEpisodeSlots({ ...input, today: target });
 	return slots.find((slot) => slot.date === input.date) ?? null;
 }
-
-export function formatBroadcastEpisodeSlot(slot: BroadcastEpisodeSlot): string {
-	if (slot.start == null || slot.end == null) return slot.label ?? "";
-	return slot.start === slot.end ? `第${slot.start}話` : `第${slot.start}話〜第${slot.end}話`;
-}
-
-// スマホ版ルームログの小型ボックス用: 「第」「話」を省いた数字のみの表示
-export function formatBroadcastEpisodeNumber(slot: BroadcastEpisodeSlot): string {
-	if (slot.start == null || slot.end == null) return slot.label ?? "";
-	return slot.start === slot.end ? `${slot.start}` : `${slot.start}-${slot.end}`;
-}
