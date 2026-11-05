@@ -9,10 +9,10 @@ import { trapFocus } from "$lib/actions/trapFocus";
 import { isCoverHiddenWithoutCopyright } from "$lib/anime-cover";
 import { animeRelationLabel, animeSeasonLabel, animeTypeLabel } from "$lib/anime-labels";
 import AddToCollectionModal from "$lib/components/AddToCollectionModal.svelte";
+import AnimePosterTile from "$lib/components/AnimePosterTile.svelte";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
 import MyListStatusPopover from "$lib/components/MyListStatusPopover.svelte";
-import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import { episodeRoomEntryState, formatAiringTime, isEpisodeRoomEntryLive } from "$lib/episode-room";
 import type { AnimeStatus, BroadcastRoomOverride, UserAnimeEntry } from "$lib/types";
 import {
@@ -527,27 +527,14 @@ $effect(() => {
 						{/if}
 						<div class="relation-list">
 							{#each group.relations as relation (`${relation.relation_type}-${relation.related_anime_mal_id}`)}
-								<a href="/anime/{relation.anime.id}" class="relation-card">
-									{#if relation.anime.cover_url}
-										<img
-											class="relation-card-thumb"
-											src={coverThumbSrc(relation.anime.cover_url)}
-											{@attach coverThumbFallback(relation.anime.cover_url)}
-											alt=""
-										>
-									{:else}
-										<span
-											class="relation-card-thumb relation-card-thumb--placeholder"
-											aria-hidden="true"
-										></span>
-									{/if}
-									<span class="relation-card-body">
-										<strong>{relation.anime.title}</strong>
-										{#if group.key === 'other' && animeRelationLabel(relation.relation_type)}
-											<small>{animeRelationLabel(relation.relation_type)}</small>
-										{/if}
-									</span>
-								</a>
+								<div class="relation-item">
+									<AnimePosterTile
+										href="/anime/{relation.anime.id}"
+										title={relation.anime.title}
+										coverUrl={relation.anime.cover_url}
+										note={group.key === 'other' ? animeRelationLabel(relation.relation_type) || undefined : undefined}
+									/>
+								</div>
 							{/each}
 						</div>
 					</div>
@@ -2889,13 +2876,14 @@ $effect(() => {
 }
 
 /* Related anime */
+/* 前作・続編・その他は幅が許す限り横に流し、作品が多いグループだけ折り返す */
 .relations-section {
-	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
-	gap: 12px;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px 20px;
 }
 .relations-section h2 {
-	grid-column: 1 / -1;
+	flex-basis: 100%;
 	font-size: 1rem;
 	font-weight: 700;
 	margin: 0;
@@ -2904,6 +2892,7 @@ $effect(() => {
 	display: flex;
 	flex-direction: column;
 	gap: 7px;
+	min-width: 0;
 }
 .relation-group h3 {
 	font-size: 0.75rem;
@@ -2916,60 +2905,8 @@ $effect(() => {
 	flex-wrap: wrap;
 	gap: 8px;
 }
-.relation-card {
-	display: flex;
-	gap: 9px;
-	align-items: center;
-	box-sizing: border-box;
-	height: 64px;
-	min-height: 52px;
-	max-width: 290px;
-	padding: 7px 10px 7px 7px;
-	background: var(--card-bg);
-	border: 1px solid var(--border);
-	border-radius: 12px;
-	color: var(--text);
-	text-decoration: none;
-}
-a.relation-card:hover {
-	border-color: var(--accent);
-	background: var(--hover-bg);
-}
-.relation-card-thumb {
-	width: 34px;
-	aspect-ratio: 1 / 1.414;
-	display: block;
-	image-rendering: auto;
-	border-radius: 4px;
-	flex-shrink: 0;
-	object-fit: cover;
-}
-.relation-card-thumb--placeholder {
-	background: var(--hover-bg);
-	border: 1px solid var(--border);
-}
-.relation-card-body {
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
-	min-width: 0;
-}
-.relation-card strong {
-	display: -webkit-box;
-	overflow: hidden;
-	font-size: 0.84rem;
-	line-height: 1.35;
-	font-weight: 600;
-	-webkit-box-orient: vertical;
-	-webkit-line-clamp: 2;
-	line-clamp: 2;
-}
-.relation-card small {
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-	font-size: 0.72rem;
-	color: var(--text-muted);
+.relation-item {
+	flex: 0 0 104px;
 }
 .relations-slot--mobile {
 	display: none;

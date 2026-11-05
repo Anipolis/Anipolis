@@ -1,7 +1,7 @@
 <script lang="ts">
 import { page } from "$app/state";
-import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import type { Anime, TrendingHashtag } from "$lib/types";
+import AnimePosterTile from "./AnimePosterTile.svelte";
 import InfoTip from "./InfoTip.svelte";
 
 interface Props {
@@ -50,28 +50,14 @@ const showFooterLinks = $derived(!page.data.user);
 	{:else}
 		<ol class="anime-trending-grid">
 			{#each activeAnimeTrending as anime, index (anime.id)}
-				{@const count = (anime.recent_count ?? 0).toLocaleString('ja-JP')}
 				<li style:grid-row="{index + 1} / span 2">
-					<a
+					<AnimePosterTile
 						href="/anime/{anime.id}"
-						class="anime-trending-tile"
-						class:anime-trending-tile--no-cover={!anime.cover_url}
-						aria-label="{index + 1}位 {anime.title} {count}件"
-					>
-						{#if anime.cover_url}
-							<img
-								src={coverThumbSrc(anime.cover_url)}
-								{@attach coverThumbFallback(anime.cover_url)}
-								alt=""
-								loading="lazy"
-							>
-						{/if}
-						<span class="anime-trending-rank">{index + 1}</span>
-						<span class="anime-trending-caption">
-							<span class="anime-trending-title">{anime.title}</span>
-							<span class="anime-trending-count">{count}件</span>
-						</span>
-					</a>
+						title={anime.title}
+						coverUrl={anime.cover_url}
+						rank={index + 1}
+						note="{(anime.recent_count ?? 0).toLocaleString('ja-JP')}件"
+					/>
 				</li>
 			{/each}
 		</ol>
@@ -110,99 +96,6 @@ const showFooterLinks = $derived(!page.data.user);
 	grid-column: 2;
 }
 
-.anime-trending-tile {
-	position: relative;
-	display: block;
-	height: 100%;
-	overflow: hidden;
-	aspect-ratio: 400 / 566;
-	border-radius: 6px;
-	background: var(--color-surface-hover);
-	color: #fff;
-	text-decoration: none;
-}
-
-.anime-trending-tile:focus-visible {
-	outline: 2px solid var(--color-accent);
-	outline-offset: 2px;
-}
-
-.anime-trending-tile img {
-	display: block;
-	width: 100%;
-	height: 100%;
-	object-fit: cover;
-}
-
-.anime-trending-rank {
-	position: absolute;
-	top: 4px;
-	left: 4px;
-	min-width: 20px;
-	padding: 2px 5px;
-	border-radius: 6px;
-	background: rgb(0 0 0 / 0.72);
-	font-size: 0.72rem;
-	font-weight: 800;
-	line-height: 16px;
-	text-align: center;
-}
-
-/* 題名はマウスを乗せるかキーボードで選ぶと出す（トレードの画像だけのカードと同じ） */
-.anime-trending-caption {
-	position: absolute;
-	inset-inline: 0;
-	bottom: 0;
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
-	padding: 18px 7px 7px;
-	background: linear-gradient(180deg, transparent, rgb(0 0 0 / 0.78));
-	font-size: 0.72rem;
-	line-height: 1.25;
-	opacity: 0;
-	transition: opacity 0.18s ease;
-}
-
-.anime-trending-tile:hover .anime-trending-caption,
-.anime-trending-tile:focus-visible .anime-trending-caption {
-	opacity: 1;
-}
-
-.anime-trending-title {
-	display: -webkit-box;
-	overflow: hidden;
-	font-weight: 800;
-	-webkit-box-orient: vertical;
-	-webkit-line-clamp: 2;
-	line-clamp: 2;
-}
-
-.anime-trending-count {
-	font-size: 0.68rem;
-	opacity: 0.85;
-}
-
-/* カバーを出さない作品は、同じ大きさの枠に題名を文字で出す */
-.anime-trending-tile--no-cover {
-	color: var(--color-text);
-}
-
-.anime-trending-tile--no-cover .anime-trending-rank {
-	color: #fff;
-}
-
-.anime-trending-tile--no-cover .anime-trending-caption {
-	background: none;
-	opacity: 1;
-}
-
-@media (hover: none) {
-	.anime-trending-caption {
-		opacity: 1;
-	}
-}
-
 /* スマホは1列で横に送る。段差があると送りにくいのでそろえる */
 @media (max-width: 768px) {
 	.anime-trending-grid {
@@ -218,10 +111,6 @@ const showFooterLinks = $derived(!page.data.user);
 
 	.anime-trending-grid li {
 		flex: 0 0 104px;
-	}
-
-	.anime-trending-caption {
-		opacity: 1;
 	}
 }
 </style>
