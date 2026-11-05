@@ -13,6 +13,7 @@ import {
 	collectAnimeCatalogSeasonMalIds,
 } from "../src/lib/anime-catalog-season.ts";
 import { buildAnimeDataAttributions } from "../src/lib/anime-data-attributions.ts";
+import { parseEpisodeCount } from "../src/lib/syobocal-episodes.ts";
 import type { AnimeDataAttribution } from "../src/lib/types.ts";
 import { normalizeStudioAlias, type StudioNameMapping } from "../src/lib/wikidata-studio-names.ts";
 
@@ -509,12 +510,17 @@ async function applyShortAnimeLobbyRule(
 		if (typeof duration === "number" && duration > 0) {
 			autoRoomType = duration <= SHORT_ANIME_LOBBY_MINUTES ? "global" : "episode";
 		}
-		// 非TV（OVA/ONA/Movie/Special）で放送情報が無い作品は各話ルームを開けない
-		// （しょぼい同期の対象外・曜日合成も不可）ため総合ロビーに落とす。後から
-		// TV放送が付いた場合（ONAのTV放送等）は broadcast 情報が入り episode に戻る。
-		const isTv = (resolution.canonical.type ?? "").toLowerCase() === "tv";
+		// 2話以上の ONA / OVA は放送情報が無くても話数ルームにする（配信開始日に全話を開く。migration 187）。
+		// それ以外の非TV（映画・特番・1話だけの配信）で放送情報が無い作品は総合ロビーに落とす。
+		// 後から TV 放送が付いた場合は broadcast 情報が入り episode に戻る。
+		const type = (resolution.canonical.type ?? "").toLowerCase();
+		const isTv = type === "tv";
 		const noBroadcastInfo = canonical["broadcast_day"] == null && canonical["broadcast_time"] == null;
-		if (!isTv && noBroadcastInfo && autoRoomType !== "global") {
+		const episodeTotal = parseEpisodeCount(canonical["episode_count"] as string | null | undefined);
+		const isSeriesRelease = (type === "ona" || type === "ova") && episodeTotal != null && episodeTotal >= 2;
+		if (isSeriesRelease) {
+			if (autoRoomType !== "global") autoRoomType = "episode";
+		} else if (!isTv && noBroadcastInfo && autoRoomType !== "global") {
 			autoRoomType = "global";
 		}
 		if (autoRoomType !== null && (current?.room_type ?? "episode") !== autoRoomType) {

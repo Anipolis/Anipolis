@@ -4199,6 +4199,10 @@ export type Database = {
 					isSetofReturn: true;
 				};
 			};
+			episode_room_bounds: {
+				Args: { p_anime_id: number };
+				Returns: { openable_up_to: number; season_first: number | null; season_last: number | null }[];
+			};
 			ensure_episode_room: {
 				Args: { p_anime_id: number; p_episode_number: number };
 				Returns: string;
