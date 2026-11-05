@@ -11,6 +11,22 @@ const firstAiringMigration = readFileSync(
 	"utf8",
 );
 
+const skipCancelledMigration = readFileSync(
+	new URL("../../../supabase/migrations/185_episode_room_season_skip_cancelled.sql", import.meta.url),
+	"utf8",
+);
+
+describe("通算の話数の作品の範囲の手がかり（185）", () => {
+	it("休止の放送枠を初回の手がかりにしない（画面側と同じ）", () => {
+		expect(skipCancelledMigration).toMatch(
+			/AND s\.airing_kind = 'first'\s+AND NOT public\.is_broadcast_room_session_cancelled\(s\.anime_id, s\.room_date\)\s+ORDER BY s\.room_date/,
+		);
+		expect(skipCancelledMigration).toContain(
+			"REVOKE ALL ON FUNCTION public.ensure_episode_room(integer, integer) FROM PUBLIC, anon;",
+		);
+	});
+});
+
 describe("通算の話数の作品の範囲（184）", () => {
 	it("放送枠のある最も早いルームが放送開始の週の放送なら初回とみなす", () => {
 		expect(firstAiringMigration).toContain("first_airing_date - target_anime.aired_from BETWEEN -1 AND 6");
