@@ -699,6 +699,26 @@ $effect(() => {
 	}
 });
 
+// ルームがまだ無い話を開いている間に、ほかの人の最初の投稿でルームができたら読み直して、ライブ更新に移る。
+// 投稿の Realtime はルームの ID で絞るので、できるまでは低頻度で確かめる
+$effect(() => {
+	const animeId = data.anime?.id;
+	const episodeNumber = data.room.episode_number;
+	if (!mounted || status !== "open" || data.room.session_id || !isEpisodeRoom) return;
+	if (animeId == null || episodeNumber == null) return;
+	const pollId = setInterval(async () => {
+		const { data: found } = await data.supabase
+			.from("episode_rooms")
+			.select("id")
+			.eq("anime_id", Number(animeId))
+			.eq("kind", "episode")
+			.eq("episode_number", episodeNumber)
+			.maybeSingle();
+		if (found) await invalidateAll();
+	}, EPISODE_ROOM_IDLE_POLL_MS);
+	return () => clearInterval(pollId);
+});
+
 // 受付中はライブ更新: Realtime の INSERT を購読し、受信をトリガーに差分APIを叩く。
 // Realtime が無効な環境向けに低頻度ポーリングをフォールバックとして併用する。
 // 購読状態はコールバックで接続状態に反映し、realtimeGeneration の更新で張り直せる。

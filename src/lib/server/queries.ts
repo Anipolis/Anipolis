@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 import { isActivityStatus, type MylistActivity } from "$lib/activity";
 import { isRepeatMuteActive } from "$lib/anime-mute-schedule";
 import { groupGenreFilters, translateAnimeGenres } from "$lib/anime-vocabulary";
@@ -3651,27 +3651,57 @@ export async function countUserAnimeList(
 	return count ?? 0;
 }
 
+/** 指定した範囲だけ読む（アニメ一覧のマイリストのタブなど） */
+async function fetchMylistRange(
+	fetchPage: (from: number, to: number) => PromiseLike<{ data: unknown; error: PostgrestError | null }>,
+	range: { limit: number; offset: number },
+): Promise<UserAnimeListWithAnimeRow[]> {
+	const { data, error } = await fetchPage(range.offset, range.offset + range.limit - 1);
+	if (error) failQuery("getUserAnimeList", error);
+	return (data ?? []) as UserAnimeListWithAnimeRow[];
+}
+
+/**
+ * マイリストの行を全件読む（PostgREST の上限 max_rows で切れないようページを追う）。
+ * 同じ更新日時でも行が抜けたり重なったりしないよう、呼び出し側は順序を一意にする
+ */
+async function fetchAllMylistRows<Row>(
+	fetchPage: (from: number, to: number) => PromiseLike<{ data: unknown; error: PostgrestError | null }>,
+	label: string,
+): Promise<Row[]> {
+	const PAGE = 1000;
+	const rows: Row[] = [];
+	for (let from = 0; ; from += PAGE) {
+		const { data, error } = await fetchPage(from, from + PAGE - 1);
+		// 取得の失敗を「マイリストが空」と見せない（#262）。補助の表示では呼び出し側が catch する
+		if (error) failQuery(label, error);
+		const page = (data ?? []) as Row[];
+		rows.push(...page);
+		if (page.length < PAGE) return rows;
+	}
+}
+
 export async function getUserAnimeList(
 	supabase: SupabaseClient<Database>,
 	userId: string,
 	status?: AnimeStatus,
 	range?: { limit: number; offset: number },
 ): Promise<Anime[]> {
-	let query = supabase
-		.from("user_anime_list")
-		.select(`status, score, progress, updated_at, created_at, anime:anime_id(${ANIME_LIST_BASE_COLUMNS})`)
-		.eq("user_id", userId)
-		.order("updated_at", { ascending: false });
+	const fetchRange = (from: number, to: number) => {
+		let query = supabase
+			.from("user_anime_list")
+			.select(`status, score, progress, updated_at, created_at, anime:anime_id(${ANIME_LIST_BASE_COLUMNS})`)
+			.eq("user_id", userId)
+			.order("updated_at", { ascending: false })
+			.order("anime_id", { ascending: true });
+		if (status) query = query.eq("status", status);
+		return query.range(from, to);
+	};
+	const rows = range
+		? await fetchMylistRange(fetchRange, range)
+		: await fetchAllMylistRows<UserAnimeListWithAnimeRow>(fetchRange, "getUserAnimeList");
 
-	if (status) query = query.eq("status", status);
-	if (range) query = query.range(range.offset, range.offset + range.limit - 1);
-
-	const { data, error } = await query;
-	// 取得の失敗を「マイリストが空」と見せない（#262）。補助の表示では呼び出し側が catch する
-	if (error) failQuery("getUserAnimeList", error);
-	if (!data) return [];
-
-	return (data as unknown as UserAnimeListWithAnimeRow[])
+	return rows
 		.filter((row): row is UserAnimeListWithAnimeRow & { anime: Record<string, unknown> } => row.anime !== null)
 		.map((row) => ({
 			...toAnime(row.anime),
@@ -3687,16 +3717,19 @@ export async function getUserAnimeList(
 
 /** 自分のマイリスト全件。詳細のモーダルで直せるよう、日付とメモも読む */
 export async function getOwnAnimeList(supabase: SupabaseClient<Database>, userId: string): Promise<Anime[]> {
-	const { data, error } = await supabase
-		.from("user_anime_list")
-		.select(`${OWN_ENTRY_COLUMNS}, created_at, anime:anime_id(${ANIME_LIST_BASE_COLUMNS})`)
-		.eq("user_id", userId)
-		.order("updated_at", { ascending: false });
-	if (error) failQuery("getOwnAnimeList", error);
-	if (!data) return [];
-
 	type Row = OwnEntryRow & { created_at: string; anime: Record<string, unknown> | null };
-	return (data as unknown as Row[]).flatMap((row) =>
+	const rows = await fetchAllMylistRows<Row>(
+		(from, to) =>
+			supabase
+				.from("user_anime_list")
+				.select(`${OWN_ENTRY_COLUMNS}, created_at, anime:anime_id(${ANIME_LIST_BASE_COLUMNS})`)
+				.eq("user_id", userId)
+				.order("updated_at", { ascending: false })
+				.order("anime_id", { ascending: true })
+				.range(from, to),
+		"getOwnAnimeList",
+	);
+	return rows.flatMap((row) =>
 		row.anime
 			? [{ ...toAnime(row.anime), user_entry: { ...toOwnUserAnimeEntry(row), created_at: row.created_at } }]
 			: [],
