@@ -1195,7 +1195,7 @@ export type EpisodeRoomLogAiring = RoomAiring & { episode_room_id: string; room_
 /**
  * 作品ページの話数ルーム一覧用: 作品の話数ルームと、それぞれの放送枠。
  * PostgREST の上限（本番 1000 件）で切れないよう、どちらもページを追って全件を取る。
- * 取得に失敗したら null（呼び出し側は今の日付のルームログに戻す。空データと区別するため）
+ * 取得に失敗したら null（呼び出し側は読み込めなかったと伝える。空データと区別するため）
  */
 export async function getEpisodeRoomLog(
 	supabase: SupabaseClient<Database>,

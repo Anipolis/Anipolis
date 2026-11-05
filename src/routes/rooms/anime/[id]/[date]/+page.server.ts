@@ -112,7 +112,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 
 	const hashtag = roomHashtag(anime);
 	// 話数はしょぼい番組表由来の値が第一。番号の無いセッション（同期開始前の
-	// 実在・合成ルーム）は、詳細ページのルームログと同じアンカー逆算で補う
+	// 実在・合成ルーム）は、アンカー逆算（buildBroadcastEpisodeLog と同じ）で補う
 	// （曜日からの機械カウントはしない）。一挙放送等の範囲はタイトルに使わない。
 	let episodeNumber = session.episode_number ?? null;
 	if (episodeNumber == null && isEligibleForRoomLog(anime.season)) {
