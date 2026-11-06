@@ -14,9 +14,15 @@ interface Props {
 	initial: AnimePick[];
 	onsave: (animeIds: number[]) => Promise<void>;
 	onclose: () => void;
+	/**
+	 * 足すだけにする（コレクションの「＋」）。今ある作品は並べ替えも外しもせず、検索結果で「追加済み」と出す。
+	 * 一覧には今回足した作品だけを出し、保存すると今ある作品の後ろに足す
+	 */
+	addOnly?: boolean;
 }
 
-let { title, max, initial, onsave, onclose }: Props = $props();
+let { title, max, initial, onsave, onclose, addOnly = false }: Props = $props();
+const initialIds = new Set(untrack(() => initial.map((pick) => pick.id)));
 
 // 開いている間に呼ぶ側の値が変わっても、開いたときの並びから編集する
 let picks = $state<AnimePick[]>(untrack(() => [...initial]));
@@ -225,7 +231,7 @@ async function save() {
 									{@render titleBlock(anime)}
 									<span class="picker-result-state">
 										{#if picked}
-											選択済み
+											{addOnly && initialIds.has(anime.id) ? '追加済み' : '選択済み'}
 										{:else}
 											<span class="i-lucide-plus" aria-hidden="true"></span>
 											追加
@@ -244,43 +250,51 @@ async function save() {
 				{#if full}
 					<p class="picker-note">{max}作品まで選べます。入れ替えるときは、どれかを外してください</p>
 				{/if}
-				{#if picks.length > 0}
-					<ol class="picker-list" aria-label="選んだ作品">
+				{#if addOnly && picks.length === initialIds.size}
+					<p class="picker-note">作品名で検索して追加します</p>
+				{:else if picks.length > 0}
+					<ol class="picker-list" aria-label={addOnly ? '追加する作品' : '選んだ作品'}>
 						{#each picks as pick, index (pick.id)}
-							<li class="picker-row picker-pick" class:just-added={pick.id === lastAddedId}>
-								<span class="picker-rank">{index + 1}</span>
-								{@render cover(pick.cover_url)}
-								{@render titleBlock(pick)}
-								<span class="picker-actions">
-									<button
-										type="button"
-										class="picker-icon-button"
-										aria-label="{pick.title} を上へ"
-										disabled={saving || index === 0}
-										onclick={() => movePick(index, -1)}
-									>
-										<span class="i-lucide-chevron-up" aria-hidden="true"></span>
-									</button>
-									<button
-										type="button"
-										class="picker-icon-button"
-										aria-label="{pick.title} を下へ"
-										disabled={saving || index === picks.length - 1}
-										onclick={() => movePick(index, 1)}
-									>
-										<span class="i-lucide-chevron-down" aria-hidden="true"></span>
-									</button>
-									<button
-										type="button"
-										class="picker-icon-button"
-										aria-label="{pick.title} を外す"
-										disabled={saving}
-										onclick={() => removePick(index)}
-									>
-										<span class="i-lucide-x" aria-hidden="true"></span>
-									</button>
-								</span>
-							</li>
+							{#if !(addOnly && initialIds.has(pick.id))}
+								<li class="picker-row picker-pick" class:just-added={pick.id === lastAddedId}>
+									{#if !addOnly}
+										<span class="picker-rank">{index + 1}</span>
+									{/if}
+									{@render cover(pick.cover_url)}
+									{@render titleBlock(pick)}
+									<span class="picker-actions">
+										{#if !addOnly}
+											<button
+												type="button"
+												class="picker-icon-button"
+												aria-label="{pick.title} を上へ"
+												disabled={saving || index === 0}
+												onclick={() => movePick(index, -1)}
+											>
+												<span class="i-lucide-chevron-up" aria-hidden="true"></span>
+											</button>
+											<button
+												type="button"
+												class="picker-icon-button"
+												aria-label="{pick.title} を下へ"
+												disabled={saving || index === picks.length - 1}
+												onclick={() => movePick(index, 1)}
+											>
+												<span class="i-lucide-chevron-down" aria-hidden="true"></span>
+											</button>
+										{/if}
+										<button
+											type="button"
+											class="picker-icon-button"
+											aria-label="{pick.title} を外す"
+											disabled={saving}
+											onclick={() => removePick(index)}
+										>
+											<span class="i-lucide-x" aria-hidden="true"></span>
+										</button>
+									</span>
+								</li>
+							{/if}
 						{/each}
 					</ol>
 				{:else}
