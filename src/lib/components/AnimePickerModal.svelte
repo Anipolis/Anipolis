@@ -39,6 +39,11 @@ let searchTimer: ReturnType<typeof setTimeout> | null = null;
 let searchController: AbortController | null = null;
 
 const full = $derived(picks.length >= max);
+// 足す・外す・並べ替えるまで「保存する」を押せない（ux-guidelines「色と強調」）
+const initialOrder = untrack(() => initial.map((pick) => pick.id));
+const changed = $derived(
+	picks.length !== initialOrder.length || picks.some((pick, index) => pick.id !== initialOrder[index]),
+);
 const pickedIds = $derived(new Set(picks.map((pick) => pick.id)));
 const showingResults = $derived(query.trim().length > 0);
 
@@ -309,7 +314,12 @@ async function save() {
 
 		<div class="picker-footer">
 			<button type="button" class="btn btn-ghost" disabled={saving} onclick={close}>キャンセル</button>
-			<button type="button" class="btn btn-primary" disabled={saving} onclick={save}>
+			<button
+				type="button"
+				class="btn {changed ? 'btn-primary' : 'btn-secondary'}"
+				disabled={saving || !changed}
+				onclick={save}
+			>
 				{saving ? '保存中...' : '保存する'}
 			</button>
 		</div>

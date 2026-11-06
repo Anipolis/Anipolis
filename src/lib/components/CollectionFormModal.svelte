@@ -29,6 +29,13 @@ let error = $state<{ field?: "title" | "description"; message: string } | null>(
 let titleInput = $state<HTMLInputElement | null>(null);
 let deleteForm = $state<HTMLFormElement | null>(null);
 
+// 直すときは、何か変えるまで「保存する」を押せない。作るときは対象にしない（ux-guidelines「色と強調」）
+const changed = $derived(
+	mode === "create" ||
+		title !== (initial?.title ?? "") ||
+		description !== (initial?.description ?? "") ||
+		isPublic !== (initial?.is_public ?? false),
+);
 const descriptionRemaining = $derived(MAX_COLLECTION_DESCRIPTION_LENGTH - description.length);
 
 $effect(() => {
@@ -200,7 +207,11 @@ const handleDelete: SubmitFunction = ({ cancel }) => {
 				{/if}
 				<span class="collection-form-spacer"></span>
 				<button type="button" class="btn btn-ghost" disabled={submitting} onclick={close}>キャンセル</button>
-				<button type="submit" class="btn btn-primary" disabled={submitting}>
+				<button
+					type="submit"
+					class="btn {changed ? 'btn-primary' : 'btn-secondary'}"
+					disabled={submitting || !changed}
+				>
 					{submitting ? '保存中...' : mode === 'create' ? '作る' : '保存する'}
 				</button>
 			</div>

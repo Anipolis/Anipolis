@@ -67,6 +67,16 @@ let initializedFor: string | null = null;
 let totalEpisodes = $derived(parseEpisodeCount(episodeCount));
 let statusOnly = $derived(variant === "status-only");
 // 登録済みなのに日付・メモを読み込んでいない画面では、欄を出さない（送らなければ保存でも触らない）
+// 登録済みの作品は、開いたときから何か変えるまで「保存する」を押せない（新しく登録するときは対象外）
+let entryChanged = $derived(
+	entry == null ||
+		selectedStatus !== entry.status ||
+		score !== (entry.score != null && entry.score > 0 ? Math.round(entry.score) : null) ||
+		progress !== clampProgress(entry.progress ?? 0) ||
+		startedOn !== (entry.started_on ?? "") ||
+		finishedOn !== (entry.finished_on ?? "") ||
+		note !== (entry.note ?? ""),
+);
 let showRecord = $derived(!statusOnly && (entry == null || entry.note !== undefined));
 // 作品ページではモーダルが閉じていても残るので、開くたびに今日を取り直す（日付をまたいでも前日を入れない）
 let today = $state(jstDateKey(new Date()));
@@ -359,7 +369,12 @@ $effect(() => {
 					<button type="button" class="cancel-button" disabled={submitting} onclick={onclose}>
 						キャンセル
 					</button>
-					<button type="submit" class="save-button" disabled={submitting || selectedStatus === null}>
+					<button
+						type="submit"
+						class="save-button"
+						class:save-button--idle={!entryChanged}
+						disabled={submitting || selectedStatus === null || !entryChanged}
+					>
 						{submitting ? "保存中…" : "✓ 保存する"}
 					</button>
 				</footer>
@@ -675,6 +690,17 @@ form {
 .save-button:hover:not(:disabled) {
 	border-color: var(--color-accent-hover);
 	background: var(--color-accent-hover);
+}
+/* 変更が無い間は灰色にする（ux-guidelines「色と強調」） */
+.save-button--idle {
+	border-color: var(--color-border-hover);
+	background: transparent;
+	box-shadow: none;
+	color: var(--color-text-muted);
+}
+.modal-footer .save-button--idle:disabled {
+	cursor: not-allowed;
+	opacity: 1;
 }
 .modal-footer button:disabled {
 	cursor: wait;
