@@ -1,11 +1,6 @@
 <script lang="ts">
-import { invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
-import { toAnimePick } from "$lib/anime-picker";
 import { ANIME_STATUS_ICONS, ANIME_STATUS_LABELS } from "$lib/anime-status";
-import { MAX_COLLECTION_ITEMS } from "$lib/collections";
-import AnimePickerModal from "$lib/components/AnimePickerModal.svelte";
-import CollectionFormModal from "$lib/components/CollectionFormModal.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
 import type { PageProps } from "./$types";
@@ -23,21 +18,10 @@ const updatedLabel = $derived(
 	}),
 );
 
-let pickingItems = $state(false);
-let editingInfo = $state(false);
+// 「リンクをコピー」は今は動いていないので隠しておく（直したら true に戻す）
+const SHOW_COPY_LINK = false;
 let copied = $state(false);
 let copyTimer: ReturnType<typeof setTimeout> | null = null;
-
-async function saveItems(animeIds: number[]) {
-	const response = await fetch(`/api/collections/${collection.id}/items`, {
-		method: "PUT",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ animeIds }),
-	});
-	const res = (await response.json().catch(() => ({}))) as { message?: string };
-	if (!response.ok) throw new Error(res.message ?? "コレクションの保存に失敗しました");
-	await invalidateAll();
-}
 
 async function copyLink() {
 	try {
@@ -71,6 +55,12 @@ async function copyLink() {
 <div class="page-container">
 	<main class="feed-column collection-page">
 		<header class="collection-header">
+			{#if data.isOwn}
+				<a href="/collections" class="collection-back">
+					<span class="i-lucide-arrow-left" aria-hidden="true"></span>
+					コレクション一覧
+				</a>
+			{/if}
 			<a href={data.isOwn ? '/collections' : `/profile/${collection.owner.username}`} class="collection-owner">
 				<UserAvatar src={collection.owner.avatar_url} username={ownerName} size="xs" />
 				<span>{ownerName}のコレクション</span>
@@ -89,43 +79,25 @@ async function copyLink() {
 			{/if}
 			<p class="collection-meta">{collection.items.length}作品・{updatedLabel}更新</p>
 
-			<div class="collection-actions">
-				{#if data.isOwn}
-					<button
-						type="button"
-						class="btn btn-secondary collection-action"
-						onclick={() => (pickingItems = true)}
-					>
-						<span class="i-lucide-list-plus" aria-hidden="true"></span>
-						作品を編集
-					</button>
-					<button
-						type="button"
-						class="btn btn-secondary collection-action"
-						onclick={() => (editingInfo = true)}
-					>
-						<span class="i-lucide-pencil" aria-hidden="true"></span>
-						題名・公開を編集
-					</button>
-				{/if}
-				{#if collection.is_public}
+			<!-- 作品の出し入れは作品ページの「コレクションに追加」、題名・公開は一覧の「編集」で行う（YouTube の再生リストと同じ） -->
+			{#if SHOW_COPY_LINK && collection.is_public}
+				<div class="collection-actions">
 					<button type="button" class="btn btn-secondary collection-action" onclick={copyLink}>
 						<span class={copied ? 'i-lucide-check' : 'i-lucide-link'} aria-hidden="true"></span>
 						{copied ? 'コピーしました' : 'リンクをコピー'}
 					</button>
-				{/if}
-			</div>
+				</div>
+			{/if}
 		</header>
 
 		{#if collection.items.length === 0}
-			{#if data.isOwn}
-				<button type="button" class="collection-empty-add" onclick={() => (pickingItems = true)}>
-					<span class="i-lucide-plus" aria-hidden="true"></span>
-					作品を追加
-				</button>
-			{:else}
-				<div class="empty-state"><p>まだ作品がありません</p></div>
-			{/if}
+			<div class="empty-state">
+				<p>
+					{data.isOwn
+						? 'まだ作品がありません。作品のページの「コレクションに追加」から入れられます'
+						: 'まだ作品がありません'}
+				</p>
+			</div>
 		{:else}
 			<ol class="collection-grid">
 				{#each collection.items as anime, index (anime.id)}
@@ -162,30 +134,6 @@ async function copyLink() {
 	</aside>
 </div>
 
-{#if pickingItems}
-	<AnimePickerModal
-		title="コレクションの作品"
-		max={MAX_COLLECTION_ITEMS}
-		initial={collection.items.map(toAnimePick)}
-		onsave={saveItems}
-		onclose={() => {
-			pickingItems = false;
-		}}
-	/>
-{/if}
-
-{#if editingInfo}
-	<CollectionFormModal
-		mode="edit"
-		action="?/updateCollection"
-		deleteAction="?/deleteCollection"
-		initial={{ title: collection.title, description: collection.description, is_public: collection.is_public }}
-		onclose={() => {
-			editingInfo = false;
-		}}
-	/>
-{/if}
-
 <style>
 .collection-page {
 	padding-bottom: 32px;
@@ -196,6 +144,19 @@ async function copyLink() {
 	gap: 8px;
 	padding: 20px 16px 16px;
 	border-bottom: 1px solid var(--color-border);
+}
+.collection-back {
+	display: inline-flex;
+	align-items: center;
+	align-self: flex-start;
+	gap: 4px;
+	margin-bottom: 4px;
+	color: var(--color-text-muted);
+	font-size: 13px;
+	text-decoration: none;
+}
+.collection-back:hover {
+	color: var(--color-text);
 }
 .collection-owner {
 	display: inline-flex;
@@ -252,26 +213,6 @@ async function copyLink() {
 }
 .collection-action {
 	font-size: 13px;
-}
-.collection-empty-add {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	gap: 6px;
-	width: calc(100% - 32px);
-	margin: 16px;
-	padding: 20px;
-	border: 1px dashed var(--color-border-hover);
-	border-radius: 12px;
-	background: transparent;
-	color: var(--color-text-muted);
-	cursor: pointer;
-	font: inherit;
-	font-size: 14px;
-}
-.collection-empty-add:hover {
-	background: var(--color-surface-hover);
-	color: var(--color-text);
 }
 .collection-grid {
 	display: grid;
