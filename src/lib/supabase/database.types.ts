@@ -3810,6 +3810,39 @@ export type Database = {
 					},
 				];
 			};
+			user_mutes: {
+				Row: {
+					created_at: string;
+					muted_id: string;
+					muter_id: string;
+				};
+				Insert: {
+					created_at?: string;
+					muted_id: string;
+					muter_id: string;
+				};
+				Update: {
+					created_at?: string;
+					muted_id?: string;
+					muter_id?: string;
+				};
+				Relationships: [
+					{
+						foreignKeyName: "user_mutes_muted_id_fkey";
+						columns: ["muted_id"];
+						isOneToOne: false;
+						referencedRelation: "profiles";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "user_mutes_muter_id_fkey";
+						columns: ["muter_id"];
+						isOneToOne: false;
+						referencedRelation: "profiles";
+						referencedColumns: ["id"];
+					},
+				];
+			};
 		};
 		Views: {
 			anime_list_genre_ranked: {

@@ -229,6 +229,39 @@ export async function unblockUserAction(request: Request, supabase: SupabaseClie
 	return { blocked: false };
 }
 
+/** アカウントのミュート（191）。相手には伝わらず、フォローもそのまま残す */
+export async function muteUserAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
+	const form = await request.formData();
+	const targetId = (form.get("target_id") as string | null)?.trim() ?? "";
+	if (!targetId) return fail(400, { message: "ユーザーIDが不正です" });
+	if (targetId === userId) return fail(400, { message: "自分自身はミュートできません" });
+
+	const { data: target } = await supabase.from("profiles").select("id").eq("id", targetId).maybeSingle();
+	if (!target) return fail(404, { message: "ユーザーが見つかりません" });
+
+	const { error } = await supabase
+		.from("user_mutes")
+		.upsert({ muter_id: userId, muted_id: targetId }, { onConflict: "muter_id,muted_id", ignoreDuplicates: true });
+	if (error) {
+		console.error("muteUserAction error:", error);
+		return fail(403, { message: "ミュートできませんでした" });
+	}
+	return { muted: true };
+}
+
+export async function unmuteUserAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
+	const form = await request.formData();
+	const targetId = (form.get("target_id") as string | null)?.trim() ?? "";
+	if (!targetId) return fail(400, { message: "ユーザーIDが不正です" });
+
+	const { error } = await supabase.from("user_mutes").delete().eq("muter_id", userId).eq("muted_id", targetId);
+	if (error) {
+		console.error("unmuteUserAction error:", error);
+		return fail(500, { message: "ミュートの解除に失敗しました" });
+	}
+	return { muted: false };
+}
+
 /**
  * API ルート（+server.ts）用: 利用制限・BAN中なら error() を投げる。
  * form action 用の ensureAccountCanWrite と同じ判定を、HTTP エラーとして返す。

@@ -65,6 +65,7 @@ function rawPost(index: number, content = `post ${index}`) {
 const NO_MUTES = {
 	anime_mutes: { data: [], error: null },
 	event_mutes: { data: [], error: null },
+	user_mutes: { data: [], error: null },
 };
 
 describe("buildTimelineNextCursor", () => {

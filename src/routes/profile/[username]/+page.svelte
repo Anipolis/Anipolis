@@ -66,6 +66,7 @@ let reportSubmitting = $state(false);
 let reportMessage = $state("");
 let showKebabMenu = $state(false);
 let blocking = $state(false);
+let muting = $state(false);
 $effect(() => {
 	isFollowing = data.isFollowing;
 	followRequestStatus = data.followRequestStatus;
@@ -92,6 +93,17 @@ const activeTab = $derived(
 const bioRemaining = $derived(160 - editBio.length);
 const editableHeaderUrl = $derived(headerPreviewUrl ?? (headerPendingDelete ? null : profile.header_url));
 const editableAvatarUrl = $derived(avatarPreviewUrl ?? (avatarPendingDelete ? null : profile.avatar_url));
+
+// ミュートは相手に伝わらず、フォローも残るので確認は出さない
+const submitMute: SubmitFunction = () => {
+	muting = true;
+	return async ({ update }) => {
+		muting = false;
+		showKebabMenu = false;
+		await update({ reset: false });
+		await invalidateAll();
+	};
+};
 
 const submitBlock: SubmitFunction = ({ cancel }) => {
 	if (!data.isBlocked && !window.confirm(`@${profile.username} をブロックします。フォロー関係も解除されます。`)) {
@@ -551,6 +563,16 @@ function listButtonFor(anime: Anime) {
 									>
 										<form
 											method="POST"
+											action={data.isMuted ? "?/unmute" : "?/mute"}
+											use:enhance={submitMute}
+										>
+											<input type="hidden" name="target_id" value={profile.id}>
+											<button type="submit" role="menuitem" disabled={muting}>
+												{data.isMuted ? "ミュート解除" : "ミュート"}
+											</button>
+										</form>
+										<form
+											method="POST"
 											action={data.isBlocked ? "?/unblock" : "?/block"}
 											use:enhance={submitBlock}
 										>
@@ -583,6 +605,13 @@ function listButtonFor(anime: Anime) {
 						@{profile.username}
 						{#if profile.is_private}
 							<span class="profile-lock-badge" title="鍵アカウント">鍵</span>
+						{/if}
+						{#if data.isMuted}
+							<span
+								class="profile-lock-badge"
+								title="タイムラインや通知に、この人の投稿と動きを出していません"
+								>ミュート中</span
+							>
 						{/if}
 					</div>
 					{#if profile.bio}
