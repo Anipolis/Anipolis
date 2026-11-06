@@ -3622,18 +3622,21 @@ export type Database = {
 					collection_id: string;
 					created_at: string;
 					position: number;
+					tier: number | null;
 				};
 				Insert: {
 					anime_id: number;
 					collection_id: string;
 					created_at?: string;
 					position: number;
+					tier?: number | null;
 				};
 				Update: {
 					anime_id?: number;
 					collection_id?: string;
 					created_at?: string;
 					position?: number;
+					tier?: number | null;
 				};
 				Relationships: [
 					{
@@ -3700,7 +3703,9 @@ export type Database = {
 					description: string | null;
 					id: string;
 					is_public: boolean;
+					kind: string;
 					title: string;
+					tiers: string[];
 					updated_at: string;
 					user_id: string;
 				};
@@ -3709,7 +3714,9 @@ export type Database = {
 					description?: string | null;
 					id?: string;
 					is_public?: boolean;
+					kind?: string;
 					title: string;
+					tiers?: string[];
 					updated_at?: string;
 					user_id: string;
 				};
@@ -3718,7 +3725,9 @@ export type Database = {
 					description?: string | null;
 					id?: string;
 					is_public?: boolean;
+					kind?: string;
 					title?: string;
+					tiers?: string[];
 					updated_at?: string;
 					user_id?: string;
 				};
@@ -4368,7 +4377,7 @@ export type Database = {
 			};
 			revoke_invite: { Args: { p_invite_id: string }; Returns: undefined };
 			set_collection_items: {
-				Args: { p_anime_ids: number[]; p_collection_id: string };
+				Args: { p_anime_ids: number[]; p_collection_id: string; p_tiers?: (number | null)[] };
 				Returns: undefined;
 			};
 			set_favorite_anime: {

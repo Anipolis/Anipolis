@@ -42,6 +42,8 @@ export const actions: Actions = {
 				title: parsed.value.title,
 				description: parsed.value.description,
 				is_public: parsed.value.isPublic,
+				kind: parsed.value.kind,
+				...(parsed.value.tiers ? { tiers: parsed.value.tiers } : {}),
 				updated_at: new Date().toISOString(),
 			})
 			.eq("id", params.id)

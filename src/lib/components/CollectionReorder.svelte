@@ -1,5 +1,6 @@
 <script lang="ts">
 import { tick, untrack } from "svelte";
+import { orderByTier } from "$lib/collections";
 
 /**
  * コレクションの並べ替え（詳細ページの並べ替えボタン）。並びが変わるたびに onchange で知らせ、
@@ -7,20 +8,29 @@ import { tick, untrack } from "svelte";
  * - ドラッグで並べ替え、つかんでいる間だけ画面の下に出るゴミ箱へ落とすと外す
  * - 指は長押ししてからつかむ（そのまま動かせば画面のスクロールになる）
  * - キーボードは矢印キーで前後へ動かし、Delete / Backspace で外す
+ * - ティア表（tiers を渡す）は段ごとに並べ、別の段へドラッグして移す。キーボードは ↑↓ で段を移り、
+ *   ←→ で段の中の順番を変える
  */
-type Item = { id: number; title: string; cover_url: string | null };
+type Item = { id: number; title: string; cover_url: string | null; tier: number | null };
 
 interface Props {
 	items: Item[];
-	/** 並びが変わるたびに、その並びの作品 ID を渡す */
-	onchange: (animeIds: number[]) => void;
+	/** ティア表の段の名前（上から）。渡さなければ段の無い並べ替え */
+	tiers?: string[] | undefined;
+	/** 順位の番号を出す（ランキング） */
+	showRank?: boolean;
+	/** 並びが変わるたびに、その並びの作品 ID と段（tiers の何番目か。未分類は null）を渡す */
+	onchange: (animeIds: number[], animeTiers: (number | null)[]) => void;
 	/** 保存中は動かせなくする */
 	disabled?: boolean;
 }
 
-let { items, onchange, disabled = false }: Props = $props();
+let { items, tiers, showRank = false, onchange, disabled = false }: Props = $props();
 
-let order = $state<Item[]>(untrack(() => [...items]));
+const tierCount = untrack(() => tiers?.length ?? 0);
+const tiered = tierCount > 0;
+
+let order = $state<Item[]>(untrack(() => (tiered ? orderByTier(items, tierCount) : [...items])));
 let draggingId = $state<number | null>(null);
 let ghost = $state<{ x: number; y: number } | null>(null);
 let overTrash = $state(false);
@@ -31,8 +41,6 @@ let trash = $state<HTMLDivElement | null>(null);
 let pending: { id: number; x: number; y: number; type: string } | null = null;
 let pressTimer: ReturnType<typeof setTimeout> | null = null;
 
-const dragging = $derived(order.find((item) => item.id === draggingId) ?? null);
-
 // ドラッグ中に画面の端へ近づいたら、その方向へ画面を送る（指のスクロールは止めているため）
 const EDGE_PX = 72;
 const MAX_SCROLL_STEP = 14;
@@ -42,6 +50,21 @@ let scrollFrame: number | null = null;
 const LONG_PRESS_MS = 250;
 const MOUSE_DRAG_THRESHOLD = 4;
 const TOUCH_SCROLL_THRESHOLD = 8;
+
+const dragging = $derived(order.find((item) => item.id === draggingId) ?? null);
+/** 段の行（上から。最後が未分類） */
+const tierRows = $derived(
+	tiered
+		? [
+				...(tiers ?? []).map((label, tier) => ({ label, tier: tier as number | null })),
+				{ label: "未分類", tier: null },
+			]
+		: [],
+);
+
+function tierLabel(tier: number | null) {
+	return tier === null ? "未分類" : (tiers?.[tier] ?? "未分類");
+}
 
 function clearPress() {
 	if (pressTimer) clearTimeout(pressTimer);
@@ -91,8 +114,11 @@ function endDrag() {
 }
 
 function setOrder(next: Item[]) {
-	order = next;
-	onchange(next.map((item) => item.id));
+	order = tiered ? orderByTier(next, tierCount) : next;
+	onchange(
+		order.map((item) => item.id),
+		order.map((item) => item.tier),
+	);
 }
 
 function onPointerDown(event: PointerEvent, id: number) {
@@ -111,14 +137,24 @@ function isOverTrash(x: number, y: number) {
 	return rect != null && x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
 }
 
-function moveTo(id: number, targetIndex: number) {
+/** 作品を targetIndex の位置へ動かす。ティア表では tier の段へも移す */
+function moveTo(id: number, targetIndex: number, tier?: number | null) {
 	const from = order.findIndex((item) => item.id === id);
-	if (from < 0 || from === targetIndex) return;
+	const moving = order[from];
+	if (!moving) return;
+	const nextTier = tier === undefined ? moving.tier : tier;
+	if (from === targetIndex && nextTier === moving.tier) return;
 	const next = [...order];
-	const [moved] = next.splice(from, 1);
-	if (!moved) return;
-	next.splice(targetIndex, 0, moved);
+	next.splice(from, 1);
+	next.splice(targetIndex, 0, { ...moving, tier: nextTier });
 	setOrder(next);
+}
+
+/** 作品を段の最後へ移す（段の空いたところに落とした・キーボードで段を移った） */
+function moveToTierEnd(id: number, tier: number | null) {
+	const moving = order.find((item) => item.id === id);
+	if (!moving || moving.tier === tier) return;
+	setOrder([...order.filter((item) => item.id !== id), { ...moving, tier }]);
 }
 
 function onPointerMove(event: PointerEvent) {
@@ -144,8 +180,19 @@ function dragOver(x: number, y: number) {
 	overTrash = isOverTrash(x, y);
 	if (overTrash) return;
 	// 指の下にある作品の位置へ動かす（つかんでいる作品の影は pointer-events: none）
-	const target = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-reorder-index]");
-	if (target) moveTo(draggingId, Number(target.dataset["reorderIndex"]));
+	const under = document.elementFromPoint(x, y);
+	const card = under?.closest<HTMLElement>("[data-reorder-index]");
+	if (card) {
+		const index = Number(card.dataset["reorderIndex"]);
+		moveTo(draggingId, index, tiered ? (order[index]?.tier ?? null) : undefined);
+		return;
+	}
+	// ティア表は、段の空いたところに来たらその段の最後へ
+	const row = tiered ? under?.closest<HTMLElement>("[data-reorder-tier]") : null;
+	if (row) {
+		const value = row.dataset["reorderTier"];
+		moveToTierEnd(draggingId, value === "none" || value === undefined ? null : Number(value));
+	}
 }
 
 function onPointerUp() {
@@ -163,26 +210,43 @@ function remove(id: number) {
 async function onKeyDown(event: KeyboardEvent, index: number) {
 	const item = order[index];
 	if (!item || disabled) return;
-	let target = index;
-	if (event.key === "ArrowLeft" || event.key === "ArrowUp") target = index - 1;
-	else if (event.key === "ArrowRight" || event.key === "ArrowDown") target = index + 1;
-	else if (event.key === "Delete" || event.key === "Backspace") {
+	const { key } = event;
+	if (key === "Delete" || key === "Backspace") {
 		event.preventDefault();
 		remove(item.id);
 		await tick();
 		focusIndex(Math.min(index, order.length - 1));
 		return;
+	}
+	const backward = key === "ArrowLeft" || (!tiered && key === "ArrowUp");
+	const forward = key === "ArrowRight" || (!tiered && key === "ArrowDown");
+	if (backward || forward) {
+		event.preventDefault();
+		const target = index + (backward ? -1 : 1);
+		// ティア表では段の中だけで動かす
+		if (target < 0 || target >= order.length || (tiered && order[target]?.tier !== item.tier)) return;
+		moveTo(item.id, target);
+		announcement = `「${item.title}」を${target + 1}番目に動かしました`;
+	} else if (tiered && (key === "ArrowUp" || key === "ArrowDown")) {
+		event.preventDefault();
+		// 未分類は一番下の段の下として扱う
+		const current = item.tier ?? tierCount;
+		const next = current + (key === "ArrowUp" ? -1 : 1);
+		if (next < 0 || next > tierCount) return;
+		const tier = next === tierCount ? null : next;
+		moveToTierEnd(item.id, tier);
+		announcement = `「${item.title}」を${tierLabel(tier)}に移しました`;
 	} else return;
-	event.preventDefault();
-	if (target < 0 || target >= order.length) return;
-	moveTo(item.id, target);
-	announcement = `「${item.title}」を${target + 1}番目に動かしました`;
 	await tick();
-	focusIndex(target);
+	focusId(item.id);
 }
 
 function focusIndex(index: number) {
 	document.querySelector<HTMLElement>(`[data-reorder-index="${index}"]`)?.focus();
+}
+
+function focusId(id: number) {
+	document.querySelector<HTMLElement>(`[data-reorder-id="${id}"]`)?.focus();
 }
 
 // つかんでいる間は、指を動かしても画面をスクロールさせない（passive では止められないので自分で付ける）
@@ -201,35 +265,59 @@ $effect(() => {
 
 <svelte:window onpointermove={onPointerMove} onpointerup={onPointerUp} onpointercancel={onPointerUp} />
 
+{#snippet card(item: Item, index: number)}
+	<li>
+		<div
+			class="reorder-card"
+			class:reorder-card--dragging={item.id === draggingId}
+			role="button"
+			tabindex="0"
+			aria-label={tiered
+				? `${tierLabel(item.tier)}「${item.title}」。上下の矢印キーで段を移り、左右で順番を変え、Delete で外します`
+				: `${index + 1}番目「${item.title}」。矢印キーで動かし、Delete で外します`}
+			data-reorder-index={index}
+			data-reorder-id={item.id}
+			onpointerdown={(event) => onPointerDown(event, item.id)}
+			onkeydown={(event) => onKeyDown(event, index)}
+			oncontextmenu={(event) => event.preventDefault()}
+		>
+			{#if !tiered}
+				<span class="reorder-rank" class:reorder-rank--plain={!showRank}>{index + 1}</span>
+			{/if}
+			<span class="reorder-cover">
+				{#if item.cover_url}
+					<img src={item.cover_url} alt="" draggable="false">
+				{:else}
+					<span class="reorder-cover-empty i-lucide-clapperboard" aria-hidden="true"></span>
+				{/if}
+			</span>
+			<span class="reorder-title">{item.title}</span>
+		</div>
+	</li>
+{/snippet}
+
 <div class="reorder" class:reorder--dragging={draggingId !== null}>
 	{#if order.length === 0}
 		<div class="empty-state"><p>作品がありません。保存するとコレクションが空になります</p></div>
+	{:else if tiered}
+		<div class="reorder-tiers">
+			{#each tierRows as row (row.tier ?? 'none')}
+				<section class="reorder-tier" data-reorder-tier={row.tier ?? 'none'} aria-label={row.label}>
+					<h2 class="reorder-tier-label">{row.label}</h2>
+					<ol class="reorder-tier-items">
+						{#each order as item, index (item.id)}
+							{#if item.tier === row.tier}
+								{@render card(item, index)}
+							{/if}
+						{/each}
+					</ol>
+				</section>
+			{/each}
+		</div>
 	{:else}
 		<ol class="reorder-grid" aria-label="並べ替える作品">
 			{#each order as item, index (item.id)}
-				<li>
-					<div
-						class="reorder-card"
-						class:reorder-card--dragging={item.id === draggingId}
-						role="button"
-						tabindex="0"
-						aria-label="{index + 1}番目「{item.title}」。矢印キーで動かし、Delete で外します"
-						data-reorder-index={index}
-						onpointerdown={(event) => onPointerDown(event, item.id)}
-						onkeydown={(event) => onKeyDown(event, index)}
-						oncontextmenu={(event) => event.preventDefault()}
-					>
-						<span class="reorder-rank">{index + 1}</span>
-						<span class="reorder-cover">
-							{#if item.cover_url}
-								<img src={item.cover_url} alt="" draggable="false">
-							{:else}
-								<span class="reorder-cover-empty i-lucide-clapperboard" aria-hidden="true"></span>
-							{/if}
-						</span>
-						<span class="reorder-title">{item.title}</span>
-					</div>
-				</li>
+				{@render card(item, index)}
 			{/each}
 		</ol>
 	{/if}
@@ -269,6 +357,49 @@ $effect(() => {
 	padding: 0;
 	list-style: none;
 }
+.reorder-tiers {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+.reorder-tier {
+	display: flex;
+	min-height: 96px;
+	overflow: hidden;
+	border: 1px solid var(--color-border);
+	border-radius: 10px;
+}
+.reorder-tier-label {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: center;
+	width: 64px;
+	margin: 0;
+	padding: 4px;
+	background: var(--color-surface-hover);
+	font-size: 15px;
+	font-weight: 800;
+	overflow-wrap: anywhere;
+	text-align: center;
+}
+.reorder-tier-items {
+	display: flex;
+	flex: 1;
+	flex-wrap: wrap;
+	align-content: flex-start;
+	gap: 6px;
+	margin: 0;
+	padding: 6px;
+	list-style: none;
+}
+.reorder-tier-items .reorder-card {
+	width: 72px;
+	padding: 4px;
+}
+.reorder-tier-items .reorder-title {
+	display: none;
+}
 .reorder-card {
 	position: relative;
 	display: flex;
@@ -305,6 +436,11 @@ $effect(() => {
 	font-size: 12px;
 	font-weight: 700;
 	text-align: center;
+}
+/* リストでは順番の目安として控えめに出す */
+.reorder-rank--plain {
+	background: rgb(0 0 0 / 0.4);
+	font-weight: 500;
 }
 .reorder-cover {
 	display: flex;

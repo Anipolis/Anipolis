@@ -4,6 +4,32 @@ export const MAX_COLLECTION_ITEMS = 100;
 export const MAX_COLLECTION_TITLE_LENGTH = 50;
 export const MAX_COLLECTION_DESCRIPTION_LENGTH = 300;
 
+/** コレクションの種類（192）。ランキングは並び順が順位、ティア表は段（S・A・B…）に分ける */
+export type CollectionKind = "list" | "ranking" | "tier";
+export const COLLECTION_KINDS: { value: CollectionKind; label: string }[] = [
+	{ value: "list", label: "リスト" },
+	{ value: "ranking", label: "ランキング" },
+	{ value: "tier", label: "ティア表" },
+];
+export const COLLECTION_KIND_LABELS: Record<CollectionKind, string> = {
+	list: "リスト",
+	ranking: "ランキング",
+	tier: "ティア表",
+};
+/** ティア表の段（DB の制約と同じ: 1〜10段、名前は1〜10文字） */
+export const DEFAULT_COLLECTION_TIERS = ["S", "A", "B", "C", "D"];
+export const MAX_COLLECTION_TIERS = 10;
+export const MAX_COLLECTION_TIER_LABEL_LENGTH = 10;
+
+/** 件数の前に付ける種類（「ランキング・」など。リストは付けない） */
+export function collectionKindPrefix(kind: CollectionKind): string {
+	return kind === "list" ? "" : `${COLLECTION_KIND_LABELS[kind]}・`;
+}
+
+export function isCollectionKind(value: unknown): value is CollectionKind {
+	return value === "list" || value === "ranking" || value === "tier";
+}
+
 /** 作品ページの「コレクションに追加」で並べる、自分のコレクションと作品が入っているか（#515） */
 export interface CollectionMembership {
 	id: string;
@@ -29,11 +55,14 @@ export interface CollectionInput {
 	title: string;
 	description: string | null;
 	isPublic: boolean;
+	kind: CollectionKind;
+	/** ティア表のときだけ。ほかの種類では今の段をそのまま残す */
+	tiers: string[] | null;
 }
 
 export type CollectionInputResult =
 	| { ok: true; value: CollectionInput }
-	| { ok: false; field: "title" | "description"; message: string };
+	| { ok: false; field: "title" | "description" | "tiers"; message: string };
 
 /** フォームの値を確かめて整える（題名は前後の空白を落とし、空の説明は null にする） */
 export function parseCollectionInput(form: FormData): CollectionInputResult {
@@ -50,9 +79,28 @@ export function parseCollectionInput(form: FormData): CollectionInputResult {
 			message: `説明は${MAX_COLLECTION_DESCRIPTION_LENGTH}文字以内で入力してください`,
 		};
 	}
+	const rawKind = form.get("kind") ?? "list";
+	const kind: CollectionKind = isCollectionKind(rawKind) ? rawKind : "list";
+	let tiers: string[] | null = null;
+	if (kind === "tier") {
+		tiers = form.getAll("tier").map((label) => String(label).trim());
+		if (tiers.length === 0 || tiers.some((label) => !label)) {
+			return { ok: false, field: "tiers", message: "段の名前を入力してください" };
+		}
+		if (tiers.length > MAX_COLLECTION_TIERS) {
+			return { ok: false, field: "tiers", message: `段は${MAX_COLLECTION_TIERS}個までです` };
+		}
+		if (tiers.some((label) => label.length > MAX_COLLECTION_TIER_LABEL_LENGTH)) {
+			return {
+				ok: false,
+				field: "tiers",
+				message: `段の名前は${MAX_COLLECTION_TIER_LABEL_LENGTH}文字以内で入力してください`,
+			};
+		}
+	}
 	return {
 		ok: true,
-		value: { title, description: rawDescription || null, isPublic: form.get("is_public") === "on" },
+		value: { title, description: rawDescription || null, isPublic: form.get("is_public") === "on", kind, tiers },
 	};
 }
 
@@ -61,6 +109,18 @@ const COLLECTION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-
 /** URL の ID がコレクションの ID の形か（違えば DB に問い合わせずに「見つからない」にする） */
 export function isCollectionId(value: string): boolean {
 	return COLLECTION_ID_PATTERN.test(value);
+}
+
+/**
+ * ティア表の並び: 段の順（上の段から、未分類は最後）に、段の中は今の並び順のまま並べ直す。
+ * 段の番号が今の段の数を超えるもの（段を減らした直後など）は未分類として扱う
+ */
+export function orderByTier<T extends { tier: number | null }>(items: T[], tierCount: number): T[] {
+	const rank = (tier: number | null) => (tier === null || tier >= tierCount ? tierCount : tier);
+	return items
+		.map((item, index) => ({ item, index }))
+		.sort((a, b) => rank(a.item.tier) - rank(b.item.tier) || a.index - b.index)
+		.map(({ item }) => item);
 }
 
 /** 作品を1つ足したあとの並び（末尾に足す。入っていればそのまま） */
