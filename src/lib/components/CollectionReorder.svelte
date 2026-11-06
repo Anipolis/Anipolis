@@ -33,6 +33,12 @@ let pressTimer: ReturnType<typeof setTimeout> | null = null;
 
 const dragging = $derived(order.find((item) => item.id === draggingId) ?? null);
 
+// ドラッグ中に画面の端へ近づいたら、その方向へ画面を送る（指のスクロールは止めているため）
+const EDGE_PX = 72;
+const MAX_SCROLL_STEP = 14;
+let lastPointer: { x: number; y: number } | null = null;
+let scrollFrame: number | null = null;
+
 const LONG_PRESS_MS = 250;
 const MOUSE_DRAG_THRESHOLD = 4;
 const TOUCH_SCROLL_THRESHOLD = 8;
@@ -50,7 +56,35 @@ function startDrag(id: number, x: number, y: number) {
 	clearPress();
 }
 
+function stopAutoScroll() {
+	if (scrollFrame !== null) cancelAnimationFrame(scrollFrame);
+	scrollFrame = null;
+}
+
+/** 端からの近さに応じた1コマ分の送り量（上端は負、下端は正、端から離れていれば 0） */
+function edgeScrollStep(y: number) {
+	// ゴミ箱の上では送らない（下端の近くにあるので、外そうとしている間に画面が動いてしまう）
+	if (overTrash) return 0;
+	if (y < EDGE_PX) return -Math.ceil(((EDGE_PX - y) / EDGE_PX) * MAX_SCROLL_STEP);
+	const fromBottom = window.innerHeight - y;
+	if (fromBottom < EDGE_PX) return Math.ceil(((EDGE_PX - fromBottom) / EDGE_PX) * MAX_SCROLL_STEP);
+	return 0;
+}
+
+function autoScroll() {
+	scrollFrame = null;
+	if (draggingId === null || !lastPointer) return;
+	const step = edgeScrollStep(lastPointer.y);
+	if (step === 0) return;
+	window.scrollBy(0, step);
+	// 画面が動くと指の下の作品も変わるので、同じ位置でもう一度確かめる
+	dragOver(lastPointer.x, lastPointer.y);
+	scrollFrame = requestAnimationFrame(autoScroll);
+}
+
 function endDrag() {
+	stopAutoScroll();
+	lastPointer = null;
 	draggingId = null;
 	ghost = null;
 	overTrash = false;
@@ -99,13 +133,18 @@ function onPointerMove(event: PointerEvent) {
 		return;
 	}
 	if (draggingId === null) return;
-	ghost = { x: event.clientX, y: event.clientY };
-	overTrash = isOverTrash(event.clientX, event.clientY);
+	lastPointer = { x: event.clientX, y: event.clientY };
+	dragOver(event.clientX, event.clientY);
+	if (scrollFrame === null && edgeScrollStep(event.clientY) !== 0) scrollFrame = requestAnimationFrame(autoScroll);
+}
+
+function dragOver(x: number, y: number) {
+	if (draggingId === null) return;
+	ghost = { x, y };
+	overTrash = isOverTrash(x, y);
 	if (overTrash) return;
 	// 指の下にある作品の位置へ動かす（つかんでいる作品の影は pointer-events: none）
-	const target = document
-		.elementFromPoint(event.clientX, event.clientY)
-		?.closest<HTMLElement>("[data-reorder-index]");
+	const target = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-reorder-index]");
 	if (target) moveTo(draggingId, Number(target.dataset["reorderIndex"]));
 }
 
@@ -155,6 +194,7 @@ $effect(() => {
 	return () => {
 		window.removeEventListener("touchmove", preventScroll);
 		clearPress();
+		stopAutoScroll();
 	};
 });
 </script>
@@ -315,6 +355,12 @@ $effect(() => {
 	transition:
 		transform 0.12s ease,
 		background 0.12s ease;
+}
+/* スマホは下のナビ（高さ 56px）の上に出す */
+@media (max-width: 960px) {
+	.reorder-trash {
+		bottom: calc(56px + 16px + env(safe-area-inset-bottom));
+	}
 }
 .reorder-trash--over {
 	background: color-mix(in srgb, var(--color-danger) 14%, var(--color-surface));
