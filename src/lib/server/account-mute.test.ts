@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
 import type { Database } from "$lib/supabase/database.types";
 import type { RawPost } from "$lib/types";
-import { enrichPostsWithCounts, getNotifications } from "./queries";
+import { enrichPostsWithCounts, getNotifications, getVisiblePostReplyCounts } from "./queries";
 
 type TableResult = { data: unknown; error: { message: string } | null };
 
@@ -114,6 +114,30 @@ describe("アカウントのミュート（191）", () => {
 		});
 		await getNotifications(client, "viewer");
 		expect(orFilters).toContain("actor_id.is.null,actor_id.not.in.(muted)");
+	});
+});
+
+describe("ルームの再確認（191）", () => {
+	it("入室中にミュートした人の投稿は、見えなくなった投稿として返す", async () => {
+		const { client } = fakeSupabase({
+			...tables(["muted"]),
+			posts: {
+				data: [
+					{ id: "a", user_id: "friend" },
+					{ id: "b", user_id: "muted" },
+				],
+				error: null,
+			},
+		});
+		vi.mocked(client.rpc).mockResolvedValue({
+			data: [
+				{ post_id: "a", reply_count: 1 },
+				{ post_id: "b", reply_count: 2 },
+			],
+			error: null,
+		} as never);
+		const visible = await getVisiblePostReplyCounts(client, ["a", "b"], "viewer");
+		expect(visible && Object.fromEntries(visible)).toEqual({ a: 1 });
 	});
 });
 

@@ -31,7 +31,7 @@ function postState(body: unknown) {
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify(body),
 		}),
-		locals: { supabase: {} },
+		locals: { supabase: {}, safeGetSession: async () => ({ user: { id: "viewer" }, session: null }) },
 	};
 	return POST(event as unknown as Parameters<typeof POST>[0]);
 }
@@ -118,7 +118,8 @@ describe("POST /api/rooms/posts/state（#324）", () => {
 		const res = await postState({ ids: [hiddenId, POST_ID] });
 		expect(res.status).toBe(200);
 		expect(await res.json()).toEqual({ visible: { [POST_ID]: 2 } });
-		expect(getVisiblePostReplyCounts).toHaveBeenCalledWith(expect.anything(), [hiddenId, POST_ID]);
+		// 見ている人のミュートも効かせるため、閲覧者の ID も渡す（191）
+		expect(getVisiblePostReplyCounts).toHaveBeenCalledWith(expect.anything(), [hiddenId, POST_ID], "viewer");
 	});
 
 	it("ID の形式・件数の上限を検査する", async () => {

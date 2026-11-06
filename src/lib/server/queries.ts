@@ -1518,10 +1518,27 @@ export async function getRoomPostsBefore(
 export async function getVisiblePostReplyCounts(
 	supabase: SupabaseClient<Database>,
 	postIds: string[],
+	viewerId: string | null = null,
 ): Promise<Map<string, number> | null> {
-	const { counts, failed } = await fetchPostCountsById(supabase, [...new Set(postIds)], null);
+	const ids = [...new Set(postIds)];
+	const [{ counts, failed }, mutedUserIds] = await Promise.all([
+		fetchPostCountsById(supabase, ids, null),
+		getMutedUserIdsCached(supabase, viewerId),
+	]);
 	if (failed) return null;
-	return new Map([...counts].map(([id, row]) => [id, Number(row.reply_count ?? 0)]));
+	const visible = new Map([...counts].map(([id, row]) => [id, Number(row.reply_count ?? 0)]));
+	// 入室中にミュートした人の投稿も、次の確認で消えるようにする（191。RLS では見えたままのため）
+	if (mutedUserIds.size > 0 && visible.size > 0) {
+		const { data, error } = await supabase
+			.from("posts")
+			.select("id, user_id")
+			.in("id", [...visible.keys()]);
+		if (error) return null;
+		for (const row of data ?? []) {
+			if (mutedUserIds.has(row.user_id)) visible.delete(row.id);
+		}
+	}
+	return visible;
 }
 
 /**
