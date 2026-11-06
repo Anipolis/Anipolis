@@ -6,7 +6,18 @@ import type { PageProps } from "./$types";
 let { data }: PageProps = $props();
 
 let creating = $state(false);
+// 三点メニューを開いているコレクションと、編集中のコレクション（題名・説明・公開はここで直す）
+let menuOpenId = $state<string | null>(null);
+let editingId = $state<string | null>(null);
+const editing = $derived(data.collections?.find((collection) => collection.id === editingId) ?? null);
 </script>
+
+<svelte:window
+	onclick={() => (menuOpenId = null)}
+	onkeydown={(event) => {
+		if (event.key === "Escape") menuOpenId = null;
+	}}
+/>
 
 <svelte:head><title>コレクション - Anipolis</title></svelte:head>
 
@@ -37,7 +48,7 @@ let creating = $state(false);
 		{:else}
 			<ul class="collections-list">
 				{#each data.collections as collection (collection.id)}
-					<li>
+					<li class="collection-row">
 						<a href="/collections/{collection.id}" class="collection-item">
 							<!-- 先頭の4作品のカバー（足りない分は空の枠） -->
 							<span class="collection-item-covers" aria-hidden="true">
@@ -65,6 +76,37 @@ let creating = $state(false);
 								<span class="collection-item-meta">{collection.item_count}作品</span>
 							</span>
 						</a>
+						<div class="collection-menu">
+							<button
+								type="button"
+								class="collection-menu-btn"
+								aria-label="「{collection.title}」のメニュー"
+								aria-haspopup="menu"
+								aria-expanded={menuOpenId === collection.id}
+								onclick={(event) => {
+									event.stopPropagation();
+									menuOpenId = menuOpenId === collection.id ? null : collection.id;
+								}}
+							>
+								<span class="i-lucide-ellipsis-vertical" aria-hidden="true"></span>
+							</button>
+							{#if menuOpenId === collection.id}
+								<div class="collection-menu-dropdown" role="menu">
+									<button
+										type="button"
+										role="menuitem"
+										onclick={(event) => {
+											event.stopPropagation();
+											menuOpenId = null;
+											editingId = collection.id;
+										}}
+									>
+										<span class="i-lucide-pencil" aria-hidden="true"></span>
+										編集
+									</button>
+								</div>
+							{/if}
+						</div>
 					</li>
 				{/each}
 			</ul>
@@ -75,6 +117,19 @@ let creating = $state(false);
 		<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
 	</aside>
 </div>
+
+{#if editing}
+	<!-- 送り先はそのコレクションのページのアクション。削除するとこの一覧へ戻る -->
+	<CollectionFormModal
+		mode="edit"
+		action="/collections/{editing.id}?/updateCollection"
+		deleteAction="/collections/{editing.id}?/deleteCollection"
+		initial={{ title: editing.title, description: editing.description, is_public: editing.is_public }}
+		onclose={() => {
+			editingId = null;
+		}}
+	/>
+{/if}
 
 {#if creating}
 	<CollectionFormModal
@@ -140,15 +195,74 @@ let creating = $state(false);
 	padding: 8px 0;
 	list-style: none;
 }
-.collection-item {
+.collection-row {
+	position: relative;
 	display: flex;
 	align-items: center;
+}
+.collection-row:hover {
+	background: var(--color-surface-hover);
+}
+.collection-item {
+	display: flex;
+	flex: 1;
+	align-items: center;
 	gap: 14px;
-	padding: 12px 16px;
+	min-width: 0;
+	padding: 12px 4px 12px 16px;
 	color: var(--color-text);
 	text-decoration: none;
 }
-.collection-item:hover {
+.collection-menu {
+	position: relative;
+	flex-shrink: 0;
+	margin-right: 8px;
+}
+.collection-menu-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 36px;
+	height: 36px;
+	border: 0;
+	border-radius: 999px;
+	background: transparent;
+	color: var(--color-text-muted);
+	cursor: pointer;
+	font-size: 20px;
+}
+.collection-menu-btn:hover,
+.collection-menu-btn[aria-expanded="true"] {
+	background: var(--color-surface-hover);
+	color: var(--color-text);
+}
+.collection-menu-dropdown {
+	position: absolute;
+	top: calc(100% + 4px);
+	right: 0;
+	z-index: 100;
+	min-width: 140px;
+	overflow: hidden;
+	border: 1px solid var(--color-border);
+	border-radius: 12px;
+	background: var(--color-surface);
+	box-shadow: 0 8px 24px rgb(0 0 0 / 0.24);
+}
+.collection-menu-dropdown button {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	padding: 10px 14px;
+	border: 0;
+	background: transparent;
+	color: var(--color-text);
+	cursor: pointer;
+	font: inherit;
+	font-size: 14px;
+	text-align: left;
+}
+.collection-menu-dropdown button:hover {
 	background: var(--color-surface-hover);
 }
 .collection-item-covers {
