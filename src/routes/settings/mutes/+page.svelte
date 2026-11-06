@@ -54,10 +54,9 @@ let muteFormChanged = $state(false);
 
 function toggleEdit(animeId: string) {
 	editingAnimeId = editingAnimeId === animeId ? null : animeId;
-	if (editingAnimeId !== animeId) {
-		const { [animeId]: _removed, ...rest } = pendingMuteType;
-		pendingMuteType = rest;
-	}
+	// 開くのは一度に1つなので、閉じる・切り替えるときは保存していない選択を捨てる
+	// （残すと開き直したときにそれが基準になり、変更なしと見なされて保存できない）
+	pendingMuteType = {};
 }
 
 const updateSubmit: SubmitFunction = ({ formData }) => {
