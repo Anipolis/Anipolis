@@ -3,12 +3,14 @@ import type { MylistActivity } from "$lib/activity";
 import {
 	blockUserAction,
 	deletePostAction,
+	muteUserAction,
 	removeUserAnimeEntry,
 	toggleBookmarkAction,
 	toggleFollowAction,
 	toggleLikeAction,
 	toggleRepostAction,
 	unblockUserAction,
+	unmuteUserAction,
 	upsertUserAnimeEntry,
 } from "$lib/server/actions";
 import {
@@ -28,6 +30,7 @@ import {
 	getUserActivityPage,
 	getUserAnimeList,
 	isBlockedByMe,
+	isMutedByMe,
 } from "$lib/server/queries";
 import { parseTimelineCursor, type TimelineCursor } from "$lib/timeline-cursor";
 import type { Post } from "$lib/types";
@@ -50,10 +53,11 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 	const isOwn = user?.id === profile.id;
 	const myId = user?.id;
 
-	const [isFollowing, rawFollowRequestStatus, isBlocked] = await Promise.all([
+	const [isFollowing, rawFollowRequestStatus, isBlocked, isMuted] = await Promise.all([
 		myId && !isOwn ? checkIsFollowing(supabase, myId, profile.id) : Promise.resolve(false),
 		myId && !isOwn ? getFollowRequestStatus(supabase, myId, profile.id) : Promise.resolve("none" as const),
 		myId && !isOwn ? isBlockedByMe(supabase, myId, profile.id) : Promise.resolve(false),
+		myId && !isOwn ? isMutedByMe(supabase, myId, profile.id) : Promise.resolve(false),
 	]);
 	const followRequestStatus = isFollowing ? ("none" as const) : rawFollowRequestStatus;
 	const canViewContent = isOwn || !profile.is_private || isFollowing;
@@ -167,6 +171,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 		isFollowing,
 		followRequestStatus,
 		isBlocked,
+		isMuted,
 		trending: trendingResult,
 		animeTrending,
 		animeList,
@@ -262,5 +267,17 @@ export const actions: Actions = {
 		const { user } = await safeGetSession();
 		if (!user) return fail(401, { message: "ログインが必要です" });
 		return unblockUserAction(request, supabase, user.id);
+	},
+
+	mute: async ({ request, locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { message: "ログインが必要です" });
+		return muteUserAction(request, supabase, user.id);
+	},
+
+	unmute: async ({ request, locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { message: "ログインが必要です" });
+		return unmuteUserAction(request, supabase, user.id);
 	},
 };

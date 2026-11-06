@@ -51,6 +51,7 @@ const NO_MUTES = {
 	muted_words: [{ data: [], error: null }],
 	anime_mutes: [{ data: [], error: null }],
 	event_mutes: [{ data: [], error: null }],
+	user_mutes: [{ data: [], error: null }],
 };
 
 const PROFILE = { id: "author", username: "author", display_name: null, avatar_url: null };

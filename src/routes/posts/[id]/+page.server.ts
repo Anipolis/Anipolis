@@ -44,6 +44,8 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 		const rawAll = [post, ...(rawParent ? [rawParent] : []), ...rawReplies] as unknown as RawPost[];
 		const enriched = await enrichPostsWithCounts(supabase, rawAll, user?.id ?? null, {
 			includeMutedRoomPosts: true,
+			// ミュートした人の投稿でも、直接開いたときは見せる（返信のうち他のミュート相手は隠す）
+			showMutedUserId: post.user_id,
 		});
 		const enrichedPost = enriched.find((item) => item.id === params.id);
 		if (!enrichedPost) throw new Error("post not found after enrich");
