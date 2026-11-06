@@ -1,4 +1,5 @@
 <script lang="ts">
+import { collectionKindPrefix } from "$lib/collections";
 import CollectionFormModal from "$lib/components/CollectionFormModal.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import type { PageProps } from "./$types";
@@ -73,7 +74,9 @@ const editing = $derived(data.collections?.find((collection) => collection.id ==
 								{#if collection.description}
 									<span class="collection-item-description">{collection.description}</span>
 								{/if}
-								<span class="collection-item-meta">{collection.item_count}作品</span>
+								<span class="collection-item-meta"
+									>{collectionKindPrefix(collection.kind)}{collection.item_count}作品</span
+								>
 							</span>
 						</a>
 						<div class="collection-menu">
@@ -124,7 +127,13 @@ const editing = $derived(data.collections?.find((collection) => collection.id ==
 		mode="edit"
 		action="/collections/{editing.id}?/updateCollection"
 		deleteAction="/collections/{editing.id}?/deleteCollection"
-		initial={{ title: editing.title, description: editing.description, is_public: editing.is_public }}
+		initial={{
+			title: editing.title,
+			description: editing.description,
+			is_public: editing.is_public,
+			kind: editing.kind,
+			tiers: editing.tiers,
+		}}
 		onclose={() => {
 			editingId = null;
 		}}

@@ -3,7 +3,7 @@ import { isActivityStatus, type MylistActivity } from "$lib/activity";
 import { isRepeatMuteActive } from "$lib/anime-mute-schedule";
 import { groupGenreFilters, translateAnimeGenres } from "$lib/anime-vocabulary";
 import { computeBroadcastStatus } from "$lib/broadcast-status";
-import type { CollectionMembership } from "$lib/collections";
+import { type CollectionKind, type CollectionMembership, isCollectionKind } from "$lib/collections";
 import type { EpisodeRoomBounds } from "$lib/episode-room";
 import { toValidExchangeSubjectiveTags } from "$lib/exchange-tags";
 import { isOwnPostImage, postImageMediaUrl } from "$lib/post-image-url";
@@ -3884,6 +3884,8 @@ export interface CollectionSummary {
 	title: string;
 	description: string | null;
 	is_public: boolean;
+	kind: CollectionKind;
+	tiers: string[];
 	updated_at: string;
 	item_count: number;
 	/** 先頭の作品のカバー（最大4枚。カバーの無い作品は飛ばす） */
@@ -3941,7 +3943,7 @@ export async function getUserCollections(
 	const { data, error } = await supabase
 		.from("user_collections")
 		.select(
-			"id, title, description, is_public, updated_at, item_count:user_collection_items(count), preview:user_collection_items(position, anime:anime_id(cover_url))",
+			"id, title, description, is_public, kind, tiers, updated_at, item_count:user_collection_items(count), preview:user_collection_items(position, anime:anime_id(cover_url))",
 		)
 		.eq("user_id", userId)
 		.order("updated_at", { ascending: false })
@@ -3954,6 +3956,8 @@ export async function getUserCollections(
 		title: string;
 		description: string | null;
 		is_public: boolean;
+		kind: string;
+		tiers: string[];
 		updated_at: string;
 		item_count: { count: number }[];
 		preview: { anime: { cover_url: string | null } | null }[];
@@ -3963,6 +3967,8 @@ export async function getUserCollections(
 		title: row.title,
 		description: row.description,
 		is_public: row.is_public,
+		kind: isCollectionKind(row.kind) ? row.kind : "list",
+		tiers: row.tiers,
 		updated_at: row.updated_at,
 		item_count: row.item_count[0]?.count ?? 0,
 		covers: row.preview.flatMap((item) => (item.anime?.cover_url ? [item.anime.cover_url] : [])).slice(0, 4),
@@ -3974,10 +3980,15 @@ export interface CollectionDetail {
 	title: string;
 	description: string | null;
 	is_public: boolean;
+	kind: CollectionKind;
+	/** ティア表の段の名前（上から） */
+	tiers: string[];
 	created_at: string;
 	updated_at: string;
 	owner: { id: string; username: string; display_name: string | null; avatar_url: string | null };
 	items: Anime[];
+	/** items と同じ並びで、各作品の段（tiers の何番目か。未分類・段が無くなったものは null） */
+	item_tiers: (number | null)[];
 }
 
 /** コレクションを作品の並び順つきで読む。見えない（非公開・鍵・ブロック）・無いときは null */
@@ -3985,7 +3996,7 @@ export async function getCollection(supabase: SupabaseClient<Database>, id: stri
 	const { data, error } = await supabase
 		.from("user_collections")
 		.select(
-			`id, title, description, is_public, created_at, updated_at, owner:profiles!user_collections_user_id_fkey(id, username, display_name, avatar_url), items:user_collection_items(position, anime:anime_id(${ANIME_LIST_BASE_COLUMNS}))`,
+			`id, title, description, is_public, kind, tiers, created_at, updated_at, owner:profiles!user_collections_user_id_fkey(id, username, display_name, avatar_url), items:user_collection_items(position, tier, anime:anime_id(${ANIME_LIST_BASE_COLUMNS}))`,
 		)
 		.eq("id", id)
 		.order("position", { referencedTable: "items" })
@@ -3993,13 +4004,17 @@ export async function getCollection(supabase: SupabaseClient<Database>, id: stri
 	if (error) failQuery("getCollection", error);
 	if (!data) return null;
 
-	const row = data as unknown as Omit<CollectionDetail, "items"> & {
-		items: { anime: Record<string, unknown> | null }[];
+	const row = data as unknown as Omit<CollectionDetail, "items" | "item_tiers" | "kind"> & {
+		kind: string;
+		items: { tier: number | null; anime: Record<string, unknown> | null }[];
 	};
+	// 後から非公開になった作品などは anime が読めずに null になるので、飛ばす
+	const readable = row.items.filter((item) => item.anime);
 	return {
 		...row,
-		// 後から非公開になった作品などは anime が読めずに null になるので、飛ばす
-		items: row.items.flatMap((item) => (item.anime ? [toAnime(item.anime)] : [])),
+		kind: isCollectionKind(row.kind) ? row.kind : "list",
+		items: readable.map((item) => toAnime(item.anime as Record<string, unknown>)),
+		item_tiers: readable.map((item) => (item.tier !== null && item.tier < row.tiers.length ? item.tier : null)),
 	};
 }
 
