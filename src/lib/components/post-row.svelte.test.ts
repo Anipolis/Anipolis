@@ -171,13 +171,16 @@ describe("CW（ネタバレ注意）の保護（#317〜#319）", () => {
 			await tick();
 			expect(target.querySelector(".post-cw-content")?.getAttribute("aria-hidden")).toBe("false");
 			expect(target.querySelector(".post-cw-content")?.hasAttribute("inert")).toBe(false);
+			// 押した文字は消え、隠し直す操作は出さない
+			expect(target.querySelector(".post-cw-banner")).toBeNull();
+			expect(document.activeElement).toBe(target.querySelector(".post-cw-content-body"));
 		});
 	}
 
 	it("作品の情報が取れなくても CW の ID があれば折り畳む（通常の本文として出さない）", async () => {
 		const post = { ...fixturePost(22), cw_anime: null };
 		const target = await render(PostRow, post);
-		expect(target.querySelector(".post-cw-banner")?.textContent).toContain("ネタバレを含みます");
+		expect(target.querySelector(".post-cw-banner")?.textContent).toContain("ネタバレを表示");
 		expect(target.querySelector(".post-cw-content")?.getAttribute("aria-hidden")).toBe("true");
 	});
 
