@@ -393,13 +393,6 @@ $effect(() => {
 	padding: 6px;
 	list-style: none;
 }
-.reorder-tier-items .reorder-card {
-	width: 72px;
-	padding: 4px;
-}
-.reorder-tier-items .reorder-title {
-	display: none;
-}
 .reorder-card {
 	position: relative;
 	display: flex;
@@ -470,6 +463,13 @@ $effect(() => {
 	-webkit-box-orient: vertical;
 	-webkit-line-clamp: 2;
 	line-clamp: 2;
+}
+.reorder-tier-items .reorder-card {
+	width: 72px;
+	padding: 4px;
+}
+.reorder-tier-items .reorder-title {
+	display: none;
 }
 .reorder-trash {
 	position: fixed;
