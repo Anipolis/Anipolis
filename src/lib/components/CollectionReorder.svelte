@@ -153,7 +153,10 @@ function moveTo(id: number, targetIndex: number, tier?: number | null) {
 /** 作品を段の最後へ移す（段の空いたところに落とした・キーボードで段を移った） */
 function moveToTierEnd(id: number, tier: number | null) {
 	const moving = order.find((item) => item.id === id);
-	if (!moving || moving.tier === tier) return;
+	if (!moving) return;
+	// すでにその段の最後にいるときだけ何もしない（同じ段の空きに落としても最後へ動かす）
+	const lastInTier = order.findLast((item) => item.tier === tier);
+	if (moving.tier === tier && lastInTier?.id === id) return;
 	setOrder([...order.filter((item) => item.id !== id), { ...moving, tier }]);
 }
 

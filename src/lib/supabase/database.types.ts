@@ -4380,6 +4380,10 @@ export type Database = {
 				Args: { p_anime_ids: number[]; p_collection_id: string; p_tiers?: (number | null)[] };
 				Returns: undefined;
 			};
+			set_collection_tiers: {
+				Args: { p_collection_id: string; p_origins: (number | null)[]; p_tiers: string[] };
+				Returns: undefined;
+			};
 			set_favorite_anime: {
 				Args: { p_anime_ids: number[] };
 				Returns: undefined;

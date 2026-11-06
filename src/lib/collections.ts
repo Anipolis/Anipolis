@@ -58,6 +58,8 @@ export interface CollectionInput {
 	kind: CollectionKind;
 	/** ティア表のときだけ。ほかの種類では今の段をそのまま残す */
 	tiers: string[] | null;
+	/** tiers と同じ長さで、各段が元は何番目だったか（新しく足した段は null） */
+	tierOrigins: (number | null)[] | null;
 }
 
 export type CollectionInputResult =
@@ -82,8 +84,14 @@ export function parseCollectionInput(form: FormData): CollectionInputResult {
 	const rawKind = form.get("kind") ?? "list";
 	const kind: CollectionKind = isCollectionKind(rawKind) ? rawKind : "list";
 	let tiers: string[] | null = null;
+	let tierOrigins: (number | null)[] | null = null;
 	if (kind === "tier") {
 		tiers = form.getAll("tier").map((label) => String(label).trim());
+		const origins = form.getAll("tier_origin").map((value) => String(value).trim());
+		tierOrigins = tiers.map((_, index) => {
+			const origin = Number(origins[index] ?? "");
+			return origins[index] && Number.isInteger(origin) && origin >= 0 ? origin : null;
+		});
 		if (tiers.length === 0 || tiers.some((label) => !label)) {
 			return { ok: false, field: "tiers", message: "段の名前を入力してください" };
 		}
@@ -100,7 +108,14 @@ export function parseCollectionInput(form: FormData): CollectionInputResult {
 	}
 	return {
 		ok: true,
-		value: { title, description: rawDescription || null, isPublic: form.get("is_public") === "on", kind, tiers },
+		value: {
+			title,
+			description: rawDescription || null,
+			isPublic: form.get("is_public") === "on",
+			kind,
+			tiers,
+			tierOrigins,
+		},
 	};
 }
 

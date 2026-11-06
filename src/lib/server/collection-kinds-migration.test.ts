@@ -20,4 +20,10 @@ describe("コレクションの種類と段（192）", () => {
 		expect(sql).toMatch(/reset_removed_collection_tiers\(\)[\s\S]*?SECURITY DEFINER/);
 		expect(sql).toContain("WHERE collection_id = NEW.id AND tier >= cardinality(NEW.tiers)");
 	});
+
+	it("段を変えるときは、作品の段を元の番号から付け替え、消した段の作品だけ未分類にする", () => {
+		expect(sql).toContain("SET tier = (array_position(p_origins, tier) - 1)::smallint");
+		expect(sql).toMatch(/FUNCTION public\.set_collection_tiers\([\s\S]*?SECURITY INVOKER/);
+		expect(sql).toContain("GRANT UPDATE (tier) ON public.user_collection_items TO authenticated;");
+	});
 });

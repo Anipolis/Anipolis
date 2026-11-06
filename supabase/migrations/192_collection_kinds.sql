@@ -144,3 +144,69 @@ $$;
 
 REVOKE ALL ON FUNCTION public.set_collection_items(uuid, bigint[], smallint[]) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.set_collection_items(uuid, bigint[], smallint[]) TO authenticated;
+
+-- 段の名前・並び・数を変える（編集画面）。p_origins は p_tiers と同じ長さで、各段が元は何番目の段だったか
+-- （新しく足した段は NULL）。作品の段を新しい番号へ付け替え、消した段の作品は未分類にする。
+-- 途中の段を消したとき、後ろの段の作品が1つ上の段へずれないようにするため、同じトランザクションで行う
+GRANT UPDATE (tier) ON public.user_collection_items TO authenticated;
+
+DROP POLICY IF EXISTS "user_collection_items: 自分のコレクションの段のみ更新可能" ON public.user_collection_items;
+CREATE POLICY "user_collection_items: 自分のコレクションの段のみ更新可能"
+    ON public.user_collection_items FOR UPDATE
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.user_collections c
+            WHERE c.id = collection_id AND c.user_id = auth.uid()
+        )
+    )
+    WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM public.user_collections c
+            WHERE c.id = collection_id AND c.user_id = auth.uid()
+        )
+        AND public.has_beta_write_access()
+        AND public.is_profile_active_for_writes(auth.uid())
+    );
+
+CREATE OR REPLACE FUNCTION public.set_collection_tiers(
+    p_collection_id uuid,
+    p_tiers text[],
+    p_origins smallint[]
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = public
+AS $$
+DECLARE
+    current_user_id uuid := auth.uid();
+    old_count integer;
+BEGIN
+    IF current_user_id IS NULL THEN
+        RAISE EXCEPTION 'login required';
+    END IF;
+    SELECT cardinality(c.tiers) INTO old_count
+    FROM public.user_collections c
+    WHERE c.id = p_collection_id AND c.user_id = current_user_id
+    FOR UPDATE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'collection not found' USING ERRCODE = 'P0002';
+    END IF;
+    IF p_tiers IS NULL OR p_origins IS NULL OR cardinality(p_origins) <> cardinality(p_tiers)
+        OR EXISTS (SELECT 1 FROM unnest(p_origins) AS o WHERE o IS NOT NULL AND (o < 0 OR o >= old_count))
+        OR (SELECT count(o) FROM unnest(p_origins) AS o) <> (SELECT count(DISTINCT o) FROM unnest(p_origins) AS o)
+    THEN
+        RAISE EXCEPTION 'invalid tiers' USING ERRCODE = '22023';
+    END IF;
+
+    -- 元の段の番号 → 新しい番号（見つからない = 消した段は NULL）
+    UPDATE public.user_collection_items
+    SET tier = (array_position(p_origins, tier) - 1)::smallint
+    WHERE collection_id = p_collection_id AND tier IS NOT NULL;
+
+    UPDATE public.user_collections SET tiers = p_tiers, updated_at = now() WHERE id = p_collection_id;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.set_collection_tiers(uuid, text[], smallint[]) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.set_collection_tiers(uuid, text[], smallint[]) TO authenticated;

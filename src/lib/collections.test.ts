@@ -13,7 +13,14 @@ describe("コレクションの入力", () => {
 			parseCollectionInput(form({ title: "  実況が盛り上がる作品 ", description: "  ", is_public: "on" })),
 		).toEqual({
 			ok: true,
-			value: { title: "実況が盛り上がる作品", description: null, isPublic: true, kind: "list", tiers: null },
+			value: {
+				title: "実況が盛り上がる作品",
+				description: null,
+				isPublic: true,
+				kind: "list",
+				tiers: null,
+				tierOrigins: null,
+			},
 		});
 	});
 

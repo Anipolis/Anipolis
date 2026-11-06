@@ -40,7 +40,12 @@ let description = $state(untrack(() => initial?.description ?? ""));
 let isPublic = $state(untrack(() => initial?.is_public ?? false));
 let kind = $state<CollectionKind>(untrack(() => initial?.kind ?? "list"));
 // ティア表の段の名前（上から）。種類を変えても入力は残しておく
-let tiers = $state<string[]>(untrack(() => [...(initial?.tiers ?? DEFAULT_COLLECTION_TIERS)]));
+// 各段が元は何番目だったか（origin）も持つ。途中の段を消しても、作品が別の段へずれないよう保存時に送る
+type TierField = { label: string; origin: number | null };
+const initialTiers: TierField[] = untrack(() =>
+	(initial?.tiers ?? DEFAULT_COLLECTION_TIERS).map((label, index) => ({ label, origin: initial ? index : null })),
+);
+let tiers = $state<TierField[]>(initialTiers.map((tier) => ({ ...tier })));
 let submitting = $state(false);
 let error = $state<{ field?: "title" | "description" | "tiers"; message: string } | null>(null);
 let titleInput = $state<HTMLInputElement | null>(null);
@@ -53,11 +58,11 @@ const changed = $derived(
 		description !== (initial?.description ?? "") ||
 		isPublic !== (initial?.is_public ?? false) ||
 		kind !== (initial?.kind ?? "list") ||
-		(kind === "tier" && JSON.stringify(tiers) !== JSON.stringify(initial?.tiers ?? DEFAULT_COLLECTION_TIERS)),
+		(kind === "tier" && JSON.stringify(tiers) !== JSON.stringify(initialTiers)),
 );
 
 function addTier() {
-	if (tiers.length < MAX_COLLECTION_TIERS) tiers = [...tiers, ""];
+	if (tiers.length < MAX_COLLECTION_TIERS) tiers = [...tiers, { label: "", origin: null }];
 }
 
 function removeTier(index: number) {
@@ -207,21 +212,22 @@ const handleDelete: SubmitFunction = ({ cancel }) => {
 					<fieldset class="collection-form-tiers">
 						<legend class="field-label">段</legend>
 						<ol class="collection-form-tier-list">
-							{#each tiers as _label, index (index)}
+							{#each tiers as tier, index (index)}
 								<li class="collection-form-tier">
 									<input
 										name="tier"
 										type="text"
 										class="field-input"
-										class:field-error={error?.field === 'tiers' && !tiers[index]?.trim()}
+										class:field-error={error?.field === 'tiers' && !tier.label.trim()}
 										aria-label="{index + 1}段目の名前"
 										maxlength={MAX_COLLECTION_TIER_LABEL_LENGTH}
 										autocomplete="off"
-										bind:value={tiers[index]}
+										bind:value={tier.label}
 										oninput={() => {
 											if (error?.field === 'tiers') error = null;
 										}}
 									>
+									<input type="hidden" name="tier_origin" value={tier.origin ?? ''}>
 									<button
 										type="button"
 										class="collection-form-tier-remove"
