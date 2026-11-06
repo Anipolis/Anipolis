@@ -328,4 +328,29 @@ describe("実況ルームの返信の続き（#325）", () => {
 		expect(allModeCalls).toHaveLength(2);
 		expect(allModeCalls[1]?.searchParams.get("after_id")).toBe(all[99]?.id);
 	});
+
+	it("最新の返信がミュートなどで全部隠れても、「さらに表示する」で古い返信へ進める", async () => {
+		const older = [reply(0), reply(1)];
+		const fetchMock = vi.fn(async (input: string) => {
+			const url = new URL(input, "http://localhost");
+			// 最新3件はミュートした人の返信で、サーバーが除いて空になった
+			if (url.searchParams.get("mode") === "recent") return Response.json({ replies: [] });
+			return Response.json({ replies: older, nextCursor: null, hasMore: false });
+		});
+		vi.stubGlobal("fetch", fetchMock);
+
+		const target = document.body.appendChild(document.createElement("div"));
+		const component = mount(LiveRoomPostCard, {
+			target,
+			props: { post: { ...fixturePost(18), reply_count: 5 }, currentUserId: "preview-user-0" },
+		});
+		cleanup.push(() => unmount(component));
+		await tick();
+		target.querySelector<HTMLButtonElement>('[aria-label="投稿の返信を表示"]')?.click();
+		await vi.waitFor(() => expect(target.querySelector(".live-more-replies")).not.toBeNull());
+		expect(target.querySelectorAll(".live-reply")).toHaveLength(0);
+
+		target.querySelector<HTMLButtonElement>(".live-more-replies")?.click();
+		await vi.waitFor(() => expect(target.querySelectorAll(".live-reply")).toHaveLength(2));
+	});
 });

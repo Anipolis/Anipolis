@@ -172,7 +172,8 @@ async function loadMoreReplies(event: MouseEvent) {
 			<p class="live-reply-status">返信を読み込み中...</p>
 		{:else if repliesError}
 			<p class="live-reply-status live-reply-error">{repliesError}</p>
-		{:else if replies.length > 0}
+		{:else}
+			<!-- 最新の返信がミュートなどで全部隠れても、続きがあれば古い返信へ進めるようにする -->
 			{#each replies as reply (reply.id)}
 				<a href="/posts/{reply.id}" class="live-reply" onclick={stop}>
 					<UserAvatar src={reply.avatar_url} username={reply.username} size="xs" />
@@ -190,9 +191,9 @@ async function loadMoreReplies(event: MouseEvent) {
 				<button type="button" class="live-more-replies" onclick={loadMoreReplies}>
 					💬 さらに表示する（残り{remainingReplyCount}件）
 				</button>
+			{:else if replies.length === 0 && post.reply_count > 0}
+				<p class="live-reply-status">返信を表示できませんでした</p>
 			{/if}
-		{:else if post.reply_count > 0}
-			<p class="live-reply-status">返信を表示できませんでした</p>
 		{/if}
 	</div>
 </PostRow>
