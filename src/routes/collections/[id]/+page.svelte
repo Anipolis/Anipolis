@@ -45,9 +45,40 @@ const reorderItems = $derived(
 	collection.items.map((anime) => ({ id: Number(anime.id), title: anime.title, cover_url: anime.cover_url })),
 );
 
-async function saveOrder(animeIds: number[]) {
-	await saveItems(animeIds);
+// 並べ替え中の並び（変えるまでは null）。保存とキャンセルはタイトル横のボタンで行う
+let pendingOrder = $state<number[] | null>(null);
+let savingOrder = $state(false);
+let orderError = $state("");
+const orderChanged = $derived(
+	pendingOrder !== null &&
+		(pendingOrder.length !== reorderItems.length ||
+			pendingOrder.some((id, index) => id !== reorderItems[index]?.id)),
+);
+
+function startReorder() {
+	pendingOrder = null;
+	orderError = "";
+	reordering = true;
+}
+
+function cancelReorder() {
 	reordering = false;
+	pendingOrder = null;
+	orderError = "";
+}
+
+async function saveOrder() {
+	if (!pendingOrder || savingOrder) return;
+	savingOrder = true;
+	orderError = "";
+	try {
+		await saveItems(pendingOrder);
+		cancelReorder();
+	} catch (saveError) {
+		orderError = saveError instanceof Error ? saveError.message : "保存に失敗しました";
+	} finally {
+		savingOrder = false;
+	}
 }
 
 // 「リンクをコピー」は今は動いていないので隠しておく（直したら true に戻す）
@@ -97,53 +128,72 @@ async function copyLink() {
 				<UserAvatar src={collection.owner.avatar_url} username={ownerName} size="xs" />
 				<span>{ownerName}のコレクション</span>
 			</a>
-			<h1 class="collection-title">
-				{collection.title}
-				{#if !collection.is_public}
-					<span class="collection-private-badge">
-						<span class="i-lucide-lock-keyhole" aria-hidden="true"></span>
-						非公開
-					</span>
+			<div class="collection-title-row">
+				<h1 class="collection-title">
+					{collection.title}
+					{#if !collection.is_public}
+						<span class="collection-private-badge">
+							<span class="i-lucide-lock-keyhole" aria-hidden="true"></span>
+							非公開
+						</span>
+					{/if}
+				</h1>
+				{#if data.isOwn && reordering}
+					<div class="collection-tools">
+						<button type="button" class="btn btn-ghost" disabled={savingOrder} onclick={cancelReorder}>
+							キャンセル
+						</button>
+						<button
+							type="button"
+							class="btn {orderChanged ? 'btn-primary' : 'btn-secondary'}"
+							disabled={!orderChanged || savingOrder}
+							onclick={saveOrder}
+						>
+							{savingOrder ? '保存中...' : '保存する'}
+						</button>
+					</div>
+				{:else if data.isOwn}
+					<div class="collection-tools">
+						<button
+							type="button"
+							class="collection-tool"
+							aria-label="作品を追加"
+							title="作品を追加"
+							disabled={collection.items.length >= MAX_COLLECTION_ITEMS}
+							onclick={() => (adding = true)}
+						>
+							<span class="i-lucide-plus" aria-hidden="true"></span>
+						</button>
+						<button
+							type="button"
+							class="collection-tool"
+							aria-label="題名・説明・公開を編集"
+							title="編集"
+							onclick={() => (editingInfo = true)}
+						>
+							<span class="i-lucide-pencil" aria-hidden="true"></span>
+						</button>
+						<button
+							type="button"
+							class="collection-tool"
+							aria-label="並べ替え・作品を外す"
+							title="並べ替え"
+							disabled={collection.items.length === 0}
+							onclick={startReorder}
+						>
+							<span class="i-lucide-arrow-up-down" aria-hidden="true"></span>
+						</button>
+					</div>
 				{/if}
-			</h1>
+			</div>
+			{#if orderError}
+				<p class="field-error-msg" role="alert">{orderError}</p>
+			{/if}
 			{#if collection.description}
 				<p class="collection-description">{collection.description}</p>
 			{/if}
 			<p class="collection-meta">{collection.items.length}作品・{updatedLabel}更新</p>
 
-			{#if data.isOwn && !reordering}
-				<div class="collection-tools">
-					<button
-						type="button"
-						class="collection-tool"
-						aria-label="作品を追加"
-						title="作品を追加"
-						disabled={collection.items.length >= MAX_COLLECTION_ITEMS}
-						onclick={() => (adding = true)}
-					>
-						<span class="i-lucide-plus" aria-hidden="true"></span>
-					</button>
-					<button
-						type="button"
-						class="collection-tool"
-						aria-label="題名・説明・公開を編集"
-						title="編集"
-						onclick={() => (editingInfo = true)}
-					>
-						<span class="i-lucide-pencil" aria-hidden="true"></span>
-					</button>
-					<button
-						type="button"
-						class="collection-tool"
-						aria-label="並べ替え・作品を外す"
-						title="並べ替え"
-						disabled={collection.items.length === 0}
-						onclick={() => (reordering = true)}
-					>
-						<span class="i-lucide-arrow-up-down" aria-hidden="true"></span>
-					</button>
-				</div>
-			{/if}
 			{#if SHOW_COPY_LINK && collection.is_public}
 				<div class="collection-actions">
 					<button type="button" class="btn btn-secondary collection-action" onclick={copyLink}>
@@ -155,7 +205,13 @@ async function copyLink() {
 		</header>
 
 		{#if reordering}
-			<CollectionReorder items={reorderItems} onsave={saveOrder} oncancel={() => (reordering = false)} />
+			<CollectionReorder
+				items={reorderItems}
+				disabled={savingOrder}
+				onchange={(ids) => {
+					pendingOrder = ids;
+				}}
+			/>
 		{:else if collection.items.length === 0}
 			<div class="empty-state">
 				<p>
@@ -226,10 +282,17 @@ async function copyLink() {
 {/if}
 
 <style>
+.collection-title-row {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px;
+}
 .collection-tools {
 	display: flex;
+	flex-shrink: 0;
+	align-items: center;
 	gap: 8px;
-	margin-top: 4px;
 }
 .collection-tool {
 	display: flex;

@@ -14,53 +14,47 @@ afterEach(async () => {
 	cleanup = null;
 });
 
-function render() {
-	const onsave = vi.fn(async (_ids: number[]) => {});
-	const oncancel = vi.fn();
+function render(disabled = false) {
+	const onchange = vi.fn((_ids: number[]) => {});
 	const target = document.body.appendChild(document.createElement("div"));
-	const component = mount(CollectionReorder, { target, props: { items, onsave, oncancel } });
+	const component = mount(CollectionReorder, { target, props: { items, onchange, disabled } });
 	cleanup = async () => {
 		await unmount(component);
 		target.remove();
 	};
 	const card = (index: number) => target.querySelector<HTMLElement>(`[data-reorder-index="${index}"]`);
-	const saveButton = () =>
-		[...target.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent?.includes("保存"));
-	return { target, onsave, oncancel, card, saveButton };
+	return { onchange, card };
 }
 
 const press = (el: HTMLElement | null, key: string) =>
 	el?.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
 
-it("変えるまでは保存できない", async () => {
-	const { saveButton } = render();
-	await tick();
-	expect(saveButton()?.disabled).toBe(true);
-});
-
-it("矢印キーで動かし、Delete で外して、その並びで保存する", async () => {
-	const { card, onsave, saveButton } = render();
+it("矢印キーで動かし、Delete で外すたびに、その並びを知らせる", async () => {
+	const { card, onchange } = render();
 	await tick();
 	press(card(0), "ArrowRight");
 	await tick();
+	expect(onchange).toHaveBeenLastCalledWith([2, 1, 3]);
 	// 動かした作品にキーボードの位置が付いていく
 	expect(document.activeElement).toBe(card(1));
 	press(card(2), "Delete");
 	await tick();
-	saveButton()?.click();
-	await tick();
-	expect(onsave).toHaveBeenCalledWith([2, 1]);
+	expect(onchange).toHaveBeenLastCalledWith([2, 1]);
 });
 
-it("保存に失敗したら、その文を出して並べ替えを続けられる", async () => {
-	const { target, card, onsave, saveButton } = render();
-	onsave.mockRejectedValueOnce(new Error("保存できませんでした"));
+it("端より先へは動かさない", async () => {
+	const { card, onchange } = render();
 	await tick();
+	press(card(0), "ArrowLeft");
+	await tick();
+	expect(onchange).not.toHaveBeenCalled();
+});
+
+it("保存中は動かせない", async () => {
+	const { card, onchange } = render(true);
+	await tick();
+	press(card(0), "ArrowRight");
 	press(card(0), "Delete");
 	await tick();
-	saveButton()?.click();
-	await vi.waitFor(() =>
-		expect(target.querySelector('[role="alert"]')?.textContent).toContain("保存できませんでした"),
-	);
-	expect(saveButton()?.disabled).toBe(false);
+	expect(onchange).not.toHaveBeenCalled();
 });
