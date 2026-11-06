@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { Snippet } from "svelte";
+import { type Snippet, tick } from "svelte";
 import { contentWarningSubject, hasContentWarning } from "$lib/content-warning";
 import type { Post } from "$lib/types";
 
@@ -14,21 +14,24 @@ let { post, children }: Props = $props();
 const guarded = $derived(hasContentWarning(post));
 const contentId = $derived(`post-cw-content-${post.id}`);
 let revealed = $state(false);
+let body = $state<HTMLDivElement>();
+
+async function reveal(e: MouseEvent) {
+	e.stopPropagation();
+	revealed = true;
+	// 押したボタンが消えるので、キーボードの位置を開いた中身へ移す
+	await tick();
+	body?.focus({ preventScroll: true });
+}
 </script>
 
 {#if guarded}
-	<button
-		type="button"
-		class="post-cw-banner"
-		class:post-cw-banner--revealed={revealed}
-		aria-expanded={revealed}
-		aria-controls={contentId}
-		onclick={(e) => { e.stopPropagation(); revealed = !revealed; }}
-	>
-		<span class="post-cw-main">
+	<!-- 押すと文字ごと消えて中身が開く。隠し直す操作は置かない -->
+	{#if !revealed}
+		<button type="button" class="post-cw-banner" aria-expanded="false" aria-controls={contentId} onclick={reveal}>
 			<svg
-				width="18"
-				height="18"
+				width="16"
+				height="16"
 				viewBox="0 0 24 24"
 				fill="none"
 				stroke="currentColor"
@@ -41,10 +44,9 @@ let revealed = $state(false);
 				<line x1="12" y1="9" x2="12" y2="13" />
 				<line x1="12" y1="17" x2="12.01" y2="17" />
 			</svg>
-			<span> {contentWarningSubject(post)}ネタバレを{revealed ? '展開中' : '含みます'} </span>
-		</span>
-		<span class="post-cw-tap">{revealed ? 'クリックで隠す △' : 'タップして表示 ▽'}</span>
-	</button>
+			<span class="post-cw-label">{contentWarningSubject(post)}ネタバレを表示</span>
+		</button>
+	{/if}
 	<!-- 折り畳み中は中のリンク・ボタン・画像を操作や読み上げの対象から外す -->
 	<div
 		id={contentId}
@@ -53,7 +55,7 @@ let revealed = $state(false);
 		aria-hidden={!revealed}
 		inert={!revealed}
 	>
-		<div class="post-cw-content-body">{@render children()}</div>
+		<div class="post-cw-content-body" tabindex="-1" bind:this={body}>{@render children()}</div>
 	</div>
 {:else}
 	{@render children()}
@@ -61,60 +63,28 @@ let revealed = $state(false);
 
 <style>
 .post-cw-banner {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 10px;
-	width: 100%;
-	padding: 10px 12px;
-	margin: 4px 0;
-	border: 1px solid var(--color-warning, #f59e0b);
-	background: color-mix(in srgb, var(--color-warning, #f59e0b) 8%, transparent);
-	border-radius: var(--radius-md, 12px);
-	cursor: pointer;
-	font-size: 14px;
-	text-align: center;
-	color: var(--color-text);
-	line-height: 1.4;
-	transition:
-		background 0.2s ease,
-		border-color 0.2s ease;
-}
-.post-cw-banner:hover {
-	background: color-mix(in srgb, var(--color-warning, #f59e0b) 16%, transparent);
-}
-.post-cw-banner--revealed {
-	border-color: var(--color-border);
-	background: color-mix(in srgb, var(--color-surface, #ffffff) 96%, var(--color-text-muted));
-	color: var(--color-text-muted);
-	border-bottom-right-radius: 4px;
-	border-bottom-left-radius: 4px;
-}
-.post-cw-banner--revealed:hover {
-	background: color-mix(in srgb, var(--color-surface, #ffffff) 92%, var(--color-text-muted));
-}
-.post-cw-main {
 	display: inline-flex;
 	align-items: center;
-	justify-content: center;
-	min-width: 0;
-	gap: 8px;
-	font-weight: 700;
+	gap: 6px;
+	min-height: 36px;
+	padding: 4px 0;
+	border: 0;
+	background: none;
+	cursor: pointer;
+	font-size: 14px;
+	text-align: left;
+	color: var(--color-text-muted);
+	line-height: 1.4;
 }
-.post-cw-banner--revealed .post-cw-main {
-	font-weight: 500;
-}
-.post-cw-main svg {
+.post-cw-banner svg {
 	color: var(--color-warning, #f59e0b);
 	flex-shrink: 0;
 }
-.post-cw-banner--revealed .post-cw-main svg {
-	color: var(--color-text-muted);
-}
-.post-cw-tap {
-	flex-shrink: 0;
-	font-size: 12px;
-	color: var(--color-text-muted);
+.post-cw-banner:hover .post-cw-label,
+.post-cw-banner:focus-visible .post-cw-label {
+	color: var(--color-text);
+	text-decoration: underline;
+	text-underline-offset: 3px;
 }
 .post-cw-content {
 	display: grid;
@@ -127,20 +97,8 @@ let revealed = $state(false);
 .post-cw-content-body {
 	min-height: 0;
 	overflow: hidden;
-	padding-top: 0;
-	transition: padding-top 0.3s ease;
 }
-.post-cw-content--revealed .post-cw-content-body {
-	padding-top: 8px;
-}
-
-@media (max-width: 640px) {
-	.post-cw-banner {
-		flex-direction: column;
-		align-items: stretch;
-	}
-	.post-cw-tap {
-		text-align: center;
-	}
+.post-cw-content-body:focus {
+	outline: none;
 }
 </style>
