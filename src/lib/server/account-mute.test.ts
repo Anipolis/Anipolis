@@ -126,4 +126,12 @@ describe("191 の migration", () => {
 		expect(sql).toContain("CHECK (muter_id <> muted_id)");
 		expect(sql).toContain("REVOKE ALL ON public.user_mutes FROM anon;");
 	});
+
+	it("フォロー中タイムラインは、重複を除く前にミュートした人の投稿とリポストを外す", () => {
+		const fn = sql.slice(sql.indexOf("CREATE OR REPLACE FUNCTION public.get_following_timeline"));
+		const events = fn.slice(0, fn.indexOf("deduplicated AS"));
+		expect(events).toContain("m.muted_id = p.user_id");
+		expect(events).toContain("m.muted_id = r.user_id");
+		expect(fn).toContain("SECURITY INVOKER");
+	});
 });
