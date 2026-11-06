@@ -92,6 +92,15 @@ const activeTab = $derived(
 );
 const bioRemaining = $derived(160 - editBio.length);
 const editableHeaderUrl = $derived(headerPreviewUrl ?? (headerPendingDelete ? null : profile.header_url));
+// 何か変えるまで「保存する」は押せない（ux-guidelines「色と強調」）
+const profileChanged = $derived(
+	editDisplayName !== (profile.display_name ?? "") ||
+		editBio !== (profile.bio ?? "") ||
+		headerPreviewUrl !== null ||
+		headerPendingDelete ||
+		avatarPreviewUrl !== null ||
+		avatarPendingDelete,
+);
 const editableAvatarUrl = $derived(avatarPreviewUrl ?? (avatarPendingDelete ? null : profile.avatar_url));
 
 // ミュートは相手に伝わらず、フォローも残るので確認は出さない
@@ -876,8 +885,8 @@ function listButtonFor(anime: Anime) {
 							</button>
 							<button
 								type="submit"
-								class="btn btn-primary"
-								disabled={profileSubmitting || headerUploading}
+								class="btn {profileChanged ? 'btn-primary' : 'btn-secondary'}"
+								disabled={profileSubmitting || headerUploading || !profileChanged}
 							>
 								{profileSubmitting ? '保存中...' : '保存する'}
 							</button>

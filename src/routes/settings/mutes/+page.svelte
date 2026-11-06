@@ -4,6 +4,7 @@ import { untrack } from "svelte";
 import { enhance } from "$app/forms";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
+import { trackFormChanges } from "$lib/actions/trackFormChanges";
 import InfoTip from "$lib/components/InfoTip.svelte";
 import SettingsBackLink from "$lib/components/SettingsBackLink.svelte";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
@@ -48,12 +49,14 @@ function muteStatusLabel(mute: AnimeMute): string {
 	return mute.is_repeat ? `放送後${days}日間（毎週）` : `放送後${days}日間`;
 }
 
+// 開いている設定（一度に1つ）を、今のミュートから変えたか。新しく設定するときは変えなくても保存できる
+let muteFormChanged = $state(false);
+
 function toggleEdit(animeId: string) {
 	editingAnimeId = editingAnimeId === animeId ? null : animeId;
-	if (editingAnimeId !== animeId) {
-		const { [animeId]: _removed, ...rest } = pendingMuteType;
-		pendingMuteType = rest;
-	}
+	// 開くのは一度に1つなので、閉じる・切り替えるときは保存していない選択を捨てる
+	// （残すと開き直したときにそれが基準になり、変更なしと見なされて保存できない）
+	pendingMuteType = {};
 }
 
 const updateSubmit: SubmitFunction = ({ formData }) => {
@@ -105,7 +108,13 @@ const activeTab = $derived.by((): "word" | "anime" | "account" => {
 
 {#snippet muteForm(_animeId: string, _mute: AnimeMute | null)}
 	{@const currentMuteType = getMuteType(_animeId, _mute)}
-	<form method="POST" action="?/updateAnimeMute" use:enhance={updateSubmit} class="mute-accordion-form">
+	<form
+		method="POST"
+		action="?/updateAnimeMute"
+		use:enhance={updateSubmit}
+		use:trackFormChanges={(changed) => (muteFormChanged = changed)}
+		class="mute-accordion-form"
+	>
 		<input type="hidden" name="anime_id" value={_animeId}>
 		<div class="mute-type-row">
 			<label class="mute-type-label">
@@ -144,7 +153,13 @@ const activeTab = $derived.by((): "word" | "anime" | "account" => {
 			</div>
 		{/if}
 		<div class="mute-accordion-actions">
-			<button type="submit" class="btn btn-primary btn-sm">保存</button>
+			<button
+				type="submit"
+				class="btn {_mute === null || muteFormChanged ? 'btn-primary' : 'btn-secondary'} btn-sm"
+				disabled={_mute !== null && !muteFormChanged}
+			>
+				保存
+			</button>
 		</div>
 	</form>
 {/snippet}
