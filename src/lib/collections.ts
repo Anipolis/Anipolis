@@ -83,6 +83,16 @@ export type CollectionInputResult =
 	| { ok: true; value: CollectionInput }
 	| { ok: false; field: "title" | "description" | "tiers"; message: string };
 
+/** 段の名前の並びを確かめる（DB の制約と同じ）。よければ null */
+export function collectionTiersError(tiers: string[]): string | null {
+	if (tiers.length === 0 || tiers.some((label) => !label)) return "段の名前を入力してください";
+	if (tiers.length > MAX_COLLECTION_TIERS) return `段は${MAX_COLLECTION_TIERS}個までです`;
+	if (tiers.some((label) => label.length > MAX_COLLECTION_TIER_LABEL_LENGTH)) {
+		return `段の名前は${MAX_COLLECTION_TIER_LABEL_LENGTH}文字以内で入力してください`;
+	}
+	return null;
+}
+
 /** フォームの値を確かめて整える（題名は前後の空白を落とし、空の説明は null にする） */
 export function parseCollectionInput(form: FormData): CollectionInputResult {
 	const title = String(form.get("title") ?? "").trim();
@@ -109,19 +119,8 @@ export function parseCollectionInput(form: FormData): CollectionInputResult {
 			const origin = Number(origins[index] ?? "");
 			return origins[index] && Number.isInteger(origin) && origin >= 0 ? origin : null;
 		});
-		if (tiers.length === 0 || tiers.some((label) => !label)) {
-			return { ok: false, field: "tiers", message: "段の名前を入力してください" };
-		}
-		if (tiers.length > MAX_COLLECTION_TIERS) {
-			return { ok: false, field: "tiers", message: `段は${MAX_COLLECTION_TIERS}個までです` };
-		}
-		if (tiers.some((label) => label.length > MAX_COLLECTION_TIER_LABEL_LENGTH)) {
-			return {
-				ok: false,
-				field: "tiers",
-				message: `段の名前は${MAX_COLLECTION_TIER_LABEL_LENGTH}文字以内で入力してください`,
-			};
-		}
+		const tiersError = collectionTiersError(tiers);
+		if (tiersError) return { ok: false, field: "tiers", message: tiersError };
 	}
 	return {
 		ok: true,

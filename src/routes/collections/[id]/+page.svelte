@@ -1,11 +1,12 @@
 <script lang="ts">
-import { invalidateAll } from "$app/navigation";
+import { untrack } from "svelte";
+import { beforeNavigate, invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
-import { toAnimePick } from "$lib/anime-picker";
+import { type AnimePick, toAnimePick } from "$lib/anime-picker";
 import { collectionKindPrefix, collectionTierColor, MAX_COLLECTION_ITEMS, orderByTier } from "$lib/collections";
 import AnimePickerModal from "$lib/components/AnimePickerModal.svelte";
+import CollectionBoard from "$lib/components/CollectionBoard.svelte";
 import CollectionFormModal from "$lib/components/CollectionFormModal.svelte";
-import CollectionReorder from "$lib/components/CollectionReorder.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
 import type { PageProps } from "./$types";
 
@@ -22,22 +23,60 @@ const updatedLabel = $derived(
 	}),
 );
 
-// 持ち主だけの道具: 作品を足す（＋）・題名などを直す（鉛筆）・並べ替える
+// 持ち主だけの道具: 作品を足す（＋。ティア表は未分類の検索から足す）・題名などを直す（鉛筆）
 let adding = $state(false);
 let editingInfo = $state(false);
-let reordering = $state(false);
 
-/** 並びを丸ごと保存する（足す・並べ替える・外すのどれも、この形で送る） */
-async function saveItems(animeIds: number[], tiers?: (number | null)[]) {
-	const response = await fetch(`/api/collections/${collection.id}/items`, {
+/** 保存先。操作した時点のコレクションに固定する（保存待ちのまま別のコレクションへ移っても、そちらへ送らない） */
+type SaveTarget = { id: string; tiered: boolean };
+
+function saveTarget(): SaveTarget {
+	return { id: collection.id, tiered: collection.kind === "tier" };
+}
+
+async function putJson(collectionId: string, path: string, body: unknown, fallback: string, keepalive = false) {
+	const response = await fetch(`/api/collections/${collectionId}/${path}`, {
 		method: "PUT",
 		headers: { "Content-Type": "application/json" },
-		// 段を送らないときは、DB が今の段を引き継ぐ（192）
-		body: JSON.stringify(tiers ? { animeIds, tiers } : { animeIds }),
+		body: JSON.stringify(body),
+		keepalive,
 	});
 	const res = (await response.json().catch(() => ({}))) as { message?: string };
-	if (!response.ok) throw new Error(res.message ?? "コレクションの保存に失敗しました");
-	await invalidateAll();
+	if (!response.ok) throw new Error(res.message ?? fallback);
+}
+
+/** 並びを丸ごと保存する（段を送らないときは、DB が今の段を引き継ぐ。192） */
+function putItems(to: SaveTarget, animeIds: number[], tiers: (number | null)[], keepalive = false) {
+	return putJson(
+		to.id,
+		"items",
+		to.tiered ? { animeIds, tiers } : { animeIds },
+		"コレクションの保存に失敗しました",
+		keepalive,
+	);
+}
+
+/** ＋を開いたときの並び（自動保存の読み直しを待たず、編集面の最新の並びから作る） */
+let pickerInitial = $state<AnimePick[]>([]);
+
+function openPicker() {
+	const byId = new Map(collection.items.map((anime) => [Number(anime.id), anime]));
+	pickerInitial = currentSnapshot()
+		.ids.map((id) => byId.get(id))
+		.filter((anime) => anime !== undefined)
+		.map(toAnimePick);
+	adding = true;
+}
+
+/** ＋から足したとき。足した作品だけを最新の並びの後ろに足し、編集面を作り直す */
+function saveItems(animeIds: number[]) {
+	const to = saveTarget();
+	return whileBoardBusy(async () => {
+		await flushItems();
+		const current = currentSnapshot().ids;
+		await putItems({ ...to, tiered: false }, [...current, ...animeIds.filter((id) => !current.includes(id))], []);
+		await resetBoard();
+	});
 }
 
 const isTier = $derived(collection.kind === "tier");
@@ -72,47 +111,168 @@ const tierRows = $derived.by(() => {
 	].filter((row) => row.key !== "none" || row.animes.length > 0);
 });
 
-// 並べ替え中の並び（変えるまでは null）。保存とキャンセルはタイトル横のボタンで行う
-let pendingOrder = $state<number[] | null>(null);
-let pendingTiers = $state<(number | null)[] | null>(null);
-let savingOrder = $state(false);
-let orderError = $state("");
-const orderChanged = $derived(
-	pendingOrder !== null &&
-		(pendingOrder.length !== reorderItems.length ||
-			pendingOrder.some((id, index) => id !== reorderItems[index]?.id) ||
-			(isTier &&
-				pendingTiers !== null &&
-				pendingTiers.some((tier, index) => tier !== (reorderItems[index]?.tier ?? null)))),
-);
+// ---- 編集面（持ち主）: 動かすたびに自動で保存する ----
 
-function startReorder() {
-	pendingOrder = null;
-	pendingTiers = null;
-	orderError = "";
-	reordering = true;
-}
+// 作り直すとき（＋で足した・元に戻した・保存に失敗した・種類や段をモーダルで変えた）に増やす
+let boardVersion = $state(0);
+// 編集面は、開いたときの並び・段から自分で持つ。段をその場で変えても作り直さない（付け替えた段が古い data で戻らないように）
+const boardKey = $derived(`${collection.id}:${collection.kind}:${boardVersion}`);
+type Snapshot = { ids: number[]; tiers: (number | null)[] };
+// 最後に知らされた並び（保存待ちを含む）と、元に戻す先
+let latest: Snapshot | null = null;
+let undoTo = $state<Snapshot | null>(null);
+// 続けて動かしている間（少し手を止めるまで）は、ひとまとまりの操作として元に戻す
+let undoGroupTimer: ReturnType<typeof setTimeout> | null = null;
+let itemsTimer: ReturnType<typeof setTimeout> | null = null;
+let queued: (Snapshot & { to: SaveTarget }) | null = null;
+let saveChain: Promise<void> = Promise.resolve();
+let saving = $state(0);
+let saveError = $state("");
+// 保存して作り直すまで（元に戻す・＋で足す・鉛筆のモーダルを開く/閉じる）は、編集面を触れなくする。
+// その間に動かした分が、古い data での作り直しで消えて、表示と保存が食い違わないように
+let boardBusy = $state(false);
 
-function cancelReorder() {
-	reordering = false;
-	pendingOrder = null;
-	pendingTiers = null;
-	orderError = "";
-}
-
-async function saveOrder() {
-	if (!pendingOrder || savingOrder) return;
-	savingOrder = true;
-	orderError = "";
+async function whileBoardBusy(task: () => Promise<void>) {
+	boardBusy = true;
 	try {
-		await saveItems(pendingOrder, isTier ? (pendingTiers ?? undefined) : undefined);
-		cancelReorder();
-	} catch (saveError) {
-		orderError = saveError instanceof Error ? saveError.message : "保存に失敗しました";
+		await task();
 	} finally {
-		savingOrder = false;
+		boardBusy = false;
 	}
 }
+
+function currentSnapshot(): Snapshot {
+	return latest ?? { ids: reorderItems.map((item) => item.id), tiers: reorderItems.map((item) => item.tier) };
+}
+
+async function resetBoard() {
+	latest = null;
+	// 作り直す前の段番号で戻さないように、元に戻す先も捨てる（モーダルで段を変えたときなど）
+	undoTo = null;
+	await invalidateAll();
+	boardVersion += 1;
+}
+
+// 保存に失敗したら増やす。失敗より前に積んだ保存は、失敗した状態を前提にしているので送らない
+let saveGeneration = 0;
+
+function enqueue(task: () => Promise<void>) {
+	const generation = saveGeneration;
+	saving += 1;
+	saveChain = saveChain
+		.then(() => (generation === saveGeneration ? task() : undefined))
+		// 続けて動かしていなければ、件数や更新日を読み直す（編集面は作り直さない）
+		.then(() => (queued || itemsTimer ? undefined : invalidateAll()))
+		.catch(async (taskError: unknown) => {
+			saveGeneration += 1;
+			saveError = `${taskError instanceof Error ? taskError.message : "保存に失敗しました"}。保存できている状態に戻しました`;
+			undoTo = null;
+			queued = null;
+			if (itemsTimer) clearTimeout(itemsTimer);
+			itemsTimer = null;
+			await whileBoardBusy(resetBoard);
+		})
+		.finally(() => {
+			saving -= 1;
+		});
+	return saveChain;
+}
+
+/** 待っている並びの保存をすぐ送る */
+function flushItems(keepalive = false) {
+	if (itemsTimer) clearTimeout(itemsTimer);
+	itemsTimer = null;
+	const next = queued;
+	queued = null;
+	if (!next) return saveChain;
+	return enqueue(() => putItems(next.to, next.ids, next.tiers, keepalive));
+}
+
+function onBoardChange(ids: number[], tiers: (number | null)[]) {
+	const previous = currentSnapshot();
+	latest = { ids, tiers };
+	queued = { ...latest, to: saveTarget() };
+	saveError = "";
+	// 元に戻す先は、一続きの操作の前の並び（矢印キーで続けて動かしたときなど）
+	if (!undoGroupTimer) undoTo = previous;
+	else clearTimeout(undoGroupTimer);
+	undoGroupTimer = setTimeout(() => (undoGroupTimer = null), 1500);
+	if (itemsTimer) clearTimeout(itemsTimer);
+	itemsTimer = setTimeout(() => void flushItems(), 500);
+}
+
+function onTiersChange(tiers: string[], origins: (number | null)[], animeIds: number[], animeTiers: (number | null)[]) {
+	saveError = "";
+	// 段の番号が変わるので、元に戻すのはやめる（作品の段は DB の関数が一緒に付け替える）
+	undoTo = null;
+	const to = saveTarget();
+	void flushItems();
+	void enqueue(() => putJson(to.id, "tiers", { tiers, origins }, "段の保存に失敗しました"));
+	// 付け替えたあとの並びを、次の操作の元に戻す先にする（古い data の段番号へ戻さない）
+	latest = { ids: animeIds, tiers: animeTiers };
+}
+
+async function undo() {
+	const target = undoTo;
+	if (!target) return;
+	const to = saveTarget();
+	undoTo = null;
+	if (undoGroupTimer) clearTimeout(undoGroupTimer);
+	undoGroupTimer = null;
+	queued = null;
+	if (itemsTimer) clearTimeout(itemsTimer);
+	itemsTimer = null;
+	await whileBoardBusy(async () => {
+		await enqueue(() => putItems(to, target.ids, target.tiers));
+		await resetBoard();
+	});
+}
+
+// ページを離れる前に、待っている保存を送る
+beforeNavigate(() => {
+	void flushItems(true);
+});
+
+/** タブを閉じるときは、先の保存を待たずに最後の並びをすぐ送る（待つと送る前にページが終わる） */
+function sendQueuedNow() {
+	if (itemsTimer) clearTimeout(itemsTimer);
+	itemsTimer = null;
+	const next = queued;
+	queued = null;
+	if (next) void putItems(next.to, next.ids, next.tiers, true).catch(() => {});
+}
+
+// 別のコレクションへ移ったら、編集の状態を持ち越さない（待っていた保存は beforeNavigate で元の保存先へ送り済み）
+let editingFor = untrack(() => collection.id);
+$effect.pre(() => {
+	const id = collection.id;
+	if (id === editingFor) return;
+	editingFor = id;
+	latest = null;
+	undoTo = null;
+	saveError = "";
+	if (undoGroupTimer) clearTimeout(undoGroupTimer);
+	undoGroupTimer = null;
+});
+
+/** 鉛筆: 段の保存と読み直しが終わってから開く（モーダルは開いたときの段を使うので、古い段で上書きしないように） */
+function openEdit() {
+	return whileBoardBusy(async () => {
+		await flushItems();
+		await saveChain;
+		await invalidateAll();
+		editingInfo = true;
+	});
+}
+
+$effect(() => {
+	const onPageHide = sendQueuedNow;
+	window.addEventListener("pagehide", onPageHide);
+	return () => {
+		window.removeEventListener("pagehide", onPageHide);
+		if (undoGroupTimer) clearTimeout(undoGroupTimer);
+	};
+});
 
 // 「リンクをコピー」は今は動いていないので隠しておく（直したら true に戻す）
 const SHOW_COPY_LINK = false;
@@ -190,56 +350,47 @@ async function copyLink() {
 						</span>
 					{/if}
 				</h1>
-				{#if data.isOwn && reordering}
+				{#if data.isOwn}
 					<div class="collection-tools">
-						<button type="button" class="btn btn-ghost" disabled={savingOrder} onclick={cancelReorder}>
-							キャンセル
-						</button>
-						<button
-							type="button"
-							class="btn {orderChanged ? 'btn-primary' : 'btn-secondary'}"
-							disabled={!orderChanged || savingOrder}
-							onclick={saveOrder}
-						>
-							{savingOrder ? '保存中...' : '保存する'}
-						</button>
-					</div>
-				{:else if data.isOwn}
-					<div class="collection-tools">
-						<button
-							type="button"
-							class="collection-tool"
-							aria-label="作品を追加"
-							title="作品を追加"
-							disabled={collection.items.length >= MAX_COLLECTION_ITEMS}
-							onclick={() => (adding = true)}
-						>
-							<span class="i-lucide-plus" aria-hidden="true"></span>
-						</button>
+						<span class="collection-save-state" aria-live="polite">{saving > 0 ? '保存中...' : ''}</span>
+						<!-- 動かしたあとだけ出す。直前の操作（続けて動かした分はまとめて）を取り消す -->
+						{#if undoTo}
+							<button
+								type="button"
+								class="collection-tool"
+								aria-label="元に戻す"
+								title="元に戻す"
+								onclick={undo}
+							>
+								<span class="i-lucide-undo-2" aria-hidden="true"></span>
+							</button>
+						{/if}
+						{#if !isTier}
+							<button
+								type="button"
+								class="collection-tool"
+								aria-label="作品を追加"
+								title="作品を追加"
+								disabled={collection.items.length >= MAX_COLLECTION_ITEMS}
+								onclick={openPicker}
+							>
+								<span class="i-lucide-plus" aria-hidden="true"></span>
+							</button>
+						{/if}
 						<button
 							type="button"
 							class="collection-tool"
 							aria-label="題名・説明・公開を編集"
 							title="編集"
-							onclick={() => (editingInfo = true)}
+							onclick={openEdit}
 						>
 							<span class="i-lucide-pencil" aria-hidden="true"></span>
-						</button>
-						<button
-							type="button"
-							class="collection-tool"
-							aria-label="並べ替え・作品を外す"
-							title="並べ替え"
-							disabled={collection.items.length === 0}
-							onclick={startReorder}
-						>
-							<span class="i-lucide-arrow-up-down" aria-hidden="true"></span>
 						</button>
 					</div>
 				{/if}
 			</div>
-			{#if orderError}
-				<p class="field-error-msg" role="alert">{orderError}</p>
+			{#if saveError}
+				<p class="field-error-msg" role="alert">{saveError}</p>
 			{/if}
 			{#if collection.description}
 				<p class="collection-description">{collection.description}</p>
@@ -258,17 +409,18 @@ async function copyLink() {
 			{/if}
 		</header>
 
-		{#if reordering}
-			<CollectionReorder
-				items={reorderItems}
-				tiers={isTier ? collection.tiers : undefined}
-				showRank={collection.kind === 'ranking'}
-				disabled={savingOrder}
-				onchange={(ids, tiers) => {
-					pendingOrder = ids;
-					pendingTiers = tiers;
-				}}
-			/>
+		{#if data.isOwn && (isTier || collection.items.length > 0)}
+			<div class="collection-board-wrap" class:collection-board-wrap--busy={boardBusy} inert={boardBusy}>
+				{#key boardKey}
+					<CollectionBoard
+						items={reorderItems}
+						tiers={isTier ? collection.tiers : undefined}
+						showRank={collection.kind === 'ranking'}
+						onchange={onBoardChange}
+						ontierschange={onTiersChange}
+					/>
+				{/key}
+			</div>
 		{:else if collection.items.length === 0}
 			<div class="empty-state">
 				<p>
@@ -314,7 +466,7 @@ async function copyLink() {
 	<AnimePickerModal
 		title="作品を追加"
 		max={MAX_COLLECTION_ITEMS}
-		initial={collection.items.map(toAnimePick)}
+		initial={pickerInitial}
 		addOnly
 		onsave={saveItems}
 		onclose={() => {
@@ -335,13 +487,26 @@ async function copyLink() {
 			kind: collection.kind,
 			tiers: collection.tiers,
 		}}
-		onclose={() => {
+		onclose={async () => {
 			editingInfo = false;
+			// 種類や段をモーダルで変えたかもしれないので、待っている保存を送ってから編集面を作り直す
+			await whileBoardBusy(async () => {
+				await flushItems();
+				await resetBoard();
+			});
 		}}
 	/>
 {/if}
 
 <style>
+.collection-board-wrap--busy {
+	opacity: 0.6;
+	transition: opacity 0.15s;
+}
+.collection-save-state {
+	color: var(--color-text-muted);
+	font-size: 12px;
+}
 .collection-title-row {
 	display: flex;
 	align-items: flex-start;
