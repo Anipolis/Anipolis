@@ -2,7 +2,6 @@
 import { invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
 import { toAnimePick } from "$lib/anime-picker";
-import { ANIME_STATUS_ICONS, ANIME_STATUS_LABELS } from "$lib/anime-status";
 import { collectionKindPrefix, collectionTierColor, MAX_COLLECTION_ITEMS, orderByTier } from "$lib/collections";
 import AnimePickerModal from "$lib/components/AnimePickerModal.svelte";
 import CollectionFormModal from "$lib/components/CollectionFormModal.svelte";
@@ -43,8 +42,6 @@ async function saveItems(animeIds: number[], tiers?: (number | null)[]) {
 }
 
 const isTier = $derived(collection.kind === "tier");
-/** ランキングとティア表はカバーだけ並べる（題名は指すかフォーカスしたときに出す） */
-const coverOnly = $derived(collection.kind !== "list");
 const reorderItems = $derived(
 	collection.items.map((anime, index) => ({
 		id: Number(anime.id),
@@ -136,8 +133,7 @@ async function copyLink() {
 </script>
 
 {#snippet animeCard(anime: (typeof collection.items)[number], rank: number | null, eager: boolean)}
-	{@const myStatus = data.myStatuses[anime.id]}
-	<a href="/anime/{anime.id}" class="collection-card" class:collection-card--cover-only={coverOnly}>
+	<a href="/anime/{anime.id}" class="collection-card">
 		<span class="collection-card-cover" class:collection-card-cover--empty={!anime.cover_url}>
 			{#if rank !== null}
 				<span class="collection-card-rank" class:collection-card-rank--top={rank <= 3} aria-label="{rank}位"
@@ -149,30 +145,9 @@ async function copyLink() {
 			{:else}
 				<span class="collection-card-cover-empty i-lucide-clapperboard" aria-hidden="true"></span>
 			{/if}
-			{#if coverOnly}
-				{#if myStatus}
-					<span
-						class="collection-card-status-badge"
-						role="img"
-						aria-label={ANIME_STATUS_LABELS[myStatus]}
-						title={ANIME_STATUS_LABELS[myStatus]}
-					>
-						<span class={ANIME_STATUS_ICONS[myStatus]} aria-hidden="true"></span>
-					</span>
-				{/if}
-				<span class="collection-card-caption">{anime.title}</span>
-			{/if}
+			<!-- 題名はカバーに重ね、指すかフォーカスしたときだけ出す -->
+			<span class="collection-card-caption">{anime.title}</span>
 		</span>
-		{#if !coverOnly}
-			<span class="collection-card-title">{anime.title}</span>
-		{/if}
-		<!-- 見ている人のマイリストでの状態（コレクションからマイリストへつなぐ手がかり） -->
-		{#if myStatus && !coverOnly}
-			<span class="collection-card-status">
-				<span class={ANIME_STATUS_ICONS[myStatus]} aria-hidden="true"></span>
-				{ANIME_STATUS_LABELS[myStatus]}
-			</span>
-		{/if}
 	</a>
 {/snippet}
 
@@ -486,7 +461,7 @@ async function copyLink() {
 .collection-grid {
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-	gap: 18px 12px;
+	gap: 12px;
 	margin: 0;
 	padding: 16px;
 	list-style: none;
@@ -494,7 +469,7 @@ async function copyLink() {
 @media (max-width: 480px) {
 	.collection-grid {
 		grid-template-columns: repeat(3, minmax(0, 1fr));
-		gap: 14px 10px;
+		gap: 8px;
 	}
 }
 .collection-card {
@@ -517,9 +492,6 @@ async function copyLink() {
 	background: var(--color-bg-card);
 	transition: opacity 0.15s;
 }
-.collection-card:hover .collection-card-cover {
-	opacity: 0.85;
-}
 .collection-card-cover img {
 	width: 100%;
 	height: 100%;
@@ -530,7 +502,7 @@ async function copyLink() {
 	height: 24px;
 	color: var(--color-text-muted);
 }
-/* カバーに重ねる題名（ランキング・ティア表）。カバーが無い作品は常に出す */
+/* カバーに重ねる題名。カバーが無い作品は常に出す */
 .collection-card-caption {
 	position: absolute;
 	right: 0;
@@ -554,38 +526,12 @@ async function copyLink() {
 .collection-card-cover--empty .collection-card-caption {
 	opacity: 1;
 }
-.collection-card--cover-only:hover .collection-card-cover {
-	opacity: 1;
-}
-.collection-card--cover-only:focus-visible {
+.collection-card:focus-visible {
 	outline: none;
 }
-.collection-card--cover-only:focus-visible .collection-card-cover {
+.collection-card:focus-visible .collection-card-cover {
 	outline: 2px solid var(--color-accent);
 	outline-offset: 2px;
-}
-.collection-card-status-badge {
-	position: absolute;
-	top: 6px;
-	right: 6px;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	width: 22px;
-	height: 22px;
-	border-radius: 999px;
-	background: rgb(0 0 0 / 0.65);
-	color: #fff;
-	font-size: 13px;
-}
-.collection-card-title {
-	display: -webkit-box;
-	overflow: hidden;
-	font-size: 13px;
-	line-height: 1.4;
-	-webkit-box-orient: vertical;
-	-webkit-line-clamp: 2;
-	line-clamp: 2;
 }
 .collection-card-rank {
 	position: absolute;
@@ -649,12 +595,5 @@ async function copyLink() {
 	padding: 12px;
 	color: var(--color-text-muted);
 	font-size: 13px;
-}
-.collection-card-status {
-	display: inline-flex;
-	align-items: center;
-	gap: 4px;
-	color: var(--color-text-muted);
-	font-size: 12px;
 }
 </style>
