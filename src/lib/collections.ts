@@ -35,7 +35,7 @@ const COLLECTION_TIER_COLORS = [
 ];
 
 export function collectionTierColor(tier: number): string {
-	return COLLECTION_TIER_COLORS[tier % COLLECTION_TIER_COLORS.length] ?? COLLECTION_TIER_COLORS[0]!;
+	return COLLECTION_TIER_COLORS[tier % COLLECTION_TIER_COLORS.length] ?? "#ff7f7f";
 }
 
 /** 件数の前に付ける種類（「ランキング・」など。リストは付けない） */
