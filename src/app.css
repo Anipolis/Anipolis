@@ -301,6 +301,12 @@ textarea {
 	min-width: 0;
 }
 
+/* 横のトレンド欄を置かないページ（マイリスト・コレクション）。トレンド欄の分まで本文を広げる */
+.feed-column--wide {
+	flex-basis: calc(var(--feed-width) + 20px + var(--sidebar-width));
+	max-width: calc(var(--feed-width) + 20px + var(--sidebar-width));
+}
+
 .sidebar-column {
 	flex: 0 0 var(--sidebar-width);
 	min-width: 0;

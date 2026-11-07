@@ -1,7 +1,7 @@
 import { error, fail, redirect } from "@sveltejs/kit";
 import { isCollectionId, parseCollectionInput } from "$lib/collections";
 import { ensureAccountCanWrite } from "$lib/server/actions";
-import { getAnimeRankingTrending, getCollection, getTrendingHashtags } from "$lib/server/queries";
+import { getCollection } from "$lib/server/queries";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
@@ -10,12 +10,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 	const [{ user }, collection] = await Promise.all([safeGetSession(), getCollection(supabase, params.id)]);
 	if (!collection) error(404, "コレクションが見つかりません");
 
-	const [trending, animeTrending] = await Promise.all([
-		getTrendingHashtags(supabase, 10),
-		getAnimeRankingTrending(supabase, 5),
-	]);
-
-	return { collection, isOwn: user?.id === collection.owner.id, trending, animeTrending, user };
+	return { collection, isOwn: user?.id === collection.owner.id, user };
 };
 
 export const actions: Actions = {

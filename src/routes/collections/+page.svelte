@@ -1,7 +1,6 @@
 <script lang="ts">
 import { collectionKindPrefix } from "$lib/collections";
 import CollectionFormModal from "$lib/components/CollectionFormModal.svelte";
-import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();
@@ -23,7 +22,7 @@ const editing = $derived(data.collections?.find((collection) => collection.id ==
 <svelte:head><title>コレクション - Anipolis</title></svelte:head>
 
 <div class="page-container">
-	<main class="feed-column collections-page">
+	<main class="feed-column feed-column--wide collections-page">
 		<header class="collections-header">
 			<h1>コレクション</h1>
 			{#if data.collections && data.collections.length > 0}
@@ -115,10 +114,6 @@ const editing = $derived(data.collections?.find((collection) => collection.id ==
 			</ul>
 		{/if}
 	</main>
-
-	<aside class="sidebar-column">
-		<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
-	</aside>
 </div>
 
 {#if editing}
