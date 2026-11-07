@@ -6,7 +6,6 @@ import { collectionKindPrefix, collectionTierColor, MAX_COLLECTION_ITEMS, orderB
 import AnimePickerModal from "$lib/components/AnimePickerModal.svelte";
 import CollectionFormModal from "$lib/components/CollectionFormModal.svelte";
 import CollectionReorder from "$lib/components/CollectionReorder.svelte";
-import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
 import type { PageProps } from "./$types";
 
@@ -169,7 +168,7 @@ async function copyLink() {
 </svelte:head>
 
 <div class="page-container">
-	<main class="feed-column collection-page">
+	<main class="feed-column feed-column--wide collection-page">
 		<header class="collection-header">
 			{#if data.isOwn}
 				<a href="/collections" class="collection-back">
@@ -309,10 +308,6 @@ async function copyLink() {
 			</ol>
 		{/if}
 	</main>
-
-	<aside class="sidebar-column">
-		<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
-	</aside>
 </div>
 
 {#if adding}

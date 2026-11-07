@@ -10,7 +10,6 @@ import MyListModal from "$lib/components/MyListModal.svelte";
 import MyListQuickEdit from "$lib/components/MyListQuickEdit.svelte";
 import MylistSortSelect from "$lib/components/MylistSortSelect.svelte";
 import MylistStatusTabs from "$lib/components/MylistStatusTabs.svelte";
-import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import {
 	createSaveQueue,
 	DEFAULT_SAVE_ERROR_MESSAGE,
@@ -256,7 +255,7 @@ $effect(() => {
 <svelte:head> <title>マイリスト - Anipolis</title> </svelte:head>
 
 <div class="page-container">
-	<main class="feed-column mylist-page">
+	<main class="feed-column feed-column--wide mylist-page">
 		<div class="mylist-container">
 			<header class="mylist-header">
 				<div class="mylist-title-row">
@@ -386,10 +385,6 @@ $effect(() => {
 			}}
 		/>
 	{/if}
-
-	<aside class="sidebar-column">
-		<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
-	</aside>
 </div>
 
 <style>
