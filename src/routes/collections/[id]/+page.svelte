@@ -1,7 +1,7 @@
 <script lang="ts">
 import { beforeNavigate, invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
-import { toAnimePick } from "$lib/anime-picker";
+import { type AnimePick, toAnimePick } from "$lib/anime-picker";
 import { collectionKindPrefix, collectionTierColor, MAX_COLLECTION_ITEMS, orderByTier } from "$lib/collections";
 import AnimePickerModal from "$lib/components/AnimePickerModal.svelte";
 import CollectionBoard from "$lib/components/CollectionBoard.svelte";
@@ -42,10 +42,23 @@ function putItems(animeIds: number[], tiers?: (number | null)[], keepalive = fal
 	return putJson("items", tiers ? { animeIds, tiers } : { animeIds }, "コレクションの保存に失敗しました", keepalive);
 }
 
-/** ＋から足したとき。編集面を新しい並びで作り直す */
+/** ＋を開いたときの並び（自動保存の読み直しを待たず、編集面の最新の並びから作る） */
+let pickerInitial = $state<AnimePick[]>([]);
+
+function openPicker() {
+	const byId = new Map(collection.items.map((anime) => [Number(anime.id), anime]));
+	pickerInitial = currentSnapshot()
+		.ids.map((id) => byId.get(id))
+		.filter((anime) => anime !== undefined)
+		.map(toAnimePick);
+	adding = true;
+}
+
+/** ＋から足したとき。足した作品だけを最新の並びの後ろに足し、編集面を作り直す */
 async function saveItems(animeIds: number[]) {
 	await flushItems();
-	await putItems(animeIds);
+	const current = currentSnapshot().ids;
+	await putItems([...current, ...animeIds.filter((id) => !current.includes(id))]);
 	latest = null;
 	await invalidateAll();
 	boardVersion += 1;
@@ -154,14 +167,14 @@ function onBoardChange(ids: number[], tiers: (number | null)[]) {
 	itemsTimer = setTimeout(() => void flushItems(), 500);
 }
 
-function onTiersChange(tiers: string[], origins: (number | null)[]) {
+function onTiersChange(tiers: string[], origins: (number | null)[], animeIds: number[], animeTiers: (number | null)[]) {
 	saveError = "";
 	// 段の番号が変わるので、元に戻すのはやめる（作品の段は DB の関数が一緒に付け替える）
 	undoTo = null;
 	void flushItems();
 	void enqueue(() => putJson("tiers", { tiers, origins }, "段の保存に失敗しました"));
-	// 編集面の並びも同じ付け替えをしているので、次の保存の元に戻す先は保存し直したものから取る
-	latest = null;
+	// 付け替えたあとの並びを、次の操作の元に戻す先にする（古い data の段番号へ戻さない）
+	latest = { ids: animeIds, tiers: animeTiers };
 }
 
 async function undo() {
@@ -298,7 +311,7 @@ async function copyLink() {
 								aria-label="作品を追加"
 								title="作品を追加"
 								disabled={collection.items.length >= MAX_COLLECTION_ITEMS}
-								onclick={() => (adding = true)}
+								onclick={openPicker}
 							>
 								<span class="i-lucide-plus" aria-hidden="true"></span>
 							</button>
@@ -390,7 +403,7 @@ async function copyLink() {
 	<AnimePickerModal
 		title="作品を追加"
 		max={MAX_COLLECTION_ITEMS}
-		initial={collection.items.map(toAnimePick)}
+		initial={pickerInitial}
 		addOnly
 		onsave={saveItems}
 		onclose={() => {

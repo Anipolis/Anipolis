@@ -28,8 +28,16 @@ interface Props {
 	showRank?: boolean;
 	/** 並びが変わるたびに、その並びの作品 ID と段（tiers の何番目か。未分類は null）を渡す */
 	onchange: (animeIds: number[], animeTiers: (number | null)[]) => void;
-	/** 段の名前・並びが変わったとき。origins は新しい各段が元は何番目だったか（足した段は null） */
-	ontierschange?: (tiers: string[], origins: (number | null)[]) => void;
+	/**
+	 * 段の名前・並びが変わったとき。origins は新しい各段が元は何番目だったか（足した段は null）。
+	 * 作品の並びと、付け替えたあとの段も一緒に渡す（DB の関数も同じ付け替えをする）
+	 */
+	ontierschange?: (
+		tiers: string[],
+		origins: (number | null)[],
+		animeIds: number[],
+		animeTiers: (number | null)[],
+	) => void;
 }
 
 let { items, tiers, showRank = false, onchange, ontierschange }: Props = $props();
@@ -317,7 +325,12 @@ function applyTiers(nextLabels: string[], origins: (number | null)[]) {
 		order.map((item) => ({ ...item, tier: item.tier === null ? null : (oldToNew.get(item.tier) ?? null) })),
 		nextLabels.length,
 	);
-	ontierschange?.(nextLabels, origins);
+	ontierschange?.(
+		nextLabels,
+		origins,
+		order.map((item) => item.id),
+		order.map((item) => item.tier),
+	);
 }
 
 async function startRename(tier: number) {

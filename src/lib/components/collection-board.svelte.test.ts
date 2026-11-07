@@ -131,7 +131,7 @@ it("段の名前をその場で直すと、段の並びはそのままで知ら�
 	input.dispatchEvent(new Event("input", { bubbles: true }));
 	press(input, "Enter");
 	await tick();
-	expect(ontierschange).toHaveBeenLastCalledWith(["神", "A"], [0, 1]);
+	expect(ontierschange).toHaveBeenLastCalledWith(["神", "A"], [0, 1], [1, 2, 3], [0, 1, 1]);
 	expect(onchange).not.toHaveBeenCalled();
 });
 
@@ -149,7 +149,7 @@ it("段を消すと、残る段の番号を付け替え、消した段の作品�
 	await tick();
 	click([...target.querySelectorAll('[role="menuitem"]')].find((el) => el.textContent?.includes("この段を消す")));
 	await tick();
-	expect(ontierschange).toHaveBeenLastCalledWith(["S", "B"], [0, 2]);
+	expect(ontierschange).toHaveBeenLastCalledWith(["S", "B"], [0, 2], [1, 3, 2], [0, 1, null]);
 	// 旧 A の作品は未分類、旧 B の作品は新しい B（1番）のまま
 	expect(target.querySelector('[data-board-tier="none"] [data-board-id="2"]')).not.toBeNull();
 	expect(target.querySelector('[data-board-tier="1"] [data-board-id="3"]')).not.toBeNull();
