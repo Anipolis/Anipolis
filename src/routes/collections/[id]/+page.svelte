@@ -93,7 +93,8 @@ type Snapshot = { ids: number[]; tiers: (number | null)[] };
 // 最後に知らされた並び（保存待ちを含む）と、元に戻す先
 let latest: Snapshot | null = null;
 let undoTo = $state<Snapshot | null>(null);
-let undoTimer: ReturnType<typeof setTimeout> | null = null;
+// 続けて動かしている間（少し手を止めるまで）は、ひとまとまりの操作として元に戻す
+let undoGroupTimer: ReturnType<typeof setTimeout> | null = null;
 let itemsTimer: ReturnType<typeof setTimeout> | null = null;
 let queued: Snapshot | null = null;
 let saveChain: Promise<void> = Promise.resolve();
@@ -146,9 +147,9 @@ function onBoardChange(ids: number[], tiers: (number | null)[]) {
 	queued = latest;
 	saveError = "";
 	// 元に戻す先は、一続きの操作の前の並び（矢印キーで続けて動かしたときなど）
-	if (!undoTo) undoTo = previous;
-	if (undoTimer) clearTimeout(undoTimer);
-	undoTimer = setTimeout(() => (undoTo = null), 6000);
+	if (!undoGroupTimer) undoTo = previous;
+	else clearTimeout(undoGroupTimer);
+	undoGroupTimer = setTimeout(() => (undoGroupTimer = null), 1500);
 	if (itemsTimer) clearTimeout(itemsTimer);
 	itemsTimer = setTimeout(() => void flushItems(), 500);
 }
@@ -167,7 +168,8 @@ async function undo() {
 	const target = undoTo;
 	if (!target) return;
 	undoTo = null;
-	if (undoTimer) clearTimeout(undoTimer);
+	if (undoGroupTimer) clearTimeout(undoGroupTimer);
+	undoGroupTimer = null;
 	queued = null;
 	if (itemsTimer) clearTimeout(itemsTimer);
 	itemsTimer = null;
@@ -194,7 +196,7 @@ $effect(() => {
 	window.addEventListener("pagehide", onPageHide);
 	return () => {
 		window.removeEventListener("pagehide", onPageHide);
-		if (undoTimer) clearTimeout(undoTimer);
+		if (undoGroupTimer) clearTimeout(undoGroupTimer);
 	};
 });
 
@@ -277,6 +279,18 @@ async function copyLink() {
 				{#if data.isOwn}
 					<div class="collection-tools">
 						<span class="collection-save-state" aria-live="polite">{saving > 0 ? '保存中...' : ''}</span>
+						<!-- 動かしたあとだけ出す。直前の操作（続けて動かした分はまとめて）を取り消す -->
+						{#if undoTo}
+							<button
+								type="button"
+								class="collection-tool"
+								aria-label="元に戻す"
+								title="元に戻す"
+								onclick={undo}
+							>
+								<span class="i-lucide-undo-2" aria-hidden="true"></span>
+							</button>
+						{/if}
 						{#if !isTier}
 							<button
 								type="button"
@@ -385,13 +399,6 @@ async function copyLink() {
 	/>
 {/if}
 
-{#if undoTo}
-	<div class="collection-undo" role="status">
-		<span>保存しました</span>
-		<button type="button" class="collection-undo-button" onclick={undo}>元に戻す</button>
-	</div>
-{/if}
-
 {#if editingInfo}
 	<CollectionFormModal
 		mode="edit"
@@ -417,40 +424,6 @@ async function copyLink() {
 .collection-save-state {
 	color: var(--color-text-muted);
 	font-size: 12px;
-}
-.collection-undo {
-	position: fixed;
-	bottom: 24px;
-	left: 50%;
-	z-index: 1000;
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	padding: 10px 12px 10px 16px;
-	border: 1px solid var(--color-border);
-	border-radius: 999px;
-	background: var(--color-bg-card);
-	box-shadow: 0 8px 24px rgb(0 0 0 / 0.24);
-	font-size: 13px;
-	transform: translateX(-50%);
-}
-.collection-undo-button {
-	padding: 4px 10px;
-	border: none;
-	border-radius: 999px;
-	background: transparent;
-	color: var(--color-accent);
-	font-size: 13px;
-	font-weight: 700;
-	cursor: pointer;
-}
-.collection-undo-button:hover {
-	background: var(--color-surface-hover);
-}
-@media (max-width: 960px) {
-	.collection-undo {
-		bottom: calc(56px + 16px + env(safe-area-inset-bottom));
-	}
 }
 .collection-title-row {
 	display: flex;
