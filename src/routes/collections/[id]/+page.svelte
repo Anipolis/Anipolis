@@ -69,14 +69,14 @@ function openPicker() {
 }
 
 /** ＋から足したとき。足した作品だけを最新の並びの後ろに足し、編集面を作り直す */
-async function saveItems(animeIds: number[]) {
+function saveItems(animeIds: number[]) {
 	const to = saveTarget();
-	await flushItems();
-	const current = currentSnapshot().ids;
-	await putItems({ ...to, tiered: false }, [...current, ...animeIds.filter((id) => !current.includes(id))], []);
-	latest = null;
-	await invalidateAll();
-	boardVersion += 1;
+	return whileBoardBusy(async () => {
+		await flushItems();
+		const current = currentSnapshot().ids;
+		await putItems({ ...to, tiered: false }, [...current, ...animeIds.filter((id) => !current.includes(id))], []);
+		await resetBoard();
+	});
 }
 
 const isTier = $derived(collection.kind === "tier");
@@ -128,8 +128,18 @@ let queued: (Snapshot & { to: SaveTarget }) | null = null;
 let saveChain: Promise<void> = Promise.resolve();
 let saving = $state(0);
 let saveError = $state("");
-// 保存して作り直すまで（元に戻す）は、編集面を触れなくする
+// 保存して作り直すまで（元に戻す・＋で足す・鉛筆のモーダルを開く/閉じる）は、編集面を触れなくする。
+// その間に動かした分が、古い data での作り直しで消えて、表示と保存が食い違わないように
 let boardBusy = $state(false);
+
+async function whileBoardBusy(task: () => Promise<void>) {
+	boardBusy = true;
+	try {
+		await task();
+	} finally {
+		boardBusy = false;
+	}
+}
 
 function currentSnapshot(): Snapshot {
 	return latest ?? { ids: reorderItems.map((item) => item.id), tiers: reorderItems.map((item) => item.tier) };
@@ -207,14 +217,10 @@ async function undo() {
 	queued = null;
 	if (itemsTimer) clearTimeout(itemsTimer);
 	itemsTimer = null;
-	// 戻している間に動かした分が、作り直しで消えないように、終わるまで編集面を止める
-	boardBusy = true;
-	try {
+	await whileBoardBusy(async () => {
 		await enqueue(() => putItems(to, target.ids, target.tiers));
 		await resetBoard();
-	} finally {
-		boardBusy = false;
-	}
+	});
 }
 
 // ページを離れる前に、待っている保存を送る
@@ -245,11 +251,13 @@ $effect.pre(() => {
 });
 
 /** 鉛筆: 段の保存と読み直しが終わってから開く（モーダルは開いたときの段を使うので、古い段で上書きしないように） */
-async function openEdit() {
-	await flushItems();
-	await saveChain;
-	await invalidateAll();
-	editingInfo = true;
+function openEdit() {
+	return whileBoardBusy(async () => {
+		await flushItems();
+		await saveChain;
+		await invalidateAll();
+		editingInfo = true;
+	});
 }
 
 $effect(() => {
@@ -477,8 +485,10 @@ async function copyLink() {
 		onclose={async () => {
 			editingInfo = false;
 			// 種類や段をモーダルで変えたかもしれないので、待っている保存を送ってから編集面を作り直す
-			await flushItems();
-			await resetBoard();
+			await whileBoardBusy(async () => {
+				await flushItems();
+				await resetBoard();
+			});
 		}}
 	/>
 {/if}
