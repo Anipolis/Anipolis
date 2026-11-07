@@ -170,7 +170,7 @@ function enqueue(task: () => Promise<void>) {
 			queued = null;
 			if (itemsTimer) clearTimeout(itemsTimer);
 			itemsTimer = null;
-			await resetBoard();
+			await whileBoardBusy(resetBoard);
 		})
 		.finally(() => {
 			saving -= 1;
