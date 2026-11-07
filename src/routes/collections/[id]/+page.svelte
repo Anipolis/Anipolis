@@ -87,9 +87,8 @@ const tierRows = $derived.by(() => {
 
 // 作り直すとき（＋で足した・元に戻した・保存に失敗した・種類や段をモーダルで変えた）に増やす
 let boardVersion = $state(0);
-// 段の名前を編集面で変えたあとは、作り直さないように編集面が持っている段を使う
-let tiersOverride = $state<string[] | null>(null);
-const boardKey = $derived(`${collection.kind}:${tiersOverride ? "" : collection.tiers.join("\n")}:${boardVersion}`);
+// 編集面は、開いたときの並び・段から自分で持つ。段をその場で変えても作り直さない（付け替えた段が古い data で戻らないように）
+const boardKey = $derived(`${collection.kind}:${boardVersion}`);
 type Snapshot = { ids: number[]; tiers: (number | null)[] };
 // 最後に知らされた並び（保存待ちを含む）と、元に戻す先
 let latest: Snapshot | null = null;
@@ -107,7 +106,6 @@ function currentSnapshot(): Snapshot {
 
 async function resetBoard() {
 	latest = null;
-	tiersOverride = null;
 	await invalidateAll();
 	boardVersion += 1;
 }
@@ -157,7 +155,6 @@ function onBoardChange(ids: number[], tiers: (number | null)[]) {
 
 function onTiersChange(tiers: string[], origins: (number | null)[]) {
 	saveError = "";
-	tiersOverride = tiers;
 	// 段の番号が変わるので、元に戻すのはやめる（作品の段は DB の関数が一緒に付け替える）
 	undoTo = null;
 	void flushItems();
@@ -183,8 +180,17 @@ beforeNavigate(() => {
 	void flushItems(true);
 });
 
+/** タブを閉じるときは、先の保存を待たずに最後の並びをすぐ送る（待つと送る前にページが終わる） */
+function sendQueuedNow() {
+	if (itemsTimer) clearTimeout(itemsTimer);
+	itemsTimer = null;
+	const next = queued;
+	queued = null;
+	if (next) void putItems(next.ids, isTier ? next.tiers : undefined, true).catch(() => {});
+}
+
 $effect(() => {
-	const onPageHide = () => void flushItems(true);
+	const onPageHide = sendQueuedNow;
 	window.addEventListener("pagehide", onPageHide);
 	return () => {
 		window.removeEventListener("pagehide", onPageHide);
@@ -319,7 +325,7 @@ async function copyLink() {
 			{#key boardKey}
 				<CollectionBoard
 					items={reorderItems}
-					tiers={isTier ? (tiersOverride ?? collection.tiers) : undefined}
+					tiers={isTier ? collection.tiers : undefined}
 					showRank={collection.kind === 'ranking'}
 					onchange={onBoardChange}
 					ontierschange={onTiersChange}
