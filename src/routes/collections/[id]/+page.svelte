@@ -1,4 +1,5 @@
 <script lang="ts">
+import { untrack } from "svelte";
 import { beforeNavigate, invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
 import { type AnimePick, toAnimePick } from "$lib/anime-picker";
@@ -26,8 +27,15 @@ const updatedLabel = $derived(
 let adding = $state(false);
 let editingInfo = $state(false);
 
-async function putJson(path: string, body: unknown, fallback: string, keepalive = false) {
-	const response = await fetch(`/api/collections/${collection.id}/${path}`, {
+/** 保存先。操作した時点のコレクションに固定する（保存待ちのまま別のコレクションへ移っても、そちらへ送らない） */
+type SaveTarget = { id: string; tiered: boolean };
+
+function saveTarget(): SaveTarget {
+	return { id: collection.id, tiered: collection.kind === "tier" };
+}
+
+async function putJson(collectionId: string, path: string, body: unknown, fallback: string, keepalive = false) {
+	const response = await fetch(`/api/collections/${collectionId}/${path}`, {
 		method: "PUT",
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify(body),
@@ -38,8 +46,14 @@ async function putJson(path: string, body: unknown, fallback: string, keepalive 
 }
 
 /** 並びを丸ごと保存する（段を送らないときは、DB が今の段を引き継ぐ。192） */
-function putItems(animeIds: number[], tiers?: (number | null)[], keepalive = false) {
-	return putJson("items", tiers ? { animeIds, tiers } : { animeIds }, "コレクションの保存に失敗しました", keepalive);
+function putItems(to: SaveTarget, animeIds: number[], tiers: (number | null)[], keepalive = false) {
+	return putJson(
+		to.id,
+		"items",
+		to.tiered ? { animeIds, tiers } : { animeIds },
+		"コレクションの保存に失敗しました",
+		keepalive,
+	);
 }
 
 /** ＋を開いたときの並び（自動保存の読み直しを待たず、編集面の最新の並びから作る） */
@@ -56,9 +70,10 @@ function openPicker() {
 
 /** ＋から足したとき。足した作品だけを最新の並びの後ろに足し、編集面を作り直す */
 async function saveItems(animeIds: number[]) {
+	const to = saveTarget();
 	await flushItems();
 	const current = currentSnapshot().ids;
-	await putItems([...current, ...animeIds.filter((id) => !current.includes(id))]);
+	await putItems({ ...to, tiered: false }, [...current, ...animeIds.filter((id) => !current.includes(id))], []);
 	latest = null;
 	await invalidateAll();
 	boardVersion += 1;
@@ -101,7 +116,7 @@ const tierRows = $derived.by(() => {
 // 作り直すとき（＋で足した・元に戻した・保存に失敗した・種類や段をモーダルで変えた）に増やす
 let boardVersion = $state(0);
 // 編集面は、開いたときの並び・段から自分で持つ。段をその場で変えても作り直さない（付け替えた段が古い data で戻らないように）
-const boardKey = $derived(`${collection.kind}:${boardVersion}`);
+const boardKey = $derived(`${collection.id}:${collection.kind}:${boardVersion}`);
 type Snapshot = { ids: number[]; tiers: (number | null)[] };
 // 最後に知らされた並び（保存待ちを含む）と、元に戻す先
 let latest: Snapshot | null = null;
@@ -109,7 +124,7 @@ let undoTo = $state<Snapshot | null>(null);
 // 続けて動かしている間（少し手を止めるまで）は、ひとまとまりの操作として元に戻す
 let undoGroupTimer: ReturnType<typeof setTimeout> | null = null;
 let itemsTimer: ReturnType<typeof setTimeout> | null = null;
-let queued: Snapshot | null = null;
+let queued: (Snapshot & { to: SaveTarget }) | null = null;
 let saveChain: Promise<void> = Promise.resolve();
 let saving = $state(0);
 let saveError = $state("");
@@ -151,13 +166,13 @@ function flushItems(keepalive = false) {
 	const next = queued;
 	queued = null;
 	if (!next) return saveChain;
-	return enqueue(() => putItems(next.ids, isTier ? next.tiers : undefined, keepalive));
+	return enqueue(() => putItems(next.to, next.ids, next.tiers, keepalive));
 }
 
 function onBoardChange(ids: number[], tiers: (number | null)[]) {
 	const previous = currentSnapshot();
 	latest = { ids, tiers };
-	queued = latest;
+	queued = { ...latest, to: saveTarget() };
 	saveError = "";
 	// 元に戻す先は、一続きの操作の前の並び（矢印キーで続けて動かしたときなど）
 	if (!undoGroupTimer) undoTo = previous;
@@ -171,8 +186,9 @@ function onTiersChange(tiers: string[], origins: (number | null)[], animeIds: nu
 	saveError = "";
 	// 段の番号が変わるので、元に戻すのはやめる（作品の段は DB の関数が一緒に付け替える）
 	undoTo = null;
+	const to = saveTarget();
 	void flushItems();
-	void enqueue(() => putJson("tiers", { tiers, origins }, "段の保存に失敗しました"));
+	void enqueue(() => putJson(to.id, "tiers", { tiers, origins }, "段の保存に失敗しました"));
 	// 付け替えたあとの並びを、次の操作の元に戻す先にする（古い data の段番号へ戻さない）
 	latest = { ids: animeIds, tiers: animeTiers };
 }
@@ -180,13 +196,14 @@ function onTiersChange(tiers: string[], origins: (number | null)[], animeIds: nu
 async function undo() {
 	const target = undoTo;
 	if (!target) return;
+	const to = saveTarget();
 	undoTo = null;
 	if (undoGroupTimer) clearTimeout(undoGroupTimer);
 	undoGroupTimer = null;
 	queued = null;
 	if (itemsTimer) clearTimeout(itemsTimer);
 	itemsTimer = null;
-	await enqueue(() => putItems(target.ids, isTier ? target.tiers : undefined));
+	await enqueue(() => putItems(to, target.ids, target.tiers));
 	await resetBoard();
 }
 
@@ -201,7 +218,28 @@ function sendQueuedNow() {
 	itemsTimer = null;
 	const next = queued;
 	queued = null;
-	if (next) void putItems(next.ids, isTier ? next.tiers : undefined, true).catch(() => {});
+	if (next) void putItems(next.to, next.ids, next.tiers, true).catch(() => {});
+}
+
+// 別のコレクションへ移ったら、編集の状態を持ち越さない（待っていた保存は beforeNavigate で元の保存先へ送り済み）
+let editingFor = untrack(() => collection.id);
+$effect.pre(() => {
+	const id = collection.id;
+	if (id === editingFor) return;
+	editingFor = id;
+	latest = null;
+	undoTo = null;
+	saveError = "";
+	if (undoGroupTimer) clearTimeout(undoGroupTimer);
+	undoGroupTimer = null;
+});
+
+/** 鉛筆: 段の保存と読み直しが終わってから開く（モーダルは開いたときの段を使うので、古い段で上書きしないように） */
+async function openEdit() {
+	await flushItems();
+	await saveChain;
+	await invalidateAll();
+	editingInfo = true;
 }
 
 $effect(() => {
@@ -321,7 +359,7 @@ async function copyLink() {
 							class="collection-tool"
 							aria-label="題名・説明・公開を編集"
 							title="編集"
-							onclick={() => (editingInfo = true)}
+							onclick={openEdit}
 						>
 							<span class="i-lucide-pencil" aria-hidden="true"></span>
 						</button>
