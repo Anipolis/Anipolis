@@ -153,13 +153,18 @@ async function resetBoard() {
 	boardVersion += 1;
 }
 
+// 保存に失敗したら増やす。失敗より前に積んだ保存は、失敗した状態を前提にしているので送らない
+let saveGeneration = 0;
+
 function enqueue(task: () => Promise<void>) {
+	const generation = saveGeneration;
 	saving += 1;
 	saveChain = saveChain
-		.then(task)
+		.then(() => (generation === saveGeneration ? task() : undefined))
 		// 続けて動かしていなければ、件数や更新日を読み直す（編集面は作り直さない）
 		.then(() => (queued || itemsTimer ? undefined : invalidateAll()))
 		.catch(async (taskError: unknown) => {
+			saveGeneration += 1;
 			saveError = `${taskError instanceof Error ? taskError.message : "保存に失敗しました"}。保存できている状態に戻しました`;
 			undoTo = null;
 			queued = null;
