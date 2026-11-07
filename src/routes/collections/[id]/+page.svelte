@@ -128,6 +128,8 @@ let queued: (Snapshot & { to: SaveTarget }) | null = null;
 let saveChain: Promise<void> = Promise.resolve();
 let saving = $state(0);
 let saveError = $state("");
+// 保存して作り直すまで（元に戻す）は、編集面を触れなくする
+let boardBusy = $state(false);
 
 function currentSnapshot(): Snapshot {
 	return latest ?? { ids: reorderItems.map((item) => item.id), tiers: reorderItems.map((item) => item.tier) };
@@ -135,6 +137,8 @@ function currentSnapshot(): Snapshot {
 
 async function resetBoard() {
 	latest = null;
+	// 作り直す前の段番号で戻さないように、元に戻す先も捨てる（モーダルで段を変えたときなど）
+	undoTo = null;
 	await invalidateAll();
 	boardVersion += 1;
 }
@@ -203,8 +207,14 @@ async function undo() {
 	queued = null;
 	if (itemsTimer) clearTimeout(itemsTimer);
 	itemsTimer = null;
-	await enqueue(() => putItems(to, target.ids, target.tiers));
-	await resetBoard();
+	// 戻している間に動かした分が、作り直しで消えないように、終わるまで編集面を止める
+	boardBusy = true;
+	try {
+		await enqueue(() => putItems(to, target.ids, target.tiers));
+		await resetBoard();
+	} finally {
+		boardBusy = false;
+	}
 }
 
 // ページを離れる前に、待っている保存を送る
@@ -387,15 +397,17 @@ async function copyLink() {
 		</header>
 
 		{#if data.isOwn && (isTier || collection.items.length > 0)}
-			{#key boardKey}
-				<CollectionBoard
-					items={reorderItems}
-					tiers={isTier ? collection.tiers : undefined}
-					showRank={collection.kind === 'ranking'}
-					onchange={onBoardChange}
-					ontierschange={onTiersChange}
-				/>
-			{/key}
+			<div class="collection-board-wrap" class:collection-board-wrap--busy={boardBusy} inert={boardBusy}>
+				{#key boardKey}
+					<CollectionBoard
+						items={reorderItems}
+						tiers={isTier ? collection.tiers : undefined}
+						showRank={collection.kind === 'ranking'}
+						onchange={onBoardChange}
+						ontierschange={onTiersChange}
+					/>
+				{/key}
+			</div>
 		{:else if collection.items.length === 0}
 			<div class="empty-state">
 				<p>
@@ -472,6 +484,10 @@ async function copyLink() {
 {/if}
 
 <style>
+.collection-board-wrap--busy {
+	opacity: 0.6;
+	transition: opacity 0.15s;
+}
 .collection-save-state {
 	color: var(--color-text-muted);
 	font-size: 12px;
