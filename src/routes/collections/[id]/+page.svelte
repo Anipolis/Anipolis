@@ -3,7 +3,7 @@ import { invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
 import { toAnimePick } from "$lib/anime-picker";
 import { ANIME_STATUS_ICONS, ANIME_STATUS_LABELS } from "$lib/anime-status";
-import { collectionKindPrefix, MAX_COLLECTION_ITEMS, orderByTier } from "$lib/collections";
+import { collectionKindPrefix, collectionTierColor, MAX_COLLECTION_ITEMS, orderByTier } from "$lib/collections";
 import AnimePickerModal from "$lib/components/AnimePickerModal.svelte";
 import CollectionFormModal from "$lib/components/CollectionFormModal.svelte";
 import CollectionReorder from "$lib/components/CollectionReorder.svelte";
@@ -43,6 +43,8 @@ async function saveItems(animeIds: number[], tiers?: (number | null)[]) {
 }
 
 const isTier = $derived(collection.kind === "tier");
+/** ランキングとティア表はカバーだけ並べる（題名は指すかフォーカスしたときに出す） */
+const coverOnly = $derived(collection.kind !== "list");
 const reorderItems = $derived(
 	collection.items.map((anime, index) => ({
 		id: Number(anime.id),
@@ -62,11 +64,13 @@ const tierRows = $derived.by(() => {
 		...collection.tiers.map((label, tier) => ({
 			key: String(tier),
 			label,
+			color: collectionTierColor(tier) as string | null,
 			animes: entries.filter((entry) => entry.tier === tier).map((entry) => entry.anime),
 		})),
 		{
 			key: "none",
 			label: "未分類",
+			color: null,
 			animes: entries.filter((entry) => entry.tier === null).map((entry) => entry.anime),
 		},
 	].filter((row) => row.key !== "none" || row.animes.length > 0);
@@ -133,8 +137,8 @@ async function copyLink() {
 
 {#snippet animeCard(anime: (typeof collection.items)[number], rank: number | null, eager: boolean)}
 	{@const myStatus = data.myStatuses[anime.id]}
-	<a href="/anime/{anime.id}" class="collection-card">
-		<span class="collection-card-cover">
+	<a href="/anime/{anime.id}" class="collection-card" class:collection-card--cover-only={coverOnly}>
+		<span class="collection-card-cover" class:collection-card-cover--empty={!anime.cover_url}>
 			{#if rank !== null}
 				<span class="collection-card-rank" class:collection-card-rank--top={rank <= 3} aria-label="{rank}位"
 					>{rank}</span
@@ -145,10 +149,25 @@ async function copyLink() {
 			{:else}
 				<span class="collection-card-cover-empty i-lucide-clapperboard" aria-hidden="true"></span>
 			{/if}
+			{#if coverOnly}
+				{#if myStatus}
+					<span
+						class="collection-card-status-badge"
+						role="img"
+						aria-label={ANIME_STATUS_LABELS[myStatus]}
+						title={ANIME_STATUS_LABELS[myStatus]}
+					>
+						<span class={ANIME_STATUS_ICONS[myStatus]} aria-hidden="true"></span>
+					</span>
+				{/if}
+				<span class="collection-card-caption">{anime.title}</span>
+			{/if}
 		</span>
-		<span class="collection-card-title">{anime.title}</span>
+		{#if !coverOnly}
+			<span class="collection-card-title">{anime.title}</span>
+		{/if}
 		<!-- 見ている人のマイリストでの状態（コレクションからマイリストへつなぐ手がかり） -->
-		{#if myStatus}
+		{#if myStatus && !coverOnly}
 			<span class="collection-card-status">
 				<span class={ANIME_STATUS_ICONS[myStatus]} aria-hidden="true"></span>
 				{ANIME_STATUS_LABELS[myStatus]}
@@ -288,7 +307,13 @@ async function copyLink() {
 			<div class="collection-tiers">
 				{#each tierRows as row (row.key)}
 					<section class="collection-tier" aria-label={row.label}>
-						<h2 class="collection-tier-label">{row.label}</h2>
+						<h2
+							class="collection-tier-label"
+							class:collection-tier-label--colored={row.color !== null}
+							style:background-color={row.color}
+						>
+							{row.label}
+						</h2>
 						{#if row.animes.length > 0}
 							<ol class="collection-tier-items">
 								{#each row.animes as anime (anime.id)}
@@ -505,6 +530,54 @@ async function copyLink() {
 	height: 24px;
 	color: var(--color-text-muted);
 }
+/* カバーに重ねる題名（ランキング・ティア表）。カバーが無い作品は常に出す */
+.collection-card-caption {
+	position: absolute;
+	right: 0;
+	bottom: 0;
+	left: 0;
+	display: -webkit-box;
+	overflow: hidden;
+	padding: 20px 6px 6px;
+	background: linear-gradient(transparent, rgb(0 0 0 / 0.85) 40%);
+	color: #fff;
+	font-size: 12px;
+	line-height: 1.4;
+	opacity: 0;
+	transition: opacity 0.15s;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 3;
+	line-clamp: 3;
+}
+.collection-card:hover .collection-card-caption,
+.collection-card:focus-visible .collection-card-caption,
+.collection-card-cover--empty .collection-card-caption {
+	opacity: 1;
+}
+.collection-card--cover-only:hover .collection-card-cover {
+	opacity: 1;
+}
+.collection-card--cover-only:focus-visible {
+	outline: none;
+}
+.collection-card--cover-only:focus-visible .collection-card-cover {
+	outline: 2px solid var(--color-accent);
+	outline-offset: 2px;
+}
+.collection-card-status-badge {
+	position: absolute;
+	top: 6px;
+	right: 6px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	border-radius: 999px;
+	background: rgb(0 0 0 / 0.65);
+	color: #fff;
+	font-size: 13px;
+}
 .collection-card-title {
 	display: -webkit-box;
 	overflow: hidden;
@@ -566,8 +639,8 @@ async function copyLink() {
 	padding: 8px;
 	list-style: none;
 }
-.collection-tier-items .collection-card-title {
-	font-size: 11px;
+.collection-tier-label--colored {
+	color: #1a1a1a;
 }
 .collection-tier-empty {
 	display: flex;

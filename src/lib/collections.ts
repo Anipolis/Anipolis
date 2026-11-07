@@ -20,6 +20,23 @@ export const COLLECTION_KIND_LABELS: Record<CollectionKind, string> = {
 export const DEFAULT_COLLECTION_TIERS = ["S", "A", "B", "C", "D"];
 export const MAX_COLLECTION_TIERS = 10;
 export const MAX_COLLECTION_TIER_LABEL_LENGTH = 10;
+/** 段の色（よくあるティア表と同じく、上の段から赤→橙→黄→緑→青→紫）。名前を変えても位置で決める */
+const COLLECTION_TIER_COLORS = [
+	"#ff7f7f",
+	"#ffbf7f",
+	"#ffdf7f",
+	"#ffff7f",
+	"#bfff7f",
+	"#7fff7f",
+	"#7fffff",
+	"#7fbfff",
+	"#7f7fff",
+	"#ff7fff",
+];
+
+export function collectionTierColor(tier: number): string {
+	return COLLECTION_TIER_COLORS[tier % COLLECTION_TIER_COLORS.length] ?? "#ff7f7f";
+}
 
 /** 件数の前に付ける種類（「ランキング・」など。リストは付けない） */
 export function collectionKindPrefix(kind: CollectionKind): string {

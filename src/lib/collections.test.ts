@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { orderByTier, parseCollectionInput, withAnimeAdded, withAnimeRemoved } from "./collections";
+import {
+	collectionTierColor,
+	orderByTier,
+	parseCollectionInput,
+	withAnimeAdded,
+	withAnimeRemoved,
+} from "./collections";
 
 function form(values: Record<string, string>) {
 	const data = new FormData();
@@ -117,5 +123,13 @@ describe("コレクションの種類と段（192）", () => {
 			{ id: 5, tier: 1 },
 		];
 		expect(orderByTier(items, 2).map((item) => item.id)).toEqual([3, 2, 5, 1, 4]);
+	});
+});
+
+describe("collectionTierColor", () => {
+	it("上の段から赤・橙・黄…と位置で決まり、10段まで別の色になる", () => {
+		expect(collectionTierColor(0)).toBe("#ff7f7f");
+		expect(collectionTierColor(1)).toBe("#ffbf7f");
+		expect(new Set(Array.from({ length: 10 }, (_, tier) => collectionTierColor(tier))).size).toBe(10);
 	});
 });

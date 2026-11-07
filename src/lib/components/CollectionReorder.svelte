@@ -1,6 +1,6 @@
 <script lang="ts">
 import { tick, untrack } from "svelte";
-import { orderByTier } from "$lib/collections";
+import { collectionTierColor, orderByTier } from "$lib/collections";
 
 /**
  * コレクションの並べ替え（詳細ページの並べ替えボタン）。並びが変わるたびに onchange で知らせ、
@@ -306,7 +306,13 @@ $effect(() => {
 		<div class="reorder-tiers">
 			{#each tierRows as row (row.tier ?? 'none')}
 				<section class="reorder-tier" data-reorder-tier={row.tier ?? 'none'} aria-label={row.label}>
-					<h2 class="reorder-tier-label">{row.label}</h2>
+					<h2
+						class="reorder-tier-label"
+						class:reorder-tier-label--colored={row.tier !== null}
+						style:background-color={row.tier === null ? null : collectionTierColor(row.tier)}
+					>
+						{row.label}
+					</h2>
 					<ol class="reorder-tier-items">
 						{#each order as item, index (item.id)}
 							{#if item.tier === row.tier}
@@ -385,6 +391,9 @@ $effect(() => {
 	font-weight: 800;
 	overflow-wrap: anywhere;
 	text-align: center;
+}
+.reorder-tier-label--colored {
+	color: #1a1a1a;
 }
 .reorder-tier-items {
 	display: flex;
