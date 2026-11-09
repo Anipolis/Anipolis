@@ -439,9 +439,7 @@ async function copyLink() {
 				{#each collection.items as anime, index (anime.id)}
 					<li>
 						<a href="/anime/{anime.id}" class="collection-ranking-row">
-							<span class="rank-medal rank-medal--{index + 1}" aria-label="{index + 1}位"
-								>{index + 1}</span
-							>
+							<span class="rank-cell rank-cell--{index + 1}" aria-label="{index + 1}位">{index + 1}</span>
 							<span class="collection-ranking-cover">
 								{#if anime.cover_url}
 									<img
@@ -634,6 +632,11 @@ async function copyLink() {
 	padding: 16px;
 	list-style: none;
 }
+@media (max-width: 960px) {
+	.collection-ranking-cover {
+		width: 64px;
+	}
+}
 @media (max-width: 480px) {
 	.collection-grid {
 		grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -720,10 +723,9 @@ async function copyLink() {
 .collection-ranking-row {
 	display: flex;
 	align-items: center;
-	gap: 14px;
-	padding: 8px 14px 8px 10px;
+	overflow: hidden;
 	border: 1px solid var(--color-border);
-	border-radius: 10px;
+	border-radius: 6px;
 	background: var(--color-bg-card);
 	color: var(--color-text);
 	text-decoration: none;
@@ -734,10 +736,8 @@ async function copyLink() {
 }
 .collection-ranking-cover {
 	flex-shrink: 0;
-	width: 48px;
+	width: 80px;
 	aspect-ratio: 400 / 566;
-	overflow: hidden;
-	border-radius: 4px;
 	background: var(--color-border);
 }
 .collection-ranking-cover img {
@@ -749,6 +749,7 @@ async function copyLink() {
 .collection-ranking-title {
 	display: -webkit-box;
 	overflow: hidden;
+	padding: 0 16px;
 	font-size: 15px;
 	font-weight: 700;
 	line-height: 1.4;
