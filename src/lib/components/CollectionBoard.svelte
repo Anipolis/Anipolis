@@ -474,18 +474,31 @@ function onWindowKeyDown(event: KeyboardEvent) {
 			onkeydown={(event) => onKeyDown(event, index)}
 			oncontextmenu={(event) => event.preventDefault()}
 		>
-			{#if showRank}
-				<span class="board-rank" class:board-rank--top={index < 3}>{index + 1}</span>
+			{#if showRank && !tiered}
+				<!-- ランキングは、順位・カバー・題名の横長の行 -->
+				<span class="rank-medal rank-medal--{index + 1}">{index + 1}</span>
+				<span class="board-row-cover">
+					{#if item.cover_url}
+						<img
+							src={coverThumbSrc(item.cover_url)}
+							{@attach coverThumbFallback(item.cover_url)}
+							alt=""
+							draggable="false"
+						>
+					{/if}
+				</span>
+				<span class="board-row-title">{item.title}</span>
+			{:else}
+				{#if item.cover_url}
+					<img
+						src={coverThumbSrc(item.cover_url)}
+						{@attach coverThumbFallback(item.cover_url)}
+						alt=""
+						draggable="false"
+					>
+				{/if}
+				<span class="board-caption" class:board-caption--always={!item.cover_url}>{item.title}</span>
 			{/if}
-			{#if item.cover_url}
-				<img
-					src={coverThumbSrc(item.cover_url)}
-					{@attach coverThumbFallback(item.cover_url)}
-					alt=""
-					draggable="false"
-				>
-			{/if}
-			<span class="board-caption" class:board-caption--always={!item.cover_url}>{item.title}</span>
 		</div>
 		{#if item.id === selectedId}
 			<div class="board-card-actions">
@@ -518,6 +531,7 @@ function onWindowKeyDown(event: KeyboardEvent) {
 	bind:this={board}
 	class="board"
 	class:board--tiered={tiered}
+	class:board--ranking={showRank && !tiered}
 	class:board--dragging={draggingId !== null}
 	class:board--selecting={selectedId !== null}
 >
@@ -1011,23 +1025,45 @@ function onWindowKeyDown(event: KeyboardEvent) {
 .board--dragging .board-caption--always {
 	opacity: 1;
 }
-.board-rank {
-	position: absolute;
-	top: 6px;
-	left: 6px;
-	z-index: 1;
-	min-width: 24px;
-	padding: 2px 7px;
-	border-radius: 999px;
-	background: rgb(0 0 0 / 0.65);
-	color: #fff;
-	font-size: 13px;
-	font-weight: 800;
-	text-align: center;
+/* ランキングは横長の行を上から積む */
+.board--ranking .board-grid {
+	grid-template-columns: minmax(0, 1fr);
+	gap: 6px;
 }
-.board-rank--top {
-	background: var(--color-accent);
-	color: var(--color-bg);
+.board--ranking .board-card {
+	justify-content: flex-start;
+	gap: 14px;
+	aspect-ratio: auto;
+	padding: 8px 14px 8px 10px;
+	border-radius: 10px;
+}
+.board-row-cover {
+	flex-shrink: 0;
+	width: 48px;
+	aspect-ratio: 400 / 566;
+	overflow: hidden;
+	border-radius: 4px;
+	background: var(--color-border);
+}
+.board-row-title {
+	display: -webkit-box;
+	overflow: hidden;
+	font-size: 15px;
+	font-weight: 700;
+	line-height: 1.4;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	line-clamp: 2;
+}
+/* 選んだ行は、右の作品ページ・外すボタンに題名がかからないように空ける */
+.board-card--selected .board-row-title {
+	padding-right: 72px;
+}
+.board--ranking .board-card-actions {
+	top: 50%;
+	right: 12px;
+	flex-direction: row;
+	transform: translateY(-50%);
 }
 .board-card-actions {
 	position: absolute;

@@ -278,14 +278,9 @@ async function copyLink() {
 }
 </script>
 
-{#snippet animeCard(anime: (typeof collection.items)[number], rank: number | null, eager: boolean)}
+{#snippet animeCard(anime: (typeof collection.items)[number], eager: boolean)}
 	<a href="/anime/{anime.id}" class="collection-card">
 		<span class="collection-card-cover" class:collection-card-cover--empty={!anime.cover_url}>
-			{#if rank !== null}
-				<span class="collection-card-rank" class:collection-card-rank--top={rank <= 3} aria-label="{rank}位"
-					>{rank}</span
-				>
-			{/if}
 			{#if anime.cover_url}
 				<img
 					src={coverThumbSrc(anime.cover_url)}
@@ -429,7 +424,7 @@ async function copyLink() {
 						{#if row.animes.length > 0}
 							<ol class="collection-tier-items">
 								{#each row.animes as anime (anime.id)}
-									<li>{@render animeCard(anime, null, true)}</li>
+									<li>{@render animeCard(anime, true)}</li>
 								{/each}
 							</ol>
 						{:else}
@@ -438,10 +433,34 @@ async function copyLink() {
 					</section>
 				{/each}
 			</div>
+		{:else if collection.kind === 'ranking'}
+			<!-- ランキングは、順位・カバー・題名の横長の行を上から積む -->
+			<ol class="collection-ranking">
+				{#each collection.items as anime, index (anime.id)}
+					<li>
+						<a href="/anime/{anime.id}" class="collection-ranking-row">
+							<span class="rank-medal rank-medal--{index + 1}" aria-label="{index + 1}位"
+								>{index + 1}</span
+							>
+							<span class="collection-ranking-cover">
+								{#if anime.cover_url}
+									<img
+										src={coverThumbSrc(anime.cover_url)}
+										{@attach coverThumbFallback(anime.cover_url)}
+										alt=""
+										loading={index < 8 ? 'eager' : 'lazy'}
+									>
+								{/if}
+							</span>
+							<span class="collection-ranking-title">{anime.title}</span>
+						</a>
+					</li>
+				{/each}
+			</ol>
 		{:else}
 			<ol class="collection-grid">
 				{#each collection.items as anime, index (anime.id)}
-					<li>{@render animeCard(anime, collection.kind === 'ranking' ? index + 1 : null, index < 8)}</li>
+					<li>{@render animeCard(anime, index < 8)}</li>
 				{/each}
 			</ol>
 		{/if}
@@ -690,22 +709,52 @@ async function copyLink() {
 	outline: 2px solid var(--color-accent);
 	outline-offset: 2px;
 }
-.collection-card-rank {
-	position: absolute;
-	top: 6px;
-	left: 6px;
-	min-width: 24px;
-	padding: 2px 7px;
-	border-radius: 999px;
-	background: rgb(0 0 0 / 0.65);
-	color: #fff;
-	font-size: 13px;
-	font-weight: 800;
-	text-align: center;
+.collection-ranking {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin: 0;
+	padding: 16px;
+	list-style: none;
 }
-.collection-card-rank--top {
-	background: var(--color-accent);
-	color: var(--color-bg);
+.collection-ranking-row {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	padding: 8px 14px 8px 10px;
+	border: 1px solid var(--color-border);
+	border-radius: 10px;
+	background: var(--color-bg-card);
+	color: var(--color-text);
+	text-decoration: none;
+	transition: background 0.15s;
+}
+.collection-ranking-row:hover {
+	background: var(--color-surface-hover);
+}
+.collection-ranking-cover {
+	flex-shrink: 0;
+	width: 48px;
+	aspect-ratio: 400 / 566;
+	overflow: hidden;
+	border-radius: 4px;
+	background: var(--color-border);
+}
+.collection-ranking-cover img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+.collection-ranking-title {
+	display: -webkit-box;
+	overflow: hidden;
+	font-size: 15px;
+	font-weight: 700;
+	line-height: 1.4;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	line-clamp: 2;
 }
 .collection-tiers {
 	display: flex;

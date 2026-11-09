@@ -33,9 +33,6 @@ const editing = $derived(data.collections?.find((collection) => collection.id ==
 				</button>
 			{/if}
 		</header>
-		<p class="collections-lead">
-			作品を好きな切り口でまとめて残せます。公開にすると、リンクを知っている人が見られます
-		</p>
 
 		{#if data.collections === null}
 			<div class="empty-state">
@@ -169,14 +166,6 @@ const editing = $derived(data.collections?.find((collection) => collection.id ==
 }
 .collections-new {
 	font-size: 13px;
-}
-.collections-lead {
-	margin: 0;
-	padding: 0 16px 8px;
-	border-bottom: 1px solid var(--color-border);
-	color: var(--color-text-muted);
-	font-size: 13px;
-	line-height: 1.6;
 }
 .collections-empty-add {
 	display: flex;
