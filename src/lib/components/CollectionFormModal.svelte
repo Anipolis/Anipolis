@@ -215,15 +215,6 @@ const handleDelete: SubmitFunction = ({ cancel }) => {
 						{/if}
 					</div>
 				</div>
-				<p class="field-hint collection-form-row-hint">
-					{kind === 'ranking'
-						? '並べた順に順位を付けます。'
-						: kind === 'tier'
-							? '作品を段に分けます。段の名前は下で変えられます。'
-							: '作品を好きな順に並べます。'}{isPublic
-						? 'リンクを知っている人が見られます（鍵アカウントはフォロワーだけ）'
-						: '自分だけが見られます'}
-				</p>
 
 				{#if kind === 'tier'}
 					<fieldset class="collection-form-tiers">
@@ -391,9 +382,6 @@ const handleDelete: SubmitFunction = ({ cancel }) => {
 	flex: 1;
 	min-width: 0;
 	margin-bottom: 0;
-}
-.collection-form-row-hint {
-	margin-top: -8px;
 }
 .collection-form-tier-list {
 	display: flex;

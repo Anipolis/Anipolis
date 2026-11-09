@@ -3638,3 +3638,31 @@ form + .repost-menu-item {
 .trending-subheader {
 	font-size: 12px;
 }
+
+/* コレクションのランキングの順位。1〜3位は金・銀・銅 */
+.rank-medal {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: center;
+	width: 34px;
+	height: 34px;
+	border-radius: 999px;
+	background: var(--color-surface-hover);
+	color: var(--color-text-muted);
+	font-size: 15px;
+	font-weight: 800;
+	font-variant-numeric: tabular-nums;
+}
+.rank-medal--1 {
+	background: linear-gradient(135deg, #f8dc7a, #c9981c);
+	color: #3a2a00;
+}
+.rank-medal--2 {
+	background: linear-gradient(135deg, #f0f2f5, #a3abb6);
+	color: #262b33;
+}
+.rank-medal--3 {
+	background: linear-gradient(135deg, #eaa76c, #a1602a);
+	color: #3a1d05;
+}
