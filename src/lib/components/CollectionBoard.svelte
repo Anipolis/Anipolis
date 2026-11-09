@@ -395,6 +395,8 @@ function deleteTier(tier: number) {
 // ---- 未分類に作品を足す（ティア表の検索） ----
 
 let query = $state("");
+// 結果の重なりは、検索窓の外を押すか Esc で閉じる（打った言葉は残す）
+let searchOpen = $state(false);
 let results = $state<AnimePick[]>([]);
 let searching = $state(false);
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -402,6 +404,7 @@ let searchController: AbortController | null = null;
 const addedIds = $derived(new Set(order.map((item) => item.id)));
 
 function onSearchInput() {
+	searchOpen = true;
 	if (searchTimer) clearTimeout(searchTimer);
 	searchController?.abort();
 	const q = query.trim();
@@ -451,12 +454,14 @@ function onWindowClick(event: MouseEvent) {
 	// 選んでいる作品は、編集面の外を押したら選び直しをやめる
 	if (selectedId !== null && board && target && !board.contains(target)) selectedId = null;
 	if (menuTier !== null && !(target instanceof Element && target.closest(".board-tier-menu-wrap"))) menuTier = null;
+	if (searchOpen && !(target instanceof Element && target.closest(".board-search"))) searchOpen = false;
 }
 
 function onWindowKeyDown(event: KeyboardEvent) {
 	if (event.key !== "Escape") return;
 	selectedId = null;
 	menuTier = null;
+	searchOpen = false;
 }
 </script>
 
@@ -616,6 +621,15 @@ function onWindowKeyDown(event: KeyboardEvent) {
 			<div class="board-pool-head">
 				<h2 class="board-pool-title">未分類 <span class="board-pool-count">{poolCount}</span></h2>
 			</div>
+			<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+			<ol class="board-pool-items" data-board-tier="none" onclick={() => onRowClick(null)}>
+				{#each order as item, index (item.id)}
+					{#if item.tier === null}
+						{@render card(item, index)}
+					{/if}
+				{/each}
+			</ol>
+			<!-- 検索は未分類の下に置き、結果は上に重ねて出す（未分類の枠を伸ばさない） -->
 			<div class="board-search">
 				<span class="board-search-icon i-lucide-search" aria-hidden="true"></span>
 				<input
@@ -626,50 +640,43 @@ function onWindowKeyDown(event: KeyboardEvent) {
 					disabled={full}
 					bind:value={query}
 					oninput={onSearchInput}
+					onfocus={() => (searchOpen = true)}
 				>
-			</div>
-			{#if query.trim()}
-				<ul class="board-results" aria-label="検索結果">
-					{#if searching && results.length === 0}
-						<li class="board-results-note">探しています...</li>
-					{:else if results.length === 0}
-						<li class="board-results-note">見つかりませんでした</li>
-					{/if}
-					{#each results as anime (anime.id)}
-						{@const added = addedIds.has(anime.id)}
-						{@const meta = animePickMeta(anime)}
-						<li>
-							<button
-								type="button"
-								class="board-result"
-								disabled={added || full}
-								onclick={() => addToPool(anime)}
-							>
-								<span class="board-result-cover">
-									{#if anime.cover_url}
-										<img src={anime.cover_url} alt="" loading="lazy">
+				{#if searchOpen && query.trim()}
+					<ul class="board-results" aria-label="検索結果">
+						{#if searching && results.length === 0}
+							<li class="board-results-note">探しています...</li>
+						{:else if results.length === 0}
+							<li class="board-results-note">見つかりませんでした</li>
+						{/if}
+						{#each results as anime (anime.id)}
+							{@const added = addedIds.has(anime.id)}
+							{@const meta = animePickMeta(anime)}
+							<li>
+								<button
+									type="button"
+									class="board-result"
+									disabled={added || full}
+									onclick={() => addToPool(anime)}
+								>
+									<span class="board-result-cover">
+										{#if anime.cover_url}
+											<img src={anime.cover_url} alt="" loading="lazy">
+										{/if}
+									</span>
+									<span class="board-result-text">
+										<span class="board-result-title">{anime.title}</span>
+										<span class="board-result-meta">{added ? '追加済み' : meta}</span>
+									</span>
+									{#if !added}
+										<span class="board-result-add i-lucide-plus" aria-hidden="true"></span>
 									{/if}
-								</span>
-								<span class="board-result-text">
-									<span class="board-result-title">{anime.title}</span>
-									<span class="board-result-meta">{added ? '追加済み' : meta}</span>
-								</span>
-								{#if !added}
-									<span class="board-result-add i-lucide-plus" aria-hidden="true"></span>
-								{/if}
-							</button>
-						</li>
-					{/each}
-				</ul>
-			{/if}
-			<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
-			<ol class="board-pool-items" data-board-tier="none" onclick={() => onRowClick(null)}>
-				{#each order as item, index (item.id)}
-					{#if item.tier === null}
-						{@render card(item, index)}
-					{/if}
-				{/each}
-			</ol>
+								</button>
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			</div>
 		</aside>
 	{:else}
 		<ol class="board-grid" aria-label="作品">
@@ -726,11 +733,11 @@ function onWindowKeyDown(event: KeyboardEvent) {
 	gap: 8px;
 	min-width: 0;
 }
+/* 段の中は、段の名前と作品を隙間なくくっつける（隙間は段と段の間だけ） */
 .board-tier {
 	display: flex;
-	min-height: 104px;
 	border: 1px solid var(--color-border);
-	border-radius: 10px;
+	border-radius: 6px;
 }
 .board-tier-head {
 	position: relative;
@@ -739,7 +746,7 @@ function onWindowKeyDown(event: KeyboardEvent) {
 	align-items: center;
 	justify-content: center;
 	width: 72px;
-	border-radius: 9px 0 0 9px;
+	border-radius: 5px 0 0 5px;
 	color: #1a1a1a;
 }
 .board-tier-label {
@@ -828,11 +835,14 @@ function onWindowKeyDown(event: KeyboardEvent) {
 	flex: 1;
 	flex-wrap: wrap;
 	align-content: flex-start;
-	gap: 6px;
+	gap: 0;
 	min-width: 0;
 	margin: 0;
-	padding: 6px;
+	padding: 0;
 	list-style: none;
+}
+.board-tier-items {
+	min-height: calc(64px * 566 / 400);
 }
 .board--selecting .board-tier-items,
 .board--selecting .board-pool-items {
@@ -846,7 +856,6 @@ function onWindowKeyDown(event: KeyboardEvent) {
 	gap: 8px;
 	max-height: calc(100vh - var(--nav-height) - 32px);
 	padding: 10px;
-	overflow-y: auto;
 	border: 1px solid var(--color-border);
 	border-radius: 10px;
 	background: var(--color-bg-card);
@@ -866,11 +875,13 @@ function onWindowKeyDown(event: KeyboardEvent) {
 	font-weight: 500;
 }
 .board-pool-items {
+	flex-shrink: 1;
 	min-height: 96px;
-	padding: 0;
+	overflow-y: auto;
 }
 .board-search {
 	position: relative;
+	flex-shrink: 0;
 }
 .board-search-icon {
 	position: absolute;
@@ -889,14 +900,24 @@ function onWindowKeyDown(event: KeyboardEvent) {
 	color: var(--color-text);
 	font-size: 13px;
 }
+/* 検索結果は検索窓の上に重ねて出す */
 .board-results {
+	position: absolute;
+	right: 0;
+	bottom: calc(100% + 6px);
+	z-index: 20;
 	display: flex;
 	flex-direction: column;
 	gap: 2px;
-	max-height: 240px;
+	width: min(340px, calc(100vw - 24px));
+	max-height: min(360px, 50vh);
 	margin: 0;
-	padding: 0;
+	padding: 6px;
 	overflow-y: auto;
+	border: 1px solid var(--color-border);
+	border-radius: 10px;
+	background: var(--color-bg-card);
+	box-shadow: 0 -8px 24px rgb(0 0 0 / 0.24);
 	list-style: none;
 }
 .board-results-note {
@@ -964,6 +985,21 @@ function onWindowKeyDown(event: KeyboardEvent) {
 .board-tier-items .board-item,
 .board-pool-items .board-item {
 	width: 64px;
+}
+/* 段と未分類の作品は枠も角丸も付けず、隣とくっつける（カバーの無い作品だけ内側の線で区切る） */
+.board-tier-items .board-card,
+.board-pool-items .board-card {
+	border: none;
+	border-radius: 0;
+	box-shadow: inset 0 0 0 1px var(--color-border);
+}
+.board-tier-items .board-card:focus-visible,
+.board-pool-items .board-card:focus-visible {
+	outline-offset: -2px;
+}
+.board-tier-items .board-card--selected,
+.board-pool-items .board-card--selected {
+	outline-offset: -3px;
 }
 .board-card {
 	position: relative;
@@ -1170,6 +1206,9 @@ function onWindowKeyDown(event: KeyboardEvent) {
 	.board-tier-items .board-item,
 	.board-pool-items .board-item {
 		width: 52px;
+	}
+	.board-tier-items {
+		min-height: calc(52px * 566 / 400);
 	}
 	.board-pool {
 		position: sticky;
