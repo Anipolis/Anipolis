@@ -301,10 +301,8 @@ async function copyLink() {
 			{/if}
 			{#if anime.cover_url}
 				<img src={anime.cover_url} alt="" loading={eager ? 'eager' : 'lazy'}>
-			{:else}
-				<span class="collection-card-cover-empty i-lucide-clapperboard" aria-hidden="true"></span>
 			{/if}
-			<!-- 題名はカバーに重ね、指すかフォーカスしたときだけ出す -->
+			<!-- 題名はカバーに重ね、指すかフォーカスしたときだけ出す（カバーが無い作品は真ん中に常に出す） -->
 			<span class="collection-card-caption">{anime.title}</span>
 		</span>
 	</a>
@@ -657,11 +655,6 @@ async function copyLink() {
 	height: 100%;
 	object-fit: cover;
 }
-.collection-card-cover-empty {
-	width: 24px;
-	height: 24px;
-	color: var(--color-text-muted);
-}
 /* カバーに重ねる題名。カバーが無い作品は常に出す */
 .collection-card-caption {
 	position: absolute;
@@ -685,6 +678,19 @@ async function copyLink() {
 .collection-card:focus-visible .collection-card-caption,
 .collection-card-cover--empty .collection-card-caption {
 	opacity: 1;
+}
+/* カバーが無い作品は、題名をカードの真ん中に出す（下に寄せると長い題名が見切れる） */
+.collection-card-cover--empty .collection-card-caption {
+	top: 50%;
+	bottom: auto;
+	padding: 0 8px;
+	transform: translateY(-50%);
+	background: none;
+	color: var(--color-text);
+	font-weight: 600;
+	text-align: center;
+	-webkit-line-clamp: 6;
+	line-clamp: 6;
 }
 .collection-card:focus-visible {
 	outline: none;
