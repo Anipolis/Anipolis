@@ -1,5 +1,6 @@
 <script lang="ts">
 import { tick, untrack } from "svelte";
+import { trapFocus } from "$lib/actions/trapFocus";
 import type { AnimePick } from "$lib/anime-picker";
 import {
 	collectionTierColor,
@@ -310,9 +311,10 @@ function focusId(id: number) {
 
 // ---- 段の名前・数（ティア表） ----
 
-let editingTier = $state<number | null>(null);
-let editingLabel = $state("");
-let menuTier = $state<number | null>(null);
+// 色の付いた段の名前を押すと、その段の設定（名前・隣の段との入れ替え・消す）を開く
+let dialogTier = $state<number | null>(null);
+let dialogLabel = $state("");
+let dialogInput = $state<HTMLInputElement>();
 let tierError = $state("");
 
 /** 段を変える。origins は新しい各段が元は何番目だったか（足した段は null） */
@@ -335,58 +337,74 @@ function applyTiers(nextLabels: string[], origins: (number | null)[]) {
 	);
 }
 
-async function startRename(tier: number) {
-	menuTier = null;
+async function openTierDialog(tier: number) {
 	tierError = "";
-	editingTier = tier;
-	editingLabel = labels[tier] ?? "";
+	dialogTier = tier;
+	dialogLabel = labels[tier] ?? "";
 	await tick();
-	board?.querySelector<HTMLInputElement>(".board-tier-input")?.select();
+	dialogInput?.select();
 }
 
-function commitRename() {
-	if (editingTier === null) return;
-	const tier = editingTier;
-	const label = editingLabel.trim();
-	editingTier = null;
-	if (!label || label === labels[tier]) return;
+/** 入力中の名前を段に当てる。名前がだめなら false（設定は開いたまま） */
+function commitTierLabel(): boolean {
+	if (dialogTier === null) return true;
+	const tier = dialogTier;
+	const label = dialogLabel.trim();
+	if (!label) {
+		tierError = "段の名前を入力してください";
+		return false;
+	}
 	if (label.length > MAX_COLLECTION_TIER_LABEL_LENGTH) {
 		tierError = `段の名前は${MAX_COLLECTION_TIER_LABEL_LENGTH}文字以内で入力してください`;
-		return;
+		return false;
 	}
 	tierError = "";
-	applyTiers(
-		labels.map((current, index) => (index === tier ? label : current)),
-		labels.map((_, index) => index),
-	);
+	if (label !== labels[tier]) {
+		applyTiers(
+			labels.map((current, index) => (index === tier ? label : current)),
+			labels.map((_, index) => index),
+		);
+	}
+	return true;
 }
 
-function onRenameKeyDown(event: KeyboardEvent) {
+function closeTierDialog() {
+	if (!commitTierLabel()) return;
+	dialogTier = null;
+}
+
+function onTierLabelKeyDown(event: KeyboardEvent) {
 	if (event.key === "Enter") {
 		event.preventDefault();
-		commitRename();
-	} else if (event.key === "Escape") {
-		event.preventDefault();
-		editingTier = null;
+		closeTierDialog();
 	}
 }
 
-/** at の位置に新しい段を入れ、名前を直せる状態にする */
-async function insertTier(at: number) {
-	menuTier = null;
+/** 段を隣の段と入れ替える（入っている作品も段ごと動く）。設定は動かした段のまま開いておく */
+function moveTier(from: number, to: number) {
+	if (to < 0 || to >= labels.length) return;
+	if (!commitTierLabel()) return;
+	const origins = labels.map((_, index) => (index === from ? to : index === to ? from : index));
+	applyTiers(
+		origins.map((origin) => labels[origin] ?? ""),
+		origins,
+	);
+	dialogTier = to;
+	announcement = `段「${labels[to]}」を${to < from ? "上" : "下"}の段と入れ替えました`;
+}
+
+/** 一番下に段を足し、すぐ名前を付けられるように設定を開く */
+async function addTier() {
 	if (labels.length >= MAX_COLLECTION_TIERS) return;
-	const origins: (number | null)[] = labels.map((_, index) => index);
-	origins.splice(at, 0, null);
-	const nextLabels = [...labels];
-	nextLabels.splice(at, 0, "新しい段");
-	applyTiers(nextLabels, origins);
-	await startRename(at);
+	applyTiers([...labels, "新しい段"], [...labels.map((_, index) => index), null]);
+	await openTierDialog(labels.length - 1);
 }
 
 function deleteTier(tier: number) {
-	menuTier = null;
 	if (labels.length <= 1) return;
 	const name = labels[tier];
+	dialogTier = null;
+	tierError = "";
 	applyTiers(
 		labels.filter((_, index) => index !== tier),
 		labels.map((_, index) => index).filter((index) => index !== tier),
@@ -421,13 +439,11 @@ function onWindowClick(event: MouseEvent) {
 	const target = event.target as Node | null;
 	// 選んでいる作品は、編集面の外を押したら選び直しをやめる
 	if (selectedId !== null && board && target && !board.contains(target)) selectedId = null;
-	if (menuTier !== null && !(target instanceof Element && target.closest(".board-tier-menu-wrap"))) menuTier = null;
 }
 
 function onWindowKeyDown(event: KeyboardEvent) {
 	if (event.key !== "Escape") return;
 	selectedId = null;
-	menuTier = null;
 }
 </script>
 
@@ -510,68 +526,15 @@ function onWindowKeyDown(event: KeyboardEvent) {
 			{#each labels as label, tier (tier)}
 				<section class="board-tier" aria-label={label}>
 					<div class="board-tier-head" style:background-color={collectionTierColor(tier)}>
-						{#if editingTier === tier}
-							<input
-								class="board-tier-input"
-								aria-label="段の名前"
-								maxlength={MAX_COLLECTION_TIER_LABEL_LENGTH}
-								bind:value={editingLabel}
-								onblur={commitRename}
-								onkeydown={onRenameKeyDown}
-							>
-						{:else}
-							<button
-								type="button"
-								class="board-tier-label"
-								title="名前を変える"
-								onclick={() => startRename(tier)}
-							>
-								{label}
-							</button>
-						{/if}
-						<div class="board-tier-menu-wrap">
-							<button
-								type="button"
-								class="board-tier-menu-button"
-								aria-label="段「{label}」のメニュー"
-								aria-expanded={menuTier === tier}
-								onclick={() => (menuTier = menuTier === tier ? null : tier)}
-							>
-								<span class="i-lucide-ellipsis" aria-hidden="true"></span>
-							</button>
-							{#if menuTier === tier}
-								<div class="board-tier-menu" role="menu">
-									<button type="button" role="menuitem" onclick={() => startRename(tier)}>
-										名前を変える
-									</button>
-									<button
-										type="button"
-										role="menuitem"
-										disabled={labels.length >= MAX_COLLECTION_TIERS}
-										onclick={() => insertTier(tier)}
-									>
-										上に段を足す
-									</button>
-									<button
-										type="button"
-										role="menuitem"
-										disabled={labels.length >= MAX_COLLECTION_TIERS}
-										onclick={() => insertTier(tier + 1)}
-									>
-										下に段を足す
-									</button>
-									<button
-										type="button"
-										role="menuitem"
-										class="board-tier-menu-danger"
-										disabled={labels.length <= 1}
-										onclick={() => deleteTier(tier)}
-									>
-										この段を消す
-									</button>
-								</div>
-							{/if}
-						</div>
+						<button
+							type="button"
+							class="board-tier-label"
+							aria-label="段「{label}」の設定"
+							title="段の設定"
+							onclick={() => openTierDialog(tier)}
+						>
+							{label}
+						</button>
 					</div>
 					<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
 					<ol class="board-tier-items" data-board-tier={tier} onclick={() => onRowClick(tier)}>
@@ -583,9 +546,15 @@ function onWindowKeyDown(event: KeyboardEvent) {
 					</ol>
 				</section>
 			{/each}
-			{#if tierError}
-				<p class="field-error-msg" role="alert">{tierError}</p>
-			{/if}
+			<button
+				type="button"
+				class="board-tier-add"
+				disabled={labels.length >= MAX_COLLECTION_TIERS}
+				onclick={addTier}
+			>
+				<span class="i-lucide-plus" aria-hidden="true"></span>
+				{labels.length >= MAX_COLLECTION_TIERS ? `段は${MAX_COLLECTION_TIERS}つまでです` : '段を足す'}
+			</button>
 		</div>
 
 		<aside class="board-pool" aria-label="未分類">
@@ -617,6 +586,83 @@ function onWindowKeyDown(event: KeyboardEvent) {
 
 	<div class="sr-only" aria-live="polite">{announcement}</div>
 </div>
+
+{#if dialogTier !== null}
+	{@const tier = dialogTier}
+	<div class="tier-dialog-overlay" role="presentation" onclick={closeTierDialog}>
+		<div
+			use:trapFocus
+			class="tier-dialog"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="tier-dialog-title"
+			tabindex="-1"
+			onclick={(event) => event.stopPropagation()}
+			onkeydown={(event) => {
+				event.stopPropagation();
+				if (event.key === 'Escape') closeTierDialog();
+			}}
+		>
+			<div class="tier-dialog-header">
+				<span
+					class="tier-dialog-swatch"
+					style:background-color={collectionTierColor(tier)}
+					aria-hidden="true"
+				></span>
+				<span id="tier-dialog-title" class="tier-dialog-heading">段の設定</span>
+				<button type="button" class="tier-dialog-close" aria-label="閉じる" onclick={closeTierDialog}>×</button>
+			</div>
+			<div class="tier-dialog-body">
+				<div class="field">
+					<label for="tier-dialog-name" class="field-label">名前</label>
+					<input
+						id="tier-dialog-name"
+						bind:this={dialogInput}
+						class="field-input"
+						maxlength={MAX_COLLECTION_TIER_LABEL_LENGTH}
+						bind:value={dialogLabel}
+						onkeydown={onTierLabelKeyDown}
+					>
+					{#if tierError}
+						<p class="field-error-msg" role="alert">{tierError}</p>
+					{/if}
+				</div>
+				<div class="tier-dialog-moves">
+					<button
+						type="button"
+						class="btn btn-secondary"
+						disabled={tier === 0}
+						onclick={() => moveTier(tier, tier - 1)}
+					>
+						<span class="i-lucide-arrow-up" aria-hidden="true"></span>
+						上の段と入れ替える
+					</button>
+					<button
+						type="button"
+						class="btn btn-secondary"
+						disabled={tier === labels.length - 1}
+						onclick={() => moveTier(tier, tier + 1)}
+					>
+						<span class="i-lucide-arrow-down" aria-hidden="true"></span>
+						下の段と入れ替える
+					</button>
+				</div>
+			</div>
+			<div class="tier-dialog-footer">
+				<button
+					type="button"
+					class="btn btn-ghost tier-dialog-delete"
+					disabled={labels.length <= 1}
+					onclick={() => deleteTier(tier)}
+				>
+					この段を消す
+				</button>
+				<span class="tier-dialog-spacer"></span>
+				<button type="button" class="btn btn-secondary" onclick={closeTierDialog}>閉じる</button>
+			</div>
+		</div>
+	</div>
+{/if}
 
 <!-- つかんでいる間だけ出すゴミ箱と、指に付いてくる作品の影 -->
 {#if dragging}
@@ -694,74 +740,110 @@ function onWindowKeyDown(event: KeyboardEvent) {
 	font-size: 16px;
 	font-weight: 800;
 	overflow-wrap: anywhere;
-	cursor: text;
+	cursor: pointer;
 }
-.board-tier-input {
-	width: 60px;
-	padding: 4px;
-	border: 1px solid rgb(0 0 0 / 0.3);
-	border-radius: 6px;
-	background: rgb(255 255 255 / 0.85);
-	color: #1a1a1a;
-	font-size: 14px;
-	font-weight: 700;
-	text-align: center;
+.board-tier-label:hover,
+.board-tier-label:focus-visible {
+	background: rgb(0 0 0 / 0.08);
 }
-.board-tier-menu-wrap {
-	position: absolute;
-	right: 2px;
-	bottom: 2px;
-}
-.board-tier-menu-button {
+.board-tier-add {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	width: 24px;
-	height: 24px;
-	padding: 0;
-	border: none;
+	gap: 6px;
+	padding: 10px;
+	border: 1px dashed var(--color-border);
 	border-radius: 6px;
 	background: transparent;
-	color: rgb(0 0 0 / 0.6);
-	font-size: 14px;
+	color: var(--color-text-muted);
+	font-size: 13px;
+	font-weight: 600;
 	cursor: pointer;
 }
-.board-tier-menu-button:hover,
-.board-tier-menu-button[aria-expanded="true"] {
-	background: rgb(0 0 0 / 0.12);
+.board-tier-add:hover:not(:disabled) {
+	border-color: var(--color-text-muted);
+	color: var(--color-text);
 }
-.board-tier-menu {
-	position: absolute;
-	top: calc(100% + 4px);
-	left: 0;
-	z-index: 20;
+.board-tier-add:disabled {
+	cursor: default;
+	opacity: 0.6;
+}
+.tier-dialog-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 1000;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 16px;
+	background: rgb(15 23 42 / 0.68);
+}
+.tier-dialog {
 	display: flex;
 	flex-direction: column;
-	min-width: 140px;
-	padding: 4px;
+	width: min(100%, 400px);
 	border: 1px solid var(--color-border);
-	border-radius: 10px;
-	background: var(--color-bg-card);
-	box-shadow: 0 8px 24px rgb(0 0 0 / 0.24);
+	border-radius: 12px;
+	background: var(--color-surface);
+	box-shadow: 0 24px 60px rgb(0 0 0 / 0.36);
+	outline: none;
 }
-.board-tier-menu button {
-	padding: 8px 10px;
-	border: none;
-	border-radius: 6px;
+.tier-dialog-header,
+.tier-dialog-footer {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 12px 14px;
+}
+.tier-dialog-header {
+	border-bottom: 1px solid var(--color-border);
+}
+.tier-dialog-footer {
+	border-top: 1px solid var(--color-border);
+}
+.tier-dialog-swatch {
+	width: 14px;
+	height: 14px;
+	border-radius: 4px;
+}
+.tier-dialog-heading {
+	flex: 1;
+	font-size: 15px;
+	font-weight: 800;
+}
+.tier-dialog-close {
+	width: 32px;
+	height: 32px;
+	border: 0;
+	border-radius: 999px;
 	background: transparent;
-	color: var(--color-text);
-	font-size: 13px;
-	text-align: left;
+	color: var(--color-text-muted);
+	font-size: 20px;
 	cursor: pointer;
 }
-.board-tier-menu button:hover:not(:disabled) {
+.tier-dialog-close:hover {
 	background: var(--color-surface-hover);
+	color: var(--color-text);
 }
-.board-tier-menu button:disabled {
-	color: var(--color-text-muted);
-	cursor: default;
+.tier-dialog-body {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	padding: 14px;
 }
-.board-tier-menu .board-tier-menu-danger:not(:disabled) {
+.tier-dialog-moves {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+.tier-dialog-moves .btn {
+	flex: 1;
+	gap: 6px;
+}
+.tier-dialog-spacer {
+	flex: 1;
+}
+.tier-dialog-delete:not(:disabled) {
 	color: var(--color-danger);
 }
 .board-tier-items,

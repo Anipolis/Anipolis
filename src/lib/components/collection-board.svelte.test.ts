@@ -119,12 +119,12 @@ it("ティア表は、選んだ作品を段や未分類の空いたところを�
 	expect(onchange).toHaveBeenLastCalledWith([2, 3, 1], [0, 1, null]);
 });
 
-it("段の名前をその場で直すと、段の並びはそのままで知らせる", async () => {
+it("段の名前を設定から直すと、段の並びはそのままで知らせる", async () => {
 	const { target, ontierschange, onchange } = render(["S", "A"], tieredItems);
 	await tick();
-	click(target.querySelector('button[title="名前を変える"]'));
+	click(target.querySelector('[aria-label="段「S」の設定"]'));
 	await tick();
-	const input = target.querySelector<HTMLInputElement>(".board-tier-input");
+	const input = target.querySelector<HTMLInputElement>("#tier-dialog-name");
 	expect(input).not.toBeNull();
 	if (!input) return;
 	input.value = "神";
@@ -145,12 +145,44 @@ it("段を消すと、残る段の番号を付け替え、消した段の作品�
 		],
 	);
 	await tick();
-	click(target.querySelector('[aria-label="段「A」のメニュー"]'));
+	click(target.querySelector('[aria-label="段「A」の設定"]'));
 	await tick();
-	click([...target.querySelectorAll('[role="menuitem"]')].find((el) => el.textContent?.includes("この段を消す")));
+	click([...target.querySelectorAll(".tier-dialog button")].find((el) => el.textContent?.includes("この段を消す")));
 	await tick();
 	expect(ontierschange).toHaveBeenLastCalledWith(["S", "B"], [0, 2], [1, 3, 2], [0, 1, null]);
 	// 旧 A の作品は未分類、旧 B の作品は新しい B（1番）のまま
 	expect(target.querySelector('[data-board-tier="none"] [data-board-id="2"]')).not.toBeNull();
 	expect(target.querySelector('[data-board-tier="1"] [data-board-id="3"]')).not.toBeNull();
+});
+
+it("段を上の段と入れ替えると、作品も段ごと動く", async () => {
+	const { target, ontierschange } = render(
+		["S", "A", "B"],
+		[
+			{ id: 1, title: "一", cover_url: null, tier: 0 },
+			{ id: 2, title: "二", cover_url: null, tier: 1 },
+			{ id: 3, title: "三", cover_url: null, tier: 2 },
+		],
+	);
+	await tick();
+	click(target.querySelector('[aria-label="段「A」の設定"]'));
+	await tick();
+	click(
+		[...target.querySelectorAll(".tier-dialog button")].find((el) =>
+			el.textContent?.includes("上の段と入れ替える"),
+		),
+	);
+	await tick();
+	expect(ontierschange).toHaveBeenLastCalledWith(["A", "S", "B"], [1, 0, 2], [2, 1, 3], [0, 1, 2]);
+	// 設定は動かした段（いまは一番上）のまま開いている
+	expect(target.querySelector<HTMLButtonElement>(".tier-dialog .btn-secondary")?.disabled).toBe(true);
+});
+
+it("段を足すと一番下に足し、名前を付けられるように設定を開く", async () => {
+	const { target, ontierschange } = render(["S", "A"], tieredItems);
+	await tick();
+	click(target.querySelector(".board-tier-add"));
+	await tick();
+	expect(ontierschange).toHaveBeenLastCalledWith(["S", "A", "新しい段"], [0, 1, null], [1, 2, 3], [0, 1, 1]);
+	expect(target.querySelector<HTMLInputElement>("#tier-dialog-name")?.value).toBe("新しい段");
 });
