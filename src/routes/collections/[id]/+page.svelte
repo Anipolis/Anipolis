@@ -361,17 +361,6 @@ async function copyLink() {
 								/>
 							</div>
 						{/if}
-						<!-- シェアは公開のときだけ（193）。ホームの投稿欄にカードを付けて開く -->
-						{#if collection.is_public}
-							<a
-								href="/?share_collection={collection.id}#compose"
-								class="collection-tool"
-								aria-label="投稿でシェア"
-								title="シェア"
-							>
-								<span class="i-lucide-share-2" aria-hidden="true"></span>
-							</a>
-						{/if}
 						<button
 							type="button"
 							class="collection-tool"

@@ -1,5 +1,5 @@
 <script lang="ts">
-import { COLLECTION_KIND_LABELS, type CollectionShare, collectionTierColor } from "$lib/collections";
+import { type CollectionShare, collectionTierColor } from "$lib/collections";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 
 /**
@@ -10,7 +10,7 @@ let { share, linked = true }: { share: CollectionShare; linked?: boolean } = $pr
 
 const tierRows = $derived(
 	share.kind === "tier"
-		? share.tiers.slice(0, 3).map((label, tier) => ({
+		? share.tiers.slice(0, 5).map((label, tier) => ({
 				label,
 				tier,
 				items: share.items.filter((item) => item.tier === tier),
@@ -28,10 +28,6 @@ const tierRows = $derived(
 {/snippet}
 
 {#snippet body()}
-	<span class="collection-share-head">
-		<span class="i-lucide-folder" aria-hidden="true"></span>
-		{COLLECTION_KIND_LABELS[share.kind]}・{share.count}作品
-	</span>
 	<span class="collection-share-title">{share.title}</span>
 	{#if share.items.length === 0}
 		<span class="collection-share-empty">まだ作品がありません</span>
@@ -97,13 +93,6 @@ const tierRows = $derived(
 }
 a.collection-share:hover {
 	background: var(--color-surface-hover);
-}
-.collection-share-head {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	color: var(--color-text-muted);
-	font-size: 12px;
 }
 .collection-share-title {
 	font-size: 15px;
