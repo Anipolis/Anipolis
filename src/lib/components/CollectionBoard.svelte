@@ -1,6 +1,6 @@
 <script lang="ts">
 import { tick, untrack } from "svelte";
-import { type AnimePick, animePickMeta } from "$lib/anime-picker";
+import type { AnimePick } from "$lib/anime-picker";
 import {
 	collectionTierColor,
 	MAX_COLLECTION_ITEMS,
@@ -9,6 +9,7 @@ import {
 	orderByTier,
 } from "$lib/collections";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
+import CollectionSearch from "./CollectionSearch.svelte";
 
 /**
  * 自分のコレクションの編集面（詳細ページ）。切り替えなしで、いつでも動かせる。
@@ -393,47 +394,13 @@ function deleteTier(tier: number) {
 	announcement = `段「${name}」を消しました。入っていた作品は未分類へ移しました`;
 }
 
-// ---- 未分類に作品を足す（ティア表の検索） ----
+// ---- 作品を足す（ティア表は未分類の検索から、ほかは見出しの検索から addItem を呼ぶ） ----
 
-let query = $state("");
-// 結果の重なりは、作品を選ぶか、検索窓の外を押すか、Esc で閉じる（打った言葉は残す）
-let searchOpen = $state(false);
-let results = $state<AnimePick[]>([]);
-let searching = $state(false);
-let searchTimer: ReturnType<typeof setTimeout> | null = null;
-let searchController: AbortController | null = null;
 const addedIds = $derived(new Set(order.map((item) => item.id)));
 
-function onSearchInput() {
-	searchOpen = true;
-	if (searchTimer) clearTimeout(searchTimer);
-	searchController?.abort();
-	const q = query.trim();
-	if (!q) {
-		results = [];
-		searching = false;
-		return;
-	}
-	searching = true;
-	searchTimer = setTimeout(async () => {
-		const controller = new AbortController();
-		searchController = controller;
-		try {
-			const res = await fetch(`/api/anime/search?q=${encodeURIComponent(q)}`, { signal: controller.signal });
-			results = res.ok ? ((await res.json()) as AnimePick[]) : [];
-		} catch {
-			if (controller.signal.aborted) return;
-			results = [];
-		}
-		searching = false;
-	}, 250);
-}
-
-function addToPool(anime: AnimePick) {
+export function addItem(anime: AnimePick) {
 	if (addedIds.has(anime.id) || full) return;
 	setOrder([...order, { id: anime.id, title: anime.title, cover_url: anime.cover_url, tier: null }]);
-	// 選んだら結果を閉じる（足した作品が未分類に見えるように）
-	searchOpen = false;
 	announcement = tiered ? `「${anime.title}」を未分類に足しました` : `「${anime.title}」を最後に足しました`;
 }
 
@@ -447,8 +414,6 @@ $effect(() => {
 		window.removeEventListener("touchmove", preventScroll);
 		clearPress();
 		stopAutoScroll();
-		if (searchTimer) clearTimeout(searchTimer);
-		searchController?.abort();
 	};
 });
 
@@ -457,14 +422,12 @@ function onWindowClick(event: MouseEvent) {
 	// 選んでいる作品は、編集面の外を押したら選び直しをやめる
 	if (selectedId !== null && board && target && !board.contains(target)) selectedId = null;
 	if (menuTier !== null && !(target instanceof Element && target.closest(".board-tier-menu-wrap"))) menuTier = null;
-	if (searchOpen && !(target instanceof Element && target.closest(".board-search"))) searchOpen = false;
 }
 
 function onWindowKeyDown(event: KeyboardEvent) {
 	if (event.key !== "Escape") return;
 	selectedId = null;
 	menuTier = null;
-	searchOpen = false;
 }
 </script>
 
@@ -475,59 +438,6 @@ function onWindowKeyDown(event: KeyboardEvent) {
 	onclick={onWindowClick}
 	onkeydown={onWindowKeyDown}
 />
-
-<!-- 作品を探して足す。結果は重ねて出し、選ぶとすぐ入る（ティア表は未分類の下で上へ、ほかは並びの上で下へ開く） -->
-{#snippet search(direction: 'up' | 'down')}
-	<div class="board-search board-search--{direction}">
-		<span class="board-search-icon i-lucide-search" aria-hidden="true"></span>
-		<input
-			type="search"
-			class="board-search-input"
-			placeholder={full ? `${MAX_COLLECTION_ITEMS}作品まで入れられます` : '作品を探して足す'}
-			aria-label={tiered ? '作品を探して未分類に足す' : '作品を探して足す'}
-			disabled={full}
-			bind:value={query}
-			oninput={onSearchInput}
-			onfocus={() => (searchOpen = true)}
-		>
-		{#if searchOpen && query.trim()}
-			<ul class="board-results" aria-label="検索結果">
-				{#if searching && results.length === 0}
-					<li class="board-results-note">探しています...</li>
-				{:else if results.length === 0}
-					<li class="board-results-note">見つかりませんでした</li>
-				{/if}
-				{#each results as anime (anime.id)}
-					{@const added = addedIds.has(anime.id)}
-					{@const meta = animePickMeta(anime)}
-					<li>
-						<button
-							type="button"
-							class="board-result"
-							disabled={added || full}
-							onclick={() => addToPool(anime)}
-						>
-							<span class="board-result-cover">
-								{#if anime.cover_url}
-									<img
-										src={coverThumbSrc(anime.cover_url)}
-										{@attach coverThumbFallback(anime.cover_url)}
-										alt=""
-										loading="lazy"
-									>
-								{/if}
-							</span>
-							<span class="board-result-text">
-								<span class="board-result-title">{anime.title}</span>
-								<span class="board-result-meta">{added ? '追加済み' : meta}</span>
-							</span>
-						</button>
-					</li>
-				{/each}
-			</ul>
-		{/if}
-	</div>
-{/snippet}
 
 {#snippet card(item: Item, index: number)}
 	<li class="board-item">
@@ -691,12 +601,11 @@ function onWindowKeyDown(event: KeyboardEvent) {
 				{/each}
 			</ol>
 			<!-- 検索は未分類の下に置き、結果は上に重ねて出す（未分類の枠を伸ばさない） -->
-			{@render search('up')}
+			<CollectionSearch {addedIds} {full} direction="up" label="作品を探して未分類に足す" onpick={addItem} />
 		</aside>
 	{:else}
-		{@render search('down')}
 		{#if order.length === 0}
-			<p class="board-empty">上の検索から作品を足せます</p>
+			<p class="board-empty">右上の検索から作品を足せます</p>
 		{:else}
 			<ol class="board-grid" aria-label="作品">
 				{#each order as item, index (item.id)}
@@ -904,120 +813,12 @@ function onWindowKeyDown(event: KeyboardEvent) {
 	min-height: 96px;
 	overflow-y: auto;
 }
-.board-search {
-	position: relative;
-	flex-shrink: 0;
-}
-.board-search--down {
-	max-width: 360px;
-	margin-bottom: 12px;
-}
 .board-empty {
 	margin: 0;
 	padding: 24px 0;
 	color: var(--color-text-muted);
 	font-size: 13px;
 	text-align: center;
-}
-.board-search-icon {
-	position: absolute;
-	top: 50%;
-	left: 10px;
-	color: var(--color-text-muted);
-	font-size: 14px;
-	transform: translateY(-50%);
-}
-.board-search-input {
-	width: 100%;
-	padding: 8px 10px 8px 30px;
-	border: 1px solid var(--color-border);
-	border-radius: 8px;
-	background: var(--color-bg);
-	color: var(--color-text);
-	font-size: 13px;
-}
-/* 検索結果は検索窓の上に重ねて出す */
-.board-results {
-	position: absolute;
-	right: 0;
-	bottom: calc(100% + 6px);
-	z-index: 20;
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
-	width: min(340px, calc(100vw - 24px));
-	max-height: min(360px, 50vh);
-	margin: 0;
-	padding: 6px;
-	overflow-y: auto;
-	border: 1px solid var(--color-border);
-	border-radius: 10px;
-	background: var(--color-bg-card);
-	box-shadow: 0 -8px 24px rgb(0 0 0 / 0.24);
-	list-style: none;
-}
-/* 並びの上に置いた検索は、結果を下へ開く */
-.board-search--down .board-results {
-	top: calc(100% + 6px);
-	right: auto;
-	bottom: auto;
-	left: 0;
-	box-shadow: 0 8px 24px rgb(0 0 0 / 0.24);
-}
-.board-results-note {
-	padding: 8px 4px;
-	color: var(--color-text-muted);
-	font-size: 12px;
-}
-.board-result {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	width: 100%;
-	padding: 4px;
-	border: none;
-	border-radius: 6px;
-	background: transparent;
-	color: var(--color-text);
-	text-align: left;
-	cursor: pointer;
-}
-.board-result:hover:not(:disabled) {
-	background: var(--color-surface-hover);
-}
-.board-result:disabled {
-	cursor: default;
-	opacity: 0.6;
-}
-.board-result-cover {
-	flex-shrink: 0;
-	width: 28px;
-	aspect-ratio: 400 / 566;
-	overflow: hidden;
-	border-radius: 4px;
-	background: var(--color-border);
-}
-.board-result-cover img {
-	display: block;
-	width: 100%;
-	height: 100%;
-	object-fit: cover;
-}
-.board-result-text {
-	display: flex;
-	flex: 1;
-	flex-direction: column;
-	min-width: 0;
-}
-.board-result-title {
-	overflow: hidden;
-	font-size: 12px;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-.board-result-meta {
-	color: var(--color-text-muted);
-	font-size: 11px;
 }
 .board-item {
 	position: relative;

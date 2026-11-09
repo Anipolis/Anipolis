@@ -2,9 +2,11 @@
 import { untrack } from "svelte";
 import { beforeNavigate, invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
-import { collectionKindPrefix, collectionTierColor, orderByTier } from "$lib/collections";
+import type { AnimePick } from "$lib/anime-picker";
+import { collectionKindPrefix, collectionTierColor, MAX_COLLECTION_ITEMS, orderByTier } from "$lib/collections";
 import CollectionBoard from "$lib/components/CollectionBoard.svelte";
 import CollectionFormModal from "$lib/components/CollectionFormModal.svelte";
+import CollectionSearch from "$lib/components/CollectionSearch.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import type { PageProps } from "./$types";
@@ -54,6 +56,13 @@ function putItems(to: SaveTarget, animeIds: number[], tiers: (number | null)[], 
 	);
 }
 
+// ティア表以外は、見出しの検索で選んだ作品を編集面の最後に足す
+let board = $state<ReturnType<typeof CollectionBoard>>();
+
+function addFromSearch(anime: AnimePick) {
+	board?.addItem(anime);
+}
+
 const isTier = $derived(collection.kind === "tier");
 const reorderItems = $derived(
 	collection.items.map((anime, index) => ({
@@ -94,7 +103,8 @@ let boardVersion = $state(0);
 const boardKey = $derived(`${collection.id}:${collection.kind}:${boardVersion}`);
 type Snapshot = { ids: number[]; tiers: (number | null)[] };
 // 最後に知らされた並び（保存待ちを含む）と、元に戻す先
-let latest: Snapshot | null = null;
+// 見出しの検索の「追加済み」にも使うので、変わったら画面に伝える
+let latest = $state.raw<Snapshot | null>(null);
 let undoTo = $state<Snapshot | null>(null);
 // 続けて動かしている間（少し手を止めるまで）は、ひとまとまりの操作として元に戻す
 let undoGroupTimer: ReturnType<typeof setTimeout> | null = null;
@@ -119,6 +129,8 @@ async function whileBoardBusy(task: () => Promise<void>) {
 function currentSnapshot(): Snapshot {
 	return latest ?? { ids: reorderItems.map((item) => item.id), tiers: reorderItems.map((item) => item.tier) };
 }
+
+const liveIds = $derived(new Set(currentSnapshot().ids));
 
 async function resetBoard() {
 	latest = null;
@@ -343,6 +355,17 @@ async function copyLink() {
 								<span class="i-lucide-undo-2" aria-hidden="true"></span>
 							</button>
 						{/if}
+						{#if !isTier}
+							<div class="collection-header-search">
+								<CollectionSearch
+									addedIds={liveIds}
+									full={liveIds.size >= MAX_COLLECTION_ITEMS}
+									direction="down"
+									label="作品を探して足す"
+									onpick={addFromSearch}
+								/>
+							</div>
+						{/if}
 						<button
 							type="button"
 							class="collection-tool"
@@ -379,6 +402,7 @@ async function copyLink() {
 			<div class="collection-board-wrap" class:collection-board-wrap--busy={boardBusy} inert={boardBusy}>
 				{#key boardKey}
 					<CollectionBoard
+						bind:this={board}
 						items={reorderItems}
 						tiers={isTier ? collection.tiers : undefined}
 						showRank={collection.kind === 'ranking'}
@@ -451,6 +475,22 @@ async function copyLink() {
 .collection-board-wrap--busy {
 	opacity: 0.6;
 	transition: opacity 0.15s;
+}
+.collection-header-search {
+	width: 240px;
+}
+/* 狭い画面では、検索のある道具の列を題名の下へ回し、検索を広げる */
+@media (max-width: 640px) {
+	.collection-title-row {
+		flex-wrap: wrap;
+	}
+	.collection-tools:has(.collection-header-search) {
+		flex: 1 1 100%;
+	}
+	.collection-header-search {
+		flex: 1;
+		width: auto;
+	}
 }
 .collection-save-state {
 	color: var(--color-text-muted);
