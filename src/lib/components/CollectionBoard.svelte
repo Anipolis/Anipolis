@@ -395,7 +395,7 @@ function deleteTier(tier: number) {
 // ---- 未分類に作品を足す（ティア表の検索） ----
 
 let query = $state("");
-// 結果の重なりは、検索窓の外を押すか Esc で閉じる（打った言葉は残す）
+// 結果の重なりは、作品を選ぶか、検索窓の外を押すか、Esc で閉じる（打った言葉は残す）
 let searchOpen = $state(false);
 let results = $state<AnimePick[]>([]);
 let searching = $state(false);
@@ -431,6 +431,8 @@ function onSearchInput() {
 function addToPool(anime: AnimePick) {
 	if (addedIds.has(anime.id) || full) return;
 	setOrder([...order, { id: anime.id, title: anime.title, cover_url: anime.cover_url, tier: null }]);
+	// 選んだら結果を閉じる（足した作品が未分類に見えるように）
+	searchOpen = false;
 	announcement = `「${anime.title}」を未分類に足しました`;
 }
 
@@ -668,9 +670,6 @@ function onWindowKeyDown(event: KeyboardEvent) {
 										<span class="board-result-title">{anime.title}</span>
 										<span class="board-result-meta">{added ? '追加済み' : meta}</span>
 									</span>
-									{#if !added}
-										<span class="board-result-add i-lucide-plus" aria-hidden="true"></span>
-									{/if}
 								</button>
 							</li>
 						{/each}
@@ -974,10 +973,6 @@ function onWindowKeyDown(event: KeyboardEvent) {
 .board-result-meta {
 	color: var(--color-text-muted);
 	font-size: 11px;
-}
-.board-result-add {
-	flex-shrink: 0;
-	color: var(--color-accent);
 }
 .board-item {
 	position: relative;
