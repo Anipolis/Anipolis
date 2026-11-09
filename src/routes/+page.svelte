@@ -109,7 +109,12 @@ $effect(() => {
 $effect(() => {
 	let active = true;
 	void data.pageExtras.then((extras) => {
-		if (!active || !(extras.initialAnime || extras.initialExchangeShare) || !data.profile) return;
+		if (
+			!active ||
+			!(extras.initialAnime || extras.initialExchangeShare || extras.initialCollectionShare) ||
+			!data.profile
+		)
+			return;
 		if (window.matchMedia("(max-width: 960px)").matches) {
 			composeOpen.set(true);
 		}
@@ -118,6 +123,7 @@ $effect(() => {
 		const url = new URL(window.location.href);
 		url.searchParams.delete("quote_anime");
 		url.searchParams.delete("share_exchange");
+		url.searchParams.delete("share_collection");
 		url.hash = "";
 		replaceState(url.toString(), {});
 	});
@@ -152,6 +158,7 @@ $effect(() => {
 						initialContent={extras.initialContent}
 						initialExchangeId={extras.initialExchangeId}
 						initialExchangeShare={extras.initialExchangeShare}
+						initialCollectionShare={extras.initialCollectionShare}
 						watchingAnime={extras.watchingAnime}
 					/>
 				{:else if pageExtras.error}
@@ -402,6 +409,7 @@ $effect(() => {
 					initialContent={extras.initialContent}
 					initialExchangeId={extras.initialExchangeId}
 					initialExchangeShare={extras.initialExchangeShare}
+					initialCollectionShare={extras.initialCollectionShare}
 					watchingAnime={extras.watchingAnime}
 					onsubmitsuccess={closeModal}
 					focusOnMount

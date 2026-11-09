@@ -1,5 +1,6 @@
 ﻿import { fail } from "@sveltejs/kit";
 import type { MylistActivity } from "$lib/activity";
+import { COLLECTION_SHARE_SELECT, type CollectionShare, isCollectionId, toCollectionShare } from "$lib/collections";
 import {
 	deletePostAction,
 	insertPostWithHashtags,
@@ -37,6 +38,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		user && (tabParam === "following" || tabParam === "activity") ? tabParam : "all";
 	const quoteAnimeId = url.searchParams.get("quote_anime");
 	const shareExchangeId = url.searchParams.get("share_exchange");
+	const shareCollectionId = url.searchParams.get("share_collection");
 	// before / before_id は PostgREST のフィルタに埋め込むので、形を厳密に確かめる（#243）
 	const before = parseTimelineCursor(url.searchParams);
 	// 続きの有無（nextCursor）はミュート除外前の取得行から決める。除外後の件数で判定すると
@@ -111,11 +113,25 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 			user && shareExchangeId
 				? getAnimeExchangeShareForUser(supabase, user.id, shareExchangeId)
 				: Promise.resolve(null),
+			user && shareCollectionId ? getOwnPublicCollectionShare(user.id, shareCollectionId) : Promise.resolve(null),
 			// 視聴中の作品は投稿欄の補助。読めなくても投稿欄は出す（失敗は failQuery がログに残す）
 			user ? getUserAnimeList(supabase, user.id, "watching").catch(() => []) : Promise.resolve([]),
 			user ? getOpenBroadcastRoomSessions(supabase, { kind: "episode" }) : Promise.resolve([]),
 			user ? isNewcomer(user.id) : Promise.resolve(false),
 		] as const);
+
+	// コレクションのシェア（193）。シェアできるのは自分の公開コレクションだけ（投稿時は DB のトリガーも確かめる）
+	async function getOwnPublicCollectionShare(userId: string, collectionId: string): Promise<CollectionShare | null> {
+		if (!isCollectionId(collectionId)) return null;
+		const { data } = await supabase
+			.from("user_collections")
+			.select(COLLECTION_SHARE_SELECT)
+			.eq("id", collectionId)
+			.eq("user_id", userId)
+			.eq("is_public", true)
+			.maybeSingle();
+		return toCollectionShare(data);
+	}
 
 	// まだ誰もフォローしておらず、マイリストも空の人（ホームで最初にやることを案内する）。読めなければ案内しない
 	async function isNewcomer(userId: string): Promise<boolean> {
@@ -131,7 +147,16 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	// ストリーミングで後から解決する。サイドバーからの遷移で、複数の
 	// Supabase クエリが終わるまで前画面に留まらないための境界である。
 	const pageExtras = fetchSidebarExtras().then(
-		([trendingResult, animeTrending, quoteAnimeResult, exchangeShare, watchingAnime, liveRooms, newcomer]) => ({
+		([
+			trendingResult,
+			animeTrending,
+			quoteAnimeResult,
+			exchangeShare,
+			collectionShare,
+			watchingAnime,
+			liveRooms,
+			newcomer,
+		]) => ({
 			newcomer,
 			trending: trendingResult.data ?? [],
 			animeTrending,
@@ -141,6 +166,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 				: null,
 			initialExchangeId: exchangeShare ? shareExchangeId : null,
 			initialExchangeShare: exchangeShare,
+			initialCollectionShare: collectionShare,
 			initialContent: exchangeShare ? buildExchangeInitialContent(exchangeShare) : "",
 			watchingAnime: watchingAnime.slice(0, 5).map((a) => ({
 				id: a.id,
@@ -175,6 +201,10 @@ export const actions: Actions = {
 		const cwAnimeId = (form.get("cw_anime_id") as string | null)?.trim() || null;
 		const broadcastRoomSessionId = (form.get("broadcast_room_session_id") as string | null)?.trim() || null;
 		const exchangeId = (form.get("exchange_id") as string | null)?.trim() || null;
+		const collectionId = (form.get("collection_id") as string | null)?.trim() || null;
+		if (collectionId && !isCollectionId(collectionId)) {
+			return fail(400, { message: "シェアするコレクションが見つかりません" });
+		}
 		let imageUrls: string[] = [];
 		try {
 			imageUrls = JSON.parse(imageUrlsRaw);
@@ -195,6 +225,10 @@ export const actions: Actions = {
 			exchangeShare,
 			broadcastRoomSessionId,
 			cwAnimeId,
+			[],
+			null,
+			null,
+			collectionId,
 		);
 	},
 

@@ -6,6 +6,7 @@ import { replaceState } from "$app/navigation";
 import { page } from "$app/state";
 import { autosize } from "$lib/actions/autosize";
 import { trapFocus } from "$lib/actions/trapFocus";
+import type { CollectionShare } from "$lib/collections";
 import {
 	type ComposeDraft,
 	clearComposeContext,
@@ -25,6 +26,7 @@ import { charCountClass } from "$lib/utils/format";
 import { applyMention, findMentionQuery, mentionOptionId, resolveMentionKey } from "$lib/utils/mention-suggest";
 import { createSearchGate } from "$lib/utils/search-gate";
 import AnimeExchangeResult from "./AnimeExchangeResult.svelte";
+import CollectionShareCard from "./CollectionShareCard.svelte";
 import { classifyComposerSubmitResult } from "./post-composer-submit";
 import UserAvatar from "./UserAvatar.svelte";
 
@@ -52,6 +54,8 @@ interface Props {
 	initialContent?: string;
 	initialExchangeId?: string | null;
 	initialExchangeShare?: AnimeExchangeShare | null;
+	/** コレクションのシェア（193）。?share_collection= で開いたとき */
+	initialCollectionShare?: CollectionShare | null;
 	watchingAnime?: AnimeResult[];
 	onsubmitsuccess?: () => void;
 	focusOnMount?: boolean;
@@ -70,6 +74,7 @@ let {
 	initialContent = "",
 	initialExchangeId = null,
 	initialExchangeShare = null,
+	initialCollectionShare = null,
 	watchingAnime = [],
 	onsubmitsuccess,
 	focusOnMount = false,
@@ -87,6 +92,7 @@ let uploading = $state(false);
 let fileInput = $state<HTMLInputElement | null>(null);
 let selectedExchangeId = $state<string | null>(null);
 let selectedExchangeShare = $state<AnimeExchangeShare | null>(null);
+let selectedCollection = $state<CollectionShare | null>(null);
 
 // アニメ引用
 let animeSearchOpen = $state(false);
@@ -140,9 +146,11 @@ let appliedInitialValuesKey = $state<string | null>(null);
 const initialValuesKey = $derived(
 	initialExchangeShare && initialExchangeId
 		? `exchange:${initialExchangeId}`
-		: initialAnime
-			? `anime:${initialAnime.id}`
-			: initialContent || null,
+		: initialCollectionShare
+			? `collection:${initialCollectionShare.id}`
+			: initialAnime
+				? `anime:${initialAnime.id}`
+				: initialContent || null,
 );
 
 $effect(() => {
@@ -159,12 +167,19 @@ $effect(() => {
 		selectedExchangeId = initialExchangeId;
 		selectedExchangeShare = initialExchangeShare;
 	}
+	if (initialCollectionShare && !selectedCollection) {
+		selectedCollection = initialCollectionShare;
+	}
 });
 
 const remaining = $derived(MAX_LENGTH - content.length);
 const countClass = $derived(charCountClass(content.length, MAX_LENGTH));
 const canSubmit = $derived(
-	(content.trim().length > 0 || imageUrls.length > 0 || selectedAnime !== null || selectedExchangeShare !== null) &&
+	(content.trim().length > 0 ||
+		imageUrls.length > 0 ||
+		selectedAnime !== null ||
+		selectedExchangeShare !== null ||
+		selectedCollection !== null) &&
 		content.length <= MAX_LENGTH &&
 		!submitting &&
 		!uploading,
@@ -306,6 +321,7 @@ function discardDraft() {
 	selectedCwAnime = null;
 	selectedRoom = null;
 	clearExchangeShare();
+	clearCollectionShare();
 	if (draftKey) {
 		clearComposeDraft(getBrowserDraftStorage(), draftKey);
 		clearComposeContext(getBrowserDraftStorage(), draftKey);
@@ -435,6 +451,16 @@ function clearExchangeShare() {
 	if (page.url.searchParams.has("share_exchange")) {
 		const url = new URL(page.url);
 		url.searchParams.delete("share_exchange");
+		replaceState(url, page.state);
+	}
+}
+
+function clearCollectionShare() {
+	selectedCollection = null;
+
+	if (page.url.searchParams.has("share_collection")) {
+		const url = new URL(page.url);
+		url.searchParams.delete("share_collection");
 		replaceState(url, page.state);
 	}
 }
@@ -591,6 +617,7 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 		imageUrls = [];
 		selectedAnime = null;
 		clearExchangeShare();
+		clearCollectionShare();
 		await update();
 		onsubmitsuccess?.();
 	};
@@ -813,6 +840,21 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 				{#if selectedExchangeId}
 					<input type="hidden" name="exchange_id" value={selectedExchangeId}>
 				{/if}
+			{/if}
+
+			{#if selectedCollection}
+				<div class="composer-collection-preview">
+					<CollectionShareCard share={selectedCollection} linked={false} />
+					<button
+						type="button"
+						class="composer-anime-remove"
+						onclick={clearCollectionShare}
+						aria-label="コレクションのシェアを削除"
+					>
+						✕
+					</button>
+				</div>
+				<input type="hidden" name="collection_id" value={selectedCollection.id}>
 			{/if}
 
 			<!-- 画像のプレビュー -->
@@ -1214,6 +1256,10 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 	border-radius: 12px;
 	background: var(--color-bg);
 }
+.composer-collection-preview {
+	position: relative;
+}
+.composer-collection-preview .composer-anime-remove,
 .composer-exchange-preview .composer-anime-remove {
 	position: absolute;
 	top: 8px;
