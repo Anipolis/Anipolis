@@ -295,7 +295,14 @@ $effect(() => {
 let draftRestored = $state(false);
 
 function currentDraft(): ComposeDraft {
-	return { content, imageUrls, anime: selectedAnime, cwAnime: selectedCwAnime, room: selectedRoom };
+	return {
+		content,
+		imageUrls,
+		anime: selectedAnime,
+		cwAnime: selectedCwAnime,
+		room: selectedRoom,
+		collection: selectedCollection,
+	};
 }
 
 const hasDraft = $derived(!isDraftEmpty(currentDraft()));
@@ -310,6 +317,8 @@ function restoreDraft(key: string) {
 		if (!selectedAnime) selectedAnime = draft.anime;
 		if (!selectedCwAnime) selectedCwAnime = draft.cwAnime;
 		if (!selectedRoom) selectedRoom = draft.room;
+		// シェアのリンクは URL から消えるので、閉じて開き直したときはここから戻す
+		if (!selectedCollection) selectedCollection = draft.collection;
 	}
 	draftRestored = true;
 }
