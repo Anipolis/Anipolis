@@ -189,24 +189,41 @@ const handleDelete: SubmitFunction = ({ cancel }) => {
 					</p>
 				</div>
 
-				<fieldset class="collection-form-kind">
-					<legend class="field-label">種類</legend>
-					<div class="collection-form-kinds">
-						{#each COLLECTION_KINDS as option (option.value)}
-							<label class="collection-form-kind-option">
-								<input type="radio" name="kind" value={option.value} bind:group={kind}>
-								<span>{option.label}</span>
-							</label>
-						{/each}
+				<!-- 種類と公開は、ドロップダウンにして横に並べる -->
+				<div class="collection-form-row">
+					<div class="field">
+						<label for="collection-kind" class="field-label">種類</label>
+						<select id="collection-kind" name="kind" class="field-input" bind:value={kind}>
+							{#each COLLECTION_KINDS as option (option.value)}
+								<option value={option.value}>{option.label}</option>
+							{/each}
+						</select>
 					</div>
-					<p class="field-hint">
-						{kind === 'ranking'
-							? '並べた順に順位を付けます'
-							: kind === 'tier'
-								? '作品を段に分けます。段の名前は下で変えられます'
-								: '作品を好きな順に並べます'}
-					</p>
-				</fieldset>
+					<div class="field">
+						<label for="collection-visibility" class="field-label">公開</label>
+						<select
+							id="collection-visibility"
+							class="field-input"
+							value={isPublic ? 'public' : 'private'}
+							onchange={(event) => (isPublic = event.currentTarget.value === 'public')}
+						>
+							<option value="private">非公開</option>
+							<option value="public">公開</option>
+						</select>
+						{#if isPublic}
+							<input type="hidden" name="is_public" value="on">
+						{/if}
+					</div>
+				</div>
+				<p class="field-hint collection-form-row-hint">
+					{kind === 'ranking'
+						? '並べた順に順位を付けます。'
+						: kind === 'tier'
+							? '作品を段に分けます。段の名前は下で変えられます。'
+							: '作品を好きな順に並べます。'}{isPublic
+						? 'リンクを知っている人が見られます（鍵アカウントはフォロワーだけ）'
+						: '自分だけが見られます'}
+				</p>
 
 				{#if kind === 'tier'}
 					<fieldset class="collection-form-tiers">
@@ -251,41 +268,6 @@ const handleDelete: SubmitFunction = ({ cancel }) => {
 						{/if}
 					</fieldset>
 				{/if}
-
-				<fieldset class="collection-form-visibility">
-					<legend class="field-label">公開</legend>
-					<label class="collection-form-option">
-						<input
-							type="radio"
-							name="visibility"
-							value="public"
-							checked={isPublic}
-							onchange={() => (isPublic = true)}
-						>
-						<span>
-							<span class="collection-form-option-title">公開</span>
-							<span class="collection-form-option-hint"
-								>リンクを知っている人が見られる（鍵アカウントはフォロワーだけ）</span
-							>
-						</span>
-					</label>
-					<label class="collection-form-option">
-						<input
-							type="radio"
-							name="visibility"
-							value="private"
-							checked={!isPublic}
-							onchange={() => (isPublic = false)}
-						>
-						<span>
-							<span class="collection-form-option-title">非公開</span>
-							<span class="collection-form-option-hint">自分だけが見られる</span>
-						</span>
-					</label>
-					{#if isPublic}
-						<input type="hidden" name="is_public" value="on">
-					{/if}
-				</fieldset>
 			</div>
 
 			<div class="collection-form-footer">
@@ -396,35 +378,22 @@ const handleDelete: SubmitFunction = ({ cancel }) => {
 .collection-form-body :global(.field) {
 	margin-bottom: 0;
 }
-.collection-form-kind,
 .collection-form-tiers {
 	margin: 0;
 	padding: 0;
 	border: 0;
 }
-.collection-form-kinds {
+.collection-form-row {
 	display: flex;
-	gap: 8px;
+	gap: 12px;
 }
-.collection-form-kind-option {
-	display: flex;
+.collection-form-row .field {
 	flex: 1;
-	align-items: center;
-	justify-content: center;
-	gap: 6px;
-	padding: 8px 10px;
-	border: 1px solid var(--color-border);
-	border-radius: 10px;
-	cursor: pointer;
-	font-size: 14px;
+	min-width: 0;
+	margin-bottom: 0;
 }
-.collection-form-kind-option:has(input:checked) {
-	border-color: var(--color-accent);
-	background: color-mix(in srgb, var(--color-accent) 8%, transparent);
-	font-weight: 700;
-}
-.collection-form-kind-option input {
-	margin: 0;
+.collection-form-row-hint {
+	margin-top: -8px;
 }
 .collection-form-tier-list {
 	display: flex;
@@ -465,44 +434,6 @@ const handleDelete: SubmitFunction = ({ cancel }) => {
 }
 .collection-form-tier-add {
 	font-size: 13px;
-}
-.collection-form-visibility {
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-	margin: 0;
-	padding: 0;
-	border: 0;
-}
-.collection-form-option {
-	display: flex;
-	align-items: flex-start;
-	gap: 10px;
-	padding: 10px 12px;
-	border: 1px solid var(--color-border);
-	border-radius: 10px;
-	cursor: pointer;
-}
-.collection-form-option:has(input:checked) {
-	border-color: var(--color-border-hover);
-	background: var(--color-surface-hover);
-}
-.collection-form-option input {
-	margin-top: 3px;
-	accent-color: var(--color-accent);
-}
-.collection-form-option > span {
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
-}
-.collection-form-option-title {
-	font-size: 14px;
-	font-weight: 700;
-}
-.collection-form-option-hint {
-	color: var(--color-text-muted);
-	font-size: 12px;
 }
 .collection-form-delete {
 	color: var(--color-danger);
