@@ -163,3 +163,46 @@ export function withAnimeAdded(animeIds: number[], animeId: number): number[] {
 export function withAnimeRemoved(animeIds: number[], animeId: number): number[] {
 	return animeIds.filter((id) => id !== animeId);
 }
+
+/** 投稿でシェアしたコレクションのカード（193）。投稿は参照だけを持ち、中身は表示のたびに今のものを読む */
+export interface CollectionShare {
+	id: string;
+	title: string;
+	kind: CollectionKind;
+	tiers: string[];
+	count: number;
+	/** リスト・ランキングは先頭5作品、ティア表は上から5段までを各段8作品まで（collection_preview） */
+	items: { id: number; title: string; cover_url: string | null; tier: number | null }[];
+}
+
+/** 投稿に JOIN したコレクション（collection_preview つき）をカードの形にする。見えない・形が違うなら null */
+export function toCollectionShare(raw: unknown): CollectionShare | null {
+	const row = Array.isArray(raw) ? raw[0] : raw;
+	if (!row || typeof row !== "object") return null;
+	const value = row as Record<string, unknown>;
+	if (typeof value["id"] !== "string" || typeof value["title"] !== "string") return null;
+	const preview = (value["collection_preview"] ?? {}) as { count?: unknown; items?: unknown };
+	const items = Array.isArray(preview.items) ? preview.items : [];
+	return {
+		id: value["id"],
+		title: value["title"],
+		kind: isCollectionKind(value["kind"]) ? value["kind"] : "list",
+		tiers: Array.isArray(value["tiers"])
+			? value["tiers"].filter((tier): tier is string => typeof tier === "string")
+			: [],
+		count: typeof preview.count === "number" ? preview.count : items.length,
+		items: items
+			.filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
+			.map((item) => ({
+				id: Number(item["id"]),
+				title: typeof item["title"] === "string" ? item["title"] : "",
+				cover_url: typeof item["cover_url"] === "string" ? item["cover_url"] : null,
+				tier: typeof item["tier"] === "number" ? item["tier"] : null,
+			}))
+			.filter((item) => Number.isFinite(item.id)),
+	};
+}
+
+/** シェアのカード・投稿欄のプレビューで読むコレクションの列 */
+// collection_preview は計算列（193）。型の生成に出てこないので、select の型推論に回さないよう string にしておく
+export const COLLECTION_SHARE_SELECT = "id, title, kind, tiers, collection_preview" as string;

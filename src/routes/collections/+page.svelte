@@ -109,6 +109,13 @@ const editing = $derived(data.collections?.find((collection) => collection.id ==
 										<span class="i-lucide-pencil" aria-hidden="true"></span>
 										編集
 									</button>
+									<!-- アニポリスの投稿でシェア（193）。公開のときだけ。外へのリンク共有と紛れないよう、アイコンはリポストと同じ -->
+									{#if collection.is_public}
+										<a role="menuitem" href="/?share_collection={collection.id}#compose">
+											<span class="i-lucide-repeat-2" aria-hidden="true"></span>
+											投稿でシェア
+										</a>
+									{/if}
 								</div>
 							{/if}
 						</div>
@@ -247,7 +254,8 @@ const editing = $derived(data.collections?.find((collection) => collection.id ==
 	background: var(--color-surface);
 	box-shadow: 0 8px 24px rgb(0 0 0 / 0.24);
 }
-.collection-menu-dropdown button {
+.collection-menu-dropdown button,
+.collection-menu-dropdown a {
 	display: flex;
 	align-items: center;
 	gap: 8px;
@@ -260,8 +268,10 @@ const editing = $derived(data.collections?.find((collection) => collection.id ==
 	font: inherit;
 	font-size: 14px;
 	text-align: left;
+	text-decoration: none;
 }
-.collection-menu-dropdown button:hover {
+.collection-menu-dropdown button:hover,
+.collection-menu-dropdown a:hover {
 	background: var(--color-surface-hover);
 }
 .collection-item-covers {

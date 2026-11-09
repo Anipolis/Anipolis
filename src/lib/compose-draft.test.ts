@@ -54,6 +54,15 @@ describe("isDraftEmpty", () => {
 		expect(isDraftEmpty({ ...createEmptyDraft(), anime })).toBe(false);
 	});
 
+	it("keeps a draft that only shares a collection", () => {
+		expect(
+			isDraftEmpty({
+				...createEmptyDraft(),
+				collection: { id: "c1", title: "t", kind: "list", tiers: [], count: 0, items: [] },
+			}),
+		).toBe(false);
+	});
+
 	it("does not keep a draft that only has CW or room selections", () => {
 		expect(isDraftEmpty({ ...createEmptyDraft(), cwAnime: anime, room })).toBe(true);
 	});
@@ -61,7 +70,22 @@ describe("isDraftEmpty", () => {
 
 describe("serialize / parse", () => {
 	it("round-trips every field", () => {
-		const draft = { content: "感想 @alice", imageUrls: ["/a.png", "/b.png"], anime, cwAnime: anime, room };
+		const collection = {
+			id: "c1",
+			title: "好きなアニメ",
+			kind: "tier" as const,
+			tiers: ["S"],
+			count: 1,
+			items: [],
+		};
+		const draft = {
+			content: "感想 @alice",
+			imageUrls: ["/a.png", "/b.png"],
+			anime,
+			cwAnime: anime,
+			room,
+			collection,
+		};
 		const raw = serializeComposeDraft(draft, 1_000);
 		expect(raw).not.toBeNull();
 		expect(parseComposeDraft(raw, 2_000)).toEqual(draft);
@@ -100,6 +124,7 @@ describe("serialize / parse", () => {
 			anime: null,
 			cwAnime: null,
 			room: null,
+			collection: null,
 		});
 	});
 });

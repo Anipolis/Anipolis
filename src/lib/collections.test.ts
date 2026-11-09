@@ -3,6 +3,7 @@ import {
 	collectionTierColor,
 	orderByTier,
 	parseCollectionInput,
+	toCollectionShare,
 	withAnimeAdded,
 	withAnimeRemoved,
 } from "./collections";
@@ -131,5 +132,39 @@ describe("collectionTierColor", () => {
 		expect(collectionTierColor(0)).toBe("#ff7f7f");
 		expect(collectionTierColor(1)).toBe("#ffbf7f");
 		expect(new Set(Array.from({ length: 10 }, (_, tier) => collectionTierColor(tier))).size).toBe(10);
+	});
+});
+
+describe("toCollectionShare", () => {
+	it("投稿に JOIN したコレクションと要約をカードの形にする", () => {
+		expect(
+			toCollectionShare({
+				id: "c1",
+				title: "好きなアニメ",
+				kind: "tier",
+				tiers: ["S", "A"],
+				collection_preview: { count: 7, items: [{ id: 5, title: "作品", cover_url: null, tier: 0 }] },
+			}),
+		).toEqual({
+			id: "c1",
+			title: "好きなアニメ",
+			kind: "tier",
+			tiers: ["S", "A"],
+			count: 7,
+			items: [{ id: 5, title: "作品", cover_url: null, tier: 0 }],
+		});
+	});
+
+	it("見えないコレクション（RLS で null）や配列の空は null", () => {
+		expect(toCollectionShare(null)).toBeNull();
+		expect(toCollectionShare([])).toBeNull();
+	});
+
+	it("種類が分からなければリスト、要約が無ければ作品なしとして扱う", () => {
+		expect(toCollectionShare([{ id: "c2", title: "t", kind: "x" }])).toMatchObject({
+			kind: "list",
+			count: 0,
+			items: [],
+		});
 	});
 });

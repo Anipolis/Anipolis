@@ -2482,6 +2482,7 @@ export type Database = {
 					episode_room_id: string | null;
 					event_id: string | null;
 					exchange_share: Json | null;
+					collection_id: string | null;
 					hidden_by_admin: boolean;
 					id: string;
 					image_urls: string[];
@@ -2498,6 +2499,7 @@ export type Database = {
 					episode_room_id?: string | null;
 					event_id?: string | null;
 					exchange_share?: Json | null;
+					collection_id?: string | null;
 					hidden_by_admin?: boolean;
 					id?: string;
 					image_urls?: string[];
@@ -2514,6 +2516,7 @@ export type Database = {
 					episode_room_id?: string | null;
 					event_id?: string | null;
 					exchange_share?: Json | null;
+					collection_id?: string | null;
 					hidden_by_admin?: boolean;
 					id?: string;
 					image_urls?: string[];

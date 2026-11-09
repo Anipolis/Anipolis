@@ -1,5 +1,6 @@
 <script lang="ts">
 import AnimeExchangeResult from "$lib/components/AnimeExchangeResult.svelte";
+import CollectionShareCard from "$lib/components/CollectionShareCard.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
 import { contentWarningLabel, hasContentWarning } from "$lib/content-warning";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
@@ -101,6 +102,16 @@ function openLightbox(event: MouseEvent, url: string) {
 	</a>
 {/if}
 
+<!-- シェアしたコレクション（193）。持ち主が非公開にした・消した・鍵で見られないときは、カードの代わりに知らせる -->
+{#if post.collection_share}
+	<CollectionShareCard share={post.collection_share} />
+{:else if post.collection_id}
+	<p class="collection-share-gone">
+		<span class="i-lucide-folder-lock" aria-hidden="true"></span>
+		このコレクションは見られません
+	</p>
+{/if}
+
 {#if post.image_urls && post.image_urls.length > 0}
 	<div class="post-images" class:post-images-single={post.image_urls.length === 1}>
 		{#each post.image_urls as url, i}
@@ -115,3 +126,17 @@ function openLightbox(event: MouseEvent, url: string) {
 		{/each}
 	</div>
 {/if}
+
+<style>
+.collection-share-gone {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 8px 0 0;
+	padding: 10px 12px;
+	border: 1px dashed var(--color-border);
+	border-radius: 12px;
+	color: var(--color-text-muted);
+	font-size: 13px;
+}
+</style>

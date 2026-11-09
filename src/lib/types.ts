@@ -1,4 +1,5 @@
 import type { ActivityStatus } from "$lib/activity";
+import { type CollectionShare, toCollectionShare } from "$lib/collections";
 // ================================================================
 // アプリ共通型定義
 // ================================================================
@@ -128,6 +129,9 @@ export interface Post {
 	anime_quote: AnimeQuote | null;
 	event_room: { id: string; title: string; hashtag: string } | null;
 	exchange_share: AnimeExchangeShare | null;
+	/** シェアしたコレクション（193）。参照だけを持ち、見えなくなったら collection_share は null */
+	collection_id: string | null;
+	collection_share: CollectionShare | null;
 	cw_anime_id: string | null;
 	cw_anime: { id: string; title: string; cover_url: string | null } | null;
 	repost_context: RepostContext | null;
@@ -412,6 +416,8 @@ export interface RawPost {
 		| null;
 	event?: { id: string; title: string; hashtag: string } | { id: string; title: string; hashtag: string }[] | null;
 	exchange_share?: unknown;
+	collection_id?: string | null;
+	collection?: unknown;
 	anime?: {
 		id: string | number;
 		title: string;
@@ -537,6 +543,8 @@ export function toPost(
 			return event ? { id: event.id, title: event.title, hashtag: event.hashtag } : null;
 		})(),
 		exchange_share: toAnimeExchangeShare(raw.exchange_share),
+		collection_id: raw.collection_id ?? null,
+		collection_share: raw.collection_id ? toCollectionShare(raw.collection) : null,
 		cw_anime_id: raw.cw_anime_id != null ? String(raw.cw_anime_id) : null,
 		cw_anime: raw.cw_anime
 			? { id: String(raw.cw_anime.id), title: raw.cw_anime.title, cover_url: raw.cw_anime.cover_url ?? null }

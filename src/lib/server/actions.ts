@@ -292,6 +292,8 @@ export async function insertPostWithHashtags(
 	additionalHashtags: string[] = [],
 	eventId: string | null = null,
 	episodeRoomId: string | null = null,
+	/** シェアするコレクション（193）。自分の公開コレクションかは DB のトリガーが確かめる */
+	collectionId: string | null = null,
 ) {
 	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
 	if (moderationFailure) return moderationFailure;
@@ -302,8 +304,8 @@ export async function insertPostWithHashtags(
 	if (rawContent.trim() && !content) {
 		return fail(400, { message: "本文に表示できる文字がありません" });
 	}
-	if (!content && imageUrls.length === 0 && !animeId && !exchangeShare) {
-		return fail(400, { message: "本文、画像、アニメ引用、またはトレード結果を追加してください" });
+	if (!content && imageUrls.length === 0 && !animeId && !exchangeShare && !collectionId) {
+		return fail(400, { message: "本文、画像、アニメ引用、トレード結果、またはコレクションを追加してください" });
 	}
 	if (content.length > 280) return fail(400, { message: "280文字以内で入力してください" });
 
@@ -334,7 +336,15 @@ export async function insertPostWithHashtags(
 		if (!quotedPost) return fail(404, { message: "引用元の投稿を表示できません" });
 	}
 
-	const postContent = exchangeShare && content.length === 0 ? "アニメトレードの結果を共有しました" : content;
+	// 本文が空でも投稿の検査（posts_content_check）を満たし、コレクションが消えて参照が空になっても残るよう、決まった文を入れる
+	const postContent =
+		content.length > 0
+			? content
+			: exchangeShare
+				? "アニメトレードの結果を共有しました"
+				: collectionId
+					? "コレクションをシェアしました"
+					: content;
 	const basePost = {
 		user_id: userId,
 		content: postContent,
@@ -347,6 +357,7 @@ export async function insertPostWithHashtags(
 		event_id: eventId,
 		// 話数ルーム（153）。放送枠の時間内なら DB のトリガーが放送枠も補う
 		episode_room_id: episodeRoomId,
+		collection_id: collectionId,
 	};
 	const postPayload = exchangeShare ? { ...basePost, exchange_share: exchangeShare as unknown as Json } : basePost;
 
