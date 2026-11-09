@@ -23,7 +23,7 @@ const updatedLabel = $derived(
 	}),
 );
 
-// 持ち主だけの道具: 作品を足す（＋。ティア表は未分類の検索から足す）・題名などを直す（鉛筆）
+// 持ち主だけの道具: 作品を足す（＋。ティア表は未分類の検索から足す）・題名などを直す（歯車）
 let adding = $state(false);
 let editingInfo = $state(false);
 
@@ -128,7 +128,7 @@ let queued: (Snapshot & { to: SaveTarget }) | null = null;
 let saveChain: Promise<void> = Promise.resolve();
 let saving = $state(0);
 let saveError = $state("");
-// 保存して作り直すまで（元に戻す・＋で足す・鉛筆のモーダルを開く/閉じる）は、編集面を触れなくする。
+// 保存して作り直すまで（元に戻す・＋で足す・設定のモーダルを開く/閉じる）は、編集面を触れなくする。
 // その間に動かした分が、古い data での作り直しで消えて、表示と保存が食い違わないように
 let boardBusy = $state(false);
 
@@ -255,7 +255,7 @@ $effect.pre(() => {
 	undoGroupTimer = null;
 });
 
-/** 鉛筆: 段の保存と読み直しが終わってから開く（モーダルは開いたときの段を使うので、古い段で上書きしないように） */
+/** 歯車: 段の保存と読み直しが終わってから開く（モーダルは開いたときの段を使うので、古い段で上書きしないように） */
 function openEdit() {
 	return whileBoardBusy(async () => {
 		await flushItems();
@@ -380,11 +380,11 @@ async function copyLink() {
 						<button
 							type="button"
 							class="collection-tool"
-							aria-label="題名・説明・公開を編集"
-							title="編集"
+							aria-label="コレクションの設定"
+							title="設定"
 							onclick={openEdit}
 						>
-							<span class="i-lucide-pencil" aria-hidden="true"></span>
+							<span class="i-lucide-settings" aria-hidden="true"></span>
 						</button>
 					</div>
 				{/if}
