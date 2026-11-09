@@ -1,6 +1,7 @@
 <script lang="ts">
 import { collectionKindPrefix } from "$lib/collections";
 import CollectionFormModal from "$lib/components/CollectionFormModal.svelte";
+import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();
@@ -55,7 +56,12 @@ const editing = $derived(data.collections?.find((collection) => collection.id ==
 								{#each [0, 1, 2, 3] as slot (slot)}
 									<span class="collection-item-cover">
 										{#if collection.covers[slot]}
-											<img src={collection.covers[slot]} alt="" loading="lazy">
+											<img
+												src={coverThumbSrc(collection.covers[slot])}
+												{@attach coverThumbFallback(collection.covers[slot])}
+												alt=""
+												loading="lazy"
+											>
 										{/if}
 									</span>
 								{/each}

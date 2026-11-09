@@ -8,6 +8,7 @@ import {
 	MAX_COLLECTION_TIERS,
 	orderByTier,
 } from "$lib/collections";
+import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 
 /**
  * 自分のコレクションの編集面（詳細ページ）。切り替えなしで、いつでも動かせる。
@@ -498,7 +499,12 @@ function onWindowKeyDown(event: KeyboardEvent) {
 				<span class="board-rank" class:board-rank--top={index < 3}>{index + 1}</span>
 			{/if}
 			{#if item.cover_url}
-				<img src={item.cover_url} alt="" draggable="false">
+				<img
+					src={coverThumbSrc(item.cover_url)}
+					{@attach coverThumbFallback(item.cover_url)}
+					alt=""
+					draggable="false"
+				>
 			{/if}
 			<span class="board-caption" class:board-caption--always={!item.cover_url}>{item.title}</span>
 		</div>
@@ -663,7 +669,12 @@ function onWindowKeyDown(event: KeyboardEvent) {
 								>
 									<span class="board-result-cover">
 										{#if anime.cover_url}
-											<img src={anime.cover_url} alt="" loading="lazy">
+											<img
+												src={coverThumbSrc(anime.cover_url)}
+												{@attach coverThumbFallback(anime.cover_url)}
+												alt=""
+												loading="lazy"
+											>
 										{/if}
 									</span>
 									<span class="board-result-text">
@@ -696,7 +707,12 @@ function onWindowKeyDown(event: KeyboardEvent) {
 	{#if ghost}
 		<div class="board-ghost" style:left="{ghost.x}px" style:top="{ghost.y}px" aria-hidden="true">
 			{#if dragging.cover_url}
-				<img src={dragging.cover_url} alt="" draggable="false">
+				<img
+					src={coverThumbSrc(dragging.cover_url)}
+					{@attach coverThumbFallback(dragging.cover_url)}
+					alt=""
+					draggable="false"
+				>
 			{:else}
 				<span class="board-cover-empty i-lucide-clapperboard"></span>
 			{/if}

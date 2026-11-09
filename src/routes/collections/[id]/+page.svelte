@@ -8,6 +8,7 @@ import AnimePickerModal from "$lib/components/AnimePickerModal.svelte";
 import CollectionBoard from "$lib/components/CollectionBoard.svelte";
 import CollectionFormModal from "$lib/components/CollectionFormModal.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
+import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();
@@ -300,7 +301,12 @@ async function copyLink() {
 				>
 			{/if}
 			{#if anime.cover_url}
-				<img src={anime.cover_url} alt="" loading={eager ? 'eager' : 'lazy'}>
+				<img
+					src={coverThumbSrc(anime.cover_url)}
+					{@attach coverThumbFallback(anime.cover_url)}
+					alt=""
+					loading={eager ? 'eager' : 'lazy'}
+				>
 			{/if}
 			<!-- 題名はカバーに重ね、指すかフォーカスしたときだけ出す（カバーが無い作品は真ん中に常に出す） -->
 			<span class="collection-card-caption">{anime.title}</span>

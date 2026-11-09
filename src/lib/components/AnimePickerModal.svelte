@@ -2,6 +2,7 @@
 import { untrack } from "svelte";
 import { trapFocus } from "$lib/actions/trapFocus";
 import { type AnimePick, animePickMeta } from "$lib/anime-picker";
+import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 
 /**
  * 作品を検索して選び、並べ替えて保存する画面（ベスト作品・コレクションで共用）。
@@ -156,7 +157,7 @@ async function save() {
 {#snippet cover(url: string | null)}
 	<span class="picker-cover">
 		{#if url}
-			<img src={url} alt="">
+			<img src={coverThumbSrc(url)} {@attach coverThumbFallback(url)} alt="">
 		{:else}
 			<span class="picker-cover-empty i-lucide-clapperboard" aria-hidden="true"></span>
 		{/if}
