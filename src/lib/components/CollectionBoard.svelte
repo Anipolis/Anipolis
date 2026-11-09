@@ -476,7 +476,7 @@ function onWindowKeyDown(event: KeyboardEvent) {
 		>
 			{#if showRank && !tiered}
 				<!-- ランキングは、順位・カバー・題名の横長の行 -->
-				<span class="rank-medal rank-medal--{index + 1}">{index + 1}</span>
+				<span class="rank-cell rank-cell--{index + 1}">{index + 1}</span>
 				<span class="board-row-cover">
 					{#if item.cover_url}
 						<img
@@ -1032,22 +1032,20 @@ function onWindowKeyDown(event: KeyboardEvent) {
 }
 .board--ranking .board-card {
 	justify-content: flex-start;
-	gap: 14px;
 	aspect-ratio: auto;
-	padding: 8px 14px 8px 10px;
-	border-radius: 10px;
+	padding: 0;
+	border-radius: 6px;
 }
 .board-row-cover {
 	flex-shrink: 0;
-	width: 48px;
+	width: 80px;
 	aspect-ratio: 400 / 566;
-	overflow: hidden;
-	border-radius: 4px;
 	background: var(--color-border);
 }
 .board-row-title {
 	display: -webkit-box;
 	overflow: hidden;
+	padding: 0 16px;
 	font-size: 15px;
 	font-weight: 700;
 	line-height: 1.4;
@@ -1057,7 +1055,7 @@ function onWindowKeyDown(event: KeyboardEvent) {
 }
 /* 選んだ行は、右の作品ページ・外すボタンに題名がかからないように空ける */
 .board-card--selected .board-row-title {
-	padding-right: 72px;
+	padding-right: 84px;
 }
 .board--ranking .board-card-actions {
 	top: 50%;
@@ -1171,6 +1169,9 @@ function onWindowKeyDown(event: KeyboardEvent) {
 	}
 	.board-tier-items {
 		min-height: calc(64px * 566 / 400);
+	}
+	.board-row-cover {
+		width: 64px;
 	}
 	.board-pool {
 		position: sticky;
