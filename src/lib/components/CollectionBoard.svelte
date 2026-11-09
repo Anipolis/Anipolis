@@ -645,7 +645,8 @@ function onWindowKeyDown(event: KeyboardEvent) {
 }
 .board--tiered {
 	display: grid;
-	grid-template-columns: minmax(0, 1fr) 260px;
+	/* 未分類は 80px の作品が横に3つ並ぶ幅（3 × 80 ＋ 左右の余白 10 × 2 ＋ 枠線 1 × 2） */
+	grid-template-columns: minmax(0, 1fr) 262px;
 	gap: 12px;
 	align-items: start;
 }
@@ -808,7 +809,10 @@ function onWindowKeyDown(event: KeyboardEvent) {
 	color: var(--color-text-muted);
 	font-weight: 500;
 }
+/* パソコンでは常に横3つ（スクロールバーが出たら少しだけ縮める） */
 .board-pool-items {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
 	flex-shrink: 1;
 	min-height: calc(80px * 566 / 400);
 	overflow-y: auto;
@@ -823,8 +827,7 @@ function onWindowKeyDown(event: KeyboardEvent) {
 .board-item {
 	position: relative;
 }
-.board-tier-items .board-item,
-.board-pool-items .board-item {
+.board-tier-items .board-item {
 	width: 80px;
 }
 /* 段と未分類の作品は枠も角丸も付けず、隣とくっつける（カバーの無い作品だけ内側の線で区切る） */
@@ -1061,6 +1064,7 @@ function onWindowKeyDown(event: KeyboardEvent) {
 		box-shadow: 0 -8px 24px rgb(0 0 0 / 0.2);
 	}
 	.board-pool-items {
+		display: flex;
 		min-height: calc(64px * 566 / 400);
 	}
 	.board-trash {
