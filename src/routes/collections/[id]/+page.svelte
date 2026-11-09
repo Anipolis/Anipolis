@@ -722,11 +722,12 @@ async function copyLink() {
 	gap: 8px;
 	padding: 16px;
 }
+/* 段の中は、段の名前と作品を隙間なくくっつける（隙間は段と段の間だけ） */
 .collection-tier {
 	display: flex;
 	overflow: hidden;
 	border: 1px solid var(--color-border);
-	border-radius: 10px;
+	border-radius: 6px;
 }
 .collection-tier-label {
 	display: flex;
@@ -745,11 +746,19 @@ async function copyLink() {
 .collection-tier-items {
 	display: grid;
 	flex: 1;
-	grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-	gap: 10px 8px;
+	grid-template-columns: repeat(auto-fill, 80px);
+	gap: 0;
 	margin: 0;
-	padding: 8px;
+	padding: 0;
 	list-style: none;
+}
+.collection-tier-items .collection-card-cover {
+	border: none;
+	border-radius: 0;
+	box-shadow: inset 0 0 0 1px var(--color-border);
+}
+.collection-tier-items .collection-card:focus-visible .collection-card-cover {
+	outline-offset: -2px;
 }
 .collection-tier-label--colored {
 	color: #1a1a1a;
