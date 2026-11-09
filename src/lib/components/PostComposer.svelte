@@ -58,6 +58,8 @@ interface Props {
 	initialCollectionShare?: CollectionShare | null;
 	/** シェアを外した・投稿した。親は同じ初期値を渡し直さない（モーダルを開き直すと作り直されるため） */
 	oncollectionsharecleared?: (collectionId: string) => void;
+	/** どちらかの投稿欄で外した（投稿した）コレクション。開いたままの投稿欄からも外す */
+	clearedCollectionShareId?: string | null;
 	watchingAnime?: AnimeResult[];
 	onsubmitsuccess?: () => void;
 	focusOnMount?: boolean;
@@ -78,6 +80,7 @@ let {
 	initialExchangeShare = null,
 	initialCollectionShare = null,
 	oncollectionsharecleared,
+	clearedCollectionShareId = null,
 	watchingAnime = [],
 	onsubmitsuccess,
 	focusOnMount = false,
@@ -157,7 +160,12 @@ const initialValuesKey = $derived(
 );
 
 $effect(() => {
-	if (!initialValuesKey || appliedInitialValuesKey === initialValuesKey) return;
+	// 初期値が無くなったら、次に同じリンクで開いたときにまた入れられるよう覚えを消す
+	if (!initialValuesKey) {
+		appliedInitialValuesKey = null;
+		return;
+	}
+	if (appliedInitialValuesKey === initialValuesKey) return;
 
 	appliedInitialValuesKey = initialValuesKey;
 	if (initialAnime && !selectedAnime) {
@@ -466,6 +474,13 @@ function clearExchangeShare() {
 		replaceState(url, page.state);
 	}
 }
+
+// 常設の投稿欄とモーダルの投稿欄は同時にあるので、片方で外した（投稿した）シェアをもう片方からも外す
+$effect(() => {
+	if (clearedCollectionShareId && selectedCollection?.id === clearedCollectionShareId) {
+		selectedCollection = null;
+	}
+});
 
 function clearCollectionShare() {
 	if (selectedCollection) oncollectionsharecleared?.(selectedCollection.id);

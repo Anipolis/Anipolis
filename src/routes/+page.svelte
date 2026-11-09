@@ -24,6 +24,11 @@ const TAB_HREFS = { all: "/", following: "/?tab=following", activity: "/?tab=act
 let { data }: PageProps = $props();
 // 投稿欄で外した（または投稿した）コレクションのシェア。モーダルを開き直しても付け直さない
 let clearedCollectionShareId = $state<string | null>(null);
+// 読み込み直したら（新しいシェアのリンクで開いたときなど）、外した覚えを消す
+$effect(() => {
+	void data.pageExtras;
+	clearedCollectionShareId = null;
+});
 
 // data.timeline は deferred Promise。load が再実行されて新しい Promise になっても、
 // 解決するまでは前回の一覧を表示し続ける（スケルトンは初回だけ、#100）。
@@ -164,6 +169,7 @@ $effect(() => {
 						? null
 						: extras.initialCollectionShare}
 						oncollectionsharecleared={(id) => (clearedCollectionShareId = id)}
+						{clearedCollectionShareId}
 						watchingAnime={extras.watchingAnime}
 					/>
 				{:else if pageExtras.error}
@@ -418,6 +424,7 @@ $effect(() => {
 						? null
 						: extras.initialCollectionShare}
 					oncollectionsharecleared={(id) => (clearedCollectionShareId = id)}
+					{clearedCollectionShareId}
 					watchingAnime={extras.watchingAnime}
 					onsubmitsuccess={closeModal}
 					focusOnMount
