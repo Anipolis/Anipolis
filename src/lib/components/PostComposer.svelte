@@ -56,6 +56,8 @@ interface Props {
 	initialExchangeShare?: AnimeExchangeShare | null;
 	/** コレクションのシェア（193）。?share_collection= で開いたとき */
 	initialCollectionShare?: CollectionShare | null;
+	/** シェアを外した・投稿した。親は同じ初期値を渡し直さない（モーダルを開き直すと作り直されるため） */
+	oncollectionsharecleared?: (collectionId: string) => void;
 	watchingAnime?: AnimeResult[];
 	onsubmitsuccess?: () => void;
 	focusOnMount?: boolean;
@@ -75,6 +77,7 @@ let {
 	initialExchangeId = null,
 	initialExchangeShare = null,
 	initialCollectionShare = null,
+	oncollectionsharecleared,
 	watchingAnime = [],
 	onsubmitsuccess,
 	focusOnMount = false,
@@ -456,6 +459,7 @@ function clearExchangeShare() {
 }
 
 function clearCollectionShare() {
+	if (selectedCollection) oncollectionsharecleared?.(selectedCollection.id);
 	selectedCollection = null;
 
 	if (page.url.searchParams.has("share_collection")) {

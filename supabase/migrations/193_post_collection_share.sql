@@ -60,7 +60,8 @@ AS $$
         'items', COALESCE((
             SELECT jsonb_agg(
                 jsonb_build_object('id', p.anime_id, 'title', p.title, 'cover_url', p.cover_url, 'tier', p.tier)
-                ORDER BY p.tier NULLS LAST, p.position
+                -- 段の順はティア表だけ。リスト・ランキングに変えても段の値は残るので、それ以外は並び順のまま
+                ORDER BY CASE WHEN c.kind = 'tier' THEN p.tier END NULLS LAST, p.position
             )
             FROM (
                 SELECT

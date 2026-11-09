@@ -22,6 +22,8 @@ const NO_ACTIVITY = { items: [], nextCursor: null };
 const TAB_HREFS = { all: "/", following: "/?tab=following", activity: "/?tab=activity" } as const;
 
 let { data }: PageProps = $props();
+// 投稿欄で外した（または投稿した）コレクションのシェア。モーダルを開き直しても付け直さない
+let clearedCollectionShareId = $state<string | null>(null);
 
 // data.timeline は deferred Promise。load が再実行されて新しい Promise になっても、
 // 解決するまでは前回の一覧を表示し続ける（スケルトンは初回だけ、#100）。
@@ -158,7 +160,10 @@ $effect(() => {
 						initialContent={extras.initialContent}
 						initialExchangeId={extras.initialExchangeId}
 						initialExchangeShare={extras.initialExchangeShare}
-						initialCollectionShare={extras.initialCollectionShare}
+						initialCollectionShare={extras.initialCollectionShare?.id === clearedCollectionShareId
+						? null
+						: extras.initialCollectionShare}
+						oncollectionsharecleared={(id) => (clearedCollectionShareId = id)}
 						watchingAnime={extras.watchingAnime}
 					/>
 				{:else if pageExtras.error}
@@ -409,7 +414,10 @@ $effect(() => {
 					initialContent={extras.initialContent}
 					initialExchangeId={extras.initialExchangeId}
 					initialExchangeShare={extras.initialExchangeShare}
-					initialCollectionShare={extras.initialCollectionShare}
+					initialCollectionShare={extras.initialCollectionShare?.id === clearedCollectionShareId
+						? null
+						: extras.initialCollectionShare}
+					oncollectionsharecleared={(id) => (clearedCollectionShareId = id)}
 					watchingAnime={extras.watchingAnime}
 					onsubmitsuccess={closeModal}
 					focusOnMount
