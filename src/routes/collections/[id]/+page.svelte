@@ -1,5 +1,5 @@
 <script lang="ts">
-import { untrack } from "svelte";
+import { onDestroy, untrack } from "svelte";
 import { beforeNavigate, goto, invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
 import type { AnimePick } from "$lib/anime-picker";
@@ -27,6 +27,17 @@ const updatedLabel = $derived(
 // ---- 取り込む（他の人のコレクションを自分のものとして写す。194） ----
 let importing = $state(false);
 let importError = $state("");
+// ページを離れたら、待っている取り込みの返事は捨てる（遅れて返った成功で、移った先から引き戻さないように）
+let importRun = 0;
+// 同じページの部品のまま別のコレクションへ移ることもあるので、表示も戻す
+beforeNavigate(() => {
+	importRun += 1;
+	importing = false;
+	importError = "";
+});
+onDestroy(() => {
+	importRun += 1;
+});
 
 async function importCollection() {
 	if (
@@ -36,20 +47,22 @@ async function importCollection() {
 	) {
 		return;
 	}
+	const run = ++importRun;
 	importing = true;
 	importError = "";
 	try {
 		const res = await fetch(`/api/collections/${collection.id}/copy`, { method: "POST" });
 		const body = (await res.json().catch(() => null)) as { id?: string; message?: string } | null;
+		if (run !== importRun) return;
 		if (!res.ok || !body?.id) {
 			importError = body?.message ?? "取り込みに失敗しました";
 			return;
 		}
 		await goto(`/collections/${body.id}`);
 	} catch {
-		importError = "取り込みに失敗しました。通信状態を確かめてください";
+		if (run === importRun) importError = "取り込みに失敗しました。通信状態を確かめてください";
 	} finally {
-		importing = false;
+		if (run === importRun) importing = false;
 	}
 }
 
