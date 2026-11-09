@@ -1,6 +1,6 @@
 <script lang="ts">
 import { untrack } from "svelte";
-import { beforeNavigate, invalidateAll } from "$app/navigation";
+import { beforeNavigate, goto, invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
 import type { AnimePick } from "$lib/anime-picker";
 import { collectionKindPrefix, collectionTierColor, MAX_COLLECTION_ITEMS, orderByTier } from "$lib/collections";
@@ -23,6 +23,35 @@ const updatedLabel = $derived(
 		timeZone: "Asia/Tokyo",
 	}),
 );
+
+// ---- 取り込む（他の人のコレクションを自分のものとして写す。194） ----
+let importing = $state(false);
+let importError = $state("");
+
+async function importCollection() {
+	if (
+		!window.confirm(
+			`「${collection.title}」を自分のコレクションとして取り込みます。取り込んだものは非公開で始まり、自由に直せます。`,
+		)
+	) {
+		return;
+	}
+	importing = true;
+	importError = "";
+	try {
+		const res = await fetch(`/api/collections/${collection.id}/copy`, { method: "POST" });
+		const body = (await res.json().catch(() => null)) as { id?: string; message?: string } | null;
+		if (!res.ok || !body?.id) {
+			importError = body?.message ?? "取り込みに失敗しました";
+			return;
+		}
+		await goto(`/collections/${body.id}`);
+	} catch {
+		importError = "取り込みに失敗しました。通信状態を確かめてください";
+	} finally {
+		importing = false;
+	}
+}
 
 // 持ち主だけの道具: 題名などを直す（歯車）。作品は編集面の検索から足す
 let editingInfo = $state(false);
@@ -371,10 +400,26 @@ async function copyLink() {
 							<span class="i-lucide-settings" aria-hidden="true"></span>
 						</button>
 					</div>
+				{:else if data.user}
+					<!-- 他の人のコレクションは、自分のコレクションとして取り込める（194） -->
+					<div class="collection-tools">
+						<button
+							type="button"
+							class="btn btn-secondary collection-import"
+							disabled={importing}
+							onclick={importCollection}
+						>
+							<span class="i-lucide-copy-plus" aria-hidden="true"></span>
+							{importing ? '取り込み中...' : '取り込む'}
+						</button>
+					</div>
 				{/if}
 			</div>
 			{#if saveError}
 				<p class="field-error-msg" role="alert">{saveError}</p>
+			{/if}
+			{#if importError}
+				<p class="field-error-msg" role="alert">{importError}</p>
 			{/if}
 			{#if collection.description}
 				<p class="collection-description">{collection.description}</p>
@@ -508,6 +553,9 @@ async function copyLink() {
 		flex: 1;
 		width: auto;
 	}
+}
+.collection-import {
+	gap: 6px;
 }
 .collection-save-state {
 	color: var(--color-text-muted);
