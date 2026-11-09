@@ -2,9 +2,7 @@
 import { untrack } from "svelte";
 import { beforeNavigate, invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
-import { type AnimePick, toAnimePick } from "$lib/anime-picker";
-import { collectionKindPrefix, collectionTierColor, MAX_COLLECTION_ITEMS, orderByTier } from "$lib/collections";
-import AnimePickerModal from "$lib/components/AnimePickerModal.svelte";
+import { collectionKindPrefix, collectionTierColor, orderByTier } from "$lib/collections";
 import CollectionBoard from "$lib/components/CollectionBoard.svelte";
 import CollectionFormModal from "$lib/components/CollectionFormModal.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
@@ -24,8 +22,7 @@ const updatedLabel = $derived(
 	}),
 );
 
-// 持ち主だけの道具: 作品を足す（＋。ティア表は未分類の検索から足す）・題名などを直す（歯車）
-let adding = $state(false);
+// 持ち主だけの道具: 題名などを直す（歯車）。作品は編集面の検索から足す
 let editingInfo = $state(false);
 
 /** 保存先。操作した時点のコレクションに固定する（保存待ちのまま別のコレクションへ移っても、そちらへ送らない） */
@@ -55,29 +52,6 @@ function putItems(to: SaveTarget, animeIds: number[], tiers: (number | null)[], 
 		"コレクションの保存に失敗しました",
 		keepalive,
 	);
-}
-
-/** ＋を開いたときの並び（自動保存の読み直しを待たず、編集面の最新の並びから作る） */
-let pickerInitial = $state<AnimePick[]>([]);
-
-function openPicker() {
-	const byId = new Map(collection.items.map((anime) => [Number(anime.id), anime]));
-	pickerInitial = currentSnapshot()
-		.ids.map((id) => byId.get(id))
-		.filter((anime) => anime !== undefined)
-		.map(toAnimePick);
-	adding = true;
-}
-
-/** ＋から足したとき。足した作品だけを最新の並びの後ろに足し、編集面を作り直す */
-function saveItems(animeIds: number[]) {
-	const to = saveTarget();
-	return whileBoardBusy(async () => {
-		await flushItems();
-		const current = currentSnapshot().ids;
-		await putItems({ ...to, tiered: false }, [...current, ...animeIds.filter((id) => !current.includes(id))], []);
-		await resetBoard();
-	});
 }
 
 const isTier = $derived(collection.kind === "tier");
@@ -369,18 +343,6 @@ async function copyLink() {
 								<span class="i-lucide-undo-2" aria-hidden="true"></span>
 							</button>
 						{/if}
-						{#if !isTier}
-							<button
-								type="button"
-								class="collection-tool"
-								aria-label="作品を追加"
-								title="作品を追加"
-								disabled={collection.items.length >= MAX_COLLECTION_ITEMS}
-								onclick={openPicker}
-							>
-								<span class="i-lucide-plus" aria-hidden="true"></span>
-							</button>
-						{/if}
 						<button
 							type="button"
 							class="collection-tool"
@@ -413,7 +375,7 @@ async function copyLink() {
 			{/if}
 		</header>
 
-		{#if data.isOwn && (isTier || collection.items.length > 0)}
+		{#if data.isOwn}
 			<div class="collection-board-wrap" class:collection-board-wrap--busy={boardBusy} inert={boardBusy}>
 				{#key boardKey}
 					<CollectionBoard
@@ -427,11 +389,7 @@ async function copyLink() {
 			</div>
 		{:else if collection.items.length === 0}
 			<div class="empty-state">
-				<p>
-					{data.isOwn
-						? 'まだ作品がありません。＋から追加できます'
-						: 'まだ作品がありません'}
-				</p>
+				<p>まだ作品がありません</p>
 			</div>
 		{:else if isTier}
 			<div class="collection-tiers">
@@ -465,19 +423,6 @@ async function copyLink() {
 		{/if}
 	</main>
 </div>
-
-{#if adding}
-	<AnimePickerModal
-		title="作品を追加"
-		max={MAX_COLLECTION_ITEMS}
-		initial={pickerInitial}
-		addOnly
-		onsave={saveItems}
-		onclose={() => {
-			adding = false;
-		}}
-	/>
-{/if}
 
 {#if editingInfo}
 	<CollectionFormModal
