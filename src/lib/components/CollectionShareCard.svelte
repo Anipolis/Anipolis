@@ -19,10 +19,13 @@ const tierRows = $derived(
 );
 </script>
 
-{#snippet cover(item: CollectionShare['items'][number])}
+<!-- カバーが無い作品は、枠の真ん中に題名を出す（ランキングは横に題名があるので出さない） -->
+{#snippet cover(item: CollectionShare['items'][number], showTitle = true)}
 	<span class="collection-share-cover" title={item.title}>
 		{#if item.cover_url}
 			<img src={coverThumbSrc(item.cover_url)} {@attach coverThumbFallback(item.cover_url)} alt="" loading="lazy">
+		{:else if showTitle}
+			<span class="collection-share-cover-title">{item.title}</span>
 		{/if}
 	</span>
 {/snippet}
@@ -51,7 +54,7 @@ const tierRows = $derived(
 			{#each share.items.slice(0, 3) as item, index (item.id)}
 				<span class="collection-share-rank">
 					<span class="rank-cell rank-cell--{index + 1}">{index + 1}</span>
-					{@render cover(item)}
+					{@render cover(item, false)}
 					<span class="collection-share-rank-title">{item.title}</span>
 				</span>
 			{/each}
@@ -104,12 +107,33 @@ a.collection-share:hover {
 	font-size: 13px;
 }
 .collection-share-cover {
-	display: block;
+	display: flex;
+	align-items: center;
+	justify-content: center;
 	flex-shrink: 0;
 	width: 44px;
 	aspect-ratio: 400 / 566;
 	overflow: hidden;
 	background: var(--color-border);
+}
+.collection-share-cover-title {
+	display: -webkit-box;
+	overflow: hidden;
+	padding: 0 3px;
+	color: var(--color-text);
+	font-size: 9px;
+	font-weight: 600;
+	line-height: 1.3;
+	text-align: center;
+	overflow-wrap: anywhere;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 5;
+	line-clamp: 5;
+}
+.collection-share-strip .collection-share-cover-title {
+	font-size: 10px;
+	-webkit-line-clamp: 6;
+	line-clamp: 6;
 }
 .collection-share-cover img {
 	display: block;
