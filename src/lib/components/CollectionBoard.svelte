@@ -645,7 +645,7 @@ function onWindowKeyDown(event: KeyboardEvent) {
 }
 .board--tiered {
 	display: grid;
-	grid-template-columns: minmax(0, 1fr) 220px;
+	grid-template-columns: minmax(0, 1fr) 260px;
 	gap: 12px;
 	align-items: start;
 }
@@ -776,7 +776,7 @@ function onWindowKeyDown(event: KeyboardEvent) {
 	list-style: none;
 }
 .board-tier-items {
-	min-height: calc(64px * 566 / 400);
+	min-height: calc(80px * 566 / 400);
 }
 .board--selecting .board-tier-items,
 .board--selecting .board-pool-items {
@@ -810,7 +810,7 @@ function onWindowKeyDown(event: KeyboardEvent) {
 }
 .board-pool-items {
 	flex-shrink: 1;
-	min-height: 96px;
+	min-height: calc(80px * 566 / 400);
 	overflow-y: auto;
 }
 .board-empty {
@@ -825,7 +825,7 @@ function onWindowKeyDown(event: KeyboardEvent) {
 }
 .board-tier-items .board-item,
 .board-pool-items .board-item {
-	width: 64px;
+	width: 80px;
 }
 /* 段と未分類の作品は枠も角丸も付けず、隣とくっつける（カバーの無い作品だけ内側の線で区切る） */
 .board-tier-items .board-card,
@@ -1002,7 +1002,7 @@ function onWindowKeyDown(event: KeyboardEvent) {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	width: 64px;
+	width: 80px;
 	aspect-ratio: 400 / 566;
 	overflow: hidden;
 	border-radius: 6px;
@@ -1046,10 +1046,10 @@ function onWindowKeyDown(event: KeyboardEvent) {
 	}
 	.board-tier-items .board-item,
 	.board-pool-items .board-item {
-		width: 52px;
+		width: 64px;
 	}
 	.board-tier-items {
-		min-height: calc(52px * 566 / 400);
+		min-height: calc(64px * 566 / 400);
 	}
 	.board-pool {
 		position: sticky;
@@ -1061,7 +1061,7 @@ function onWindowKeyDown(event: KeyboardEvent) {
 		box-shadow: 0 -8px 24px rgb(0 0 0 / 0.2);
 	}
 	.board-pool-items {
-		min-height: 76px;
+		min-height: calc(64px * 566 / 400);
 	}
 	.board-trash {
 		bottom: calc(56px + 16px + env(safe-area-inset-bottom));
