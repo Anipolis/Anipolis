@@ -492,8 +492,6 @@ function onWindowKeyDown(event: KeyboardEvent) {
 			{/if}
 			{#if item.cover_url}
 				<img src={item.cover_url} alt="" draggable="false">
-			{:else}
-				<span class="board-cover-empty i-lucide-clapperboard" aria-hidden="true"></span>
 			{/if}
 			<span class="board-caption" class:board-caption--always={!item.cover_url}>{item.title}</span>
 		</div>
@@ -1034,6 +1032,22 @@ function onWindowKeyDown(event: KeyboardEvent) {
 }
 .board--dragging .board-caption {
 	opacity: 0;
+}
+/* カバーが無い作品は、題名をカードの真ん中に出す（下に寄せると長い題名が見切れる） */
+.board-caption--always {
+	top: 50%;
+	bottom: auto;
+	padding: 0 6px;
+	transform: translateY(-50%);
+	background: none;
+	color: var(--color-text);
+	font-weight: 600;
+	text-align: center;
+	-webkit-line-clamp: 6;
+	line-clamp: 6;
+}
+.board--dragging .board-caption--always {
+	opacity: 1;
 }
 .board-rank {
 	position: absolute;
