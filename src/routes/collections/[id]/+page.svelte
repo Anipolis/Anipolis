@@ -40,13 +40,7 @@ onDestroy(() => {
 });
 
 async function importCollection() {
-	if (
-		!window.confirm(
-			`「${collection.title}」を自分のコレクションとして取り込みます。取り込んだものは非公開で始まり、自由に直せます。`,
-		)
-	) {
-		return;
-	}
+	// 確認は出さない（取り込んだものは非公開で始まり、いらなければ消せる）
 	const run = ++importRun;
 	importing = true;
 	importError = "";
