@@ -333,6 +333,21 @@ describe("resolveAnimeCatalog", () => {
 		expect(settled.canonical.episode_count).toBe("10");
 	});
 
+	it("prefers MAL's status over an offline snapshot taken before the show aired", () => {
+		// 夜桜さんちの大作戦 第2期2クール: AODB は放送前のスナップショット、MAL は放送中
+		const resolved = resolveAnimeCatalog([
+			source("anime_offline_database", { title: "Example", status: "upcoming" }),
+			source("mal", { title_ja: "例の作品", aired_from: "2026-10-11", status: "airing" }),
+		]);
+		expect(resolved.canonical.status).toBe("airing");
+		// AODB 自身が終了を見た値はこれまでどおり優先する
+		const settled = resolveAnimeCatalog([
+			source("anime_offline_database", { title: "Example", status: "finished" }),
+			source("mal", { title_ja: "例の作品", status: "airing" }),
+		]);
+		expect(settled.canonical.status).toBe("finished");
+	});
+
 	it("rejects native-language titles smuggled into MAL's Japanese-title field", () => {
 		// 韓国作品: MALのja欄にハングル題
 		const korean = resolveAnimeCatalog([
