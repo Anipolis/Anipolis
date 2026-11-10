@@ -102,7 +102,7 @@ function handleKeydown(event: KeyboardEvent) {
 					disabled={!controller.quoteText.trim() || controller.quoteSubmitting}
 					onclick={() => controller.submitQuoteRepost()}
 				>
-					{controller.quoteSubmitting ? '投稿中…' : 'リポスト'}
+					{controller.quoteSubmitting ? "投稿中…" : "リポスト"}
 				</button>
 			</div>
 		</div>
@@ -114,7 +114,10 @@ function handleKeydown(event: KeyboardEvent) {
 	<div
 		class="exchange-result-modal-overlay"
 		role="presentation"
-		onclick={(e) => { e.stopPropagation(); controller.exchangeModalOpen = false; }}
+		onclick={(e) => {
+			e.stopPropagation();
+			controller.exchangeModalOpen = false;
+		}}
 	>
 		<div
 			class="exchange-result-modal-card"
@@ -158,7 +161,10 @@ function handleKeydown(event: KeyboardEvent) {
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<div
 		class="lightbox-overlay"
-		onclick={(e) => { e.stopPropagation(); controller.lightboxUrl = null; }}
+		onclick={(e) => {
+			e.stopPropagation();
+			controller.lightboxUrl = null;
+		}}
 		role="dialog"
 		aria-modal="true"
 		aria-label="画像拡大表示"
@@ -184,7 +190,10 @@ function handleKeydown(event: KeyboardEvent) {
 	<div
 		class="report-modal-overlay"
 		role="presentation"
-		onclick={(e) => { e.stopPropagation(); controller.reportModalOpen = false; }}
+		onclick={(e) => {
+			e.stopPropagation();
+			controller.reportModalOpen = false;
+		}}
 	>
 		<div
 			class="report-modal-card"
@@ -233,7 +242,7 @@ function handleKeydown(event: KeyboardEvent) {
 					disabled={controller.reportSubmitting}
 					onclick={() => controller.submitReport()}
 				>
-					{controller.reportSubmitting ? '送信中...' : '送信'}
+					{controller.reportSubmitting ? "送信中..." : "送信"}
 				</button>
 			</div>
 		</div>
@@ -245,7 +254,10 @@ function handleKeydown(event: KeyboardEvent) {
 	<div
 		class="delete-modal-overlay"
 		role="presentation"
-		onclick={(e) => { e.stopPropagation(); controller.deleteModalOpen = false; }}
+		onclick={(e) => {
+			e.stopPropagation();
+			controller.deleteModalOpen = false;
+		}}
 	>
 		<div
 			class="delete-modal-card"

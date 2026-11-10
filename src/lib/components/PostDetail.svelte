@@ -79,7 +79,10 @@ function handleKeydown(event: KeyboardEvent) {
 							<button
 								type="button"
 								class="post-kebab-item post-kebab-item--danger"
-								onclick={() => { menuOpen = false; controller.deleteModalOpen = true; }}
+								onclick={() => {
+									menuOpen = false;
+									controller.deleteModalOpen = true;
+								}}
 							>
 								<span class="i-lucide-trash-2" aria-hidden="true"></span>
 								削除
@@ -88,7 +91,10 @@ function handleKeydown(event: KeyboardEvent) {
 							<button
 								type="button"
 								class="post-kebab-item"
-								onclick={() => { menuOpen = false; controller.reportModalOpen = true; }}
+								onclick={() => {
+									menuOpen = false;
+									controller.reportModalOpen = true;
+								}}
 							>
 								<span class="i-lucide-flag" aria-hidden="true"></span>
 								通報

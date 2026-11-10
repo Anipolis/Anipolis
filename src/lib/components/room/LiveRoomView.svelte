@@ -1061,7 +1061,7 @@ function formatCompactDate(iso: string) {
 								keepComposerFocused = true;
 							}}
 							onkeydown={(e) => {
-								if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
+								if (e.key === "Enter" && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
 									e.preventDefault();
 									submitComposer();
 								}
@@ -1072,7 +1072,7 @@ function formatCompactDate(iso: string) {
 								<span class="composer-note">タイムラインにも表示されます</span>
 							{/if}
 							{#if charCount >= maxLen - 40}
-								<span class="char-count {overLimit ? 'char-count--over' : ''}"
+								<span class="char-count {overLimit ? "char-count--over" : ""}"
 									>{charCount}/{maxLen}</span
 								>
 							{/if}

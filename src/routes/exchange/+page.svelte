@@ -423,9 +423,11 @@ const handleCancelExchangeSubmit: SubmitFunction = () => {
 										type="button"
 										class="exchange-tag-chip"
 										class:exchange-tag-chip--selected={selected}
-										class:exchange-tag-chip--locked={!selected && selectedSubjectiveTagCount >= MAX_EXCHANGE_SUBJECTIVE_TAGS}
+										class:exchange-tag-chip--locked={!selected &&
+											selectedSubjectiveTagCount >= MAX_EXCHANGE_SUBJECTIVE_TAGS}
 										aria-pressed={selected}
-										aria-disabled={!selected && selectedSubjectiveTagCount >= MAX_EXCHANGE_SUBJECTIVE_TAGS}
+										aria-disabled={!selected &&
+											selectedSubjectiveTagCount >= MAX_EXCHANGE_SUBJECTIVE_TAGS}
 										onclick={() => toggleSubjectiveTag(tag)}
 									>
 										{tag}

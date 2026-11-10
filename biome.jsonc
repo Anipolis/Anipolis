@@ -1,8 +1,19 @@
 {
-	"$schema": "https://biomejs.dev/schemas/2.4.15/schema.json",
+	"$schema": "https://biomejs.dev/schemas/2.6.6/schema.json",
 	"files": {
 		"ignoreUnknown": true,
-		"includes": ["**", "!**/package.json", "!supabase", "!.claude", "!**/.omc"]
+		"includes": [
+			"**",
+			"!**/package.json",
+			"!supabase",
+			"!.claude",
+			"!**/.omc",
+			// Biome 2.6 は Markdown / YAML / SVG も整形するが、このリポジトリでは対象外にする
+			"!**/*.md",
+			"!**/*.yml",
+			"!**/*.yaml",
+			"!**/*.svg"
+		]
 	},
 	"vcs": {
 		"enabled": true,
@@ -17,12 +28,21 @@
 	"linter": {
 		"enabled": true,
 		"rules": {
-			"recommended": true,
+			"preset": "recommended",
 			"suspicious": {
 				"noExplicitAny": "warn"
 			},
 			"style": {
 				"noNonNullAssertion": "warn"
+			},
+			"a11y": {
+				// Biome 2.6 で recommended に追加されたルール。既存 UI のマークアップ見直しは
+				// 別途行うため、移行時点では warn にして CI を止めない。
+				"noStaticElementInteractions": "warn",
+				"useKeyWithClickEvents": "warn",
+				"useSemanticElements": "warn",
+				"noNoninteractiveTabindex": "warn",
+				"useFocusableInteractive": "warn"
 			},
 			"complexity": {
 				"useLiteralKeys": "off"

@@ -178,9 +178,9 @@ function isActive(path: string): boolean {
 			type="button"
 			class="mobile-theme-btn"
 			onclick={toggleTheme}
-			aria-label={theme === 'dark' ? 'ライトモードに切替' : 'ダークモードに切替'}
+			aria-label={theme === "dark" ? "ライトモードに切替" : "ダークモードに切替"}
 		>
-			{#if theme === 'dark'}
+			{#if theme === "dark"}
 				<svg
 					width="20"
 					height="20"
@@ -271,7 +271,7 @@ function isActive(path: string): boolean {
 	{#if !minimal}
 		<nav class="mobile-drawer-nav">
 			{#if session}
-				<a href="/anime" class="mobile-drawer-btn" class:active={isActive('/anime')} onclick={closeDrawer}>
+				<a href="/anime" class="mobile-drawer-btn" class:active={isActive("/anime")} onclick={closeDrawer}>
 					<AnimeIcon size={20} />
 					アニメ
 				</a>
@@ -280,7 +280,7 @@ function isActive(path: string): boolean {
 					<a
 						href="/profile/{profile.username}"
 						class="mobile-drawer-btn"
-						class:active={isActive('/profile')}
+						class:active={isActive("/profile")}
 						onclick={closeDrawer}
 					>
 						<svg
@@ -304,7 +304,7 @@ function isActive(path: string): boolean {
 				<a
 					href="/collections"
 					class="mobile-drawer-btn"
-					class:active={isActive('/collections')}
+					class:active={isActive("/collections")}
 					onclick={closeDrawer}
 				>
 					<svg
@@ -328,7 +328,7 @@ function isActive(path: string): boolean {
 				<a
 					href="/exchange"
 					class="mobile-drawer-btn"
-					class:active={isActive('/exchange')}
+					class:active={isActive("/exchange")}
 					onclick={closeDrawer}
 				>
 					<svg
@@ -353,7 +353,7 @@ function isActive(path: string): boolean {
 				<a
 					href="/settings"
 					class="mobile-drawer-btn"
-					class:active={isActive('/settings')}
+					class:active={isActive("/settings")}
 					onclick={closeDrawer}
 				>
 					<svg
@@ -376,7 +376,7 @@ function isActive(path: string): boolean {
 				</a>
 
 				{#if profile?.is_admin}
-					<a href="/admin" class="mobile-drawer-btn" class:active={isActive('/admin')} onclick={closeDrawer}>
+					<a href="/admin" class="mobile-drawer-btn" class:active={isActive("/admin")} onclick={closeDrawer}>
 						<svg
 							width="20"
 							height="20"
@@ -393,7 +393,7 @@ function isActive(path: string): boolean {
 						Admin
 						{#if pendingReportsCount > 0}
 							<span class="mobile-drawer-badge"
-								>{pendingReportsCount > 99 ? '99+' : pendingReportsCount}</span
+								>{pendingReportsCount > 99 ? "99+" : pendingReportsCount}</span
 							>
 						{/if}
 					</a>
@@ -441,7 +441,10 @@ function isActive(path: string): boolean {
 					<button
 						type="button"
 						class="mobile-drawer-btn mobile-drawer-extra-account"
-						onclick={() => { closeDrawer(); handleSwitch(acct.userId); }}
+						onclick={() => {
+							closeDrawer();
+							handleSwitch(acct.userId);
+						}}
 						disabled={isSwitching}
 					>
 						<UserAvatar
@@ -536,7 +539,7 @@ function isActive(path: string): boolean {
 
 	{#if !minimal}
 		<nav class="sidebar-nav" aria-label="メインナビゲーション">
-			<a href="/" class="sidebar-btn" class:active={isActive('/')} aria-label="ホーム" title="ホーム">
+			<a href="/" class="sidebar-btn" class:active={isActive("/")} aria-label="ホーム" title="ホーム">
 				<svg
 					width="22"
 					height="22"
@@ -555,7 +558,7 @@ function isActive(path: string): boolean {
 			</a>
 
 			{#if session}
-				<a href="/search" class="sidebar-btn" class:active={isActive('/search')} aria-label="検索" title="検索">
+				<a href="/search" class="sidebar-btn" class:active={isActive("/search")} aria-label="検索" title="検索">
 					<svg
 						width="22"
 						height="22"
@@ -578,7 +581,7 @@ function isActive(path: string): boolean {
 				<a
 					href="/notifications"
 					class="sidebar-btn"
-					class:active={isActive('/notifications')}
+					class:active={isActive("/notifications")}
 					aria-label="通知"
 					title="通知"
 				>
@@ -597,13 +600,13 @@ function isActive(path: string): boolean {
 						<path d="M13.73 21a2 2 0 0 1-3.46 0" />
 					</svg>
 					{#if notificationCount > 0}
-						<span class="sidebar-badge">{notificationCount > 99 ? '99+' : notificationCount}</span>
+						<span class="sidebar-badge">{notificationCount > 99 ? "99+" : notificationCount}</span>
 					{/if}
 					<span class="sidebar-btn-label">通知</span>
 				</a>
 			{/if}
 
-			<a href="/anime" class="sidebar-btn" class:active={isActive('/anime')} aria-label="アニメ" title="アニメ">
+			<a href="/anime" class="sidebar-btn" class:active={isActive("/anime")} aria-label="アニメ" title="アニメ">
 				<AnimeIcon />
 				<span class="sidebar-btn-label">アニメ</span>
 			</a>
@@ -611,7 +614,7 @@ function isActive(path: string): boolean {
 			<a
 				href="/schedule"
 				class="sidebar-btn"
-				class:active={isActive('/schedule') || isActive('/events')}
+				class:active={isActive("/schedule") || isActive("/events")}
 				aria-label="カレンダー"
 				title="カレンダー"
 			>
@@ -630,7 +633,7 @@ function isActive(path: string): boolean {
 					<path d="M16 2l-4 5-4-5" />
 				</svg>
 				{#if unreadReminderCount > 0}
-					<span class="sidebar-indicator" aria-label="放送前のお知らせがあります"></span>
+					<span class="sidebar-indicator" role="status" aria-label="放送前のお知らせがあります"></span>
 				{/if}
 				<span class="sidebar-btn-label">カレンダー</span>
 			</a>
@@ -639,7 +642,7 @@ function isActive(path: string): boolean {
 				<a
 					href="/mylist"
 					class="sidebar-btn"
-					class:active={isActive('/mylist')}
+					class:active={isActive("/mylist")}
 					aria-label="マイリスト"
 					title="マイリスト"
 				>
@@ -667,7 +670,7 @@ function isActive(path: string): boolean {
 				<a
 					href="/collections"
 					class="sidebar-btn"
-					class:active={isActive('/collections')}
+					class:active={isActive("/collections")}
 					aria-label="コレクション"
 					title="コレクション"
 				>
@@ -692,7 +695,7 @@ function isActive(path: string): boolean {
 				<a
 					href="/exchange"
 					class="sidebar-btn"
-					class:active={isActive('/exchange')}
+					class:active={isActive("/exchange")}
 					aria-label="トレード"
 					title="トレード"
 				>
@@ -719,7 +722,7 @@ function isActive(path: string): boolean {
 				<a
 					href="/settings"
 					class="sidebar-btn"
-					class:active={isActive('/settings')}
+					class:active={isActive("/settings")}
 					aria-label="設定"
 					title="設定"
 				>
@@ -746,7 +749,7 @@ function isActive(path: string): boolean {
 					<a
 						href="/admin"
 						class="sidebar-btn"
-						class:active={isActive('/admin')}
+						class:active={isActive("/admin")}
 						aria-label="Admin"
 						title="Admin"
 					>
@@ -764,7 +767,7 @@ function isActive(path: string): boolean {
 							<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
 						</svg>
 						{#if pendingReportsCount > 0}
-							<span class="sidebar-badge">{pendingReportsCount > 99 ? '99+' : pendingReportsCount}</span>
+							<span class="sidebar-badge">{pendingReportsCount > 99 ? "99+" : pendingReportsCount}</span>
 						{/if}
 						<span class="sidebar-btn-label">Admin</span>
 					</a>
@@ -779,9 +782,9 @@ function isActive(path: string): boolean {
 			class="sidebar-btn"
 			onclick={toggleTheme}
 			aria-label="テーマ切替"
-			title={theme === 'dark' ? 'ライトモードに切替' : 'ダークモードに切替'}
+			title={theme === "dark" ? "ライトモードに切替" : "ダークモードに切替"}
 		>
-			{#if theme === 'dark'}
+			{#if theme === "dark"}
 				<svg
 					width="20"
 					height="20"

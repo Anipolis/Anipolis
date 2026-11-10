@@ -120,6 +120,7 @@ onDestroy(clearSelectedAvatarFile);
 
 				<div class="onboarding-avatar-row">
 					<!-- アイコンを押しても画像を選べる。Tab の移動先と読み上げは「画像を選択／変更」だけにする（同じ操作を 2 つ並べない） -->
+					<!-- biome-ignore lint/a11y/noLabelWithoutControl: 読み上げは隣の「画像を選択」ボタン側で行い、この label は aria-hidden で隠している -->
 					<label for="onboarding-avatar-input" class="avatar-pick" aria-hidden="true">
 						<UserAvatar src={selectedAvatarUrl} username={displayName || username} size="lg" />
 					</label>

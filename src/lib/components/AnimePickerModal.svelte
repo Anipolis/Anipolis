@@ -217,7 +217,7 @@ async function save() {
 									{#snippet trailing()}
 										<span class="picker-result-state">
 											{#if picked}
-												{addOnly && initialIds.has(anime.id) ? '追加済み' : '選択済み'}
+												{addOnly && initialIds.has(anime.id) ? "追加済み" : "選択済み"}
 											{:else}
 												<span class="i-lucide-plus" aria-hidden="true"></span>
 												追加
@@ -240,7 +240,7 @@ async function save() {
 				{#if addOnly && picks.length === initialIds.size}
 					<p class="picker-note">作品名で検索して追加します</p>
 				{:else if picks.length > 0}
-					<ol class="picker-list" aria-label={addOnly ? '追加する作品' : '選んだ作品'}>
+					<ol class="picker-list" aria-label={addOnly ? "追加する作品" : "選んだ作品"}>
 						{#each picks as pick, index (pick.id)}
 							{#if !(addOnly && initialIds.has(pick.id))}
 								<li class="picker-pick" class:just-added={pick.id === lastAddedId}>
@@ -302,11 +302,11 @@ async function save() {
 			<button type="button" class="btn btn-ghost" disabled={saving} onclick={close}>キャンセル</button>
 			<button
 				type="button"
-				class="btn {changed ? 'btn-primary' : 'btn-secondary'}"
+				class="btn {changed ? "btn-primary" : "btn-secondary"}"
 				disabled={saving || !changed}
 				onclick={save}
 			>
-				{saving ? '保存中...' : '保存する'}
+				{saving ? "保存中..." : "保存する"}
 			</button>
 		</div>
 	</div>

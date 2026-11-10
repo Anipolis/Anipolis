@@ -175,7 +175,7 @@ async function confirmCrop(): Promise<void> {
 
 	const toBlob = (type: string) => new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, 0.9));
 	let blob = await toBlob("image/webp");
-	if (!blob || blob.type !== "image/webp") blob = await toBlob("image/jpeg");
+	if (blob?.type !== "image/webp") blob = await toBlob("image/jpeg");
 	saving = false;
 	if (!blob || closed) return;
 	const ext = blob.type === "image/webp" ? "webp" : "jpg";
@@ -216,7 +216,9 @@ async function confirmCrop(): Promise<void> {
 				style:width="{FRAME.width}px"
 				style:height="{FRAME.height}px"
 				role="application"
-				aria-label="{isHeader ? 'ヘッダー画像' : 'アイコン'}にする範囲。ドラッグか矢印キーで動かし、＋／－で拡大・縮小します"
+				aria-label="{isHeader
+					? "ヘッダー画像"
+					: "アイコン"}にする範囲。ドラッグか矢印キーで動かし、＋／－で拡大・縮小します"
 				tabindex="0"
 				onpointerdown={handlePointerDown}
 				onpointermove={handlePointerMove}

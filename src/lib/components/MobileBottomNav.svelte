@@ -24,9 +24,9 @@ function isActive(path: string): boolean {
 		<a
 			href="/"
 			class="mobile-tab"
-			class:active={isActive('/')}
+			class:active={isActive("/")}
 			aria-label="ホーム"
-			aria-current={isActive('/') ? 'page' : undefined}
+			aria-current={isActive("/") ? "page" : undefined}
 		>
 			<svg
 				width="22"
@@ -48,9 +48,9 @@ function isActive(path: string): boolean {
 		<a
 			href="/search"
 			class="mobile-tab"
-			class:active={isActive('/search')}
+			class:active={isActive("/search")}
 			aria-label="検索"
-			aria-current={isActive('/search') ? 'page' : undefined}
+			aria-current={isActive("/search") ? "page" : undefined}
 		>
 			<svg
 				width="22"
@@ -72,9 +72,9 @@ function isActive(path: string): boolean {
 		<a
 			href="/schedule"
 			class="mobile-tab"
-			class:active={isActive('/schedule') || isActive('/events')}
+			class:active={isActive("/schedule") || isActive("/events")}
 			aria-label="カレンダー"
-			aria-current={isActive('/schedule') || isActive('/events') ? 'page' : undefined}
+			aria-current={isActive("/schedule") || isActive("/events") ? "page" : undefined}
 		>
 			<span class="mobile-tab-icon-wrap">
 				<svg
@@ -92,7 +92,7 @@ function isActive(path: string): boolean {
 					<path d="M16 2l-4 5-4-5" />
 				</svg>
 				{#if unreadReminderCount > 0}
-					<span class="mobile-tab-dot" aria-label="放送前のお知らせがあります"></span>
+					<span class="mobile-tab-dot" role="status" aria-label="放送前のお知らせがあります"></span>
 				{/if}
 			</span>
 			<span class="mobile-tab-label">カレンダー</span>
@@ -101,9 +101,9 @@ function isActive(path: string): boolean {
 		<a
 			href="/notifications"
 			class="mobile-tab"
-			class:active={isActive('/notifications')}
+			class:active={isActive("/notifications")}
 			aria-label="通知"
-			aria-current={isActive('/notifications') ? 'page' : undefined}
+			aria-current={isActive("/notifications") ? "page" : undefined}
 		>
 			<span class="mobile-tab-icon-wrap">
 				<svg
@@ -122,7 +122,7 @@ function isActive(path: string): boolean {
 				</svg>
 				{#if unreadNotificationCount > 0}
 					<span class="mobile-tab-badge"
-						>{unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}</span
+						>{unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}</span
 					>
 				{/if}
 			</span>
@@ -132,9 +132,9 @@ function isActive(path: string): boolean {
 		<a
 			href="/mylist"
 			class="mobile-tab"
-			class:active={isActive('/mylist')}
+			class:active={isActive("/mylist")}
 			aria-label="マイリスト"
-			aria-current={isActive('/mylist') ? 'page' : undefined}
+			aria-current={isActive("/mylist") ? "page" : undefined}
 		>
 			<svg
 				width="22"
@@ -160,9 +160,9 @@ function isActive(path: string): boolean {
 		<a
 			href="/"
 			class="mobile-tab"
-			class:active={isActive('/')}
+			class:active={isActive("/")}
 			aria-label="ホーム"
-			aria-current={isActive('/') ? 'page' : undefined}
+			aria-current={isActive("/") ? "page" : undefined}
 		>
 			<svg
 				width="22"
@@ -184,9 +184,9 @@ function isActive(path: string): boolean {
 		<a
 			href="/schedule"
 			class="mobile-tab"
-			class:active={isActive('/schedule') || isActive('/events')}
+			class:active={isActive("/schedule") || isActive("/events")}
 			aria-label="カレンダー"
-			aria-current={isActive('/schedule') || isActive('/events') ? 'page' : undefined}
+			aria-current={isActive("/schedule") || isActive("/events") ? "page" : undefined}
 		>
 			<span class="mobile-tab-icon-wrap">
 				<svg
@@ -204,7 +204,7 @@ function isActive(path: string): boolean {
 					<path d="M16 2l-4 5-4-5" />
 				</svg>
 				{#if unreadReminderCount > 0}
-					<span class="mobile-tab-dot" aria-label="放送前のお知らせがあります"></span>
+					<span class="mobile-tab-dot" role="status" aria-label="放送前のお知らせがあります"></span>
 				{/if}
 			</span>
 			<span class="mobile-tab-label">カレンダー</span>
@@ -213,9 +213,9 @@ function isActive(path: string): boolean {
 		<a
 			href="/anime"
 			class="mobile-tab"
-			class:active={isActive('/anime')}
+			class:active={isActive("/anime")}
 			aria-label="アニメ"
-			aria-current={isActive('/anime') ? 'page' : undefined}
+			aria-current={isActive("/anime") ? "page" : undefined}
 		>
 			<AnimeIcon size={22} />
 			<span class="mobile-tab-label">アニメ</span>
@@ -224,9 +224,9 @@ function isActive(path: string): boolean {
 		<a
 			href="/auth"
 			class="mobile-tab"
-			class:active={isActive('/auth')}
+			class:active={isActive("/auth")}
 			aria-label="ログイン"
-			aria-current={isActive('/auth') ? 'page' : undefined}
+			aria-current={isActive("/auth") ? "page" : undefined}
 		>
 			<svg
 				width="22"

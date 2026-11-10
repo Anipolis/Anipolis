@@ -196,7 +196,13 @@ const submitRequestReauth: SubmitFunction = () => {
 
 				<div class="settings-actions">
 					<button type="submit" class="btn btn-primary" disabled={saving}>
-						{saving ? (data.hasEmailProvider ? "変更中..." : "設定中...") : data.hasEmailProvider ? "パスワードを変更" : "パスワードを設定"}
+						{saving
+							? data.hasEmailProvider
+								? "変更中..."
+								: "設定中..."
+							: data.hasEmailProvider
+								? "パスワードを変更"
+								: "パスワードを設定"}
 					</button>
 				</div>
 			</form>

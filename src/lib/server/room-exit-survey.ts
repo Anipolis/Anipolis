@@ -383,7 +383,7 @@ async function saveEventRoomExitSurveyResponse(
 	if (!event || event.is_cancelled) {
 		return { ok: false, status: 400, message: "Survey target room is invalid" };
 	}
-	if (!run || run.room_kind !== "event" || run.event_id !== request.eventId) {
+	if (run?.room_kind !== "event" || run.event_id !== request.eventId) {
 		return { ok: false, status: 400, message: "Survey target room is invalid" };
 	}
 	if (run.ended_at) {

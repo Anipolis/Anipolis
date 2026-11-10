@@ -114,10 +114,10 @@ function closeQuoteModal() {
 					onclick={toggleLike}
 					aria-label={liked ? "Unlike" : "Like"}
 					class="flex h-8 w-8 border-none bg-transparent cursor-pointer transition-colors {liked
-                        ? 'text-[var(--color-danger)]'
-                        : 'hover:text-[var(--color-danger)]'}"
+						? "text-[var(--color-danger)]"
+						: "hover:text-[var(--color-danger)]"}"
 				>
-					<span class="i-lucide-heart h-full w-full {liked ? 'fill-current' : ''}"></span>
+					<span class="i-lucide-heart h-full w-full {liked ? "fill-current" : ""}"></span>
 					{#if likeCount > 0}
 						<span class="text-xs ml-1">{likeCount}</span>
 					{/if}
@@ -130,10 +130,10 @@ function closeQuoteModal() {
 						onclick={openRepostMenu}
 						aria-label={reposted ? "Undo repost" : "Repost"}
 						class="flex items-center gap-1 border-none bg-transparent cursor-pointer transition-colors {reposted
-                            ? 'text-[var(--status-watching)]'
-                            : 'hover:text-[var(--status-watching)]'}"
+							? "text-[var(--status-watching)]"
+							: "hover:text-[var(--status-watching)]"}"
 					>
-						<span class="i-lucide-repeat h-5 w-5 {reposted ? 'fill-current' : ''}"></span>
+						<span class="i-lucide-repeat h-5 w-5 {reposted ? "fill-current" : ""}"></span>
 						{#if repostCount > 0}
 							<span class="text-xs">{repostCount}</span>
 						{/if}
@@ -149,7 +149,7 @@ function closeQuoteModal() {
 								class="flex w-full items-center gap-3 px-4 py-3 text-sm text-[var(--color-text)] transition-colors hover:bg-[var(--color-surface-hover)]"
 							>
 								<span class="i-lucide-repeat h-4 w-4 text-[var(--status-watching)]"></span>
-								{reposted ? 'リポストを取り消す' : 'リポスト'}
+								{reposted ? "リポストを取り消す" : "リポスト"}
 							</button>
 							<button
 								type="button"
@@ -165,7 +165,7 @@ function closeQuoteModal() {
 						<div
 							class="fixed inset-0 z-10"
 							role="presentation"
-							onclick={() => showRepostMenu = false}
+							onclick={() => (showRepostMenu = false)}
 						></div>
 					{/if}
 				</div>

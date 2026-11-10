@@ -508,6 +508,7 @@ function onWindowKeyDown(event: KeyboardEvent) {
 					aria-label="「{item.title}」の作品ページを開く"
 					title="作品ページ"
 				>
+					<span class="sr-only">作品ページを開く</span>
 					<span class="i-lucide-external-link" aria-hidden="true"></span>
 				</a>
 				<button
@@ -567,7 +568,7 @@ function onWindowKeyDown(event: KeyboardEvent) {
 				onclick={addTier}
 			>
 				<span class="i-lucide-plus" aria-hidden="true"></span>
-				{labels.length >= MAX_COLLECTION_TIERS ? `段は${MAX_COLLECTION_TIERS}つまでです` : '段を足す'}
+				{labels.length >= MAX_COLLECTION_TIERS ? `段は${MAX_COLLECTION_TIERS}つまでです` : "段を足す"}
 			</button>
 		</div>
 
@@ -614,7 +615,7 @@ function onWindowKeyDown(event: KeyboardEvent) {
 			onclick={(event) => event.stopPropagation()}
 			onkeydown={(event) => {
 				event.stopPropagation();
-				if (event.key === 'Escape') closeTierDialog();
+				if (event.key === "Escape") closeTierDialog();
 			}}
 		>
 			<div class="tier-dialog-header">

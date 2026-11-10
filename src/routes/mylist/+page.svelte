@@ -279,10 +279,10 @@ $effect(() => {
 								<button
 									type="button"
 									class="view-btn"
-									class:active={viewMode === 'list'}
-									onclick={() => (viewMode = 'list')}
+									class:active={viewMode === "list"}
+									onclick={() => (viewMode = "list")}
 									aria-label="カードで表示"
-									aria-pressed={viewMode === 'list'}
+									aria-pressed={viewMode === "list"}
 									title="カードで表示"
 								>
 									<span class="i-lucide-layout-grid" aria-hidden="true"></span>
@@ -290,10 +290,10 @@ $effect(() => {
 								<button
 									type="button"
 									class="view-btn"
-									class:active={viewMode === 'progress'}
-									onclick={() => (viewMode = 'progress')}
+									class:active={viewMode === "progress"}
+									onclick={() => (viewMode = "progress")}
 									aria-label="話数を記録"
-									aria-pressed={viewMode === 'progress'}
+									aria-pressed={viewMode === "progress"}
 									title="話数を記録"
 								>
 									<span class="i-lucide-list" aria-hidden="true"></span>
@@ -320,8 +320,7 @@ $effect(() => {
 					<p>まだアニメがありません。<a href="/anime">アニメを探す</a></p>
 					{#if data.profile.list_is_public}
 						<p class="mylist-empty-note">
-							マイリストは他の人もプロフィールで見られます。<a href="/settings/privacy"
-								>設定</a
+							マイリストは他の人もプロフィールで見られます。<a href="/settings/privacy">設定</a
 							>で非公開にできます
 						</p>
 					{/if}
@@ -335,7 +334,7 @@ $effect(() => {
 						<div class="status-empty">
 							<p>{MYLIST_TAB_LABELS[selectedStatus]}にはまだ登録がありません</p>
 						</div>
-					{:else if viewMode === 'list'}
+					{:else if viewMode === "list"}
 						<AnimeStatusSection
 							animes={visibleAnimes}
 							scoreLabel="自分のスコア"

@@ -480,7 +480,9 @@ $effect(() => {
 										href="/anime/{relation.anime.id}"
 										title={relation.anime.title}
 										coverUrl={relation.anime.cover_url}
-										note={group.key === 'other' ? animeRelationLabel(relation.relation_type) || undefined : undefined}
+										note={group.key === "other"
+											? animeRelationLabel(relation.relation_type) || undefined
+											: undefined}
 									/>
 								</div>
 							{/each}
@@ -549,6 +551,7 @@ $effect(() => {
 						</div>
 					{/if}
 					{#if data.isAdmin}
+						<!-- biome-ignore lint/a11y/noLabelWithoutControl: file input を内包しているが、Svelte のブロックを挟むため静的解析で関連付けを検出できない -->
 						<label class="cover-upload-btn" title="カバー画像を変更" class:uploading={coverUploading}>
 							{#if coverUploading}
 								<span>...</span>
@@ -653,8 +656,8 @@ $effect(() => {
 										<dt>ハッシュタグ</dt>
 										<dd class="genre-list">
 											{#each data.anime.official_hashtag as tag}
-												<a href="/hashtag/{tag.replace(/^#/, '')}" class="hashtag-link"
-													>#{tag.replace(/^#/, '')}</a
+												<a href="/hashtag/{tag.replace(/^#/, "")}" class="hashtag-link"
+													>#{tag.replace(/^#/, "")}</a
 												>
 											{/each}
 										</dd>
@@ -718,8 +721,7 @@ $effect(() => {
 							<!-- スマホでは大きな数を「1.2万」と縮める（PC はそのまま） -->
 							<span
 								><span class="count-full">{formatCount(data.anime.score_count ?? 0)}</span
-								><span class="count-compact"
-									>{formatCompactCount(data.anime.score_count ?? 0)}</span
+								><span class="count-compact">{formatCompactCount(data.anime.score_count ?? 0)}</span
 								>人が評価</span
 							>
 						</span>
@@ -785,8 +787,8 @@ $effect(() => {
 							class:active={myListModalOpen}
 							onclick={() => (myListModalOpen = true)}
 							aria-haspopup="dialog"
-							aria-label={userEntry ? 'スコア・進捗を編集' : 'スコア・進捗も入れて登録'}
-							title={userEntry ? 'スコア・進捗を編集' : 'スコア・進捗も入れて登録'}
+							aria-label={userEntry ? "スコア・進捗を編集" : "スコア・進捗も入れて登録"}
+							title={userEntry ? "スコア・進捗を編集" : "スコア・進捗も入れて登録"}
 						>
 							<!-- 未登録は list-plus、登録済みは list-check（アニメ一覧のカードと同じ） -->
 							{#if userEntry}
@@ -985,7 +987,8 @@ $effect(() => {
 														<td>
 															{#if room.merged_into}
 																統合済み
-															{:else if room.opens_at && Date.parse(room.opens_at) <= Date.now()}
+															{:else if room.opens_at &&
+																Date.parse(room.opens_at) <= Date.now()}
 																投稿できる
 															{:else}
 																未放送
@@ -1197,7 +1200,9 @@ $effect(() => {
 															<div class="broadcast-override-table-tags">
 																{#if formatBroadcastOverrideEpisodeSummary(override)}
 																	<span class="broadcast-override-tag"
-																		>{formatBroadcastOverrideEpisodeSummary(override)}</span
+																		>{formatBroadcastOverrideEpisodeSummary(
+																			override,
+																		)}</span
 																	>
 																{/if}
 																{#if override.episode_count_increment != null}
@@ -1280,7 +1285,8 @@ $effect(() => {
 												{#each overrideKindOptions as option}
 													<label
 														class="broadcast-override-kind-option"
-														class:broadcast-override-kind-option--active={selectedOverrideKind === option.kind}
+														class:broadcast-override-kind-option--active={selectedOverrideKind ===
+															option.kind}
 													>
 														<input
 															type="radio"
@@ -1631,7 +1637,9 @@ $effect(() => {
 						{:else if data.episodeRooms.length > 0}
 							<section class="room-log-section">
 								<h2 class="room-log-heading">
-									{data.episodeRooms.some((entry) => entry.kind === "episode") ? "話数ルーム" : "特番ルーム"}
+									{data.episodeRooms.some((entry) => entry.kind === "episode")
+										? "話数ルーム"
+										: "特番ルーム"}
 								</h2>
 								<ol class="room-log-list">
 									{#if isAnimeAiring && latestEpisodeRoom}
@@ -1676,7 +1684,9 @@ $effect(() => {
 													>{episodeRoomChips.get(entry.key)}</span
 												>
 												<span class="sr-only"
-													>{entryDetail ? `${entry.label}（${entryDetail}）` : entry.label}</span
+													>{entryDetail
+														? `${entry.label}（${entryDetail}）`
+														: entry.label}</span
 												>
 												{#if liveEpisodeRoomKeys.has(entry.key)}
 													<span class="room-log-live-dot" aria-hidden="true"></span>
@@ -1707,13 +1717,13 @@ $effect(() => {
 										<span class="event-log-title">{event.title}</span>
 										<span class="event-log-date">
 											{new Date(event.scheduled_at).toLocaleString("ja-JP", {
-											timeZone: "Asia/Tokyo",
-											year: "numeric",
-											month: "numeric",
-											day: "numeric",
-											hour: "2-digit",
-											minute: "2-digit",
-										})}
+												timeZone: "Asia/Tokyo",
+												year: "numeric",
+												month: "numeric",
+												day: "numeric",
+												hour: "2-digit",
+												minute: "2-digit",
+											})}
 										</span>
 										{#if event.is_cancelled}
 											<span class="event-log-cancelled-badge">キャンセル済み</span>
@@ -1778,7 +1788,7 @@ $effect(() => {
 							{/if}
 							<span
 								class="listed-user-status-dot"
-								style="background: {listedUserStatusColors[u.status] ?? 'var(--fg-muted)'};"
+								style="background: {listedUserStatusColors[u.status] ?? "var(--fg-muted)"};"
 								title={listedUserStatusLabels[u.status] ?? u.status}
 							></span>
 						</div>
@@ -1854,12 +1864,12 @@ $effect(() => {
 				<p class="form-error">{recommendError || recommendFormMessage}</p>
 			{/if}
 			{#if recommendFormSuccess || recommendFeedback}
-				<p class="form-success">{recommendFeedback || '推薦を送信しました'}</p>
+				<p class="form-success">{recommendFeedback || "推薦を送信しました"}</p>
 			{/if}
 
 			<form method="POST" action="?/recommendAnime" use:enhance={handleRecommendSubmit} class="recommend-form">
 				<input type="hidden" name="anime_id" value={data.anime.id}>
-				<input type="hidden" name="recipient_id" value={selectedRecipient?.id ?? ''}>
+				<input type="hidden" name="recipient_id" value={selectedRecipient?.id ?? ""}>
 
 				<div class="recommend-recipient-field">
 					<label class="form-label">
@@ -1916,7 +1926,7 @@ $effect(() => {
 					class="btn-primary recommend-submit"
 					disabled={!selectedRecipient || recommendSubmitting}
 				>
-					{recommendSubmitting ? '送信中…' : '推薦する'}
+					{recommendSubmitting ? "送信中…" : "推薦する"}
 				</button>
 			</form>
 		</div>
@@ -1931,7 +1941,9 @@ $effect(() => {
 	entry={userEntry}
 	removeAction="?/removeWatchlist"
 	onsaved={handleMyListSaved}
-	onclose={() => { myListModalOpen = false; }}
+	onclose={() => {
+		myListModalOpen = false;
+	}}
 />
 <style>
 .detail-page {

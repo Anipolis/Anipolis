@@ -264,7 +264,10 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 								onclick={() =>
 									(stopTarget = {
 										id: run.id,
-										title: run.room_kind === "event" ? (run.event_title ?? "") : (run.anime_title ?? ""),
+										title:
+											run.room_kind === "event"
+												? (run.event_title ?? "")
+												: (run.anime_title ?? ""),
 									})}
 							>
 								停止
@@ -309,7 +312,10 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 								<div class="survey-distributions">
 									<div>
 										<h4>次回参加</h4>
-										{#each optionCounts(run.survey.next_participation_counts, nextParticipationLabels) as option}
+										{#each optionCounts(
+											run.survey.next_participation_counts,
+											nextParticipationLabels,
+										) as option}
 											<div class="survey-option-row">
 												<span>{option.label}</span>
 												<strong>{option.count}</strong>
@@ -318,7 +324,10 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 									</div>
 									<div>
 										<h4>X / Twitter比較</h4>
-										{#each optionCounts(run.survey.comparison_with_x_counts, comparisonWithXLabels) as option}
+										{#each optionCounts(
+											run.survey.comparison_with_x_counts,
+											comparisonWithXLabels,
+										) as option}
 											<div class="survey-option-row">
 												<span>{option.label}</span>
 												<strong>{option.count}</strong>
@@ -417,7 +426,9 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 	<div
 		class="modal-backdrop"
 		role="presentation"
-		onclick={(event) => { if (event.target === event.currentTarget) stopTarget = null; }}
+		onclick={(event) => {
+			if (event.target === event.currentTarget) stopTarget = null;
+		}}
 	>
 		<div
 			class="modal"

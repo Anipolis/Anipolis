@@ -131,7 +131,7 @@ const handleDelete: SubmitFunction = ({ cancel }) => {
 	>
 		<div class="collection-form-header">
 			<span id="collection-form-title" class="collection-form-heading">
-				{mode === 'create' ? 'コレクションを作る' : 'コレクションを編集'}
+				{mode === "create" ? "コレクションを作る" : "コレクションを編集"}
 			</span>
 			<button
 				type="button"
@@ -158,16 +158,16 @@ const handleDelete: SubmitFunction = ({ cancel }) => {
 						name="title"
 						type="text"
 						class="field-input"
-						class:field-error={error?.field === 'title'}
-						aria-invalid={error?.field === 'title'}
+						class:field-error={error?.field === "title"}
+						aria-invalid={error?.field === "title"}
 						maxlength={MAX_COLLECTION_TITLE_LENGTH}
 						autocomplete="off"
 						bind:value={title}
 						oninput={() => {
-							if (error?.field === 'title') error = null;
+							if (error?.field === "title") error = null;
 						}}
 					>
-					{#if error?.field === 'title'}
+					{#if error?.field === "title"}
 						<p class="field-error-msg" role="alert">{error.message}</p>
 					{/if}
 				</div>
@@ -178,14 +178,14 @@ const handleDelete: SubmitFunction = ({ cancel }) => {
 						id="collection-description"
 						name="description"
 						class="field-textarea"
-						class:field-error={error?.field === 'description'}
-						aria-invalid={error?.field === 'description'}
+						class:field-error={error?.field === "description"}
+						aria-invalid={error?.field === "description"}
 						rows="3"
 						maxlength={MAX_COLLECTION_DESCRIPTION_LENGTH}
 						bind:value={description}
 					></textarea>
-					<p class="field-hint" class:danger={error?.field === 'description'}>
-						{error?.field === 'description' ? error.message : `残り ${descriptionRemaining} 文字`}
+					<p class="field-hint" class:danger={error?.field === "description"}>
+						{error?.field === "description" ? error.message : `残り ${descriptionRemaining} 文字`}
 					</p>
 				</div>
 
@@ -204,8 +204,8 @@ const handleDelete: SubmitFunction = ({ cancel }) => {
 						<select
 							id="collection-visibility"
 							class="field-input"
-							value={isPublic ? 'public' : 'private'}
-							onchange={(event) => (isPublic = event.currentTarget.value === 'public')}
+							value={isPublic ? "public" : "private"}
+							onchange={(event) => (isPublic = event.currentTarget.value === "public")}
 						>
 							<option value="private">非公開</option>
 							<option value="public">公開</option>
@@ -216,7 +216,7 @@ const handleDelete: SubmitFunction = ({ cancel }) => {
 					</div>
 				</div>
 
-				{#if kind === 'tier'}
+				{#if kind === "tier"}
 					<fieldset class="collection-form-tiers">
 						<legend class="field-label">段</legend>
 						<ol class="collection-form-tier-list">
@@ -226,16 +226,16 @@ const handleDelete: SubmitFunction = ({ cancel }) => {
 										name="tier"
 										type="text"
 										class="field-input"
-										class:field-error={error?.field === 'tiers' && !tier.label.trim()}
+										class:field-error={error?.field === "tiers" && !tier.label.trim()}
 										aria-label="{index + 1}段目の名前"
 										maxlength={MAX_COLLECTION_TIER_LABEL_LENGTH}
 										autocomplete="off"
 										bind:value={tier.label}
 										oninput={() => {
-											if (error?.field === 'tiers') error = null;
+											if (error?.field === "tiers") error = null;
 										}}
 									>
-									<input type="hidden" name="tier_origin" value={tier.origin ?? ''}>
+									<input type="hidden" name="tier_origin" value={tier.origin ?? ""}>
 									<button
 										type="button"
 										class="collection-form-tier-remove"
@@ -254,7 +254,7 @@ const handleDelete: SubmitFunction = ({ cancel }) => {
 								段を足す
 							</button>
 						{/if}
-						{#if error?.field === 'tiers'}
+						{#if error?.field === "tiers"}
 							<p class="field-error-msg" role="alert">{error.message}</p>
 						{/if}
 					</fieldset>
@@ -262,7 +262,7 @@ const handleDelete: SubmitFunction = ({ cancel }) => {
 			</div>
 
 			<div class="collection-form-footer">
-				{#if mode === 'edit' && deleteAction}
+				{#if mode === "edit" && deleteAction}
 					<!-- 削除は別のフォーム（確認を通す）から送る -->
 					<button
 						type="button"
@@ -277,15 +277,15 @@ const handleDelete: SubmitFunction = ({ cancel }) => {
 				<button type="button" class="btn btn-ghost" disabled={submitting} onclick={close}>キャンセル</button>
 				<button
 					type="submit"
-					class="btn {changed ? 'btn-primary' : 'btn-secondary'}"
+					class="btn {changed ? "btn-primary" : "btn-secondary"}"
 					disabled={submitting || !changed}
 				>
-					{submitting ? '保存中...' : mode === 'create' ? '作る' : '保存する'}
+					{submitting ? "保存中..." : mode === "create" ? "作る" : "保存する"}
 				</button>
 			</div>
 		</form>
 
-		{#if mode === 'edit' && deleteAction}
+		{#if mode === "edit" && deleteAction}
 			<form bind:this={deleteForm} method="POST" action={deleteAction} use:enhance={handleDelete} hidden></form>
 		{/if}
 	</div>

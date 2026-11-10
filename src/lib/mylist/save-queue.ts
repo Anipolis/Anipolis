@@ -167,7 +167,7 @@ export function createSaveQueue<T>(options: SaveQueueOptions<T>) {
 		/** 失敗した行を、保持している最新値でもう一度送る */
 		retry(key: string) {
 			const entry = rows.get(key);
-			if (!entry || entry.state.status !== "failed") return;
+			if (entry?.state.status !== "failed") return;
 			start(key, entry);
 		},
 

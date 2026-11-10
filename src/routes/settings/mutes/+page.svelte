@@ -123,7 +123,9 @@ const activeTab = $derived.by((): "word" | "anime" | "account" => {
 					name="mute_type"
 					value="period"
 					checked={currentMuteType === "period"}
-					onchange={() => { pendingMuteType = { ...pendingMuteType, [_animeId]: "period" }; }}
+					onchange={() => {
+						pendingMuteType = { ...pendingMuteType, [_animeId]: "period" };
+					}}
 				>
 				<span>期間指定</span>
 			</label>
@@ -133,7 +135,9 @@ const activeTab = $derived.by((): "word" | "anime" | "account" => {
 					name="mute_type"
 					value="always"
 					checked={currentMuteType === "always"}
-					onchange={() => { pendingMuteType = { ...pendingMuteType, [_animeId]: "always" }; }}
+					onchange={() => {
+						pendingMuteType = { ...pendingMuteType, [_animeId]: "always" };
+					}}
 				>
 				<span>常にミュート</span>
 			</label>
@@ -155,7 +159,7 @@ const activeTab = $derived.by((): "word" | "anime" | "account" => {
 		<div class="mute-accordion-actions">
 			<button
 				type="submit"
-				class="btn {_mute === null || muteFormChanged ? 'btn-primary' : 'btn-secondary'} btn-sm"
+				class="btn {_mute === null || muteFormChanged ? "btn-primary" : "btn-secondary"} btn-sm"
 				disabled={_mute !== null && !muteFormChanged}
 			>
 				保存

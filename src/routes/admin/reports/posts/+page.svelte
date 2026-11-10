@@ -89,7 +89,7 @@ function toggleRow(id: string) {
 										<input type="hidden" name="report_id" value={report.id}>
 										<div class="action-row">
 											<select name="status" class="status-select">
-												{#each Object.entries(statusLabels) as [ value, label ]}
+												{#each Object.entries(statusLabels) as [value, label]}
 													<option {value} selected={report.status === value}>{label}</option>
 												{/each}
 											</select>
@@ -108,8 +108,8 @@ function toggleRow(id: string) {
 										<button
 											type="submit"
 											class="btn {report.post_hidden_by_admin
-												? 'btn-ghost'
-												: 'btn-warning'} btn-full"
+												? "btn-ghost"
+												: "btn-warning"} btn-full"
 										>
 											{report.post_hidden_by_admin ? "表示に戻す" : "非表示にする"}
 										</button>

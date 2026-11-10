@@ -83,7 +83,7 @@ const confirmDelete: SubmitFunction = ({ cancel }) => {
 					disabled={registering}
 				>
 					<span class="i-lucide-key-round" aria-hidden="true"></span>
-					{registering ? '登録中…' : 'パスキーを追加'}
+					{registering ? "登録中…" : "パスキーを追加"}
 				</button>
 			{:else}
 				<div class="passkey-reauth">
@@ -131,14 +131,16 @@ const confirmDelete: SubmitFunction = ({ cancel }) => {
 						<li class="passkey-item">
 							<div class="passkey-main">
 								<strong>
-									{passkey.device_type === 'multiDevice' ? '同期されるパスキー' : 'この端末だけのパスキー'}
+									{passkey.device_type === "multiDevice"
+										? "同期されるパスキー"
+										: "この端末だけのパスキー"}
 								</strong>
 								<div class="passkey-meta">
 									<span>{formatRelativeTime(passkey.created_at)}に登録</span>
 									<span>
 										{passkey.last_used_at
 											? `${formatRelativeTime(passkey.last_used_at)}に使用`
-											: '未使用'}
+											: "未使用"}
 									</span>
 								</div>
 							</div>

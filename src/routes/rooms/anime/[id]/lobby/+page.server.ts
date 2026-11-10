@@ -18,7 +18,7 @@ import type { Actions, PageServerLoad } from "./$types";
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 	const anime = await getAnime(supabase, params.id, user?.id ?? null);
-	if (!anime || anime.room_type !== "global") throw error(404, "総合ロビーが見つかりません");
+	if (anime?.room_type !== "global") throw error(404, "総合ロビーが見つかりません");
 
 	const session = await getGlobalAnimeLobbySession(supabase, anime.id);
 	if (!session) throw error(404, "総合ロビーが見つかりません");
@@ -66,7 +66,7 @@ export const actions: Actions = {
 		if (!user) return fail(401, { message: "ログインが必要です" });
 
 		const anime = await getAnime(supabase, params.id, user.id);
-		if (!anime || anime.room_type !== "global") return fail(404, { message: "総合ロビーが見つかりません" });
+		if (anime?.room_type !== "global") return fail(404, { message: "総合ロビーが見つかりません" });
 
 		const session = await getGlobalAnimeLobbySession(supabase, anime.id);
 		if (!session) return fail(404, { message: "総合ロビーが見つかりません" });

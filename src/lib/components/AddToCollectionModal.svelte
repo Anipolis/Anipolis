@@ -195,7 +195,7 @@ function close() {
 								</span>
 								<!-- 入っているコレクションにだけチェックの印を出す（入っていなければ空けておく） -->
 								<span
-									class={['add-collection-mark', collection.has_anime && 'i-lucide-check']}
+									class={["add-collection-mark", collection.has_anime && "i-lucide-check"]}
 									aria-hidden="true"
 								></span>
 							</button>
@@ -224,7 +224,7 @@ function close() {
 							{@attach (input) => input.focus()}
 						>
 						<button type="submit" class="btn btn-primary" disabled={busy || !newTitle.trim()}>
-							{creating ? '作成中…' : '作成'}
+							{creating ? "作成中…" : "作成"}
 						</button>
 					</form>
 				{:else}

@@ -119,13 +119,13 @@ $effect(() => {
 >
 <div class="preview-controls">
 	<span>開発用 · 40件の混在投稿</span>
-	<button type="button" onclick={() => room = !room}>{room ? "ホーム表示へ" : "実況表示へ"}</button>
+	<button type="button" onclick={() => (room = !room)}>{room ? "ホーム表示へ" : "実況表示へ"}</button>
 	{#if room}
-		<button type="button" onclick={() => episodeRoom = !episodeRoom}>
+		<button type="button" onclick={() => (episodeRoom = !episodeRoom)}>
 			{episodeRoom ? "ロビーとして表示" : "話数ルームとして表示"}
 		</button>
 	{/if}
-	<button type="button" onclick={() => dark = !dark}>{dark ? "ライト表示" : "ダーク表示"}</button>
+	<button type="button" onclick={() => (dark = !dark)}>{dark ? "ライト表示" : "ダーク表示"}</button>
 	<button type="button" onclick={addPost}>新着を追加</button>
 	<span>送信確認: {submitted}</span>
 </div>
@@ -145,7 +145,10 @@ $effect(() => {
 		</div>
 		<aside class="sidebar-column">
 			<TrendingPanel
-				trending={[{ name: "星をめぐる旅", post_count: 128 }, { name: "今週のアニメ", post_count: 64 }]}
+				trending={[
+					{ name: "星をめぐる旅", post_count: 128 },
+					{ name: "今週のアニメ", post_count: 64 },
+				]}
 			/>
 		</aside>
 	</div>

@@ -72,6 +72,7 @@ $effect(() => {
 <div class="page-container">
 	<main class="feed-column">
 		<a href="/" class="post-detail-back" aria-label="タイムラインに戻る">
+			<span class="sr-only">タイムラインに戻る</span>
 			<svg
 				width="18"
 				height="18"
@@ -93,7 +94,7 @@ $effect(() => {
 				<button type="button" class="btn" onclick={() => location.reload()}>再読み込み</button>
 			</div>
 		{:else if thread.value === null}
-			<div class="posts-loading-spinner" aria-label="読み込み中">
+			<div class="posts-loading-spinner" role="status" aria-label="読み込み中">
 				<div class="spinner" aria-hidden="true"></div>
 				<span>読み込み中…</span>
 			</div>
@@ -128,7 +129,7 @@ $effect(() => {
 
 						{#if replyError}
 							<p class="flash-error" role="alert" style="margin-bottom: 8px;">{replyError}</p>
-						{:else if form && 'message' in form}
+						{:else if form && "message" in form}
 							<p class="flash-error" role="alert" style="margin-bottom: 8px;">{form.message}</p>
 						{/if}
 
@@ -143,7 +144,7 @@ $effect(() => {
 						<div class="composer-footer">
 							<span class="char-count {countClass}">{remaining}</span>
 							<button type="submit" class="btn btn-primary" disabled={!canSubmit}>
-								{submitting ? '投稿中…' : '返信'}
+								{submitting ? "投稿中…" : "返信"}
 							</button>
 						</div>
 					</form>

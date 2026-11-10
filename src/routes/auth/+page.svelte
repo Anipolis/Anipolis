@@ -211,7 +211,7 @@ async function handlePasskeyLogin(): Promise<void> {
 
 <svelte:head>
 	<title>
-		{activeMode === 'register' ? 'アカウント作成' : activeMode === 'add_account' ? 'アカウントを追加' : 'ログイン'}
+		{activeMode === "register" ? "アカウント作成" : activeMode === "add_account" ? "アカウントを追加" : "ログイン"}
 		- Anipolis
 	</title>
 </svelte:head>
@@ -226,29 +226,33 @@ async function handlePasskeyLogin(): Promise<void> {
 	<main class="auth-panel">
 		<div class="settings-card">
 			<!-- 見出しはタブと同じ言葉になるので、画面には出さず読み上げ用に残す（#425）。アカウントの追加はタブが無いので見せる -->
-			<h1 class="settings-title" class:sr-only={activeMode !== 'add_account'}>
-				{activeMode === 'register' ? 'アカウント作成' : activeMode === 'add_account' ? 'アカウントを追加' : 'ログイン'}
+			<h1 class="settings-title" class:sr-only={activeMode !== "add_account"}>
+				{activeMode === "register"
+					? "アカウント作成"
+					: activeMode === "add_account"
+						? "アカウントを追加"
+						: "ログイン"}
 			</h1>
 
-			{#if activeMode !== 'add_account'}
+			{#if activeMode !== "add_account"}
 				{#if data.betaGateEnabled}
 					<!-- 長い説明の代わりに、いまの状況だけをバッジで示す -->
 					<p class="auth-beta-badge">クローズドβ</p>
 				{/if}
-				<div class="auth-tabs" aria-label="認証メニュー">
+				<nav class="auth-tabs" aria-label="認証メニュー">
 					<a
 						href="/auth?mode=login&next={encodeURIComponent(next)}"
-						class:active={activeMode === 'login'}
-						aria-current={activeMode === 'login' ? 'page' : undefined}
+						class:active={activeMode === "login"}
+						aria-current={activeMode === "login" ? "page" : undefined}
 						>ログイン</a
 					>
 					<a
 						href="/auth?mode=register&next={encodeURIComponent(next)}"
-						class:active={activeMode === 'register'}
-						aria-current={activeMode === 'register' ? 'page' : undefined}
+						class:active={activeMode === "register"}
+						aria-current={activeMode === "register" ? "page" : undefined}
 						>アカウント作成</a
 					>
-				</div>
+				</nav>
 			{/if}
 
 			{#if form?.success && form.message}
@@ -257,11 +261,11 @@ async function handlePasskeyLogin(): Promise<void> {
 				<div class="flash-success" role="status">退会が完了しました。ご利用ありがとうございました。</div>
 			{/if}
 
-			{#if form && 'message' in form && !form.success}
+			{#if form && "message" in form && !form.success}
 				<div class="flash-error" role="alert">{form.message}</div>
 			{/if}
 
-			{#if data.error === 'not_member'}
+			{#if data.error === "not_member"}
 				<div class="flash-error" role="alert">
 					このサービスは現在、クローズドβテスト中です。<a
 						href={DISCORD_INVITE_URL}
@@ -270,26 +274,26 @@ async function handlePasskeyLogin(): Promise<void> {
 						>Discordサーバーへの参加</a
 					>、または招待コードが必要です。
 				</div>
-			{:else if data.error === 'invite_required'}
+			{:else if data.error === "invite_required"}
 				<div class="flash-error" role="alert">
 					このサービスは現在、クローズドβテスト中です。招待リンクから登録するか、招待コードを入力してください。
 				</div>
-			{:else if data.error === 'invalid_invite'}
+			{:else if data.error === "invalid_invite"}
 				<div class="flash-error" role="alert">招待コードが無効です。</div>
-			{:else if data.error === 'invite_exhausted'}
+			{:else if data.error === "invite_exhausted"}
 				<div class="flash-error" role="alert">この招待コードは使用回数の上限に達しています。</div>
-			{:else if data.error === 'grant_failed'}
+			{:else if data.error === "grant_failed"}
 				<div class="flash-error" role="alert">
 					アクセス許可の付与に失敗しました。しばらく待ってから再度ログインしてください。
 				</div>
-			{:else if data.error === 'confirm_failed'}
+			{:else if data.error === "confirm_failed"}
 				<div class="flash-error" role="alert">
 					確認のリンクが無効か、有効期限が切れています。もう一度ログインするか、登録し直してください。
 					{#if data.errorReason}
 						（理由: {data.errorReason}）
 					{/if}
 				</div>
-			{:else if data.error === 'oauth_failed'}
+			{:else if data.error === "oauth_failed"}
 				<div class="flash-error" role="alert">
 					ログインを完了できませんでした。時間をおいて、もう一度お試しください。
 					{#if data.errorReason}
@@ -298,14 +302,14 @@ async function handlePasskeyLogin(): Promise<void> {
 				</div>
 			{/if}
 
-			{#if activeMode === 'add_account'}
+			{#if activeMode === "add_account"}
 				<p class="auth-info-text">別のAnipolisアカウントのメールアドレスとパスワードを入力してください。</p>
 				<form
 					method="POST"
 					action="?/addAccount&mode=add_account"
 					class="auth-form"
 					novalidate
-					use:enhance={enhanceAuth('add_account')}
+					use:enhance={enhanceAuth("add_account")}
 				>
 					<div class="field">
 						<label for="add-email" class="field-label">メールアドレス</label>
@@ -323,11 +327,11 @@ async function handlePasskeyLogin(): Promise<void> {
 						<PasswordInput id="add-password" name="password" autocomplete="current-password" required />
 					</div>
 					<button type="submit" class="btn btn-primary auth-wide-button" disabled={submitting !== null}>
-						{submitting === 'add_account' ? '確認中...' : 'アカウントを追加'}
+						{submitting === "add_account" ? "確認中..." : "アカウントを追加"}
 					</button>
 					<a href="/" class="btn btn-ghost auth-wide-button" style="text-align:center">キャンセル</a>
 				</form>
-			{:else if activeMode === 'register' && !hasInviteAccess}
+			{:else if activeMode === "register" && !hasInviteAccess}
 				<!-- 説明文は置かず、入口ごとに小見出しを付けて分ける -->
 				<form
 					method="POST"
@@ -335,7 +339,7 @@ async function handlePasskeyLogin(): Promise<void> {
 					class="auth-form"
 					aria-labelledby="auth-invite-heading"
 					novalidate
-					use:enhance={enhanceAuth('invite')}
+					use:enhance={enhanceAuth("invite")}
 				>
 					<h2 id="auth-invite-heading" class="auth-section-title">招待コードをお持ちの方</h2>
 					<input type="hidden" name="next" value={next}>
@@ -357,9 +361,9 @@ async function handlePasskeyLogin(): Promise<void> {
 					<button
 						type="submit"
 						class="btn btn-primary auth-wide-button"
-						disabled={submitting !== null || inviteCodeState.value.trim() === ''}
+						disabled={submitting !== null || inviteCodeState.value.trim() === ""}
 					>
-						{submitting === 'invite' ? '確認中...' : '次へ'}
+						{submitting === "invite" ? "確認中..." : "次へ"}
 					</button>
 				</form>
 
@@ -370,7 +374,7 @@ async function handlePasskeyLogin(): Promise<void> {
 					action="?/discord&next={encodeURIComponent(next)}"
 					class="auth-oauth-form"
 					aria-labelledby="auth-discord-heading"
-					onsubmit={(event) => startOAuth('discord', event)}
+					onsubmit={(event) => startOAuth("discord", event)}
 				>
 					<h2 id="auth-discord-heading" class="auth-section-title">Discordサーバーのメンバーの方</h2>
 					<input type="hidden" name="next" value={next}>
@@ -381,7 +385,7 @@ async function handlePasskeyLogin(): Promise<void> {
 						disabled={submitting !== null}
 					>
 						<span class="auth-provider-icon i-brand-discord" aria-hidden="true"></span>
-						{submitting === 'discord' ? 'Discordへ移動中...' : 'Discordで登録'}
+						{submitting === "discord" ? "Discordへ移動中..." : "Discordで登録"}
 					</button>
 				</form>
 				<!-- 招待コードもサーバーへの参加も無い人が行き止まりにならないよう、サーバーへの入口を最後に控えめに出す -->
@@ -404,7 +408,12 @@ async function handlePasskeyLogin(): Promise<void> {
 							>招待コード <strong>{inviteCodeState.value}</strong> を確認しました</span
 						>
 					</div>
-				{:else if data.betaGateEnabled && (activeMode !== 'login' || (form && 'needInvite' in form && form.needInvite) || ['not_member', 'invite_required', 'invalid_invite', 'invite_exhausted'].includes(data.error ?? ''))}
+				{:else if data.betaGateEnabled &&
+					(activeMode !== "login" ||
+						(form && "needInvite" in form && form.needInvite) ||
+						["not_member", "invite_required", "invalid_invite", "invite_exhausted"].includes(
+							data.error ?? "",
+						))}
 					<div class="field">
 						<label for="invite-code" class="field-label">招待コード</label>
 						<input
@@ -423,7 +432,7 @@ async function handlePasskeyLogin(): Promise<void> {
 
 				<!-- ログインの手段（外部サービス・メールアドレス）は同じボタンの並びにする。「または」の区切りは置かない -->
 				<div class="auth-providers">
-					{#if activeMode === 'login' && data.passkeyEnabled}
+					{#if activeMode === "login" && data.passkeyEnabled}
 						{#if passkeyError}
 							<div class="flash-error" role="alert">{passkeyError}</div>
 						{/if}
@@ -434,12 +443,16 @@ async function handlePasskeyLogin(): Promise<void> {
 							disabled={passkeyPending || submitting !== null}
 						>
 							<span class="i-lucide-key-round" aria-hidden="true"></span>
-							{passkeyPending ? '確認中...' : 'パスキーでログイン'}
-							{@render lastUsedBadge('passkey')}
+							{passkeyPending ? "確認中..." : "パスキーでログイン"}
+							{@render lastUsedBadge("passkey")}
 						</button>
 					{/if}
 
-					{#each [{ kind: 'discord', method: 'discord', label: 'Discord', icon: 'i-brand-discord' }, { kind: 'google', method: 'google', label: 'Google', icon: 'i-brand-google' }, { kind: 'twitter', method: 'x', label: 'X', icon: 'i-brand-x' }] as provider (provider.kind)}
+					{#each [
+						{ kind: "discord", method: "discord", label: "Discord", icon: "i-brand-discord" },
+						{ kind: "google", method: "google", label: "Google", icon: "i-brand-google" },
+						{ kind: "twitter", method: "x", label: "X", icon: "i-brand-x" },
+					] as provider (provider.kind)}
 						<form
 							method="POST"
 							action="?/{provider.kind}&next={encodeURIComponent(next)}"
@@ -454,7 +467,9 @@ async function handlePasskeyLogin(): Promise<void> {
 								disabled={submitting !== null}
 							>
 								<span class="auth-provider-icon {provider.icon}" aria-hidden="true"></span>
-								{submitting === provider.kind ? `${provider.label}へ移動中...` : `${provider.label}${actionWord}`}
+								{submitting === provider.kind
+									? `${provider.label}へ移動中...`
+									: `${provider.label}${actionWord}`}
 								{@render lastUsedBadge(provider.method)}
 							</button>
 						</form>
@@ -465,20 +480,20 @@ async function handlePasskeyLogin(): Promise<void> {
 						<summary class="btn btn-secondary auth-wide-button auth-provider-button">
 							<span class="auth-provider-icon i-lucide-mail" aria-hidden="true"></span>
 							メールアドレス{actionWord}
-							{@render lastUsedBadge('email')}
+							{@render lastUsedBadge("email")}
 						</summary>
 						<!-- メールアドレスを選んだら他の手段のボタンは隠すので（CSS の :has）、戻る手段を置く -->
 						<button type="button" class="btn btn-ghost auth-email-back" onclick={closeEmail}>
 							<span class="i-lucide-arrow-left" aria-hidden="true"></span>
 							ほかの方法{actionWord}
 						</button>
-						{#if activeMode === 'login'}
+						{#if activeMode === "login"}
 							<form
 								method="POST"
 								action="?/login&next={encodeURIComponent(next)}"
 								class="auth-form"
 								novalidate
-								use:enhance={enhanceAuth('login')}
+								use:enhance={enhanceAuth("login")}
 							>
 								<input type="hidden" name="next" value={next}>
 								<input type="hidden" name="invite_code" value={inviteCodeState.value}>
@@ -491,7 +506,7 @@ async function handlePasskeyLogin(): Promise<void> {
 										type="email"
 										class="field-input"
 										autocomplete="email"
-										defaultValue={form?.mode === 'login' ? form.email ?? '' : ''}
+										defaultValue={form?.mode === "login" ? (form.email ?? "") : ""}
 										required
 									>
 								</div>
@@ -515,7 +530,7 @@ async function handlePasskeyLogin(): Promise<void> {
 									class="btn btn-primary auth-wide-button"
 									disabled={submitting !== null}
 								>
-									{submitting === 'login' ? 'ログイン中...' : 'ログイン'}
+									{submitting === "login" ? "ログイン中..." : "ログイン"}
 								</button>
 							</form>
 						{:else}
@@ -524,7 +539,7 @@ async function handlePasskeyLogin(): Promise<void> {
 								action="?/register&next={encodeURIComponent(next)}"
 								class="auth-form"
 								novalidate
-								use:enhance={enhanceAuth('register')}
+								use:enhance={enhanceAuth("register")}
 							>
 								<input type="hidden" name="next" value={next}>
 								<input type="hidden" name="invite_code" value={inviteCodeState.value}>
@@ -537,7 +552,7 @@ async function handlePasskeyLogin(): Promise<void> {
 										type="email"
 										class="field-input"
 										autocomplete="email"
-										defaultValue={form?.mode === 'register' ? form.email ?? '' : ''}
+										defaultValue={form?.mode === "register" ? (form.email ?? "") : ""}
 										required
 									>
 								</div>
@@ -551,10 +566,10 @@ async function handlePasskeyLogin(): Promise<void> {
 										autocomplete="new-password"
 										minlength={MIN_PASSWORD_LENGTH}
 										required
-										invalid={Boolean(form && 'field' in form && form.field === 'password')}
+										invalid={Boolean(form && "field" in form && form.field === "password")}
 										bind:input={registerPasswordInput}
 									/>
-									{#if form && 'field' in form && form.field === 'password'}
+									{#if form && "field" in form && form.field === "password"}
 										<p class="field-error-msg">{form.message}</p>
 									{:else}
 										<p class="field-hint">{MIN_PASSWORD_LENGTH}文字以上で入力してください。</p>
@@ -566,7 +581,7 @@ async function handlePasskeyLogin(): Promise<void> {
 									class="btn btn-primary auth-wide-button"
 									disabled={submitting !== null}
 								>
-									{submitting === 'register' ? '作成中...' : 'アカウントを作成'}
+									{submitting === "register" ? "作成中..." : "アカウントを作成"}
 								</button>
 							</form>
 						{/if}
@@ -576,7 +591,7 @@ async function handlePasskeyLogin(): Promise<void> {
 
 			<!-- この端末で前回ログインに使った方法の印（ログインのタブだけ。並び順は変えない） -->
 			{#snippet lastUsedBadge(method: string)}
-				{#if activeMode === 'login' && data.lastLoginMethod === method}
+				{#if activeMode === "login" && data.lastLoginMethod === method}
 					<span class="auth-last-used">前回のログイン</span>
 				{/if}
 			{/snippet}
@@ -590,7 +605,7 @@ async function handlePasskeyLogin(): Promise<void> {
 					>に同意したものとみなされます。
 				</p>
 			{/snippet}
-			{#if activeMode !== 'add_account' && !(activeMode === 'register' && !hasInviteAccess)}
+			{#if activeMode !== "add_account" && !(activeMode === "register" && !hasInviteAccess)}
 				{@render consent()}
 			{/if}
 		</div>

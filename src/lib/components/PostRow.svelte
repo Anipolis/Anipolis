@@ -133,7 +133,9 @@ function handleKeydown(event: KeyboardEvent) {
 			onclick={toggleActions}
 		></button>
 	{:else}
-		<a href="/posts/{post.id}" class="post-row-hitarea" aria-label="投稿詳細を開く"></a>
+		<a href="/posts/{post.id}" class="post-row-hitarea" aria-label="投稿詳細を開く"
+			><span class="sr-only">投稿詳細を開く</span></a
+		>
 	{/if}
 
 	{#if !joinPrevious}
@@ -513,7 +515,8 @@ function handleKeydown(event: KeyboardEvent) {
 	padding-top: 2px;
 }
 /* 場所は残したまま隠す（本文の幅が変わらないように） */
-.post-row--quiet-like:not(:hover):not(:focus-within):not(.post-row--selected) .post-row-main
+.post-row--quiet-like:not(:hover):not(:focus-within):not(.post-row--selected)
+	.post-row-main
 	:global(.post-footer-like) {
 	visibility: hidden;
 }

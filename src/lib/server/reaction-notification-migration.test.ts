@@ -52,17 +52,17 @@ describe("like / repost notification dedupe migration (#286)", () => {
 		);
 	});
 
-	it.each([
-		"notify_on_like",
-		"notify_on_repost",
-	])("%s inserts with ON CONFLICT DO NOTHING against that index", (name) => {
-		const body = functionBody(name);
-		expect(body).toContain("post_author_id != NEW.user_id");
-		expect(body).toMatch(
-			/ON CONFLICT \(recipient_id, actor_id, post_id, type\)\s+WHERE type IN \('like', 'repost'\) AND NOT read\s+DO NOTHING/,
-		);
-		expect(migration).toContain(`${name}()\nRETURNS TRIGGER AS $$`);
-	});
+	it.each(["notify_on_like", "notify_on_repost"])(
+		"%s inserts with ON CONFLICT DO NOTHING against that index",
+		(name) => {
+			const body = functionBody(name);
+			expect(body).toContain("post_author_id != NEW.user_id");
+			expect(body).toMatch(
+				/ON CONFLICT \(recipient_id, actor_id, post_id, type\)\s+WHERE type IN \('like', 'repost'\) AND NOT read\s+DO NOTHING/,
+			);
+			expect(migration).toContain(`${name}()\nRETURNS TRIGGER AS $$`);
+		},
+	);
 
 	it.each([
 		{ fn: "handle_unlike_delete_notification", table: "likes", trigger: "on_like_deleted", type: "like" },

@@ -112,8 +112,7 @@ import { WIKIDATA_STUDIO_TRANSFORMATION_URL } from "$lib/wikidata-studio-names";
 			<summary>データの変換について（技術情報）</summary>
 			<p>
 				anime-offline-databaseから変換した派生データは、機械可読な
-				<a href="/api/data/anime-catalog"
-					>アニメ作品カタログAPI</a
+				<a href="/api/data/anime-catalog">アニメ作品カタログAPI</a
 				>から取得できます。このAPIはJikanや手動編集を含むAnipolis全作品データの配布ではありません。
 			</p>
 			<p>

@@ -20,7 +20,7 @@ const tierRows = $derived(
 </script>
 
 <!-- カバーが無い作品は、枠の真ん中に題名を出す（ランキングは横に題名があるので出さない） -->
-{#snippet cover(item: CollectionShare['items'][number], showTitle = true)}
+{#snippet cover(item: CollectionShare["items"][number], showTitle = true)}
 	<span class="collection-share-cover" title={item.title}>
 		{#if item.cover_url}
 			<img src={coverThumbSrc(item.cover_url)} {@attach coverThumbFallback(item.cover_url)} alt="" loading="lazy">
@@ -34,7 +34,7 @@ const tierRows = $derived(
 	<span class="collection-share-title">{share.title}</span>
 	{#if share.items.length === 0}
 		<span class="collection-share-empty">まだ作品がありません</span>
-	{:else if share.kind === 'tier'}
+	{:else if share.kind === "tier"}
 		<span class="collection-share-tiers">
 			{#each tierRows as row (row.tier)}
 				<span class="collection-share-tier">
@@ -49,7 +49,7 @@ const tierRows = $derived(
 				</span>
 			{/each}
 		</span>
-	{:else if share.kind === 'ranking'}
+	{:else if share.kind === "ranking"}
 		<span class="collection-share-ranking">
 			{#each share.items.slice(0, 3) as item, index (item.id)}
 				<span class="collection-share-rank">

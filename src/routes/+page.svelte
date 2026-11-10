@@ -166,8 +166,8 @@ $effect(() => {
 						initialExchangeId={extras.initialExchangeId}
 						initialExchangeShare={extras.initialExchangeShare}
 						initialCollectionShare={extras.initialCollectionShare?.id === clearedCollectionShareId
-						? null
-						: extras.initialCollectionShare}
+							? null
+							: extras.initialCollectionShare}
 						oncollectionsharecleared={(id) => (clearedCollectionShareId = id)}
 						{clearedCollectionShareId}
 						watchingAnime={extras.watchingAnime}
@@ -246,22 +246,22 @@ $effect(() => {
 
 		{#if data.user}
 			<div class="timeline-tabs">
-				<a href="/" class="timeline-tab" class:active={data.tab === 'all'}> 全体 </a>
-				<a href="/?tab=following" class="timeline-tab" class:active={data.tab === 'following'}> フォロー中 </a>
-				<a href="/?tab=activity" class="timeline-tab" class:active={data.tab === 'activity'}>
+				<a href="/" class="timeline-tab" class:active={data.tab === "all"}> 全体 </a>
+				<a href="/?tab=following" class="timeline-tab" class:active={data.tab === "following"}> フォロー中 </a>
+				<a href="/?tab=activity" class="timeline-tab" class:active={data.tab === "activity"}>
 					アクティビティ
 				</a>
 			</div>
 		{/if}
 
-		{#if data.tab === 'activity'}
+		{#if data.tab === "activity"}
 			<!-- フォロー中の人のマイリストの動き（181） -->
 			{#if activity.error}
 				<div class="home-deferred-error" role="alert" data-deferred-error="true">
 					アクティビティを読み込めませんでした。<a href={TAB_HREFS.activity}>再読み込み</a>
 				</div>
 			{:else if activity.value === null}
-				<div class="posts-loading-spinner" aria-label="アクティビティを読み込み中">
+				<div class="posts-loading-spinner" role="status" aria-label="アクティビティを読み込み中">
 					<div class="spinner" aria-hidden="true"></div>
 					<span>読み込み中…</span>
 				</div>
@@ -298,7 +298,7 @@ $effect(() => {
 					投稿を読み込めませんでした。<a href={TAB_HREFS[data.tab]}>再読み込み</a>
 				</div>
 			{:else if timeline.value === null}
-				<div class="posts-loading-spinner" aria-label="投稿を読み込み中">
+				<div class="posts-loading-spinner" role="status" aria-label="投稿を読み込み中">
 					<div class="spinner" aria-hidden="true"></div>
 					<span>読み込み中…</span>
 				</div>
@@ -313,7 +313,7 @@ $effect(() => {
 				{/if}
 				{#if posts.length === 0 && !nextCursor}
 					<div class="empty-state">
-						{#if data.tab === 'following'}
+						{#if data.tab === "following"}
 							<p>
 								フォロー中のユーザーの投稿がありません。<br>気になるユーザーをフォローしてみましょう！
 							</p>

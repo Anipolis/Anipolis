@@ -66,7 +66,7 @@ function inviteStatus(invite: (typeof data.invites)[number]): { label: string; a
 								>
 							</td>
 							<td>{invite.use_count}/{invite.max_uses}</td>
-							<td>{invite.expires_at ? formatRelativeTime(invite.expires_at) : '無期限'}</td>
+							<td>{invite.expires_at ? formatRelativeTime(invite.expires_at) : "無期限"}</td>
 							<td>{formatRelativeTime(invite.created_at)}</td>
 							<td>
 								{#if inviteState.active}

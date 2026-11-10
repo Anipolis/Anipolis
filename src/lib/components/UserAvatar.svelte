@@ -23,7 +23,7 @@ function markFailed() {
  * コンソールにエラーが出るので、マウント時に addEventListener で付ける。
  * SSR の HTML で先に読み込みに失敗した画像には error が届かないので、マウント時にも確かめる
  */
-// biome-ignore lint/correctness/noUnusedVariables: マークアップの {@attach} から使う
+// マークアップの {@attach} から使う
 function watchFailure(img: HTMLImageElement) {
 	if (img.complete && img.naturalWidth === 0) markFailed();
 	img.addEventListener("error", markFailed);
@@ -31,7 +31,7 @@ function watchFailure(img: HTMLImageElement) {
 }
 </script>
 
-<div class="avatar avatar-{size}" aria-label={username}>
+<div class="avatar avatar-{size}" role="img" aria-label={username}>
 	{#if showImage}
 		<img {src} alt={username} referrerpolicy="no-referrer" decoding="async" {@attach watchFailure}>
 	{:else}

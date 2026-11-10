@@ -549,7 +549,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 		<p class="form-error schedule-flash">{form.message}</p>
 	{/if}
 
-	<div class="day-tab-bar" aria-label="日付選択" bind:this={dayTabBar}>
+	<nav class="day-tab-bar" aria-label="日付選択" bind:this={dayTabBar}>
 		{#each getDisplayDayItems() as item}
 			<button
 				type="button"
@@ -562,7 +562,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 				<span class="day-tab-date">{formatDate(item.date)}</span>
 			</button>
 		{/each}
-	</div>
+	</nav>
 
 	<div class="schedule-grid">
 		{#each data.days as day, d}
@@ -611,7 +611,9 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 										</div>
 										<span class="slot-title">{event.title}</span>
 										<span class="slot-bottom"
-											>{[event.anime?.title, `#${event.hashtag}`].filter(Boolean).join(" ・ ")}</span
+											>{[event.anime?.title, `#${event.hashtag}`]
+												.filter(Boolean)
+												.join(" ・ ")}</span
 										>
 									</div>
 								</a>
@@ -622,13 +624,17 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 											class="notify-btn"
 											class:notify-btn--active={eventSubscribed}
 											class:notify-btn--muted={eventMuted}
-											title={eventMuted ? "ミュート中。通知またはミュートを設定" : "通知またはミュートを設定"}
-											aria-label={eventMuted ? "ミュート中。通知またはミュートを設定" : "通知またはミュートを設定"}
+											title={eventMuted
+												? "ミュート中。通知またはミュートを設定"
+												: "通知またはミュートを設定"}
+											aria-label={eventMuted
+												? "ミュート中。通知またはミュートを設定"
+												: "通知またはミュートを設定"}
 											aria-expanded={openAlertMenu === eventAlertKey(event.id)}
 											onclick={() => {
-											const key = eventAlertKey(event.id);
-											openAlertMenu = openAlertMenu === key ? null : key;
-										}}
+												const key = eventAlertKey(event.id);
+												openAlertMenu = openAlertMenu === key ? null : key;
+											}}
 										>
 											{#if eventMuted}
 												<svg
@@ -686,7 +692,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 											aria-label="閉じる"
 											onclick={() => (openAlertMenu = null)}
 										></button>
-										<div class="room-alert-menu" aria-label="イベント設定">
+										<div class="room-alert-menu" role="group" aria-label="イベント設定">
 											{#if !event.is_cancelled}
 												<form
 													method="POST"
@@ -793,7 +799,11 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 
 						{#each groupScheduleItemsByTimeBand(day, displayDate) as itemGroup, groupIndex (groupIndex)}
 							<div class="anime-time-group">
-								{#each itemGroup as item (item.type === "anime" ? item.anime.id : item.type === "event" ? item.event.id : `suspension-${item.anime_id}-${item.room_date}`)}
+								{#each itemGroup as item (item.type === "anime"
+									? item.anime.id
+									: item.type === "event"
+										? item.event.id
+										: `suspension-${item.anime_id}-${item.room_date}`)}
 									{#if item.type === "event"}
 										{@render eventSlot(item.event)}
 									{:else if item.type === "suspension"}
@@ -828,17 +838,30 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 										{@const isMuted = mutedAnimeIds.has(anime.id)}
 										{@const roomMute = roomMuteSettings[anime.id]}
 										{@const subscribable = canSubscribe(anime)}
-										{@const ep = currentEpisodeForSlot(anime, displayDate, data.broadcastOverrides[anime.id])}
+										{@const ep = currentEpisodeForSlot(
+											anime,
+											displayDate,
+											data.broadcastOverrides[anime.id],
+										)}
 										{@const isMarathon = ep !== null && isMarathonEpisodeSlot(ep)}
-										{@const epBadge = ep !== null ? formatEpisodeBadge(ep, anime.episode_count) : null}
-										{@const specialEpisodeLabel = ep !== null && ep.start == null && ep.end == null ? ep.label : null}
+										{@const epBadge =
+											ep !== null ? formatEpisodeBadge(ep, anime.episode_count) : null}
+										{@const specialEpisodeLabel =
+											ep !== null && ep.start == null && ep.end == null ? ep.label : null}
 										{@const episodeLabel =
-											epBadge !== null && specialEpisodeLabel === null ? (anime.episode_count ? epBadge : `#${epBadge}`) : null}
-										{@const stationLabel = anime.broadcast_station?.length ? anime.broadcast_station.join(" / ") : null}
+											epBadge !== null && specialEpisodeLabel === null
+												? anime.episode_count
+													? epBadge
+													: `#${epBadge}`
+												: null}
+										{@const stationLabel = anime.broadcast_station?.length
+											? anime.broadcast_station.join(" / ")
+											: null}
 										<div
 											class="anime-slot-wrap"
 											class:anime-slot-wrap--notifying={isNotifying}
-											class:anime-slot-wrap--menu-open={openAlertMenu === alertKey(anime.id, displayDate)}
+											class:anime-slot-wrap--menu-open={openAlertMenu ===
+												alertKey(anime.id, displayDate)}
 										>
 											<a href="/rooms/anime/{anime.id}/{displayDate}" class="anime-slot">
 												<div class="slot-cover-wrap">
@@ -876,7 +899,9 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 													{/if}
 													{#if episodeLabel || stationLabel}
 														<span class="slot-bottom"
-															>{[episodeLabel, stationLabel].filter(Boolean).join(" · ")}</span
+															>{[episodeLabel, stationLabel]
+																.filter(Boolean)
+																.join(" · ")}</span
 														>
 													{/if}
 												</div>
@@ -888,13 +913,18 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 														class="notify-btn"
 														class:notify-btn--active={isSubscribed}
 														class:notify-btn--muted={isMuted}
-														title={isMuted ? "ミュート中。通知またはミュートを設定" : "通知またはミュートを設定"}
-														aria-label={isMuted ? "ミュート中。通知またはミュートを設定" : "通知またはミュートを設定"}
-														aria-expanded={openAlertMenu === alertKey(anime.id, displayDate)}
+														title={isMuted
+															? "ミュート中。通知またはミュートを設定"
+															: "通知またはミュートを設定"}
+														aria-label={isMuted
+															? "ミュート中。通知またはミュートを設定"
+															: "通知またはミュートを設定"}
+														aria-expanded={openAlertMenu ===
+															alertKey(anime.id, displayDate)}
 														onclick={() => {
-														const key = alertKey(anime.id, displayDate);
-														openAlertMenu = openAlertMenu === key ? null : key;
-													}}
+															const key = alertKey(anime.id, displayDate);
+															openAlertMenu = openAlertMenu === key ? null : key;
+														}}
 													>
 														{#if isMuted}
 															<svg
@@ -952,7 +982,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 														aria-label="閉じる"
 														onclick={() => (openAlertMenu = null)}
 													></button>
-													<div class="room-alert-menu" aria-label="ルーム設定">
+													<div class="room-alert-menu" role="group" aria-label="ルーム設定">
 														{#if subscribable}
 															<form
 																method="POST"
@@ -1043,7 +1073,10 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 																<button
 																	type="submit"
 																	class="mute-chip"
-																	class:mute-chip--active={isMuted && roomMute?.mute_type === "period" && roomMute?.period_days === 3 && roomMute?.is_repeat}
+																	class:mute-chip--active={isMuted &&
+																		roomMute?.mute_type === "period" &&
+																		roomMute?.period_days === 3 &&
+																		roomMute?.is_repeat}
 																>
 																	放送後3日間
 																</button>
@@ -1064,7 +1097,8 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 																<button
 																	type="submit"
 																	class="mute-chip"
-																	class:mute-chip--active={isMuted && roomMute?.mute_type === "always"}
+																	class:mute-chip--active={isMuted &&
+																		roomMute?.mute_type === "always"}
 																>
 																	常にミュート
 																</button>

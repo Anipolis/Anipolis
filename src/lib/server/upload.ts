@@ -53,7 +53,7 @@ export function sniffImageMime(bytes: Uint8Array): string | null {
 		const boxSize = ((bytes[0] ?? 0) << 24) | ((bytes[1] ?? 0) << 16) | ((bytes[2] ?? 0) << 8) | (bytes[3] ?? 0);
 		// major brand(8-11) + minor version(12-15) の後に compatible_brands が並ぶ。
 		// box サイズ異常値でも先頭 256 バイトまでしか見ない。
-		const scanEnd = Math.min(boxSize >= 16 ? boxSize : 16, bytes.length, 256);
+		const scanEnd = Math.min(Math.max(boxSize, 16), bytes.length, 256);
 		for (let offset = 8; offset + 4 <= scanEnd; offset += 4) {
 			if (offset === 12) continue; // minor version はブランドではない
 			const isAvifBrand =
