@@ -34,10 +34,10 @@ function closePicker() {
 					src={coverThumbSrc(singleRoom.anime.cover_url)}
 					{@attach coverThumbFallback(singleRoom.anime.cover_url)}
 					alt={singleRoom.anime.title}
-					class="anime-search-thumb"
+					class="live-room-thumb"
 				>
 			{:else}
-				<div class="anime-search-thumb anime-search-thumb-empty"></div>
+				<div class="live-room-thumb"></div>
 			{/if}
 			<span class="live-room-entry-info">
 				<span class="live-room-entry-title">{singleRoom.anime?.title ?? "不明"}</span>
@@ -69,6 +69,16 @@ function closePicker() {
 	cursor: pointer;
 	font: inherit;
 	text-align: left;
+}
+
+.live-room-thumb {
+	display: block;
+	flex-shrink: 0;
+	width: 36px;
+	aspect-ratio: 400 / 566;
+	border-radius: 3px;
+	background: var(--color-border);
+	object-fit: cover;
 }
 
 .live-room-entry-info {

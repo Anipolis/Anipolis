@@ -1,7 +1,7 @@
 <script lang="ts">
 import { type AnimePick, animePickMeta } from "$lib/anime-picker";
 import { MAX_COLLECTION_ITEMS } from "$lib/collections";
-import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
+import AnimeRow from "./AnimeRow.svelte";
 
 /**
  * コレクションに作品を探して足す検索窓。結果は窓に重ねて出し、押すとすぐ足して閉じる。
@@ -112,27 +112,13 @@ $effect(() => () => {
 			{#each results as anime (anime.id)}
 				{@const added = addedIds.has(anime.id)}
 				<li>
-					<button
-						type="button"
-						class="collection-search-result"
+					<AnimeRow
+						coverUrl={anime.cover_url}
+						title={anime.title}
+						meta={added ? '追加済み' : animePickMeta(anime)}
 						disabled={added || full}
 						onclick={() => pick(anime)}
-					>
-						<span class="collection-search-cover">
-							{#if anime.cover_url}
-								<img
-									src={coverThumbSrc(anime.cover_url)}
-									{@attach coverThumbFallback(anime.cover_url)}
-									alt=""
-									loading="lazy"
-								>
-							{/if}
-						</span>
-						<span class="collection-search-text">
-							<span class="collection-search-title">{anime.title}</span>
-							<span class="collection-search-meta">{added ? '追加済み' : animePickMeta(anime)}</span>
-						</span>
-					</button>
+					/>
 				</li>
 			{/each}
 		</ul>
@@ -214,60 +200,5 @@ $effect(() => () => {
 	padding: 10px 6px;
 	color: var(--color-text-muted);
 	font-size: 13px;
-}
-.collection-search-result {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	width: 100%;
-	padding: 6px;
-	border: none;
-	border-radius: 6px;
-	background: transparent;
-	color: var(--color-text);
-	text-align: left;
-	cursor: pointer;
-}
-.collection-search-result:hover:not(:disabled) {
-	background: var(--color-surface-hover);
-}
-.collection-search-result:disabled {
-	cursor: default;
-	opacity: 0.6;
-}
-.collection-search-cover {
-	flex-shrink: 0;
-	width: 44px;
-	aspect-ratio: 400 / 566;
-	overflow: hidden;
-	border-radius: 4px;
-	background: var(--color-border);
-}
-.collection-search-cover img {
-	display: block;
-	width: 100%;
-	height: 100%;
-	object-fit: cover;
-}
-.collection-search-text {
-	display: flex;
-	flex: 1;
-	flex-direction: column;
-	min-width: 0;
-}
-.collection-search-title {
-	display: -webkit-box;
-	overflow: hidden;
-	font-size: 14px;
-	font-weight: 600;
-	line-height: 1.4;
-	overflow-wrap: anywhere;
-	-webkit-box-orient: vertical;
-	-webkit-line-clamp: 2;
-	line-clamp: 2;
-}
-.collection-search-meta {
-	color: var(--color-text-muted);
-	font-size: 12px;
 }
 </style>

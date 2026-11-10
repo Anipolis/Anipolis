@@ -6,6 +6,7 @@ import { replaceState } from "$app/navigation";
 import { page } from "$app/state";
 import { autosize } from "$lib/actions/autosize";
 import { trapFocus } from "$lib/actions/trapFocus";
+import { animePickMeta } from "$lib/anime-picker";
 import type { CollectionShare } from "$lib/collections";
 import {
 	type ComposeDraft,
@@ -18,7 +19,6 @@ import {
 	saveComposeContext,
 	saveComposeDraft,
 } from "$lib/compose-draft";
-import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import { postImageMediaUrl } from "$lib/post-image-url";
 import type { AnimeExchangeShare, OpenBroadcastRoomSummary } from "$lib/types";
 import { animeQuoteChipLabel, cwChipLabel } from "$lib/utils/composer-chips";
@@ -26,6 +26,7 @@ import { charCountClass } from "$lib/utils/format";
 import { applyMention, findMentionQuery, mentionOptionId, resolveMentionKey } from "$lib/utils/mention-suggest";
 import { createSearchGate } from "$lib/utils/search-gate";
 import AnimeExchangeResult from "./AnimeExchangeResult.svelte";
+import AnimeRow from "./AnimeRow.svelte";
 import CollectionShareCard from "./CollectionShareCard.svelte";
 import { classifyComposerSubmitResult } from "./post-composer-submit";
 import UserAvatar from "./UserAvatar.svelte";
@@ -36,6 +37,8 @@ interface AnimeResult {
 	title_en: string | null;
 	cover_url: string | null;
 	official_hashtag?: string[] | null;
+	type?: string | null;
+	aired_from?: string | null;
 }
 
 interface UserResult {
@@ -964,26 +967,12 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 					<p class="anime-search-empty">見つかりませんでした</p>
 				{:else}
 					{#each animeResults as anime}
-						<button type="button" class="anime-search-item" onclick={() => selectAnime(anime)}>
-							{#if anime.cover_url}
-								<img
-									src={coverThumbSrc(anime.cover_url)}
-									{@attach coverThumbFallback(anime.cover_url)}
-									alt={anime.title}
-									class="anime-search-thumb"
-									loading="lazy"
-									decoding="async"
-								>
-							{:else}
-								<div class="anime-search-thumb anime-search-thumb-empty"></div>
-							{/if}
-							<div class="anime-search-item-info">
-								<span class="anime-search-item-title">{anime.title}</span>
-								{#if anime.title_en}
-									<span class="anime-search-item-sub">{anime.title_en}</span>
-								{/if}
-							</div>
-						</button>
+						<AnimeRow
+							coverUrl={anime.cover_url}
+							title={anime.title}
+							meta={animePickMeta(anime)}
+							onclick={() => selectAnime(anime)}
+						/>
 					{/each}
 				{/if}
 			</div>
@@ -1025,24 +1014,12 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 					<p class="anime-search-empty">見つかりませんでした</p>
 				{:else}
 					{#each (cwQuery.trim() ? cwResults : watchingAnime) as anime}
-						<button type="button" class="anime-search-item" onclick={() => selectCwAnime(anime)}>
-							{#if anime.cover_url}
-								<img
-									src={coverThumbSrc(anime.cover_url)}
-									{@attach coverThumbFallback(anime.cover_url)}
-									alt={anime.title}
-									class="anime-search-thumb"
-								>
-							{:else}
-								<div class="anime-search-thumb anime-search-thumb-empty"></div>
-							{/if}
-							<div class="anime-search-item-info">
-								<span class="anime-search-item-title">{anime.title}</span>
-								{#if anime.title_en}
-									<span class="anime-search-item-sub">{anime.title_en}</span>
-								{/if}
-							</div>
-						</button>
+						<AnimeRow
+							coverUrl={anime.cover_url}
+							title={anime.title}
+							meta={animePickMeta(anime)}
+							onclick={() => selectCwAnime(anime)}
+						/>
 					{/each}
 				{/if}
 			</div>
@@ -1076,26 +1053,12 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 					<p class="anime-search-empty">現在開放中のルームはありません</p>
 				{:else if openRooms}
 					{#each openRooms as room (room.id)}
-						<button type="button" class="anime-search-item" onclick={() => selectRoom(room)}>
-							{#if room.anime?.cover_url}
-								<img
-									src={coverThumbSrc(room.anime.cover_url)}
-									{@attach coverThumbFallback(room.anime.cover_url)}
-									alt={room.anime.title}
-									class="anime-search-thumb"
-								>
-							{:else}
-								<div class="anime-search-thumb anime-search-thumb-empty"></div>
-							{/if}
-							<div class="anime-search-item-info">
-								<span class="anime-search-item-title">{room.anime?.title ?? "不明"}</span>
-								{#if room.room_kind === "episode"}
-									<span class="anime-search-item-sub">{room.room_date}</span>
-								{:else}
-									<span class="anime-search-item-sub">総合ロビー</span>
-								{/if}
-							</div>
-						</button>
+						<AnimeRow
+							coverUrl={room.anime?.cover_url}
+							title={room.anime?.title ?? "不明"}
+							meta={room.room_kind === "episode" ? room.room_date : "総合ロビー"}
+							onclick={() => selectRoom(room)}
+						/>
 					{/each}
 				{/if}
 			</div>

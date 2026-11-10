@@ -1,7 +1,7 @@
 <script lang="ts">
 import { trapFocus } from "$lib/actions/trapFocus";
-import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import type { OpenBroadcastRoomSummary } from "$lib/types";
+import AnimeRow from "./AnimeRow.svelte";
 
 type Props = {
 	open: boolean;
@@ -51,26 +51,13 @@ $effect(() => {
 					<p class="anime-search-empty">現在ライブ中の実況ルームはありません</p>
 				{:else}
 					{#each rooms as room (room.id)}
-						<a
+						<AnimeRow
 							href="/rooms/anime/{room.anime_id}/{room.room_date}"
-							class="anime-search-item"
+							coverUrl={room.anime?.cover_url}
+							title={room.anime?.title ?? "不明"}
+							meta={room.room_date}
 							onclick={onclose}
-						>
-							{#if room.anime?.cover_url}
-								<img
-									src={coverThumbSrc(room.anime.cover_url)}
-									{@attach coverThumbFallback(room.anime.cover_url)}
-									alt={room.anime.title}
-									class="anime-search-thumb"
-								>
-							{:else}
-								<div class="anime-search-thumb anime-search-thumb-empty"></div>
-							{/if}
-							<div class="anime-search-item-info">
-								<span class="anime-search-item-title">{room.anime?.title ?? "不明"}</span>
-								<span class="anime-search-item-sub">{room.room_date}</span>
-							</div>
-						</a>
+						/>
 					{/each}
 				{/if}
 			</div>
@@ -103,15 +90,6 @@ $effect(() => {
 .live-room-picker-modal .anime-search-header,
 .live-room-picker-modal .anime-search-results {
 	background: var(--color-surface);
-}
-
-.live-room-picker-modal .anime-search-item {
-	background: var(--color-surface);
-}
-
-.live-room-picker-modal .anime-search-item:hover,
-.live-room-picker-modal .anime-search-item:focus-visible {
-	background: var(--color-surface-hover);
 }
 
 @media (max-width: 640px) {

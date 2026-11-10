@@ -2,6 +2,8 @@
 import type { SubmitFunction } from "@sveltejs/kit";
 import { untrack } from "svelte";
 import { enhance } from "$app/forms";
+import { animePickMeta } from "$lib/anime-picker";
+import AnimeRow from "$lib/components/AnimeRow.svelte";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import { roomReminderStatus, roomReminderTime } from "$lib/room-reminders";
 import { roomReminders } from "$lib/stores/notifications";
@@ -30,6 +32,8 @@ interface AnimeSearchResult {
 	title: string;
 	title_en: string | null;
 	cover_url: string | null;
+	type?: string | null;
+	aired_from?: string | null;
 }
 
 // 放送前のお知らせの「あと何分」を進める（一覧そのものは layout が30秒ごとに読み直す）
@@ -1202,27 +1206,12 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 									<p>検索中...</p>
 								{:else}
 									{#each eventAnimeResults as anime}
-										<button
-											type="button"
-											class="event-anime-result"
+										<AnimeRow
+											coverUrl={anime.cover_url}
+											title={anime.title}
+											meta={animePickMeta(anime)}
 											onclick={() => selectEventAnime(anime)}
-										>
-											{#if anime.cover_url}
-												<img
-													src={coverThumbSrc(anime.cover_url)}
-													{@attach coverThumbFallback(anime.cover_url)}
-													alt={anime.title}
-												>
-											{:else}
-												<div class="event-anime-thumb-empty"></div>
-											{/if}
-											<span>
-												<strong>{anime.title}</strong>
-												{#if anime.title_en}
-													<small>{anime.title_en}</small>
-												{/if}
-											</span>
-										</button>
+										/>
 									{/each}
 								{/if}
 							</div>
@@ -1950,8 +1939,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	grid-template-columns: minmax(0, 1fr) 120px;
 	gap: 8px;
 }
-.event-anime-selected,
-.event-anime-result {
+.event-anime-selected {
 	display: grid;
 	grid-template-columns: 40px minmax(0, 1fr) auto;
 	align-items: center;
@@ -1966,7 +1954,6 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	padding: 6px;
 }
 .event-anime-selected img,
-.event-anime-result img,
 .event-anime-thumb-empty {
 	width: 40px;
 	height: 54px;
@@ -1974,23 +1961,20 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	object-fit: cover;
 	background: var(--color-border);
 }
-.event-anime-selected div,
-.event-anime-result span {
+.event-anime-selected div {
 	min-width: 0;
 	display: flex;
 	flex-direction: column;
 	gap: 2px;
 }
-.event-anime-selected strong,
-.event-anime-result strong {
+.event-anime-selected strong {
 	font-size: 0.78rem;
 	line-height: 1.3;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-.event-anime-selected span,
-.event-anime-result small {
+.event-anime-selected span {
 	font-size: 0.68rem;
 	font-weight: 500;
 	color: var(--color-text-muted);
@@ -2007,28 +1991,26 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	border-radius: 5px;
 	color: var(--color-text-muted);
 }
-.event-anime-clear:hover,
-.event-anime-result:hover {
+.event-anime-clear:hover {
 	background: var(--color-surface-hover);
 	color: var(--color-text);
 }
 .event-anime-results {
-	max-height: 220px;
+	max-height: min(360px, 50vh);
 	overflow: auto;
 	display: flex;
 	flex-direction: column;
-	gap: 6px;
+	gap: 2px;
+	padding: 6px;
+	border: 1px solid var(--color-border);
+	border-radius: 8px;
+	background: var(--color-surface);
 }
 .event-anime-results p {
 	margin: 0;
+	padding: 4px;
 	font-size: 0.75rem;
 	color: var(--color-text-muted);
-}
-.event-anime-result {
-	grid-template-columns: 40px minmax(0, 1fr);
-	padding: 6px;
-	text-align: left;
-	cursor: pointer;
 }
 .event-form textarea {
 	resize: vertical;
