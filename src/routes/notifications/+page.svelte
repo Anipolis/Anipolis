@@ -14,46 +14,26 @@ import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();
 
-type TabId = "normal" | "room";
-
-const tabs: { id: TabId; label: string }[] = [
-	{ id: "normal", label: "通常" },
-	{ id: "room", label: "ルーム" },
-];
-
-const activeTab = $derived(data.tab as TabId);
 // アクティビティへのいいねは、同じ記録への分を1件にまとめて出す
-const activeEntries = $derived(groupActivityLikes((data.notifications[activeTab] ?? []) as Notification[]));
+const entries = $derived(groupActivityLikes(data.notifications as Notification[]));
 
 // 既読化はページが実際に描画された後にだけ行う。server load で既読化すると、
 // hover プリロードやブラウザの先読みで load が走っただけで未読が消える（#242）。
-let markedReadTab = $state<TabId | null>(null);
-
-async function markTabRead(tab: TabId) {
-	if (data.unreadCounts[tab] === 0) return;
-	try {
-		const response = await fetch("/api/notifications/read", {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ category: tab }),
-		});
-		if (!response.ok) return;
-		markedReadTab = tab;
-		requestNotificationCountsRefresh();
-	} catch {
-		// 失敗時は未読のまま残す（次にタブを表示したときに再試行される）
-	}
-}
-
 $effect(() => {
-	const tab = activeTab;
-	markedReadTab = null;
-	void untrack(() => markTabRead(tab));
+	if (data.unreadCount === 0) return;
+	void untrack(async () => {
+		try {
+			const response = await fetch("/api/notifications/read", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ category: "normal" }),
+			});
+			if (response.ok) requestNotificationCountsRefresh();
+		} catch {
+			// 失敗時は未読のまま残す（次にページを開いたときに再試行される）
+		}
+	});
 });
-
-function unreadBadge(tab: TabId): number {
-	return markedReadTab === tab ? 0 : data.unreadCounts[tab];
-}
 
 function notificationLabel(type: string): string {
 	if (type === "like") return "があなたの投稿にいいねしました";
@@ -65,31 +45,6 @@ function notificationLabel(type: string): string {
 	if (type === "follow_request") return "さんからフォロー申請が届きました";
 	return "";
 }
-
-function formatBroadcastTime(value: string | null): string {
-	if (!value) return "";
-	return new Date(value).toLocaleString("ja-JP", {
-		month: "numeric",
-		day: "numeric",
-		hour: "2-digit",
-		minute: "2-digit",
-	});
-}
-
-function broadcastLabel(value: string | null): string {
-	if (value && new Date(value).getTime() <= Date.now()) return "の放送ルームが開始しました";
-	return "の放送ルームがまもなく開始します";
-}
-
-function eventBroadcastLabel(value: string | null): string {
-	if (value && new Date(value).getTime() <= Date.now()) return "が開始しました";
-	return "がまもなく開始します";
-}
-
-function emptyMessage(tab: TabId): string {
-	if (tab === "room") return "ルームの通知はまだありません";
-	return "通知はまだありません";
-}
 </script>
 
 <svelte:head> <title>通知 - Anipolis</title> </svelte:head>
@@ -99,82 +54,23 @@ function emptyMessage(tab: TabId): string {
 		<header class="notifications-header">
 			<h1 class="with-info-tip">
 				通知
-				<InfoTip label="通知のタブ">
-					<p>通常: いいね・リポスト・返信・メンション・フォロー・作品のおすすめ・トレードの成立</p>
-					<p>ルーム: カレンダーでベルを付けた番組が始まる前のお知らせ</p>
+				<InfoTip label="通知に届くもの">
+					<p>いいね・リポスト・返信・メンション・フォロー・作品のおすすめ・トレードの成立</p>
+					<p>カレンダーでベルを付けた番組が始まる前のお知らせは、カレンダーに出ます</p>
 					<p>フォロー中の人のマイリストの動きは、タイムラインの「アクティビティ」で見られます</p>
 				</InfoTip>
 			</h1>
 		</header>
 
-		<nav class="notif-tab-bar" aria-label="通知カテゴリ">
-			{#each tabs as tab (tab.id)}
-				<a
-					href="?tab={tab.id}"
-					class="notif-tab notif-tab--{tab.id}"
-					class:active={activeTab === tab.id}
-					aria-current={activeTab === tab.id ? 'page' : undefined}
-					data-sveltekit-noscroll
-				>
-					<span class="tab-label">{tab.label}</span>
-					{#if unreadBadge(tab.id) > 0}
-						<span class="tab-badge">{unreadBadge(tab.id) > 99 ? '99+' : unreadBadge(tab.id)}</span>
-					{/if}
-				</a>
-			{/each}
-		</nav>
-
-		{#if activeEntries.length === 0}
+		{#if entries.length === 0}
 			<div class="notifications-empty">
-				<p>{emptyMessage(activeTab)}</p>
+				<p>通知はまだありません</p>
 			</div>
 		{:else}
 			<ul class="notification-list">
-				{#each activeEntries as { notif, others } (notif.id)}
+				{#each entries as { notif, others } (notif.id)}
 					<li class="notification-item">
-						{#if notif.type === 'broadcast'}
-							<div class="notification-room-icon" aria-hidden="true">
-								<span class="i-lucide-calendar-clock"></span>
-							</div>
-							<div class="notification-body">
-								{#if notif.event_id}
-									<p class="notification-text">
-										<strong>{notif.event_title ?? 'イベント'}</strong>
-										{eventBroadcastLabel(notif.broadcast_scheduled_at)}
-									</p>
-									<a href="/events/{notif.event_id}" class="notification-anime-preview">
-										<span>
-											<strong>{notif.event_title ?? 'イベントルーム'}</strong>
-											<small>{formatBroadcastTime(notif.broadcast_scheduled_at)} 開始</small>
-										</span>
-									</a>
-								{:else}
-									<p class="notification-text">
-										<strong>{notif.broadcast_anime_title ?? '登録したアニメ'}</strong>
-										{broadcastLabel(notif.broadcast_scheduled_at)}
-									</p>
-									{#if notif.broadcast_anime_id && notif.broadcast_room_date}
-										<a
-											href="/rooms/anime/{notif.broadcast_anime_id}/{notif.broadcast_room_date}"
-											class="notification-anime-preview"
-										>
-											{#if notif.broadcast_anime_cover_url}
-												<img
-													src={coverThumbSrc(notif.broadcast_anime_cover_url)}
-													{@attach coverThumbFallback(notif.broadcast_anime_cover_url)}
-													alt={notif.broadcast_anime_title ?? '放送作品'}
-												>
-											{/if}
-											<span>
-												<strong>{notif.broadcast_anime_title ?? '放送ルーム'}</strong>
-												<small>{formatBroadcastTime(notif.broadcast_scheduled_at)} 開始</small>
-											</span>
-										</a>
-									{/if}
-								{/if}
-								<span class="notification-time">{formatRelativeTime(notif.created_at)}</span>
-							</div>
-						{:else if notif.type === 'exchange_matched'}
+						{#if notif.type === 'exchange_matched'}
 							<div class="notification-room-icon" aria-hidden="true">
 								<span class="i-lucide-arrow-left-right"></span>
 							</div>
@@ -297,61 +193,6 @@ function emptyMessage(tab: TabId): string {
 	font-size: 1.25rem;
 	font-weight: 700;
 	margin: 0;
-}
-
-/* ---- タブバー（デスクトップ = ピル） ---- */
-.notif-tab-bar {
-	display: flex;
-	gap: 8px;
-	overflow-x: auto;
-	padding: 12px 0;
-	scrollbar-width: none;
-}
-
-.notif-tab-bar::-webkit-scrollbar {
-	display: none;
-}
-
-.notif-tab {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	padding: 8px 16px;
-	border-radius: 28px;
-	font-size: 0.85rem;
-	font-weight: 600;
-	text-decoration: none;
-	white-space: nowrap;
-	flex-shrink: 0;
-	background: color-mix(in srgb, var(--fg, #e2e8f0) 8%, transparent);
-	color: var(--fg-muted, #94a3b8);
-	transition:
-		background 0.15s,
-		color 0.15s;
-}
-
-.notif-tab.active {
-	background: color-mix(in srgb, var(--color-accent) 20%, transparent);
-	color: var(--color-accent);
-}
-
-.tab-badge {
-	display: inline-grid;
-	place-items: center;
-	min-width: 18px;
-	height: 18px;
-	padding: 0 5px;
-	border-radius: 9999px;
-	corner-shape: round;
-	background: var(--color-accent, #6366f1);
-	color: #fff;
-	font-size: 11px;
-	font-weight: 700;
-	line-height: 1;
-}
-
-.notif-tab.active .tab-badge {
-	background: var(--color-accent, #6366f1);
 }
 
 .notifications-empty {
@@ -509,50 +350,5 @@ function emptyMessage(tab: TabId): string {
 .notification-time {
 	font-size: 12px;
 	color: var(--color-text-muted);
-}
-
-/* ---- モバイル = 下線付きフルワイドタブ（マイリストページに準拠） ---- */
-@media (max-width: 600px) {
-	.notif-tab-bar {
-		width: 100%;
-		gap: 0;
-		padding: 0;
-		margin-bottom: 4px;
-		border-bottom: 1px solid var(--border, #334155);
-		overflow: hidden;
-	}
-
-	.notif-tab {
-		position: relative;
-		flex: 1 1 33%;
-		justify-content: center;
-		min-width: 0;
-		gap: 5px;
-		padding: 12px 0;
-		border-radius: 0;
-		background: transparent;
-		font-size: 13px;
-	}
-
-	.notif-tab.active {
-		background: transparent;
-	}
-
-	.notif-tab.active::after {
-		position: absolute;
-		right: 12px;
-		bottom: -1px;
-		left: 12px;
-		height: 2px;
-		border-radius: 2px 2px 0 0;
-		background: currentColor;
-		content: "";
-	}
-
-	.tab-badge {
-		min-width: 16px;
-		height: 16px;
-		font-size: 10px;
-	}
 }
 </style>

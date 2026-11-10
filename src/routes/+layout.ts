@@ -26,7 +26,7 @@ export const load: LayoutLoad = async ({ data, depends, fetch }) => {
 		user: data.user,
 		profile: data.profile,
 		unreadNotificationCount: data.unreadNotificationCount ?? Promise.resolve(0),
-		unreadBroadcastNotificationCount: data.unreadBroadcastNotificationCount ?? Promise.resolve(0),
+		roomReminders: data.roomReminders ?? Promise.resolve([]),
 		pendingReportsCount: data.pendingReportsCount ?? Promise.resolve(0),
 		extraAccounts: data.extraAccounts ?? [],
 	};
