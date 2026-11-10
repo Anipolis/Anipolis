@@ -32,21 +32,50 @@ function writeShown(ids: string[]) {
 	}
 }
 
+function markShown(reminder: RoomReminder) {
+	const shown = readShown();
+	const key = roomReminderToastKey(reminder);
+	if (!shown.includes(key)) writeShown([...shown, key]);
+}
+
+function startTimer(id: string) {
+	const previous = timers.get(id);
+	if (previous) clearTimeout(previous);
+	timers.set(
+		id,
+		setTimeout(() => dismiss(id), DISMISS_MS),
+	);
+}
+
+// 一度に出すのは3件まで。はみ出した分は待たせ、前のが消えたら出す（実際に出したときに表示済みにする）
+let waiting: RoomReminder[] = [];
+
+function showWaiting() {
+	while (toasts.length < VISIBLE_LIMIT && waiting.length > 0) {
+		const [next, ...rest] = waiting;
+		waiting = rest;
+		if (!next) break;
+		toasts = [...toasts, next];
+		markShown(next);
+		startTimer(next.id);
+	}
+}
+
 /** layout が新しいお知らせを受け取るたびに呼ぶ。未読でまだ出していないものだけ出す */
 export function notify(reminders: readonly RoomReminder[]) {
 	const shown = readShown();
-	const fresh = reminders.filter((reminder) => !reminder.read && !shown.includes(roomReminderToastKey(reminder)));
-	if (fresh.length === 0) return;
-	writeShown([...shown, ...fresh.map(roomReminderToastKey)]);
-	for (const reminder of fresh) {
-		toasts = [...toasts.filter((toast) => toast.id !== reminder.id), reminder].slice(-VISIBLE_LIMIT);
-		const previous = timers.get(reminder.id);
-		if (previous) clearTimeout(previous);
-		timers.set(
-			reminder.id,
-			setTimeout(() => dismiss(reminder.id), DISMISS_MS),
-		);
+	for (const reminder of reminders) {
+		if (reminder.read || shown.includes(roomReminderToastKey(reminder))) continue;
+		if (toasts.some((toast) => toast.id === reminder.id)) {
+			// 出ている間に次のタイミングで鳴り直したら、その場で差し替えて出し直す
+			toasts = toasts.map((toast) => (toast.id === reminder.id ? reminder : toast));
+			markShown(reminder);
+			startTimer(reminder.id);
+			continue;
+		}
+		waiting = [...waiting.filter((item) => item.id !== reminder.id), reminder];
 	}
+	showWaiting();
 }
 
 function dismiss(id: string) {
@@ -54,6 +83,7 @@ function dismiss(id: string) {
 	if (timer) clearTimeout(timer);
 	timers.delete(id);
 	toasts = toasts.filter((toast) => toast.id !== id);
+	showWaiting();
 }
 
 $effect(() => () => {
