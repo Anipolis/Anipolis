@@ -141,13 +141,17 @@ a.collection-share:hover {
 	height: 100%;
 	object-fit: cover;
 }
+/* リストは、カードの幅に入るだけ1列に並べる（幅を余らせず、2列目に回る分は隠す） */
 .collection-share-strip {
-	display: flex;
-	gap: 6px;
+	display: grid;
+	grid-template-rows: auto;
+	grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+	grid-auto-rows: 0;
+	gap: 0 6px;
 	overflow: hidden;
 }
 .collection-share-strip .collection-share-cover {
-	width: 64px;
+	width: auto;
 	border-radius: 4px;
 }
 .collection-share-tiers,

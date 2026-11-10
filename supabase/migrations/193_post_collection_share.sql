@@ -47,7 +47,7 @@ CREATE TRIGGER check_post_collection_share
 -- 投稿のカード用の要約（PostgREST の計算列。select で collection_preview と書いて取る）。
 -- 呼んだ人の権限で読むので、作品の RLS（非公開・情報未整備の作品）もそのまま効く。
 --   count: 作品の数
---   items: リスト・ランキングは先頭5作品、ティア表は上から5段までを各段8作品まで（段の順・並び順）
+--   items: リストは先頭12作品（カードの幅に入るだけ1列に並べる）、ランキングは先頭5作品、ティア表は上から5段までを各段8作品まで（段の順・並び順）
 CREATE OR REPLACE FUNCTION public.collection_preview(c public.user_collections)
 RETURNS jsonb
 LANGUAGE sql
@@ -78,6 +78,7 @@ AS $$
             ) p
             WHERE CASE
                 WHEN c.kind = 'tier' THEN p.tier IS NOT NULL AND p.tier < 5 AND p.rank_in_tier <= 8
+                WHEN c.kind = 'list' THEN p.rank_in_all <= 12
                 ELSE p.rank_in_all <= 5
             END
         ), '[]'::jsonb)
