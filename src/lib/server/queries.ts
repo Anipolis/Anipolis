@@ -916,7 +916,9 @@ export async function getActiveRoomReminders(
 		.eq("type", "broadcast" as never)
 		.gte("broadcast_scheduled_at", new Date(now.getTime() - ROOM_REMINDER_LOOKBACK_MS).toISOString())
 		.order("created_at", { ascending: false })
-		.limit(50);
+		// 終わった放送は読んだあとで外すので、上限は1日に鳴る数より十分大きく取る
+		// （ここで切ると、前に鳴った長いイベントのお知らせが新しい分に押し出される）
+		.limit(200);
 	if (error) {
 		console.error("getActiveRoomReminders error:", error);
 		return [];
