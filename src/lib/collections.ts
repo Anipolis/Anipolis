@@ -171,7 +171,7 @@ export interface CollectionShare {
 	kind: CollectionKind;
 	tiers: string[];
 	count: number;
-	/** リスト・ランキングは先頭5作品、ティア表は上から5段までを各段8作品まで（collection_preview） */
+	/** リストは先頭12作品、ランキングは先頭5作品、ティア表は上から5段までを各段8作品まで（collection_preview） */
 	items: { id: number; title: string; cover_url: string | null; tier: number | null }[];
 }
 
