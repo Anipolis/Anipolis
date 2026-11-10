@@ -2,7 +2,7 @@
 import { untrack } from "svelte";
 import { trapFocus } from "$lib/actions/trapFocus";
 import { type AnimePick, animePickMeta } from "$lib/anime-picker";
-import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
+import AnimeRow from "./AnimeRow.svelte";
 
 /**
  * 作品を検索して選び、並べ替えて保存する画面（ベスト作品・コレクションで共用）。
@@ -154,26 +154,6 @@ async function save() {
 }
 </script>
 
-{#snippet cover(url: string | null)}
-	<span class="picker-cover">
-		{#if url}
-			<img src={coverThumbSrc(url)} {@attach coverThumbFallback(url)} alt="">
-		{:else}
-			<span class="picker-cover-empty i-lucide-clapperboard" aria-hidden="true"></span>
-		{/if}
-	</span>
-{/snippet}
-
-{#snippet titleBlock(anime: AnimePick)}
-	{@const meta = animePickMeta(anime)}
-	<span class="picker-text">
-		<span class="picker-title">{anime.title}</span>
-		{#if meta}
-			<span class="picker-meta">{meta}</span>
-		{/if}
-	</span>
-{/snippet}
-
 <div class="picker-overlay" role="presentation" onclick={close}>
 	<div
 		bind:this={card}
@@ -227,23 +207,24 @@ async function save() {
 						{#each results as anime (anime.id)}
 							{@const picked = pickedIds.has(anime.id)}
 							<li>
-								<button
-									type="button"
-									class="picker-row picker-result"
+								<AnimeRow
+									coverUrl={anime.cover_url}
+									title={anime.title}
+									meta={animePickMeta(anime)}
 									disabled={saving || picked}
 									onclick={() => addPick(anime)}
 								>
-									{@render cover(anime.cover_url)}
-									{@render titleBlock(anime)}
-									<span class="picker-result-state">
-										{#if picked}
-											{addOnly && initialIds.has(anime.id) ? '追加済み' : '選択済み'}
-										{:else}
-											<span class="i-lucide-plus" aria-hidden="true"></span>
-											追加
-										{/if}
-									</span>
-								</button>
+									{#snippet trailing()}
+										<span class="picker-result-state">
+											{#if picked}
+												{addOnly && initialIds.has(anime.id) ? '追加済み' : '選択済み'}
+											{:else}
+												<span class="i-lucide-plus" aria-hidden="true"></span>
+												追加
+											{/if}
+										</span>
+									{/snippet}
+								</AnimeRow>
 							</li>
 						{/each}
 					</ul>
@@ -262,43 +243,47 @@ async function save() {
 					<ol class="picker-list" aria-label={addOnly ? '追加する作品' : '選んだ作品'}>
 						{#each picks as pick, index (pick.id)}
 							{#if !(addOnly && initialIds.has(pick.id))}
-								<li class="picker-row picker-pick" class:just-added={pick.id === lastAddedId}>
-									{#if !addOnly}
-										<span class="picker-rank">{index + 1}</span>
-									{/if}
-									{@render cover(pick.cover_url)}
-									{@render titleBlock(pick)}
-									<span class="picker-actions">
-										{#if !addOnly}
-											<button
-												type="button"
-												class="picker-icon-button"
-												aria-label="{pick.title} を上へ"
-												disabled={saving || index === 0}
-												onclick={() => movePick(index, -1)}
-											>
-												<span class="i-lucide-chevron-up" aria-hidden="true"></span>
-											</button>
-											<button
-												type="button"
-												class="picker-icon-button"
-												aria-label="{pick.title} を下へ"
-												disabled={saving || index === picks.length - 1}
-												onclick={() => movePick(index, 1)}
-											>
-												<span class="i-lucide-chevron-down" aria-hidden="true"></span>
-											</button>
-										{/if}
-										<button
-											type="button"
-											class="picker-icon-button"
-											aria-label="{pick.title} を外す"
-											disabled={saving}
-											onclick={() => removePick(index)}
-										>
-											<span class="i-lucide-x" aria-hidden="true"></span>
-										</button>
-									</span>
+								<li class="picker-pick" class:just-added={pick.id === lastAddedId}>
+									<AnimeRow coverUrl={pick.cover_url} title={pick.title} meta={animePickMeta(pick)}>
+										{#snippet leading()}
+											{#if !addOnly}
+												<span class="picker-rank">{index + 1}</span>
+											{/if}
+										{/snippet}
+										{#snippet trailing()}
+											<span class="picker-actions">
+												{#if !addOnly}
+													<button
+														type="button"
+														class="picker-icon-button"
+														aria-label="{pick.title} を上へ"
+														disabled={saving || index === 0}
+														onclick={() => movePick(index, -1)}
+													>
+														<span class="i-lucide-chevron-up" aria-hidden="true"></span>
+													</button>
+													<button
+														type="button"
+														class="picker-icon-button"
+														aria-label="{pick.title} を下へ"
+														disabled={saving || index === picks.length - 1}
+														onclick={() => movePick(index, 1)}
+													>
+														<span class="i-lucide-chevron-down" aria-hidden="true"></span>
+													</button>
+												{/if}
+												<button
+													type="button"
+													class="picker-icon-button"
+													aria-label="{pick.title} を外す"
+													disabled={saving}
+													onclick={() => removePick(index)}
+												>
+													<span class="i-lucide-x" aria-hidden="true"></span>
+												</button>
+											</span>
+										{/snippet}
+									</AnimeRow>
 								</li>
 							{/if}
 						{/each}
@@ -436,15 +421,8 @@ async function save() {
 	padding: 0;
 	list-style: none;
 }
-.picker-row {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	min-width: 0;
-	padding: 6px 8px;
-	border-radius: 8px;
-}
 .picker-pick {
+	border-radius: 8px;
 	background: var(--color-bg-card);
 }
 .picker-pick.just-added {
@@ -461,21 +439,7 @@ async function save() {
 		animation: none;
 	}
 }
-.picker-result {
-	width: 100%;
-	border: 0;
-	background: transparent;
-	color: var(--color-text);
-	cursor: pointer;
-	font: inherit;
-	text-align: left;
-}
-.picker-result:hover:not(:disabled) {
-	background: var(--color-surface-hover);
-}
-.picker-result:disabled {
-	cursor: default;
-}
+
 .picker-rank {
 	width: 2em;
 	flex-shrink: 0;
@@ -484,52 +448,6 @@ async function save() {
 	font-weight: 700;
 	text-align: center;
 	font-variant-numeric: tabular-nums;
-}
-.picker-cover {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	width: 32px;
-	flex-shrink: 0;
-	aspect-ratio: 400 / 566;
-	overflow: hidden;
-	border: 1px solid var(--color-border);
-	border-radius: 4px;
-	background: var(--color-bg-card);
-}
-.picker-cover img {
-	width: 100%;
-	height: 100%;
-	object-fit: cover;
-}
-.picker-cover-empty {
-	width: 14px;
-	height: 14px;
-	color: var(--color-text-muted);
-}
-.picker-text {
-	display: flex;
-	flex: 1 1 auto;
-	flex-direction: column;
-	gap: 2px;
-	min-width: 0;
-}
-/* スマホでは右のボタンで幅が狭いので、題名は2行まで折り返す */
-.picker-title {
-	display: -webkit-box;
-	overflow: hidden;
-	font-size: 14px;
-	line-height: 1.35;
-	-webkit-box-orient: vertical;
-	-webkit-line-clamp: 2;
-	line-clamp: 2;
-}
-.picker-meta {
-	overflow: hidden;
-	color: var(--color-text-muted);
-	font-size: 12px;
-	text-overflow: ellipsis;
-	white-space: nowrap;
 }
 .picker-actions {
 	display: flex;
@@ -565,8 +483,5 @@ async function save() {
 	gap: 2px;
 	color: var(--color-text);
 	font-size: 12px;
-}
-.picker-result:disabled .picker-result-state {
-	color: var(--color-text-muted);
 }
 </style>
