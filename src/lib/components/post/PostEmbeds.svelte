@@ -22,11 +22,6 @@ function openExchangeModal(event: Event) {
 	controller.exchangeModalOpen = true;
 }
 
-function handleExchangePreviewKeydown(event: KeyboardEvent) {
-	if (event.key !== "Enter" && event.key !== " ") return;
-	openExchangeModal(event);
-}
-
 function openLightbox(event: MouseEvent, url: string) {
 	event.preventDefault();
 	event.stopPropagation();
@@ -54,15 +49,14 @@ function openLightbox(event: MouseEvent, url: string) {
 {/if}
 
 {#if post.exchange_share}
-	<!-- biome-ignore lint/a11y/useSemanticElements: 内部にブロック要素を含むため button にできない -->
-	<div
-		class="exchange-share-inline"
-		role="button"
-		tabindex="0"
-		aria-label={`トレード結果を見る: ${post.exchange_share.offered_anime.title} から ${post.exchange_share.received_anime.title}`}
-		onclick={openExchangeModal}
-		onkeydown={handleExchangePreviewKeydown}
-	>
+	<!-- カード全体を押せるように、中身の上に透明なボタンを重ねる（ブロック要素を含むので button で包めない） -->
+	<div class="exchange-share-inline">
+		<button
+			type="button"
+			class="exchange-share-hitarea"
+			aria-label={`トレード結果を見る: ${post.exchange_share.offered_anime.title} から ${post.exchange_share.received_anime.title}`}
+			onclick={openExchangeModal}
+		></button>
 		<AnimeExchangeResult
 			offeredAnime={post.exchange_share.offered_anime}
 			receivedAnime={post.exchange_share.received_anime}

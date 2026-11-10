@@ -1,5 +1,4 @@
 <script lang="ts">
-import { tick } from "svelte";
 import { trapFocus } from "$lib/actions/trapFocus";
 import type { RoomExitSurveyComparisonWithX, RoomExitSurveyNextParticipation } from "$lib/types";
 
@@ -81,36 +80,6 @@ function setRating(field: RatingField, value: number) {
 	else readabilityRating = value;
 }
 
-function nextRatingValue(field: RatingField, direction: -1 | 1) {
-	const current = ratingValue(field) ?? 3;
-	return Math.min(5, Math.max(1, current + direction));
-}
-
-async function setRatingAndFocus(field: RatingField, value: number) {
-	setRating(field, value);
-	await tick();
-	document.querySelector<HTMLButtonElement>(`[data-rating-field="${field}"][data-rating-value="${value}"]`)?.focus();
-}
-
-function handleRatingKeydown(event: KeyboardEvent, field: RatingField, value: number) {
-	if (event.key === "ArrowLeft" || event.key === "ArrowDown") {
-		event.preventDefault();
-		void setRatingAndFocus(field, nextRatingValue(field, -1));
-	} else if (event.key === "ArrowRight" || event.key === "ArrowUp") {
-		event.preventDefault();
-		void setRatingAndFocus(field, nextRatingValue(field, 1));
-	} else if (event.key === "Home") {
-		event.preventDefault();
-		void setRatingAndFocus(field, 1);
-	} else if (event.key === "End") {
-		event.preventDefault();
-		void setRatingAndFocus(field, 5);
-	} else if (event.key === " " || event.key === "Enter") {
-		event.preventDefault();
-		setRating(field, value);
-	}
-}
-
 function trimOptionalText(value: string) {
 	const trimmed = value.trim();
 	return trimmed ? trimmed.slice(0, 1000) : null;
@@ -152,26 +121,22 @@ function submit() {
 				{@const ratingField = field as RatingField}
 				<section class="survey-question">
 					<h3>{ratingLabels[ratingField]}</h3>
-					<div class="rating-row" role="radiogroup" aria-label={ratingLabels[ratingField]}>
+					<fieldset class="rating-row fieldset-reset">
+						<legend class="sr-only">{ratingLabels[ratingField]}</legend>
 						{#each [1, 2, 3, 4, 5] as value}
-							{@const selected = ratingValue(ratingField) === value}
-							<!-- biome-ignore lint/a11y/useSemanticElements: radiogroup 内のカスタム radio として button + role=radio を使っている -->
-							<button
-								type="button"
-								role="radio"
-								class:active={selected}
-								aria-checked={selected}
-								data-rating-field={ratingField}
-								data-rating-value={value}
-								tabindex={selected || (ratingValue(ratingField) == null && value === 1) ? 0 : -1}
-								disabled={submitting}
-								onclick={() => setRating(ratingField, value)}
-								onkeydown={(event) => handleRatingKeydown(event, ratingField, value)}
-							>
-								{value}
-							</button>
+							<label class="rating-option" class:active={ratingValue(ratingField) === value}>
+								<input
+									type="radio"
+									name={ratingField}
+									{value}
+									checked={ratingValue(ratingField) === value}
+									disabled={submitting}
+									onchange={() => setRating(ratingField, value)}
+								>
+								<span aria-hidden="true">{value}</span>
+							</label>
 						{/each}
-					</div>
+					</fieldset>
 					<div class="rating-caption">
 						<span>{ratingCaptions[ratingField][0]}</span>
 						<span>{ratingCaptions[ratingField][1]}</span>
@@ -307,7 +272,10 @@ function submit() {
 	gap: 6px;
 }
 
-.rating-row button {
+.rating-option {
+	display: flex;
+	align-items: center;
+	justify-content: center;
 	min-width: 0;
 	min-height: 38px;
 	border: 1px solid var(--color-border);
@@ -315,9 +283,25 @@ function submit() {
 	background: var(--color-bg);
 	color: var(--color-text);
 	font-weight: 800;
+	cursor: pointer;
 }
 
-.rating-row button.active {
+.rating-option input {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+.rating-option:has(input:focus-visible) {
+	outline: 2px solid var(--color-accent);
+	outline-offset: 2px;
+}
+
+.rating-option.active {
 	border-color: var(--color-accent);
 	background: var(--color-accent);
 	color: white;
@@ -422,7 +406,7 @@ function submit() {
 
 .skip-button:disabled,
 .submit-button:disabled,
-.rating-row button:disabled,
+.rating-option:has(input:disabled),
 .option-row input:disabled,
 .text-question textarea:disabled {
 	cursor: not-allowed;

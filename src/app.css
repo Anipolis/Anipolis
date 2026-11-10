@@ -1025,8 +1025,11 @@ textarea {
 /* アイコンを押して画像を選べる場所（初期設定・プロフィールの編集）。ファイル選択の label として使う */
 .avatar-pick {
 	display: inline-flex;
+	padding: 0;
+	border: 0;
 	border-radius: 50%;
 	corner-shape: round;
+	background: none;
 	cursor: pointer;
 	transition: opacity 0.15s;
 }
@@ -2943,6 +2946,7 @@ textarea {
 }
 
 .exchange-share-inline {
+	position: relative;
 	margin: 8px 0 4px;
 	padding: 8px;
 	border: 1px solid color-mix(in srgb, var(--color-border) 48%, transparent);
@@ -2965,7 +2969,18 @@ textarea {
 	transform: translateY(-1px);
 }
 
-.exchange-share-inline:focus-visible {
+.exchange-share-hitarea {
+	position: absolute;
+	inset: 0;
+	z-index: 1;
+	padding: 0;
+	border: 0;
+	border-radius: inherit;
+	background: transparent;
+	cursor: pointer;
+}
+
+.exchange-share-inline:has(.exchange-share-hitarea:focus-visible) {
 	border-color: color-mix(in srgb, var(--color-accent) 70%, var(--color-border));
 	background: color-mix(in srgb, var(--color-accent) 10%, transparent);
 	box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 18%, transparent);

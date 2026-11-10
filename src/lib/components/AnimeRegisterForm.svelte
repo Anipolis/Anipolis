@@ -78,6 +78,7 @@ let imageFile = $state<File | null>(null);
 let imagePreview = $state<string | null>(null);
 let resizedBlob = $state<Blob | null>(null);
 let imageProcessing = $state(false);
+let coverFileInput = $state<HTMLInputElement | null>(null);
 
 async function resizeImage(file: File, maxWidth = 800): Promise<Blob> {
 	return new Promise((resolve, reject) => {
@@ -546,8 +547,12 @@ async function handleFileChange(e: Event) {
 				</div>
 				<div class="form-group form-group--wide">
 					<span class="field-label">カバー画像</span>
-					<!-- biome-ignore lint/a11y/noLabelWithoutControl: file input を内包しているが、Svelte のブロックを挟むため静的解析で関連付けを検出できない -->
-					<label class="cover-upload-label" class:has-preview={!!imagePreview}>
+					<button
+						type="button"
+						class="cover-upload-label"
+						class:has-preview={!!imagePreview}
+						onclick={() => coverFileInput?.click()}
+					>
 						{#if imagePreview}
 							<img src={imagePreview} alt="カバープレビュー" class="cover-preview">
 							<span class="cover-change-hint">クリックして変更</span>
@@ -569,14 +574,15 @@ async function handleFileChange(e: Event) {
 								>{imageProcessing ? "処理中..." : "画像をアップロード（JPEG/PNG/WebP）"}</span
 							>
 						{/if}
-						<input
-							type="file"
-							accept="image/jpeg,image/png,image/webp,image/avif"
-							onchange={handleFileChange}
-							disabled={imageProcessing}
-							class="cover-file-input"
-						>
-					</label>
+					</button>
+					<input
+						bind:this={coverFileInput}
+						type="file"
+						accept="image/jpeg,image/png,image/webp,image/avif"
+						onchange={handleFileChange}
+						disabled={imageProcessing}
+						class="cover-file-input"
+					>
 					{#if !imageFile}
 						<input
 							id="rf-cover"
@@ -839,14 +845,17 @@ async function handleFileChange(e: Event) {
 	gap: 6px;
 	width: 100%;
 	height: 110px;
+	padding: 0;
+	color: var(--color-text-muted);
+	font: inherit;
+	font-size: 0.82rem;
+	background: transparent;
 	border: 2px dashed var(--color-border);
 	border-radius: 12px;
 	cursor: pointer;
 	transition:
 		border-color 0.15s,
 		background 0.15s;
-	color: var(--color-text-muted);
-	font-size: 0.82rem;
 	overflow: hidden;
 	position: relative;
 }

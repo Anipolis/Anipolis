@@ -337,6 +337,7 @@ async function resizeImage(file: File, maxWidth: number): Promise<Blob> {
 	});
 }
 let coverUploading = $state(false);
+let coverFileInput = $state<HTMLInputElement | null>(null);
 let coverError = $state("");
 
 async function uploadCover(e: Event) {
@@ -551,8 +552,14 @@ $effect(() => {
 						</div>
 					{/if}
 					{#if data.isAdmin}
-						<!-- biome-ignore lint/a11y/noLabelWithoutControl: file input を内包しているが、Svelte のブロックを挟むため静的解析で関連付けを検出できない -->
-						<label class="cover-upload-btn" title="カバー画像を変更" class:uploading={coverUploading}>
+						<button
+							type="button"
+							class="cover-upload-btn"
+							title="カバー画像を変更"
+							aria-label="カバー画像を変更"
+							class:uploading={coverUploading}
+							onclick={() => coverFileInput?.click()}
+						>
 							{#if coverUploading}
 								<span>...</span>
 							{:else}
@@ -570,13 +577,15 @@ $effect(() => {
 									<line x1="12" y1="3" x2="12" y2="15" />
 								</svg>
 							{/if}
-							<input
-								type="file"
-								accept="image/jpeg,image/png,image/webp,image/avif"
-								onchange={uploadCover}
-								disabled={coverUploading}
-							>
-						</label>
+						</button>
+						<input
+							bind:this={coverFileInput}
+							type="file"
+							accept="image/jpeg,image/png,image/webp,image/avif"
+							onchange={uploadCover}
+							disabled={coverUploading}
+							class="cover-upload-file"
+						>
 					{/if}
 				</div>
 				{#if data.anime.copyright}
@@ -2049,6 +2058,8 @@ $effect(() => {
 	right: 8px;
 	width: 32px;
 	height: 32px;
+	padding: 0;
+	border: 0;
 	border-radius: 50%;
 	corner-shape: round;
 	background: rgba(0, 0, 0, 0.65);
@@ -2060,7 +2071,7 @@ $effect(() => {
 	opacity: 0;
 	transition: opacity 0.15s;
 }
-.cover-upload-btn input {
+.cover-upload-file {
 	display: none;
 }
 .cover-upload-btn.uploading {

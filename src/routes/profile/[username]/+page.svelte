@@ -58,6 +58,8 @@ let avatarMessage = $state("");
 let avatarPreviewUrl = $state<string | null>(null);
 let avatarPendingFile = $state<File | null>(null);
 let avatarPendingDelete = $state(false);
+let avatarFileInput = $state<HTMLInputElement | null>(null);
+let headerFileInput = $state<HTMLInputElement | null>(null);
 let showProfileEditModal = $state(false);
 let showUserReportModal = $state(false);
 let reportReason = $state("harassment");
@@ -798,14 +800,20 @@ function listButtonFor(anime: Anime) {
 								<span class="field-label">アイコン画像</span>
 								<!-- 左にアイコン、右にボタン（初期設定と同じ並び）。アイコンを押しても選べる。Tab の移動先と読み上げはボタンだけ -->
 								<div class="profile-avatar-editor">
-									<!-- biome-ignore lint/a11y/noLabelWithoutControl: 読み上げは隣のボタン側で行い、この label は aria-hidden で隠している -->
-									<label for="profile-avatar-input" class="avatar-pick" aria-hidden="true">
+									<!-- アイコンのクリックはマウス向けの補助。読み上げとキーボードは右のボタンだけに任せる -->
+									<button
+										type="button"
+										class="avatar-pick"
+										aria-hidden="true"
+										tabindex="-1"
+										onclick={() => avatarFileInput?.click()}
+									>
 										<UserAvatar
 											src={editableAvatarUrl}
 											username={profile.display_name || profile.username}
 											size="lg"
 										/>
-									</label>
+									</button>
 									<div class="profile-image-actions">
 										<label class="btn btn-secondary profile-image-button">
 											{avatarUploading
@@ -814,6 +822,7 @@ function listButtonFor(anime: Anime) {
 													? "画像を変更"
 													: "画像を選択"}
 											<input
+												bind:this={avatarFileInput}
 												id="profile-avatar-input"
 												type="file"
 												accept="image/jpeg,image/png,image/webp"
@@ -840,15 +849,20 @@ function listButtonFor(anime: Anime) {
 
 							<div class="field">
 								<span class="field-label">ヘッダー画像</span>
-								<!-- プレビューを押しても選べる（読み上げはボタンだけ） -->
-								<!-- biome-ignore lint/a11y/noLabelWithoutControl: 読み上げは隣のボタン側で行い、この label は aria-hidden で隠している -->
-								<label for="profile-header-input" class="profile-header-editor" aria-hidden="true">
+								<!-- プレビューのクリックはマウス向けの補助。読み上げとキーボードは下のボタンだけに任せる -->
+								<button
+									type="button"
+									class="profile-header-editor"
+									aria-hidden="true"
+									tabindex="-1"
+									onclick={() => headerFileInput?.click()}
+								>
 									{#if editableHeaderUrl}
 										<img src={editableHeaderUrl} alt="">
 									{:else}
 										<span class="profile-header-editor-empty">ヘッダー画像は未設定です</span>
 									{/if}
-								</label>
+								</button>
 								<div class="profile-image-actions profile-header-actions-row">
 									<label class="btn btn-secondary profile-image-button">
 										{headerUploading
@@ -857,6 +871,7 @@ function listButtonFor(anime: Anime) {
 												? "画像を変更"
 												: "画像を選択"}
 										<input
+											bind:this={headerFileInput}
 											id="profile-header-input"
 											type="file"
 											accept="image/jpeg,image/png,image/webp"
@@ -1512,6 +1527,10 @@ function listButtonFor(anime: Anime) {
 
 .profile-header-editor {
 	display: block;
+	padding: 0;
+	font: inherit;
+	color: inherit;
+	text-align: inherit;
 	cursor: pointer;
 	transition: opacity 0.15s;
 	overflow: hidden;
