@@ -418,11 +418,17 @@ export function resolveAnimeCatalog(
 	const officialSiteUrl = resolveOfficialUrl("official_site_url");
 	const officialXUrl = resolveOfficialUrl("official_x_url");
 	const coverUrl = resolveNullableString("cover_url", false);
-	const status = firstDefined([
-		candidate(stringValue(manual, "status"), "manual", "verified"),
-		candidate(stringValue(offline, "status"), "anime_offline_database", "source"),
+	// status も話数と同じく、AODB が終了を見ていない値（upcoming / airing）は取り込み時点の暫定値。
+	// 更新が止まると放送が始まっても「放送前」のまま残る（夜桜さんちの大作戦 第2期2クール:
+	// AODB=upcoming / MAL=airing）ので、その場合は MAL/Jikan を優先する
+	const offlineStatus = candidate(stringValue(offline, "status"), "anime_offline_database", "source");
+	const importedStatuses = [
 		candidate(stringValue(mal, "status"), "mal", "source"),
 		candidate(stringValue(jikan, "status"), "jikan", "source"),
+	];
+	const status = firstDefined([
+		candidate(stringValue(manual, "status"), "manual", "verified"),
+		...(offlineSawFinish ? [offlineStatus, ...importedStatuses] : [...importedStatuses, offlineStatus]),
 		candidate(legacyRow?.status, "legacy", "fallback"),
 		{ value: "upcoming", source: "legacy", confidence: "fallback" },
 	]);

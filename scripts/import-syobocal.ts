@@ -52,6 +52,13 @@ type Options = {
 	season: SeasonName;
 	dryRun: boolean;
 	syncPrograms: boolean;
+	/**
+	 * 放送予定を昨日より前から取り直す（--program-since 2026-10-01 --only-mal 64503,63667）。
+	 * 対応表を後から直した作品の、過去の放送枠を埋めるための一回限りの指定。
+	 * 範囲内の過去の枠は選び直されるので、ほかの作品を巻き込まないよう --only-mal と一緒にしか使えない
+	 */
+	programSince?: string;
+	onlyMalIds?: number[];
 };
 
 type SourceRecord = {
@@ -75,7 +82,6 @@ type SyobocalTitle = {
 	tid: number;
 	lastUpdate: string | null;
 	title: string;
-	shortTitle: string | null;
 	titleYomi: string | null;
 	category: number | null;
 	firstYear: number | null;
@@ -190,6 +196,20 @@ function parseArgs(argv: string[]): Options {
 			options.syncPrograms = true;
 			continue;
 		}
+		if (arg === "--program-since" && next) {
+			if (!/^\d{4}-\d{2}-\d{2}$/.test(next)) throw new Error(`Invalid --program-since: ${next}`);
+			options.programSince = next;
+			index += 1;
+			continue;
+		}
+		if (arg === "--only-mal" && next) {
+			options.onlyMalIds = next.split(",").map((value) => Number.parseInt(value, 10));
+			if (options.onlyMalIds.some((value) => !Number.isInteger(value) || value < 1)) {
+				throw new Error(`Invalid --only-mal: ${next}`);
+			}
+			index += 1;
+			continue;
+		}
 		if (arg === "--year" && next) {
 			options.year = Number.parseInt(next, 10);
 			index += 1;
@@ -209,11 +229,16 @@ function parseArgs(argv: string[]): Options {
 				"   or: pnpm sync:syobocal-programs -- --year 2026 --season summer [--dry-run]",
 		);
 	}
+	if (options.programSince && (!options.syncPrograms || !options.onlyMalIds?.length)) {
+		throw new Error("--program-since needs --sync-programs and --only-mal.");
+	}
 	return {
 		year: options.year,
 		season: options.season,
 		dryRun: options.dryRun,
 		syncPrograms: options.syncPrograms,
+		...(options.programSince ? { programSince: options.programSince } : {}),
+		...(options.onlyMalIds ? { onlyMalIds: options.onlyMalIds } : {}),
 	};
 }
 
@@ -385,7 +410,6 @@ function parseTitle(raw: Record<string, unknown>): SyobocalTitle | null {
 		tid,
 		lastUpdate: textValue(raw, "LastUpdate"),
 		title,
-		shortTitle: textValue(raw, "ShortTitle"),
 		titleYomi: textValue(raw, "TitleYomi"),
 		category: integerValue(raw, "Cat"),
 		firstYear: integerValue(raw, "FirstYear"),
@@ -446,23 +470,69 @@ function parseProgram(raw: Record<string, unknown>): SyobocalProgram | null {
 	};
 }
 
+const TITLE_DETAIL_FIELDS =
+	"TID,LastUpdate,Title,TitleYomi,Comment,Keywords,Cat,FirstYear,FirstMonth,FirstEndYear,FirstEndMonth,FirstCh";
+// TitleLookup に並べられる TID は100件まで
+const TITLE_DETAIL_BATCH_SIZE = 100;
+const TITLE_DETAIL_CACHE_NAME = "title-details.json";
+
+/**
+ * 全作品の情報。2026-10-22 から TID=* のまとめ取りでは TID・LastUpdate・Title しか指定できなくなった
+ * （ほかの項目を足すと 400）。一覧で更新日時だけ取り、詳しい項目は TID を100件ずつ並べて取る。
+ * 取った詳細は手元に控え、更新日時が変わっていない作品は取り直さない（初回だけ全件で80回ほど問い合わせる）
+ */
 async function fetchTitles(): Promise<SyobocalTitle[]> {
-	const payload = await readCachedXml(
-		"TitleLookup",
-		{
-			TID: "*",
-			Fields: "TID,LastUpdate,Title,ShortTitle,TitleYomi,Comment,Keywords,Cat,FirstYear,FirstMonth,FirstEndYear,FirstEndMonth,FirstCh",
-		},
-		"titles.xml",
-	);
-	const titles = responseItems(payload, "TitleLookupResponse", "TitleItems", "TitleItem").flatMap((row) => {
-		const parsed = parseTitle(row);
+	const payload = await readCachedXml("TitleLookup", { TID: "*", Fields: "TID,LastUpdate,Title" }, "titles.xml");
+	const index = responseItems(payload, "TitleLookupResponse", "TitleItems", "TitleItem").flatMap((row) => {
+		const tid = integerValue(row, "TID");
+		return tid ? [{ tid, lastUpdate: textValue(row, "LastUpdate") }] : [];
+	});
+	if (index.length < 1_000) {
+		throw new Error(`Syobocal title snapshot is unexpectedly small (${index.length} rows).`);
+	}
+
+	const cachePath = join(CACHE_DIR, TITLE_DETAIL_CACHE_NAME);
+	const details: Record<string, Record<string, unknown>> = await readFile(cachePath, "utf8")
+		.then((text) => asRecord(JSON.parse(text)) as Record<string, Record<string, unknown>>)
+		.catch(() => ({}));
+	const stale = index
+		.filter((entry) => {
+			const cached = details[String(entry.tid)];
+			return !cached || textValue(cached, "LastUpdate") !== entry.lastUpdate;
+		})
+		.map((entry) => entry.tid);
+	if (stale.length > 0) console.log(`Syobocal title details: fetching ${stale.length} new or updated titles.`);
+	for (let start = 0; start < stale.length; start += TITLE_DETAIL_BATCH_SIZE) {
+		const url = new URL(SYOBOCAL_ENDPOINT);
+		url.searchParams.set("Command", "TitleLookup");
+		url.searchParams.set("TID", stale.slice(start, start + TITLE_DETAIL_BATCH_SIZE).join(","));
+		url.searchParams.set("Fields", TITLE_DETAIL_FIELDS);
+		const response = await fetchWithRetry(url, "application/xml,text/xml");
+		const rows = responseItems(
+			xmlParser.parse(await response.text()),
+			"TitleLookupResponse",
+			"TitleItems",
+			"TitleItem",
+		);
+		for (const row of rows) {
+			const tid = integerValue(row, "TID");
+			if (tid) details[String(tid)] = row;
+		}
+		if (start + TITLE_DETAIL_BATCH_SIZE < stale.length) await sleep(1_000);
+	}
+	if (stale.length > 0) {
+		await mkdir(dirname(cachePath), { recursive: true });
+		const temporaryPath = `${cachePath}.tmp`;
+		await writeFile(temporaryPath, JSON.stringify(details), "utf8");
+		await unlink(cachePath).catch(() => undefined);
+		await rename(temporaryPath, cachePath);
+	}
+
+	return index.flatMap((entry) => {
+		const raw = details[String(entry.tid)];
+		const parsed = raw ? parseTitle(raw) : null;
 		return parsed ? [parsed] : [];
 	});
-	if (titles.length < 1_000) {
-		throw new Error(`Syobocal title snapshot is unexpectedly small (${titles.length} rows).`);
-	}
-	return titles;
 }
 
 async function fetchChannels(): Promise<SyobocalChannel[]> {
@@ -1828,9 +1898,12 @@ async function main() {
 	// are synced for every confirmed primary mapping in the catalog, not just
 	// the imported season, so continuing shows keep their schedule and shows
 	// without current Syobocal programs disappear naturally.
-	const programMappings: ProgramSyncMapping[] = options.syncPrograms
-		? mergeProgramSyncMappings(mapping.selected, await fetchAllPrimaryMappings(supabase, options.dryRun))
-		: mapping.selected;
+	const onlyMalIds = options.onlyMalIds ? new Set(options.onlyMalIds) : null;
+	const programMappings: ProgramSyncMapping[] = (
+		options.syncPrograms
+			? mergeProgramSyncMappings(mapping.selected, await fetchAllPrimaryMappings(supabase, options.dryRun))
+			: mapping.selected
+	).filter((entry) => !onlyMalIds || onlyMalIds.has(entry.malId));
 	// Sorted for stable batch composition, so the per-batch response cache hits
 	// across reruns of the same day.
 	const programTids = [...new Set(programMappings.map((entry) => entry.tid))]
@@ -1852,7 +1925,15 @@ async function main() {
 	let channels: SyobocalChannel[] = [];
 	// The program window is purely rolling (yesterday through +91 days): with
 	// catalog-wide mappings the season clamp would wrongly cut continuing shows.
-	const programRange = options.syncPrograms ? rollingSyobocalProgramRange("1900-01-01", "2999-12-31") : null;
+	const rollingRange = options.syncPrograms ? rollingSyobocalProgramRange("1900-01-01", "2999-12-31") : null;
+	const programRange =
+		rollingRange && options.programSince && options.programSince < rollingRange.startDate
+			? {
+					startDate: options.programSince,
+					endDate: rollingRange.endDate,
+					apiRange: `${options.programSince.replaceAll("-", "")}_000000-${rollingRange.apiRange.split("-")[1]}`,
+				}
+			: rollingRange;
 	if (programRange && programMappings.length > 0) {
 		console.log(
 			`Program sync range: ${programRange.startDate} through ${programRange.endDate} (end exclusive) for ${programTids.length} mapped titles.`,
@@ -1930,7 +2011,6 @@ async function main() {
 			tid: title.tid,
 			source_url: `https://cal.syoboi.jp/tid/${title.tid}`,
 			title: title.title,
-			short_title: title.shortTitle,
 			title_yomi: title.titleYomi,
 			category: title.category,
 			first_year: title.firstYear,
