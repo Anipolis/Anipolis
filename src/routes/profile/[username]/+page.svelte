@@ -676,15 +676,20 @@ function listButtonFor(anime: Anime) {
 		</div>
 
 		{#if showUserReportModal}
-			<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
-			<div class="report-modal-overlay" role="presentation" onclick={() => (showUserReportModal = false)}>
+			<div class="report-modal-overlay">
+				<button
+					type="button"
+					class="modal-click-target modal-click-layer"
+					tabindex="-1"
+					aria-label="閉じる"
+					onclick={() => (showUserReportModal = false)}
+				></button>
 				<div
-					class="report-modal-card"
+					class="report-modal-card modal-content-layer"
 					role="dialog"
 					aria-modal="true"
 					aria-labelledby="user-report-title"
 					tabindex="-1"
-					onclick={(event) => event.stopPropagation()}
 					onkeydown={(event) => event.stopPropagation()}
 				>
 					<div class="report-modal-header">
@@ -742,15 +747,20 @@ function listButtonFor(anime: Anime) {
 		{/if}
 
 		{#if showProfileEditModal && isOwn}
-			<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
-			<div class="profile-edit-modal-overlay" role="presentation" onclick={closeProfileEditModal}>
+			<div class="profile-edit-modal-overlay">
+				<button
+					type="button"
+					class="modal-click-target modal-click-layer"
+					tabindex="-1"
+					aria-label="閉じる"
+					onclick={closeProfileEditModal}
+				></button>
 				<div
-					class="profile-edit-modal-card"
+					class="profile-edit-modal-card modal-content-layer"
 					role="dialog"
 					aria-modal="true"
 					aria-labelledby="profile-edit-title"
 					tabindex="-1"
-					onclick={(event) => event.stopPropagation()}
 					onkeydown={(event) => {
 						event.stopPropagation();
 						if (event.key === "Escape") closeProfileEditModal();

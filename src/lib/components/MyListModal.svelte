@@ -213,19 +213,22 @@ $effect(() => {
 </script>
 
 {#if open}
-	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
-	<div class="modal-backdrop" role="presentation" onclick={() => !submitting && onclose()}>
-		<!-- biome-ignore lint/a11y/useKeyWithClickEvents: 背景クリックの伝播を止めるだけで、要素自体は操作しない -->
+	<div class="modal-backdrop">
+		<button
+			type="button"
+			class="modal-click-target modal-click-layer"
+			tabindex="-1"
+			aria-label="閉じる"
+			onclick={() => !submitting && onclose()}
+		></button>
 		<div
-			class="modal-card"
+			class="modal-card modal-content-layer"
 			class:modal-card--compact={statusOnly}
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="mylist-modal-title"
 			tabindex="-1"
 			use:trapFocus
-			onclick={(e) => e.stopPropagation()}
 		>
 			<header class="modal-header" class:modal-header--removable={Boolean(entry && removeAction)}>
 				<h2 id="mylist-modal-title">{statusOnly ? "マイリストに追加" : "マイリスト登録・編集"}</h2>

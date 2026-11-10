@@ -711,8 +711,7 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 			</div>
 
 			<!-- 追加機能（画像・アニメ引用・CW・実況ルーム）のタイル -->
-			<!-- biome-ignore lint/a11y/useSemanticElements: ボタン群のグルーピングには role="group" を使う（フォーム項目ではない） -->
-			<div class="composer-tools" role="group" aria-label="投稿の追加機能">
+			<fieldset class="composer-tools fieldset-reset" aria-label="投稿の追加機能">
 				<button
 					type="button"
 					class="composer-tool-tile"
@@ -770,7 +769,7 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 					<span class="i-lucide-door-open" aria-hidden="true"></span>
 					<span class="composer-tool-label">ルーム</span>
 				</button>
-			</div>
+			</fieldset>
 
 			{#if selectedAnime || selectedCwAnime || selectedRoom}
 				<div class="flex flex-wrap gap-2 mt-2 mb-0.5">

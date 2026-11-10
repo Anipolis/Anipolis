@@ -37,24 +37,21 @@ function handleKeydown(event: KeyboardEvent) {
 {/if}
 
 {#if controller.quoteModalOpen}
-	<!-- svelte-ignore a11y_no_noninteractive_element_interactions a11y_click_events_have_key_events -->
-	<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
-	<div
-		class="quote-modal-overlay"
-		role="presentation"
-		onclick={(e) => {
-			e.stopPropagation();
-			if (e.target === e.currentTarget) controller.closeQuoteModal();
-		}}
-	>
+	<div class="quote-modal-overlay">
+		<button
+			type="button"
+			class="modal-click-target modal-click-layer"
+			tabindex="-1"
+			aria-label="閉じる"
+			onclick={() => controller.closeQuoteModal()}
+		></button>
 		<div
-			class="quote-modal-card"
+			class="quote-modal-card modal-content-layer"
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="quote-modal-title"
 			tabindex="-1"
 			use:trapFocus
-			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.stopPropagation()}
 		>
 			<div class="quote-modal-header">
@@ -111,25 +108,21 @@ function handleKeydown(event: KeyboardEvent) {
 {/if}
 
 {#if controller.exchangeModalOpen && post.exchange_share}
-	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
-	<div
-		class="exchange-result-modal-overlay"
-		role="presentation"
-		onclick={(e) => {
-			e.stopPropagation();
-			controller.exchangeModalOpen = false;
-		}}
-	>
-		<!-- biome-ignore lint/a11y/useKeyWithClickEvents: 背景クリックの伝播を止めるだけで、要素自体は操作しない -->
+	<div class="exchange-result-modal-overlay">
+		<button
+			type="button"
+			class="modal-click-target modal-click-layer"
+			tabindex="-1"
+			aria-label="閉じる"
+			onclick={() => (controller.exchangeModalOpen = false)}
+		></button>
 		<div
-			class="exchange-result-modal-card"
+			class="exchange-result-modal-card modal-content-layer"
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="exchange-result-modal-title"
 			tabindex="-1"
 			use:trapFocus
-			onclick={(e) => e.stopPropagation()}
 		>
 			<div class="exchange-result-modal-header">
 				<span id="exchange-result-modal-title" class="exchange-result-modal-title">トレード結果</span>
@@ -161,26 +154,20 @@ function handleKeydown(event: KeyboardEvent) {
 {/if}
 
 {#if controller.lightboxUrl}
-	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<!-- biome-ignore lint/a11y/useKeyWithClickEvents: 背景クリックの伝播を止めるだけで、要素自体は操作しない -->
-	<div
-		class="lightbox-overlay"
-		onclick={(e) => {
-			e.stopPropagation();
-			controller.lightboxUrl = null;
-		}}
-		role="dialog"
-		aria-modal="true"
-		aria-label="画像拡大表示"
-		tabindex="-1"
-		use:trapFocus
-	>
-		<button type="button" class="lightbox-content" onclick={(e) => e.stopPropagation()} aria-label="拡大画像">
+	<div class="lightbox-overlay" role="dialog" aria-modal="true" aria-label="画像拡大表示" tabindex="-1" use:trapFocus>
+		<button
+			type="button"
+			class="modal-click-target modal-click-layer"
+			tabindex="-1"
+			aria-label="閉じる"
+			onclick={() => (controller.lightboxUrl = null)}
+		></button>
+		<button type="button" class="lightbox-content modal-content-layer" aria-label="拡大画像">
 			<img src={controller.lightboxUrl} alt="拡大画像" class="lightbox-image">
 		</button>
 		<button
 			type="button"
-			class="lightbox-close"
+			class="lightbox-close modal-content-layer"
 			onclick={() => (controller.lightboxUrl = null)}
 			aria-label="閉じる"
 		>
@@ -190,25 +177,21 @@ function handleKeydown(event: KeyboardEvent) {
 {/if}
 
 {#if controller.reportModalOpen}
-	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<!-- biome-ignore lint/a11y/noStaticElementInteractions: ダイアログ内の閉じるボタンと Escape で操作できる -->
-	<div
-		class="report-modal-overlay"
-		role="presentation"
-		onclick={(e) => {
-			e.stopPropagation();
-			controller.reportModalOpen = false;
-		}}
-	>
-		<!-- biome-ignore lint/a11y/useKeyWithClickEvents: 背景クリックの伝播を止めるだけで、要素自体は操作しない -->
+	<div class="report-modal-overlay">
+		<button
+			type="button"
+			class="modal-click-target modal-click-layer"
+			tabindex="-1"
+			aria-label="閉じる"
+			onclick={() => (controller.reportModalOpen = false)}
+		></button>
 		<div
-			class="report-modal-card"
+			class="report-modal-card modal-content-layer"
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="report-modal-title"
 			tabindex="-1"
 			use:trapFocus
-			onclick={(e) => e.stopPropagation()}
 		>
 			<div class="report-modal-header">
 				<span id="report-modal-title" class="report-modal-title">投稿を通報</span>
@@ -256,25 +239,21 @@ function handleKeydown(event: KeyboardEvent) {
 {/if}
 
 {#if controller.deleteModalOpen}
-	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
-	<div
-		class="delete-modal-overlay"
-		role="presentation"
-		onclick={(e) => {
-			e.stopPropagation();
-			controller.deleteModalOpen = false;
-		}}
-	>
-		<!-- biome-ignore lint/a11y/useKeyWithClickEvents: 背景クリックの伝播を止めるだけで、要素自体は操作しない -->
+	<div class="delete-modal-overlay">
+		<button
+			type="button"
+			class="modal-click-target modal-click-layer"
+			tabindex="-1"
+			aria-label="閉じる"
+			onclick={() => (controller.deleteModalOpen = false)}
+		></button>
 		<div
-			class="delete-modal-card"
+			class="delete-modal-card modal-content-layer"
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="delete-modal-title"
 			tabindex="-1"
 			use:trapFocus
-			onclick={(e) => e.stopPropagation()}
 		>
 			<div class="delete-modal-header">
 				<span id="delete-modal-title" class="delete-modal-title">投稿を削除</span>

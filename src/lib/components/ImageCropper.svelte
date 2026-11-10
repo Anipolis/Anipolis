@@ -185,16 +185,16 @@ async function confirmCrop(): Promise<void> {
 
 <svelte:window onkeydown={handleWindowKeydown} />
 
-<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
-<div
-	class="cropper-backdrop"
-	role="presentation"
-	onclick={(event) => {
-		if (event.target === event.currentTarget) cancel();
-	}}
->
+<div class="cropper-backdrop">
+	<button
+		type="button"
+		class="modal-click-target modal-click-layer"
+		tabindex="-1"
+		aria-label="閉じる"
+		onclick={cancel}
+	></button>
 	<div
-		class="cropper"
+		class="cropper modal-content-layer"
 		class:cropper--wide={isHeader}
 		use:trapFocus
 		role="dialog"

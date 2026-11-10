@@ -230,10 +230,13 @@ function isActive(path: string): boolean {
 
 <!-- Mobile drawer backdrop -->
 {#if drawerOpen}
-	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<!-- biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: 背景クリックは補助操作。メニュー内の項目で閉じられる -->
-	<div class="mobile-drawer-backdrop" onclick={closeDrawer}></div>
+	<button
+		type="button"
+		class="mobile-drawer-backdrop modal-click-target"
+		tabindex="-1"
+		aria-label="ナビゲーションを閉じる"
+		onclick={closeDrawer}
+	></button>
 {/if}
 
 <!-- Mobile drawer -->
@@ -832,16 +835,23 @@ function isActive(path: string): boolean {
 
 			<div class="account-menu-wrapper">
 				{#if menuOpen}
-					<!-- svelte-ignore a11y_click_events_have_key_events -->
-					<!-- svelte-ignore a11y_no_static_element_interactions -->
-					<!-- biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: 背景クリックは補助操作。メニュー内の項目で閉じられる -->
-					<div class="account-menu-backdrop" onclick={() => (menuOpen = false)}></div>
+					<button
+						type="button"
+						class="account-menu-backdrop modal-click-target"
+						tabindex="-1"
+						aria-label="アカウントメニューを閉じる"
+						onclick={() => (menuOpen = false)}
+					></button>
 					<div class="account-menu" role="menu">
 						<!-- 現在ログイン中のアカウント（ハイライト表示） -->
 						{#if profile}
 							<div class="account-menu-section">
-								<!-- biome-ignore lint/a11y/useFocusableInteractive: 現在のアカウント表示は操作できない -->
-								<div class="account-menu-item account-menu-current" role="menuitem" aria-current="true">
+								<div
+									class="account-menu-item account-menu-current"
+									role="menuitem"
+									aria-current="true"
+									tabindex="-1"
+								>
 									<UserAvatar src={profile.avatar_url} username={displayName} size="sm" />
 									<div class="account-menu-identity">
 										<span class="account-menu-display">{displayName}</span>

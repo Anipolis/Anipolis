@@ -115,16 +115,21 @@ const handleDelete: SubmitFunction = ({ cancel }) => {
 };
 </script>
 
-<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
-<div class="collection-form-overlay" role="presentation" onclick={close}>
+<div class="collection-form-overlay">
+	<button
+		type="button"
+		class="modal-click-target modal-click-layer"
+		tabindex="-1"
+		aria-label="閉じる"
+		onclick={close}
+	></button>
 	<div
 		use:trapFocus
-		class="collection-form-card"
+		class="collection-form-card modal-content-layer"
 		role="dialog"
 		aria-modal="true"
 		aria-labelledby="collection-form-title"
 		tabindex="-1"
-		onclick={(event) => event.stopPropagation()}
 		onkeydown={(event) => {
 			event.stopPropagation();
 			if (event.key === "Escape") close();

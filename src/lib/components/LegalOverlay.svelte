@@ -35,15 +35,21 @@ function handleKeydown(event: KeyboardEvent) {
 
 <svelte:window onkeydown={handleKeydown} />
 
-<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
-<div
-	class="legal-overlay-backdrop"
-	role="presentation"
-	onclick={(event) => {
-		if (event.target === event.currentTarget) onclose();
-	}}
->
-	<div class="legal-overlay" use:trapFocus role="dialog" aria-modal="true" aria-labelledby="legal-overlay-title">
+<div class="legal-overlay-backdrop">
+	<button
+		type="button"
+		class="modal-click-target modal-click-layer"
+		tabindex="-1"
+		aria-label="閉じる"
+		onclick={onclose}
+	></button>
+	<div
+		class="legal-overlay modal-content-layer"
+		use:trapFocus
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="legal-overlay-title"
+	>
 		<div class="legal-overlay-header">
 			<h2 id="legal-overlay-title">{title}</h2>
 			<button type="button" class="legal-overlay-close" onclick={onclose} aria-label="閉じて入力画面に戻る">

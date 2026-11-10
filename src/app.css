@@ -3236,6 +3236,34 @@ textarea {
 	color: #fff;
 }
 
+.fieldset-reset {
+	border: 0;
+	padding: 0;
+	margin: 0;
+	min-width: 0;
+}
+
+/* --- Modal click layer --- */
+/* 背景クリックは pointer 専用にする。キーボードは閉じるボタンや Escape に任せる。 */
+.modal-click-target {
+	padding: 0;
+	margin: 0;
+	border: 0;
+	background: transparent;
+	cursor: pointer;
+}
+
+.modal-click-layer {
+	position: absolute;
+	inset: 0;
+	z-index: 0;
+}
+
+:where(.modal-content-layer) {
+	position: relative;
+	z-index: 1;
+}
+
 /* --- Repost dropdown --- */
 .post-repost-wrapper {
 	position: relative;

@@ -109,8 +109,7 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 		<div class="admin-section-header">
 			<h2>対象検索</h2>
 		</div>
-		<!-- biome-ignore lint/a11y/useSemanticElements: ボタン群のグルーピングには role="group" を使う（フォーム項目ではない） -->
-		<div class="target-toggle" role="group" aria-label="対象種別">
+		<fieldset class="target-toggle fieldset-reset" aria-label="対象種別">
 			<a
 				class="btn-toggle"
 				class:btn-toggle--active={data.target !== "event"}
@@ -125,7 +124,7 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 			>
 				イベント
 			</a>
-		</div>
+		</fieldset>
 		<form method="GET" class="search-form">
 			<input type="hidden" name="target" value={data.target}>
 			<input
@@ -424,16 +423,16 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 </main>
 
 {#if stopTarget}
-	<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
-	<div
-		class="modal-backdrop"
-		role="presentation"
-		onclick={(event) => {
-			if (event.target === event.currentTarget) stopTarget = null;
-		}}
-	>
+	<div class="modal-backdrop">
+		<button
+			type="button"
+			class="modal-click-target modal-click-layer"
+			tabindex="-1"
+			aria-label="閉じる"
+			onclick={() => (stopTarget = null)}
+		></button>
 		<div
-			class="modal"
+			class="modal modal-content-layer"
 			use:trapFocus
 			role="dialog"
 			aria-modal="true"

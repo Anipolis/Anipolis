@@ -692,8 +692,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 											aria-label="閉じる"
 											onclick={() => (openAlertMenu = null)}
 										></button>
-										<!-- biome-ignore lint/a11y/useSemanticElements: ボタン群のグルーピングには role="group" を使う（フォーム項目ではない） -->
-										<div class="room-alert-menu" role="group" aria-label="イベント設定">
+										<fieldset class="room-alert-menu fieldset-reset" aria-label="イベント設定">
 											{#if !event.is_cancelled}
 												<form
 													method="POST"
@@ -792,7 +791,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 													ミュート設定を管理
 												</a>
 											</div>
-										</div>
+										</fieldset>
 									{/if}
 								{/if}
 							</div>
@@ -983,8 +982,10 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 														aria-label="閉じる"
 														onclick={() => (openAlertMenu = null)}
 													></button>
-													<!-- biome-ignore lint/a11y/useSemanticElements: ボタン群のグルーピングには role="group" を使う（フォーム項目ではない） -->
-													<div class="room-alert-menu" role="group" aria-label="ルーム設定">
+													<fieldset
+														class="room-alert-menu fieldset-reset"
+														aria-label="ルーム設定"
+													>
 														{#if subscribable}
 															<form
 																method="POST"
@@ -1118,7 +1119,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 																カスタムミュート設定
 															</a>
 														</div>
-													</div>
+													</fieldset>
 												{/if}
 											{/if}
 										</div>

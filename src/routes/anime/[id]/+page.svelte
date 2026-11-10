@@ -1748,15 +1748,16 @@ $effect(() => {
 <svelte:window onkeydown={handleModalKeydown} />
 
 {#if showUserListModal}
-	<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
-	<div
-		class="user-list-modal-backdrop"
-		role="presentation"
-		onclick={handleUserListBackdropClick}
-		transition:fade={{ duration: 180 }}
-	>
+	<div class="user-list-modal-backdrop" transition:fade={{ duration: 180 }}>
+		<button
+			type="button"
+			class="modal-click-target modal-click-layer"
+			tabindex="-1"
+			aria-label="閉じる"
+			onclick={handleUserListBackdropClick}
+		></button>
 		<div
-			class="user-list-modal"
+			class="user-list-modal modal-content-layer"
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="user-list-modal-title"
@@ -1834,15 +1835,16 @@ $effect(() => {
 {/if}
 
 {#if recommendModalOpen}
-	<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
-	<div
-		class="user-list-modal-backdrop"
-		role="presentation"
-		onclick={handleRecommendBackdropClick}
-		transition:fade={{ duration: 180 }}
-	>
+	<div class="user-list-modal-backdrop" transition:fade={{ duration: 180 }}>
+		<button
+			type="button"
+			class="modal-click-target modal-click-layer"
+			tabindex="-1"
+			aria-label="閉じる"
+			onclick={handleRecommendBackdropClick}
+		></button>
 		<div
-			class="user-list-modal recommend-modal"
+			class="user-list-modal recommend-modal modal-content-layer"
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="recommend-modal-title"

@@ -154,17 +154,22 @@ async function save() {
 }
 </script>
 
-<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
-<div class="picker-overlay" role="presentation" onclick={close}>
+<div class="picker-overlay">
+	<button
+		type="button"
+		class="modal-click-target modal-click-layer"
+		tabindex="-1"
+		aria-label="閉じる"
+		onclick={close}
+	></button>
 	<div
 		bind:this={card}
 		use:trapFocus
-		class="picker-card"
+		class="picker-card modal-content-layer"
 		role="dialog"
 		aria-modal="true"
 		aria-labelledby="anime-picker-title"
 		tabindex="-1"
-		onclick={(event) => event.stopPropagation()}
 		onkeydown={(event) => {
 			event.stopPropagation();
 			if (event.key !== "Escape") return;

@@ -607,16 +607,21 @@ function onWindowKeyDown(event: KeyboardEvent) {
 
 {#if dialogTier !== null}
 	{@const tier = dialogTier}
-	<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
-	<div class="tier-dialog-overlay" role="presentation" onclick={closeTierDialog}>
+	<div class="tier-dialog-overlay">
+		<button
+			type="button"
+			class="modal-click-target modal-click-layer"
+			tabindex="-1"
+			aria-label="閉じる"
+			onclick={closeTierDialog}
+		></button>
 		<div
 			use:trapFocus
-			class="tier-dialog"
+			class="tier-dialog modal-content-layer"
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="tier-dialog-title"
 			tabindex="-1"
-			onclick={(event) => event.stopPropagation()}
 			onkeydown={(event) => {
 				event.stopPropagation();
 				if (event.key === "Escape") closeTierDialog();

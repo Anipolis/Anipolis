@@ -83,18 +83,21 @@ const handleCancelSubmit: SubmitFunction = () => {
 </script>
 
 {#if open}
-	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
-	<div class="modal-backdrop" role="presentation" onclick={() => onclose()}>
-		<!-- biome-ignore lint/a11y/useKeyWithClickEvents: 背景クリックの伝播を止めるだけで、要素自体は操作しない -->
+	<div class="modal-backdrop">
+		<button
+			type="button"
+			class="modal-click-target modal-click-layer"
+			tabindex="-1"
+			aria-label="閉じる"
+			onclick={() => onclose()}
+		></button>
 		<div
-			class="modal-card"
+			class="modal-card modal-content-layer"
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="event-settings-modal-title"
 			tabindex="-1"
 			use:trapFocus
-			onclick={(e) => e.stopPropagation()}
 		>
 			<header class="modal-header">
 				<h2 id="event-settings-modal-title">イベント設定</h2>

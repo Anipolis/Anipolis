@@ -375,8 +375,13 @@ $effect(() => {
 {#if $composeOpen && data.profile}
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<!-- biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
-	<div class="compose-modal-backdrop" onclick={closeModal}></div>
+	<button
+		type="button"
+		class="compose-modal-backdrop modal-click-target"
+		tabindex="-1"
+		aria-label="投稿画面を閉じる"
+		onclick={closeModal}
+	></button>
 	<!--
 		ダイアログとして読み上げられるようにし、フォーカスを内部に閉じ込める（GitLab #12）。
 		trapFocus は開いた時に内部へフォーカスを移し、閉じた時に起点（FAB）へ戻す。

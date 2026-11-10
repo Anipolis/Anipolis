@@ -131,16 +131,21 @@ function close() {
 	}}
 />
 
-<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
-<div class="add-collection-overlay" role="presentation" onclick={close}>
+<div class="add-collection-overlay">
+	<button
+		type="button"
+		class="modal-click-target modal-click-layer"
+		tabindex="-1"
+		aria-label="閉じる"
+		onclick={close}
+	></button>
 	<div
 		use:trapFocus
-		class="add-collection-card"
+		class="add-collection-card modal-content-layer"
 		role="dialog"
 		aria-modal="true"
 		aria-label="「{animeTitle}」をコレクションに追加"
 		tabindex="-1"
-		onclick={(event) => event.stopPropagation()}
 		onkeydown={(event) => {
 			event.stopPropagation();
 			if (event.key !== "Escape") return;

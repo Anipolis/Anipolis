@@ -161,13 +161,13 @@ function closeQuoteModal() {
 							</button>
 						</div>
 						<!-- backdrop to close menu -->
-						<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
-						<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
-						<div
-							class="fixed inset-0 z-10"
-							role="presentation"
+						<button
+							type="button"
+							class="fixed inset-0 z-10 modal-click-target"
+							tabindex="-1"
+							aria-label="リポストメニューを閉じる"
 							onclick={() => (showRepostMenu = false)}
-						></div>
+						></button>
 					{/if}
 				</div>
 			</div>
@@ -176,20 +176,20 @@ function closeQuoteModal() {
 </article>
 
 {#if showQuoteModal}
-	<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
-	<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-		role="presentation"
-		onclick={closeQuoteModal}
-	>
+	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+		<button
+			type="button"
+			class="modal-click-target modal-click-layer"
+			tabindex="-1"
+			aria-label="閉じる"
+			onclick={closeQuoteModal}
+		></button>
 		<div
-			class="w-full max-w-lg rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl"
+			class="modal-content-layer w-full max-w-lg rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl"
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="quote-modal-title"
 			tabindex="-1"
-			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.stopPropagation()}
 		>
 			<div class="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-3">

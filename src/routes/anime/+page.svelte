@@ -460,10 +460,8 @@ $effect(() => {
 											<InfoTip label="タグの絞り込み" text={ANIME_GENRE_FILTER_HELP} />
 										{/if}
 									</h2>
-									<!-- biome-ignore lint/a11y/useSemanticElements: ボタン群のグルーピングには role="group" を使う（フォーム項目ではない） -->
-									<div
-										class="drawer-genre-grid"
-										role="group"
+									<fieldset
+										class="drawer-genre-grid fieldset-reset"
 										aria-labelledby="genre-filter-desktop-{group.key}"
 									>
 										{#each group.tags as tag (tag.ja)}
@@ -477,7 +475,7 @@ $effect(() => {
 												{tag.ja}
 											</button>
 										{/each}
-									</div>
+									</fieldset>
 								</section>
 							{/each}
 
@@ -833,13 +831,16 @@ $effect(() => {
 	{/if}
 
 	{#if filterSheetOpen}
-		<!-- svelte-ignore a11y_click_events_have_key_events -->
-		<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
-		<div class="filter-sheet-overlay" role="presentation" onclick={closeFilterSheet}>
-			<!-- biome-ignore lint/a11y/useKeyWithClickEvents: 背景クリックの伝播を止めるだけで、要素自体は操作しない -->
+		<div class="filter-sheet-overlay">
+			<button
+				type="button"
+				class="modal-click-target modal-click-layer"
+				tabindex="-1"
+				aria-label="閉じる"
+				onclick={closeFilterSheet}
+			></button>
 			<div
-				class="filter-sheet"
-				onclick={(e) => e.stopPropagation()}
+				class="filter-sheet modal-content-layer"
 				role="dialog"
 				aria-modal="true"
 				aria-label="フィルター"
@@ -871,8 +872,10 @@ $effect(() => {
 									<InfoTip label="タグの絞り込み" text={ANIME_GENRE_FILTER_HELP} />
 								{/if}
 							</h3>
-							<!-- biome-ignore lint/a11y/useSemanticElements: ボタン群のグルーピングには role="group" を使う（フォーム項目ではない） -->
-							<div class="genre-chips" role="group" aria-labelledby="genre-filter-mobile-{group.key}">
+							<fieldset
+								class="genre-chips fieldset-reset"
+								aria-labelledby="genre-filter-mobile-{group.key}"
+							>
 								{#each group.tags as tag (tag.ja)}
 									<button
 										type="button"
@@ -884,7 +887,7 @@ $effect(() => {
 										{tag.ja}
 									</button>
 								{/each}
-							</div>
+							</fieldset>
 						</section>
 					{/each}
 

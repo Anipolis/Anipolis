@@ -9,7 +9,8 @@ const FOCUSABLE = [
 
 function getFocusable(node: HTMLElement): HTMLElement[] {
 	return Array.from(node.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
-		(el) => !el.closest("[inert],[hidden]") && el.getClientRects().length > 0,
+		(el) =>
+			el.getAttribute("tabindex") !== "-1" && !el.closest("[inert],[hidden]") && el.getClientRects().length > 0,
 	);
 }
 
