@@ -1,4 +1,4 @@
-﻿<script lang="ts">
+<script lang="ts">
 import type { Session } from "@supabase/supabase-js";
 import { browser } from "$app/environment";
 import { goto, invalidateAll } from "$app/navigation";
@@ -16,7 +16,7 @@ interface Props {
 	session: Session | null;
 	profile: Profile;
 	unreadNotificationCount?: number;
-	unreadBroadcastNotificationCount?: number;
+	unreadReminderCount?: number;
 	pendingReportsCount?: number;
 	extraAccounts?: StoredAccount[];
 	/** 初期設定の途中など。ロゴ・テーマ切り替え・アカウント（ログアウト）だけを出し、画面へのリンクは出さない */
@@ -28,7 +28,7 @@ let {
 	session,
 	profile,
 	unreadNotificationCount = 0,
-	unreadBroadcastNotificationCount = 0,
+	unreadReminderCount = 0,
 	pendingReportsCount = 0,
 	extraAccounts = [],
 	minimal = false,
@@ -629,8 +629,8 @@ function isActive(path: string): boolean {
 					<rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
 					<path d="M16 2l-4 5-4-5" />
 				</svg>
-				{#if unreadBroadcastNotificationCount > 0}
-					<span class="sidebar-indicator" aria-label="未読の放送通知があります"></span>
+				{#if unreadReminderCount > 0}
+					<span class="sidebar-indicator" aria-label="放送前のお知らせがあります"></span>
 				{/if}
 				<span class="sidebar-btn-label">カレンダー</span>
 			</a>

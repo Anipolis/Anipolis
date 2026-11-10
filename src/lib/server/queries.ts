@@ -7,6 +7,12 @@ import { type CollectionKind, type CollectionMembership, isCollectionKind } from
 import type { EpisodeRoomBounds } from "$lib/episode-room";
 import { toValidExchangeSubjectiveTags } from "$lib/exchange-tags";
 import { isOwnPostImage, postImageMediaUrl } from "$lib/post-image-url";
+import {
+	ROOM_REMINDER_LOOKBACK_MS,
+	type RoomReminder,
+	type RoomReminderRow,
+	toActiveRoomReminders,
+} from "$lib/room-reminders";
 import { getAssuranceLevel, isAdminMfaRequired } from "$lib/server/mfa";
 import { signPostImageUrls } from "$lib/server/post-image-signing";
 import { buildPostCardSelect, POST_CW_ANIME_SELECT } from "$lib/server/post-selects";
@@ -872,8 +878,9 @@ export async function getUnreadNotificationCount(supabase: SupabaseClient<Databa
 		.select("id", { count: "exact", head: true })
 		.eq("recipient_id", userId)
 		.eq("read", false)
-		// 181 より前のマイリスト通知（フォロー中の人の動き）は、もう画面に出さないので数えない
-		.neq("type", "mylist_status" as never);
+		// 181 より前のマイリスト通知（フォロー中の人の動き）は、もう画面に出さないので数えない。
+		// 放送前のお知らせ（broadcast）は通知ではなくカレンダーに出すので数えない
+		.not("type", "in", "(broadcast,mylist_status)");
 	// ミュートした相手からの通知は一覧に出さないので、未読にも数えない（191）
 	if (mutedUserIds.size > 0) {
 		query = query.or(`actor_id.is.null,actor_id.not.in.(${[...mutedUserIds].join(",")})`);
@@ -883,41 +890,37 @@ export async function getUnreadNotificationCount(supabase: SupabaseClient<Databa
 	return count ?? 0;
 }
 
-export async function getUnreadBroadcastNotificationCount(
-	supabase: SupabaseClient<Database>,
-	userId: string,
-): Promise<number> {
-	const { count } = await supabase
-		.from("notifications")
-		.select("id", { count: "exact", head: true })
-		.eq("recipient_id", userId)
-		.eq("read", false)
-		.eq("type", "broadcast" as never);
-
-	return count ?? 0;
-}
-
-export interface NotificationCategoryCounts {
-	normal: number;
-	room: number;
-}
-
 /**
- * 通知タブごとの未読数を返す。
- * - room   = broadcast
- * - normal = 上記以外（181 より前のマイリスト通知は数えない）
+ * 放送がまだ終わっていない「もうすぐ始まる」お知らせ（カレンダーの上と小さな表示に出す）。
+ * 取れなかったときは空にする（お知らせが出ないだけで、ページは開ける）
  */
-export async function getUnreadNotificationCountsByCategory(
+export async function getActiveRoomReminders(
 	supabase: SupabaseClient<Database>,
 	userId: string,
-): Promise<NotificationCategoryCounts> {
-	// getUnreadNotificationCount は mylist_status を除外済み（= normal + room 相当）
-	const [nonMylistTotal, room] = await Promise.all([
-		getUnreadNotificationCount(supabase, userId),
-		getUnreadBroadcastNotificationCount(supabase, userId),
-	]);
-
-	return { normal: Math.max(0, nonMylistTotal - room), room };
+	now = new Date(),
+): Promise<RoomReminder[]> {
+	const { data, error } = await supabase
+		.from("notifications")
+		.select(`
+            id,
+            read,
+            broadcast_anime_id,
+            broadcast_scheduled_at,
+            broadcast_room_date,
+            event_id,
+            broadcast_anime:anime!notifications_broadcast_anime_id_fkey ( title, cover_url, broadcast_duration_minutes ),
+            event:events!notifications_event_id_fkey ( title, duration_minutes )
+        `)
+		.eq("recipient_id", userId)
+		.eq("type", "broadcast" as never)
+		.gte("broadcast_scheduled_at", new Date(now.getTime() - ROOM_REMINDER_LOOKBACK_MS).toISOString())
+		.order("created_at", { ascending: false })
+		.limit(50);
+	if (error) {
+		console.error("getActiveRoomReminders error:", error);
+		return [];
+	}
+	return toActiveRoomReminders((data ?? []) as unknown as RoomReminderRow[], now);
 }
 
 // ================================================================

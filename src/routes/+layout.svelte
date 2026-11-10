@@ -6,11 +6,13 @@ import AccountBoundary from "$lib/components/AccountBoundary.svelte";
 import DevEnvBadge from "$lib/components/DevEnvBadge.svelte";
 import MobileBottomNav from "$lib/components/MobileBottomNav.svelte";
 import MobileSwipeNavigation from "$lib/components/MobileSwipeNavigation.svelte";
+import RoomReminderToasts from "$lib/components/RoomReminderToasts.svelte";
 import RouteNavigationSkeleton from "$lib/components/RouteNavigationSkeleton.svelte";
 import Sidebar from "$lib/components/Sidebar.svelte";
 import { navigationSkeletonPath } from "$lib/navigation-skeleton";
+import { type RoomReminder, unreadRoomReminderCount } from "$lib/room-reminders";
 import { composeOpen } from "$lib/stores/compose";
-import { notificationCountsRefresh } from "$lib/stores/notifications";
+import { notificationCountsRefresh, roomReminders } from "$lib/stores/notifications";
 import type { LayoutProps } from "./$types";
 import "virtual:uno.css";
 import "@fontsource/zen-maru-gothic/400.css";
@@ -21,7 +23,11 @@ import "../app.css";
 
 let { data, children }: LayoutProps = $props();
 let unreadNotificationCount = $state(0);
-let unreadBroadcastNotificationCount = $state(0);
+let reminderToasts = $state<ReturnType<typeof RoomReminderToasts>>();
+// カレンダーの点は、まだ終わっていない放送前のお知らせのうち、カレンダーを開いて見ていないものがあるとき
+const unreadReminderCount = $derived(unreadRoomReminderCount($roomReminders));
+const onSchedulePage = $derived(page.url.pathname.startsWith("/schedule"));
+let markingRemindersRead = false;
 let pendingReportsCount = $state(0);
 const roomScrollLocked = $derived(page.url.pathname.startsWith("/rooms/anime/"));
 // 初期設定の途中は、押しても初期設定に戻されるだけの画面リンク（サイドバー・下のナビ）を出さない（#423）
@@ -55,7 +61,7 @@ $effect(() => {
 async function refreshNotificationCounts() {
 	if (!data.session) {
 		unreadNotificationCount = 0;
-		unreadBroadcastNotificationCount = 0;
+		receiveRoomReminders([]);
 		return;
 	}
 
@@ -63,19 +69,45 @@ async function refreshNotificationCounts() {
 	if (!response.ok) return;
 	const counts = (await response.json()) as {
 		unreadNotificationCount?: number;
-		unreadBroadcastNotificationCount?: number;
+		roomReminders?: RoomReminder[];
 	};
 	unreadNotificationCount = counts.unreadNotificationCount ?? 0;
-	unreadBroadcastNotificationCount = counts.unreadBroadcastNotificationCount ?? 0;
+	receiveRoomReminders(counts.roomReminders ?? []);
 }
+
+// 鳴ったばかりのお知らせを小さく出してから一覧に入れる（カレンダーを開いていると、そのあとすぐ既読になる）
+function receiveRoomReminders(next: RoomReminder[]) {
+	reminderToasts?.notify(next);
+	roomReminders.set(next);
+}
+
+// カレンダーを開いている間に未読のお知らせがあれば既読にする（点を消す）
+$effect(() => {
+	if (!onSchedulePage || unreadReminderCount === 0 || markingRemindersRead) return;
+	markingRemindersRead = true;
+	void fetch("/api/notifications/read", {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({ category: "room" }),
+	})
+		.then((response) => {
+			if (response.ok) roomReminders.update((list) => list.map((reminder) => ({ ...reminder, read: true })));
+		})
+		.catch(() => {
+			// 失敗したら点を残す（次に読み直したときにもう一度試す）
+		})
+		.finally(() => {
+			markingRemindersRead = false;
+		});
+});
 
 $effect(() => {
 	let active = true;
 	void Promise.resolve(data.unreadNotificationCount ?? 0).then((count) => {
 		if (active) unreadNotificationCount = count;
 	});
-	void Promise.resolve(data.unreadBroadcastNotificationCount ?? 0).then((count) => {
-		if (active) unreadBroadcastNotificationCount = count;
+	void Promise.resolve(data.roomReminders ?? []).then((list) => {
+		if (active) receiveRoomReminders(list);
 	});
 	void Promise.resolve(data.pendingReportsCount ?? 0).then((count) => {
 		if (active) pendingReportsCount = count;
@@ -136,7 +168,7 @@ function handleFabClick() {
 		session={data.session}
 		profile={data.profile}
 		{unreadNotificationCount}
-		{unreadBroadcastNotificationCount}
+		{unreadReminderCount}
 		{pendingReportsCount}
 		extraAccounts={data.extraAccounts}
 		minimal={minimalChrome}
@@ -152,9 +184,10 @@ function handleFabClick() {
 </div>
 
 {#if !minimalChrome}
-	<MobileBottomNav session={data.session} {unreadNotificationCount} />
+	<MobileBottomNav session={data.session} {unreadNotificationCount} {unreadReminderCount} />
 {/if}
 <DevEnvBadge />
+<RoomReminderToasts bind:this={reminderToasts} />
 <MobileSwipeNavigation session={data.session} />
 
 <!-- FAB: compose post (mobile only) -->

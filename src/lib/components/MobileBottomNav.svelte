@@ -6,9 +6,11 @@ import AnimeIcon from "./AnimeIcon.svelte";
 interface Props {
 	session: Session | null;
 	unreadNotificationCount?: number;
+	/** 放送前のお知らせのうち、カレンダーを開いて見ていないもの（カレンダーに点を付ける） */
+	unreadReminderCount?: number;
 }
 
-let { session, unreadNotificationCount = 0 }: Props = $props();
+let { session, unreadNotificationCount = 0, unreadReminderCount = 0 }: Props = $props();
 const activePath = $derived(navigating?.to?.url.pathname ?? page.url.pathname);
 
 function isActive(path: string): boolean {
@@ -74,20 +76,25 @@ function isActive(path: string): boolean {
 			aria-label="カレンダー"
 			aria-current={isActive('/schedule') || isActive('/events') ? 'page' : undefined}
 		>
-			<svg
-				width="22"
-				height="22"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-				aria-hidden="true"
-			>
-				<rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
-				<path d="M16 2l-4 5-4-5" />
-			</svg>
+			<span class="mobile-tab-icon-wrap">
+				<svg
+					width="22"
+					height="22"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
+					<rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+					<path d="M16 2l-4 5-4-5" />
+				</svg>
+				{#if unreadReminderCount > 0}
+					<span class="mobile-tab-dot" aria-label="放送前のお知らせがあります"></span>
+				{/if}
+			</span>
 			<span class="mobile-tab-label">カレンダー</span>
 		</a>
 
@@ -181,20 +188,25 @@ function isActive(path: string): boolean {
 			aria-label="カレンダー"
 			aria-current={isActive('/schedule') || isActive('/events') ? 'page' : undefined}
 		>
-			<svg
-				width="22"
-				height="22"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-				aria-hidden="true"
-			>
-				<rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
-				<path d="M16 2l-4 5-4-5" />
-			</svg>
+			<span class="mobile-tab-icon-wrap">
+				<svg
+					width="22"
+					height="22"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
+					<rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+					<path d="M16 2l-4 5-4-5" />
+				</svg>
+				{#if unreadReminderCount > 0}
+					<span class="mobile-tab-dot" aria-label="放送前のお知らせがあります"></span>
+				{/if}
+			</span>
 			<span class="mobile-tab-label">カレンダー</span>
 		</a>
 
@@ -288,6 +300,18 @@ function isActive(path: string): boolean {
 	.mobile-bottom-nav {
 		display: flex;
 	}
+}
+
+.mobile-tab-dot {
+	position: absolute;
+	top: -3px;
+	right: -5px;
+	width: 10px;
+	height: 10px;
+	border: 2px solid var(--color-bg);
+	border-radius: 9999px;
+	background: var(--color-accent);
+	pointer-events: none;
 }
 
 .mobile-tab-badge {

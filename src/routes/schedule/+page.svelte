@@ -3,6 +3,8 @@ import type { SubmitFunction } from "@sveltejs/kit";
 import { untrack } from "svelte";
 import { enhance } from "$app/forms";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
+import { roomReminderStatus, roomReminderTime } from "$lib/room-reminders";
+import { roomReminders } from "$lib/stores/notifications";
 import type { Anime, BroadcastRoomOverride } from "$lib/types";
 import {
 	type BroadcastEpisodeSlot,
@@ -29,6 +31,13 @@ interface AnimeSearchResult {
 	title_en: string | null;
 	cover_url: string | null;
 }
+
+// 放送前のお知らせの「あと何分」を進める（一覧そのものは layout が30秒ごとに読み直す）
+let reminderNow = $state(Date.now());
+$effect(() => {
+	const timer = setInterval(() => (reminderNow = Date.now()), 30_000);
+	return () => clearInterval(timer);
+});
 
 let showEventDialog = $state(false);
 let openAlertMenu = $state<string | null>(null);
@@ -500,6 +509,37 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 			{/if}
 		</div>
 	</header>
+
+	{#if $roomReminders.length > 0}
+		<!-- ベルを付けた番組の、鳴ったお知らせ。放送が終わると消える（通知のように履歴には残さない） -->
+		<section class="schedule-reminders" aria-label="放送前のお知らせ">
+			<ul class="schedule-reminder-list">
+				{#each $roomReminders as reminder (reminder.id)}
+					<li>
+						<a href={reminder.href} class="schedule-reminder">
+							<span class="schedule-reminder-cover">
+								{#if reminder.cover_url}
+									<img
+										src={coverThumbSrc(reminder.cover_url)}
+										{@attach coverThumbFallback(reminder.cover_url)}
+										alt=""
+									>
+								{:else}
+									<span class="i-lucide-calendar-clock" aria-hidden="true"></span>
+								{/if}
+							</span>
+							<span class="schedule-reminder-title">{reminder.title}</span>
+							<span class="schedule-reminder-meta">
+								<span class="i-lucide-alarm-clock" aria-hidden="true"></span>
+								{roomReminderStatus(reminder, reminderNow)}・{roomReminderTime(reminder)}
+								開始
+							</span>
+						</a>
+					</li>
+				{/each}
+			</ul>
+		</section>
+	{/if}
 
 	{#if form && "roomMuteError" in form && "message" in form}
 		<p class="form-error schedule-flash">{form.message}</p>
@@ -1239,6 +1279,68 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 }
 .schedule-flash {
 	margin: 0 0 10px;
+}
+.schedule-reminders {
+	margin: 0 0 12px;
+}
+.schedule-reminder-list {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+	gap: 8px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.schedule-reminder {
+	display: grid;
+	grid-template-columns: 36px minmax(0, 1fr);
+	grid-template-rows: auto auto;
+	column-gap: 10px;
+	row-gap: 2px;
+	align-items: center;
+	padding: 8px;
+	border: 1px solid var(--color-border);
+	border-radius: 12px;
+	background: var(--color-bg-card);
+	color: var(--color-text);
+	text-decoration: none;
+}
+.schedule-reminder:hover {
+	background: var(--color-surface-hover);
+}
+.schedule-reminder-cover {
+	display: flex;
+	grid-row: 1 / 3;
+	align-items: center;
+	justify-content: center;
+	width: 36px;
+	aspect-ratio: 400 / 566;
+	overflow: hidden;
+	border-radius: 6px;
+	background: var(--color-border);
+	color: var(--color-accent);
+	font-size: 16px;
+}
+.schedule-reminder-cover img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+.schedule-reminder-title {
+	overflow: hidden;
+	font-size: 14px;
+	font-weight: 700;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.schedule-reminder-meta {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	color: var(--color-accent);
+	font-size: 12px;
+	font-weight: 600;
 }
 .week-nav {
 	display: flex;
