@@ -904,6 +904,7 @@ export async function getActiveRoomReminders(
 		.select(`
             id,
             read,
+            created_at,
             broadcast_anime_id,
             broadcast_scheduled_at,
             broadcast_room_date,

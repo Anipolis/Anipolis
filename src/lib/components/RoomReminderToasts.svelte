@@ -1,10 +1,10 @@
 <script lang="ts">
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
-import { type RoomReminder, roomReminderStatus, roomReminderTime } from "$lib/room-reminders";
+import { type RoomReminder, roomReminderStatus, roomReminderTime, roomReminderToastKey } from "$lib/room-reminders";
 
 /**
  * 放送前のお知らせが鳴った瞬間に、パソコンは右下・スマホは上に小さく出す。
- * 同じお知らせ（通知の行の id）は、この端末で一度だけ出す。数秒で消え、×でも閉じられる
+ * 同じお知らせ（通知の行が鳴った1回）は、この端末で一度だけ出す。数秒で消え、×でも閉じられる
  */
 
 const SHOWN_KEY = "anipolis:room-reminder-toasts";
@@ -35,11 +35,13 @@ function writeShown(ids: string[]) {
 /** layout が新しいお知らせを受け取るたびに呼ぶ。未読でまだ出していないものだけ出す */
 export function notify(reminders: readonly RoomReminder[]) {
 	const shown = readShown();
-	const fresh = reminders.filter((reminder) => !reminder.read && !shown.includes(reminder.id));
+	const fresh = reminders.filter((reminder) => !reminder.read && !shown.includes(roomReminderToastKey(reminder)));
 	if (fresh.length === 0) return;
-	writeShown([...shown, ...fresh.map((reminder) => reminder.id)]);
+	writeShown([...shown, ...fresh.map(roomReminderToastKey)]);
 	for (const reminder of fresh) {
 		toasts = [...toasts.filter((toast) => toast.id !== reminder.id), reminder].slice(-VISIBLE_LIMIT);
+		const previous = timers.get(reminder.id);
+		if (previous) clearTimeout(previous);
 		timers.set(
 			reminder.id,
 			setTimeout(() => dismiss(reminder.id), DISMISS_MS),

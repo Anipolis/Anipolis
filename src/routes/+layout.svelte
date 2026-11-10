@@ -65,12 +65,16 @@ async function refreshNotificationCounts() {
 		return;
 	}
 
+	// 読んでいる間にアカウントを切り替えたら、前のアカウントの結果は捨てる
+	// （AccountBoundary が作り直すのはページだけで、layout とお知らせのストアは残る）
+	const userId = data.user?.id;
 	const response = await fetch("/api/notifications/unread-counts");
 	if (!response.ok) return;
 	const counts = (await response.json()) as {
 		unreadNotificationCount?: number;
 		roomReminders?: RoomReminder[];
 	};
+	if (data.user?.id !== userId) return;
 	unreadNotificationCount = counts.unreadNotificationCount ?? 0;
 	receiveRoomReminders(counts.roomReminders ?? []);
 }
@@ -85,13 +89,15 @@ function receiveRoomReminders(next: RoomReminder[]) {
 $effect(() => {
 	if (!onSchedulePage || unreadReminderCount === 0 || markingRemindersRead) return;
 	markingRemindersRead = true;
+	const userId = untrack(() => data.user?.id);
 	void fetch("/api/notifications/read", {
 		method: "POST",
 		headers: { "content-type": "application/json" },
 		body: JSON.stringify({ category: "room" }),
 	})
 		.then((response) => {
-			if (response.ok) roomReminders.update((list) => list.map((reminder) => ({ ...reminder, read: true })));
+			if (!response.ok || data.user?.id !== userId) return;
+			roomReminders.update((list) => list.map((reminder) => ({ ...reminder, read: true })));
 		})
 		.catch(() => {
 			// 失敗したら点を残す（次に読み直したときにもう一度試す）

@@ -1,11 +1,14 @@
 /**
  * カレンダーでベルを付けた番組・イベントの「もうすぐ始まる」お知らせ。
- * 通知の行（type = broadcast）は選んだタイミング（1分前・5分前・30分前）で鳴るたびに作られるが、
- * 履歴としては残さず、放送が終わるまでカレンダーの上と右下（スマホは上）の小さな表示に出す。
+ * 通知の行（type = broadcast）は放送ごとに1行で、選んだタイミング（1分前・5分前・30分前）で鳴るたびに
+ * 同じ行の created_at と read が書き換わる（096）。履歴としては残さず、放送が終わるまで
+ * カレンダーの上と右下（スマホは上）の小さな表示に出す。
  */
 export interface RoomReminder {
-	/** 番組の中で一番新しく鳴った通知の行の id。小さな表示は id ごとに一度だけ出す */
+	/** 番組の中で一番新しく鳴った通知の行の id */
 	id: string;
+	/** その行が最後に鳴った時刻。小さな表示は id と鳴った時刻の組ごとに一度だけ出す */
+	fired_at: string;
 	title: string;
 	cover_url: string | null;
 	href: string;
@@ -18,6 +21,7 @@ export interface RoomReminder {
 export interface RoomReminderRow {
 	id: string;
 	read: boolean;
+	created_at: string;
 	broadcast_anime_id: number | string | null;
 	broadcast_scheduled_at: string | null;
 	broadcast_room_date: string | null;
@@ -54,7 +58,7 @@ export function toActiveRoomReminders(rows: RoomReminderRow[], now: Date): RoomR
 		const event = one(row.event);
 		const anime = one(row.broadcast_anime);
 		let key: string;
-		let reminder: Omit<RoomReminder, "id" | "read">;
+		let reminder: Omit<RoomReminder, "id" | "fired_at" | "read">;
 		if (row.event_id) {
 			const minutes = event?.duration_minutes || DEFAULT_EVENT_MINUTES;
 			key = `event:${row.event_id}:${scheduledMs}`;
@@ -88,7 +92,7 @@ export function toActiveRoomReminders(rows: RoomReminderRow[], now: Date): RoomR
 			if (!row.read) existing.read = false;
 			continue;
 		}
-		byBroadcast.set(key, { id: row.id, read: row.read, ...reminder });
+		byBroadcast.set(key, { id: row.id, fired_at: row.created_at, read: row.read, ...reminder });
 	}
 	return [...byBroadcast.values()].sort((a, b) => Date.parse(a.scheduled_at) - Date.parse(b.scheduled_at));
 }
@@ -111,4 +115,9 @@ export function roomReminderTime(reminder: Pick<RoomReminder, "scheduled_at">): 
 		minute: "2-digit",
 		timeZone: "Asia/Tokyo",
 	});
+}
+
+/** 小さな表示を出したかどうかを覚えるときの鍵（同じ行でも、次のタイミングで鳴り直したら別の鍵） */
+export function roomReminderToastKey(reminder: Pick<RoomReminder, "id" | "fired_at">): string {
+	return `${reminder.id}@${reminder.fired_at}`;
 }

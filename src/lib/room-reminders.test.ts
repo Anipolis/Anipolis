@@ -3,6 +3,7 @@ import {
 	type RoomReminderRow,
 	roomReminderStatus,
 	roomReminderTime,
+	roomReminderToastKey,
 	toActiveRoomReminders,
 	unreadRoomReminderCount,
 } from "./room-reminders";
@@ -13,6 +14,7 @@ function animeRow(overrides: Partial<RoomReminderRow> = {}): RoomReminderRow {
 	return {
 		id: "n1",
 		read: false,
+		created_at: "2026-11-10T11:55:00Z",
 		broadcast_anime_id: 7,
 		broadcast_scheduled_at: "2026-11-10T12:30:00Z",
 		broadcast_room_date: "2026-11-10",
@@ -105,5 +107,14 @@ describe("roomReminderStatus / roomReminderTime", () => {
 
 	it("時刻は日本時間で出す", () => {
 		expect(roomReminderTime({ scheduled_at: "2026-11-10T12:30:00Z" })).toBe("21:30");
+	});
+});
+
+describe("roomReminderToastKey", () => {
+	it("同じ行でも、次のタイミングで鳴り直したら別の鍵になる（096 は行を書き換えて鳴らす）", () => {
+		const [at30] = toActiveRoomReminders([animeRow({ created_at: "2026-11-10T12:00:00Z" })], now);
+		const [at5] = toActiveRoomReminders([animeRow({ created_at: "2026-11-10T12:25:00Z" })], now);
+		expect(at30?.id).toBe(at5?.id);
+		expect(roomReminderToastKey(at30!)).not.toBe(roomReminderToastKey(at5!));
 	});
 });
