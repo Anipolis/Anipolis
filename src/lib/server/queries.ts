@@ -11,6 +11,7 @@ import {
 	ROOM_REMINDER_LOOKBACK_MS,
 	type RoomReminder,
 	type RoomReminderRow,
+	roomSessionKey,
 	toActiveRoomReminders,
 } from "$lib/room-reminders";
 import { getAssuranceLevel, isAdminMfaRequired } from "$lib/server/mfa";
@@ -923,7 +924,31 @@ export async function getActiveRoomReminders(
 		console.error("getActiveRoomReminders error:", error);
 		return [];
 	}
-	return toActiveRoomReminders((data ?? []) as unknown as RoomReminderRow[], now);
+	const rows = (data ?? []) as unknown as RoomReminderRow[];
+	return toActiveRoomReminders(rows, now, await getRoomSessionMinutes(supabase, rows));
+}
+
+/** お知らせの番組の、当日の放送枠の長さ（ルームのページと同じく、特番で延びた枠はこちらが正しい） */
+async function getRoomSessionMinutes(
+	supabase: SupabaseClient<Database>,
+	rows: RoomReminderRow[],
+): Promise<Map<string, number>> {
+	const animeRows = rows.filter((row) => row.broadcast_anime_id != null && row.broadcast_room_date);
+	const minutes = new Map<string, number>();
+	if (animeRows.length === 0) return minutes;
+	const { data, error } = await supabase
+		.from("broadcast_room_sessions")
+		.select("anime_id, scheduled_at, duration_minutes")
+		.in("anime_id", [...new Set(animeRows.map((row) => Number(row.broadcast_anime_id)))])
+		.in("room_date", [...new Set(animeRows.map((row) => row.broadcast_room_date as string))]);
+	// 取れなかったときは作品のいつもの枠で判定する
+	if (error) console.error("getRoomSessionMinutes error:", error);
+	for (const session of data ?? []) {
+		if (session.duration_minutes > 0) {
+			minutes.set(roomSessionKey(session.anime_id, session.scheduled_at), session.duration_minutes);
+		}
+	}
+	return minutes;
 }
 
 // ================================================================

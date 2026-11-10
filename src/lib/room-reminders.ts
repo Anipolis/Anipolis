@@ -46,10 +46,20 @@ function one<T>(value: T | T[] | null): T | null {
 	return Array.isArray(value) ? (value[0] ?? null) : value;
 }
 
+/** 当日の放送枠（broadcast_room_sessions）の長さを引くときの鍵 */
+export function roomSessionKey(animeId: number | string, scheduledAt: string): string {
+	return `${animeId}@${Date.parse(scheduledAt)}`;
+}
+
 /**
- * 新しい順の通知の行から、まだ終わっていない番組のお知らせを1番組1件にまとめて、始まる順に返す
+ * 新しい順の通知の行から、まだ終わっていない番組のお知らせを1番組1件にまとめて、始まる順に返す。
+ * アニメの終わりは、当日の放送枠の長さ（特番で延びた枠など）があればそれを、無ければ作品のいつもの枠を使う
  */
-export function toActiveRoomReminders(rows: RoomReminderRow[], now: Date): RoomReminder[] {
+export function toActiveRoomReminders(
+	rows: RoomReminderRow[],
+	now: Date,
+	sessionMinutes: ReadonlyMap<string, number> = new Map(),
+): RoomReminder[] {
 	const byBroadcast = new Map<string, RoomReminder>();
 	for (const row of rows) {
 		if (!row.broadcast_scheduled_at) continue;
@@ -70,8 +80,11 @@ export function toActiveRoomReminders(rows: RoomReminderRow[], now: Date): RoomR
 				ends_at: new Date(scheduledMs + minutes * 60_000).toISOString(),
 			};
 		} else if (row.broadcast_anime_id != null) {
-			const minutes = anime?.broadcast_duration_minutes || DEFAULT_ANIME_MINUTES;
 			const animeId = String(row.broadcast_anime_id);
+			const minutes =
+				sessionMinutes.get(roomSessionKey(animeId, row.broadcast_scheduled_at)) ||
+				anime?.broadcast_duration_minutes ||
+				DEFAULT_ANIME_MINUTES;
 			key = `anime:${animeId}:${row.broadcast_room_date ?? scheduledMs}`;
 			reminder = {
 				title: anime?.title ?? "登録したアニメ",

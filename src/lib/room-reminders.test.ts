@@ -4,6 +4,7 @@ import {
 	roomReminderStatus,
 	roomReminderTime,
 	roomReminderToastKey,
+	roomSessionKey,
 	toActiveRoomReminders,
 	unreadRoomReminderCount,
 } from "./room-reminders";
@@ -69,6 +70,13 @@ describe("toActiveRoomReminders", () => {
 			now,
 		);
 		expect(reminders.map((reminder) => reminder.id)).toEqual(["event", "airing"]);
+	});
+
+	it("当日の放送枠が延びていれば、その長さで終わりを決める", () => {
+		const row = animeRow({ broadcast_scheduled_at: "2026-11-10T11:20:00Z" });
+		expect(toActiveRoomReminders([row], now)).toEqual([]);
+		const extended = toActiveRoomReminders([row], now, new Map([[roomSessionKey(7, "2026-11-10T11:20:00Z"), 60]]));
+		expect(extended[0]?.ends_at).toBe("2026-11-10T12:20:00.000Z");
 	});
 
 	it("同じ放送で何度か鳴った分は1件にまとめ、一番新しい行の id を使い、1つでも未読なら未読", () => {
