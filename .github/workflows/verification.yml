@@ -29,12 +29,10 @@ jobs:
           persist-credentials: false
       # pnpm のバージョンは package.json の packageManager から読む（二重指定するとエラーになる）
       - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      # Node のバージョンは mise.toml を正本にしてローカルと揃える（setup-node v7.1.0 以降が mise.toml を読める）
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          # 2026-10-21 のセキュリティリリース。Cloudflare Pages のビルドは出たばかりの 24.22.1 を入れられないので、
-          # .node-version（Pages が読む）はメジャー版の 24 にしてあり、CI だけ版を明示する。
-          # Pages が扱えるようになったら .node-version も 24.22.1 にし、ここは node-version-file に戻す
-          node-version: 24.22.1
+          node-version-file: mise.toml
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
