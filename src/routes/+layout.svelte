@@ -193,7 +193,10 @@ function handleFabClick() {
 	<MobileBottomNav session={data.session} {unreadNotificationCount} {unreadReminderCount} />
 {/if}
 <DevEnvBadge />
-<RoomReminderToasts bind:this={reminderToasts} />
+<!-- アカウントを切り替えたら作り直し、前のアカウントのお知らせ（表示中・待機中）を持ち越さない -->
+{#key data.user?.id}
+	<RoomReminderToasts bind:this={reminderToasts} />
+{/key}
 <MobileSwipeNavigation session={data.session} />
 
 <!-- FAB: compose post (mobile only) -->

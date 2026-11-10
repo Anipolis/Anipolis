@@ -29,9 +29,11 @@ afterEach(() => {
 
 function render() {
 	const target = document.body.appendChild(document.createElement("div"));
-	const component = mount(RoomReminderToasts, { target });
+	const instance = mount(RoomReminderToasts, { target });
+	// mount の戻り値は書き出した関数の型を持たないので、使う分だけ型を付ける
+	const component = instance as unknown as { notify: (reminders: RoomReminder[]) => void };
 	cleanup = () => {
-		unmount(component);
+		unmount(instance);
 		target.remove();
 	};
 	const titles = () =>
