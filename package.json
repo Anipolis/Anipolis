@@ -74,7 +74,7 @@
 		"@sveltejs/vite-plugin-svelte": "^6.2.4",
 		"@tsconfig/strictest": "^2.0.8",
 		"@tsconfig/svelte": "^5.0.8",
-		"@types/node": "^25.8.0",
+		"@types/node": "^26.6.6",
 		"@unocss/preset-icons": "^66.6.8",
 		"@unocss/preset-wind3": "^66.6.8",
 		"@vitest/coverage-v8": "^4.1.6",
