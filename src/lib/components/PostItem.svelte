@@ -162,6 +162,7 @@ function closeQuoteModal() {
 						</div>
 						<!-- backdrop to close menu -->
 						<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+						<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
 						<div
 							class="fixed inset-0 z-10"
 							role="presentation"
@@ -176,6 +177,7 @@ function closeQuoteModal() {
 
 {#if showQuoteModal}
 	<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+	<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
 	<div
 		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
 		role="presentation"

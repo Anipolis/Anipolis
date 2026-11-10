@@ -54,6 +54,7 @@ function openLightbox(event: MouseEvent, url: string) {
 {/if}
 
 {#if post.exchange_share}
+	<!-- biome-ignore lint/a11y/useSemanticElements: 内部にブロック要素を含むため button にできない -->
 	<div
 		class="exchange-share-inline"
 		role="button"

@@ -24,6 +24,7 @@ $effect(() => {
 
 {#if open}
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<!-- biome-ignore lint/a11y/useKeyWithClickEvents: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
 	<div
 		class="anime-search-overlay live-room-picker-overlay"
 		onclick={(e) => {

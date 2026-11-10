@@ -154,6 +154,7 @@ async function save() {
 }
 </script>
 
+<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
 <div class="picker-overlay" role="presentation" onclick={close}>
 	<div
 		bind:this={card}

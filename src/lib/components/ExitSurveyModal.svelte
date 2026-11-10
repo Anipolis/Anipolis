@@ -155,6 +155,7 @@ function submit() {
 					<div class="rating-row" role="radiogroup" aria-label={ratingLabels[ratingField]}>
 						{#each [1, 2, 3, 4, 5] as value}
 							{@const selected = ratingValue(ratingField) === value}
+							<!-- biome-ignore lint/a11y/useSemanticElements: radiogroup 内のカスタム radio として button + role=radio を使っている -->
 							<button
 								type="button"
 								role="radio"

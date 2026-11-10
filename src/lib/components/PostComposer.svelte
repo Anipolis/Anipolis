@@ -711,6 +711,7 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 			</div>
 
 			<!-- 追加機能（画像・アニメ引用・CW・実況ルーム）のタイル -->
+			<!-- biome-ignore lint/a11y/useSemanticElements: ボタン群のグルーピングには role="group" を使う（フォーム項目ではない） -->
 			<div class="composer-tools" role="group" aria-label="投稿の追加機能">
 				<button
 					type="button"

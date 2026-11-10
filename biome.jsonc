@@ -33,7 +33,10 @@
 				"noExplicitAny": "warn"
 			},
 			"style": {
-				"noNonNullAssertion": "warn"
+				"noNonNullAssertion": "warn",
+				// 既存の CSS は意図した詳細度と順序で組んでおり、無関係なセレクタ同士でも
+				// 警告になるため、このルールは無効にする
+				"noDescendingSpecificity": "off"
 			},
 			"a11y": {
 				// Biome 2.6 で recommended に追加されたルール。既存 UI のマークアップ見直しは
@@ -57,6 +60,18 @@
 				"rules": {
 					"correctness": {
 						"noUndeclaredVariables": "error"
+					}
+				}
+			}
+		},
+		{
+			// 画像クロップの role=application と、キーボードでスクロールする実況タイムラインは
+			// tabindex が必要なため、この2ファイルだけルールを無効にする
+			"includes": ["src/lib/components/ImageCropper.svelte", "src/lib/components/room/LiveRoomView.svelte"],
+			"linter": {
+				"rules": {
+					"a11y": {
+						"noNoninteractiveTabindex": "off"
 					}
 				}
 			}

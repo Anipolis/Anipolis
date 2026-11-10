@@ -375,6 +375,7 @@ $effect(() => {
 {#if $composeOpen && data.profile}
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<!-- biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
 	<div class="compose-modal-backdrop" onclick={closeModal}></div>
 	<!--
 		ダイアログとして読み上げられるようにし、フォーカスを内部に閉じ込める（GitLab #12）。

@@ -1149,6 +1149,7 @@ function formatCompactDate(iso: string) {
 			{/if}
 		</div>
 
+		<!-- biome-ignore lint/a11y/useSemanticElements: ボタン群のグルーピングには role="group" を使う（フォーム項目ではない） -->
 		<div class="room-order-toggle" role="group" aria-label="投稿の表示順">
 			<button
 				type="button"
@@ -1170,6 +1171,7 @@ function formatCompactDate(iso: string) {
 
 		<div class="room-post-list-shell">
 			<!-- svelte-ignore a11y_no_noninteractive_tabindex (The scroll region supports keyboard scrolling.) -->
+			<!-- biome-ignore lint/a11y/useSemanticElements: キーボードでスクロールする領域のためフォーカス可能にする -->
 			<div
 				class="room-post-list scrollbar-thin-muted"
 				role="region"

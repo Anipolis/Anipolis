@@ -131,6 +131,7 @@ function close() {
 	}}
 />
 
+<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
 <div class="add-collection-overlay" role="presentation" onclick={close}>
 	<div
 		use:trapFocus

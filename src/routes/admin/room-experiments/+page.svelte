@@ -109,6 +109,7 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 		<div class="admin-section-header">
 			<h2>対象検索</h2>
 		</div>
+		<!-- biome-ignore lint/a11y/useSemanticElements: ボタン群のグルーピングには role="group" を使う（フォーム項目ではない） -->
 		<div class="target-toggle" role="group" aria-label="対象種別">
 			<a
 				class="btn-toggle"
@@ -423,6 +424,7 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 </main>
 
 {#if stopTarget}
+	<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
 	<div
 		class="modal-backdrop"
 		role="presentation"

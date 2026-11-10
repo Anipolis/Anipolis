@@ -35,6 +35,7 @@ function handleKeydown(event: KeyboardEvent) {
 
 <svelte:window onkeydown={handleKeydown} />
 
+<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
 <div
 	class="legal-overlay-backdrop"
 	role="presentation"
@@ -50,6 +51,7 @@ function handleKeydown(event: KeyboardEvent) {
 			</button>
 		</div>
 		<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -- 本文の中のリンクのクリックを拾うだけ（キー操作はリンク自体が受ける） -->
+		<!-- biome-ignore lint/a11y/useKeyWithClickEvents lint/a11y/noStaticElementInteractions: 本文内のリンククリックを拾うだけで、キー操作はリンク自体が受ける -->
 		<div class="legal-overlay-body" bind:this={body} onclick={handleBodyClick}>
 			<LegalBody {html} />
 		</div>

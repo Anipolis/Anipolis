@@ -38,6 +38,7 @@ function handleKeydown(event: KeyboardEvent) {
 
 {#if controller.quoteModalOpen}
 	<!-- svelte-ignore a11y_no_noninteractive_element_interactions a11y_click_events_have_key_events -->
+	<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
 	<div
 		class="quote-modal-overlay"
 		role="presentation"
@@ -111,6 +112,7 @@ function handleKeydown(event: KeyboardEvent) {
 
 {#if controller.exchangeModalOpen && post.exchange_share}
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
 	<div
 		class="exchange-result-modal-overlay"
 		role="presentation"
@@ -119,6 +121,7 @@ function handleKeydown(event: KeyboardEvent) {
 			controller.exchangeModalOpen = false;
 		}}
 	>
+		<!-- biome-ignore lint/a11y/useKeyWithClickEvents: 背景クリックの伝播を止めるだけで、要素自体は操作しない -->
 		<div
 			class="exchange-result-modal-card"
 			role="dialog"
@@ -159,6 +162,7 @@ function handleKeydown(event: KeyboardEvent) {
 
 {#if controller.lightboxUrl}
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<!-- biome-ignore lint/a11y/useKeyWithClickEvents: 背景クリックの伝播を止めるだけで、要素自体は操作しない -->
 	<div
 		class="lightbox-overlay"
 		onclick={(e) => {
@@ -187,6 +191,7 @@ function handleKeydown(event: KeyboardEvent) {
 
 {#if controller.reportModalOpen}
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<!-- biome-ignore lint/a11y/noStaticElementInteractions: ダイアログ内の閉じるボタンと Escape で操作できる -->
 	<div
 		class="report-modal-overlay"
 		role="presentation"
@@ -195,6 +200,7 @@ function handleKeydown(event: KeyboardEvent) {
 			controller.reportModalOpen = false;
 		}}
 	>
+		<!-- biome-ignore lint/a11y/useKeyWithClickEvents: 背景クリックの伝播を止めるだけで、要素自体は操作しない -->
 		<div
 			class="report-modal-card"
 			role="dialog"
@@ -251,6 +257,7 @@ function handleKeydown(event: KeyboardEvent) {
 
 {#if controller.deleteModalOpen}
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
 	<div
 		class="delete-modal-overlay"
 		role="presentation"
@@ -259,6 +266,7 @@ function handleKeydown(event: KeyboardEvent) {
 			controller.deleteModalOpen = false;
 		}}
 	>
+		<!-- biome-ignore lint/a11y/useKeyWithClickEvents: 背景クリックの伝播を止めるだけで、要素自体は操作しない -->
 		<div
 			class="delete-modal-card"
 			role="dialog"

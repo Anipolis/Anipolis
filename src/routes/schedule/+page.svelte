@@ -692,6 +692,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 											aria-label="閉じる"
 											onclick={() => (openAlertMenu = null)}
 										></button>
+										<!-- biome-ignore lint/a11y/useSemanticElements: ボタン群のグルーピングには role="group" を使う（フォーム項目ではない） -->
 										<div class="room-alert-menu" role="group" aria-label="イベント設定">
 											{#if !event.is_cancelled}
 												<form
@@ -982,6 +983,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 														aria-label="閉じる"
 														onclick={() => (openAlertMenu = null)}
 													></button>
+													<!-- biome-ignore lint/a11y/useSemanticElements: ボタン群のグルーピングには role="group" を使う（フォーム項目ではない） -->
 													<div class="room-alert-menu" role="group" aria-label="ルーム設定">
 														{#if subscribable}
 															<form

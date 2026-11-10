@@ -676,6 +676,7 @@ function listButtonFor(anime: Anime) {
 		</div>
 
 		{#if showUserReportModal}
+			<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
 			<div class="report-modal-overlay" role="presentation" onclick={() => (showUserReportModal = false)}>
 				<div
 					class="report-modal-card"
@@ -741,6 +742,7 @@ function listButtonFor(anime: Anime) {
 		{/if}
 
 		{#if showProfileEditModal && isOwn}
+			<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
 			<div class="profile-edit-modal-overlay" role="presentation" onclick={closeProfileEditModal}>
 				<div
 					class="profile-edit-modal-card"

@@ -73,6 +73,7 @@ function handleKeydown(event: KeyboardEvent) {
 				</button>
 				{#if menuOpen}
 					<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+					<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
 					<div class="post-kebab-backdrop" role="presentation" onclick={() => (menuOpen = false)}></div>
 					<div class="post-kebab-menu">
 						{#if controller.isOwn}

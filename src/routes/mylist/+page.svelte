@@ -275,6 +275,7 @@ $effect(() => {
 					</div>
 					<div class="header-actions">
 						{#if totalCount > 0}
+							<!-- biome-ignore lint/a11y/useSemanticElements: ボタン群のグルーピングには role="group" を使う（フォーム項目ではない） -->
 							<div class="view-toggle" role="group" aria-label="表示の切り替え">
 								<button
 									type="button"

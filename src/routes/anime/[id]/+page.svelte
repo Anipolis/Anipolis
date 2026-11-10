@@ -1748,6 +1748,7 @@ $effect(() => {
 <svelte:window onkeydown={handleModalKeydown} />
 
 {#if showUserListModal}
+	<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
 	<div
 		class="user-list-modal-backdrop"
 		role="presentation"
@@ -1833,6 +1834,7 @@ $effect(() => {
 {/if}
 
 {#if recommendModalOpen}
+	<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
 	<div
 		class="user-list-modal-backdrop"
 		role="presentation"

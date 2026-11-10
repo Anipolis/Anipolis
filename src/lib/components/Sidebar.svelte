@@ -232,6 +232,7 @@ function isActive(path: string): boolean {
 {#if drawerOpen}
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<!-- biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: 背景クリックは補助操作。メニュー内の項目で閉じられる -->
 	<div class="mobile-drawer-backdrop" onclick={closeDrawer}></div>
 {/if}
 
@@ -833,11 +834,13 @@ function isActive(path: string): boolean {
 				{#if menuOpen}
 					<!-- svelte-ignore a11y_click_events_have_key_events -->
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<!-- biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: 背景クリックは補助操作。メニュー内の項目で閉じられる -->
 					<div class="account-menu-backdrop" onclick={() => (menuOpen = false)}></div>
 					<div class="account-menu" role="menu">
 						<!-- 現在ログイン中のアカウント（ハイライト表示） -->
 						{#if profile}
 							<div class="account-menu-section">
+								<!-- biome-ignore lint/a11y/useFocusableInteractive: 現在のアカウント表示は操作できない -->
 								<div class="account-menu-item account-menu-current" role="menuitem" aria-current="true">
 									<UserAvatar src={profile.avatar_url} username={displayName} size="sm" />
 									<div class="account-menu-identity">

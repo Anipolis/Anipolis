@@ -457,6 +457,7 @@ function onWindowKeyDown(event: KeyboardEvent) {
 
 {#snippet card(item: Item, index: number)}
 	<li class="board-item">
+		<!-- biome-ignore lint/a11y/useSemanticElements: カード内に操作ボタンやリンクがあるため button にできない -->
 		<div
 			class="board-card"
 			class:board-card--dragging={item.id === draggingId}
@@ -552,6 +553,7 @@ function onWindowKeyDown(event: KeyboardEvent) {
 						</button>
 					</div>
 					<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+					<!-- biome-ignore lint/a11y/useKeyWithClickEvents: 行内のカード操作で選択できるため、行全体のクリックは補助 -->
 					<ol class="board-tier-items" data-board-tier={tier} onclick={() => onRowClick(tier)}>
 						{#each order as item, index (item.id)}
 							{#if item.tier === tier}
@@ -577,6 +579,7 @@ function onWindowKeyDown(event: KeyboardEvent) {
 				<h2 class="board-pool-title">未分類 <span class="board-pool-count">{poolCount}</span></h2>
 			</div>
 			<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+			<!-- biome-ignore lint/a11y/useKeyWithClickEvents: 行内のカード操作で選択できるため、行全体のクリックは補助 -->
 			<ol class="board-pool-items" data-board-tier="none" onclick={() => onRowClick(null)}>
 				{#each order as item, index (item.id)}
 					{#if item.tier === null}
@@ -604,6 +607,7 @@ function onWindowKeyDown(event: KeyboardEvent) {
 
 {#if dialogTier !== null}
 	{@const tier = dialogTier}
+	<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
 	<div class="tier-dialog-overlay" role="presentation" onclick={closeTierDialog}>
 		<div
 			use:trapFocus

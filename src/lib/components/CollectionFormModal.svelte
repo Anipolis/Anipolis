@@ -115,6 +115,7 @@ const handleDelete: SubmitFunction = ({ cancel }) => {
 };
 </script>
 
+<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
 <div class="collection-form-overlay" role="presentation" onclick={close}>
 	<div
 		use:trapFocus

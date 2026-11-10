@@ -460,6 +460,7 @@ $effect(() => {
 											<InfoTip label="タグの絞り込み" text={ANIME_GENRE_FILTER_HELP} />
 										{/if}
 									</h2>
+									<!-- biome-ignore lint/a11y/useSemanticElements: ボタン群のグルーピングには role="group" を使う（フォーム項目ではない） -->
 									<div
 										class="drawer-genre-grid"
 										role="group"
@@ -833,7 +834,9 @@ $effect(() => {
 
 	{#if filterSheetOpen}
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<!-- biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックは補助操作。キーボードは閉じるボタンや Escape で操作できる -->
 		<div class="filter-sheet-overlay" role="presentation" onclick={closeFilterSheet}>
+			<!-- biome-ignore lint/a11y/useKeyWithClickEvents: 背景クリックの伝播を止めるだけで、要素自体は操作しない -->
 			<div
 				class="filter-sheet"
 				onclick={(e) => e.stopPropagation()}
@@ -868,6 +871,7 @@ $effect(() => {
 									<InfoTip label="タグの絞り込み" text={ANIME_GENRE_FILTER_HELP} />
 								{/if}
 							</h3>
+							<!-- biome-ignore lint/a11y/useSemanticElements: ボタン群のグルーピングには role="group" を使う（フォーム項目ではない） -->
 							<div class="genre-chips" role="group" aria-labelledby="genre-filter-mobile-{group.key}">
 								{#each group.tags as tag (tag.ja)}
 									<button
