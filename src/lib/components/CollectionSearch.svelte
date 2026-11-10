@@ -22,6 +22,7 @@ let {
 } = $props();
 
 let root = $state<HTMLDivElement>();
+let input = $state<HTMLInputElement>();
 let query = $state("");
 // 結果の重なりは、作品を選ぶか、検索窓の外を押すか、Esc で閉じる（打った言葉は残す）
 let resultsOpen = $state(false);
@@ -55,6 +56,12 @@ function onInput() {
 	}, 250);
 }
 
+function clear() {
+	query = "";
+	onInput();
+	input?.focus();
+}
+
 function pick(anime: AnimePick) {
 	if (addedIds.has(anime.id) || full) return;
 	onpick(anime);
@@ -84,10 +91,17 @@ $effect(() => () => {
 		placeholder={full ? `${MAX_COLLECTION_ITEMS}作品まで入れられます` : '作品を探して足す'}
 		aria-label={label}
 		disabled={full}
+		bind:this={input}
 		bind:value={query}
 		oninput={onInput}
 		onfocus={() => (resultsOpen = true)}
 	>
+	{#if query}
+		<!-- 標準の×は小さくて押しにくいので、入力欄の右端の高さいっぱいを押せるようにする -->
+		<button type="button" class="collection-search-clear" aria-label="検索の言葉を消す" onclick={clear}>
+			<span class="i-lucide-x" aria-hidden="true"></span>
+		</button>
+	{/if}
 	{#if resultsOpen && query.trim()}
 		<ul class="collection-search-results" aria-label="検索結果">
 			{#if searching && results.length === 0}
@@ -140,12 +154,36 @@ $effect(() => () => {
 }
 .collection-search-input {
 	width: 100%;
-	padding: 8px 10px 8px 30px;
+	padding: 8px 36px 8px 30px;
 	border: 1px solid var(--color-border);
 	border-radius: 8px;
 	background: var(--color-bg);
 	color: var(--color-text);
 	font-size: 13px;
+}
+.collection-search-input::-webkit-search-cancel-button {
+	display: none;
+	appearance: none;
+}
+.collection-search-clear {
+	position: absolute;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 36px;
+	padding: 0;
+	border: none;
+	border-radius: 0 8px 8px 0;
+	background: transparent;
+	color: var(--color-text-muted);
+	font-size: 16px;
+	cursor: pointer;
+}
+.collection-search-clear:hover {
+	color: var(--color-text);
 }
 .collection-search-results {
 	position: absolute;
@@ -154,8 +192,8 @@ $effect(() => () => {
 	display: flex;
 	flex-direction: column;
 	gap: 2px;
-	width: min(340px, calc(100vw - 24px));
-	max-height: min(360px, 50vh);
+	width: min(420px, calc(100vw - 24px));
+	max-height: min(480px, 60vh);
 	margin: 0;
 	padding: 6px;
 	overflow-y: auto;
@@ -173,16 +211,16 @@ $effect(() => () => {
 	box-shadow: 0 8px 24px rgb(0 0 0 / 0.24);
 }
 .collection-search-note {
-	padding: 8px 4px;
+	padding: 10px 6px;
 	color: var(--color-text-muted);
-	font-size: 12px;
+	font-size: 13px;
 }
 .collection-search-result {
 	display: flex;
 	align-items: center;
-	gap: 8px;
+	gap: 12px;
 	width: 100%;
-	padding: 4px;
+	padding: 6px;
 	border: none;
 	border-radius: 6px;
 	background: transparent;
@@ -199,7 +237,7 @@ $effect(() => () => {
 }
 .collection-search-cover {
 	flex-shrink: 0;
-	width: 28px;
+	width: 44px;
 	aspect-ratio: 400 / 566;
 	overflow: hidden;
 	border-radius: 4px;
@@ -218,13 +256,18 @@ $effect(() => () => {
 	min-width: 0;
 }
 .collection-search-title {
+	display: -webkit-box;
 	overflow: hidden;
-	font-size: 12px;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+	font-size: 14px;
+	font-weight: 600;
+	line-height: 1.4;
+	overflow-wrap: anywhere;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	line-clamp: 2;
 }
 .collection-search-meta {
 	color: var(--color-text-muted);
-	font-size: 11px;
+	font-size: 12px;
 }
 </style>
