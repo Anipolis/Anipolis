@@ -81,7 +81,8 @@ function handleQueryInput() {
 		const request = searchGate.start();
 		searching = true;
 		try {
-			const res = await fetch(`/api/anime/search?q=${encodeURIComponent(query.trim())}`, {
+			// 話数ルームは最近の作品で使うことがほとんどなので、放送時期の新しい順に出す
+			const res = await fetch(`/api/anime/search?q=${encodeURIComponent(query.trim())}&order=recent`, {
 				signal: request.signal,
 			});
 			const found = res.ok ? ((await res.json()) as AnimeResult[]) : [];
