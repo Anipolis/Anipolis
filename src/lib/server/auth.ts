@@ -59,12 +59,25 @@ export function hasPasswordProvider(user: AuthUser, session: AuthSession | null 
 }
 
 /**
+ * 2要素目の確認（TOTP など）と、トークンの更新で付く amr。ログインし直した証拠には数えない。
+ * 2要素目は、ログイン中のセッションがあれば Supabase Auth の API で自分で登録して確認まで済ませられる
+ * （パスワードも OAuth も要らない）。これを数えると、セッションを持っているだけの人が
+ * 「直近にログインし直した」ことにできてしまう。
+ */
+function isReauthenticationMethod(method: string | undefined): boolean {
+	if (!method) return false;
+	return method !== "totp" && method !== "token_refresh" && !method.startsWith("mfa/");
+}
+
+/**
  * このセッションで最後に本人確認（ログイン）した時刻（ms）。取れなければ null。
  * amr はリフレッシュしても引き継がれるので、「直近にログインし直したか」の判定に使える。
+ * パスワード・OAuth・メールのリンクなど、1要素目の確認だけを数える（2要素目は数えない）。
  * session は safeGetSession() で getUser() による検証を通ったものを渡すこと。
  */
 export function getLastSignInAt(session: AuthSession | null): number | null {
 	const timestamps = (getJwtPayload(session)?.amr ?? [])
+		.filter((entry) => isReauthenticationMethod(entry.method))
 		.map((entry) => entry.timestamp)
 		.filter((timestamp): timestamp is number => typeof timestamp === "number" && Number.isFinite(timestamp));
 	return timestamps.length > 0 ? Math.max(...timestamps) * 1000 : null;
