@@ -328,11 +328,12 @@ function userName(group: ActivityGroup): string {
 	border-radius: 4px;
 	background: var(--color-bg-card);
 }
+/* コレクションを共有したカードのカバーと同じ大きさ（60px）。たたんだ並びは1行に収めるので少し小さく */
 .activity-cover--md {
-	width: 36px;
+	width: 60px;
 }
 .activity-cover--sm {
-	width: 32px;
+	width: 44px;
 }
 .activity-cover img {
 	display: block;

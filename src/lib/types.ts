@@ -1,4 +1,5 @@
 import type { ActivityStatus } from "$lib/activity";
+import { animeCardMeta } from "$lib/anime-labels";
 import { type CollectionShare, toCollectionShare } from "$lib/collections";
 // ================================================================
 // アプリ共通型定義
@@ -44,8 +45,10 @@ export interface AnimeQuote {
 	episode_number: number | null;
 	/** 話数ルーム（153）の投稿か。true なら episode_number はルームの話数 */
 	episode_room?: boolean;
-	/** 閲覧者自身のスコア（enrichPostsWithCounts で付加） */
-	user_score: number | null;
+	/** カードに出す「TV・2026年春」（animeCardMeta） */
+	meta: string;
+	/** みんなの平均スコア（enrichPostsWithCounts で付加。評価が無い・取れなかったときは null） */
+	avg_score: number | null;
 }
 
 export interface AnimeExchangeShareAnime {
@@ -422,6 +425,8 @@ export interface RawPost {
 		id: string | number;
 		title: string;
 		cover_url: string | null;
+		type?: string | null;
+		season?: string | null;
 		official_hashtag?: string[] | null;
 		broadcast_day?: number | null;
 		broadcast_time?: string | null;
@@ -534,7 +539,8 @@ export function toPost(
 								anime.broadcast_time ?? null,
 							),
 						episode_room: episodeNumber != null,
-						user_score: null,
+						meta: animeCardMeta(anime),
+						avg_score: null,
 					};
 				})()
 			: null,

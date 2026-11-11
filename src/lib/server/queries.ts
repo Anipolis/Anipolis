@@ -559,17 +559,20 @@ export async function enrichPostsWithCounts(
 	// p_user_id が NULL（未ログイン）の場合は各 *_by_me が全て false になる。
 	const { counts: countsByPostId } = await fetchPostCountsById(supabase, postIds, userId);
 
-	// ── アニメ引用がある投稿のスコアを一括取得 ────────────────────
+	// ── アニメ引用のカードに出す平均スコアを一括取得（一覧カード・作品ページと同じ anime_top_rated）──
 	const animeIds = Array.from(new Set(visibleRawPosts.map((p) => p.anime_id).filter((n): n is number => n != null)));
-	const userScoreMap = new Map<string, number | null>();
-	if (userId && animeIds.length > 0) {
-		const { data: entries } = await supabase
-			.from("user_anime_list")
-			.select("anime_id, score")
-			.eq("user_id", userId)
+	const avgScoreMap = new Map<string, number | null>();
+	if (animeIds.length > 0) {
+		const { data: rows, error } = await supabase
+			.from("anime_top_rated")
+			.select("anime_id, avg_score, score_count")
 			.in("anime_id", animeIds);
-		for (const e of entries ?? []) {
-			userScoreMap.set(String(e.anime_id), e.score);
+		if (error) console.error("[enrichPostsWithCounts] avg score", error);
+		for (const row of rows ?? []) {
+			avgScoreMap.set(
+				String(row.anime_id),
+				normalizeAverageScore(Number(row.avg_score ?? 0), Number(row.score_count ?? 0)),
+			);
 		}
 	}
 
@@ -590,7 +593,7 @@ export async function enrichPostsWithCounts(
 			bookmarked_by_me: countsByPostId.get(raw["id"])?.bookmarked_by_me ?? false,
 		});
 		if (post.anime_quote && post.anime_id) {
-			post.anime_quote.user_score = normalizeScore(userScoreMap.get(post.anime_id));
+			post.anime_quote.avg_score = avgScoreMap.get(post.anime_id) ?? null;
 		}
 		if (post.image_urls.length > 0) {
 			post.image_urls = post.image_urls
