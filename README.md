@@ -65,7 +65,7 @@ GitHub の利用規約（Additional Product Terms）に反し、2026年9月に�
 
 - カタログの定期同期（しょぼい・MAL・Wikidata）はメンテナーの開発機のタスクスケジューラで動いています。詳細は [scripts/scheduled/README.md](scripts/scheduled/README.md)
 - 本番（Cloudflare Workers）へのデプロイは別メンバーが管理しています。手元から直接出す場合は `pnpm exec wrangler login` のあと `pnpm deploy`
-- デプロイ設定は `wrangler.jsonc`、ビルド結果は `.svelte-kit/cloudflare`。手元で本番と同じ形を確かめるときは `pnpm build` のあと `pnpm preview:worker`
+- デプロイ設定は `wrangler.jsonc`、ビルド結果は `.svelte-kit/cloudflare`。手元で本番と同じ形を確かめるときは `pnpm build` のあと `pnpm preview:worker`。環境変数の置き場所と切り替え手順は [docs/workers-deploy.md](docs/workers-deploy.md)
 - Pull Request を出す前に手元でも `pnpm check` / `pnpm test` を通してください
 
 ## ライセンス
