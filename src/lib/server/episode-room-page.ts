@@ -3,9 +3,13 @@ import { airingOnAirAt, OPENABLE_WITHOUT_ROOM } from "$lib/episode-room";
 import { insertPostWithHashtags } from "$lib/server/actions";
 import {
 	advanceMylistProgressFromRoom,
+	ensureEpisodeRoom,
 	getAnimeRankingTrending,
 	getEpisodeRoomAirings,
+	getEpisodeRoomById,
+	getEpisodeRoomByNumber,
 	getEpisodeRoomPosts,
+	getSpecialEpisodeRoom,
 } from "$lib/server/queries";
 import { roomHashtag, stripTrailingRoomHashtag } from "$lib/server/room-hashtag";
 import type { Anime, EpisodeRoom } from "$lib/types";
@@ -109,6 +113,36 @@ export async function buildEpisodeRoomPageData(input: {
 	};
 }
 
+/** 話数ルームを探す。統合済みなら統合先を返す。ページを開くだけではルームを作らない */
+export async function findEpisodeRoom(supabase: Supabase, animeId: number, episodeNumber: number) {
+	const room = await getEpisodeRoomByNumber(supabase, animeId, episodeNumber);
+	if (room?.merged_into) return (await getEpisodeRoomById(supabase, room.merged_into)) ?? room;
+	return room;
+}
+
+/**
+ * ホームなどの投稿欄から話数ルーム・特番ルームへ投稿するときの投稿先。
+ * 話のルームがまだ無ければ作る（ルームのページの最初の投稿と同じく、開いてよいかは DB が判断する）
+ */
+export async function resolveComposerEpisodeRoom(
+	supabase: Supabase,
+	animeId: number,
+	target: { episodeNumber: number } | { specialKey: string },
+): Promise<EpisodeRoom | null> {
+	if ("specialKey" in target) return getSpecialEpisodeRoom(supabase, animeId, target.specialKey);
+	const found = await findEpisodeRoom(supabase, animeId, target.episodeNumber);
+	return found ?? (await ensureEpisodeRoom(supabase, animeId, target.episodeNumber));
+}
+
+/** ルームに投稿できないときの失敗（無い・統合済み・まだ開いていない）。投稿できるなら null */
+export function episodeRoomPostFailure(room: EpisodeRoom | null) {
+	if (!room || room.merged_into) return fail(404, { message: "ルームが見つかりません" });
+	if (!room.opens_at || Date.parse(room.opens_at) > Date.now()) {
+		return fail(403, { message: "まだ放送されていないため、投稿できません" });
+	}
+	return null;
+}
+
 /** ルームへの投稿。ルームが開いていなければ投稿させない。話数ルームなら、マイリストの話数も進める */
 export async function createEpisodeRoomPost(input: {
 	supabase: Supabase;
@@ -118,10 +152,9 @@ export async function createEpisodeRoomPost(input: {
 	room: EpisodeRoom | null;
 }) {
 	const { supabase, userId, request, anime, room } = input;
-	if (!room || room.merged_into) return fail(404, { message: "ルームが見つかりません" });
-	if (!room.opens_at || Date.parse(room.opens_at) > Date.now()) {
-		return fail(403, { message: "まだ放送されていないため、投稿できません" });
-	}
+	const closed = episodeRoomPostFailure(room);
+	if (closed) return closed;
+	if (!room) return fail(404, { message: "ルームが見つかりません" });
 
 	const form = await request.formData();
 	const rawContent = (form.get("content") as string | null) ?? "";

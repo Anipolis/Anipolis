@@ -14,7 +14,21 @@
 
 import { type CollectionShare, isCollectionKind } from "$lib/collections";
 import { isPostImageUsable } from "$lib/post-image-lifetime";
-import type { OpenBroadcastRoomSummary } from "$lib/types";
+
+/**
+ * 投稿に付けるルーム。放送枠（放送中の話・作品ルーム）か、話数ルーム（話数・特番）のどれか1つを指す。
+ * 話数ルームはいつでも書けるので、放送中でなくても作品を探して付けられる
+ */
+export interface ComposeRoom {
+	anime_id: string;
+	anime: { id: string; title: string; cover_url: string | null } | null;
+	/** 作品名の後ろに付ける「第6話」「作品ルーム」など */
+	label: string;
+	/** 放送枠（放送中の話・作品ルーム）。受付中かは戻すときに確かめる */
+	session_id?: string;
+	episode_number?: number;
+	special_key?: string;
+}
 
 export interface ComposeDraftAnime {
 	id: string;
@@ -29,7 +43,7 @@ export interface ComposeDraft {
 	imageUrls: string[];
 	anime: ComposeDraftAnime | null;
 	cwAnime: ComposeDraftAnime | null;
-	room: OpenBroadcastRoomSummary | null;
+	room: ComposeRoom | null;
 	/** シェアするコレクション（193）。投稿時に DB が今も公開かを確かめるので、カードの中身は保存時点のままでよい */
 	collection: CollectionShare | null;
 }
@@ -102,10 +116,45 @@ function isAnime(value: unknown): value is ComposeDraftAnime {
 	return typeof v["id"] === "string" && typeof v["title"] === "string";
 }
 
-function isRoom(value: unknown): value is OpenBroadcastRoomSummary {
-	if (!value || typeof value !== "object") return false;
+function roomAnime(value: unknown): ComposeRoom["anime"] {
+	if (!value || typeof value !== "object") return null;
 	const v = value as Record<string, unknown>;
-	return typeof v["id"] === "string" && typeof v["anime_id"] === "string";
+	if (typeof v["id"] !== "string" || typeof v["title"] !== "string") return null;
+	return { id: v["id"], title: v["title"], cover_url: typeof v["cover_url"] === "string" ? v["cover_url"] : null };
+}
+
+/**
+ * 保存されていたルームを戻す。指す先が1つに決まらないものは捨てる。
+ * 整理前の保存（放送枠の行そのもの: id・room_kind・room_date）は放送枠の指定として読む
+ */
+export function toComposeRoom(value: unknown): ComposeRoom | null {
+	if (!value || typeof value !== "object") return null;
+	const v = value as Record<string, unknown>;
+	if (typeof v["anime_id"] !== "string") return null;
+	const anime = roomAnime(v["anime"]);
+	if (typeof v["label"] === "string") {
+		const targets = [
+			typeof v["session_id"] === "string",
+			typeof v["episode_number"] === "number" && Number.isInteger(v["episode_number"]) && v["episode_number"] > 0,
+			typeof v["special_key"] === "string" && v["special_key"] !== "",
+		].filter(Boolean).length;
+		if (targets !== 1) return null;
+		return {
+			anime_id: v["anime_id"],
+			anime,
+			label: v["label"],
+			...(typeof v["session_id"] === "string" ? { session_id: v["session_id"] } : {}),
+			...(typeof v["episode_number"] === "number" ? { episode_number: v["episode_number"] } : {}),
+			...(typeof v["special_key"] === "string" ? { special_key: v["special_key"] } : {}),
+		};
+	}
+	if (typeof v["id"] !== "string") return null;
+	return {
+		anime_id: v["anime_id"],
+		anime,
+		label: v["room_kind"] === "global" ? "作品ルーム" : typeof v["room_date"] === "string" ? v["room_date"] : "",
+		session_id: v["id"],
+	};
 }
 
 /** 保存文字列を下書きに戻す。壊れている・古い形式・期限切れなら null。 */
@@ -130,7 +179,7 @@ export function parseComposeDraft(raw: string | null, now = Date.now()): Compose
 			: [],
 		anime: isAnime(stored.anime) ? stored.anime : null,
 		cwAnime: isAnime(stored.cwAnime) ? stored.cwAnime : null,
-		room: isRoom(stored.room) ? stored.room : null,
+		room: toComposeRoom(stored.room),
 		// 193 より前の保存には無い
 		collection: isCollectionShare(stored.collection) ? stored.collection : null,
 	};
@@ -188,7 +237,7 @@ export function clearComposeDraft(storage: DraftStorage | null, userId: string) 
 
 export interface ComposeContext {
 	cwAnime: ComposeDraftAnime | null;
-	room: OpenBroadcastRoomSummary | null;
+	room: ComposeRoom | null;
 }
 
 /** CW を戻す期限。同じ話題を続けて書く間は残し、時間が空けば外す */
@@ -232,7 +281,7 @@ export function loadComposeContext(storage: DraftStorage | null, userId: string,
 		const age = now - parsed.savedAt;
 		return {
 			cwAnime: age <= COMPOSE_CONTEXT_CW_TTL_MS && isAnime(parsed.cwAnime) ? parsed.cwAnime : null,
-			room: age <= COMPOSE_CONTEXT_ROOM_TTL_MS && isRoom(parsed.room) ? parsed.room : null,
+			room: age <= COMPOSE_CONTEXT_ROOM_TTL_MS ? toComposeRoom(parsed.room) : null,
 		};
 	} catch {
 		return empty;

@@ -49,6 +49,12 @@ function handleClose() {
 	if (!unmounting) onclose();
 }
 
+// Esc はこのダイアログを閉じるだけにする。投稿画面などのモーダルの中で開いたとき、外側の
+// Esc の処理（親のモーダルを閉じる）までキー入力が届かないよう、ここで伝わりを止める（Codex レビュー）
+function handleKeydown(event: KeyboardEvent) {
+	if (event.key === "Escape") event.stopPropagation();
+}
+
 function handlePointerdown(event: PointerEvent) {
 	pressedOnDialog = event.target === event.currentTarget;
 }
@@ -60,14 +66,15 @@ function handleClick(event: MouseEvent) {
 }
 </script>
 
-<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
-<!-- biome-ignore lint/a11y/useKeyWithClickEvents: 背景のクリックはポインター専用。キーボードは Esc と中身の閉じるボタンで閉じられる -->
+<!-- 背景のクリックはポインター専用。キーボードは Esc と中身の閉じるボタンで閉じられる -->
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <dialog
 	class="modal"
 	aria-labelledby={labelledby}
 	aria-label={label}
 	oncancel={handleCancel}
 	onclose={handleClose}
+	onkeydown={handleKeydown}
 	onpointerdown={handlePointerdown}
 	onclick={handleClick}
 	{@attach openModal}

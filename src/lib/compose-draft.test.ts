@@ -16,6 +16,7 @@ import {
 	saveComposeContext,
 	saveComposeDraft,
 	serializeComposeDraft,
+	toComposeRoom,
 } from "./compose-draft";
 
 function memoryStorage(): DraftStorage & { data: Map<string, string> } {
@@ -34,13 +35,10 @@ function memoryStorage(): DraftStorage & { data: Map<string, string> } {
 
 const anime = { id: "a1", title: "葬送のフリーレン", title_en: "Frieren", cover_url: null };
 const room = {
-	id: "r1",
 	anime_id: "a1",
-	room_date: "2026-09-28",
-	room_kind: "episode" as const,
-	room_key: "a1:2026-09-28",
-	scheduled_at: "2026-09-28T12:00:00Z",
 	anime: { id: "a1", title: "葬送のフリーレン", cover_url: null },
+	label: "第3話",
+	episode_number: 3,
 };
 
 describe("isDraftEmpty", () => {
@@ -218,5 +216,48 @@ describe("直前の投稿の文脈（#331）", () => {
 		storage.setItem(composeContextKey("user-1"), "{broken");
 		expect(loadComposeContext(storage, "user-1", now)).toEqual({ cwAnime: null, room: null });
 		expect(loadComposeContext(null, "user-1", now)).toEqual({ cwAnime: null, room: null });
+	});
+});
+
+describe("toComposeRoom", () => {
+	const roomAnime = { id: "a1", title: "葬送のフリーレン", cover_url: null };
+
+	it("放送枠・話数・特番のどれか1つを指すルームだけを戻す", () => {
+		expect(toComposeRoom({ anime_id: "a1", anime: roomAnime, label: "第3話", episode_number: 3 })).toEqual({
+			anime_id: "a1",
+			anime: roomAnime,
+			label: "第3話",
+			episode_number: 3,
+		});
+		expect(
+			toComposeRoom({ anime_id: "a1", anime: roomAnime, label: "総集編", special_key: "recap" })?.special_key,
+		).toBe("recap");
+		expect(
+			toComposeRoom({ anime_id: "a1", anime: roomAnime, label: "作品ルーム", session_id: "s1" })?.session_id,
+		).toBe("s1");
+		// 指す先が無い・2つある・話数がおかしいものは捨てる
+		expect(toComposeRoom({ anime_id: "a1", anime: roomAnime, label: "x" })).toBeNull();
+		expect(toComposeRoom({ anime_id: "a1", label: "x", session_id: "s1", episode_number: 3 })).toBeNull();
+		expect(toComposeRoom({ anime_id: "a1", label: "x", episode_number: 0 })).toBeNull();
+		expect(toComposeRoom({ anime_id: "a1", label: "x", episode_number: 1.5 })).toBeNull();
+	});
+
+	it("整理前の保存（放送枠の行そのもの）は放送枠の指定として読む", () => {
+		const legacy = {
+			id: "r1",
+			anime_id: "a1",
+			room_date: "2026-09-28",
+			room_kind: "episode",
+			room_key: "a1:2026-09-28",
+			scheduled_at: "2026-09-28T12:00:00Z",
+			anime: roomAnime,
+		};
+		expect(toComposeRoom(legacy)).toEqual({
+			anime_id: "a1",
+			anime: roomAnime,
+			label: "2026-09-28",
+			session_id: "r1",
+		});
+		expect(toComposeRoom({ ...legacy, room_kind: "global" })?.label).toBe("作品ルーム");
 	});
 });
