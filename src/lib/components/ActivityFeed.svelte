@@ -202,8 +202,8 @@ function userName(group: ActivityGroup): string {
 							aria-expanded="true"
 							onclick={() => toggleExpanded(group.key)}
 						>
-							<span class="i-lucide-chevron-up" aria-hidden="true"></span>
 							たたむ
+							<span class="i-lucide-chevron-up" aria-hidden="true"></span>
 						</button>
 					{:else}
 						<button
@@ -418,9 +418,10 @@ function userName(group: ActivityGroup): string {
 	font-size: 12px;
 	font-weight: 600;
 }
+/* 「広げる」と同じく右端に置く。文字の右端が「広げる」とそろうよう、左右の余白の分だけはみ出させる */
 .activity-toggle {
-	align-self: flex-start;
-	margin-left: 0;
+	align-self: flex-end;
+	margin-right: -8px;
 	padding: 4px 8px;
 	border: 0;
 	border-radius: 999px;
