@@ -54,8 +54,8 @@ function handleClick(event: MouseEvent) {
 }
 </script>
 
-<!-- 背景のクリックはポインター専用。キーボードは Esc と中身の閉じるボタンで閉じられる -->
 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+<!-- biome-ignore lint/a11y/useKeyWithClickEvents: 背景のクリックはポインター専用。キーボードは Esc と中身の閉じるボタンで閉じられる -->
 <dialog
 	class="modal"
 	aria-labelledby={labelledby}
