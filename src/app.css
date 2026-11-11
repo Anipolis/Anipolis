@@ -3279,6 +3279,16 @@ textarea {
 	z-index: 1;
 }
 
+/* モーダルの背景で回したホイールやスワイプを、後ろのページへ伝えない（#599）。
+   overflow で「スクロールしない入れ物」にし、overscroll-behavior で伝わりを止める。
+   body に overflow: hidden を付けるやり方は、スクロールバーが消えて横にずれ、sticky も壊れるので使わない。
+   スクロールしない要素にも効くのは Chrome 144 / Firefox 150 以降で、Safari では今までどおり。
+   :where で詳細度を 0 にし、各モーダルが自分で overflow を決めていればそちらを優先する */
+:where(:has(> .modal-click-layer), .modal-click-target, .survey-backdrop, .dialog-backdrop, .anime-search-overlay) {
+	overflow: hidden;
+	overscroll-behavior: contain;
+}
+
 /* --- Repost dropdown --- */
 .post-repost-wrapper {
 	position: relative;

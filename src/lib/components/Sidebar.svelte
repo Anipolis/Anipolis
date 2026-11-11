@@ -1088,6 +1088,8 @@ function isActive(path: string): boolean {
 	transform: translateX(-100%);
 	transition: transform 0.25s ease;
 	overflow-y: auto;
+	/* 端までスクロールしても後ろのページを動かさない（#599） */
+	overscroll-behavior: contain;
 }
 
 .mobile-drawer.open {

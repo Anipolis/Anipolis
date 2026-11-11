@@ -502,6 +502,8 @@ $effect(() => {
 	display: flex;
 	flex-direction: column;
 	overflow: hidden;
+	/* 投稿欄の上で回したホイールを後ろのタイムラインへ伝えない（#599） */
+	overscroll-behavior: contain;
 }
 
 .compose-modal-header {
