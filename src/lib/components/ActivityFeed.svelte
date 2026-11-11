@@ -6,21 +6,25 @@ import { formatRelativeTime } from "$lib/utils/format";
 import UserAvatar from "./UserAvatar.svelte";
 
 /**
- * 「アクティビティ」（181）。タイムラインではフォロー中の人の、プロフィールではその人のマイリストの動きを並べる。
+ * 「アクティビティ」（181）。タイムラインでは自分とフォロー中の人の（195）、プロフィールではその人のマイリストの動きを並べる。
  * 同じ人が同じステータスに続けて入れた分は1行にまとめ、まとまりは広げてから作品ごとにいいねする
  * （まとまり全体へのいいねは、何に共感したのかが伝わらないため置かない）
  */
 interface Props {
 	items: MylistActivity[];
-	/** いいねを押せるか。押せないとき（未ログイン・自分の記録）はいいねの数だけ出す */
+	/** いいねを押せるか。押せないとき（未ログイン）はいいねの数だけ出す。自分の記録は viewerId で見分ける */
 	canLike: boolean;
 	/** 行ごとに人のアイコンと名前を出すか。プロフィールでは全部同じ人なので出さない */
 	showUser?: boolean;
-	/** 見ている本人の記録か（自分のプロフィール）。スコアを「自分のもの」の青で出す */
-	mine?: boolean;
+	/** 見ている人の ID。その人の記録はいいねボタンを出さず（数だけ）、スコアを「自分のもの」の青で出す */
+	viewerId?: string | null | undefined;
 }
 
-let { items, canLike, showUser = true, mine = false }: Props = $props();
+let { items, canLike, showUser = true, viewerId = null }: Props = $props();
+
+function isOwn(item: MylistActivity): boolean {
+	return viewerId != null && item.user.id === viewerId;
+}
 
 const groups = $derived(groupActivities(items));
 const expanded = new SvelteSet<string>();
@@ -89,7 +93,7 @@ function userName(group: ActivityGroup): string {
 
 {#snippet likeButton(item: MylistActivity)}
 	{@const state = likeState(item)}
-	{#if !canLike}
+	{#if !canLike || isOwn(item)}
 		{#if state.count > 0}
 			<span class="activity-like activity-like--static" role="img" aria-label="いいね {state.count}">
 				<span class="i-lucide-heart" aria-hidden="true"></span>
@@ -143,7 +147,7 @@ function userName(group: ActivityGroup): string {
 				{#if item.score != null}
 					<span
 						class="activity-score"
-						class:activity-score--mine={mine}
+						class:activity-score--mine={isOwn(item)}
 						role="img"
 						aria-label="スコア {item.score}"
 						>★ {item.score}</span

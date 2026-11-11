@@ -255,7 +255,7 @@ $effect(() => {
 		{/if}
 
 		{#if data.tab === "activity"}
-			<!-- フォロー中の人のマイリストの動き（181） -->
+			<!-- 自分とフォロー中の人のマイリストの動き（181・195） -->
 			{#if activity.error}
 				<div class="home-deferred-error" role="alert" data-deferred-error="true">
 					アクティビティを読み込めませんでした。<a href={TAB_HREFS.activity}>再読み込み</a>
@@ -273,12 +273,12 @@ $effect(() => {
 				{#if page.items.length === 0 && !page.nextCursor}
 					<div class="empty-state">
 						<p>
-							フォロー中の人のマイリストの動きはまだありません。<br>
-							フォローしている人が作品を視聴予定・視聴中・完了にすると、ここに流れます。
+							マイリストの動きはまだありません。<br>
+							あなたやフォローしている人が作品を視聴予定・視聴中・完了にすると、ここに流れます。
 						</p>
 					</div>
 				{:else}
-					<ActivityFeed items={page.items} canLike={Boolean(data.profile)} />
+					<ActivityFeed items={page.items} canLike={Boolean(data.profile)} viewerId={data.user?.id} />
 					{#if page.nextCursor}
 						<a href={loadMoreHref(page.nextCursor.createdAt, page.nextCursor.id)} class="load-more-btn">
 							さらに読み込む
