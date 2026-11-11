@@ -429,6 +429,7 @@ function userName(group: ActivityGroup): string {
 	padding: 4px 8px;
 	border: 0;
 	border-radius: 999px;
+	corner-shape: round;
 	background: transparent;
 	color: var(--color-text-muted);
 	cursor: pointer;

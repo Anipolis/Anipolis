@@ -287,7 +287,7 @@ function selectCustom(event: Event) {
 	padding: 0;
 	list-style: none;
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--color-surface);
 	overflow: hidden;
 }
@@ -307,7 +307,7 @@ function selectCustom(event: Event) {
 .cover {
 	width: 64px;
 	aspect-ratio: 400 / 566;
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	background: var(--color-bg);
 	overflow: hidden;
 }
@@ -368,7 +368,7 @@ function selectCustom(event: Event) {
 	align-items: center;
 	gap: 8px;
 	padding: 4px 6px;
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	font-size: 13px;
 	cursor: pointer;
 }
@@ -400,7 +400,7 @@ function selectCustom(event: Event) {
 	min-height: 30px;
 	padding: 0 8px;
 	border: 1px solid var(--color-border);
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	background: var(--color-bg);
 	color: var(--color-text);
 	font-size: 13px;

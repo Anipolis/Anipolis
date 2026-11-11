@@ -1000,7 +1000,7 @@ $effect(() => {
 	flex: 0 0 auto;
 	min-height: 38px;
 	padding: 0 14px;
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	border: 1px solid var(--border);
 	background: var(--card-bg);
 	color: var(--text);
@@ -1059,7 +1059,7 @@ $effect(() => {
 	--filter-drawer-control-height: 46px;
 	padding: 16px;
 	border: 1px solid var(--border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--card-bg);
 	box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
 	box-sizing: border-box;
@@ -1104,7 +1104,7 @@ $effect(() => {
 .filter-drawer-clear {
 	width: 100%;
 	padding: 8px 13px;
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	border: 1px solid var(--border);
 	background: transparent;
 	color: var(--text-muted);
@@ -1166,7 +1166,7 @@ $effect(() => {
 .search-input {
 	width: 100%;
 	padding: 9px 12px 9px 34px;
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	border: 1px solid var(--color-border);
 	background: var(--color-surface);
 	color: var(--color-text);
@@ -1187,7 +1187,7 @@ $effect(() => {
 }
 .search-btn {
 	padding: 9px 18px;
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--color-accent);
 	color: #fff;
 	border: none;
@@ -1202,7 +1202,7 @@ $effect(() => {
 }
 .search-clear {
 	padding: 7px 11px;
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	border: 1px solid var(--color-border);
 	color: var(--color-text-muted);
 	text-decoration: none;
@@ -1224,7 +1224,7 @@ $effect(() => {
 }
 .filter-year-today-btn {
 	padding: 7px 8px;
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	border: 1px solid var(--color-border);
 	background: var(--color-surface-hover);
 	color: var(--color-text-muted);
@@ -1241,7 +1241,7 @@ $effect(() => {
 .filter-select,
 .filter-input {
 	padding: 7px 10px;
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	border: 1px solid var(--color-border);
 	background: var(--color-bg);
 	color: var(--color-text);
@@ -1271,7 +1271,7 @@ $effect(() => {
 .filter-clear {
 	margin-left: 6px;
 	padding: 2px 7px;
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	border: 1px solid var(--color-border);
 	color: var(--color-text-muted);
 	text-decoration: none;
@@ -1298,7 +1298,8 @@ $effect(() => {
 }
 .tab-btn {
 	padding: 6px 14px;
-	border-radius: 28px;
+	border-radius: 999px;
+	corner-shape: round;
 	font-size: 0.85rem;
 	color: var(--text-secondary);
 	text-decoration: none;
@@ -1503,7 +1504,7 @@ $effect(() => {
 	display: none;
 	position: relative;
 	padding: 8px 10px;
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	border: 1px solid var(--border);
 	background: var(--card-bg);
 	color: var(--text);
@@ -1592,7 +1593,7 @@ $effect(() => {
 	background: none;
 	color: var(--text-muted);
 	cursor: pointer;
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -1665,7 +1666,7 @@ $effect(() => {
 }
 .season-chip {
 	padding: 9px 0;
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	border: 1.5px solid var(--border);
 	background: transparent;
 	color: var(--text);
@@ -1721,7 +1722,7 @@ $effect(() => {
 }
 .filter-sheet-input {
 	padding: 9px 12px;
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	border: 1px solid var(--border);
 	background: var(--bg);
 	color: var(--text);
@@ -1748,7 +1749,7 @@ $effect(() => {
 .filter-sheet-clear {
 	align-self: flex-start;
 	padding: 6px 14px;
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	border: 1px solid var(--color-border);
 	background: transparent;
 	color: var(--text-muted);

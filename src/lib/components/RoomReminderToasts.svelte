@@ -175,7 +175,7 @@ $effect(() => () => {
 	width: 40px;
 	aspect-ratio: 400 / 566;
 	overflow: hidden;
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	background: var(--color-border);
 	color: var(--color-accent);
 	font-size: 18px;

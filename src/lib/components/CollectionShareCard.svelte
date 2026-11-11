@@ -89,7 +89,7 @@ const tierRows = $derived(
 	margin-top: 8px;
 	padding: 12px;
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--color-bg-card);
 	color: var(--color-text);
 	text-decoration: none;
@@ -166,7 +166,7 @@ a.collection-share:hover {
 	align-items: stretch;
 	overflow: hidden;
 	border: 1px solid var(--color-border);
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 }
 .collection-share-tier-head {
 	display: flex;

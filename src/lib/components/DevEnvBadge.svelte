@@ -25,6 +25,7 @@ const LABELS = { staging: "ステージング", production: "本番 DB", unknown
 	transform: translateX(-50%);
 	padding: 1px 8px;
 	border-radius: 999px;
+	corner-shape: round;
 	background: #0f766e;
 	color: #fff;
 	font-size: 11px;

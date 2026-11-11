@@ -196,7 +196,7 @@ function isAiringToday(): boolean {
 	flex-direction: column;
 	text-decoration: none;
 	color: var(--color-text);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	overflow: hidden;
 	border: 1px solid var(--color-border);
 	transition:

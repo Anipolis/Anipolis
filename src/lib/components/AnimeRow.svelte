@@ -67,7 +67,7 @@ let {
 	min-width: 0;
 	padding: 6px;
 	border: none;
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	background: transparent;
 	color: var(--color-text);
 	font: inherit;

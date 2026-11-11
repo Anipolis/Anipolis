@@ -46,7 +46,7 @@ const label = $derived([rank != null && `${rank}位`, title, note].filter(Boolea
 	height: 100%;
 	overflow: hidden;
 	aspect-ratio: 400 / 566;
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	background: var(--color-surface-hover);
 	color: #fff;
 	text-decoration: none;
@@ -70,7 +70,7 @@ const label = $derived([rank != null && `${rank}位`, title, note].filter(Boolea
 	left: 4px;
 	min-width: 20px;
 	padding: 2px 5px;
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	background: rgb(0 0 0 / 0.72);
 	color: #fff;
 	font-size: 0.72rem;

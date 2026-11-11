@@ -1249,7 +1249,7 @@ function listButtonFor(anime: Anime) {
 	z-index: 100;
 	min-width: 140px;
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--color-surface);
 	box-shadow: 0 8px 24px rgb(0 0 0 / 0.24);
 	overflow: hidden;
@@ -1351,7 +1351,7 @@ function listButtonFor(anime: Anime) {
 .report-modal-card {
 	width: min(100%, 420px);
 	border: 1px solid var(--color-border, var(--border, #334155));
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--color-surface, var(--surface, #1e293b));
 	box-shadow: 0 24px 60px rgb(0 0 0 / 0.36);
 }
@@ -1415,7 +1415,7 @@ function listButtonFor(anime: Anime) {
 .report-field textarea {
 	width: 100%;
 	border: 1px solid var(--color-border, var(--border, #334155));
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--color-bg, var(--bg, #0f172a));
 	color: var(--color-text, var(--fg, #e2e8f0));
 	padding: 9px 10px;
@@ -1451,7 +1451,7 @@ function listButtonFor(anime: Anime) {
 	max-height: calc(100dvh - 32px);
 	overflow: hidden;
 	border: 1px solid var(--color-border, var(--border, #334155));
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--color-surface, var(--surface, #1e293b));
 	box-shadow: 0 24px 60px rgb(0 0 0 / 0.36);
 }
@@ -1542,7 +1542,7 @@ function listButtonFor(anime: Anime) {
 	width: 100%;
 	aspect-ratio: 3 / 1;
 	border: 1px solid var(--color-border, var(--border, #334155));
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--color-bg, var(--bg, #0f172a));
 }
 

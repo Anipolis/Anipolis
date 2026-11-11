@@ -168,7 +168,7 @@ function handleProgressKeydown(event: KeyboardEvent & { currentTarget: HTMLInput
 	aspect-ratio: 2 / 3;
 	flex: 0 0 auto;
 	overflow: hidden;
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	background: var(--color-surface-hover);
 	text-decoration: none;
 }

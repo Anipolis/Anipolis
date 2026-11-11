@@ -63,7 +63,7 @@ function dismiss(): void {
 	margin: 0 0 12px;
 	padding: 14px 16px 16px;
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--color-surface);
 }
 

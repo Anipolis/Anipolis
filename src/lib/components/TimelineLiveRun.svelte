@@ -78,7 +78,7 @@ const recent = $derived(Date.now() - Date.parse((chronological.at(-1) ?? first).
 	padding: 2px 8px;
 	margin-left: -8px;
 	border: 0;
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	background: none;
 	color: var(--color-text-muted);
 	font-size: 12px;
