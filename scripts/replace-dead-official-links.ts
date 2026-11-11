@@ -1,6 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { createClient } from "@supabase/supabase-js";
-import { classifyLink } from "../src/lib/link-check.ts";
+import { classifyLink, seasonSortKey } from "../src/lib/link-check.ts";
 
 // check:official-links の結果のうち、閉鎖・乗っ取りの公式サイトを Wayback Machine の
 // 放送当時のアーカイブに差し替える。アーカイブが無い（または当時の時点で既に売却・
@@ -229,7 +229,10 @@ async function main() {
 		}
 		if (options.cachedOnly) continue;
 		const seasons = row.anime.map((anime) => anime.season).filter((season): season is string => Boolean(season));
-		const earliest = seasons.sort()[0] ?? null;
+		const earliest =
+			seasons.sort(
+				(a, b) => (seasonSortKey(a) ?? Number.MAX_SAFE_INTEGER) - (seasonSortKey(b) ?? Number.MAX_SAFE_INTEGER),
+			)[0] ?? null;
 		const titles = row.anime.map((anime) => anime.title);
 		const wanted = seasonTimestamp(earliest);
 		let replacement: string | null = null;
@@ -298,41 +301,52 @@ async function main() {
 		for (const decision of decisions) {
 			for (const animeId of decision.anime_ids) {
 				// 点検の後に誰かが直した URL は上書きしない
+				const { data: current, error: currentError } = await supabase
+					.from("anime")
+					.select("mal_id")
+					.eq("id", animeId)
+					.eq("official_site_url", decision.url)
+					.maybeSingle();
+				if (currentError) throw new Error(`Could not read anime ${animeId}: ${currentError.message}`);
+				if (!current) continue;
+				// manual の記録を先に保存し、anime の URL は最後に変える。途中で失敗しても anime は元の URL の
+				// ままなので、再実行で同じ作品をやり直せる（service role の更新は 136 の自動記録の対象外）
+				const malId = (current as { mal_id: number | null }).mal_id;
+				if (malId != null) await saveManualOfficialSite(malId, decision.replacement);
 				const { data, error } = await supabase
 					.from("anime")
 					.update({ official_site_url: decision.replacement })
 					.eq("id", animeId)
 					.eq("official_site_url", decision.url)
-					.select("mal_id");
+					.select("id");
 				if (error) throw new Error(`Could not update anime ${animeId}: ${error.message}`);
-				const malId = (data?.[0] as { mal_id: number | null } | undefined)?.mal_id;
-				if (!data?.length) continue;
-				updatedAnime += 1;
-				if (malId == null) continue;
-				const { data: manual, error: readError } = await supabase
-					.from("anime_source_records")
-					.select("normalized_data,source_url")
-					.eq("mal_id", malId)
-					.eq("source", "manual")
-					.maybeSingle();
-				if (readError) throw new Error(`Could not read manual record ${malId}: ${readError.message}`);
-				const { error: upsertError } = await supabase.from("anime_source_records").upsert(
-					{
-						mal_id: malId,
-						source: "manual",
-						source_version: new Date().toISOString().slice(0, 10),
-						source_url:
-							(manual?.source_url as string | undefined) ?? `https://myanimelist.net/anime/${malId}`,
-						normalized_data: {
-							...((manual?.normalized_data as Record<string, unknown> | undefined) ?? { mal_id: malId }),
-							official_site_url: decision.replacement,
-						},
-					},
-					{ onConflict: "mal_id,source" },
-				);
-				if (upsertError) throw new Error(`Could not save manual record ${malId}: ${upsertError.message}`);
+				if (data?.length) updatedAnime += 1;
 			}
 		}
+	}
+
+	async function saveManualOfficialSite(malId: number, replacement: string | null) {
+		const { data: manual, error: readError } = await supabase
+			.from("anime_source_records")
+			.select("normalized_data,source_url")
+			.eq("mal_id", malId)
+			.eq("source", "manual")
+			.maybeSingle();
+		if (readError) throw new Error(`Could not read manual record ${malId}: ${readError.message}`);
+		const { error: upsertError } = await supabase.from("anime_source_records").upsert(
+			{
+				mal_id: malId,
+				source: "manual",
+				source_version: new Date().toISOString().slice(0, 10),
+				source_url: (manual?.source_url as string | undefined) ?? `https://myanimelist.net/anime/${malId}`,
+				normalized_data: {
+					...((manual?.normalized_data as Record<string, unknown> | undefined) ?? { mal_id: malId }),
+					official_site_url: replacement,
+				},
+			},
+			{ onConflict: "mal_id,source" },
+		);
+		if (upsertError) throw new Error(`Could not save manual record ${malId}: ${upsertError.message}`);
 	}
 
 	const outPath = options.review.replace(/\.json$/, "-replacements.json");

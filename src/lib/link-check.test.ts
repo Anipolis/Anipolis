@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyLink, type LinkCheckInput, mentionsAnime, registrableDomain } from "./link-check";
+import { classifyLink, type LinkCheckInput, mentionsAnime, registrableDomain, seasonSortKey } from "./link-check";
 
 function input(partial: Partial<LinkCheckInput>): LinkCheckInput {
 	return {
@@ -107,5 +107,23 @@ describe("mentionsAnime", () => {
 	it("matches by bigram overlap regardless of punctuation and width", () => {
 		expect(mentionsAnime("TVアニメ『ロウきゅーぶ！SS』公式サイト", ["ロウきゅーぶ！"])).toBe(true);
 		expect(mentionsAnime("株式会社サンプル", ["ロウきゅーぶ！"])).toBe(false);
+	});
+});
+
+describe("seasonSortKey", () => {
+	it("同じ年の季節を時系列で並べる", () => {
+		const seasons = ["2020-fall", "2020-winter", "2020-summer", "2020-spring"];
+		expect(seasons.sort((a, b) => (seasonSortKey(a) ?? 0) - (seasonSortKey(b) ?? 0))).toEqual([
+			"2020-winter",
+			"2020-spring",
+			"2020-summer",
+			"2020-fall",
+		]);
+		expect(seasonSortKey("2019-fall") as number).toBeLessThan(seasonSortKey("2020-winter") as number);
+	});
+
+	it("形の違うシーズンは null", () => {
+		expect(seasonSortKey(null)).toBeNull();
+		expect(seasonSortKey("2020")).toBeNull();
 	});
 });

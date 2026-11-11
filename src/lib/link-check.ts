@@ -36,6 +36,15 @@ const RETRY_ERROR_CODES = new Set(["TIMEOUT", "ECONNRESET", "EAI_AGAIN", "UND_ER
 const SECOND_LEVEL_LABELS = new Set(["co", "ne", "or", "ac", "go", "ed", "gr", "lg", "ad", "com", "net", "org"]);
 
 /** 登録ドメイン（組織単位）の近似。www.tv-tokyo.co.jp → tv-tokyo.co.jp */
+const SEASON_ORDER: Record<string, number> = { winter: 1, spring: 2, summer: 3, fall: 4 };
+
+/** "2020-winter" を時系列で比べられる数（202001）にする。形が違えば null。季節名の辞書順は時系列と合わない */
+export function seasonSortKey(season: string | null | undefined): number | null {
+	const match = season?.match(/^(\d{4})-(winter|spring|summer|fall)$/);
+	if (!match) return null;
+	return Number(match[1]) * 100 + (SEASON_ORDER[match[2] as string] as number);
+}
+
 export function registrableDomain(url: string): string | null {
 	let host: string;
 	try {

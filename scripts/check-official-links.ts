@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createClient } from "@supabase/supabase-js";
-import { classifyLink, type LinkCheckStatus } from "../src/lib/link-check.ts";
+import { classifyLink, type LinkCheckStatus, seasonSortKey } from "../src/lib/link-check.ts";
 
 // 公式サイトのリンク点検。anime.official_site_url を1件ずつ開き、閉鎖・乗っ取りを分類して
 // レビュー用ファイル（.link-check-cache/）に出す。DB は変更しない（反映は別手順）。
@@ -209,8 +209,10 @@ async function main() {
 		rows.push(...((data ?? []) as AnimeRow[]));
 		if (!data || data.length < PAGE_SIZE) break;
 	}
-	const targetRows = options.beforeSeason
-		? rows.filter((row) => (row.season ?? "9999") < (options.beforeSeason as string))
+	// 季節名の辞書順は時系列と合わないので数にして比べる。シーズン不明の作品は含めない
+	const beforeKey = seasonSortKey(options.beforeSeason);
+	const targetRows = beforeKey
+		? rows.filter((row) => (seasonSortKey(row.season) ?? Number.POSITIVE_INFINITY) < beforeKey)
 		: rows;
 	const rowsByUrl = new Map<string, AnimeRow[]>();
 	for (const row of targetRows) {
