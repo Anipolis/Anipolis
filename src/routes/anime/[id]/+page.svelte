@@ -4,6 +4,7 @@ import { tick, untrack } from "svelte";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
+import { tabListKeys } from "$lib/actions/tabListKeys";
 import { isCoverHiddenWithoutCopyright } from "$lib/anime-cover";
 import { animeRelationLabel, animeSeasonLabel, animeTypeLabel } from "$lib/anime-labels";
 import AddToCollectionModal from "$lib/components/AddToCollectionModal.svelte";
@@ -519,7 +520,8 @@ $effect(() => {
 			<div class="cover-col">
 				<div class="anime-cover">
 					{#if coverUrl}
-						<img src={coverUrl} alt={data.anime.title}>
+						<!-- ページでいちばん大きい画像（LCP）なので先に取りに行く。描画には影響しない -->
+						<img src={coverUrl} alt={data.anime.title} fetchpriority="high">
 					{:else}
 						<div class="anime-cover-placeholder">
 							<svg
@@ -895,13 +897,14 @@ $effect(() => {
 						{adminEditOpen ? "作品情報フォームを閉じる" : "作品情報を編集"}
 					</button>
 					{#if adminEditOpen}
-						<div class="admin-tab-list" role="tablist" aria-label="作品管理">
+						<div class="admin-tab-list" role="tablist" aria-label="作品管理" {@attach tabListKeys}>
 							<button
 								type="button"
 								class="admin-tab"
 								class:admin-tab--active={activeAdminTab === "basic"}
 								role="tab"
 								aria-selected={activeAdminTab === "basic"}
+								tabindex={activeAdminTab === "basic" ? 0 : -1}
 								onclick={() => {
 									activeAdminTab = "basic";
 								}}
@@ -915,6 +918,7 @@ $effect(() => {
 								class:admin-tab--active={activeAdminTab === "overrides"}
 								role="tab"
 								aria-selected={activeAdminTab === "overrides"}
+								tabindex={activeAdminTab === "overrides" ? 0 : -1}
 								onclick={() => {
 									activeAdminTab = "overrides";
 								}}
@@ -928,6 +932,7 @@ $effect(() => {
 								class:admin-tab--active={activeAdminTab === "rooms"}
 								role="tab"
 								aria-selected={activeAdminTab === "rooms"}
+								tabindex={activeAdminTab === "rooms" ? 0 : -1}
 								onclick={() => {
 									activeAdminTab = "rooms";
 								}}
@@ -1586,7 +1591,7 @@ $effect(() => {
 			{/if}
 
 			<section class="room-tabs-section">
-				<div class="room-tabs" role="tablist" aria-label="ルーム表示切り替え">
+				<div class="room-tabs" role="tablist" aria-label="ルーム表示切り替え" {@attach tabListKeys}>
 					<button
 						type="button"
 						role="tab"
@@ -1595,6 +1600,7 @@ $effect(() => {
 						class:room-tab--active={activeRoomTab === "log"}
 						aria-selected={activeRoomTab === "log"}
 						aria-controls="room-tabpanel"
+						tabindex={activeRoomTab === "log" ? 0 : -1}
 						onclick={() => (activeRoomTab = "log")}
 					>
 						ルーム
@@ -1607,6 +1613,7 @@ $effect(() => {
 						class:room-tab--active={activeRoomTab === "event"}
 						aria-selected={activeRoomTab === "event"}
 						aria-controls="room-tabpanel"
+						tabindex={activeRoomTab === "event" ? 0 : -1}
 						onclick={() => (activeRoomTab = "event")}
 					>
 						イベント

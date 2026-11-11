@@ -1,6 +1,7 @@
 <script lang="ts">
 import { page } from "$app/state";
 import { scrollableTabs } from "$lib/actions/scrollableTabs";
+import { tabListKeys } from "$lib/actions/tabListKeys";
 import {
 	DEFAULT_MYLIST_TAB,
 	MYLIST_TAB_LABELS,
@@ -41,6 +42,7 @@ function selectTab(next: MylistTab) {
 	role="tablist"
 	aria-label="視聴ステータス"
 	{@attach scrollableTabs(".status-tab.active", status)}
+	{@attach tabListKeys}
 >
 	{#each MYLIST_TAB_ORDER as option (option)}
 		<button
@@ -49,6 +51,7 @@ function selectTab(next: MylistTab) {
 			class="status-tab"
 			class:active={status === option}
 			aria-selected={status === option}
+			tabindex={status === option ? 0 : -1}
 			onclick={() => selectTab(option)}
 		>
 			{MYLIST_TAB_LABELS[option]}
