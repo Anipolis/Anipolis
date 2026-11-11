@@ -36,4 +36,28 @@ describe("sanitizeInternalRedirect", () => {
 		expect(sanitizeInternalRedirect("\\/evil.com")).toBe("/");
 		expect(sanitizeInternalRedirect("/path\\..\\evil")).toBe("/");
 	});
+
+	it("制御文字によるプロトコル相対バイパスを拒否する", () => {
+		// URL パーサーは TAB・改行を捨てるため、/<TAB>/evil.com は //evil.com として外部へリダイレクトされる
+		expect(new URL("/\t/evil.com", "https://anipolis.example/auth").origin).toBe("https://evil.com");
+		expect(sanitizeInternalRedirect("/\t/evil.com")).toBe("/");
+		expect(sanitizeInternalRedirect("/\t\t/evil.com")).toBe("/");
+		expect(sanitizeInternalRedirect("/\n/evil.com")).toBe("/");
+		expect(sanitizeInternalRedirect("/\r/evil.com")).toBe("/");
+		expect(sanitizeInternalRedirect("/\u0000/evil.com")).toBe("/");
+		expect(sanitizeInternalRedirect("/\u007f/evil.com")).toBe("/");
+		expect(sanitizeInternalRedirect("/anime/123\t")).toBe("/");
+		// ?next=/%09/evil.com は URLSearchParams が TAB に戻してから渡ってくる
+		expect(sanitizeInternalRedirect(new URLSearchParams("next=/%09/evil.com").get("next"))).toBe("/");
+	});
+
+	it("サイト内に留まる値は、エンコードされた文字を含んでいてもそのまま返す", () => {
+		// 二重にエンコードされた %09 は TAB に戻らないので、サイト内のパスのまま
+		expect(sanitizeInternalRedirect("/search?q=%09")).toBe("/search?q=%09");
+		expect(sanitizeInternalRedirect("/.//evil.com")).toBe("/.//evil.com");
+		expect(new URL("/.//evil.com", "https://anipolis.example").origin).toBe("https://anipolis.example");
+		expect(sanitizeInternalRedirect("/rooms/anime/1/ep/2?tab=log#latest")).toBe(
+			"/rooms/anime/1/ep/2?tab=log#latest",
+		);
+	});
 });

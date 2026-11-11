@@ -632,11 +632,16 @@ function toAnimeExchangeShareAnime(value: unknown): AnimeExchangeShareAnime | nu
 	if (!value || typeof value !== "object") return null;
 	const raw = value as AnimeExchangeShareAnimeRaw;
 	if (raw.id == null || typeof raw.title !== "string") return null;
+	// posts.exchange_share は投稿した人が書ける JSON。id はリンク（/anime/<id>）に、cover_url は画像の
+	// src に入るので、作品の ID の形（数字だけ）と http(s) の URL 以外は通さない
+	// （id に "../auth?next=…" のようなパスを、cover_url にサイト内の GET を入れられないようにする）
+	const id = String(raw.id);
+	if (!/^\d+$/.test(id)) return null;
 	return {
-		id: String(raw.id),
+		id,
 		title: raw.title,
 		title_en: typeof raw.title_en === "string" ? raw.title_en : null,
-		cover_url: typeof raw.cover_url === "string" ? raw.cover_url : null,
+		cover_url: typeof raw.cover_url === "string" && /^https?:\/\//.test(raw.cover_url) ? raw.cover_url : null,
 	};
 }
 
@@ -850,3 +855,10 @@ export interface StoredAccount {
 		avatar_url: string | null;
 	};
 }
+
+/**
+ * 画面に渡す連携アカウント。StoredAccount からリフレッシュトークンを除いたもの。
+ * ページのデータは HTML と __data.json に載り、ページ上のスクリプトから読める。
+ * トークンは httpOnly の Cookie の中だけに置き、切り替えはサーバー（/api/account-switch）が Cookie から読む。
+ */
+export type LinkedAccountSummary = Pick<StoredAccount, "userId" | "profile">;
