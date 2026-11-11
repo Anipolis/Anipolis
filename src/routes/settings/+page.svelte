@@ -117,11 +117,12 @@ const sections = $derived.by((): Section[] => {
 		},
 		{
 			id: "notify",
-			label: "お知らせ",
+			label: "通知",
 			items: [
 				{
-					label: "放送前のお知らせ",
-					description: "カレンダーでベルを付けた番組を、始まる何分前に知らせるかを決めます",
+					label: "放送前リマインダー",
+					description:
+						"カレンダーでベルを付けた番組を、始まる何分前に知らせるかを決めます（カレンダーと画面の端に出ます）",
 					href: "/settings/rooms/notifications",
 				},
 			],
