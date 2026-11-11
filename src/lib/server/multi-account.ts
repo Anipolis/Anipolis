@@ -1,7 +1,6 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
 import type { Cookies } from "@sveltejs/kit";
 import { dev } from "$app/environment";
-import { env } from "$env/dynamic/private";
+import { getCookieSigningSecret, signCookiePayload, verifyCookieSignature } from "$lib/server/cookie-signing";
 import type { StoredAccount } from "$lib/types";
 
 const COOKIE_NAME = "anipolis_extra_accounts";
@@ -12,30 +11,6 @@ const COOKIE_OPTS = {
 	path: "/",
 	maxAge: 60 * 60 * 24 * 7,
 };
-
-/**
- * Cookie 署名鍵。専用の MULTI_ACCOUNT_COOKIE_SECRET を優先し、未設定なら
- * サーバー専用の Supabase シークレットにフォールバックする（新規の必須環境変数を増やさない）。
- * どれも無ければ空文字を返し、その場合は署名 Cookie を発行・信用しない。
- */
-function getSigningSecret(): string {
-	return env["MULTI_ACCOUNT_COOKIE_SECRET"] ?? env["SUPABASE_SECRET_KEY"] ?? env["SUPABASE_SERVICE_ROLE_KEY"] ?? "";
-}
-
-function sign(payloadB64: string, secret: string): string {
-	return createHmac("sha256", secret).update(payloadB64).digest("base64url");
-}
-
-/**
- * 署名を定数時間で検証する。
- * 入力長に依存する早期 return を避けるため、期待値・入力値をそれぞれ再度 HMAC で
- * 固定長（32バイト）ダイジェスト化してから timingSafeEqual で比較する。
- */
-function verify(payloadB64: string, signature: string, secret: string): boolean {
-	const expectedDigest = createHmac("sha256", secret).update(sign(payloadB64, secret)).digest();
-	const actualDigest = createHmac("sha256", secret).update(signature).digest();
-	return timingSafeEqual(expectedDigest, actualDigest);
-}
 
 /**
  * 署名付き Cookie から追加アカウントを取り出す。
@@ -49,14 +24,14 @@ export function getExtraAccounts(cookies: Cookies): StoredAccount[] {
 	const raw = cookies.get(COOKIE_NAME);
 	if (!raw) return [];
 
-	const secret = getSigningSecret();
+	const secret = getCookieSigningSecret();
 	if (!secret) return [];
 
 	const dotIndex = raw.lastIndexOf(".");
 	if (dotIndex <= 0) return [];
 	const payloadB64 = raw.slice(0, dotIndex);
 	const signature = raw.slice(dotIndex + 1);
-	if (!verify(payloadB64, signature, secret)) return [];
+	if (!verifyCookieSignature("extra-accounts", payloadB64, signature, secret)) return [];
 
 	try {
 		const parsed = JSON.parse(Buffer.from(payloadB64, "base64url").toString("utf8"));
@@ -79,7 +54,7 @@ export function setExtraAccounts(cookies: Cookies, accounts: StoredAccount[]): v
 		return;
 	}
 
-	const secret = getSigningSecret();
+	const secret = getCookieSigningSecret();
 	if (!secret) {
 		// 署名鍵が無い環境では未署名でトークンを保存しない（多重アカウントが永続化されないだけ）
 		console.error(
@@ -90,5 +65,5 @@ export function setExtraAccounts(cookies: Cookies, accounts: StoredAccount[]): v
 	}
 
 	const payloadB64 = Buffer.from(JSON.stringify(capped)).toString("base64url");
-	cookies.set(COOKIE_NAME, `${payloadB64}.${sign(payloadB64, secret)}`, COOKIE_OPTS);
+	cookies.set(COOKIE_NAME, `${payloadB64}.${signCookiePayload("extra-accounts", payloadB64, secret)}`, COOKIE_OPTS);
 }
