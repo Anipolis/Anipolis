@@ -2,6 +2,7 @@ import type { EmailOtpType } from "@supabase/supabase-js";
 import { redirect } from "@sveltejs/kit";
 import { admitWithInviteCode } from "$lib/server/beta-admission";
 import { isBetaGateEnabled, isBetaMember } from "$lib/server/discord";
+import { isEmailLinkNavigation } from "$lib/server/email-link";
 import { getInviteCodeCookie, setInviteCodeCookie } from "$lib/server/invites";
 import { sanitizeInternalRedirect } from "$lib/utils/url";
 import type { RequestHandler } from "./$types";
@@ -21,12 +22,14 @@ function confirmFailurePath(reason: string | null | undefined): string {
 	return `/auth?error=confirm_failed&reason=${safe}`;
 }
 
-export const GET: RequestHandler = async ({ url, cookies, locals: { supabase } }) => {
+export const GET: RequestHandler = async ({ url, request, cookies, locals: { supabase } }) => {
 	const tokenHash = url.searchParams.get("token_hash");
 	const type = url.searchParams.get("type") as EmailOtpType | null;
 	const next = sanitizeInternalRedirect(url.searchParams.get("next"));
 
 	if (!tokenHash || !type || !CONFIRM_TYPES.has(type)) redirect(303, confirmFailurePath("invalid_link"));
+	// 画像や fetch として読み込まれたときは確認しない（トークンも使わない）。email-link.ts のコメント参照
+	if (!isEmailLinkNavigation(request)) redirect(303, confirmFailurePath("invalid_link"));
 
 	const { data, error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
 	const user = data.user;
