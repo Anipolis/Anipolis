@@ -194,9 +194,7 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 							{/if}
 							<div>
 								<strong>{anime.title}</strong>
-								<span
-									>{anime.room_type === "global" ? "グローバルロビー作品" : "放送回ルーム作品"}</span
-								>
+								<span>{anime.room_type === "global" ? "作品ルームの作品" : "放送回ルーム作品"}</span>
 							</div>
 						</div>
 						{#if anime.active_run_id}
@@ -417,7 +415,7 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 
 	<section class="note-box">
 		<p>※この画面では、検証対象化後のログインユーザーによる放送回ルーム内の行動のみ集計しています。</p>
-		<p>※グローバルロビー、未ログイン閲覧、対象化前の入室・投稿は含まれません。</p>
+		<p>※作品ルーム、未ログイン閲覧、対象化前の入室・投稿は含まれません。</p>
 		<p>※滞在時間は exit が送信されなかった場合、最後の heartbeat 時刻で補完されます。</p>
 	</section>
 </main>

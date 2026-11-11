@@ -254,7 +254,7 @@ async function handleFileChange(e: Event) {
 						<option value="episode" selected={(anime?.room_type ?? "episode") === "episode"}>
 							話数別ルーム
 						</option>
-						<option value="global" selected={anime?.room_type === "global"}>総合ロビー</option>
+						<option value="global" selected={anime?.room_type === "global"}>作品ルーム</option>
 					</select>
 				</div>
 			</div>

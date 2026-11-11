@@ -938,7 +938,7 @@ function formatHMS(ms: number) {
 }
 
 const timerLabel = $derived.by(() => {
-	if (isGlobalLobby) return "総合ロビーはいつでも投稿できます";
+	if (isGlobalLobby) return "作品ルームはいつでも投稿できます";
 	if (isEpisodeRoom) {
 		if (status === "not_open") {
 			return data.room.opens_at_known ? `投稿受付まで ${formatHMS(openMs - now)}` : "まだ放送されていません";

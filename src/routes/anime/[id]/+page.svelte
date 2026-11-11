@@ -1631,7 +1631,7 @@ $effect(() => {
 								<a href="/rooms/anime/{data.anime.id}/lobby" class="global-lobby-link">
 									<span class="i-lucide-messages-square" aria-hidden="true"></span>
 									<span>
-										<strong>この作品の総合実況・雑談ロビーへ入る</strong>
+										<strong>この作品の作品ルームに入る</strong>
 									</span>
 								</a>
 							</section>

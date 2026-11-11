@@ -4971,7 +4971,7 @@ export async function getOpenBroadcastRoomSessions(
 	let query = sessionReader
 		.from("broadcast_room_sessions")
 		.select(
-			"id, anime_id, room_date, room_kind, room_key, scheduled_at, schedule_source, anime:anime!broadcast_room_sessions_anime_id_fkey ( id, title, cover_url, aired_from, aired_to, broadcast_day )",
+			"id, anime_id, room_date, room_kind, room_key, scheduled_at, schedule_source, episode_number, anime:anime!broadcast_room_sessions_anime_id_fkey ( id, title, cover_url, aired_from, aired_to, broadcast_day )",
 		)
 		.lte("posting_opens_at", now)
 		.gte("posting_closes_at", now)
@@ -4990,6 +4990,7 @@ export async function getOpenBroadcastRoomSessions(
 		room_key: string;
 		scheduled_at: string;
 		schedule_source: string | null;
+		episode_number: number | null;
 		anime: unknown;
 	};
 	const rows = (data ?? []) as RawOpenBroadcastRoomRow[];
@@ -5055,6 +5056,7 @@ export async function getOpenBroadcastRoomSessions(
 				room_kind: row.room_kind as "episode" | "global",
 				room_key: row.room_key,
 				scheduled_at: row.scheduled_at,
+				episode_number: row.episode_number ?? null,
 				anime: anime ? { id: String(anime.id), title: anime.title, cover_url: anime.cover_url ?? null } : null,
 			};
 		});

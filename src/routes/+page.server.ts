@@ -8,9 +8,11 @@ import {
 	toggleLikeAction,
 	toggleRepostAction,
 } from "$lib/server/actions";
+import { episodeRoomPostFailure, resolveComposerEpisodeRoom } from "$lib/server/episode-room-page";
 import { buildPostCardSelect } from "$lib/server/post-selects";
 import {
 	fillTimelinePage,
+	getAnime,
 	getAnimeExchangeShareForUser,
 	getAnimeRankingTrending,
 	getFollowingActivity,
@@ -21,6 +23,7 @@ import {
 	type TimelineCursor,
 } from "$lib/server/queries";
 import { failQuery } from "$lib/server/query-failure";
+import { roomHashtag } from "$lib/server/room-hashtag";
 import { parseTimelineCursor } from "$lib/timeline-cursor";
 import type { AnimeExchangeShare, Post } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
@@ -200,6 +203,10 @@ export const actions: Actions = {
 		const animeId = (form.get("anime_id") as string | null)?.trim() || null;
 		const cwAnimeId = (form.get("cw_anime_id") as string | null)?.trim() || null;
 		const broadcastRoomSessionId = (form.get("broadcast_room_session_id") as string | null)?.trim() || null;
+		// 話数ルーム・特番ルーム（放送中でなくても作品を探して付けられる）。放送枠とはどちらか一方
+		const roomEpisodeRaw = (form.get("room_episode") as string | null)?.trim() || null;
+		const roomSpecialKey = (form.get("room_special_key") as string | null)?.trim() || null;
+		const roomAnimeId = (form.get("room_anime_id") as string | null)?.trim() || null;
 		const exchangeId = (form.get("exchange_id") as string | null)?.trim() || null;
 		const collectionId = (form.get("collection_id") as string | null)?.trim() || null;
 		if (collectionId && !isCollectionId(collectionId)) {
@@ -214,6 +221,38 @@ export const actions: Actions = {
 		const exchangeShare = exchangeId ? await getAnimeExchangeShareForUser(supabase, user.id, exchangeId) : null;
 		if (exchangeId && !exchangeShare) return fail(404, { message: "共有するトレード結果が見つかりません" });
 
+		let episodeRoomId: string | null = null;
+		const roomHashtags: string[] = [];
+		if (roomEpisodeRaw || roomSpecialKey) {
+			const episodeNumber = roomEpisodeRaw ? Number(roomEpisodeRaw) : null;
+			const validEpisode =
+				episodeNumber != null && Number.isInteger(episodeNumber) && episodeNumber >= 1 && episodeNumber <= 9999;
+			if (
+				broadcastRoomSessionId ||
+				!animeId ||
+				(roomEpisodeRaw && !validEpisode) ||
+				(roomEpisodeRaw && roomSpecialKey)
+			) {
+				return fail(400, { message: "ルームの指定が正しくありません" });
+			}
+			// 作品の引用とルームは同じ作品だけ（投稿の作品とルームの作品が食い違うと DB が断る）
+			if (roomAnimeId && roomAnimeId !== animeId) {
+				return fail(400, { message: "引用した作品とルームの作品が違います" });
+			}
+			const anime = await getAnime(supabase, animeId, user.id);
+			if (!anime) return fail(404, { message: "ルームが見つかりません" });
+			const room = await resolveComposerEpisodeRoom(
+				supabase,
+				Number(anime.id),
+				episodeNumber != null ? { episodeNumber } : { specialKey: roomSpecialKey ?? "" },
+			);
+			const closed = episodeRoomPostFailure(room);
+			if (closed) return closed;
+			episodeRoomId = room?.id ?? null;
+			// ルームのページからの投稿と同じく、作品のハッシュタグでトレンドに数える
+			roomHashtags.push(roomHashtag(anime));
+		}
+
 		return insertPostWithHashtags(
 			supabase,
 			user.id,
@@ -225,9 +264,9 @@ export const actions: Actions = {
 			exchangeShare,
 			broadcastRoomSessionId,
 			cwAnimeId,
-			[],
+			roomHashtags,
 			null,
-			null,
+			episodeRoomId,
 			collectionId,
 		);
 	},

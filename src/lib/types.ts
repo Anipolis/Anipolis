@@ -45,6 +45,8 @@ export interface AnimeQuote {
 	episode_number: number | null;
 	/** 話数ルーム（153）の投稿か。true なら episode_number はルームの話数 */
 	episode_room?: boolean;
+	/** 話数の無いルームの名前（特番ルームの名前・「作品ルーム」）。あれば「作品名 ○○」と出す */
+	room_label?: string | null;
 	/** カードに出す「TV・2026年春」（animeCardMeta） */
 	meta: string;
 	/** みんなの平均スコア（enrichPostsWithCounts で付加。評価が無い・取れなかったときは null） */
@@ -522,6 +524,12 @@ export function toPost(
 						episodeRoom?.kind === "episode" && !episodeRoom.merged_into
 							? (episodeRoom.episode_number ?? null)
 							: null;
+					// 特番ルームの投稿は、放送時間の外に書いたもの（放送枠が付かない）もルームへのリンクにする
+					const specialKey =
+						episodeRoom?.kind === "special" && !episodeRoom.merged_into ? episodeRoom.special_key : null;
+					const session = Array.isArray(raw.broadcast_room_session)
+						? raw.broadcast_room_session[0]
+						: raw.broadcast_room_session;
 					return {
 						id: String(anime.id),
 						title: anime.title,
@@ -530,7 +538,9 @@ export function toPost(
 						room_href:
 							episodeNumber != null
 								? `/rooms/anime/${String(anime.id)}/ep/${episodeNumber}`
-								: buildAnimeRoomHref(anime, raw.broadcast_room_session ?? null),
+								: specialKey
+									? `/rooms/anime/${String(anime.id)}/sp/${encodeURIComponent(specialKey)}`
+									: buildAnimeRoomHref(anime, raw.broadcast_room_session ?? null),
 						episode_number:
 							episodeNumber ??
 							calcEpisodeNumber(
@@ -539,6 +549,11 @@ export function toPost(
 								anime.broadcast_time ?? null,
 							),
 						episode_room: episodeNumber != null,
+						room_label: specialKey
+							? (episodeRoom?.label ?? "特番")
+							: session?.room_kind === "global"
+								? "作品ルーム"
+								: null,
 						meta: animeCardMeta(anime),
 						avg_score: null,
 					};
@@ -600,10 +615,11 @@ export function buildEventRoomLabel(eventRoom: { title: string; hashtag: string 
 }
 
 export function buildAnimeRoomLabel(
-	anime: Pick<AnimeQuote, "title" | "official_hashtag" | "episode_number" | "episode_room">,
+	anime: Pick<AnimeQuote, "title" | "official_hashtag" | "episode_number" | "episode_room" | "room_label">,
 ): string {
-	// 話数ルームの投稿は「作品名 第N話」
+	// 話数ルームの投稿は「作品名 第N話」、特番ルーム・作品ルームは「作品名 ○○」
 	if (anime.episode_room && anime.episode_number != null) return `${anime.title} 第${anime.episode_number}話`;
+	if (anime.room_label) return `${anime.title} ${anime.room_label}`;
 	const officialHashtag = anime.official_hashtag
 		?.map((tag) => tag.trim().replace(/^#+/, ""))
 		.find((tag) => tag.length > 0);
@@ -741,6 +757,8 @@ export interface OpenBroadcastRoomSummary {
 	room_kind: "episode" | "global";
 	room_key: string;
 	scheduled_at: string;
+	/** 話数の放送枠なら話数（無い枠・作品ルームは null） */
+	episode_number?: number | null;
 	anime: { id: string; title: string; cover_url: string | null } | null;
 }
 
