@@ -8,7 +8,7 @@ import type { PostController } from "./post-controller.svelte";
 
 interface Props {
 	controller: PostController;
-	/** Show the linked anime as a card (detail view only; rows show it inline instead). */
+	/** 引用した作品をカードで出す（ルームの中やルームの投稿では出さない） */
 	animeCard?: boolean;
 }
 
@@ -74,23 +74,28 @@ function openLightbox(event: MouseEvent, url: string) {
 			<img
 				src={coverThumbSrc(post.anime_quote.cover_url)}
 				{@attach coverThumbFallback(post.anime_quote.cover_url)}
-				alt={post.anime_quote.title}
+				alt=""
 				class="anime-quote-cover"
+				loading="lazy"
 			>
 		{:else}
 			<div class="anime-quote-cover anime-quote-cover-empty"></div>
 		{/if}
 		<div class="anime-quote-body">
-			<span class="anime-quote-label">アニメ</span>
 			<span class="anime-quote-title">{post.anime_quote.title}</span>
-			{#if post.anime_quote.user_score != null && post.anime_quote.user_score > 0}
-				<span class="anime-quote-score">
-					<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-						<path
-							d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
-						/>
-					</svg>
-					{post.anime_quote.user_score.toFixed(1)}
+			{#if post.anime_quote.meta || post.anime_quote.avg_score != null}
+				<span class="anime-quote-meta">
+					{#if post.anime_quote.meta}
+						<span>{post.anime_quote.meta}</span>
+					{/if}
+					{#if post.anime_quote.avg_score != null}
+						<!-- 一覧カードと同じ出し方（星だけ黄色、数字は平均） -->
+						<span class="anime-quote-score">
+							<span class="anime-quote-star" aria-hidden="true">★</span>
+							<span class="sr-only">平均スコア</span>
+							{post.anime_quote.avg_score.toFixed(2)}
+						</span>
+					{/if}
 				</span>
 			{/if}
 		</div>

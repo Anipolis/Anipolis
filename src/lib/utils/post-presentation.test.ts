@@ -63,7 +63,8 @@ describe("話数ルームの投稿（153）", () => {
 			room_href: "/rooms/anime/1/ep/15",
 			episode_number: 15,
 			episode_room: true,
-			user_score: null,
+			meta: "",
+			avg_score: null,
 		};
 		expect(buildAnimeRoomLabel(room)).toBe("天は赤い河のほとり 第15話");
 		// 放送日のルーム（旧）は今どおりハッシュタグと話数

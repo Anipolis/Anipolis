@@ -27,7 +27,7 @@ export const POST_EPISODE_ROOM_SELECT =
 	"episode_room:episode_rooms!posts_episode_room_id_fkey ( kind, episode_number, special_key, label, merged_into )";
 export const POST_EVENT_SELECT = "event:events!posts_event_id_fkey ( id, title, hashtag )";
 export const POST_CARD_ANIME_SELECT =
-	"anime:anime!posts_anime_id_fkey ( id, title, cover_url, official_hashtag, broadcast_day, broadcast_time, broadcast_duration_minutes, aired_from )";
+	"anime:anime!posts_anime_id_fkey ( id, title, cover_url, type, season, official_hashtag, broadcast_day, broadcast_time, broadcast_duration_minutes, aired_from )";
 export const POST_CW_ANIME_SELECT = "cw_anime:anime!posts_cw_anime_id_fkey ( id, title, cover_url )";
 // 見えないコレクション（非公開にした・鍵の相手）は RLS で null になり、カードの代わりに「見られません」を出す
 export const POST_COLLECTION_SELECT = `collection:user_collections!posts_collection_id_fkey ( ${COLLECTION_SHARE_SELECT} )`;

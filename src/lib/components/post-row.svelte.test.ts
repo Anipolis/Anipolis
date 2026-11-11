@@ -32,7 +32,7 @@ describe("shared reaction rows", () => {
 		cleanup.push(() => unmount(component));
 		await tick();
 		expect(target.querySelector('[aria-label="返信"]')).toBeNull();
-		expect(target.querySelector(".post-inline-context")?.textContent).toContain("星をめぐる旅");
+		expect(target.querySelector(".anime-quote-card .anime-quote-title")?.textContent).toContain("星をめぐる旅");
 		target.querySelector<HTMLButtonElement>('[aria-label="投稿の操作"]')?.click();
 		await tick();
 		expect(target.querySelector('[aria-label="返信"]')).not.toBeNull();
