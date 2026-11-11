@@ -46,14 +46,14 @@ const settingsSubmit: SubmitFunction = () => {
 };
 </script>
 
-<svelte:head> <title>ルーム通知設定 - Anipolis</title> </svelte:head>
+<svelte:head> <title>放送前のお知らせ - Anipolis</title> </svelte:head>
 
 <div class="page-container" style="justify-content: center;">
 	<main style="flex: 0 1 640px; min-width: 0;">
 		<div class="settings-card">
 			<SettingsBackLink />
 			<div class="settings-header-row">
-				<h1 class="settings-title">ルーム通知</h1>
+				<h1 class="settings-title">放送前のお知らせ</h1>
 			</div>
 
 			{#if form && "message" in form}
@@ -63,9 +63,9 @@ const settingsSubmit: SubmitFunction = () => {
 			<section class="settings-section">
 				<div class="section-heading-row">
 					<h2 class="settings-section-title with-info-tip">
-						放送前通知のタイミング
-						<InfoTip label="放送前通知">
-							<p>お知らせは、通知の「ルーム」タブに届きます。</p>
+						お知らせのタイミング
+						<InfoTip label="放送前のお知らせ">
+							<p>お知らせは、カレンダーの上と、画面の右下（スマホは上）に出ます。</p>
 							<p>複数選ぶと、それぞれの時間にお知らせします。</p>
 						</InfoTip>
 					</h2>
@@ -93,7 +93,7 @@ const settingsSubmit: SubmitFunction = () => {
 							name="notify_1min"
 							bind:checked={notify1min}
 							disabled={saving}
-							label="1分前に通知"
+							label="1分前にお知らせ"
 							onchange={autoSave}
 						/>
 					</div>
@@ -106,7 +106,7 @@ const settingsSubmit: SubmitFunction = () => {
 							name="notify_5min"
 							bind:checked={notify5min}
 							disabled={saving}
-							label="5分前に通知"
+							label="5分前にお知らせ"
 							onchange={autoSave}
 						/>
 					</div>
@@ -119,7 +119,7 @@ const settingsSubmit: SubmitFunction = () => {
 							name="notify_30min"
 							bind:checked={notify30min}
 							disabled={saving}
-							label="30分前に通知"
+							label="30分前にお知らせ"
 							onchange={autoSave}
 						/>
 					</div>

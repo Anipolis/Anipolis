@@ -1,26 +1,22 @@
 <script lang="ts">
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
+import PrivacyToggles from "$lib/components/PrivacyToggles.svelte";
 import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();
 
-type SectionId = "account" | "privacy" | "rooms" | "about";
+/**
+ * 設定の一覧。見出し（カテゴリ）と項目の定義は1つで、見せ方だけ画面の幅で変える。
+ * PC は左にカテゴリ、右に選んだカテゴリの項目（?section= に残す）。スマホは全カテゴリを見出し付きで縦に並べる
+ */
+type SectionId = "account" | "login" | "visibility" | "mute" | "notify" | "about";
 
-const sections: { id: SectionId; label: string }[] = [
-	{ id: "account", label: "アカウント" },
-	{ id: "privacy", label: "プライバシーと安全" },
-	{ id: "rooms", label: "ルーム" },
-	{ id: "about", label: "Anipolisについて" },
-];
+type Item = { label: string; description: string; href: string; badge?: number };
+type Section = { id: SectionId; label: string; items: Item[]; privacyToggles?: boolean };
 
-const activeSection = $derived(
-	(sections.some((s) => s.id === page.url.searchParams.get("section"))
-		? page.url.searchParams.get("section")
-		: "account") as SectionId,
-);
-
-type Item = { label: string; description: string; href: string };
+// 整理前の ?section= で来たとき（古いリンク・ブックマーク）の行き先
+const LEGACY_SECTIONS: Record<string, SectionId> = { privacy: "visibility", rooms: "notify" };
 
 // 規約・ポリシー・出典と問い合わせ先。未ログイン時はトレンド欄下にも同じリンクを出す
 const aboutItems: Item[] = [
@@ -42,83 +38,105 @@ const aboutItems: Item[] = [
 	},
 ];
 
-const items = $derived.by((): Item[] => {
-	if (activeSection === "account") {
-		const list: Item[] = [
-			{ label: "ユーザー名", description: "ユーザー名を変更します", href: "/settings/account" },
-		];
-		list.push({
+const sections = $derived.by((): Section[] => {
+	const login: Item[] = [
+		{
 			label: data.hasEmailProvider ? "パスワードの変更" : "パスワードの設定",
 			description: data.hasEmailProvider
 				? "現在のパスワードを確認して変更します"
 				: "メールアドレスとパスワードでもログインできるようになります",
 			href: "/settings/account/password",
+		},
+	];
+	if (data.passkeyEnabled) {
+		login.push({
+			label: "パスキー",
+			description: "指紋・顔認証や画面ロックでログインできるようにします",
+			href: "/settings/passkeys",
 		});
-		// 管理者の権限は二段階認証を済ませたログインでだけ使える（migration 177）。今は管理者だけに出す
-		if (data.profile?.is_admin) {
-			list.push({
-				label: "二段階認証",
-				description: "ログインのときに認証アプリのコードも確認します（管理画面を使うのに必要です）",
-				href: "/settings/security",
-			});
-		}
-		if (data.passkeyEnabled) {
-			list.push({
-				label: "パスキー",
-				description: "指紋・顔認証や画面ロックでログインできるようにします",
-				href: "/settings/passkeys",
-			});
-		}
-		list.push({
-			label: "招待",
-			description: "招待コードを発行して他のユーザーを招待します",
-			href: "/settings/invites",
-		});
-		list.push({
-			label: "退会",
-			description: "アカウントと投稿・マイリストをすべて削除します",
-			href: "/settings/account/delete",
-		});
-		return list;
 	}
-	if (activeSection === "privacy") {
-		const list: Item[] = [
-			{
-				label: "プライバシー",
-				description: "アカウントの公開設定を変更します",
-				href: "/settings/privacy",
-			},
-			{
-				label: "ミュート設定",
-				description: "ワード・ルームのミュートをまとめて管理します",
-				href: "/settings/mutes",
-			},
-			{
-				label: "ブロックしたユーザー",
-				description: "ブロックした相手を確認・解除します",
-				href: "/settings/blocks",
-			},
-		];
-		if (data.pendingFollowRequestCount > 0) {
-			list.push({
-				label: "フォローリクエスト",
-				description: `${data.pendingFollowRequestCount}件の未対応申請があります`,
-				href: "/settings/follow-requests",
-			});
-		}
-		return list;
+	// 管理者の権限は二段階認証を済ませたログインでだけ使える（migration 177）。今は管理者だけに出す
+	if (data.profile?.is_admin) {
+		login.push({
+			label: "二段階認証",
+			description: "ログインのときに認証アプリのコードも確認します（管理画面を使うのに必要です）",
+			href: "/settings/security",
+		});
 	}
-	if (activeSection === "about") return aboutItems;
+	const pendingRequests = data.pendingFollowRequestCount ?? 0;
 	return [
 		{
-			label: "通知",
-			description: "放送前通知のタイミングを設定します",
-			href: "/settings/rooms/notifications",
+			id: "account",
+			label: "アカウント",
+			items: [
+				{ label: "ユーザー名", description: "ユーザー名を変更します", href: "/settings/account" },
+				{
+					label: "招待",
+					description: "招待コードを発行して他のユーザーを招待します",
+					href: "/settings/invites",
+				},
+				{
+					label: "退会",
+					description: "アカウントと投稿・マイリストをすべて削除します",
+					href: "/settings/account/delete",
+				},
+			],
 		},
+		{ id: "login", label: "ログイン", items: login },
+		{
+			id: "visibility",
+			label: "公開範囲",
+			privacyToggles: true,
+			items: [
+				{
+					label: "フォローリクエスト",
+					description:
+						pendingRequests > 0
+							? `${pendingRequests}件の申請が届いています`
+							: "鍵アカウントへのフォローの申請を承認・拒否します",
+					href: "/settings/follow-requests",
+					...(pendingRequests > 0 ? { badge: pendingRequests } : {}),
+				},
+			],
+		},
+		{
+			id: "mute",
+			label: "ミュートとブロック",
+			items: [
+				{
+					label: "ミュート",
+					description: "ワード・作品・ユーザーのミュートをまとめて管理します",
+					href: "/settings/mutes",
+				},
+				{
+					label: "ブロックしたユーザー",
+					description: "ブロックした相手を確認・解除します",
+					href: "/settings/blocks",
+				},
+			],
+		},
+		{
+			id: "notify",
+			label: "お知らせ",
+			items: [
+				{
+					label: "放送前のお知らせ",
+					description: "カレンダーでベルを付けた番組を、始まる何分前に知らせるかを決めます",
+					href: "/settings/rooms/notifications",
+				},
+			],
+		},
+		{ id: "about", label: "Anipolisについて", items: aboutItems },
 	];
 });
 
-const activeLabel = $derived(sections.find((s) => s.id === activeSection)?.label ?? "");
+const activeSection = $derived.by((): SectionId => {
+	const param = page.url.searchParams.get("section") ?? "";
+	const id = LEGACY_SECTIONS[param] ?? param;
+	return sections.some((s) => s.id === id) ? (id as SectionId) : "account";
+});
+
+let privacyStatus = $state<"idle" | "saving" | "saved">("idle");
 </script>
 
 <svelte:head><title>設定 - Anipolis</title></svelte:head>
@@ -138,7 +156,8 @@ const activeLabel = $derived(sections.find((s) => s.id === activeSection)?.label
 									type="button"
 									class="settings-nav-item"
 									class:active={activeSection === section.id}
-									onclick={() => goto(`?section=${section.id}`, { replaceState: true })}
+									onclick={() =>
+										goto(`?section=${section.id}`, { replaceState: true, noScroll: true })}
 									aria-current={activeSection === section.id ? "page" : undefined}
 								>
 									{section.label}
@@ -149,17 +168,56 @@ const activeLabel = $derived(sections.find((s) => s.id === activeSection)?.label
 				</nav>
 
 				<div class="settings-panel">
-					<nav class="settings-item-list" aria-label="{activeLabel}の設定メニュー">
-						{#each items as item (item.href)}
-							<a href={item.href} class="settings-item-link">
-								<span>
-									<strong>{item.label}</strong>
-									<small>{item.description}</small>
-								</span>
-								<span class="settings-item-arrow" aria-hidden="true">›</span>
-							</a>
-						{/each}
-					</nav>
+					{#each sections as section (section.id)}
+						<section
+							class="settings-section-block"
+							class:active={activeSection === section.id}
+							data-section={section.id}
+							aria-labelledby="settings-section-{section.id}"
+						>
+							<div class="settings-section-heading">
+								<h2 id="settings-section-{section.id}">{section.label}</h2>
+								{#if section.privacyToggles}
+									<span
+										class="autosave-status"
+										class:visible={privacyStatus !== "idle"}
+										aria-live="polite"
+									>
+										{#if privacyStatus === "saving"}
+											保存中…
+										{:else if privacyStatus === "saved"}
+											✓ 保存しました
+										{/if}
+									</span>
+								{/if}
+							</div>
+							{#if section.privacyToggles}
+								<div class="settings-toggles">
+									<PrivacyToggles
+										isPrivate={data.profile?.is_private ?? false}
+										listIsPublic={data.profile?.list_is_public ?? true}
+										onstatus={(next) => (privacyStatus = next)}
+									/>
+								</div>
+							{/if}
+							<nav class="settings-item-list" aria-label="{section.label}の設定メニュー">
+								{#each section.items as item (item.href)}
+									<a href={item.href} class="settings-item-link">
+										<span>
+											<strong>
+												{item.label}
+												{#if item.badge}
+													<span class="settings-item-badge">{item.badge}</span>
+												{/if}
+											</strong>
+											<small>{item.description}</small>
+										</span>
+										<span class="settings-item-arrow" aria-hidden="true">›</span>
+									</a>
+								{/each}
+							</nav>
+						</section>
+					{/each}
 				</div>
 			</div>
 		</div>
@@ -224,10 +282,62 @@ const activeLabel = $derived(sections.find((s) => s.id === activeSection)?.label
 	padding: 28px 32px;
 }
 
+/* PC は選んだカテゴリだけを出す（スマホは下の @media で全部出す） */
+.settings-section-block {
+	display: none;
+}
+
+.settings-section-block.active {
+	display: block;
+}
+
+.settings-section-heading {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.settings-section-heading h2 {
+	margin: 0;
+	font-size: 1.05rem;
+	font-weight: 700;
+}
+
+.autosave-status {
+	color: var(--color-text-muted);
+	font-size: 0.78rem;
+	opacity: 0;
+	transition: opacity 0.2s ease;
+}
+
+.autosave-status.visible {
+	opacity: 1;
+}
+
+.settings-toggles {
+	margin-top: 12px;
+	border-top: 1px solid var(--color-border);
+}
+
+.settings-toggles :global(.toggle-row) {
+	padding: 16px 0;
+	border-bottom: 1px solid var(--color-border);
+}
+
 .settings-item-list {
 	display: flex;
 	flex-direction: column;
 	margin-top: 12px;
+}
+
+/* スイッチの下に続く項目は、スイッチの区切り線と二重にしない */
+.settings-toggles + .settings-item-list {
+	margin-top: 0;
+}
+
+.settings-toggles + .settings-item-list .settings-item-link:first-child {
+	border-top: none;
 }
 
 .settings-item-link {
@@ -264,6 +374,22 @@ const activeLabel = $derived(sections.find((s) => s.id === activeSection)?.label
 	color: var(--color-accent);
 }
 
+.settings-item-badge {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 18px;
+	height: 18px;
+	margin-left: 6px;
+	padding: 0 5px;
+	border-radius: 9px;
+	background: var(--color-accent);
+	color: var(--color-bg);
+	font-size: 0.72rem;
+	font-weight: 700;
+	vertical-align: 1px;
+}
+
 .settings-item-arrow {
 	color: var(--color-text-muted);
 	font-size: 1.5rem;
@@ -271,6 +397,7 @@ const activeLabel = $derived(sections.find((s) => s.id === activeSection)?.label
 	line-height: 1;
 }
 
+/* スマホはカテゴリを選ばせず、全カテゴリを見出し付きで縦に並べる */
 @media (max-width: 640px) {
 	.settings-shell {
 		grid-template-columns: minmax(0, 1fr);
@@ -278,49 +405,40 @@ const activeLabel = $derived(sections.find((s) => s.id === activeSection)?.label
 
 	.settings-sidebar {
 		border-right: none;
-		border-bottom: 1px solid var(--color-border);
 		padding: 16px 0 0;
 	}
 
 	.settings-sidebar-header {
-		padding: 0 16px 12px;
+		padding: 0 16px 4px;
+		border-bottom: none;
+		margin-bottom: 0;
 	}
 
-	/* カテゴリは4つだけなので、横スクロールにせず折り返して全部見せる（選択中が隠れないように） */
 	.settings-nav-list {
-		display: flex;
-		flex-direction: row;
-		flex-wrap: wrap;
-		padding: 0 12px 12px;
-		gap: 4px;
-	}
-
-	.settings-nav-item {
-		padding: 8px 14px;
-		border-radius: 28px;
-		white-space: nowrap;
-		font-size: 0.88rem;
-	}
-
-	.settings-nav-item.active {
-		background: var(--color-accent);
-		color: #fff;
+		display: none;
 	}
 
 	.settings-panel {
-		padding: 4px 16px 12px;
+		padding: 0 16px 12px;
 	}
 
-	/* カテゴリの下の線と重なるので、一覧の先頭の線は引かない */
-	.settings-item-list {
-		margin-top: 0;
+	.settings-section-block {
+		display: block;
+		padding-top: 20px;
 	}
 
-	.settings-item-link:first-child {
-		border-top: none;
+	.settings-section-heading h2 {
+		color: var(--color-text-muted);
+		font-size: 0.82rem;
+		font-weight: 600;
 	}
 
-	.settings-item-link:last-child {
+	.settings-item-list,
+	.settings-toggles {
+		margin-top: 4px;
+	}
+
+	.settings-section-block:last-child .settings-item-link:last-child {
 		border-bottom: none;
 	}
 }
