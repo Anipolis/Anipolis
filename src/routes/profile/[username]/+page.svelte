@@ -1119,7 +1119,12 @@ function listButtonFor(anime: Anime) {
 					</p>
 				</div>
 			{:else}
-				<ActivityFeed items={data.activity.items} canLike={Boolean(data.user) && !isOwn} showUser={false} />
+				<ActivityFeed
+					items={data.activity.items}
+					canLike={Boolean(data.user) && !isOwn}
+					showUser={false}
+					mine={isOwn}
+				/>
 				{#if data.activity.nextCursor}
 					<a href={timelineCursorHref(page.url, data.activity.nextCursor)} class="load-more-btn"
 						>さらに読み込む</a
