@@ -28,10 +28,16 @@ let unmounting = false;
 let pressedOnDialog = false;
 
 const openModal: Attachment<HTMLDialogElement> = (dialog) => {
+	// 親が表示フラグを下ろして外したとき（閉じるボタンなど）は、DOM を外したあとにここが走るので
+	// ブラウザのフォーカスの戻しが効かない。開く前の要素を覚えておき、迷子になっていたら自分で戻す
+	const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 	dialog.showModal();
 	return () => {
 		unmounting = true;
 		if (dialog.open) dialog.close();
+		const active = document.activeElement;
+		const focusLost = !active || active === document.body || dialog.contains(active);
+		if (focusLost && opener?.isConnected) opener.focus();
 	};
 };
 
