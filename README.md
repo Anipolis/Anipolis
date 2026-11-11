@@ -64,7 +64,8 @@ GitHub Actions は **リポジトリ自身のビルド・テスト（`.github/wo
 GitHub の利用規約（Additional Product Terms）に反し、2026年9月に実際にアカウントが凍結されました。二度と戻さないでください。
 
 - カタログの定期同期（しょぼい・MAL・Wikidata）はメンテナーの開発機のタスクスケジューラで動いています。詳細は [scripts/scheduled/README.md](scripts/scheduled/README.md)
-- 本番（Cloudflare Pages）へのデプロイは別メンバーが管理しています。手元から直接出す場合は `pnpm exec wrangler login` のあと `pnpm deploy`
+- 本番（Cloudflare Workers）へのデプロイは別メンバーが管理しています。手元から直接出す場合は `pnpm exec wrangler login` のあと `pnpm deploy`
+- デプロイ設定は `wrangler.jsonc`、ビルド結果は `.svelte-kit/cloudflare`。手元で本番と同じ形を確かめるときは `pnpm build` のあと `pnpm preview:worker`
 - Pull Request を出す前に手元でも `pnpm check` / `pnpm test` を通してください
 
 ## ライセンス

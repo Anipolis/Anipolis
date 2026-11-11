@@ -40,4 +40,5 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
       - run: pnpm test
-      - run: pnpm build
+      # wrangler.jsonc の設定と、Worker のバンドル・サイズ上限をデプロイ前に確かめる
+      - run: pnpm deploy:dry-run

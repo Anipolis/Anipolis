@@ -1,0 +1,17 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"name": "anipolis",
+	// SvelteKit のサーバー。adapter-cloudflare がここに _worker.js を書き出す
+	"main": ".svelte-kit/cloudflare/_worker.js",
+	"compatibility_date": "2026-11-01",
+	// 2026-08-04 以降の日付では既定で有効だが、サーバーが node:crypto を使うため明示する
+	"compatibility_flags": ["nodejs_compat"],
+	"assets": {
+		// _worker.js から env.ASSETS で静的ファイルを読むため、名前は ASSETS から変えない
+		"binding": "ASSETS",
+		"directory": ".svelte-kit/cloudflare"
+	},
+	"observability": {
+		"enabled": true
+	}
+}

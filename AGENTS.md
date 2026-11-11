@@ -46,7 +46,7 @@ Detected from the repository:
 - Package manager: `pnpm` `12.18.0`.
 - Framework: SvelteKit `^2.60.1` with Svelte `^5.55.7`.
 - Build tool: Vite `^7.3.3`.
-- Deployment adapter: `@sveltejs/adapter-cloudflare`. Production is Cloudflare Pages; `pnpm deploy` builds and uploads with Wrangler.
+- Deployment adapter: `@sveltejs/adapter-cloudflare`. Production is Cloudflare Workers (static assets + `_worker.js`); `wrangler.jsonc` is the deployment config and `pnpm deploy` builds and uploads with Wrangler.
 - Database/backend: Supabase, using `@supabase/supabase-js` and `@supabase/ssr`.
 - Auth: Supabase Auth through server-side SvelteKit hooks.
 - Styling: global CSS in `src/app.css` plus UnoCSS utilities and Iconify Lucide icons through `@unocss/preset-icons`.
