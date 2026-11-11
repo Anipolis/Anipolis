@@ -4,7 +4,7 @@ import { browser } from "$app/environment";
 import { goto, invalidateAll } from "$app/navigation";
 import { navigating, page } from "$app/state";
 import type { Database } from "$lib/supabase/database.types";
-import type { OpenBroadcastRoomSummary, StoredAccount } from "$lib/types";
+import type { LinkedAccountSummary, OpenBroadcastRoomSummary } from "$lib/types";
 import AnimeIcon from "./AnimeIcon.svelte";
 import LiveRoomPickerModal from "./LiveRoomPickerModal.svelte";
 import UserAvatar from "./UserAvatar.svelte";
@@ -18,7 +18,7 @@ interface Props {
 	unreadNotificationCount?: number;
 	unreadReminderCount?: number;
 	pendingReportsCount?: number;
-	extraAccounts?: StoredAccount[];
+	extraAccounts?: LinkedAccountSummary[];
 	/** 初期設定の途中など。ロゴ・テーマ切り替え・アカウント（ログアウト）だけを出し、画面へのリンクは出さない */
 	minimal?: boolean;
 }
