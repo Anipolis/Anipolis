@@ -480,10 +480,6 @@ textarea {
 	color: var(--color-accent-hover);
 }
 
-.sidebar-avatar {
-	padding: 2px;
-}
-
 .sidebar-badge {
 	position: absolute;
 	top: 6px;
