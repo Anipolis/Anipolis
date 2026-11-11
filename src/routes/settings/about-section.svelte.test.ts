@@ -52,7 +52,7 @@ describe("設定の一覧", () => {
 			"ログイン",
 			"公開範囲",
 			"ミュートとブロック",
-			"お知らせ",
+			"通知",
 			"Anipolisについて",
 		]);
 	});
@@ -106,7 +106,7 @@ describe("設定の一覧", () => {
 		expect(withRequests.querySelector('[data-section="visibility"] .settings-item-badge')?.textContent).toBe("3");
 	});
 
-	it("整理前の ?section=privacy・rooms は、公開範囲・お知らせとして開く", () => {
+	it("整理前の ?section=privacy・rooms は、公開範囲・通知として開く", () => {
 		const privacy = renderSettings("privacy");
 		expect(privacy.querySelector(".settings-section-block.active")?.getAttribute("data-section")).toBe(
 			"visibility",

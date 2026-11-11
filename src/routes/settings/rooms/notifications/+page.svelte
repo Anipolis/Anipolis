@@ -46,14 +46,14 @@ const settingsSubmit: SubmitFunction = () => {
 };
 </script>
 
-<svelte:head> <title>放送前のお知らせ - Anipolis</title> </svelte:head>
+<svelte:head> <title>放送前リマインダー - Anipolis</title> </svelte:head>
 
 <div class="page-container" style="justify-content: center;">
 	<main style="flex: 0 1 640px; min-width: 0;">
 		<div class="settings-card">
 			<SettingsBackLink />
 			<div class="settings-header-row">
-				<h1 class="settings-title">放送前のお知らせ</h1>
+				<h1 class="settings-title">放送前リマインダー</h1>
 			</div>
 
 			{#if form && "message" in form}
@@ -63,10 +63,12 @@ const settingsSubmit: SubmitFunction = () => {
 			<section class="settings-section">
 				<div class="section-heading-row">
 					<h2 class="settings-section-title with-info-tip">
-						お知らせのタイミング
-						<InfoTip label="放送前のお知らせ">
-							<p>お知らせは、カレンダーの上と、画面の右下（スマホは上）に出ます。</p>
-							<p>複数選ぶと、それぞれの時間にお知らせします。</p>
+						知らせるタイミング
+						<InfoTip label="放送前リマインダー">
+							<p>
+								リマインダーは、カレンダーの上と、画面の右下（スマホは上）に出ます。通知タブには届きません。
+							</p>
+							<p>複数選ぶと、それぞれの時間に知らせます。</p>
 						</InfoTip>
 					</h2>
 					<span class="autosave-status" class:visible={saving || justSaved} aria-live="polite">
@@ -77,7 +79,7 @@ const settingsSubmit: SubmitFunction = () => {
 						{/if}
 					</span>
 				</div>
-				<p class="settings-section-desc">カレンダーでベルを付けた番組が始まる前にお知らせします。</p>
+				<p class="settings-section-desc">カレンダーでベルを付けた番組が始まる前に知らせます。</p>
 				<form
 					method="POST"
 					action="?/updateNotificationSettings"
@@ -87,39 +89,39 @@ const settingsSubmit: SubmitFunction = () => {
 					<div class="toggle-row">
 						<span class="toggle-row-text">
 							<strong>1分前</strong>
-							<small>放送の1分前にお知らせ</small>
+							<small>放送の1分前に知らせる</small>
 						</span>
 						<ToggleSwitch
 							name="notify_1min"
 							bind:checked={notify1min}
 							disabled={saving}
-							label="1分前にお知らせ"
+							label="1分前に知らせる"
 							onchange={autoSave}
 						/>
 					</div>
 					<div class="toggle-row">
 						<span class="toggle-row-text">
 							<strong>5分前</strong>
-							<small>放送の5分前にお知らせ</small>
+							<small>放送の5分前に知らせる</small>
 						</span>
 						<ToggleSwitch
 							name="notify_5min"
 							bind:checked={notify5min}
 							disabled={saving}
-							label="5分前にお知らせ"
+							label="5分前に知らせる"
 							onchange={autoSave}
 						/>
 					</div>
 					<div class="toggle-row">
 						<span class="toggle-row-text">
 							<strong>30分前</strong>
-							<small>放送の30分前にお知らせ</small>
+							<small>放送の30分前に知らせる</small>
 						</span>
 						<ToggleSwitch
 							name="notify_30min"
 							bind:checked={notify30min}
 							disabled={saving}
-							label="30分前にお知らせ"
+							label="30分前に知らせる"
 							onchange={autoSave}
 						/>
 					</div>
