@@ -1,17 +1,29 @@
 <script lang="ts">
+import { collectionKindPrefix } from "$lib/collections";
 import CollectionFormModal from "$lib/components/CollectionFormModal.svelte";
-import TrendingPanel from "$lib/components/TrendingPanel.svelte";
+import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();
 
 let creating = $state(false);
+// 三点メニューを開いているコレクションと、編集中のコレクション（題名・説明・公開はここで直す）
+let menuOpenId = $state<string | null>(null);
+let editingId = $state<string | null>(null);
+const editing = $derived(data.collections?.find((collection) => collection.id === editingId) ?? null);
 </script>
+
+<svelte:window
+	onclick={() => (menuOpenId = null)}
+	onkeydown={(event) => {
+		if (event.key === "Escape") menuOpenId = null;
+	}}
+/>
 
 <svelte:head><title>コレクション - Anipolis</title></svelte:head>
 
 <div class="page-container">
-	<main class="feed-column collections-page">
+	<main class="feed-column feed-column--wide collections-page">
 		<header class="collections-header">
 			<h1>コレクション</h1>
 			{#if data.collections && data.collections.length > 0}
@@ -21,9 +33,6 @@ let creating = $state(false);
 				</button>
 			{/if}
 		</header>
-		<p class="collections-lead">
-			作品を好きな切り口でまとめて残せます。公開にすると、リンクを知っている人が見られます
-		</p>
 
 		{#if data.collections === null}
 			<div class="empty-state">
@@ -37,14 +46,19 @@ let creating = $state(false);
 		{:else}
 			<ul class="collections-list">
 				{#each data.collections as collection (collection.id)}
-					<li>
+					<li class="collection-row">
 						<a href="/collections/{collection.id}" class="collection-item">
 							<!-- 先頭の4作品のカバー（足りない分は空の枠） -->
 							<span class="collection-item-covers" aria-hidden="true">
 								{#each [0, 1, 2, 3] as slot (slot)}
 									<span class="collection-item-cover">
 										{#if collection.covers[slot]}
-											<img src={collection.covers[slot]} alt="" loading="lazy">
+											<img
+												src={coverThumbSrc(collection.covers[slot])}
+												{@attach coverThumbFallback(collection.covers[slot])}
+												alt=""
+												loading="lazy"
+											>
 										{/if}
 									</span>
 								{/each}
@@ -62,19 +76,74 @@ let creating = $state(false);
 								{#if collection.description}
 									<span class="collection-item-description">{collection.description}</span>
 								{/if}
-								<span class="collection-item-meta">{collection.item_count}作品</span>
+								<span class="collection-item-meta"
+									>{collectionKindPrefix(collection.kind)}{collection.item_count}作品</span
+								>
 							</span>
 						</a>
+						<div class="collection-menu">
+							<button
+								type="button"
+								class="collection-menu-btn"
+								aria-label="「{collection.title}」のメニュー"
+								aria-haspopup="menu"
+								aria-expanded={menuOpenId === collection.id}
+								onclick={(event) => {
+									event.stopPropagation();
+									menuOpenId = menuOpenId === collection.id ? null : collection.id;
+								}}
+							>
+								<span class="i-lucide-ellipsis-vertical" aria-hidden="true"></span>
+							</button>
+							{#if menuOpenId === collection.id}
+								<div class="collection-menu-dropdown" role="menu">
+									<button
+										type="button"
+										role="menuitem"
+										onclick={(event) => {
+											event.stopPropagation();
+											menuOpenId = null;
+											editingId = collection.id;
+										}}
+									>
+										<span class="i-lucide-pencil" aria-hidden="true"></span>
+										編集
+									</button>
+									<!-- アニポリスの投稿でシェア（193）。公開のときだけ。外へのリンク共有と紛れないよう、アイコンはリポストと同じ -->
+									{#if collection.is_public}
+										<a role="menuitem" href="/?share_collection={collection.id}#compose">
+											<span class="i-lucide-repeat-2" aria-hidden="true"></span>
+											投稿でシェア
+										</a>
+									{/if}
+								</div>
+							{/if}
+						</div>
 					</li>
 				{/each}
 			</ul>
 		{/if}
 	</main>
-
-	<aside class="sidebar-column">
-		<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
-	</aside>
 </div>
+
+{#if editing}
+	<!-- 送り先はそのコレクションのページのアクション。削除するとこの一覧へ戻る -->
+	<CollectionFormModal
+		mode="edit"
+		action="/collections/{editing.id}?/updateCollection"
+		deleteAction="/collections/{editing.id}?/deleteCollection"
+		initial={{
+			title: editing.title,
+			description: editing.description,
+			is_public: editing.is_public,
+			kind: editing.kind,
+			tiers: editing.tiers,
+		}}
+		onclose={() => {
+			editingId = null;
+		}}
+	/>
+{/if}
 
 {#if creating}
 	<CollectionFormModal
@@ -105,14 +174,6 @@ let creating = $state(false);
 .collections-new {
 	font-size: 13px;
 }
-.collections-lead {
-	margin: 0;
-	padding: 0 16px 8px;
-	border-bottom: 1px solid var(--color-border);
-	color: var(--color-text-muted);
-	font-size: 13px;
-	line-height: 1.6;
-}
 .collections-empty-add {
 	display: flex;
 	align-items: center;
@@ -140,15 +201,77 @@ let creating = $state(false);
 	padding: 8px 0;
 	list-style: none;
 }
-.collection-item {
+.collection-row {
+	position: relative;
 	display: flex;
 	align-items: center;
+}
+.collection-row:hover {
+	background: var(--color-surface-hover);
+}
+.collection-item {
+	display: flex;
+	flex: 1;
+	align-items: center;
 	gap: 14px;
-	padding: 12px 16px;
+	min-width: 0;
+	padding: 12px 4px 12px 16px;
 	color: var(--color-text);
 	text-decoration: none;
 }
-.collection-item:hover {
+.collection-menu {
+	position: relative;
+	flex-shrink: 0;
+	margin-right: 8px;
+}
+.collection-menu-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 36px;
+	height: 36px;
+	border: 0;
+	border-radius: 999px;
+	background: transparent;
+	color: var(--color-text-muted);
+	cursor: pointer;
+	font-size: 20px;
+}
+.collection-menu-btn:hover,
+.collection-menu-btn[aria-expanded="true"] {
+	background: var(--color-surface-hover);
+	color: var(--color-text);
+}
+.collection-menu-dropdown {
+	position: absolute;
+	top: calc(100% + 4px);
+	right: 0;
+	z-index: 100;
+	min-width: 140px;
+	overflow: hidden;
+	border: 1px solid var(--color-border);
+	border-radius: 12px;
+	background: var(--color-surface);
+	box-shadow: 0 8px 24px rgb(0 0 0 / 0.24);
+}
+.collection-menu-dropdown button,
+.collection-menu-dropdown a {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	padding: 10px 14px;
+	border: 0;
+	background: transparent;
+	color: var(--color-text);
+	cursor: pointer;
+	font: inherit;
+	font-size: 14px;
+	text-align: left;
+	text-decoration: none;
+}
+.collection-menu-dropdown button:hover,
+.collection-menu-dropdown a:hover {
 	background: var(--color-surface-hover);
 }
 .collection-item-covers {

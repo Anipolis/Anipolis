@@ -10,7 +10,6 @@ import MyListModal from "$lib/components/MyListModal.svelte";
 import MyListQuickEdit from "$lib/components/MyListQuickEdit.svelte";
 import MylistSortSelect from "$lib/components/MylistSortSelect.svelte";
 import MylistStatusTabs from "$lib/components/MylistStatusTabs.svelte";
-import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import {
 	createSaveQueue,
 	DEFAULT_SAVE_ERROR_MESSAGE,
@@ -256,7 +255,7 @@ $effect(() => {
 <svelte:head> <title>マイリスト - Anipolis</title> </svelte:head>
 
 <div class="page-container">
-	<main class="feed-column mylist-page">
+	<main class="feed-column feed-column--wide mylist-page">
 		<div class="mylist-container">
 			<header class="mylist-header">
 				<div class="mylist-title-row">
@@ -276,14 +275,14 @@ $effect(() => {
 					</div>
 					<div class="header-actions">
 						{#if totalCount > 0}
-							<div class="view-toggle" role="group" aria-label="表示の切り替え">
+							<fieldset class="view-toggle fieldset-reset" aria-label="表示の切り替え">
 								<button
 									type="button"
 									class="view-btn"
-									class:active={viewMode === 'list'}
-									onclick={() => (viewMode = 'list')}
+									class:active={viewMode === "list"}
+									onclick={() => (viewMode = "list")}
 									aria-label="カードで表示"
-									aria-pressed={viewMode === 'list'}
+									aria-pressed={viewMode === "list"}
 									title="カードで表示"
 								>
 									<span class="i-lucide-layout-grid" aria-hidden="true"></span>
@@ -291,15 +290,15 @@ $effect(() => {
 								<button
 									type="button"
 									class="view-btn"
-									class:active={viewMode === 'progress'}
-									onclick={() => (viewMode = 'progress')}
+									class:active={viewMode === "progress"}
+									onclick={() => (viewMode = "progress")}
 									aria-label="話数を記録"
-									aria-pressed={viewMode === 'progress'}
+									aria-pressed={viewMode === "progress"}
 									title="話数を記録"
 								>
 									<span class="i-lucide-list" aria-hidden="true"></span>
 								</button>
-							</div>
+							</fieldset>
 						{/if}
 
 						{#if totalCount > 0}
@@ -321,8 +320,7 @@ $effect(() => {
 					<p>まだアニメがありません。<a href="/anime">アニメを探す</a></p>
 					{#if data.profile.list_is_public}
 						<p class="mylist-empty-note">
-							マイリストは他の人もプロフィールで見られます。<a href="/settings/privacy"
-								>設定</a
+							マイリストは他の人もプロフィールで見られます。<a href="/settings/privacy">設定</a
 							>で非公開にできます
 						</p>
 					{/if}
@@ -336,7 +334,7 @@ $effect(() => {
 						<div class="status-empty">
 							<p>{MYLIST_TAB_LABELS[selectedStatus]}にはまだ登録がありません</p>
 						</div>
-					{:else if viewMode === 'list'}
+					{:else if viewMode === "list"}
 						<AnimeStatusSection
 							animes={visibleAnimes}
 							scoreLabel="自分のスコア"
@@ -386,10 +384,6 @@ $effect(() => {
 			}}
 		/>
 	{/if}
-
-	<aside class="sidebar-column">
-		<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
-	</aside>
 </div>
 
 <style>

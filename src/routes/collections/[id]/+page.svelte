@@ -1,13 +1,14 @@
 <script lang="ts">
-import { invalidateAll } from "$app/navigation";
+import { onDestroy, untrack } from "svelte";
+import { beforeNavigate, goto, invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
-import { toAnimePick } from "$lib/anime-picker";
-import { ANIME_STATUS_ICONS, ANIME_STATUS_LABELS } from "$lib/anime-status";
-import { MAX_COLLECTION_ITEMS } from "$lib/collections";
-import AnimePickerModal from "$lib/components/AnimePickerModal.svelte";
+import type { AnimePick } from "$lib/anime-picker";
+import { collectionKindPrefix, collectionTierColor, MAX_COLLECTION_ITEMS, orderByTier } from "$lib/collections";
+import CollectionBoard from "$lib/components/CollectionBoard.svelte";
 import CollectionFormModal from "$lib/components/CollectionFormModal.svelte";
-import TrendingPanel from "$lib/components/TrendingPanel.svelte";
+import CollectionSearch from "$lib/components/CollectionSearch.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
+import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();
@@ -23,21 +24,283 @@ const updatedLabel = $derived(
 	}),
 );
 
-let pickingItems = $state(false);
-let editingInfo = $state(false);
-let copied = $state(false);
-let copyTimer: ReturnType<typeof setTimeout> | null = null;
+// ---- 取り込む（他の人のコレクションを自分のものとして写す。194） ----
+let importing = $state(false);
+let importError = $state("");
+// ページを離れたら、待っている取り込みの返事は捨てる（遅れて返った成功で、移った先から引き戻さないように）
+let importRun = 0;
+// 同じページの部品のまま別のコレクションへ移ることもあるので、表示も戻す
+beforeNavigate(() => {
+	importRun += 1;
+	importing = false;
+	importError = "";
+});
+onDestroy(() => {
+	importRun += 1;
+});
 
-async function saveItems(animeIds: number[]) {
-	const response = await fetch(`/api/collections/${collection.id}/items`, {
+async function importCollection() {
+	// 確認は出さない（取り込んだものは非公開で始まり、いらなければ消せる）
+	const run = ++importRun;
+	importing = true;
+	importError = "";
+	try {
+		const res = await fetch(`/api/collections/${collection.id}/copy`, { method: "POST" });
+		const body = (await res.json().catch(() => null)) as { id?: string; message?: string } | null;
+		if (run !== importRun) return;
+		if (!res.ok || !body?.id) {
+			importError = body?.message ?? "取り込みに失敗しました";
+			return;
+		}
+		await goto(`/collections/${body.id}`);
+	} catch {
+		if (run === importRun) importError = "取り込みに失敗しました。通信状態を確かめてください";
+	} finally {
+		if (run === importRun) importing = false;
+	}
+}
+
+// 持ち主だけの道具: 題名などを直す（歯車）。作品は編集面の検索から足す
+let editingInfo = $state(false);
+
+/** 保存先。操作した時点のコレクションに固定する（保存待ちのまま別のコレクションへ移っても、そちらへ送らない） */
+type SaveTarget = { id: string; tiered: boolean };
+
+function saveTarget(): SaveTarget {
+	return { id: collection.id, tiered: collection.kind === "tier" };
+}
+
+async function putJson(collectionId: string, path: string, body: unknown, fallback: string, keepalive = false) {
+	const response = await fetch(`/api/collections/${collectionId}/${path}`, {
 		method: "PUT",
 		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ animeIds }),
+		body: JSON.stringify(body),
+		keepalive,
 	});
 	const res = (await response.json().catch(() => ({}))) as { message?: string };
-	if (!response.ok) throw new Error(res.message ?? "コレクションの保存に失敗しました");
-	await invalidateAll();
+	if (!response.ok) throw new Error(res.message ?? fallback);
 }
+
+/** 並びを丸ごと保存する（段を送らないときは、DB が今の段を引き継ぐ。192） */
+function putItems(to: SaveTarget, animeIds: number[], tiers: (number | null)[], keepalive = false) {
+	return putJson(
+		to.id,
+		"items",
+		to.tiered ? { animeIds, tiers } : { animeIds },
+		"コレクションの保存に失敗しました",
+		keepalive,
+	);
+}
+
+// ティア表以外は、見出しの検索で選んだ作品を編集面の最後に足す
+let board = $state<ReturnType<typeof CollectionBoard>>();
+
+function addFromSearch(anime: AnimePick) {
+	board?.addItem(anime);
+}
+
+const isTier = $derived(collection.kind === "tier");
+const reorderItems = $derived(
+	collection.items.map((anime, index) => ({
+		id: Number(anime.id),
+		title: anime.title,
+		cover_url: anime.cover_url,
+		tier: collection.item_tiers[index] ?? null,
+	})),
+);
+/** ティア表の表示: 段ごと（上から、最後が未分類）に、段の中は並び順のまま */
+const tierRows = $derived.by(() => {
+	if (!isTier) return [];
+	const entries = orderByTier(
+		collection.items.map((anime, index) => ({ anime, tier: collection.item_tiers[index] ?? null })),
+		collection.tiers.length,
+	);
+	return [
+		...collection.tiers.map((label, tier) => ({
+			key: String(tier),
+			label,
+			color: collectionTierColor(tier) as string | null,
+			animes: entries.filter((entry) => entry.tier === tier).map((entry) => entry.anime),
+		})),
+		{
+			key: "none",
+			label: "未分類",
+			color: null,
+			animes: entries.filter((entry) => entry.tier === null).map((entry) => entry.anime),
+		},
+	].filter((row) => row.key !== "none" || row.animes.length > 0);
+});
+
+// ---- 編集面（持ち主）: 動かすたびに自動で保存する ----
+
+// 作り直すとき（＋で足した・元に戻した・保存に失敗した・種類や段をモーダルで変えた）に増やす
+let boardVersion = $state(0);
+// 編集面は、開いたときの並び・段から自分で持つ。段をその場で変えても作り直さない（付け替えた段が古い data で戻らないように）
+const boardKey = $derived(`${collection.id}:${collection.kind}:${boardVersion}`);
+type Snapshot = { ids: number[]; tiers: (number | null)[] };
+// 最後に知らされた並び（保存待ちを含む）と、元に戻す先
+// 見出しの検索の「追加済み」にも使うので、変わったら画面に伝える
+let latest = $state.raw<Snapshot | null>(null);
+let undoTo = $state<Snapshot | null>(null);
+// 続けて動かしている間（少し手を止めるまで）は、ひとまとまりの操作として元に戻す
+let undoGroupTimer: ReturnType<typeof setTimeout> | null = null;
+let itemsTimer: ReturnType<typeof setTimeout> | null = null;
+let queued: (Snapshot & { to: SaveTarget }) | null = null;
+let saveChain: Promise<void> = Promise.resolve();
+let saving = $state(0);
+let saveError = $state("");
+// 保存して作り直すまで（元に戻す・＋で足す・設定のモーダルを開く/閉じる）は、編集面を触れなくする。
+// その間に動かした分が、古い data での作り直しで消えて、表示と保存が食い違わないように
+let boardBusy = $state(false);
+
+async function whileBoardBusy(task: () => Promise<void>) {
+	boardBusy = true;
+	try {
+		await task();
+	} finally {
+		boardBusy = false;
+	}
+}
+
+function currentSnapshot(): Snapshot {
+	return latest ?? { ids: reorderItems.map((item) => item.id), tiers: reorderItems.map((item) => item.tier) };
+}
+
+const liveIds = $derived(new Set(currentSnapshot().ids));
+
+async function resetBoard() {
+	latest = null;
+	// 作り直す前の段番号で戻さないように、元に戻す先も捨てる（モーダルで段を変えたときなど）
+	undoTo = null;
+	await invalidateAll();
+	boardVersion += 1;
+}
+
+// 保存に失敗したら増やす。失敗より前に積んだ保存は、失敗した状態を前提にしているので送らない
+let saveGeneration = 0;
+
+function enqueue(task: () => Promise<void>) {
+	const generation = saveGeneration;
+	saving += 1;
+	saveChain = saveChain
+		.then(() => (generation === saveGeneration ? task() : undefined))
+		// 続けて動かしていなければ、件数や更新日を読み直す（編集面は作り直さない）
+		.then(() => (queued || itemsTimer ? undefined : invalidateAll()))
+		.catch(async (taskError: unknown) => {
+			saveGeneration += 1;
+			saveError = `${taskError instanceof Error ? taskError.message : "保存に失敗しました"}。保存できている状態に戻しました`;
+			undoTo = null;
+			queued = null;
+			if (itemsTimer) clearTimeout(itemsTimer);
+			itemsTimer = null;
+			await whileBoardBusy(resetBoard);
+		})
+		.finally(() => {
+			saving -= 1;
+		});
+	return saveChain;
+}
+
+/** 待っている並びの保存をすぐ送る */
+function flushItems(keepalive = false) {
+	if (itemsTimer) clearTimeout(itemsTimer);
+	itemsTimer = null;
+	const next = queued;
+	queued = null;
+	if (!next) return saveChain;
+	return enqueue(() => putItems(next.to, next.ids, next.tiers, keepalive));
+}
+
+function onBoardChange(ids: number[], tiers: (number | null)[]) {
+	const previous = currentSnapshot();
+	latest = { ids, tiers };
+	queued = { ...latest, to: saveTarget() };
+	saveError = "";
+	// 元に戻す先は、一続きの操作の前の並び（矢印キーで続けて動かしたときなど）
+	if (!undoGroupTimer) undoTo = previous;
+	else clearTimeout(undoGroupTimer);
+	undoGroupTimer = setTimeout(() => (undoGroupTimer = null), 1500);
+	if (itemsTimer) clearTimeout(itemsTimer);
+	itemsTimer = setTimeout(() => void flushItems(), 500);
+}
+
+function onTiersChange(tiers: string[], origins: (number | null)[], animeIds: number[], animeTiers: (number | null)[]) {
+	saveError = "";
+	// 段の番号が変わるので、元に戻すのはやめる（作品の段は DB の関数が一緒に付け替える）
+	undoTo = null;
+	const to = saveTarget();
+	void flushItems();
+	void enqueue(() => putJson(to.id, "tiers", { tiers, origins }, "段の保存に失敗しました"));
+	// 付け替えたあとの並びを、次の操作の元に戻す先にする（古い data の段番号へ戻さない）
+	latest = { ids: animeIds, tiers: animeTiers };
+}
+
+async function undo() {
+	const target = undoTo;
+	if (!target) return;
+	const to = saveTarget();
+	undoTo = null;
+	if (undoGroupTimer) clearTimeout(undoGroupTimer);
+	undoGroupTimer = null;
+	queued = null;
+	if (itemsTimer) clearTimeout(itemsTimer);
+	itemsTimer = null;
+	await whileBoardBusy(async () => {
+		await enqueue(() => putItems(to, target.ids, target.tiers));
+		await resetBoard();
+	});
+}
+
+// ページを離れる前に、待っている保存を送る
+beforeNavigate(() => {
+	void flushItems(true);
+});
+
+/** タブを閉じるときは、先の保存を待たずに最後の並びをすぐ送る（待つと送る前にページが終わる） */
+function sendQueuedNow() {
+	if (itemsTimer) clearTimeout(itemsTimer);
+	itemsTimer = null;
+	const next = queued;
+	queued = null;
+	if (next) void putItems(next.to, next.ids, next.tiers, true).catch(() => {});
+}
+
+// 別のコレクションへ移ったら、編集の状態を持ち越さない（待っていた保存は beforeNavigate で元の保存先へ送り済み）
+let editingFor = untrack(() => collection.id);
+$effect.pre(() => {
+	const id = collection.id;
+	if (id === editingFor) return;
+	editingFor = id;
+	latest = null;
+	undoTo = null;
+	saveError = "";
+	if (undoGroupTimer) clearTimeout(undoGroupTimer);
+	undoGroupTimer = null;
+});
+
+/** 歯車: 段の保存と読み直しが終わってから開く（モーダルは開いたときの段を使うので、古い段で上書きしないように） */
+function openEdit() {
+	return whileBoardBusy(async () => {
+		await flushItems();
+		await saveChain;
+		await invalidateAll();
+		editingInfo = true;
+	});
+}
+
+$effect(() => {
+	const onPageHide = sendQueuedNow;
+	window.addEventListener("pagehide", onPageHide);
+	return () => {
+		window.removeEventListener("pagehide", onPageHide);
+		if (undoGroupTimer) clearTimeout(undoGroupTimer);
+	};
+});
+
+// 「リンクをコピー」は今は動いていないので隠しておく（直したら true に戻す）
+const SHOW_COPY_LINK = false;
+let copied = $state(false);
+let copyTimer: ReturnType<typeof setTimeout> | null = null;
 
 async function copyLink() {
 	try {
@@ -50,6 +313,23 @@ async function copyLink() {
 	}
 }
 </script>
+
+{#snippet animeCard(anime: (typeof collection.items)[number], eager: boolean)}
+	<a href="/anime/{anime.id}" class="collection-card">
+		<span class="collection-card-cover" class:collection-card-cover--empty={!anime.cover_url}>
+			{#if anime.cover_url}
+				<img
+					src={coverThumbSrc(anime.cover_url)}
+					{@attach coverThumbFallback(anime.cover_url)}
+					alt=""
+					loading={eager ? "eager" : "lazy"}
+				>
+			{/if}
+			<!-- 題名はカバーに重ね、指すかフォーカスしたときだけ出す（カバーが無い作品は真ん中に常に出す） -->
+			<span class="collection-card-caption">{anime.title}</span>
+		</span>
+	</a>
+{/snippet}
 
 <svelte:head>
 	<title>{collection.title}（{ownerName}のコレクション） - Anipolis</title>
@@ -69,124 +349,259 @@ async function copyLink() {
 </svelte:head>
 
 <div class="page-container">
-	<main class="feed-column collection-page">
+	<main class="feed-column feed-column--wide collection-page">
 		<header class="collection-header">
-			<a href={data.isOwn ? '/collections' : `/profile/${collection.owner.username}`} class="collection-owner">
+			{#if data.isOwn}
+				<a href="/collections" class="collection-back">
+					<span class="i-lucide-arrow-left" aria-hidden="true"></span>
+					コレクション一覧
+				</a>
+			{/if}
+			<a href={data.isOwn ? "/collections" : `/profile/${collection.owner.username}`} class="collection-owner">
 				<UserAvatar src={collection.owner.avatar_url} username={ownerName} size="xs" />
 				<span>{ownerName}のコレクション</span>
 			</a>
-			<h1 class="collection-title">
-				{collection.title}
-				{#if !collection.is_public}
-					<span class="collection-private-badge">
-						<span class="i-lucide-lock-keyhole" aria-hidden="true"></span>
-						非公開
-					</span>
+			<div class="collection-title-row">
+				<h1 class="collection-title">
+					{collection.title}
+					{#if !collection.is_public}
+						<span class="collection-private-badge">
+							<span class="i-lucide-lock-keyhole" aria-hidden="true"></span>
+							非公開
+						</span>
+					{/if}
+				</h1>
+				{#if data.isOwn}
+					<div class="collection-tools">
+						<span class="collection-save-state" aria-live="polite">{saving > 0 ? "保存中..." : ""}</span>
+						<!-- 動かしたあとだけ出す。直前の操作（続けて動かした分はまとめて）を取り消す -->
+						{#if undoTo}
+							<button
+								type="button"
+								class="collection-tool"
+								aria-label="元に戻す"
+								title="元に戻す"
+								onclick={undo}
+							>
+								<span class="i-lucide-undo-2" aria-hidden="true"></span>
+							</button>
+						{/if}
+						{#if !isTier}
+							<div class="collection-header-search">
+								<CollectionSearch
+									addedIds={liveIds}
+									full={liveIds.size >= MAX_COLLECTION_ITEMS}
+									direction="down"
+									label="作品を探して足す"
+									onpick={addFromSearch}
+								/>
+							</div>
+						{/if}
+						<button
+							type="button"
+							class="collection-tool"
+							aria-label="コレクションの設定"
+							title="設定"
+							onclick={openEdit}
+						>
+							<span class="i-lucide-settings" aria-hidden="true"></span>
+						</button>
+					</div>
+				{:else if data.user}
+					<!-- 他の人のコレクションは、自分のコレクションとして取り込める（194） -->
+					<div class="collection-tools">
+						<button
+							type="button"
+							class="btn btn-secondary collection-import"
+							disabled={importing}
+							onclick={importCollection}
+						>
+							<span class="i-lucide-copy-plus" aria-hidden="true"></span>
+							{importing ? "取り込み中..." : "取り込む"}
+						</button>
+					</div>
 				{/if}
-			</h1>
+			</div>
+			{#if saveError}
+				<p class="field-error-msg" role="alert">{saveError}</p>
+			{/if}
+			{#if importError}
+				<p class="field-error-msg" role="alert">{importError}</p>
+			{/if}
 			{#if collection.description}
 				<p class="collection-description">{collection.description}</p>
 			{/if}
-			<p class="collection-meta">{collection.items.length}作品・{updatedLabel}更新</p>
+			<p class="collection-meta">
+				{collectionKindPrefix(collection.kind)}{collection.items.length}作品・{updatedLabel}更新
+			</p>
 
-			<div class="collection-actions">
-				{#if data.isOwn}
-					<button
-						type="button"
-						class="btn btn-secondary collection-action"
-						onclick={() => (pickingItems = true)}
-					>
-						<span class="i-lucide-list-plus" aria-hidden="true"></span>
-						作品を編集
-					</button>
-					<button
-						type="button"
-						class="btn btn-secondary collection-action"
-						onclick={() => (editingInfo = true)}
-					>
-						<span class="i-lucide-pencil" aria-hidden="true"></span>
-						題名・公開を編集
-					</button>
-				{/if}
-				{#if collection.is_public}
+			{#if SHOW_COPY_LINK && collection.is_public}
+				<div class="collection-actions">
 					<button type="button" class="btn btn-secondary collection-action" onclick={copyLink}>
-						<span class={copied ? 'i-lucide-check' : 'i-lucide-link'} aria-hidden="true"></span>
-						{copied ? 'コピーしました' : 'リンクをコピー'}
+						<span class={copied ? "i-lucide-check" : "i-lucide-link"} aria-hidden="true"></span>
+						{copied ? "コピーしました" : "リンクをコピー"}
 					</button>
-				{/if}
-			</div>
+				</div>
+			{/if}
 		</header>
 
-		{#if collection.items.length === 0}
-			{#if data.isOwn}
-				<button type="button" class="collection-empty-add" onclick={() => (pickingItems = true)}>
-					<span class="i-lucide-plus" aria-hidden="true"></span>
-					作品を追加
-				</button>
-			{:else}
-				<div class="empty-state"><p>まだ作品がありません</p></div>
-			{/if}
-		{:else}
-			<ol class="collection-grid">
+		{#if data.isOwn}
+			<div class="collection-board-wrap" class:collection-board-wrap--busy={boardBusy} inert={boardBusy}>
+				{#key boardKey}
+					<CollectionBoard
+						bind:this={board}
+						items={reorderItems}
+						tiers={isTier ? collection.tiers : undefined}
+						showRank={collection.kind === "ranking"}
+						onchange={onBoardChange}
+						ontierschange={onTiersChange}
+					/>
+				{/key}
+			</div>
+		{:else if collection.items.length === 0}
+			<div class="empty-state">
+				<p>まだ作品がありません</p>
+			</div>
+		{:else if isTier}
+			<div class="collection-tiers">
+				{#each tierRows as row (row.key)}
+					<section class="collection-tier" aria-label={row.label}>
+						<h2
+							class="collection-tier-label"
+							class:collection-tier-label--colored={row.color !== null}
+							style:background-color={row.color}
+						>
+							{row.label}
+						</h2>
+						{#if row.animes.length > 0}
+							<ol class="collection-tier-items">
+								{#each row.animes as anime (anime.id)}
+									<li>{@render animeCard(anime, true)}</li>
+								{/each}
+							</ol>
+						{:else}
+							<p class="collection-tier-empty">なし</p>
+						{/if}
+					</section>
+				{/each}
+			</div>
+		{:else if collection.kind === "ranking"}
+			<!-- ランキングは、順位・カバー・題名の横長の行を上から積む -->
+			<ol class="collection-ranking">
 				{#each collection.items as anime, index (anime.id)}
-					{@const myStatus = data.myStatuses[anime.id]}
 					<li>
-						<a href="/anime/{anime.id}" class="collection-card">
-							<span class="collection-card-cover">
+						<a href="/anime/{anime.id}" class="collection-ranking-row">
+							<span class="rank-cell rank-cell--{index + 1}" role="img" aria-label="{index + 1}位"
+								>{index + 1}</span
+							>
+							<span class="collection-ranking-cover">
 								{#if anime.cover_url}
-									<img src={anime.cover_url} alt="" loading={index < 8 ? 'eager' : 'lazy'}>
-								{:else}
-									<span
-										class="collection-card-cover-empty i-lucide-clapperboard"
-										aria-hidden="true"
-									></span>
+									<img
+										src={coverThumbSrc(anime.cover_url)}
+										{@attach coverThumbFallback(anime.cover_url)}
+										alt=""
+										loading={index < 8 ? "eager" : "lazy"}
+									>
 								{/if}
 							</span>
-							<span class="collection-card-title">{anime.title}</span>
-							<!-- 見ている人のマイリストでの状態（コレクションからマイリストへつなぐ手がかり） -->
-							{#if myStatus}
-								<span class="collection-card-status">
-									<span class={ANIME_STATUS_ICONS[myStatus]} aria-hidden="true"></span>
-									{ANIME_STATUS_LABELS[myStatus]}
-								</span>
-							{/if}
+							<span class="collection-ranking-title">{anime.title}</span>
 						</a>
 					</li>
 				{/each}
 			</ol>
+		{:else}
+			<ol class="collection-grid">
+				{#each collection.items as anime, index (anime.id)}
+					<li>{@render animeCard(anime, index < 8)}</li>
+				{/each}
+			</ol>
 		{/if}
 	</main>
-
-	<aside class="sidebar-column">
-		<TrendingPanel trending={data.trending} animeTrending={data.animeTrending} />
-	</aside>
 </div>
-
-{#if pickingItems}
-	<AnimePickerModal
-		title="コレクションの作品"
-		max={MAX_COLLECTION_ITEMS}
-		initial={collection.items.map(toAnimePick)}
-		onsave={saveItems}
-		onclose={() => {
-			pickingItems = false;
-		}}
-	/>
-{/if}
 
 {#if editingInfo}
 	<CollectionFormModal
 		mode="edit"
 		action="?/updateCollection"
 		deleteAction="?/deleteCollection"
-		initial={{ title: collection.title, description: collection.description, is_public: collection.is_public }}
-		onclose={() => {
+		initial={{
+			title: collection.title,
+			description: collection.description,
+			is_public: collection.is_public,
+			kind: collection.kind,
+			tiers: collection.tiers,
+		}}
+		onclose={async () => {
 			editingInfo = false;
+			// 種類や段をモーダルで変えたかもしれないので、待っている保存を送ってから編集面を作り直す
+			await whileBoardBusy(async () => {
+				await flushItems();
+				await resetBoard();
+			});
 		}}
 	/>
 {/if}
 
 <style>
+.collection-board-wrap--busy {
+	opacity: 0.6;
+	transition: opacity 0.15s;
+}
+.collection-header-search {
+	width: 240px;
+}
+/* 狭い画面では、検索のある道具の列を題名の下へ回し、検索を広げる */
+@media (max-width: 640px) {
+	.collection-title-row {
+		flex-wrap: wrap;
+	}
+	.collection-tools:has(.collection-header-search) {
+		flex: 1 1 100%;
+	}
+	.collection-header-search {
+		flex: 1;
+		width: auto;
+	}
+}
+.collection-import {
+	gap: 6px;
+}
+.collection-save-state {
+	color: var(--color-text-muted);
+	font-size: 12px;
+}
+.collection-title-row {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px;
+}
+.collection-tools {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 8px;
+}
+.collection-tool {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 40px;
+	height: 40px;
+	border: 1px solid var(--color-border);
+	border-radius: 999px;
+	background: transparent;
+	color: var(--color-text);
+	cursor: pointer;
+	font-size: 18px;
+}
+.collection-tool:hover:not(:disabled) {
+	background: var(--color-surface-hover);
+}
+.collection-tool:disabled {
+	cursor: not-allowed;
+	opacity: 0.4;
+}
 .collection-page {
 	padding-bottom: 32px;
 }
@@ -196,6 +611,19 @@ async function copyLink() {
 	gap: 8px;
 	padding: 20px 16px 16px;
 	border-bottom: 1px solid var(--color-border);
+}
+.collection-back {
+	display: inline-flex;
+	align-items: center;
+	align-self: flex-start;
+	gap: 4px;
+	margin-bottom: 4px;
+	color: var(--color-text-muted);
+	font-size: 13px;
+	text-decoration: none;
+}
+.collection-back:hover {
+	color: var(--color-text);
 }
 .collection-owner {
 	display: inline-flex;
@@ -253,38 +681,23 @@ async function copyLink() {
 .collection-action {
 	font-size: 13px;
 }
-.collection-empty-add {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	gap: 6px;
-	width: calc(100% - 32px);
-	margin: 16px;
-	padding: 20px;
-	border: 1px dashed var(--color-border-hover);
-	border-radius: 12px;
-	background: transparent;
-	color: var(--color-text-muted);
-	cursor: pointer;
-	font: inherit;
-	font-size: 14px;
-}
-.collection-empty-add:hover {
-	background: var(--color-surface-hover);
-	color: var(--color-text);
-}
 .collection-grid {
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-	gap: 18px 12px;
+	gap: 12px;
 	margin: 0;
 	padding: 16px;
 	list-style: none;
 }
+@media (max-width: 960px) {
+	.collection-ranking-cover {
+		width: 64px;
+	}
+}
 @media (max-width: 480px) {
 	.collection-grid {
 		grid-template-columns: repeat(3, minmax(0, 1fr));
-		gap: 14px 10px;
+		gap: 8px;
 	}
 }
 .collection-card {
@@ -296,6 +709,7 @@ async function copyLink() {
 	text-decoration: none;
 }
 .collection-card-cover {
+	position: relative;
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -306,33 +720,153 @@ async function copyLink() {
 	background: var(--color-bg-card);
 	transition: opacity 0.15s;
 }
-.collection-card:hover .collection-card-cover {
-	opacity: 0.85;
-}
 .collection-card-cover img {
 	width: 100%;
 	height: 100%;
 	object-fit: cover;
 }
-.collection-card-cover-empty {
-	width: 24px;
-	height: 24px;
-	color: var(--color-text-muted);
-}
-.collection-card-title {
+/* カバーに重ねる題名。カバーが無い作品は常に出す */
+.collection-card-caption {
+	position: absolute;
+	right: 0;
+	bottom: 0;
+	left: 0;
 	display: -webkit-box;
 	overflow: hidden;
-	font-size: 13px;
+	padding: 20px 6px 6px;
+	background: linear-gradient(transparent, rgb(0 0 0 / 0.85) 40%);
+	color: #fff;
+	font-size: 12px;
+	line-height: 1.4;
+	opacity: 0;
+	transition: opacity 0.15s;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 3;
+	line-clamp: 3;
+}
+.collection-card:hover .collection-card-caption,
+.collection-card:focus-visible .collection-card-caption,
+.collection-card-cover--empty .collection-card-caption {
+	opacity: 1;
+}
+/* カバーが無い作品は、題名をカードの真ん中に出す（下に寄せると長い題名が見切れる） */
+.collection-card-cover--empty .collection-card-caption {
+	top: 50%;
+	bottom: auto;
+	padding: 0 8px;
+	transform: translateY(-50%);
+	background: none;
+	color: var(--color-text);
+	font-weight: 600;
+	text-align: center;
+	-webkit-line-clamp: 6;
+	line-clamp: 6;
+}
+.collection-card:focus-visible {
+	outline: none;
+}
+.collection-card:focus-visible .collection-card-cover {
+	outline: 2px solid var(--color-accent);
+	outline-offset: 2px;
+}
+.collection-ranking {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin: 0;
+	padding: 16px;
+	list-style: none;
+}
+.collection-ranking-row {
+	display: flex;
+	align-items: center;
+	overflow: hidden;
+	border: 1px solid var(--color-border);
+	border-radius: 6px;
+	background: var(--color-bg-card);
+	color: var(--color-text);
+	text-decoration: none;
+	transition: background 0.15s;
+}
+.collection-ranking-row:hover {
+	background: var(--color-surface-hover);
+}
+.collection-ranking-cover {
+	flex-shrink: 0;
+	width: 80px;
+	aspect-ratio: 400 / 566;
+	background: var(--color-border);
+}
+.collection-ranking-cover img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+.collection-ranking-title {
+	display: -webkit-box;
+	overflow: hidden;
+	padding: 0 16px;
+	font-size: 15px;
+	font-weight: 700;
 	line-height: 1.4;
 	-webkit-box-orient: vertical;
 	-webkit-line-clamp: 2;
 	line-clamp: 2;
 }
-.collection-card-status {
-	display: inline-flex;
+.collection-tiers {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 16px;
+}
+/* 段の中は、段の名前と作品を隙間なくくっつける（隙間は段と段の間だけ） */
+.collection-tier {
+	display: flex;
+	overflow: hidden;
+	border: 1px solid var(--color-border);
+	border-radius: 6px;
+}
+.collection-tier-label {
+	display: flex;
+	flex-shrink: 0;
 	align-items: center;
-	gap: 4px;
+	justify-content: center;
+	width: 64px;
+	margin: 0;
+	padding: 4px;
+	background: var(--color-surface-hover);
+	font-size: 16px;
+	font-weight: 800;
+	overflow-wrap: anywhere;
+	text-align: center;
+}
+.collection-tier-items {
+	display: grid;
+	flex: 1;
+	grid-template-columns: repeat(auto-fill, 80px);
+	gap: 0;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.collection-tier-items .collection-card-cover {
+	border: none;
+	border-radius: 0;
+	box-shadow: inset 0 0 0 1px var(--color-border);
+}
+.collection-tier-items .collection-card:focus-visible .collection-card-cover {
+	outline-offset: -2px;
+}
+.collection-tier-label--colored {
+	color: #1a1a1a;
+}
+.collection-tier-empty {
+	display: flex;
+	align-items: center;
+	margin: 0;
+	padding: 12px;
 	color: var(--color-text-muted);
-	font-size: 12px;
+	font-size: 13px;
 }
 </style>

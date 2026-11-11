@@ -42,16 +42,16 @@ Concrete examples:
 
 Detected from the repository:
 
-- Runtime: Node.js `24.14.1`, managed by `mise`.
-- Package manager: `pnpm` `10.33.2`.
-- Framework: SvelteKit `^2.50.2` with Svelte `^5.54.0`.
-- Build tool: Vite `^7.3.1`.
-- Deployment adapter: `@sveltejs/adapter-auto`. `CLAUDE.md` mentions Cloudflare Pages as the hosting assumption, but this repo currently uses adapter-auto rather than a Cloudflare-specific adapter.
+- Runtime: Node.js `26.13.0`, managed by `mise` (`mise.toml` is the source of truth; `.node-version` mirrors it for Cloudflare).
+- Package manager: `pnpm` `12.18.0`.
+- Framework: SvelteKit `^2.60.1` with Svelte `^5.55.7`.
+- Build tool: Vite `^7.3.3`.
+- Deployment adapter: `@sveltejs/adapter-cloudflare`. Production is Cloudflare Workers (static assets + `_worker.js`); `wrangler.jsonc` is the deployment config and `pnpm deploy` builds and uploads with Wrangler.
 - Database/backend: Supabase, using `@supabase/supabase-js` and `@supabase/ssr`.
 - Auth: Supabase Auth through server-side SvelteKit hooks.
 - Styling: global CSS in `src/app.css` plus UnoCSS utilities and Iconify Lucide icons through `@unocss/preset-icons`.
 - Fonts: UnoCSS web fonts config references `Zen Maru Gothic`.
-- Formatting/linting: Biome `2.4.10`.
+- Formatting/linting: Biome `2.6.6`.
 - Type checking: `svelte-check` and `tsc --noEmit`.
 - Tests: Vitest `4.x` with `happy-dom` for Svelte component tests and Node for server tests.
 

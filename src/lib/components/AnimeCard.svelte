@@ -99,12 +99,12 @@ function isAiringToday(): boolean {
 		<!-- 放送中の作品は右上のリボンで示す。今日放送があれば「本日放送」を優先する -->
 		{#if isAiringToday()}
 			<span class="cover-ribbon cover-ribbon--today">本日放送</span>
-		{:else if anime.computed_broadcast_status === 'airing' && !hideAiringRibbon}
+		{:else if anime.computed_broadcast_status === "airing" && !hideAiringRibbon}
 			<span class="cover-ribbon cover-ribbon--airing">放送中</span>
 		{/if}
 		{#if progress}
 			<span class="cover-progress-count">
-				<span class="sr-only">見た話数</span>{progress.watched}{progress.total ? `/${progress.total}` : ''}話
+				<span class="sr-only">見た話数</span>{progress.watched}{progress.total ? `/${progress.total}` : ""}話
 			</span>
 			{#if progressRatio != null}
 				<span class="cover-progress" aria-hidden="true">
@@ -115,10 +115,10 @@ function isAiringToday(): boolean {
 	</div>
 	<!-- 画像の下: 左にスコア、右に自分のマイリスト（2マスに仕切る） -->
 	<div class="anime-card-actions" class:anime-card-actions--split={listButton}>
-		{#if score.kind === 'average' && score.count == null}
+		{#if score.kind === "average" && score.count == null}
 			<!-- スコアを読み込めなかった（評価なしとは区別して何も出さない） -->
 			<span class="anime-score"><span class="sr-only">スコアを読み込めませんでした</span></span>
-		{:else if score.kind === 'personal' && score.onclick}
+		{:else if score.kind === "personal" && score.onclick}
 			<!-- 自分のスコア。押すとその場で変える欄を開く -->
 			<button
 				type="button"
@@ -131,17 +131,17 @@ function isAiringToday(): boolean {
 				title={score.value != null ? `${score.label}（押して変更）` : `${score.label}を付ける`}
 			>
 				<span class="anime-score-star" aria-hidden="true">★</span>
-				<span aria-hidden="true">{score.value ?? '—'}</span>
+				<span aria-hidden="true">{score.value ?? "—"}</span>
 			</button>
 		{:else}
 			<span
 				class="anime-score"
-				class:anime-score--mine={score.kind === 'personal' && score.mine}
+				class:anime-score--mine={score.kind === "personal" && score.mine}
 				class:anime-score--none={score.value == null}
 			>
 				<span class="anime-score-star" aria-hidden="true">★</span>
 				{#if score.value != null}
-					{#if score.kind === 'average'}
+					{#if score.kind === "average"}
 						<span class="sr-only">平均スコア</span>
 						<span title="{score.count}人の評価の平均">{score.value.toFixed(2)}</span>
 					{:else}
@@ -149,7 +149,7 @@ function isAiringToday(): boolean {
 						<span title={score.label}>{score.value}</span>
 					{/if}
 				{:else}
-					<span class="sr-only">{score.kind === 'average' ? '評価なし' : `${score.label}なし`}</span>
+					<span class="sr-only">{score.kind === "average" ? "評価なし" : `${score.label}なし`}</span>
 					<span aria-hidden="true">—</span>
 				{/if}
 			</span>
@@ -181,11 +181,11 @@ function isAiringToday(): boolean {
 			class:anime-title-en--placeholder={!anime.title_en}
 			aria-hidden={anime.title_en ? undefined : "true"}
 		>
-			{anime.title_en ?? ' '}
+			{anime.title_en ?? " "}
 		</p>
 		<!-- 種別と時期（「TV・2026年春」、映画は年だけ）を1行で -->
 		<p class="anime-meta" class:anime-meta--placeholder={!meta} aria-hidden={meta ? undefined : "true"}>
-			{meta || ' '}
+			{meta || " "}
 		</p>
 	</div>
 </a>

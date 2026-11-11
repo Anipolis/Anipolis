@@ -4,9 +4,9 @@
 	"license": "MIT",
 	"private": true,
 	"type": "module",
-	"packageManager": "pnpm@12.8.1",
+	"packageManager": "pnpm@12.18.0",
 	"engines": {
-		"node": ">=22.14.0"
+		"node": ">=26.13.0"
 	},
 	"scripts": {
 		"dev": "vite dev --mode staging",
@@ -14,14 +14,17 @@
 		"staging:db-push": "node --experimental-strip-types scripts/staging/db-push.ts",
 		"staging:seed": "node --experimental-strip-types scripts/staging/seed.ts",
 		"build": "vite build",
-		"deploy": "vite build && wrangler pages deploy .svelte-kit/cloudflare --project-name anipolis --commit-dirty=true",
+		"deploy": "vite build && wrangler deploy",
+		"deploy:dry-run": "vite build && wrangler deploy --dry-run --outdir .svelte-kit/cloudflare-deploy",
 		"preview": "vite preview",
+		"preview:worker": "wrangler dev",
 		"prepare": "simple-git-hooks",
 		"check:biome": "biome check .",
 		"check:svelte": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:types": "svelte-kit sync && tsc --noEmit",
 		"check:anime-view": "node --experimental-strip-types scripts/check-anime-view-types.ts",
-		"check": "pnpm check:biome && pnpm check:svelte && pnpm check:types && pnpm check:anime-view",
+		"check:node-version": "node --experimental-strip-types scripts/check-node-version.ts",
+		"check": "pnpm check:biome && pnpm check:svelte && pnpm check:types && pnpm check:anime-view && pnpm check:node-version",
 		"test:unit": "vitest --run --coverage",
 		"test": "pnpm test:unit",
 		"supabase:version": "supabase --version",
@@ -66,15 +69,14 @@
 		"marked": "^18.0.5"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "^2.4.15",
+		"@biomejs/biome": "2.6.6",
 		"@iconify-json/lucide": "^1.2.108",
-		"@sveltejs/adapter-auto": "^7.0.1",
 		"@sveltejs/adapter-cloudflare": "^7.2.8",
 		"@sveltejs/kit": "^2.60.1",
 		"@sveltejs/vite-plugin-svelte": "^6.2.4",
 		"@tsconfig/strictest": "^2.0.8",
 		"@tsconfig/svelte": "^5.0.8",
-		"@types/node": "^25.8.0",
+		"@types/node": "^26.6.6",
 		"@unocss/preset-icons": "^66.6.8",
 		"@unocss/preset-wind3": "^66.6.8",
 		"@vitest/coverage-v8": "^4.1.6",
@@ -87,6 +89,7 @@
 		"typescript": "^5.9.3",
 		"unocss": "^66.6.8",
 		"vite": "^7.3.3",
-		"vitest": "^4.1.6"
+		"vitest": "^4.1.6",
+		"wrangler": "^4.159.0"
 	}
 }

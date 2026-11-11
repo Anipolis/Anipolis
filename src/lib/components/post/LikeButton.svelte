@@ -66,8 +66,8 @@ $effect(() => {
 				type="button"
 				class="reaction-count-button post-like-count reaction-count-hitbox"
 				aria-label="いいねしたユーザーを表示"
-				aria-expanded={controller.openReactionType === 'like'}
-				onclick={(event) => controller.openReactionPopover(event, 'like')}
+				aria-expanded={controller.openReactionType === "like"}
+				onclick={(event) => controller.openReactionPopover(event, "like")}
 			>
 				<span
 					class="reaction-count-roll"
@@ -93,9 +93,9 @@ $effect(() => {
 						onanimationend={() => (rolling = false)}
 					>
 						{#if rolling}
-							<span class="reaction-count-roll-old">{previousCount > 0 ? previousCount : ''}</span>
+							<span class="reaction-count-roll-old">{previousCount > 0 ? previousCount : ""}</span>
 						{/if}
-						<span class="reaction-count-roll-new">{displayedCount > 0 ? displayedCount : ''}</span>
+						<span class="reaction-count-roll-new">{displayedCount > 0 ? displayedCount : ""}</span>
 					</span>
 				{/if}
 			</span>
@@ -121,7 +121,7 @@ $effect(() => {
 					width="17"
 					height="17"
 					viewBox="0 0 24 24"
-					fill={controller.likedByMe ? 'currentColor' : 'none'}
+					fill={controller.likedByMe ? "currentColor" : "none"}
 					stroke="currentColor"
 					stroke-width="2"
 					stroke-linecap="round"
@@ -134,7 +134,7 @@ $effect(() => {
 				</svg>
 			</button>
 		</form>
-		{#if controller.openReactionType === 'like'}
+		{#if controller.openReactionType === "like"}
 			<ReactionUsersPopover
 				title="いいねしたユーザー"
 				users={controller.reactionUsers}

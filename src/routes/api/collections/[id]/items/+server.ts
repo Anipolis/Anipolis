@@ -1,16 +1,17 @@
 import { error, json } from "@sveltejs/kit";
-import { isCollectionId, MAX_COLLECTION_ITEMS } from "$lib/collections";
+import { isCollectionId, MAX_COLLECTION_ITEMS, MAX_COLLECTION_TIERS } from "$lib/collections";
 import { requireAccountCanWrite } from "$lib/server/actions";
 import type { RequestHandler } from "./$types";
 
-// コレクションの作品を、送られた順番で丸ごと置き換える（#515）
+// コレクションの作品を、送られた順番で丸ごと置き換える（#515）。
+// ティア表の並べ替えは tiers（animeIds と同じ長さ。段の番号か null）も送る。送らなければ今の段を引き継ぐ（192）
 export const PUT: RequestHandler = async ({ params, request, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 	if (!user) error(401, "ログインが必要です");
 	if (!isCollectionId(params.id)) error(404, "コレクションが見つかりません");
 	await requireAccountCanWrite(supabase, user.id);
 
-	const body = (await request.json().catch(() => null)) as { animeIds?: unknown } | null;
+	const body = (await request.json().catch(() => null)) as { animeIds?: unknown; tiers?: unknown } | null;
 	const animeIds = body?.animeIds;
 	if (
 		!Array.isArray(animeIds) ||
@@ -22,9 +23,22 @@ export const PUT: RequestHandler = async ({ params, request, locals: { supabase,
 	if (animeIds.length > MAX_COLLECTION_ITEMS)
 		error(400, `コレクションには${MAX_COLLECTION_ITEMS}作品まで入れられます`);
 
+	const tiers = body?.tiers;
+	if (
+		tiers !== undefined &&
+		(!Array.isArray(tiers) ||
+			tiers.length !== animeIds.length ||
+			!tiers.every(
+				(tier) => tier === null || (Number.isInteger(tier) && tier >= 0 && tier < MAX_COLLECTION_TIERS),
+			))
+	) {
+		error(400, "段の指定が正しくありません");
+	}
+
 	const { error: rpcError } = await supabase.rpc("set_collection_items", {
 		p_collection_id: params.id,
 		p_anime_ids: animeIds as number[],
+		...(tiers !== undefined ? { p_tiers: tiers as (number | null)[] } : {}),
 	});
 	if (rpcError) {
 		console.error("set_collection_items error:", rpcError);

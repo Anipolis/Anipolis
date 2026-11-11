@@ -22,7 +22,7 @@ import {
 	type RoomPostPage,
 } from "$lib/room-live-sync";
 import type { Post, RoomAiring, RoomExitSurveyComparisonWithX, RoomExitSurveyNextParticipation } from "$lib/types";
-import type { LiveRoomActionData, LiveRoomData } from "$lib/types/live-room";
+import type { LiveRoomActionData, LiveRoomData, RoomProgressAdvance } from "$lib/types/live-room";
 import { isPostContinuation } from "$lib/utils/post-presentation";
 import {
 	createRoomConnectionState,
@@ -64,11 +64,16 @@ $effect(() => {
 	void form;
 	hideFormMessage = false;
 });
+// 投稿で進んだマイリストの話数。出したままにして、元に戻せるようにする
+let progressAdvance = $state<RoomProgressAdvance | null>(null);
+let isUndoingProgress = $state(false);
+// 元に戻したら、このルームで投稿を続けても進め直さない（話数を移ると再マウントされて戻る）
+let keepProgress = false;
 // 送信中に Enter で送った文章。前の投稿が終わったら順に送る（連投で Enter が空振りしないように）
 let queuedContents: string[] = [];
 // 次の送信で送る送信待ちの文章（入力欄の文章ではなくこちらを送る）
 let sendingQueued: string | null = null;
-let postListEl: HTMLDivElement | null = $state(null);
+let postListEl: HTMLElement | null = $state(null);
 let mounted = $state(false);
 let isMobileViewport = $state(false);
 let postOrder = $state<PostOrder>("oldest");
@@ -393,6 +398,7 @@ const handleCreatePost: SubmitFunction = ({ cancel, formData }) => {
 	sendingQueued = null;
 	const submitted = fromQueue ?? String(formData.get("content") ?? "");
 	if (fromQueue != null) formData.set("content", fromQueue);
+	if (keepProgress) formData.set("keep_progress", "1");
 	isPosting = true;
 	keepComposerFocused = true;
 	composerError = null;
@@ -404,6 +410,8 @@ const handleCreatePost: SubmitFunction = ({ cancel, formData }) => {
 			// update()（applyAction）は成功時にフォーカスをリセットして入力欄から外すので呼ばない。
 			// 連投中にフォーカスが外れ、その間に打った文字が入力欄に入らなくなるため
 			localSurveyPostCount += 1;
+			const advanced = result.data?.["progressAdvance"] as RoomProgressAdvance | undefined;
+			if (advanced) progressAdvance = advanced;
 			// 最初の投稿でルームができたときは、ルームの ID から読み直す
 			if (!data.room.session_id) await invalidateAll();
 			// 自分の投稿は、ライブ更新と同じ差分APIで反映する（invalidateAll は load 全体の再実行で重い）
@@ -440,6 +448,22 @@ const handleCreatePost: SubmitFunction = ({ cancel, formData }) => {
 			isPosting = false;
 		}
 		await focusComposerTextarea({ preventScroll: true });
+	};
+};
+
+const handleUndoProgress: SubmitFunction = () => {
+	isUndoingProgress = true;
+	// 応答を待つ間の投稿でも進め直さないよう、押した時点で止める（失敗したら戻す）
+	keepProgress = true;
+	composerError = null;
+	return async ({ result }) => {
+		isUndoingProgress = false;
+		if (result.type === "success") {
+			progressAdvance = null;
+		} else {
+			keepProgress = false;
+			composerError = "話数を元に戻せませんでした";
+		}
 	};
 };
 
@@ -984,6 +1008,34 @@ function formatCompactDate(iso: string) {
 					<!-- JavaScript が無いときの送信結果や、ほかの操作（投稿の削除など）の失敗 -->
 					<p class="form-error">{form.message}</p>
 				{/if}
+				{#if progressAdvance}
+					<div class="progress-advance" role="status">
+						<span class="progress-advance-text">
+							マイリストを {progressAdvance.to}
+							{progressAdvance.total != null ? ` / ${progressAdvance.total}` : ""}
+							話に進めました
+						</span>
+						<form method="POST" action="?/undoProgress" use:enhance={handleUndoProgress}>
+							<input type="hidden" name="from" value={progressAdvance.from}>
+							<input type="hidden" name="to" value={progressAdvance.to}>
+							<button
+								type="submit"
+								class="progress-advance-undo"
+								disabled={isUndoingProgress || isPosting}
+							>
+								元に戻す
+							</button>
+						</form>
+						<button
+							type="button"
+							class="progress-advance-close"
+							aria-label="閉じる"
+							onclick={() => (progressAdvance = null)}
+						>
+							<span class="i-lucide-x" aria-hidden="true"></span>
+						</button>
+					</div>
+				{/if}
 				{#if isEpisodeRoom}
 					<!-- スマホは投稿欄が1行の帯なので、注意は帯の上に出す（PC は投稿ボタンの横） -->
 					<p class="composer-note composer-note--mobile">タイムラインにも表示されます</p>
@@ -1009,7 +1061,7 @@ function formatCompactDate(iso: string) {
 								keepComposerFocused = true;
 							}}
 							onkeydown={(e) => {
-								if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
+								if (e.key === "Enter" && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
 									e.preventDefault();
 									submitComposer();
 								}
@@ -1020,7 +1072,7 @@ function formatCompactDate(iso: string) {
 								<span class="composer-note">タイムラインにも表示されます</span>
 							{/if}
 							{#if charCount >= maxLen - 40}
-								<span class="char-count {overLimit ? 'char-count--over' : ''}"
+								<span class="char-count {overLimit ? "char-count--over" : ""}"
 									>{charCount}/{maxLen}</span
 								>
 							{/if}
@@ -1097,7 +1149,7 @@ function formatCompactDate(iso: string) {
 			{/if}
 		</div>
 
-		<div class="room-order-toggle" role="group" aria-label="投稿の表示順">
+		<fieldset class="room-order-toggle fieldset-reset" aria-label="投稿の表示順">
 			<button
 				type="button"
 				class:active={postOrder === "oldest"}
@@ -1114,13 +1166,12 @@ function formatCompactDate(iso: string) {
 			>
 				新しい順
 			</button>
-		</div>
+		</fieldset>
 
 		<div class="room-post-list-shell">
 			<!-- svelte-ignore a11y_no_noninteractive_tabindex (The scroll region supports keyboard scrolling.) -->
-			<div
+			<section
 				class="room-post-list scrollbar-thin-muted"
-				role="region"
 				aria-label="実況タイムライン"
 				tabindex="0"
 				bind:this={postListEl}
@@ -1165,7 +1216,7 @@ function formatCompactDate(iso: string) {
 						{/each}
 					{/if}
 				</div>
-			</div>
+			</section>
 
 			<!-- 投稿が無いと飛び先が無く、空の表示に重なるだけなので出さない（#432） -->
 			{#if liveAiring && allPosts.length > 0}
@@ -1276,6 +1327,43 @@ function formatCompactDate(iso: string) {
 
 .composer-note--mobile {
 	display: none;
+}
+
+.progress-advance {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 8px;
+	font-size: 12px;
+	color: var(--color-text-muted);
+}
+
+.progress-advance-text {
+	min-width: 0;
+	margin-right: auto;
+}
+
+.progress-advance-undo {
+	padding: 2px 4px;
+	border: none;
+	background: none;
+	color: var(--color-primary);
+	font: inherit;
+	white-space: nowrap;
+	cursor: pointer;
+}
+
+.progress-advance-undo:hover {
+	text-decoration: underline;
+}
+
+.progress-advance-close {
+	display: inline-flex;
+	padding: 2px;
+	border: none;
+	background: none;
+	color: inherit;
+	cursor: pointer;
 }
 
 .room-summary-card {
@@ -1818,7 +1906,7 @@ function formatCompactDate(iso: string) {
 		will-change: transform;
 	}
 
-	.room-page-container .composer form,
+	.room-page-container .composer > form,
 	.room-page-container .composer-body {
 		min-width: 0;
 		width: 100%;

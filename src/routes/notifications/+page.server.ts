@@ -1,9 +1,10 @@
-import type { NotificationCategory } from "$lib/server/actions";
-import { getAnimeRankingTrending, getNotifications, getUnreadNotificationCountsByCategory } from "$lib/server/queries";
+import { getAnimeRankingTrending, getNotifications, getUnreadNotificationCount } from "$lib/server/queries";
 import { redirectToLogin } from "$lib/server/require-login";
 import type { PageServerLoad } from "./$types";
 
-const NORMAL_TYPES = [
+// 放送前のお知らせ（broadcast）は通知ではなくカレンダーに出す。
+// 181 より前のマイリスト通知（mylist_status）も、もう出さない
+const NOTIFICATION_TYPES = [
 	"like",
 	"repost",
 	"reply",
@@ -14,12 +15,6 @@ const NORMAL_TYPES = [
 	"exchange_matched",
 	"activity_like",
 ] as const;
-const ROOM_TYPES = ["broadcast"] as const;
-
-function resolveTab(value: string | null): NotificationCategory {
-	// 「マイリスト」のタブは 181 でなくした（フォロー中の人の動きはタイムラインのアクティビティへ）
-	return value === "room" ? "room" : "normal";
-}
 
 export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession }, url, parent }) => {
 	const { user } = await safeGetSession();
@@ -27,27 +22,19 @@ export const load: PageServerLoad = async ({ locals: { supabase, safeGetSession 
 
 	await parent();
 
-	const tab = resolveTab(url.searchParams.get("tab"));
-
 	// 既読化はここでは行わない。load は hover プリロードやブラウザの先読みでも走るため、
 	// ここで書き込むとページを開いていなくても未読が消える（#242）。
-	// 表示中タブの既読化は、描画後にページが POST /api/notifications/read を呼んで行う。
-
-	// タブは通常リンク遷移で毎回 load が走るため、表示するタブの一覧だけ取得する
-	// （非表示タブの分まで毎回50件×2カテゴリを取得しない）。未読バッジはカウント
-	// クエリ（getUnreadNotificationCountsByCategory）だけで賄える。
-	const typesByTab = { normal: NORMAL_TYPES, room: ROOM_TYPES } as const;
-	const [activeList, unreadCounts, trendingResult, animeTrending] = await Promise.all([
-		getNotifications(supabase, user.id, 50, typesByTab[tab]),
-		getUnreadNotificationCountsByCategory(supabase, user.id),
+	// 既読化は、描画後にページが POST /api/notifications/read を呼んで行う。
+	const [notifications, unreadCount, trendingResult, animeTrending] = await Promise.all([
+		getNotifications(supabase, user.id, 50, NOTIFICATION_TYPES),
+		getUnreadNotificationCount(supabase, user.id),
 		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
 		getAnimeRankingTrending(supabase, 5),
 	]);
 
 	return {
-		tab,
-		notifications: { normal: [], room: [], [tab]: activeList },
-		unreadCounts,
+		notifications,
+		unreadCount,
 		trending: trendingResult.data ?? [],
 		animeTrending,
 	};

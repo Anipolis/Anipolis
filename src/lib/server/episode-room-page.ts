@@ -1,9 +1,15 @@
-import { fail } from "@sveltejs/kit";
+import { fail, isActionFailure } from "@sveltejs/kit";
 import { airingOnAirAt, OPENABLE_WITHOUT_ROOM } from "$lib/episode-room";
 import { insertPostWithHashtags } from "$lib/server/actions";
-import { getAnimeRankingTrending, getEpisodeRoomAirings, getEpisodeRoomPosts } from "$lib/server/queries";
+import {
+	advanceMylistProgressFromRoom,
+	getAnimeRankingTrending,
+	getEpisodeRoomAirings,
+	getEpisodeRoomPosts,
+} from "$lib/server/queries";
 import { roomHashtag, stripTrailingRoomHashtag } from "$lib/server/room-hashtag";
 import type { Anime, EpisodeRoom } from "$lib/types";
+import type { RoomProgressAdvance } from "$lib/types/live-room";
 
 /**
  * 話数ルーム・特番ルーム（153）のページの共通部分。
@@ -103,7 +109,7 @@ export async function buildEpisodeRoomPageData(input: {
 	};
 }
 
-/** ルームへの投稿。ルームが開いていなければ投稿させない */
+/** ルームへの投稿。ルームが開いていなければ投稿させない。話数ルームなら、マイリストの話数も進める */
 export async function createEpisodeRoomPost(input: {
 	supabase: Supabase;
 	userId: string;
@@ -124,7 +130,7 @@ export async function createEpisodeRoomPost(input: {
 	if (!content) return fail(400, { message: "投稿内容を入力してください" });
 
 	// 放送枠の時間内なら、DB のトリガー（153）が放送枠も補う
-	return insertPostWithHashtags(
+	const posted = await insertPostWithHashtags(
 		supabase,
 		userId,
 		content,
@@ -139,4 +145,45 @@ export async function createEpisodeRoomPost(input: {
 		null,
 		room.id,
 	);
+	// 話数を元に戻した人には、同じルームで投稿を続けても進め直さない（keep_progress）
+	if (
+		isActionFailure(posted) ||
+		room.kind !== "episode" ||
+		room.episode_number == null ||
+		form.has("keep_progress")
+	) {
+		return posted;
+	}
+	// 話数を進められなくても投稿は成功のまま
+	const advanced = await advanceMylistProgressFromRoom(supabase, Number(anime.id), room.episode_number);
+	if (!advanced) return posted;
+	const progressAdvance: RoomProgressAdvance = { ...advanced, total: anime.episode_total ?? null };
+	return { ...posted, progressAdvance };
+}
+
+/** 投稿で進んだマイリストの話数を元に戻す。その後に話数を変えていたら、そちらを優先して何もしない */
+export async function undoRoomProgressAdvance(input: {
+	supabase: Supabase;
+	userId: string;
+	request: Request;
+	animeId: number;
+}) {
+	const { supabase, userId, request, animeId } = input;
+	const form = await request.formData();
+	const from = Number(form.get("from"));
+	const to = Number(form.get("to"));
+	if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to <= from) {
+		return fail(400, { message: "話数が不正です" });
+	}
+	const { error } = await supabase
+		.from("user_anime_list")
+		.update({ progress: from })
+		.eq("user_id", userId)
+		.eq("anime_id", animeId)
+		.eq("progress", to);
+	if (error) {
+		console.error("undoRoomProgressAdvance error:", error);
+		return fail(500, { message: "話数を元に戻せませんでした" });
+	}
+	return { success: true };
 }

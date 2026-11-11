@@ -107,7 +107,9 @@ describe("shared reaction rows", () => {
 		await tick();
 		const overlay = target.querySelector<HTMLElement>(".quote-modal-overlay");
 		if (!overlay) throw new Error("Missing quote modal");
-		overlay.click();
+		const backdrop = overlay.querySelector<HTMLElement>(".modal-click-target");
+		if (!backdrop) throw new Error("Missing quote modal backdrop");
+		backdrop.click();
 		await tick();
 		expect(target.querySelector(".quote-modal-overlay")).toBeNull();
 		expect(goto).not.toHaveBeenCalled();
@@ -171,13 +173,16 @@ describe("CW（ネタバレ注意）の保護（#317〜#319）", () => {
 			await tick();
 			expect(target.querySelector(".post-cw-content")?.getAttribute("aria-hidden")).toBe("false");
 			expect(target.querySelector(".post-cw-content")?.hasAttribute("inert")).toBe(false);
+			// 押した文字は消え、隠し直す操作は出さない
+			expect(target.querySelector(".post-cw-banner")).toBeNull();
+			expect(document.activeElement).toBe(target.querySelector(".post-cw-content-body"));
 		});
 	}
 
 	it("作品の情報が取れなくても CW の ID があれば折り畳む（通常の本文として出さない）", async () => {
 		const post = { ...fixturePost(22), cw_anime: null };
 		const target = await render(PostRow, post);
-		expect(target.querySelector(".post-cw-banner")?.textContent).toContain("ネタバレを含みます");
+		expect(target.querySelector(".post-cw-banner")?.textContent).toContain("ネタバレを表示");
 		expect(target.querySelector(".post-cw-content")?.getAttribute("aria-hidden")).toBe("true");
 	});
 
@@ -324,5 +329,30 @@ describe("実況ルームの返信の続き（#325）", () => {
 			.filter((u) => u.searchParams.get("mode") === "all");
 		expect(allModeCalls).toHaveLength(2);
 		expect(allModeCalls[1]?.searchParams.get("after_id")).toBe(all[99]?.id);
+	});
+
+	it("最新の返信がミュートなどで全部隠れても、「さらに表示する」で古い返信へ進める", async () => {
+		const older = [reply(0), reply(1)];
+		const fetchMock = vi.fn(async (input: string) => {
+			const url = new URL(input, "http://localhost");
+			// 最新3件はミュートした人の返信で、サーバーが除いて空になった
+			if (url.searchParams.get("mode") === "recent") return Response.json({ replies: [] });
+			return Response.json({ replies: older, nextCursor: null, hasMore: false });
+		});
+		vi.stubGlobal("fetch", fetchMock);
+
+		const target = document.body.appendChild(document.createElement("div"));
+		const component = mount(LiveRoomPostCard, {
+			target,
+			props: { post: { ...fixturePost(18), reply_count: 5 }, currentUserId: "preview-user-0" },
+		});
+		cleanup.push(() => unmount(component));
+		await tick();
+		target.querySelector<HTMLButtonElement>('[aria-label="投稿の返信を表示"]')?.click();
+		await vi.waitFor(() => expect(target.querySelector(".live-more-replies")).not.toBeNull());
+		expect(target.querySelectorAll(".live-reply")).toHaveLength(0);
+
+		target.querySelector<HTMLButtonElement>(".live-more-replies")?.click();
+		await vi.waitFor(() => expect(target.querySelectorAll(".live-reply")).toHaveLength(2));
 	});
 });

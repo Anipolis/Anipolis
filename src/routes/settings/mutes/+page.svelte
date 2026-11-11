@@ -4,6 +4,7 @@ import { untrack } from "svelte";
 import { enhance } from "$app/forms";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
+import { trackFormChanges } from "$lib/actions/trackFormChanges";
 import InfoTip from "$lib/components/InfoTip.svelte";
 import SettingsBackLink from "$lib/components/SettingsBackLink.svelte";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
@@ -48,12 +49,14 @@ function muteStatusLabel(mute: AnimeMute): string {
 	return mute.is_repeat ? `放送後${days}日間（毎週）` : `放送後${days}日間`;
 }
 
+// 開いている設定（一度に1つ）を、今のミュートから変えたか。新しく設定するときは変えなくても保存できる
+let muteFormChanged = $state(false);
+
 function toggleEdit(animeId: string) {
 	editingAnimeId = editingAnimeId === animeId ? null : animeId;
-	if (editingAnimeId !== animeId) {
-		const { [animeId]: _removed, ...rest } = pendingMuteType;
-		pendingMuteType = rest;
-	}
+	// 開くのは一度に1つなので、閉じる・切り替えるときは保存していない選択を捨てる
+	// （残すと開き直したときにそれが基準になり、変更なしと見なされて保存できない）
+	pendingMuteType = {};
 }
 
 const updateSubmit: SubmitFunction = ({ formData }) => {
@@ -91,9 +94,10 @@ function eventMuteDateLabel(mute: EventMute): string {
 	});
 }
 
-const activeTab = $derived.by((): "word" | "anime" => {
+const activeTab = $derived.by((): "word" | "anime" | "account" => {
 	const tab = page.url.searchParams.get("tab");
 	if (tab === "anime") return "anime";
+	if (tab === "account") return "account";
 	if (tab === "word") return "word";
 	if (stagedAnimeId) return "anime";
 	return "word";
@@ -104,7 +108,13 @@ const activeTab = $derived.by((): "word" | "anime" => {
 
 {#snippet muteForm(_animeId: string, _mute: AnimeMute | null)}
 	{@const currentMuteType = getMuteType(_animeId, _mute)}
-	<form method="POST" action="?/updateAnimeMute" use:enhance={updateSubmit} class="mute-accordion-form">
+	<form
+		method="POST"
+		action="?/updateAnimeMute"
+		use:enhance={updateSubmit}
+		use:trackFormChanges={(changed) => (muteFormChanged = changed)}
+		class="mute-accordion-form"
+	>
 		<input type="hidden" name="anime_id" value={_animeId}>
 		<div class="mute-type-row">
 			<label class="mute-type-label">
@@ -113,7 +123,9 @@ const activeTab = $derived.by((): "word" | "anime" => {
 					name="mute_type"
 					value="period"
 					checked={currentMuteType === "period"}
-					onchange={() => { pendingMuteType = { ...pendingMuteType, [_animeId]: "period" }; }}
+					onchange={() => {
+						pendingMuteType = { ...pendingMuteType, [_animeId]: "period" };
+					}}
 				>
 				<span>期間指定</span>
 			</label>
@@ -123,7 +135,9 @@ const activeTab = $derived.by((): "word" | "anime" => {
 					name="mute_type"
 					value="always"
 					checked={currentMuteType === "always"}
-					onchange={() => { pendingMuteType = { ...pendingMuteType, [_animeId]: "always" }; }}
+					onchange={() => {
+						pendingMuteType = { ...pendingMuteType, [_animeId]: "always" };
+					}}
 				>
 				<span>常にミュート</span>
 			</label>
@@ -143,7 +157,13 @@ const activeTab = $derived.by((): "word" | "anime" => {
 			</div>
 		{/if}
 		<div class="mute-accordion-actions">
-			<button type="submit" class="btn btn-primary btn-sm">保存</button>
+			<button
+				type="submit"
+				class="btn {_mute === null || muteFormChanged ? "btn-primary" : "btn-secondary"} btn-sm"
+				disabled={_mute !== null && !muteFormChanged}
+			>
+				保存
+			</button>
 		</div>
 	</form>
 {/snippet}
@@ -170,6 +190,13 @@ const activeTab = $derived.by((): "word" | "anime" => {
 					class:active={activeTab === "anime"}
 					aria-current={activeTab === "anime" ? "page" : undefined}
 					>ルーム</a
+				>
+				<a
+					href="/settings/mutes?tab=account"
+					class="mute-tab"
+					class:active={activeTab === "account"}
+					aria-current={activeTab === "account" ? "page" : undefined}
+					>アカウント</a
 				>
 			</nav>
 
@@ -225,6 +252,44 @@ const activeTab = $derived.by((): "word" | "anime" => {
 								</div>
 								<form method="POST" action="?/removeMute" use:enhance>
 									<input type="hidden" name="id" value={mutedWord.id}>
+									<button type="submit" class="btn btn-ghost danger">解除</button>
+								</form>
+							</div>
+						{/each}
+					{/if}
+				</div>
+			{:else if activeTab === "account"}
+				{#if form && "message" in form}
+					<div class="flash-error" role="alert">{form.message}</div>
+				{/if}
+
+				<p class="settings-section-desc">
+					ミュートした人の投稿・リポスト・通知・アクティビティを、タイムラインや実況ルームに出しません。相手には伝わらず、フォローもそのままです。相手のプロフィールを開けば投稿は見られます。
+				</p>
+
+				<div class="mute-list">
+					{#if data.mutedUsers.length === 0}
+						<div class="empty-state compact">
+							<p>ミュート中のアカウントはありません。相手のプロフィールの「…」からミュートできます。</p>
+						</div>
+					{:else}
+						{#each data.mutedUsers as mutedUser (mutedUser.id)}
+							<div class="mute-list-item">
+								<a class="mute-user" href={`/profile/${mutedUser.username}`}>
+									{#if mutedUser.avatar_url}
+										<img src={mutedUser.avatar_url} alt="" class="mute-avatar">
+									{:else}
+										<div class="mute-avatar mute-avatar--placeholder"></div>
+									{/if}
+									<span class="mute-user-names">
+										<span class="mute-user-name"
+											>{mutedUser.display_name ?? mutedUser.username}</span
+										>
+										<span class="mute-date">@{mutedUser.username}</span>
+									</span>
+								</a>
+								<form method="POST" action="?/unmuteUser" use:enhance>
+									<input type="hidden" name="target_id" value={mutedUser.id}>
 									<button type="submit" class="btn btn-ghost danger">解除</button>
 								</form>
 							</div>
@@ -357,6 +422,35 @@ const activeTab = $derived.by((): "word" | "anime" => {
 </div>
 
 <style>
+.mute-user {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+	color: inherit;
+	text-decoration: none;
+}
+.mute-avatar {
+	width: 36px;
+	height: 36px;
+	border-radius: 50%;
+	flex-shrink: 0;
+	object-fit: cover;
+}
+.mute-avatar--placeholder {
+	background: var(--color-border);
+}
+.mute-user-names {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+.mute-user-name {
+	font-weight: 600;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
 .mute-tabs {
 	display: flex;
 	gap: 4px;

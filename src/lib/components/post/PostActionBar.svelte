@@ -22,6 +22,7 @@ const bookmarkLabel = $derived(controller.bookmarkedByMe ? "ブックマーク�
 	<div class="post-footer-item">
 		<div class="reaction-action-group">
 			<a href="/posts/{post.id}" class="post-action-btn post-reply-btn reaction-icon-hitbox" aria-label="返信">
+				<span class="sr-only">返信</span>
 				<svg
 					width="15"
 					height="15"
@@ -37,7 +38,7 @@ const bookmarkLabel = $derived(controller.bookmarkedByMe ? "ブックマーク�
 				</svg>
 			</a>
 			<span class="reaction-count-static" class:has-count={detail && post.reply_count > 0}
-				>{post.reply_count > 0 ? post.reply_count : ''}</span
+				>{post.reply_count > 0 ? post.reply_count : ""}</span
 			>
 		</div>
 	</div>
@@ -51,7 +52,9 @@ const bookmarkLabel = $derived(controller.bookmarkedByMe ? "ブックマーク�
 				disabled={!controller.isLoggedIn}
 				aria-label={repostLabel}
 				title={repostLabel}
-				onclick={() => { if (controller.isLoggedIn) controller.repostMenuOpen = !controller.repostMenuOpen; }}
+				onclick={() => {
+					if (controller.isLoggedIn) controller.repostMenuOpen = !controller.repostMenuOpen;
+				}}
 			>
 				<svg
 					width="15"
@@ -76,23 +79,27 @@ const bookmarkLabel = $derived(controller.bookmarkedByMe ? "ブックマーク�
 						type="button"
 						class="reaction-count-button post-repost-count reaction-count-hitbox"
 						aria-label="リポストしたユーザーを表示"
-						aria-expanded={controller.openReactionType === 'repost'}
-						onclick={(event) => controller.openReactionPopover(event, 'repost')}
+						aria-expanded={controller.openReactionType === "repost"}
+						onclick={(event) => controller.openReactionPopover(event, "repost")}
 					>
 						{controller.repostCount}
 					</button>
 				{/if}
 			{:else}
-				<span class="reaction-count-static">{controller.repostCount > 0 ? controller.repostCount : ''}</span>
+				<span class="reaction-count-static">{controller.repostCount > 0 ? controller.repostCount : ""}</span>
 			{/if}
 
 			{#if controller.repostMenuOpen}
-				<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
-				<div
-					class="repost-backdrop"
-					role="presentation"
-					onclick={(e) => { e.stopPropagation(); controller.repostMenuOpen = false; }}
-				></div>
+				<button
+					type="button"
+					class="repost-backdrop modal-click-target"
+					tabindex="-1"
+					aria-label="リポストメニューを閉じる"
+					onclick={(e) => {
+						e.stopPropagation();
+						controller.repostMenuOpen = false;
+					}}
+				></button>
 				<div class="repost-dropdown">
 					<form
 						method="POST"
@@ -118,13 +125,16 @@ const bookmarkLabel = $derived(controller.bookmarkedByMe ? "ブックマーク�
 								<path d="M7 23l-4-4 4-4" />
 								<path d="M21 13v2a4 4 0 0 1-4 4H3" />
 							</svg>
-							{controller.repostedByMe ? 'リポストを取り消す' : 'リポスト'}
+							{controller.repostedByMe ? "リポストを取り消す" : "リポスト"}
 						</button>
 					</form>
 					<button
 						type="button"
 						class="repost-menu-item repost-menu-item-quote"
-						onclick={() => { controller.repostMenuOpen = false; controller.quoteModalOpen = true; }}
+						onclick={() => {
+							controller.repostMenuOpen = false;
+							controller.quoteModalOpen = true;
+						}}
 					>
 						<svg
 							width="14"
@@ -144,7 +154,7 @@ const bookmarkLabel = $derived(controller.bookmarkedByMe ? "ブックマーク�
 					</button>
 				</div>
 			{/if}
-			{#if controller.openReactionType === 'repost'}
+			{#if controller.openReactionType === "repost"}
 				<ReactionUsersPopover
 					title="リポストしたユーザー"
 					users={controller.reactionUsers}
@@ -175,7 +185,7 @@ const bookmarkLabel = $derived(controller.bookmarkedByMe ? "ブックマーク�
 					width="15"
 					height="15"
 					viewBox="0 0 24 24"
-					fill={controller.bookmarkedByMe ? 'currentColor' : 'none'}
+					fill={controller.bookmarkedByMe ? "currentColor" : "none"}
 					stroke="currentColor"
 					stroke-width="2"
 					stroke-linecap="round"

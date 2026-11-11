@@ -2,7 +2,9 @@
 import type { SubmitFunction } from "@sveltejs/kit";
 import { onDestroy } from "svelte";
 import { enhance } from "$app/forms";
+import { animePickMeta } from "$lib/anime-picker";
 import AnimeExchangeResult from "$lib/components/AnimeExchangeResult.svelte";
+import AnimeRow from "$lib/components/AnimeRow.svelte";
 import InfoTip from "$lib/components/InfoTip.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
@@ -17,6 +19,8 @@ interface AnimeResult {
 	title: string;
 	title_en: string | null;
 	cover_url: string | null;
+	type?: string | null;
+	aired_from?: string | null;
 }
 
 type MyListModalAnime = {
@@ -360,23 +364,12 @@ const handleCancelExchangeSubmit: SubmitFunction = () => {
 							{#if animeResults.length > 0}
 								<div class="anime-results">
 									{#each animeResults as anime (anime.id)}
-										<button type="button" class="anime-result" onclick={() => selectAnime(anime)}>
-											{#if anime.cover_url}
-												<img
-													src={coverThumbSrc(anime.cover_url)}
-													{@attach coverThumbFallback(anime.cover_url)}
-													alt={anime.title}
-												>
-											{:else}
-												<span class="anime-result-cover"></span>
-											{/if}
-											<span>
-												<strong>{anime.title}</strong>
-												{#if anime.title_en}
-													<small>{anime.title_en}</small>
-												{/if}
-											</span>
-										</button>
+										<AnimeRow
+											coverUrl={anime.cover_url}
+											title={anime.title}
+											meta={animePickMeta(anime)}
+											onclick={() => selectAnime(anime)}
+										/>
 									{/each}
 								</div>
 							{:else if animeSearching}
@@ -430,9 +423,11 @@ const handleCancelExchangeSubmit: SubmitFunction = () => {
 										type="button"
 										class="exchange-tag-chip"
 										class:exchange-tag-chip--selected={selected}
-										class:exchange-tag-chip--locked={!selected && selectedSubjectiveTagCount >= MAX_EXCHANGE_SUBJECTIVE_TAGS}
+										class:exchange-tag-chip--locked={!selected &&
+											selectedSubjectiveTagCount >= MAX_EXCHANGE_SUBJECTIVE_TAGS}
 										aria-pressed={selected}
-										aria-disabled={!selected && selectedSubjectiveTagCount >= MAX_EXCHANGE_SUBJECTIVE_TAGS}
+										aria-disabled={!selected &&
+											selectedSubjectiveTagCount >= MAX_EXCHANGE_SUBJECTIVE_TAGS}
 										onclick={() => toggleSubjectiveTag(tag)}
 									>
 										{tag}
@@ -786,7 +781,11 @@ const handleCancelExchangeSubmit: SubmitFunction = () => {
 	top: calc(100% + 6px);
 	left: 0;
 	right: 0;
-	max-height: 280px;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	max-height: min(420px, 60vh);
+	padding: 6px;
 	overflow-y: auto;
 	background: var(--color-surface);
 	border: 1px solid var(--color-border);
@@ -794,61 +793,19 @@ const handleCancelExchangeSubmit: SubmitFunction = () => {
 	box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
 }
 
-.anime-result {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	width: 100%;
-	padding: 9px 10px;
-	text-align: left;
-	background: transparent;
-	border-bottom: 1px solid var(--color-border);
-}
-
-.anime-result:last-child {
-	border-bottom: none;
-}
-
-.anime-result:hover {
-	background: var(--color-surface-hover);
-}
-
-.anime-result img,
-.anime-result-cover,
 .selected-anime img {
+	display: block;
 	width: 40px;
 	border-radius: 4px;
 	background: var(--color-border);
 	flex: 0 0 auto;
-}
-.anime-result img,
-.selected-anime img {
-	display: block;
 	image-rendering: auto;
 }
-.anime-result-cover {
-	aspect-ratio: 5 / 7;
-}
 
-.anime-result span:last-child {
-	display: flex;
-	flex-direction: column;
-	min-width: 0;
-}
-
-.anime-result strong,
-.anime-result small {
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.anime-result small,
 .search-hint {
 	color: var(--color-text-muted);
 	font-size: 0.8rem;
 }
-
 .selected-anime {
 	display: inline-flex;
 	align-items: center;

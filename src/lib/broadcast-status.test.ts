@@ -44,17 +44,14 @@ describe("computeBroadcastStatus", () => {
 		).toBe("airing");
 	});
 
-	it.each([
-		"Movie",
-		"ONA",
-		"OVA",
-		"TV Special",
-		"Special",
-	])("treats a started finite release without an end date as finished: %s", (type) => {
-		expect(computeBroadcastStatus({ airedFrom: TODAY, airedTo: null, type, status: "upcoming" }, TODAY)).toBe(
-			"finished",
-		);
-	});
+	it.each(["Movie", "ONA", "OVA", "TV Special", "Special"])(
+		"treats a started finite release without an end date as finished: %s",
+		(type) => {
+			expect(computeBroadcastStatus({ airedFrom: TODAY, airedTo: null, type, status: "upcoming" }, TODAY)).toBe(
+				"finished",
+			);
+		},
+	);
 
 	it("treats an airing finite release as started even when its start date is missing", () => {
 		expect(computeBroadcastStatus({ airedFrom: null, airedTo: null, type: "ONA", status: "airing" }, TODAY)).toBe(

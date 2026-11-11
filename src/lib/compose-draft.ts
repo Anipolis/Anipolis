@@ -12,6 +12,7 @@
  * - localStorage が使えない環境（プライベートモード等）では例外を握りつぶし、保存無しで動作する
  */
 
+import { type CollectionShare, isCollectionKind } from "$lib/collections";
 import { isPostImageUsable } from "$lib/post-image-lifetime";
 import type { OpenBroadcastRoomSummary } from "$lib/types";
 
@@ -29,6 +30,8 @@ export interface ComposeDraft {
 	anime: ComposeDraftAnime | null;
 	cwAnime: ComposeDraftAnime | null;
 	room: OpenBroadcastRoomSummary | null;
+	/** シェアするコレクション（193）。投稿時に DB が今も公開かを確かめるので、カードの中身は保存時点のままでよい */
+	collection: CollectionShare | null;
 }
 
 interface StoredComposeDraft extends ComposeDraft {
@@ -54,12 +57,30 @@ export function composeDraftKey(userId: string): string {
 }
 
 export function createEmptyDraft(): ComposeDraft {
-	return { content: "", imageUrls: [], anime: null, cwAnime: null, room: null };
+	return { content: "", imageUrls: [], anime: null, cwAnime: null, room: null, collection: null };
 }
 
-/** 保存する価値のある内容が無い（本文・画像・引用作品のいずれも無い）なら true */
+/** 保存する価値のある内容が無い（本文・画像・引用作品・シェアするコレクションのいずれも無い）なら true */
 export function isDraftEmpty(draft: ComposeDraft): boolean {
-	return draft.content.trim().length === 0 && draft.imageUrls.length === 0 && draft.anime === null;
+	return (
+		draft.content.trim().length === 0 &&
+		draft.imageUrls.length === 0 &&
+		draft.anime === null &&
+		draft.collection === null
+	);
+}
+
+function isCollectionShare(value: unknown): value is CollectionShare {
+	if (!value || typeof value !== "object") return false;
+	const v = value as Record<string, unknown>;
+	return (
+		typeof v["id"] === "string" &&
+		typeof v["title"] === "string" &&
+		isCollectionKind(v["kind"]) &&
+		Array.isArray(v["tiers"]) &&
+		typeof v["count"] === "number" &&
+		Array.isArray(v["items"])
+	);
 }
 
 /**
@@ -110,6 +131,8 @@ export function parseComposeDraft(raw: string | null, now = Date.now()): Compose
 		anime: isAnime(stored.anime) ? stored.anime : null,
 		cwAnime: isAnime(stored.cwAnime) ? stored.cwAnime : null,
 		room: isRoom(stored.room) ? stored.room : null,
+		// 193 より前の保存には無い
+		collection: isCollectionShare(stored.collection) ? stored.collection : null,
 	};
 	return isDraftEmpty(draft) ? null : draft;
 }

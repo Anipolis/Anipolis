@@ -102,7 +102,7 @@ async function copyLink(code: string) {
 					</p>
 				</div>
 				<button type="submit" class="btn btn-primary auth-wide-button" disabled={creating}>
-					{creating ? '発行中…' : '招待コードを発行'}
+					{creating ? "発行中…" : "招待コードを発行"}
 				</button>
 			</form>
 
@@ -124,7 +124,7 @@ async function copyLink(code: string) {
 							<div class="invite-meta">
 								<span>{invite.use_count}/{invite.max_uses}回使用</span>
 								<span>
-									{invite.expires_at ? `${formatRelativeTime(invite.expires_at)}に失効` : '無期限'}
+									{invite.expires_at ? `${formatRelativeTime(invite.expires_at)}に失効` : "無期限"}
 								</span>
 								<span>{formatRelativeTime(invite.created_at)}発行</span>
 							</div>

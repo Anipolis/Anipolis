@@ -1,7 +1,7 @@
 import { fail, redirect } from "@sveltejs/kit";
 import { MAX_COLLECTIONS_PER_USER, parseCollectionInput } from "$lib/collections";
 import { ensureAccountCanWrite } from "$lib/server/actions";
-import { getAnimeRankingTrending, getUserCollections } from "$lib/server/queries";
+import { getUserCollections } from "$lib/server/queries";
 import { redirectToLogin } from "$lib/server/require-login";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -13,17 +13,9 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	const { user } = await safeGetSession();
 	if (!user) redirectToLogin(url);
 
-	const [collections, trendingResult, animeTrending] = await Promise.all([
-		// 読めなかったときは null にして、「まだ無い」と見せない
-		getUserCollections(supabase, user.id).catch((): null => null),
-		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
-		getAnimeRankingTrending(supabase, 5),
-	]);
-	return {
-		collections,
-		trending: trendingResult.data ?? [],
-		animeTrending,
-	};
+	// 読めなかったときは null にして、「まだ無い」と見せない
+	const collections = await getUserCollections(supabase, user.id).catch((): null => null);
+	return { collections };
 };
 
 export const actions: Actions = {
@@ -43,6 +35,8 @@ export const actions: Actions = {
 				title: parsed.value.title,
 				description: parsed.value.description,
 				is_public: parsed.value.isPublic,
+				kind: parsed.value.kind,
+				...(parsed.value.tiers ? { tiers: parsed.value.tiers } : {}),
 			})
 			.select("id")
 			.single();

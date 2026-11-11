@@ -28,6 +28,14 @@ function handleBodyClick(event: MouseEvent) {
 	if (link) onlink?.(event, link);
 }
 
+// 本文は HTML を流し込むだけなので、リンクのクリックは監視で拾う（本文自体は操作要素にしない）
+$effect(() => {
+	const node = body;
+	if (!node) return;
+	node.addEventListener("click", handleBodyClick);
+	return () => node.removeEventListener("click", handleBodyClick);
+});
+
 function handleKeydown(event: KeyboardEvent) {
 	if (event.key === "Escape") onclose();
 }
@@ -35,22 +43,28 @@ function handleKeydown(event: KeyboardEvent) {
 
 <svelte:window onkeydown={handleKeydown} />
 
-<div
-	class="legal-overlay-backdrop"
-	role="presentation"
-	onclick={(event) => {
-		if (event.target === event.currentTarget) onclose();
-	}}
->
-	<div class="legal-overlay" use:trapFocus role="dialog" aria-modal="true" aria-labelledby="legal-overlay-title">
+<div class="legal-overlay-backdrop">
+	<button
+		type="button"
+		class="modal-click-target modal-click-layer"
+		tabindex="-1"
+		aria-label="閉じる"
+		onclick={onclose}
+	></button>
+	<div
+		class="legal-overlay modal-content-layer"
+		use:trapFocus
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="legal-overlay-title"
+	>
 		<div class="legal-overlay-header">
 			<h2 id="legal-overlay-title">{title}</h2>
 			<button type="button" class="legal-overlay-close" onclick={onclose} aria-label="閉じて入力画面に戻る">
 				<span class="i-lucide-x" aria-hidden="true"></span>
 			</button>
 		</div>
-		<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -- 本文の中のリンクのクリックを拾うだけ（キー操作はリンク自体が受ける） -->
-		<div class="legal-overlay-body" bind:this={body} onclick={handleBodyClick}>
+		<div class="legal-overlay-body" bind:this={body}>
 			<LegalBody {html} />
 		</div>
 		<div class="legal-overlay-footer">

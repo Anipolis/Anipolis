@@ -6,6 +6,8 @@ import { replaceState } from "$app/navigation";
 import { page } from "$app/state";
 import { autosize } from "$lib/actions/autosize";
 import { trapFocus } from "$lib/actions/trapFocus";
+import { animePickMeta } from "$lib/anime-picker";
+import type { CollectionShare } from "$lib/collections";
 import {
 	type ComposeDraft,
 	clearComposeContext,
@@ -17,7 +19,6 @@ import {
 	saveComposeContext,
 	saveComposeDraft,
 } from "$lib/compose-draft";
-import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import { postImageMediaUrl } from "$lib/post-image-url";
 import type { AnimeExchangeShare, OpenBroadcastRoomSummary } from "$lib/types";
 import { animeQuoteChipLabel, cwChipLabel } from "$lib/utils/composer-chips";
@@ -25,6 +26,8 @@ import { charCountClass } from "$lib/utils/format";
 import { applyMention, findMentionQuery, mentionOptionId, resolveMentionKey } from "$lib/utils/mention-suggest";
 import { createSearchGate } from "$lib/utils/search-gate";
 import AnimeExchangeResult from "./AnimeExchangeResult.svelte";
+import AnimeRow from "./AnimeRow.svelte";
+import CollectionShareCard from "./CollectionShareCard.svelte";
 import { classifyComposerSubmitResult } from "./post-composer-submit";
 import UserAvatar from "./UserAvatar.svelte";
 
@@ -34,6 +37,8 @@ interface AnimeResult {
 	title_en: string | null;
 	cover_url: string | null;
 	official_hashtag?: string[] | null;
+	type?: string | null;
+	aired_from?: string | null;
 }
 
 interface UserResult {
@@ -52,6 +57,12 @@ interface Props {
 	initialContent?: string;
 	initialExchangeId?: string | null;
 	initialExchangeShare?: AnimeExchangeShare | null;
+	/** コレクションのシェア（193）。?share_collection= で開いたとき */
+	initialCollectionShare?: CollectionShare | null;
+	/** シェアを外した・投稿した。親は同じ初期値を渡し直さない（モーダルを開き直すと作り直されるため） */
+	oncollectionsharecleared?: (collectionId: string) => void;
+	/** どちらかの投稿欄で外した（投稿した）コレクション。開いたままの投稿欄からも外す */
+	clearedCollectionShareId?: string | null;
 	watchingAnime?: AnimeResult[];
 	onsubmitsuccess?: () => void;
 	focusOnMount?: boolean;
@@ -70,6 +81,9 @@ let {
 	initialContent = "",
 	initialExchangeId = null,
 	initialExchangeShare = null,
+	initialCollectionShare = null,
+	oncollectionsharecleared,
+	clearedCollectionShareId = null,
 	watchingAnime = [],
 	onsubmitsuccess,
 	focusOnMount = false,
@@ -87,6 +101,7 @@ let uploading = $state(false);
 let fileInput = $state<HTMLInputElement | null>(null);
 let selectedExchangeId = $state<string | null>(null);
 let selectedExchangeShare = $state<AnimeExchangeShare | null>(null);
+let selectedCollection = $state<CollectionShare | null>(null);
 
 // アニメ引用
 let animeSearchOpen = $state(false);
@@ -140,13 +155,20 @@ let appliedInitialValuesKey = $state<string | null>(null);
 const initialValuesKey = $derived(
 	initialExchangeShare && initialExchangeId
 		? `exchange:${initialExchangeId}`
-		: initialAnime
-			? `anime:${initialAnime.id}`
-			: initialContent || null,
+		: initialCollectionShare
+			? `collection:${initialCollectionShare.id}`
+			: initialAnime
+				? `anime:${initialAnime.id}`
+				: initialContent || null,
 );
 
 $effect(() => {
-	if (!initialValuesKey || appliedInitialValuesKey === initialValuesKey) return;
+	// 初期値が無くなったら、次に同じリンクで開いたときにまた入れられるよう覚えを消す
+	if (!initialValuesKey) {
+		appliedInitialValuesKey = null;
+		return;
+	}
+	if (appliedInitialValuesKey === initialValuesKey) return;
 
 	appliedInitialValuesKey = initialValuesKey;
 	if (initialAnime && !selectedAnime) {
@@ -159,12 +181,19 @@ $effect(() => {
 		selectedExchangeId = initialExchangeId;
 		selectedExchangeShare = initialExchangeShare;
 	}
+	if (initialCollectionShare && !selectedCollection) {
+		selectedCollection = initialCollectionShare;
+	}
 });
 
 const remaining = $derived(MAX_LENGTH - content.length);
 const countClass = $derived(charCountClass(content.length, MAX_LENGTH));
 const canSubmit = $derived(
-	(content.trim().length > 0 || imageUrls.length > 0 || selectedAnime !== null || selectedExchangeShare !== null) &&
+	(content.trim().length > 0 ||
+		imageUrls.length > 0 ||
+		selectedAnime !== null ||
+		selectedExchangeShare !== null ||
+		selectedCollection !== null) &&
 		content.length <= MAX_LENGTH &&
 		!submitting &&
 		!uploading,
@@ -277,7 +306,14 @@ $effect(() => {
 let draftRestored = $state(false);
 
 function currentDraft(): ComposeDraft {
-	return { content, imageUrls, anime: selectedAnime, cwAnime: selectedCwAnime, room: selectedRoom };
+	return {
+		content,
+		imageUrls,
+		anime: selectedAnime,
+		cwAnime: selectedCwAnime,
+		room: selectedRoom,
+		collection: selectedCollection,
+	};
 }
 
 const hasDraft = $derived(!isDraftEmpty(currentDraft()));
@@ -292,6 +328,8 @@ function restoreDraft(key: string) {
 		if (!selectedAnime) selectedAnime = draft.anime;
 		if (!selectedCwAnime) selectedCwAnime = draft.cwAnime;
 		if (!selectedRoom) selectedRoom = draft.room;
+		// シェアのリンクは URL から消えるので、閉じて開き直したときはここから戻す
+		if (!selectedCollection) selectedCollection = draft.collection;
 	}
 	draftRestored = true;
 }
@@ -306,6 +344,7 @@ function discardDraft() {
 	selectedCwAnime = null;
 	selectedRoom = null;
 	clearExchangeShare();
+	clearCollectionShare();
 	if (draftKey) {
 		clearComposeDraft(getBrowserDraftStorage(), draftKey);
 		clearComposeContext(getBrowserDraftStorage(), draftKey);
@@ -435,6 +474,24 @@ function clearExchangeShare() {
 	if (page.url.searchParams.has("share_exchange")) {
 		const url = new URL(page.url);
 		url.searchParams.delete("share_exchange");
+		replaceState(url, page.state);
+	}
+}
+
+// 常設の投稿欄とモーダルの投稿欄は同時にあるので、片方で外した（投稿した）シェアをもう片方からも外す
+$effect(() => {
+	if (clearedCollectionShareId && selectedCollection?.id === clearedCollectionShareId) {
+		selectedCollection = null;
+	}
+});
+
+function clearCollectionShare() {
+	if (selectedCollection) oncollectionsharecleared?.(selectedCollection.id);
+	selectedCollection = null;
+
+	if (page.url.searchParams.has("share_collection")) {
+		const url = new URL(page.url);
+		url.searchParams.delete("share_collection");
 		replaceState(url, page.state);
 	}
 }
@@ -591,6 +648,7 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 		imageUrls = [];
 		selectedAnime = null;
 		clearExchangeShare();
+		clearCollectionShare();
 		await update();
 		onsubmitsuccess?.();
 	};
@@ -653,7 +711,7 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 			</div>
 
 			<!-- 追加機能（画像・アニメ引用・CW・実況ルーム）のタイル -->
-			<div class="composer-tools" role="group" aria-label="投稿の追加機能">
+			<fieldset class="composer-tools fieldset-reset" aria-label="投稿の追加機能">
 				<button
 					type="button"
 					class="composer-tool-tile"
@@ -711,7 +769,7 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 					<span class="i-lucide-door-open" aria-hidden="true"></span>
 					<span class="composer-tool-label">ルーム</span>
 				</button>
-			</div>
+			</fieldset>
 
 			{#if selectedAnime || selectedCwAnime || selectedRoom}
 				<div class="flex flex-wrap gap-2 mt-2 mb-0.5">
@@ -815,6 +873,21 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 				{/if}
 			{/if}
 
+			{#if selectedCollection}
+				<div class="composer-collection-preview">
+					<CollectionShareCard share={selectedCollection} linked={false} />
+					<button
+						type="button"
+						class="composer-anime-remove"
+						onclick={clearCollectionShare}
+						aria-label="コレクションのシェアを削除"
+					>
+						✕
+					</button>
+				</div>
+				<input type="hidden" name="collection_id" value={selectedCollection.id}>
+			{/if}
+
 			<!-- 画像のプレビュー -->
 			{#if imageUrls.length > 0}
 				<div class="composer-image-previews">
@@ -848,10 +921,10 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 					<button type="button" class="composer-draft-discard" onclick={discardDraft}>下書きを破棄</button>
 				{/if}
 				{#if remaining <= 40}
-					<span class="char-count {countClass}" aria-label="残り文字数">{remaining}</span>
+					<span class="char-count {countClass}" role="status" aria-label="残り文字数">{remaining}</span>
 				{/if}
 				<button type="submit" class="btn btn-primary" disabled={!canSubmit}>
-					{submitting ? '投稿中…' : '投稿'}
+					{submitting ? "投稿中…" : "投稿"}
 				</button>
 			</div>
 		</form>
@@ -864,7 +937,9 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<div
 		class="anime-search-overlay"
-		onclick={(e) => { if (e.target === e.currentTarget) closeAnimeSearch(); }}
+		onclick={(e) => {
+			if (e.target === e.currentTarget) closeAnimeSearch();
+		}}
 		onkeydown={(e) => handleOverlayEscape(e, closeAnimeSearch)}
 		role="dialog"
 		aria-modal="true"
@@ -894,26 +969,12 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 					<p class="anime-search-empty">見つかりませんでした</p>
 				{:else}
 					{#each animeResults as anime}
-						<button type="button" class="anime-search-item" onclick={() => selectAnime(anime)}>
-							{#if anime.cover_url}
-								<img
-									src={coverThumbSrc(anime.cover_url)}
-									{@attach coverThumbFallback(anime.cover_url)}
-									alt={anime.title}
-									class="anime-search-thumb"
-									loading="lazy"
-									decoding="async"
-								>
-							{:else}
-								<div class="anime-search-thumb anime-search-thumb-empty"></div>
-							{/if}
-							<div class="anime-search-item-info">
-								<span class="anime-search-item-title">{anime.title}</span>
-								{#if anime.title_en}
-									<span class="anime-search-item-sub">{anime.title_en}</span>
-								{/if}
-							</div>
-						</button>
+						<AnimeRow
+							coverUrl={anime.cover_url}
+							title={anime.title}
+							meta={animePickMeta(anime)}
+							onclick={() => selectAnime(anime)}
+						/>
 					{/each}
 				{/if}
 			</div>
@@ -927,7 +988,9 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<div
 		class="anime-search-overlay"
-		onclick={(e) => { if (e.target === e.currentTarget) closeCwSearch(); }}
+		onclick={(e) => {
+			if (e.target === e.currentTarget) closeCwSearch();
+		}}
 		onkeydown={(e) => handleOverlayEscape(e, closeCwSearch)}
 		role="dialog"
 		aria-modal="true"
@@ -954,25 +1017,13 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 				{:else if cwQuery.trim().length > 0 && cwResults.length === 0}
 					<p class="anime-search-empty">見つかりませんでした</p>
 				{:else}
-					{#each (cwQuery.trim() ? cwResults : watchingAnime) as anime}
-						<button type="button" class="anime-search-item" onclick={() => selectCwAnime(anime)}>
-							{#if anime.cover_url}
-								<img
-									src={coverThumbSrc(anime.cover_url)}
-									{@attach coverThumbFallback(anime.cover_url)}
-									alt={anime.title}
-									class="anime-search-thumb"
-								>
-							{:else}
-								<div class="anime-search-thumb anime-search-thumb-empty"></div>
-							{/if}
-							<div class="anime-search-item-info">
-								<span class="anime-search-item-title">{anime.title}</span>
-								{#if anime.title_en}
-									<span class="anime-search-item-sub">{anime.title_en}</span>
-								{/if}
-							</div>
-						</button>
+					{#each cwQuery.trim() ? cwResults : watchingAnime as anime}
+						<AnimeRow
+							coverUrl={anime.cover_url}
+							title={anime.title}
+							meta={animePickMeta(anime)}
+							onclick={() => selectCwAnime(anime)}
+						/>
 					{/each}
 				{/if}
 			</div>
@@ -986,7 +1037,9 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<div
 		class="anime-search-overlay"
-		onclick={(e) => { if (e.target === e.currentTarget) closeRoomModal(); }}
+		onclick={(e) => {
+			if (e.target === e.currentTarget) closeRoomModal();
+		}}
 		onkeydown={(e) => handleOverlayEscape(e, closeRoomModal)}
 		role="dialog"
 		aria-modal="true"
@@ -1006,26 +1059,12 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 					<p class="anime-search-empty">現在開放中のルームはありません</p>
 				{:else if openRooms}
 					{#each openRooms as room (room.id)}
-						<button type="button" class="anime-search-item" onclick={() => selectRoom(room)}>
-							{#if room.anime?.cover_url}
-								<img
-									src={coverThumbSrc(room.anime.cover_url)}
-									{@attach coverThumbFallback(room.anime.cover_url)}
-									alt={room.anime.title}
-									class="anime-search-thumb"
-								>
-							{:else}
-								<div class="anime-search-thumb anime-search-thumb-empty"></div>
-							{/if}
-							<div class="anime-search-item-info">
-								<span class="anime-search-item-title">{room.anime?.title ?? "不明"}</span>
-								{#if room.room_kind === "episode"}
-									<span class="anime-search-item-sub">{room.room_date}</span>
-								{:else}
-									<span class="anime-search-item-sub">総合ロビー</span>
-								{/if}
-							</div>
-						</button>
+						<AnimeRow
+							coverUrl={room.anime?.cover_url}
+							title={room.anime?.title ?? "不明"}
+							meta={room.room_kind === "episode" ? room.room_date : "総合ロビー"}
+							onclick={() => selectRoom(room)}
+						/>
 					{/each}
 				{/if}
 			</div>
@@ -1214,6 +1253,10 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 	border-radius: 12px;
 	background: var(--color-bg);
 }
+.composer-collection-preview {
+	position: relative;
+}
+.composer-collection-preview .composer-anime-remove,
 .composer-exchange-preview .composer-anime-remove {
 	position: absolute;
 	top: 8px;

@@ -34,7 +34,7 @@ const displayName = $derived(profile.display_name ?? profile.username);
 		</div>
 
 		{#await data.followers}
-			<div class="posts-loading-spinner" aria-label="読み込み中">
+			<div class="posts-loading-spinner" role="status" aria-label="読み込み中">
 				<div class="spinner" aria-hidden="true"></div>
 				<span>読み込み中…</span>
 			</div>

@@ -2,6 +2,7 @@
 import { untrack } from "svelte";
 import { trapFocus } from "$lib/actions/trapFocus";
 import { type AnimePick, animePickMeta } from "$lib/anime-picker";
+import AnimeRow from "./AnimeRow.svelte";
 
 /**
  * 作品を検索して選び、並べ替えて保存する画面（ベスト作品・コレクションで共用）。
@@ -14,9 +15,15 @@ interface Props {
 	initial: AnimePick[];
 	onsave: (animeIds: number[]) => Promise<void>;
 	onclose: () => void;
+	/**
+	 * 足すだけにする（コレクションの「＋」）。今ある作品は並べ替えも外しもせず、検索結果で「追加済み」と出す。
+	 * 一覧には今回足した作品だけを出し、保存すると今ある作品の後ろに足す
+	 */
+	addOnly?: boolean;
 }
 
-let { title, max, initial, onsave, onclose }: Props = $props();
+let { title, max, initial, onsave, onclose, addOnly = false }: Props = $props();
+const initialIds = new Set(untrack(() => initial.map((pick) => pick.id)));
 
 // 開いている間に呼ぶ側の値が変わっても、開いたときの並びから編集する
 let picks = $state<AnimePick[]>(untrack(() => [...initial]));
@@ -33,6 +40,11 @@ let searchTimer: ReturnType<typeof setTimeout> | null = null;
 let searchController: AbortController | null = null;
 
 const full = $derived(picks.length >= max);
+// 足す・外す・並べ替えるまで「保存する」を押せない（ux-guidelines「色と強調」）
+const initialOrder = untrack(() => initial.map((pick) => pick.id));
+const changed = $derived(
+	picks.length !== initialOrder.length || picks.some((pick, index) => pick.id !== initialOrder[index]),
+);
 const pickedIds = $derived(new Set(picks.map((pick) => pick.id)));
 const showingResults = $derived(query.trim().length > 0);
 
@@ -142,36 +154,22 @@ async function save() {
 }
 </script>
 
-{#snippet cover(url: string | null)}
-	<span class="picker-cover">
-		{#if url}
-			<img src={url} alt="">
-		{:else}
-			<span class="picker-cover-empty i-lucide-clapperboard" aria-hidden="true"></span>
-		{/if}
-	</span>
-{/snippet}
-
-{#snippet titleBlock(anime: AnimePick)}
-	{@const meta = animePickMeta(anime)}
-	<span class="picker-text">
-		<span class="picker-title">{anime.title}</span>
-		{#if meta}
-			<span class="picker-meta">{meta}</span>
-		{/if}
-	</span>
-{/snippet}
-
-<div class="picker-overlay" role="presentation" onclick={close}>
+<div class="picker-overlay">
+	<button
+		type="button"
+		class="modal-click-target modal-click-layer"
+		tabindex="-1"
+		aria-label="閉じる"
+		onclick={close}
+	></button>
 	<div
 		bind:this={card}
 		use:trapFocus
-		class="picker-card"
+		class="picker-card modal-content-layer"
 		role="dialog"
 		aria-modal="true"
 		aria-labelledby="anime-picker-title"
 		tabindex="-1"
-		onclick={(event) => event.stopPropagation()}
 		onkeydown={(event) => {
 			event.stopPropagation();
 			if (event.key !== "Escape") return;
@@ -215,23 +213,24 @@ async function save() {
 						{#each results as anime (anime.id)}
 							{@const picked = pickedIds.has(anime.id)}
 							<li>
-								<button
-									type="button"
-									class="picker-row picker-result"
+								<AnimeRow
+									coverUrl={anime.cover_url}
+									title={anime.title}
+									meta={animePickMeta(anime)}
 									disabled={saving || picked}
 									onclick={() => addPick(anime)}
 								>
-									{@render cover(anime.cover_url)}
-									{@render titleBlock(anime)}
-									<span class="picker-result-state">
-										{#if picked}
-											選択済み
-										{:else}
-											<span class="i-lucide-plus" aria-hidden="true"></span>
-											追加
-										{/if}
-									</span>
-								</button>
+									{#snippet trailing()}
+										<span class="picker-result-state">
+											{#if picked}
+												{addOnly && initialIds.has(anime.id) ? "追加済み" : "選択済み"}
+											{:else}
+												<span class="i-lucide-plus" aria-hidden="true"></span>
+												追加
+											{/if}
+										</span>
+									{/snippet}
+								</AnimeRow>
 							</li>
 						{/each}
 					</ul>
@@ -244,43 +243,55 @@ async function save() {
 				{#if full}
 					<p class="picker-note">{max}作品まで選べます。入れ替えるときは、どれかを外してください</p>
 				{/if}
-				{#if picks.length > 0}
-					<ol class="picker-list" aria-label="選んだ作品">
+				{#if addOnly && picks.length === initialIds.size}
+					<p class="picker-note">作品名で検索して追加します</p>
+				{:else if picks.length > 0}
+					<ol class="picker-list" aria-label={addOnly ? "追加する作品" : "選んだ作品"}>
 						{#each picks as pick, index (pick.id)}
-							<li class="picker-row picker-pick" class:just-added={pick.id === lastAddedId}>
-								<span class="picker-rank">{index + 1}</span>
-								{@render cover(pick.cover_url)}
-								{@render titleBlock(pick)}
-								<span class="picker-actions">
-									<button
-										type="button"
-										class="picker-icon-button"
-										aria-label="{pick.title} を上へ"
-										disabled={saving || index === 0}
-										onclick={() => movePick(index, -1)}
-									>
-										<span class="i-lucide-chevron-up" aria-hidden="true"></span>
-									</button>
-									<button
-										type="button"
-										class="picker-icon-button"
-										aria-label="{pick.title} を下へ"
-										disabled={saving || index === picks.length - 1}
-										onclick={() => movePick(index, 1)}
-									>
-										<span class="i-lucide-chevron-down" aria-hidden="true"></span>
-									</button>
-									<button
-										type="button"
-										class="picker-icon-button"
-										aria-label="{pick.title} を外す"
-										disabled={saving}
-										onclick={() => removePick(index)}
-									>
-										<span class="i-lucide-x" aria-hidden="true"></span>
-									</button>
-								</span>
-							</li>
+							{#if !(addOnly && initialIds.has(pick.id))}
+								<li class="picker-pick" class:just-added={pick.id === lastAddedId}>
+									<AnimeRow coverUrl={pick.cover_url} title={pick.title} meta={animePickMeta(pick)}>
+										{#snippet leading()}
+											{#if !addOnly}
+												<span class="picker-rank">{index + 1}</span>
+											{/if}
+										{/snippet}
+										{#snippet trailing()}
+											<span class="picker-actions">
+												{#if !addOnly}
+													<button
+														type="button"
+														class="picker-icon-button"
+														aria-label="{pick.title} を上へ"
+														disabled={saving || index === 0}
+														onclick={() => movePick(index, -1)}
+													>
+														<span class="i-lucide-chevron-up" aria-hidden="true"></span>
+													</button>
+													<button
+														type="button"
+														class="picker-icon-button"
+														aria-label="{pick.title} を下へ"
+														disabled={saving || index === picks.length - 1}
+														onclick={() => movePick(index, 1)}
+													>
+														<span class="i-lucide-chevron-down" aria-hidden="true"></span>
+													</button>
+												{/if}
+												<button
+													type="button"
+													class="picker-icon-button"
+													aria-label="{pick.title} を外す"
+													disabled={saving}
+													onclick={() => removePick(index)}
+												>
+													<span class="i-lucide-x" aria-hidden="true"></span>
+												</button>
+											</span>
+										{/snippet}
+									</AnimeRow>
+								</li>
+							{/if}
 						{/each}
 					</ol>
 				{:else}
@@ -295,8 +306,13 @@ async function save() {
 
 		<div class="picker-footer">
 			<button type="button" class="btn btn-ghost" disabled={saving} onclick={close}>キャンセル</button>
-			<button type="button" class="btn btn-primary" disabled={saving} onclick={save}>
-				{saving ? '保存中...' : '保存する'}
+			<button
+				type="button"
+				class="btn {changed ? "btn-primary" : "btn-secondary"}"
+				disabled={saving || !changed}
+				onclick={save}
+			>
+				{saving ? "保存中..." : "保存する"}
 			</button>
 		</div>
 	</div>
@@ -411,15 +427,8 @@ async function save() {
 	padding: 0;
 	list-style: none;
 }
-.picker-row {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	min-width: 0;
-	padding: 6px 8px;
-	border-radius: 8px;
-}
 .picker-pick {
+	border-radius: 8px;
 	background: var(--color-bg-card);
 }
 .picker-pick.just-added {
@@ -436,21 +445,7 @@ async function save() {
 		animation: none;
 	}
 }
-.picker-result {
-	width: 100%;
-	border: 0;
-	background: transparent;
-	color: var(--color-text);
-	cursor: pointer;
-	font: inherit;
-	text-align: left;
-}
-.picker-result:hover:not(:disabled) {
-	background: var(--color-surface-hover);
-}
-.picker-result:disabled {
-	cursor: default;
-}
+
 .picker-rank {
 	width: 2em;
 	flex-shrink: 0;
@@ -459,52 +454,6 @@ async function save() {
 	font-weight: 700;
 	text-align: center;
 	font-variant-numeric: tabular-nums;
-}
-.picker-cover {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	width: 32px;
-	flex-shrink: 0;
-	aspect-ratio: 400 / 566;
-	overflow: hidden;
-	border: 1px solid var(--color-border);
-	border-radius: 4px;
-	background: var(--color-bg-card);
-}
-.picker-cover img {
-	width: 100%;
-	height: 100%;
-	object-fit: cover;
-}
-.picker-cover-empty {
-	width: 14px;
-	height: 14px;
-	color: var(--color-text-muted);
-}
-.picker-text {
-	display: flex;
-	flex: 1 1 auto;
-	flex-direction: column;
-	gap: 2px;
-	min-width: 0;
-}
-/* スマホでは右のボタンで幅が狭いので、題名は2行まで折り返す */
-.picker-title {
-	display: -webkit-box;
-	overflow: hidden;
-	font-size: 14px;
-	line-height: 1.35;
-	-webkit-box-orient: vertical;
-	-webkit-line-clamp: 2;
-	line-clamp: 2;
-}
-.picker-meta {
-	overflow: hidden;
-	color: var(--color-text-muted);
-	font-size: 12px;
-	text-overflow: ellipsis;
-	white-space: nowrap;
 }
 .picker-actions {
 	display: flex;
@@ -540,8 +489,5 @@ async function save() {
 	gap: 2px;
 	color: var(--color-text);
 	font-size: 12px;
-}
-.picker-result:disabled .picker-result-state {
-	color: var(--color-text-muted);
 }
 </style>

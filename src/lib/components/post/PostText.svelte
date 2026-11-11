@@ -22,9 +22,9 @@ let collapsed = $state(true);
 	<div class="post-content-inner" class:post-content-clipped={isLong && collapsed}>
 		<p class="post-content">
 			{#each parts as part}
-				{#if part.type === 'hashtag'}
+				{#if part.type === "hashtag"}
 					<a href="/hashtag/{part.value}" class="hashtag">#{part.value}</a>
-				{:else if part.type === 'mention'}
+				{:else if part.type === "mention"}
 					<a href="/profile/{part.value}" class="mention">@{part.value}</a>
 				{:else}
 					{part.value}
@@ -36,9 +36,12 @@ let collapsed = $state(true);
 		<button
 			type="button"
 			class="post-content-toggle"
-			onclick={(e) => { e.stopPropagation(); collapsed = !collapsed; }}
+			onclick={(e) => {
+				e.stopPropagation();
+				collapsed = !collapsed;
+			}}
 		>
-			{collapsed ? 'もっと見る' : '閉じる'}
+			{collapsed ? "もっと見る" : "閉じる"}
 		</button>
 	{/if}
 {/snippet}

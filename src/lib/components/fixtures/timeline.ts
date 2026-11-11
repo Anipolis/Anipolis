@@ -51,6 +51,8 @@ export function makeTimelinePosts(count = 40): Post[] {
 				episode_number: null,
 			},
 			exchange_share: null,
+			collection_id: null,
+			collection_share: null,
 			cw_anime_id: index === 22 ? "42" : null,
 			cw_anime: index === 22 ? { id: "42", title: "星をめぐる旅", cover_url: null } : null,
 			repost_context: null,

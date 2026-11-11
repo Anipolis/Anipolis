@@ -2,9 +2,9 @@ import type { ServerLoad } from "@sveltejs/kit";
 import { error, redirect } from "@sveltejs/kit";
 import { getExtraAccounts, setExtraAccounts } from "$lib/server/multi-account";
 import {
+	getActiveRoomReminders,
 	getPendingReportsCount,
 	getProfileById,
-	getUnreadBroadcastNotificationCount,
 	getUnreadNotificationCount,
 } from "$lib/server/queries";
 import type { StoredAccount } from "$lib/types";
@@ -89,7 +89,7 @@ export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, c
 	// 未ログインはカウントが無いので Promise にせず、存在しない URL（route.id が無い）は待ってから返して、
 	// 404 などが正しく返るようにする（ログイン中にページの load が 404 にした場合は 200 のまま）
 	const unreadNotificationCount = user ? getUnreadNotificationCount(supabase, user.id) : 0;
-	const unreadBroadcastNotificationCount = user ? getUnreadBroadcastNotificationCount(supabase, user.id) : 0;
+	const roomReminders = user ? getActiveRoomReminders(supabase, user.id) : [];
 	const pendingReportsCount = profile?.is_admin ? getPendingReportsCount(supabase) : 0;
 	const stream = route.id !== null;
 	return {
@@ -98,9 +98,7 @@ export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, c
 		profile,
 		cookies: filteredCookies,
 		unreadNotificationCount: stream ? unreadNotificationCount : await unreadNotificationCount,
-		unreadBroadcastNotificationCount: stream
-			? unreadBroadcastNotificationCount
-			: await unreadBroadcastNotificationCount,
+		roomReminders: stream ? roomReminders : await roomReminders,
 		pendingReportsCount: stream ? pendingReportsCount : await pendingReportsCount,
 		extraAccounts,
 	};

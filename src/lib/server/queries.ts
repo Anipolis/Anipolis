@@ -3,10 +3,17 @@ import { isActivityStatus, type MylistActivity } from "$lib/activity";
 import { isRepeatMuteActive } from "$lib/anime-mute-schedule";
 import { groupGenreFilters, translateAnimeGenres } from "$lib/anime-vocabulary";
 import { computeBroadcastStatus } from "$lib/broadcast-status";
-import type { CollectionMembership } from "$lib/collections";
+import { type CollectionKind, type CollectionMembership, isCollectionKind } from "$lib/collections";
 import type { EpisodeRoomBounds } from "$lib/episode-room";
 import { toValidExchangeSubjectiveTags } from "$lib/exchange-tags";
 import { isOwnPostImage, postImageMediaUrl } from "$lib/post-image-url";
+import {
+	ROOM_REMINDER_LOOKBACK_MS,
+	type RoomReminder,
+	type RoomReminderRow,
+	roomSessionKey,
+	toActiveRoomReminders,
+} from "$lib/room-reminders";
 import { getAssuranceLevel, isAdminMfaRequired } from "$lib/server/mfa";
 import { signPostImageUrls } from "$lib/server/post-image-signing";
 import { buildPostCardSelect, POST_CW_ANIME_SELECT } from "$lib/server/post-selects";
@@ -232,6 +239,7 @@ const muteSettingsCache = new WeakMap<
 			animeMuteIds?: Promise<Set<string>>;
 			mutedEventIds?: Promise<Set<string>>;
 			blockedUserIds?: Promise<Set<string>>;
+			mutedUserIds?: Promise<Set<string>>;
 		}
 	>
 >();
@@ -343,6 +351,64 @@ function getBlockedUserIdsCached(supabase: SupabaseClient<Database>, userId: str
 	return entry.blockedUserIds;
 }
 
+/** 自分がミュートした相手の ID（191）。ミュートは片方向なので、相手からのミュートは関係ない */
+export async function getMutedUserIds(supabase: SupabaseClient<Database>, userId: string | null): Promise<Set<string>> {
+	if (!userId) return new Set();
+	const { data, error } = await supabase.from("user_mutes").select("muted_id").eq("muter_id", userId);
+	if (error) {
+		console.error("getMutedUserIds error:", error);
+		return new Set();
+	}
+	return new Set((data ?? []).map((row) => row.muted_id));
+}
+
+/** 自分がミュートした相手の一覧（設定画面用） */
+export async function getMutedProfiles(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+): Promise<(ProfileSummary & { muted_at: string })[]> {
+	const { data, error } = await supabase
+		.from("user_mutes")
+		.select("created_at, muted:profiles!user_mutes_muted_id_fkey ( id, username, display_name, avatar_url, bio )")
+		.eq("muter_id", userId)
+		.order("created_at", { ascending: false });
+
+	if (error) {
+		console.error("getMutedProfiles error:", error);
+		return [];
+	}
+
+	type MuteRow = { created_at: string; muted: ProfileSummary | ProfileSummary[] | null };
+	return ((data ?? []) as unknown as MuteRow[]).flatMap((row) => {
+		const profile = Array.isArray(row.muted) ? row.muted[0] : row.muted;
+		return profile ? [{ ...profile, muted_at: row.created_at }] : [];
+	});
+}
+
+/** 自分が相手をミュートしているか（プロフィール画面のメニュー表示用） */
+export async function isMutedByMe(
+	supabase: SupabaseClient<Database>,
+	userId: string | null,
+	targetId: string,
+): Promise<boolean> {
+	if (!userId || userId === targetId) return false;
+	const { data } = await supabase
+		.from("user_mutes")
+		.select("muted_id")
+		.eq("muter_id", userId)
+		.eq("muted_id", targetId)
+		.maybeSingle();
+	return data != null;
+}
+
+/** リクエストスコープでメモ化された getMutedUserIds */
+function getMutedUserIdsCached(supabase: SupabaseClient<Database>, userId: string | null): Promise<Set<string>> {
+	if (!userId) return Promise.resolve(new Set<string>());
+	const entry = getMuteCacheEntry(supabase, userId);
+	if (!entry.mutedUserIds) entry.mutedUserIds = getMutedUserIds(supabase, userId);
+	return entry.mutedUserIds;
+}
+
 /**
  * rawPost 配列に like_count / repost_count / reply_count / liked_by_me / reposted_by_me を付加して
  * Post[] に変換する共通ヘルパー。
@@ -391,7 +457,13 @@ export async function enrichPostsWithCounts(
 	supabase: SupabaseClient<Database>,
 	rawPosts: RawPost[],
 	userId: string | null,
-	options: { includeMutedRoomPosts?: boolean } = {},
+	options: {
+		includeMutedRoomPosts?: boolean;
+		/** ミュート中でも見せる相手（その人のプロフィール・その人の投稿を直接開いたとき） */
+		showMutedUserId?: string;
+		/** アカウントのミュートを効かせない（自分のブックマーク・いいねの一覧） */
+		includeMutedUsers?: boolean;
+	} = {},
 ): Promise<Post[]> {
 	if (rawPosts.length === 0) return [];
 
@@ -405,6 +477,10 @@ export async function enrichPostsWithCounts(
 		: getMutedEventIdsCached(supabase, userId);
 	// ブロックは入室中のルームでも解除しない（ミュートと違い、相手を避けるための機能）
 	const blockedUserIdsPromise = getBlockedUserIdsCached(supabase, userId);
+	// アカウントのミュート（191）は入室中のルームでも効かせる（作品ではなく人を避ける設定のため）
+	const mutedUserIdsPromise = options.includeMutedUsers
+		? Promise.resolve(new Set<string>())
+		: getMutedUserIdsCached(supabase, userId);
 
 	type QuotedPostRow = {
 		id: string;
@@ -437,12 +513,17 @@ export async function enrichPostsWithCounts(
 		}
 	}
 
-	const [mutedWords, mutedRoomAnimeIds, mutedEventIds, blockedUserIds] = await Promise.all([
+	const [mutedWords, mutedRoomAnimeIds, mutedEventIds, blockedUserIds, mutedUserIds] = await Promise.all([
 		mutedWordsPromise,
 		mutedRoomAnimeIdsPromise,
 		mutedEventIdsPromise,
 		blockedUserIdsPromise,
+		mutedUserIdsPromise,
 	]);
+	// キャッシュの Set は同じリクエストの他の一覧でも使うので、書き換えずに写して外す
+	const hiddenAuthorIds = options.showMutedUserId
+		? new Set([...mutedUserIds].filter((id) => id !== options.showMutedUserId))
+		: mutedUserIds;
 
 	// 引用先がブロック相手なら引用枠を落とす（本文だけ残す）
 	if (blockedUserIds.size > 0) {
@@ -455,14 +536,15 @@ export async function enrichPostsWithCounts(
 	const visibleRawPosts = rawPosts.filter(
 		(post) =>
 			!blockedUserIds.has(post.user_id) &&
+			// ミュートした人の投稿と、ミュートした人のリポストは出さない
+			!hiddenAuthorIds.has(post.user_id) &&
+			!(post.repost_context && hiddenAuthorIds.has(post.repost_context.user_id)) &&
 			!(mutedWords.length > 0 && containsMutedWord(post, mutedWords)) &&
 			!(
 				// 実況の投稿（放送枠、または放送時間外の話数ルーム）は作品ミュートで隠す
-				(
-					(post.broadcast_room_session_id || post.episode_room_id) &&
-					post.anime_id != null &&
-					mutedRoomAnimeIds.has(String(post.anime_id))
-				)
+				(post.broadcast_room_session_id || post.episode_room_id) &&
+				post.anime_id != null &&
+				mutedRoomAnimeIds.has(String(post.anime_id))
 			) &&
 			!(post.event_id != null && mutedEventIds.has(String(post.event_id))),
 	);
@@ -652,7 +734,11 @@ export async function getNotifications(
 ): Promise<Notification[]> {
 	// ブロック相手からの通知は、ブロック前に作られた行も含めて出さない。
 	// 取得上限を無駄にしないよう、絞り込みはクエリ側で行う。
-	const blockedUserIds = await getBlockedUserIdsCached(supabase, userId);
+	const [blockedUserIds, mutedUserIds] = await Promise.all([
+		getBlockedUserIdsCached(supabase, userId),
+		getMutedUserIdsCached(supabase, userId),
+	]);
+	const hiddenActorIds = new Set([...blockedUserIds, ...mutedUserIds]);
 
 	let query = supabase
 		.from("notifications")
@@ -721,9 +807,9 @@ export async function getNotifications(
 		query = query.in("type", types as string[]);
 	}
 
-	if (blockedUserIds.size > 0) {
+	if (hiddenActorIds.size > 0) {
 		// NOT IN は NULL を落とすため、actor_id が NULL のシステム通知（放送・トレード成立）は明示的に残す
-		query = query.or(`actor_id.is.null,actor_id.not.in.(${[...blockedUserIds].join(",")})`);
+		query = query.or(`actor_id.is.null,actor_id.not.in.(${[...hiddenActorIds].join(",")})`);
 	}
 
 	const { data, error } = await query;
@@ -785,52 +871,82 @@ export async function getNotifications(
  * 未読通知数を返す（ナビゲーションバッジ用）
  */
 export async function getUnreadNotificationCount(supabase: SupabaseClient<Database>, userId: string): Promise<number> {
-	const { count } = await supabase
+	const mutedUserIds = await getMutedUserIdsCached(supabase, userId);
+	let query = supabase
 		.from("notifications")
 		.select("id", { count: "exact", head: true })
 		.eq("recipient_id", userId)
 		.eq("read", false)
-		// 181 より前のマイリスト通知（フォロー中の人の動き）は、もう画面に出さないので数えない
-		.neq("type", "mylist_status" as never);
+		// 181 より前のマイリスト通知（フォロー中の人の動き）は、もう画面に出さないので数えない。
+		// 放送前のお知らせ（broadcast）は通知ではなくカレンダーに出すので数えない
+		.not("type", "in", "(broadcast,mylist_status)");
+	// ミュートした相手からの通知は一覧に出さないので、未読にも数えない（191）
+	if (mutedUserIds.size > 0) {
+		query = query.or(`actor_id.is.null,actor_id.not.in.(${[...mutedUserIds].join(",")})`);
+	}
+	const { count } = await query;
 
 	return count ?? 0;
-}
-
-export async function getUnreadBroadcastNotificationCount(
-	supabase: SupabaseClient<Database>,
-	userId: string,
-): Promise<number> {
-	const { count } = await supabase
-		.from("notifications")
-		.select("id", { count: "exact", head: true })
-		.eq("recipient_id", userId)
-		.eq("read", false)
-		.eq("type", "broadcast" as never);
-
-	return count ?? 0;
-}
-
-export interface NotificationCategoryCounts {
-	normal: number;
-	room: number;
 }
 
 /**
- * 通知タブごとの未読数を返す。
- * - room   = broadcast
- * - normal = 上記以外（181 より前のマイリスト通知は数えない）
+ * 放送がまだ終わっていない「もうすぐ始まる」お知らせ（カレンダーの上と小さな表示に出す）。
+ * 取れなかったときは空にする（お知らせが出ないだけで、ページは開ける）
  */
-export async function getUnreadNotificationCountsByCategory(
+export async function getActiveRoomReminders(
 	supabase: SupabaseClient<Database>,
 	userId: string,
-): Promise<NotificationCategoryCounts> {
-	// getUnreadNotificationCount は mylist_status を除外済み（= normal + room 相当）
-	const [nonMylistTotal, room] = await Promise.all([
-		getUnreadNotificationCount(supabase, userId),
-		getUnreadBroadcastNotificationCount(supabase, userId),
-	]);
+	now = new Date(),
+): Promise<RoomReminder[]> {
+	const { data, error } = await supabase
+		.from("notifications")
+		.select(`
+            id,
+            read,
+            created_at,
+            broadcast_anime_id,
+            broadcast_scheduled_at,
+            broadcast_room_date,
+            event_id,
+            broadcast_anime:anime!notifications_broadcast_anime_id_fkey ( title, cover_url, broadcast_duration_minutes ),
+            event:events!notifications_event_id_fkey ( title, duration_minutes )
+        `)
+		.eq("recipient_id", userId)
+		.eq("type", "broadcast" as never)
+		.gte("broadcast_scheduled_at", new Date(now.getTime() - ROOM_REMINDER_LOOKBACK_MS).toISOString())
+		.order("created_at", { ascending: false })
+		// 終わった放送は読んだあとで外すので、上限は1日に鳴る数より十分大きく取る
+		// （ここで切ると、前に鳴った長いイベントのお知らせが新しい分に押し出される）
+		.limit(200);
+	if (error) {
+		console.error("getActiveRoomReminders error:", error);
+		return [];
+	}
+	const rows = (data ?? []) as unknown as RoomReminderRow[];
+	return toActiveRoomReminders(rows, now, await getRoomSessionMinutes(supabase, rows));
+}
 
-	return { normal: Math.max(0, nonMylistTotal - room), room };
+/** お知らせの番組の、当日の放送枠の長さ（ルームのページと同じく、特番で延びた枠はこちらが正しい） */
+async function getRoomSessionMinutes(
+	supabase: SupabaseClient<Database>,
+	rows: RoomReminderRow[],
+): Promise<Map<string, number>> {
+	const animeRows = rows.filter((row) => row.broadcast_anime_id != null && row.broadcast_room_date);
+	const minutes = new Map<string, number>();
+	if (animeRows.length === 0) return minutes;
+	const { data, error } = await supabase
+		.from("broadcast_room_sessions")
+		.select("anime_id, scheduled_at, duration_minutes")
+		.in("anime_id", [...new Set(animeRows.map((row) => Number(row.broadcast_anime_id)))])
+		.in("room_date", [...new Set(animeRows.map((row) => row.broadcast_room_date as string))]);
+	// 取れなかったときは作品のいつもの枠で判定する
+	if (error) console.error("getRoomSessionMinutes error:", error);
+	for (const session of data ?? []) {
+		if (session.duration_minutes > 0) {
+			minutes.set(roomSessionKey(session.anime_id, session.scheduled_at), session.duration_minutes);
+		}
+	}
+	return minutes;
 }
 
 // ================================================================
@@ -1164,6 +1280,24 @@ export async function getEpisodeRoomBounds(
 	};
 }
 
+/** 話数ルームへの投稿でマイリストの話数を進める（188）。進まなかったとき・失敗したときは null */
+export async function advanceMylistProgressFromRoom(
+	supabase: SupabaseClient<Database>,
+	animeId: number,
+	episodeNumber: number,
+): Promise<{ from: number; to: number } | null> {
+	const { data, error } = await supabase.rpc("advance_mylist_progress_from_room", {
+		p_anime_id: animeId,
+		p_episode_number: episodeNumber,
+	});
+	if (error) {
+		console.error("advanceMylistProgressFromRoom error:", error);
+		return null;
+	}
+	const row = data?.[0];
+	return row ? { from: row.previous_progress, to: row.new_progress } : null;
+}
+
 /** 管理者が休止にした放送日（broadcast_room_overrides.is_cancelled）。話数ルームの放送枠から除く（156） */
 async function getCancelledRoomDates(supabase: SupabaseClient<Database>, animeId: number): Promise<Set<string> | null> {
 	const { data, error } = await supabase
@@ -1413,10 +1547,27 @@ export async function getRoomPostsBefore(
 export async function getVisiblePostReplyCounts(
 	supabase: SupabaseClient<Database>,
 	postIds: string[],
+	viewerId: string | null = null,
 ): Promise<Map<string, number> | null> {
-	const { counts, failed } = await fetchPostCountsById(supabase, [...new Set(postIds)], null);
+	const ids = [...new Set(postIds)];
+	const [{ counts, failed }, mutedUserIds] = await Promise.all([
+		fetchPostCountsById(supabase, ids, null),
+		getMutedUserIdsCached(supabase, viewerId),
+	]);
 	if (failed) return null;
-	return new Map([...counts].map(([id, row]) => [id, Number(row.reply_count ?? 0)]));
+	const visible = new Map([...counts].map(([id, row]) => [id, Number(row.reply_count ?? 0)]));
+	// 入室中にミュートした人の投稿も、次の確認で消えるようにする（191。RLS では見えたままのため）
+	if (mutedUserIds.size > 0 && visible.size > 0) {
+		const { data, error } = await supabase
+			.from("posts")
+			.select("id, user_id")
+			.in("id", [...visible.keys()]);
+		if (error) return null;
+		for (const row of data ?? []) {
+			if (mutedUserIds.has(row.user_id)) visible.delete(row.id);
+		}
+	}
+	return visible;
 }
 
 /**
@@ -2108,12 +2259,17 @@ export async function getFollowingActivity(
 		createdAt: row.created_at,
 		id: row.activity_id,
 	}));
-	const hydrated = await hydrateActivities(
-		supabase,
-		currentUserId,
-		rows.map((row) => row.activity_id),
-	);
-	return hydrated.error ? { posts: [], error: hydrated.error, nextCursor: null } : { ...hydrated, nextCursor };
+	const [hydrated, mutedUserIds] = await Promise.all([
+		hydrateActivities(
+			supabase,
+			currentUserId,
+			rows.map((row) => row.activity_id),
+		),
+		getMutedUserIdsCached(supabase, currentUserId),
+	]);
+	if (hydrated.error) return { posts: [], error: hydrated.error, nextCursor: null };
+	// ミュートした人の記録は出さない（191）。目印は間引く前の行から作ってあるので、続きは読める
+	return { posts: hydrated.posts.filter((item) => !mutedUserIds.has(item.user.id)), error: null, nextCursor };
 }
 
 /**
@@ -2386,7 +2542,11 @@ export async function getProfileTimelinePage(
 		];
 	});
 
-	return { posts: await enrichPostsWithCounts(supabase, rawTimelinePosts, currentUserId), error: null, nextCursor };
+	return {
+		posts: await enrichPostsWithCounts(supabase, rawTimelinePosts, currentUserId, { showMutedUserId: profile.id }),
+		error: null,
+		nextCursor,
+	};
 }
 
 /** プロフィールの画像タブの 1 ページ（本人の画像付きの投稿。返信は含めない）。画像の有無は DB で絞る（#250） */
@@ -2414,7 +2574,11 @@ export async function getProfileImagePostsPage(
 	if (error) return { posts: [], error, nextCursor: null };
 	const rows = (data ?? []) as unknown as RawPost[];
 	const nextCursor = buildTimelineNextCursor(rows, limit, (row) => ({ createdAt: row.created_at, id: row.id }));
-	return { posts: await enrichPostsWithCounts(supabase, rows, currentUserId), error: null, nextCursor };
+	return {
+		posts: await enrichPostsWithCounts(supabase, rows, currentUserId, { showMutedUserId: profileId }),
+		error: null,
+		nextCursor,
+	};
 }
 
 /**
@@ -2456,7 +2620,14 @@ async function getReactedPostsPage(
 	const sorted = ((rawPosts ?? []) as unknown as RawPost[]).sort(
 		(a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0),
 	);
-	return { posts: await enrichPostsWithCounts(supabase, sorted, currentUserId), error: null, nextCursor };
+	return {
+		posts: await enrichPostsWithCounts(supabase, sorted, currentUserId, {
+			// 自分のブックマーク・いいねは自分で選んだ投稿なので、ミュートした人の投稿も出す
+			includeMutedUsers: ownerId === currentUserId,
+		}),
+		error: null,
+		nextCursor,
+	};
 }
 
 /** ブックマークした投稿（本人だけが見る）。見えなくなった投稿で目減りしたページは取り足す */
@@ -3742,6 +3913,8 @@ export interface CollectionSummary {
 	title: string;
 	description: string | null;
 	is_public: boolean;
+	kind: CollectionKind;
+	tiers: string[];
 	updated_at: string;
 	item_count: number;
 	/** 先頭の作品のカバー（最大4枚。カバーの無い作品は飛ばす） */
@@ -3799,7 +3972,7 @@ export async function getUserCollections(
 	const { data, error } = await supabase
 		.from("user_collections")
 		.select(
-			"id, title, description, is_public, updated_at, item_count:user_collection_items(count), preview:user_collection_items(position, anime:anime_id(cover_url))",
+			"id, title, description, is_public, kind, tiers, updated_at, item_count:user_collection_items(count), preview:user_collection_items(position, anime:anime_id(cover_url))",
 		)
 		.eq("user_id", userId)
 		.order("updated_at", { ascending: false })
@@ -3812,6 +3985,8 @@ export async function getUserCollections(
 		title: string;
 		description: string | null;
 		is_public: boolean;
+		kind: string;
+		tiers: string[];
 		updated_at: string;
 		item_count: { count: number }[];
 		preview: { anime: { cover_url: string | null } | null }[];
@@ -3821,6 +3996,8 @@ export async function getUserCollections(
 		title: row.title,
 		description: row.description,
 		is_public: row.is_public,
+		kind: isCollectionKind(row.kind) ? row.kind : "list",
+		tiers: row.tiers,
 		updated_at: row.updated_at,
 		item_count: row.item_count[0]?.count ?? 0,
 		covers: row.preview.flatMap((item) => (item.anime?.cover_url ? [item.anime.cover_url] : [])).slice(0, 4),
@@ -3832,10 +4009,15 @@ export interface CollectionDetail {
 	title: string;
 	description: string | null;
 	is_public: boolean;
+	kind: CollectionKind;
+	/** ティア表の段の名前（上から） */
+	tiers: string[];
 	created_at: string;
 	updated_at: string;
 	owner: { id: string; username: string; display_name: string | null; avatar_url: string | null };
 	items: Anime[];
+	/** items と同じ並びで、各作品の段（tiers の何番目か。未分類・段が無くなったものは null） */
+	item_tiers: (number | null)[];
 }
 
 /** コレクションを作品の並び順つきで読む。見えない（非公開・鍵・ブロック）・無いときは null */
@@ -3843,7 +4025,7 @@ export async function getCollection(supabase: SupabaseClient<Database>, id: stri
 	const { data, error } = await supabase
 		.from("user_collections")
 		.select(
-			`id, title, description, is_public, created_at, updated_at, owner:profiles!user_collections_user_id_fkey(id, username, display_name, avatar_url), items:user_collection_items(position, anime:anime_id(${ANIME_LIST_BASE_COLUMNS}))`,
+			`id, title, description, is_public, kind, tiers, created_at, updated_at, owner:profiles!user_collections_user_id_fkey(id, username, display_name, avatar_url), items:user_collection_items(position, tier, anime:anime_id(${ANIME_LIST_BASE_COLUMNS}))`,
 		)
 		.eq("id", id)
 		.order("position", { referencedTable: "items" })
@@ -3851,13 +4033,17 @@ export async function getCollection(supabase: SupabaseClient<Database>, id: stri
 	if (error) failQuery("getCollection", error);
 	if (!data) return null;
 
-	const row = data as unknown as Omit<CollectionDetail, "items"> & {
-		items: { anime: Record<string, unknown> | null }[];
+	const row = data as unknown as Omit<CollectionDetail, "items" | "item_tiers" | "kind"> & {
+		kind: string;
+		items: { tier: number | null; anime: Record<string, unknown> | null }[];
 	};
+	// 後から非公開になった作品などは anime が読めずに null になるので、飛ばす
+	const readable = row.items.filter((item) => item.anime);
 	return {
 		...row,
-		// 後から非公開になった作品などは anime が読めずに null になるので、飛ばす
-		items: row.items.flatMap((item) => (item.anime ? [toAnime(item.anime)] : [])),
+		kind: isCollectionKind(row.kind) ? row.kind : "list",
+		items: readable.map((item) => toAnime(item.anime as Record<string, unknown>)),
+		item_tiers: readable.map((item) => (item.tier !== null && item.tier < row.tiers.length ? item.tier : null)),
 	};
 }
 

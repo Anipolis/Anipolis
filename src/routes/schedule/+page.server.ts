@@ -104,6 +104,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	const minWeek = addDaysToDateKey(currentWeekStart, -WEEK_NAV_RANGE_DAYS);
 	const maxWeek = addDaysToDateKey(currentWeekStart, WEEK_NAV_RANGE_DAYS);
 	const rawWeek = parseWeekStart(url.searchParams.get("week"), currentWeekStart);
+	// biome-ignore lint/complexity/useMathMinMax: YYYY-MM-DD は日付文字列のまま比較する（Date に変換しない）
 	const weekStart = rawWeek < minWeek ? minWeek : rawWeek > maxWeek ? maxWeek : rawWeek;
 	// room_date の範囲 [start, end] とイベント取得範囲 [startsAt, endsAt) は同じ 7 放送日を指す
 	const week = jstWeekRange(weekStart);

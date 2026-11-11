@@ -43,7 +43,7 @@ function handleBackClick(event: MouseEvent) {
 		</div>
 
 		{#if timeline.value === null}
-			<div class="posts-loading-spinner" aria-label="投稿を読み込み中">
+			<div class="posts-loading-spinner" role="status" aria-label="投稿を読み込み中">
 				<div class="spinner" aria-hidden="true"></div>
 				<span>読み込み中…</span>
 			</div>

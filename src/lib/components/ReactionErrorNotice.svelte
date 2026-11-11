@@ -18,7 +18,14 @@ function stop(event: Event) {
 	<div class="reaction-error" role="alert">
 		<span class="reaction-error-text">{feedback.message}</span>
 		{#if feedback.canRetry}
-			<button type="button" class="reaction-error-btn" onclick={(event) => { stop(event); feedback.retry(); }}>
+			<button
+				type="button"
+				class="reaction-error-btn"
+				onclick={(event) => {
+					stop(event);
+					feedback.retry();
+				}}
+			>
 				再試行
 			</button>
 		{/if}
@@ -26,7 +33,10 @@ function stop(event: Event) {
 			type="button"
 			class="reaction-error-btn reaction-error-dismiss"
 			aria-label="メッセージを閉じる"
-			onclick={(event) => { stop(event); feedback.clear(); }}
+			onclick={(event) => {
+				stop(event);
+				feedback.clear();
+			}}
 		>
 			閉じる
 		</button>

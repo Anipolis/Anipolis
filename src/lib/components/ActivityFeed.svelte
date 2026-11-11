@@ -76,7 +76,7 @@ function userName(group: ActivityGroup): string {
 }
 </script>
 
-{#snippet cover(item: MylistActivity, size: 'sm' | 'md')}
+{#snippet cover(item: MylistActivity, size: "sm" | "md")}
 	<span class="activity-cover activity-cover--{size}">
 		{#if item.anime.cover_url}
 			<img
@@ -93,7 +93,7 @@ function userName(group: ActivityGroup): string {
 	{@const state = likeState(item)}
 	{#if !canLike}
 		{#if state.count > 0}
-			<span class="activity-like activity-like--static" aria-label="いいね {state.count}">
+			<span class="activity-like activity-like--static" role="img" aria-label="いいね {state.count}">
 				<span class="i-lucide-heart" aria-hidden="true"></span>
 				{state.count}
 			</span>
@@ -106,7 +106,9 @@ function userName(group: ActivityGroup): string {
 				class:active={state.liked}
 				class:popping={popping === item.id}
 				aria-pressed={state.liked}
-				aria-label={state.liked ? `「${item.anime.title}」へのいいねを取り消す` : `「${item.anime.title}」にいいね`}
+				aria-label={state.liked
+					? `「${item.anime.title}」へのいいねを取り消す`
+					: `「${item.anime.title}」にいいね`}
 				disabled={!canLike}
 				onclick={() => void toggleLike(item)}
 				onanimationend={() => (popping = null)}
@@ -115,7 +117,7 @@ function userName(group: ActivityGroup): string {
 					width="17"
 					height="17"
 					viewBox="0 0 24 24"
-					fill={state.liked ? 'currentColor' : 'none'}
+					fill={state.liked ? "currentColor" : "none"}
 					stroke="currentColor"
 					stroke-width="2"
 					stroke-linecap="round"
@@ -128,7 +130,7 @@ function userName(group: ActivityGroup): string {
 				</svg>
 			</button>
 			<span class="activity-like-count" class:activity-like-count--active={state.liked}>
-				{state.count > 0 ? state.count : ''}
+				{state.count > 0 ? state.count : ""}
 			</span>
 		</span>
 	{/if}
@@ -137,11 +139,11 @@ function userName(group: ActivityGroup): string {
 {#snippet animeRow(item: MylistActivity)}
 	<div class="activity-anime">
 		<a href="/anime/{item.anime.id}" class="activity-anime-link">
-			{@render cover(item, 'md')}
+			{@render cover(item, "md")}
 			<span class="activity-anime-text">
 				<span class="activity-anime-title">{item.anime.title}</span>
 				{#if item.score != null}
-					<span class="activity-score" aria-label="スコア {item.score}">★ {item.score}</span>
+					<span class="activity-score" role="img" aria-label="スコア {item.score}">★ {item.score}</span>
 				{/if}
 			</span>
 		</a>
@@ -169,11 +171,11 @@ function userName(group: ActivityGroup): string {
 						{#if showUser}
 							<a href="/profile/{group.user.username}" class="activity-user">{userName(group)}</a>
 							<span>
-								が{isGroup ? `${group.items.length}作品を` : ''}{activityStatusPhrase(group.status)}
+								が{isGroup ? `${group.items.length}作品を` : ""}{activityStatusPhrase(group.status)}
 							</span>
 						{:else}
 							<span
-								>{isGroup ? `${group.items.length}作品を` : ''}
+								>{isGroup ? `${group.items.length}作品を` : ""}
 								{activityStatusPhrase(group.status)}</span
 							>
 						{/if}
@@ -210,7 +212,7 @@ function userName(group: ActivityGroup): string {
 						>
 							<span class="activity-cover-strip" aria-hidden="true">
 								{#each group.items.slice(0, PREVIEW_COVERS) as item (item.id)}
-									{@render cover(item, 'sm')}
+									{@render cover(item, "sm")}
 								{/each}
 								{#if group.items.length > PREVIEW_COVERS}
 									<span class="activity-cover-more">+{group.items.length - PREVIEW_COVERS}</span>
@@ -218,7 +220,7 @@ function userName(group: ActivityGroup): string {
 							</span>
 							{#if totalLikes > 0}
 								<!-- 中のいいねが閉じたままでも分かるように、合計だけ出す -->
-								<span class="activity-group-likes" aria-label="いいね {totalLikes}">
+								<span class="activity-group-likes" role="img" aria-label="いいね {totalLikes}">
 									<span class="i-lucide-heart" aria-hidden="true"></span>
 									{totalLikes}
 								</span>

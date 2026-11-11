@@ -229,6 +229,39 @@ export async function unblockUserAction(request: Request, supabase: SupabaseClie
 	return { blocked: false };
 }
 
+/** アカウントのミュート（191）。相手には伝わらず、フォローもそのまま残す */
+export async function muteUserAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
+	const form = await request.formData();
+	const targetId = (form.get("target_id") as string | null)?.trim() ?? "";
+	if (!targetId) return fail(400, { message: "ユーザーIDが不正です" });
+	if (targetId === userId) return fail(400, { message: "自分自身はミュートできません" });
+
+	const { data: target } = await supabase.from("profiles").select("id").eq("id", targetId).maybeSingle();
+	if (!target) return fail(404, { message: "ユーザーが見つかりません" });
+
+	const { error } = await supabase
+		.from("user_mutes")
+		.upsert({ muter_id: userId, muted_id: targetId }, { onConflict: "muter_id,muted_id", ignoreDuplicates: true });
+	if (error) {
+		console.error("muteUserAction error:", error);
+		return fail(403, { message: "ミュートできませんでした" });
+	}
+	return { muted: true };
+}
+
+export async function unmuteUserAction(request: Request, supabase: SupabaseClient<Database>, userId: string) {
+	const form = await request.formData();
+	const targetId = (form.get("target_id") as string | null)?.trim() ?? "";
+	if (!targetId) return fail(400, { message: "ユーザーIDが不正です" });
+
+	const { error } = await supabase.from("user_mutes").delete().eq("muter_id", userId).eq("muted_id", targetId);
+	if (error) {
+		console.error("unmuteUserAction error:", error);
+		return fail(500, { message: "ミュートの解除に失敗しました" });
+	}
+	return { muted: false };
+}
+
 /**
  * API ルート（+server.ts）用: 利用制限・BAN中なら error() を投げる。
  * form action 用の ensureAccountCanWrite と同じ判定を、HTTP エラーとして返す。
@@ -259,6 +292,8 @@ export async function insertPostWithHashtags(
 	additionalHashtags: string[] = [],
 	eventId: string | null = null,
 	episodeRoomId: string | null = null,
+	/** シェアするコレクション（193）。自分の公開コレクションかは DB のトリガーが確かめる */
+	collectionId: string | null = null,
 ) {
 	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
 	if (moderationFailure) return moderationFailure;
@@ -269,8 +304,8 @@ export async function insertPostWithHashtags(
 	if (rawContent.trim() && !content) {
 		return fail(400, { message: "本文に表示できる文字がありません" });
 	}
-	if (!content && imageUrls.length === 0 && !animeId && !exchangeShare) {
-		return fail(400, { message: "本文、画像、アニメ引用、またはトレード結果を追加してください" });
+	if (!content && imageUrls.length === 0 && !animeId && !exchangeShare && !collectionId) {
+		return fail(400, { message: "本文、画像、アニメ引用、トレード結果、またはコレクションを追加してください" });
 	}
 	if (content.length > 280) return fail(400, { message: "280文字以内で入力してください" });
 
@@ -301,7 +336,15 @@ export async function insertPostWithHashtags(
 		if (!quotedPost) return fail(404, { message: "引用元の投稿を表示できません" });
 	}
 
-	const postContent = exchangeShare && content.length === 0 ? "アニメトレードの結果を共有しました" : content;
+	// 本文が空でも投稿の検査（posts_content_check）を満たし、コレクションが消えて参照が空になっても残るよう、決まった文を入れる
+	const postContent =
+		content.length > 0
+			? content
+			: exchangeShare
+				? "アニメトレードの結果を共有しました"
+				: collectionId
+					? "コレクションをシェアしました"
+					: content;
 	const basePost = {
 		user_id: userId,
 		content: postContent,
@@ -314,6 +357,7 @@ export async function insertPostWithHashtags(
 		event_id: eventId,
 		// 話数ルーム（153）。放送枠の時間内なら DB のトリガーが放送枠も補う
 		episode_room_id: episodeRoomId,
+		collection_id: collectionId,
 	};
 	const postPayload = exchangeShare ? { ...basePost, exchange_share: exchangeShare as unknown as Json } : basePost;
 

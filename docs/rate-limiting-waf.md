@@ -50,7 +50,7 @@ SvelteKit の form action は「ページのパス + `?/<action名>` クエリ�
 
 ## 適用手順（Cloudflare ダッシュボード）
 
-Cloudflare の **Security → WAF → Rate limiting rules**（プランにより **Security → Bots** 近傍）から設定する。Workers/Pages でカスタムドメインを運用している前提。
+Cloudflare の **Security → WAF → Rate limiting rules**（プランにより **Security → Bots** 近傍）から設定する。Cloudflare Workers でカスタムドメインを運用している前提。
 
 > 無料プランでも Rate limiting rules は1ルール利用可能。複数ルールが必要なら Pro 以上、または後述の Cloudflare Workers KV / Durable Objects 方式を検討。
 

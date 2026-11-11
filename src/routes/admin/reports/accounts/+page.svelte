@@ -79,13 +79,16 @@ function toggleRow(id: string) {
 												>@{report.target_username}</a
 											>
 										{/if}
-										{#if report.target_moderation_status && report.target_moderation_status !== "active"}
+										{#if report.target_moderation_status &&
+											report.target_moderation_status !== "active"}
 											<span class="moderation-pill moderation-{report.target_moderation_status}">
 												{moderationLabels[report.target_moderation_status]}
 											</span>
 											{#if report.target_moderation_until}
 												<span class="mod-until">
-													{new Date(report.target_moderation_until).toLocaleString("ja-JP")}まで
+													{new Date(report.target_moderation_until).toLocaleString(
+														"ja-JP",
+													)}まで
 												</span>
 											{/if}
 											{#if report.target_moderation_reason}
@@ -113,7 +116,7 @@ function toggleRow(id: string) {
 										<input type="hidden" name="report_id" value={report.id}>
 										<div class="action-row">
 											<select name="status" class="status-select">
-												{#each Object.entries(statusLabels) as [ value, label ]}
+												{#each Object.entries(statusLabels) as [value, label]}
 													<option {value} selected={report.status === value}>{label}</option>
 												{/each}
 											</select>
@@ -130,11 +133,12 @@ function toggleRow(id: string) {
 											<label class="field-label">
 												対応
 												<select name="moderation_status" class="status-select">
-													{#each Object.entries(moderationLabels) as [ value, label ]}
+													{#each Object.entries(moderationLabels) as [value, label]}
 														<option
 															{value}
 															selected={report.target_moderation_status === value ||
-																(!report.target_moderation_status && value === "active")}
+																(!report.target_moderation_status &&
+																	value === "active")}
 														>
 															{label}
 														</option>

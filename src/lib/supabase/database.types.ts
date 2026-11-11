@@ -2482,6 +2482,7 @@ export type Database = {
 					episode_room_id: string | null;
 					event_id: string | null;
 					exchange_share: Json | null;
+					collection_id: string | null;
 					hidden_by_admin: boolean;
 					id: string;
 					image_urls: string[];
@@ -2498,6 +2499,7 @@ export type Database = {
 					episode_room_id?: string | null;
 					event_id?: string | null;
 					exchange_share?: Json | null;
+					collection_id?: string | null;
 					hidden_by_admin?: boolean;
 					id?: string;
 					image_urls?: string[];
@@ -2514,6 +2516,7 @@ export type Database = {
 					episode_room_id?: string | null;
 					event_id?: string | null;
 					exchange_share?: Json | null;
+					collection_id?: string | null;
 					hidden_by_admin?: boolean;
 					id?: string;
 					image_urls?: string[];
@@ -3622,18 +3625,21 @@ export type Database = {
 					collection_id: string;
 					created_at: string;
 					position: number;
+					tier: number | null;
 				};
 				Insert: {
 					anime_id: number;
 					collection_id: string;
 					created_at?: string;
 					position: number;
+					tier?: number | null;
 				};
 				Update: {
 					anime_id?: number;
 					collection_id?: string;
 					created_at?: string;
 					position?: number;
+					tier?: number | null;
 				};
 				Relationships: [
 					{
@@ -3700,7 +3706,9 @@ export type Database = {
 					description: string | null;
 					id: string;
 					is_public: boolean;
+					kind: string;
 					title: string;
+					tiers: string[];
 					updated_at: string;
 					user_id: string;
 				};
@@ -3709,7 +3717,9 @@ export type Database = {
 					description?: string | null;
 					id?: string;
 					is_public?: boolean;
+					kind?: string;
 					title: string;
+					tiers?: string[];
 					updated_at?: string;
 					user_id: string;
 				};
@@ -3718,7 +3728,9 @@ export type Database = {
 					description?: string | null;
 					id?: string;
 					is_public?: boolean;
+					kind?: string;
 					title?: string;
+					tiers?: string[];
 					updated_at?: string;
 					user_id?: string;
 				};
@@ -3804,6 +3816,39 @@ export type Database = {
 					{
 						foreignKeyName: "user_favorite_anime_user_id_fkey";
 						columns: ["user_id"];
+						isOneToOne: false;
+						referencedRelation: "profiles";
+						referencedColumns: ["id"];
+					},
+				];
+			};
+			user_mutes: {
+				Row: {
+					created_at: string;
+					muted_id: string;
+					muter_id: string;
+				};
+				Insert: {
+					created_at?: string;
+					muted_id: string;
+					muter_id: string;
+				};
+				Update: {
+					created_at?: string;
+					muted_id?: string;
+					muter_id?: string;
+				};
+				Relationships: [
+					{
+						foreignKeyName: "user_mutes_muted_id_fkey";
+						columns: ["muted_id"];
+						isOneToOne: false;
+						referencedRelation: "profiles";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "user_mutes_muter_id_fkey";
+						columns: ["muter_id"];
 						isOneToOne: false;
 						referencedRelation: "profiles";
 						referencedColumns: ["id"];
@@ -4063,6 +4108,10 @@ export type Database = {
 			};
 		};
 		Functions: {
+			advance_mylist_progress_from_room: {
+				Args: { p_anime_id: number; p_episode_number: number };
+				Returns: { new_progress: number; previous_progress: number }[];
+			};
 			anime_list_with_genre_match: {
 				Args: { p_genres: string[] };
 				Returns: {
@@ -4331,7 +4380,12 @@ export type Database = {
 			};
 			revoke_invite: { Args: { p_invite_id: string }; Returns: undefined };
 			set_collection_items: {
-				Args: { p_anime_ids: number[]; p_collection_id: string };
+				Args: { p_anime_ids: number[]; p_collection_id: string; p_tiers?: (number | null)[] };
+				Returns: undefined;
+			};
+			copy_collection: { Args: { p_source_id: string }; Returns: string };
+			set_collection_tiers: {
+				Args: { p_collection_id: string; p_origins: (number | null)[]; p_tiers: string[] };
 				Returns: undefined;
 			};
 			set_favorite_anime: {

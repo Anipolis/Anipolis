@@ -1,7 +1,11 @@
 import { error, fail, redirect } from "@sveltejs/kit";
 import { episodeRoomPath, hasEpisodeRooms, parseEpisodeNumberParam } from "$lib/episode-room";
 import { deletePostAction, toggleBookmarkAction, toggleLikeAction, toggleRepostAction } from "$lib/server/actions";
-import { buildEpisodeRoomPageData, createEpisodeRoomPost } from "$lib/server/episode-room-page";
+import {
+	buildEpisodeRoomPageData,
+	createEpisodeRoomPost,
+	undoRoomProgressAdvance,
+} from "$lib/server/episode-room-page";
 import {
 	ensureEpisodeRoom,
 	getAnime,
@@ -82,6 +86,12 @@ export const actions: Actions = {
 		const found = await findEpisodeRoom(supabase, animeId, episodeNumber);
 		const room = found ?? (await ensureEpisodeRoom(supabase, animeId, episodeNumber));
 		return createEpisodeRoomPost({ supabase, userId: user.id, request, anime, room });
+	},
+
+	undoProgress: async ({ request, params, locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { message: "ログインが必要です" });
+		return undoRoomProgressAdvance({ supabase, userId: user.id, request, animeId: Number(params.id) });
 	},
 
 	deletePost: async ({ request, locals: { supabase, safeGetSession } }) => {

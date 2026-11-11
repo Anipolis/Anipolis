@@ -626,7 +626,7 @@ export async function createRoomExperimentVisit(
 		console.error("room experiment session lookup error:", sessionError);
 		return { error: true, status: 500, message: "放送ルームの取得に失敗しました" };
 	}
-	if (!session || session.room_kind !== "episode") return { tracked: false };
+	if (session?.room_kind !== "episode") return { tracked: false };
 
 	const { data: run, error: runError } = await supabase
 		.from("room_experiment_runs")

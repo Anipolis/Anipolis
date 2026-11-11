@@ -3,9 +3,16 @@ import {
 	parsePositiveInt,
 	removeAnimeMuteAction,
 	removeEventMuteAction,
+	unmuteUserAction,
 	updateAnimeMuteAction,
 } from "$lib/server/actions";
-import { getAnimeMuteCandidate, getAnimeMutes, getEventMutes, getMutedWordRows } from "$lib/server/queries";
+import {
+	getAnimeMuteCandidate,
+	getAnimeMutes,
+	getEventMutes,
+	getMutedProfiles,
+	getMutedWordRows,
+} from "$lib/server/queries";
 import { redirectToLogin } from "$lib/server/require-login";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -13,10 +20,11 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	const { user } = await safeGetSession();
 	if (!user) redirectToLogin(url);
 
-	const [mutedWords, mutes, eventMutes] = await Promise.all([
+	const [mutedWords, mutes, eventMutes, mutedUsers] = await Promise.all([
 		getMutedWordRows(supabase, user.id),
 		getAnimeMutes(supabase, user.id),
 		getEventMutes(supabase, user.id),
+		getMutedProfiles(supabase, user.id),
 	]);
 
 	const parsedAnimeId = parsePositiveInt(url.searchParams.get("anime_id"));
@@ -26,10 +34,16 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		virtualAnime = await getAnimeMuteCandidate(supabase, Number(stagedAnimeId));
 	}
 
-	return { mutedWords, mutes, eventMutes, virtualAnime, stagedAnimeId };
+	return { mutedWords, mutes, eventMutes, mutedUsers, virtualAnime, stagedAnimeId };
 };
 
 export const actions: Actions = {
+	unmuteUser: async ({ request, locals: { supabase, safeGetSession } }) => {
+		const { user } = await safeGetSession();
+		if (!user) return fail(401, { message: "ログインが必要です" });
+		return unmuteUserAction(request, supabase, user.id);
+	},
+
 	addMute: async ({ request, locals: { supabase, safeGetSession } }) => {
 		const { user } = await safeGetSession();
 		if (!user) return fail(401, { message: "ログインが必要です" });

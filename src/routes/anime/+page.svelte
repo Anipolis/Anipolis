@@ -460,9 +460,8 @@ $effect(() => {
 											<InfoTip label="タグの絞り込み" text={ANIME_GENRE_FILTER_HELP} />
 										{/if}
 									</h2>
-									<div
-										class="drawer-genre-grid"
-										role="group"
+									<fieldset
+										class="drawer-genre-grid fieldset-reset"
 										aria-labelledby="genre-filter-desktop-{group.key}"
 									>
 										{#each group.tags as tag (tag.ja)}
@@ -476,7 +475,7 @@ $effect(() => {
 												{tag.ja}
 											</button>
 										{/each}
-									</div>
+									</fieldset>
 								</section>
 							{/each}
 
@@ -491,7 +490,10 @@ $effect(() => {
 										max="2100"
 										class="filter-input"
 										placeholder="例: 2025"
-										bind:value={() => filterState.year, (year) => updateFilterStateDebounced({ year: year == null ? "" : String(year) })}
+										bind:value={
+											() => filterState.year,
+											(year) => updateFilterStateDebounced({ year: year == null ? "" : String(year) })
+										}
 									>
 									<button
 										type="button"
@@ -528,7 +530,10 @@ $effect(() => {
 									type="text"
 									class="filter-input"
 									placeholder="スタジオ名"
-									bind:value={() => filterState.studio, (studio) => updateFilterStateDebounced({ studio })}
+									bind:value={
+										() => filterState.studio,
+										(studio) => updateFilterStateDebounced({ studio })
+									}
 								>
 							</section>
 
@@ -612,7 +617,15 @@ $effect(() => {
 						<span class="filter-active-dot" aria-hidden="true"></span>
 					{/if}
 				</button>
-				{#if data.search || data.genre || data.season || data.broadcastYear || data.broadcastSeason || data.broadcastSeasons?.length || data.studio || data.producer || data.source}
+				{#if data.search ||
+					data.genre ||
+					data.season ||
+					data.broadcastYear ||
+					data.broadcastSeason ||
+					data.broadcastSeasons?.length ||
+					data.studio ||
+					data.producer ||
+					data.source}
 					<a href="/anime" class="search-clear" title="フィルターをすべてクリア">✕</a>
 				{/if}
 			</div>
@@ -620,7 +633,7 @@ $effect(() => {
 
 		<nav class="tab-nav">
 			{#each tabs as tab}
-				{#if tab.id !== 'mylist' || data.user}
+				{#if tab.id !== "mylist" || data.user}
 					<a href={buildAnimeTabUrl(tab.id)} class="tab-btn" class:active={data.tab === tab.id}
 						>{tab.label}</a
 					>
@@ -628,9 +641,9 @@ $effect(() => {
 			{/each}
 			{#if data.isAdmin}
 				<a
-					href={buildAnimeTabUrl('register')}
+					href={buildAnimeTabUrl("register")}
 					class="tab-btn tab-btn--add"
-					class:active={data.tab === 'register'}
+					class:active={data.tab === "register"}
 					>＋登録</a
 				>
 			{/if}
@@ -661,7 +674,12 @@ $effect(() => {
 		{:else if data.broadcastYear || data.broadcastSeason || data.broadcastSeasons?.length}
 			<p class="search-label">
 				放送時期：<strong
-					>{[data.broadcastYear, ...(data.broadcastSeasons?.length ? data.broadcastSeasons : [data.broadcastSeason])].filter(Boolean).join(' ')}</strong
+					>{[
+						data.broadcastYear,
+						...(data.broadcastSeasons?.length ? data.broadcastSeasons : [data.broadcastSeason]),
+					]
+						.filter(Boolean)
+						.join(" ")}</strong
 				>
 				／ {data.total ?? data.animes.length}件 <a href="/anime" class="filter-clear">✕</a>
 			</p>
@@ -682,15 +700,15 @@ $effect(() => {
 			</p>
 		{/if}
 
-		{#if data.tab === 'register' && data.isAdmin}
+		{#if data.tab === "register" && data.isAdmin}
 			<AnimeRegisterForm {form} />
-		{:else if data.tab === 'register'}
+		{:else if data.tab === "register"}
 			<div class="anime-grid anime-grid--empty">
 				<div class="empty-state">
 					<p>管理者権限が必要です</p>
 				</div>
 			</div>
-		{:else if data.tab === 'mylist' && !data.user}
+		{:else if data.tab === "mylist" && !data.user}
 			<div class="anime-grid anime-grid--empty">
 				<div class="empty-state">
 					<p>マイリストを見るにはログインが必要です</p>
@@ -716,13 +734,17 @@ $effect(() => {
 							{anime}
 							titleOnlyOnPhone
 							href={buildAnimeDetailUrl(anime.id)}
-							score={{ kind: 'average', value: anime.avg_score ?? null, count: anime.score_count }}
-							rank={data.tab === 'popular' || data.tab === 'trending' || data.tab === 'top_rated' ? rankIndex + 1 : null}
-							hideAiringRibbon={data.tab === 'airing'}
+							score={{ kind: "average", value: anime.avg_score ?? null, count: anime.score_count }}
+							rank={data.tab === "popular" || data.tab === "trending" || data.tab === "top_rated"
+								? rankIndex + 1
+								: null}
+							hideAiringRibbon={data.tab === "airing"}
 							listButton={data.user
 								? {
 										status: entryStatus,
-										label: entryStatus ? `マイリスト: ${statusLabels[entryStatus]}` : 'マイリストに追加',
+										label: entryStatus
+											? `マイリスト: ${statusLabels[entryStatus]}`
+											: "マイリストに追加",
 										expanded: quickEdit?.isOpenFor(anime.id) ?? false,
 										onclick: (e) => quickEdit?.open(e, anime),
 									}
@@ -758,7 +780,7 @@ $effect(() => {
 								class:active={currentAnimeSectionIndex === page.index}
 								onclick={() => goToAnimePage(page.index)}
 								aria-label={`${page.rangeStart + 1}-${page.rangeEnd}件を表示`}
-								aria-current={currentAnimeSectionIndex === page.index ? 'page' : undefined}
+								aria-current={currentAnimeSectionIndex === page.index ? "page" : undefined}
 							>
 								{page.index + 1}
 							</button>
@@ -770,7 +792,7 @@ $effect(() => {
 								class:active={currentAnimeSectionIndex === page.index}
 								onclick={() => goToAnimePage(page.index)}
 								aria-label={`${page.rangeStart + 1}-${page.rangeEnd}件を表示`}
-								aria-current={currentAnimeSectionIndex === page.index ? 'page' : undefined}
+								aria-current={currentAnimeSectionIndex === page.index ? "page" : undefined}
 							>
 								{page.index + 1}
 							</button>
@@ -809,11 +831,16 @@ $effect(() => {
 	{/if}
 
 	{#if filterSheetOpen}
-		<!-- svelte-ignore a11y_click_events_have_key_events -->
-		<div class="filter-sheet-overlay" role="presentation" onclick={closeFilterSheet}>
+		<div class="filter-sheet-overlay">
+			<button
+				type="button"
+				class="modal-click-target modal-click-layer"
+				tabindex="-1"
+				aria-label="閉じる"
+				onclick={closeFilterSheet}
+			></button>
 			<div
-				class="filter-sheet"
-				onclick={(e) => e.stopPropagation()}
+				class="filter-sheet modal-content-layer"
 				role="dialog"
 				aria-modal="true"
 				aria-label="フィルター"
@@ -845,7 +872,10 @@ $effect(() => {
 									<InfoTip label="タグの絞り込み" text={ANIME_GENRE_FILTER_HELP} />
 								{/if}
 							</h3>
-							<div class="genre-chips" role="group" aria-labelledby="genre-filter-mobile-{group.key}">
+							<fieldset
+								class="genre-chips fieldset-reset"
+								aria-labelledby="genre-filter-mobile-{group.key}"
+							>
 								{#each group.tags as tag (tag.ja)}
 									<button
 										type="button"
@@ -857,7 +887,7 @@ $effect(() => {
 										{tag.ja}
 									</button>
 								{/each}
-							</div>
+							</fieldset>
 						</section>
 					{/each}
 

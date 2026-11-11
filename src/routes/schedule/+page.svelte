@@ -2,7 +2,11 @@
 import type { SubmitFunction } from "@sveltejs/kit";
 import { untrack } from "svelte";
 import { enhance } from "$app/forms";
+import { animePickMeta } from "$lib/anime-picker";
+import AnimeRow from "$lib/components/AnimeRow.svelte";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
+import { roomReminderStatus, roomReminderTime } from "$lib/room-reminders";
+import { roomReminders } from "$lib/stores/notifications";
 import type { Anime, BroadcastRoomOverride } from "$lib/types";
 import {
 	type BroadcastEpisodeSlot,
@@ -28,7 +32,16 @@ interface AnimeSearchResult {
 	title: string;
 	title_en: string | null;
 	cover_url: string | null;
+	type?: string | null;
+	aired_from?: string | null;
 }
+
+// 放送前のお知らせの「あと何分」を進める（一覧そのものは layout が30秒ごとに読み直す）
+let reminderNow = $state(Date.now());
+$effect(() => {
+	const timer = setInterval(() => (reminderNow = Date.now()), 30_000);
+	return () => clearInterval(timer);
+});
 
 let showEventDialog = $state(false);
 let openAlertMenu = $state<string | null>(null);
@@ -501,11 +514,42 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 		</div>
 	</header>
 
+	{#if $roomReminders.length > 0}
+		<!-- ベルを付けた番組の、鳴ったお知らせ。放送が終わると消える（通知のように履歴には残さない） -->
+		<section class="schedule-reminders" aria-label="放送前のお知らせ">
+			<ul class="schedule-reminder-list">
+				{#each $roomReminders as reminder (reminder.id)}
+					<li>
+						<a href={reminder.href} class="schedule-reminder">
+							<span class="schedule-reminder-cover">
+								{#if reminder.cover_url}
+									<img
+										src={coverThumbSrc(reminder.cover_url)}
+										{@attach coverThumbFallback(reminder.cover_url)}
+										alt=""
+									>
+								{:else}
+									<span class="i-lucide-calendar-clock" aria-hidden="true"></span>
+								{/if}
+							</span>
+							<span class="schedule-reminder-title">{reminder.title}</span>
+							<span class="schedule-reminder-meta">
+								<span class="i-lucide-alarm-clock" aria-hidden="true"></span>
+								{roomReminderStatus(reminder, reminderNow)}・{roomReminderTime(reminder)}
+								開始
+							</span>
+						</a>
+					</li>
+				{/each}
+			</ul>
+		</section>
+	{/if}
+
 	{#if form && "roomMuteError" in form && "message" in form}
 		<p class="form-error schedule-flash">{form.message}</p>
 	{/if}
 
-	<div class="day-tab-bar" aria-label="日付選択" bind:this={dayTabBar}>
+	<nav class="day-tab-bar" aria-label="日付選択" bind:this={dayTabBar}>
 		{#each getDisplayDayItems() as item}
 			<button
 				type="button"
@@ -518,7 +562,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 				<span class="day-tab-date">{formatDate(item.date)}</span>
 			</button>
 		{/each}
-	</div>
+	</nav>
 
 	<div class="schedule-grid">
 		{#each data.days as day, d}
@@ -567,7 +611,9 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 										</div>
 										<span class="slot-title">{event.title}</span>
 										<span class="slot-bottom"
-											>{[event.anime?.title, `#${event.hashtag}`].filter(Boolean).join(" ・ ")}</span
+											>{[event.anime?.title, `#${event.hashtag}`]
+												.filter(Boolean)
+												.join(" ・ ")}</span
 										>
 									</div>
 								</a>
@@ -578,13 +624,17 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 											class="notify-btn"
 											class:notify-btn--active={eventSubscribed}
 											class:notify-btn--muted={eventMuted}
-											title={eventMuted ? "ミュート中。通知またはミュートを設定" : "通知またはミュートを設定"}
-											aria-label={eventMuted ? "ミュート中。通知またはミュートを設定" : "通知またはミュートを設定"}
+											title={eventMuted
+												? "ミュート中。通知またはミュートを設定"
+												: "通知またはミュートを設定"}
+											aria-label={eventMuted
+												? "ミュート中。通知またはミュートを設定"
+												: "通知またはミュートを設定"}
 											aria-expanded={openAlertMenu === eventAlertKey(event.id)}
 											onclick={() => {
-											const key = eventAlertKey(event.id);
-											openAlertMenu = openAlertMenu === key ? null : key;
-										}}
+												const key = eventAlertKey(event.id);
+												openAlertMenu = openAlertMenu === key ? null : key;
+											}}
 										>
 											{#if eventMuted}
 												<svg
@@ -642,7 +692,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 											aria-label="閉じる"
 											onclick={() => (openAlertMenu = null)}
 										></button>
-										<div class="room-alert-menu" aria-label="イベント設定">
+										<fieldset class="room-alert-menu fieldset-reset" aria-label="イベント設定">
 											{#if !event.is_cancelled}
 												<form
 													method="POST"
@@ -741,7 +791,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 													ミュート設定を管理
 												</a>
 											</div>
-										</div>
+										</fieldset>
 									{/if}
 								{/if}
 							</div>
@@ -749,7 +799,11 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 
 						{#each groupScheduleItemsByTimeBand(day, displayDate) as itemGroup, groupIndex (groupIndex)}
 							<div class="anime-time-group">
-								{#each itemGroup as item (item.type === "anime" ? item.anime.id : item.type === "event" ? item.event.id : `suspension-${item.anime_id}-${item.room_date}`)}
+								{#each itemGroup as item (item.type === "anime"
+									? item.anime.id
+									: item.type === "event"
+										? item.event.id
+										: `suspension-${item.anime_id}-${item.room_date}`)}
 									{#if item.type === "event"}
 										{@render eventSlot(item.event)}
 									{:else if item.type === "suspension"}
@@ -784,17 +838,30 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 										{@const isMuted = mutedAnimeIds.has(anime.id)}
 										{@const roomMute = roomMuteSettings[anime.id]}
 										{@const subscribable = canSubscribe(anime)}
-										{@const ep = currentEpisodeForSlot(anime, displayDate, data.broadcastOverrides[anime.id])}
+										{@const ep = currentEpisodeForSlot(
+											anime,
+											displayDate,
+											data.broadcastOverrides[anime.id],
+										)}
 										{@const isMarathon = ep !== null && isMarathonEpisodeSlot(ep)}
-										{@const epBadge = ep !== null ? formatEpisodeBadge(ep, anime.episode_count) : null}
-										{@const specialEpisodeLabel = ep !== null && ep.start == null && ep.end == null ? ep.label : null}
+										{@const epBadge =
+											ep !== null ? formatEpisodeBadge(ep, anime.episode_count) : null}
+										{@const specialEpisodeLabel =
+											ep !== null && ep.start == null && ep.end == null ? ep.label : null}
 										{@const episodeLabel =
-											epBadge !== null && specialEpisodeLabel === null ? (anime.episode_count ? epBadge : `#${epBadge}`) : null}
-										{@const stationLabel = anime.broadcast_station?.length ? anime.broadcast_station.join(" / ") : null}
+											epBadge !== null && specialEpisodeLabel === null
+												? anime.episode_count
+													? epBadge
+													: `#${epBadge}`
+												: null}
+										{@const stationLabel = anime.broadcast_station?.length
+											? anime.broadcast_station.join(" / ")
+											: null}
 										<div
 											class="anime-slot-wrap"
 											class:anime-slot-wrap--notifying={isNotifying}
-											class:anime-slot-wrap--menu-open={openAlertMenu === alertKey(anime.id, displayDate)}
+											class:anime-slot-wrap--menu-open={openAlertMenu ===
+												alertKey(anime.id, displayDate)}
 										>
 											<a href="/rooms/anime/{anime.id}/{displayDate}" class="anime-slot">
 												<div class="slot-cover-wrap">
@@ -832,7 +899,9 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 													{/if}
 													{#if episodeLabel || stationLabel}
 														<span class="slot-bottom"
-															>{[episodeLabel, stationLabel].filter(Boolean).join(" · ")}</span
+															>{[episodeLabel, stationLabel]
+																.filter(Boolean)
+																.join(" · ")}</span
 														>
 													{/if}
 												</div>
@@ -844,13 +913,18 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 														class="notify-btn"
 														class:notify-btn--active={isSubscribed}
 														class:notify-btn--muted={isMuted}
-														title={isMuted ? "ミュート中。通知またはミュートを設定" : "通知またはミュートを設定"}
-														aria-label={isMuted ? "ミュート中。通知またはミュートを設定" : "通知またはミュートを設定"}
-														aria-expanded={openAlertMenu === alertKey(anime.id, displayDate)}
+														title={isMuted
+															? "ミュート中。通知またはミュートを設定"
+															: "通知またはミュートを設定"}
+														aria-label={isMuted
+															? "ミュート中。通知またはミュートを設定"
+															: "通知またはミュートを設定"}
+														aria-expanded={openAlertMenu ===
+															alertKey(anime.id, displayDate)}
 														onclick={() => {
-														const key = alertKey(anime.id, displayDate);
-														openAlertMenu = openAlertMenu === key ? null : key;
-													}}
+															const key = alertKey(anime.id, displayDate);
+															openAlertMenu = openAlertMenu === key ? null : key;
+														}}
 													>
 														{#if isMuted}
 															<svg
@@ -908,7 +982,10 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 														aria-label="閉じる"
 														onclick={() => (openAlertMenu = null)}
 													></button>
-													<div class="room-alert-menu" aria-label="ルーム設定">
+													<fieldset
+														class="room-alert-menu fieldset-reset"
+														aria-label="ルーム設定"
+													>
 														{#if subscribable}
 															<form
 																method="POST"
@@ -999,7 +1076,10 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 																<button
 																	type="submit"
 																	class="mute-chip"
-																	class:mute-chip--active={isMuted && roomMute?.mute_type === "period" && roomMute?.period_days === 3 && roomMute?.is_repeat}
+																	class:mute-chip--active={isMuted &&
+																		roomMute?.mute_type === "period" &&
+																		roomMute?.period_days === 3 &&
+																		roomMute?.is_repeat}
 																>
 																	放送後3日間
 																</button>
@@ -1020,7 +1100,8 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 																<button
 																	type="submit"
 																	class="mute-chip"
-																	class:mute-chip--active={isMuted && roomMute?.mute_type === "always"}
+																	class:mute-chip--active={isMuted &&
+																		roomMute?.mute_type === "always"}
 																>
 																	常にミュート
 																</button>
@@ -1038,7 +1119,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 																カスタムミュート設定
 															</a>
 														</div>
-													</div>
+													</fieldset>
 												{/if}
 											{/if}
 										</div>
@@ -1162,27 +1243,12 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 									<p>検索中...</p>
 								{:else}
 									{#each eventAnimeResults as anime}
-										<button
-											type="button"
-											class="event-anime-result"
+										<AnimeRow
+											coverUrl={anime.cover_url}
+											title={anime.title}
+											meta={animePickMeta(anime)}
 											onclick={() => selectEventAnime(anime)}
-										>
-											{#if anime.cover_url}
-												<img
-													src={coverThumbSrc(anime.cover_url)}
-													{@attach coverThumbFallback(anime.cover_url)}
-													alt={anime.title}
-												>
-											{:else}
-												<div class="event-anime-thumb-empty"></div>
-											{/if}
-											<span>
-												<strong>{anime.title}</strong>
-												{#if anime.title_en}
-													<small>{anime.title_en}</small>
-												{/if}
-											</span>
-										</button>
+										/>
 									{/each}
 								{/if}
 							</div>
@@ -1239,6 +1305,68 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 }
 .schedule-flash {
 	margin: 0 0 10px;
+}
+.schedule-reminders {
+	margin: 0 0 12px;
+}
+.schedule-reminder-list {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+	gap: 8px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.schedule-reminder {
+	display: grid;
+	grid-template-columns: 36px minmax(0, 1fr);
+	grid-template-rows: auto auto;
+	column-gap: 10px;
+	row-gap: 2px;
+	align-items: center;
+	padding: 8px;
+	border: 1px solid var(--color-border);
+	border-radius: 12px;
+	background: var(--color-bg-card);
+	color: var(--color-text);
+	text-decoration: none;
+}
+.schedule-reminder:hover {
+	background: var(--color-surface-hover);
+}
+.schedule-reminder-cover {
+	display: flex;
+	grid-row: 1 / 3;
+	align-items: center;
+	justify-content: center;
+	width: 36px;
+	aspect-ratio: 400 / 566;
+	overflow: hidden;
+	border-radius: 6px;
+	background: var(--color-border);
+	color: var(--color-accent);
+	font-size: 16px;
+}
+.schedule-reminder-cover img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+.schedule-reminder-title {
+	overflow: hidden;
+	font-size: 14px;
+	font-weight: 700;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.schedule-reminder-meta {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	color: var(--color-accent);
+	font-size: 12px;
+	font-weight: 600;
 }
 .week-nav {
 	display: flex;
@@ -1848,8 +1976,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	grid-template-columns: minmax(0, 1fr) 120px;
 	gap: 8px;
 }
-.event-anime-selected,
-.event-anime-result {
+.event-anime-selected {
 	display: grid;
 	grid-template-columns: 40px minmax(0, 1fr) auto;
 	align-items: center;
@@ -1864,7 +1991,6 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	padding: 6px;
 }
 .event-anime-selected img,
-.event-anime-result img,
 .event-anime-thumb-empty {
 	width: 40px;
 	height: 54px;
@@ -1872,23 +1998,20 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	object-fit: cover;
 	background: var(--color-border);
 }
-.event-anime-selected div,
-.event-anime-result span {
+.event-anime-selected div {
 	min-width: 0;
 	display: flex;
 	flex-direction: column;
 	gap: 2px;
 }
-.event-anime-selected strong,
-.event-anime-result strong {
+.event-anime-selected strong {
 	font-size: 0.78rem;
 	line-height: 1.3;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-.event-anime-selected span,
-.event-anime-result small {
+.event-anime-selected span {
 	font-size: 0.68rem;
 	font-weight: 500;
 	color: var(--color-text-muted);
@@ -1905,28 +2028,26 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	border-radius: 5px;
 	color: var(--color-text-muted);
 }
-.event-anime-clear:hover,
-.event-anime-result:hover {
+.event-anime-clear:hover {
 	background: var(--color-surface-hover);
 	color: var(--color-text);
 }
 .event-anime-results {
-	max-height: 220px;
+	max-height: min(360px, 50vh);
 	overflow: auto;
 	display: flex;
 	flex-direction: column;
-	gap: 6px;
+	gap: 2px;
+	padding: 6px;
+	border: 1px solid var(--color-border);
+	border-radius: 8px;
+	background: var(--color-surface);
 }
 .event-anime-results p {
 	margin: 0;
+	padding: 4px;
 	font-size: 0.75rem;
 	color: var(--color-text-muted);
-}
-.event-anime-result {
-	grid-template-columns: 40px minmax(0, 1fr);
-	padding: 6px;
-	text-align: left;
-	cursor: pointer;
 }
 .event-form textarea {
 	resize: vertical;
