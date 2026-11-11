@@ -4,7 +4,8 @@ import { join } from "node:path";
 // border-radius に 999px/9999px/50% を指定した宣言ブロックは corner-shape: round を同一ブロック内に併記する。
 // app.css が全要素へ corner-shape: squircle を適用するため、併記漏れは Chromium で円・ピルがスクワークルになる。
 const SRC_ROOT = "src";
-const PILL_RADIUS_PATTERN = /border-radius\s*:\s*(999px|9999px|50%)\b/;
+// % の直後は単語境界が成立しないため、px と % で終端条件を分けず先読みで宣言の終端を判定する。
+const PILL_RADIUS_PATTERN = /border-radius\s*:\s*(999px|9999px|50%)(?=[\s;!}]|$)/;
 const ROUND_SHAPE_PATTERN = /corner-shape\s*:\s*round\b/;
 const STYLE_PATTERN = /<style\b[^>]*>([\s\S]*?)<\/style>/g;
 const COMMENT_PATTERN = /\/\*[\s\S]*?\*\//g;
@@ -21,24 +22,70 @@ function stripCommentsPreservingLines(source: string): string {
 	return source.replace(COMMENT_PATTERN, (match) => match.replace(/[^\n]/g, " "));
 }
 
-// マッチ開始位置は直前の改行を含むため、開き括弧の位置で宣言ブロックの行を求める。
+interface CssBlock {
+	selector: string;
+	braceIndex: number;
+	contentStart: number;
+	inner: Array<[number, number]>;
+}
+
+// 波括弧の対応を追跡し、各ブロック自身の宣言だけを検査する。入れ子の内側は親の宣言から除く。
 function checkCssChunk(filePath: string, css: string, baseLine: number, violations: Violation[]): void {
 	const stripped = stripCommentsPreservingLines(css);
-	const rulePattern = /([^{}]+)\{([^{}]*)\}/g;
-	let match = rulePattern.exec(stripped);
-	while (match !== null) {
-		const selector = match[1] ?? "";
-		const body = match[2] ?? "";
-		const trimmedSelector = selector.trim();
-		if (!KEYFRAME_SELECTOR_PATTERN.test(trimmedSelector) && !trimmedSelector.startsWith("@")) {
-			if (PILL_RADIUS_PATTERN.test(body) && !ROUND_SHAPE_PATTERN.test(body)) {
-				const braceIndex = match.index + selector.length;
-				const relativeLine = stripped.slice(0, braceIndex).split("\n").length;
-				const lastLine = trimmedSelector.split("\n").pop()?.trim() ?? trimmedSelector;
-				violations.push({ file: filePath, line: baseLine + relativeLine, selector: lastLine });
+	const stack: CssBlock[] = [];
+	let selectorStart = 0;
+	let quote: string | null = null;
+	let escaped = false;
+	for (let i = 0; i < stripped.length; i += 1) {
+		const char = stripped[i];
+		if (quote !== null) {
+			if (escaped) {
+				escaped = false;
+			} else if (char === "\\") {
+				escaped = true;
+			} else if (char === quote) {
+				quote = null;
 			}
+			continue;
 		}
-		match = rulePattern.exec(stripped);
+		if (char === '"' || char === "'") {
+			quote = char;
+		} else if (char === "{") {
+			stack.push({
+				selector: stripped.slice(selectorStart, i),
+				braceIndex: i,
+				contentStart: i + 1,
+				inner: [],
+			});
+			selectorStart = i + 1;
+		} else if (char === "}") {
+			const block = stack.pop();
+			if (block === undefined) {
+				selectorStart = i + 1;
+				continue;
+			}
+			const sortedInner = [...block.inner].sort((a, b) => a[0] - b[0]);
+			let declarations = "";
+			let position = block.contentStart;
+			for (const [start, end] of sortedInner) {
+				declarations += stripped.slice(position, start);
+				position = end + 1;
+			}
+			declarations += stripped.slice(position, i);
+			const parent = stack[stack.length - 1];
+			if (parent !== undefined) parent.inner.push([block.braceIndex, i]);
+			const trimmedSelector = block.selector.trim();
+			if (!KEYFRAME_SELECTOR_PATTERN.test(trimmedSelector) && !trimmedSelector.startsWith("@")) {
+				if (PILL_RADIUS_PATTERN.test(declarations) && !ROUND_SHAPE_PATTERN.test(declarations)) {
+					const relativeLine = stripped.slice(0, block.braceIndex).split("\n").length;
+					const lastLine = trimmedSelector.split("\n").pop()?.trim() ?? trimmedSelector;
+					violations.push({ file: filePath, line: baseLine + relativeLine, selector: lastLine });
+				}
+			}
+			selectorStart = i + 1;
+		} else if (char === ";") {
+			selectorStart = i + 1;
+		}
 	}
 }
 
