@@ -23,19 +23,22 @@ $effect(() => {
 </script>
 
 {#if open}
-	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<div
 		class="anime-search-overlay live-room-picker-overlay"
-		onclick={(e) => {
-			if (e.target === e.currentTarget) onclose();
-		}}
 		role="dialog"
 		aria-modal="true"
 		aria-label="ライブ実況ルームを選択"
 		tabindex="-1"
 		use:trapFocus
 	>
-		<div class="anime-search-modal live-room-picker-modal">
+		<button
+			type="button"
+			class="modal-click-target modal-click-layer"
+			tabindex="-1"
+			aria-label="閉じる"
+			onclick={onclose}
+		></button>
+		<div class="anime-search-modal live-room-picker-modal modal-content-layer">
 			<div class="anime-search-header">
 				<span class="anime-search-title">ライブ実況ルームを選択</span>
 				<button type="button" class="anime-search-close" onclick={onclose} aria-label="閉じる">

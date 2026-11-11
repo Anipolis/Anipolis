@@ -12,6 +12,7 @@ export default defineConfig({
 				test: {
 					name: "client",
 					environment: "happy-dom",
+					setupFiles: ["./src/test/setup-happy-dom.ts"],
 					include: ["src/**/*.svelte.test.ts"],
 					exclude: ["src/lib/server/**"],
 				},

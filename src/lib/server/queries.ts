@@ -542,11 +542,9 @@ export async function enrichPostsWithCounts(
 			!(mutedWords.length > 0 && containsMutedWord(post, mutedWords)) &&
 			!(
 				// 実況の投稿（放送枠、または放送時間外の話数ルーム）は作品ミュートで隠す
-				(
-					(post.broadcast_room_session_id || post.episode_room_id) &&
-					post.anime_id != null &&
-					mutedRoomAnimeIds.has(String(post.anime_id))
-				)
+				(post.broadcast_room_session_id || post.episode_room_id) &&
+				post.anime_id != null &&
+				mutedRoomAnimeIds.has(String(post.anime_id))
 			) &&
 			!(post.event_id != null && mutedEventIds.has(String(post.event_id))),
 	);

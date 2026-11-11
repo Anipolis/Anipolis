@@ -72,14 +72,22 @@ function handleKeydown(event: KeyboardEvent) {
 					<span class="i-lucide-ellipsis-vertical" aria-hidden="true"></span>
 				</button>
 				{#if menuOpen}
-					<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
-					<div class="post-kebab-backdrop" role="presentation" onclick={() => (menuOpen = false)}></div>
+					<button
+						type="button"
+						class="post-kebab-backdrop modal-click-target"
+						tabindex="-1"
+						aria-label="メニューを閉じる"
+						onclick={() => (menuOpen = false)}
+					></button>
 					<div class="post-kebab-menu">
 						{#if controller.isOwn}
 							<button
 								type="button"
 								class="post-kebab-item post-kebab-item--danger"
-								onclick={() => { menuOpen = false; controller.deleteModalOpen = true; }}
+								onclick={() => {
+									menuOpen = false;
+									controller.deleteModalOpen = true;
+								}}
 							>
 								<span class="i-lucide-trash-2" aria-hidden="true"></span>
 								削除
@@ -88,7 +96,10 @@ function handleKeydown(event: KeyboardEvent) {
 							<button
 								type="button"
 								class="post-kebab-item"
-								onclick={() => { menuOpen = false; controller.reportModalOpen = true; }}
+								onclick={() => {
+									menuOpen = false;
+									controller.reportModalOpen = true;
+								}}
 							>
 								<span class="i-lucide-flag" aria-hidden="true"></span>
 								通報

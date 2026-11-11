@@ -109,7 +109,7 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 		<div class="admin-section-header">
 			<h2>対象検索</h2>
 		</div>
-		<div class="target-toggle" role="group" aria-label="対象種別">
+		<fieldset class="target-toggle fieldset-reset" aria-label="対象種別">
 			<a
 				class="btn-toggle"
 				class:btn-toggle--active={data.target !== "event"}
@@ -124,7 +124,7 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 			>
 				イベント
 			</a>
-		</div>
+		</fieldset>
 		<form method="GET" class="search-form">
 			<input type="hidden" name="target" value={data.target}>
 			<input
@@ -264,7 +264,10 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 								onclick={() =>
 									(stopTarget = {
 										id: run.id,
-										title: run.room_kind === "event" ? (run.event_title ?? "") : (run.anime_title ?? ""),
+										title:
+											run.room_kind === "event"
+												? (run.event_title ?? "")
+												: (run.anime_title ?? ""),
 									})}
 							>
 								停止
@@ -309,7 +312,10 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 								<div class="survey-distributions">
 									<div>
 										<h4>次回参加</h4>
-										{#each optionCounts(run.survey.next_participation_counts, nextParticipationLabels) as option}
+										{#each optionCounts(
+											run.survey.next_participation_counts,
+											nextParticipationLabels,
+										) as option}
 											<div class="survey-option-row">
 												<span>{option.label}</span>
 												<strong>{option.count}</strong>
@@ -318,7 +324,10 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 									</div>
 									<div>
 										<h4>X / Twitter比較</h4>
-										{#each optionCounts(run.survey.comparison_with_x_counts, comparisonWithXLabels) as option}
+										{#each optionCounts(
+											run.survey.comparison_with_x_counts,
+											comparisonWithXLabels,
+										) as option}
 											<div class="survey-option-row">
 												<span>{option.label}</span>
 												<strong>{option.count}</strong>
@@ -414,13 +423,16 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 </main>
 
 {#if stopTarget}
-	<div
-		class="modal-backdrop"
-		role="presentation"
-		onclick={(event) => { if (event.target === event.currentTarget) stopTarget = null; }}
-	>
+	<div class="modal-backdrop">
+		<button
+			type="button"
+			class="modal-click-target modal-click-layer"
+			tabindex="-1"
+			aria-label="閉じる"
+			onclick={() => (stopTarget = null)}
+		></button>
 		<div
-			class="modal"
+			class="modal modal-content-layer"
 			use:trapFocus
 			role="dialog"
 			aria-modal="true"

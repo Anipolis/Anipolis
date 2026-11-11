@@ -14,7 +14,9 @@ concurrency:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # ubuntu-latest は 2026-10〜11 に 24.04 から 26.04 へ切り替わる。
+    # OS が黙って変わらないよう、当面は 24.04 を明示する。
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       # SvelteKit's static env modules must be populated for type generation;
@@ -28,15 +30,15 @@ jobs:
         with:
           persist-credentials: false
       # pnpm のバージョンは package.json の packageManager から読む（二重指定するとエラーになる）
-      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      # v6.1.0 以降が pnpm 12 の公式サポート
+      - uses: pnpm/action-setup@9bbca1e9dc2902adb87e8780fe5c98796985a62d # v6.1.1
+      # Node のバージョンは mise.toml を正本にしてローカルと揃える（setup-node v7.1.0 以降が mise.toml を読める）
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          # 2026-10-21 のセキュリティリリース。Cloudflare Pages のビルドは出たばかりの 24.22.1 を入れられないので、
-          # .node-version（Pages が読む）はメジャー版の 24 にしてあり、CI だけ版を明示する。
-          # Pages が扱えるようになったら .node-version も 24.22.1 にし、ここは node-version-file に戻す
-          node-version: 24.22.1
+          node-version-file: mise.toml
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
       - run: pnpm test
-      - run: pnpm build
+      # wrangler.jsonc の設定と、Worker のバンドル・サイズ上限をデプロイ前に確かめる
+      - run: pnpm deploy:dry-run

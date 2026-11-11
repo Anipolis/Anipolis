@@ -83,16 +83,21 @@ const handleCancelSubmit: SubmitFunction = () => {
 </script>
 
 {#if open}
-	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<div class="modal-backdrop" role="presentation" onclick={() => onclose()}>
+	<div class="modal-backdrop">
+		<button
+			type="button"
+			class="modal-click-target modal-click-layer"
+			tabindex="-1"
+			aria-label="閉じる"
+			onclick={() => onclose()}
+		></button>
 		<div
-			class="modal-card"
+			class="modal-card modal-content-layer"
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="event-settings-modal-title"
 			tabindex="-1"
 			use:trapFocus
-			onclick={(e) => e.stopPropagation()}
 		>
 			<header class="modal-header">
 				<h2 id="event-settings-modal-title">イベント設定</h2>

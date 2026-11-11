@@ -56,7 +56,7 @@ const submitRequest: SubmitFunction = () => {
 						class="field-input"
 						autocomplete="email"
 						maxlength="254"
-						defaultValue={form && !form.success ? form.email ?? "" : ""}
+						defaultValue={form && !form.success ? (form.email ?? "") : ""}
 						required
 					>
 				</div>

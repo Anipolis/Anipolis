@@ -107,7 +107,9 @@ describe("shared reaction rows", () => {
 		await tick();
 		const overlay = target.querySelector<HTMLElement>(".quote-modal-overlay");
 		if (!overlay) throw new Error("Missing quote modal");
-		overlay.click();
+		const backdrop = overlay.querySelector<HTMLElement>(".modal-click-target");
+		if (!backdrop) throw new Error("Missing quote modal backdrop");
+		backdrop.click();
 		await tick();
 		expect(target.querySelector(".quote-modal-overlay")).toBeNull();
 		expect(goto).not.toHaveBeenCalled();

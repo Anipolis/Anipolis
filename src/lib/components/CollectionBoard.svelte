@@ -457,6 +457,7 @@ function onWindowKeyDown(event: KeyboardEvent) {
 
 {#snippet card(item: Item, index: number)}
 	<li class="board-item">
+		<!-- biome-ignore lint/a11y/useSemanticElements: カード内に操作ボタンやリンクがあるため button にできない -->
 		<div
 			class="board-card"
 			class:board-card--dragging={item.id === draggingId}
@@ -508,6 +509,7 @@ function onWindowKeyDown(event: KeyboardEvent) {
 					aria-label="「{item.title}」の作品ページを開く"
 					title="作品ページ"
 				>
+					<span class="sr-only">作品ページを開く</span>
 					<span class="i-lucide-external-link" aria-hidden="true"></span>
 				</a>
 				<button
@@ -551,6 +553,7 @@ function onWindowKeyDown(event: KeyboardEvent) {
 						</button>
 					</div>
 					<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+					<!-- biome-ignore lint/a11y/useKeyWithClickEvents: 行内のカード操作で選択できるため、行全体のクリックは補助 -->
 					<ol class="board-tier-items" data-board-tier={tier} onclick={() => onRowClick(tier)}>
 						{#each order as item, index (item.id)}
 							{#if item.tier === tier}
@@ -567,7 +570,7 @@ function onWindowKeyDown(event: KeyboardEvent) {
 				onclick={addTier}
 			>
 				<span class="i-lucide-plus" aria-hidden="true"></span>
-				{labels.length >= MAX_COLLECTION_TIERS ? `段は${MAX_COLLECTION_TIERS}つまでです` : '段を足す'}
+				{labels.length >= MAX_COLLECTION_TIERS ? `段は${MAX_COLLECTION_TIERS}つまでです` : "段を足す"}
 			</button>
 		</div>
 
@@ -576,6 +579,7 @@ function onWindowKeyDown(event: KeyboardEvent) {
 				<h2 class="board-pool-title">未分類 <span class="board-pool-count">{poolCount}</span></h2>
 			</div>
 			<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+			<!-- biome-ignore lint/a11y/useKeyWithClickEvents: 行内のカード操作で選択できるため、行全体のクリックは補助 -->
 			<ol class="board-pool-items" data-board-tier="none" onclick={() => onRowClick(null)}>
 				{#each order as item, index (item.id)}
 					{#if item.tier === null}
@@ -603,18 +607,24 @@ function onWindowKeyDown(event: KeyboardEvent) {
 
 {#if dialogTier !== null}
 	{@const tier = dialogTier}
-	<div class="tier-dialog-overlay" role="presentation" onclick={closeTierDialog}>
+	<div class="tier-dialog-overlay">
+		<button
+			type="button"
+			class="modal-click-target modal-click-layer"
+			tabindex="-1"
+			aria-label="閉じる"
+			onclick={closeTierDialog}
+		></button>
 		<div
 			use:trapFocus
-			class="tier-dialog"
+			class="tier-dialog modal-content-layer"
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="tier-dialog-title"
 			tabindex="-1"
-			onclick={(event) => event.stopPropagation()}
 			onkeydown={(event) => {
 				event.stopPropagation();
-				if (event.key === 'Escape') closeTierDialog();
+				if (event.key === "Escape") closeTierDialog();
 			}}
 		>
 			<div class="tier-dialog-header">

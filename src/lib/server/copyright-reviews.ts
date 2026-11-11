@@ -128,7 +128,7 @@ export async function resolveCopyrightReviewAction(
 		.eq("id", reviewId)
 		.maybeSingle();
 	if (reviewError) return fail(500, { message: `確認項目の取得に失敗しました: ${reviewError.message}` });
-	if (!review || review.status !== "pending") return fail(409, { message: "この項目は既に処理されています" });
+	if (review?.status !== "pending") return fail(409, { message: "この項目は既に処理されています" });
 
 	const current = review.anime?.copyright ?? null;
 	let next: string | null;

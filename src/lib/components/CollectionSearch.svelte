@@ -79,7 +79,7 @@ $effect(() => () => {
 		if (resultsOpen && root && !root.contains(event.target as Node | null)) resultsOpen = false;
 	}}
 	onkeydown={(event) => {
-		if (event.key === 'Escape') resultsOpen = false;
+		if (event.key === "Escape") resultsOpen = false;
 	}}
 />
 
@@ -88,7 +88,7 @@ $effect(() => () => {
 	<input
 		type="search"
 		class="collection-search-input"
-		placeholder={full ? `${MAX_COLLECTION_ITEMS}作品まで入れられます` : '作品を探して足す'}
+		placeholder={full ? `${MAX_COLLECTION_ITEMS}作品まで入れられます` : "作品を探して足す"}
 		aria-label={label}
 		disabled={full}
 		bind:this={input}
@@ -115,7 +115,7 @@ $effect(() => () => {
 					<AnimeRow
 						coverUrl={anime.cover_url}
 						title={anime.title}
-						meta={added ? '追加済み' : animePickMeta(anime)}
+						meta={added ? "追加済み" : animePickMeta(anime)}
 						disabled={added || full}
 						onclick={() => pick(anime)}
 					/>

@@ -73,7 +73,7 @@ let keepProgress = false;
 let queuedContents: string[] = [];
 // 次の送信で送る送信待ちの文章（入力欄の文章ではなくこちらを送る）
 let sendingQueued: string | null = null;
-let postListEl: HTMLDivElement | null = $state(null);
+let postListEl: HTMLElement | null = $state(null);
 let mounted = $state(false);
 let isMobileViewport = $state(false);
 let postOrder = $state<PostOrder>("oldest");
@@ -1061,7 +1061,7 @@ function formatCompactDate(iso: string) {
 								keepComposerFocused = true;
 							}}
 							onkeydown={(e) => {
-								if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
+								if (e.key === "Enter" && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
 									e.preventDefault();
 									submitComposer();
 								}
@@ -1072,7 +1072,7 @@ function formatCompactDate(iso: string) {
 								<span class="composer-note">タイムラインにも表示されます</span>
 							{/if}
 							{#if charCount >= maxLen - 40}
-								<span class="char-count {overLimit ? 'char-count--over' : ''}"
+								<span class="char-count {overLimit ? "char-count--over" : ""}"
 									>{charCount}/{maxLen}</span
 								>
 							{/if}
@@ -1149,7 +1149,7 @@ function formatCompactDate(iso: string) {
 			{/if}
 		</div>
 
-		<div class="room-order-toggle" role="group" aria-label="投稿の表示順">
+		<fieldset class="room-order-toggle fieldset-reset" aria-label="投稿の表示順">
 			<button
 				type="button"
 				class:active={postOrder === "oldest"}
@@ -1166,13 +1166,12 @@ function formatCompactDate(iso: string) {
 			>
 				新しい順
 			</button>
-		</div>
+		</fieldset>
 
 		<div class="room-post-list-shell">
 			<!-- svelte-ignore a11y_no_noninteractive_tabindex (The scroll region supports keyboard scrolling.) -->
-			<div
+			<section
 				class="room-post-list scrollbar-thin-muted"
-				role="region"
 				aria-label="実況タイムライン"
 				tabindex="0"
 				bind:this={postListEl}
@@ -1217,7 +1216,7 @@ function formatCompactDate(iso: string) {
 						{/each}
 					{/if}
 				</div>
-			</div>
+			</section>
 
 			<!-- 投稿が無いと飛び先が無く、空の表示に重なるだけなので出さない（#432） -->
 			{#if liveAiring && allPosts.length > 0}

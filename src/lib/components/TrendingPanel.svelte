@@ -35,7 +35,7 @@ const showFooterLinks = $derived(!page.data.user);
 			<a href="/hashtag/{tag.name}" class="trending-item">
 				<span class="trending-rank">{index + 1}</span>
 				<span class="trending-name">#{tag.name}</span>
-				<span class="trending-count">{tag.post_count.toLocaleString('ja-JP')}件</span>
+				<span class="trending-count">{tag.post_count.toLocaleString("ja-JP")}件</span>
 			</a>
 		{/each}
 	{/if}
@@ -56,7 +56,7 @@ const showFooterLinks = $derived(!page.data.user);
 						title={anime.title}
 						coverUrl={anime.cover_url}
 						rank={index + 1}
-						note="{(anime.recent_count ?? 0).toLocaleString('ja-JP')}件"
+						note="{(anime.recent_count ?? 0).toLocaleString("ja-JP")}件"
 					/>
 				</li>
 			{/each}

@@ -31,22 +31,22 @@ const submitPassword: SubmitFunction = () => {
 			{#if form?.success}
 				<div class="flash-success">パスワードを再設定しました。新しいパスワードでログインできます。</div>
 				<a href="/" class="btn btn-primary auth-wide-button">Anipolisへ</a>
-			{:else if data.state === 'oauth_only'}
+			{:else if data.state === "oauth_only"}
 				<div class="flash-error" role="alert">このメールアドレスのアカウントはパスワードを持っていません。</div>
 				<p class="auth-info-text">
 					{#if data.providers.length > 0}
-						{data.providers.join(' / ')}
+						{data.providers.join(" / ")}
 						でのログインに使われています。ログイン画面で同じサービスのボタンからログインしてください。
 					{:else}
 						ログイン画面から外部サービスのボタンでログインしてください。
 					{/if}
 				</p>
 				<a href="/auth?mode=login&method=email" class="btn btn-primary auth-wide-button">ログイン画面へ</a>
-			{:else if data.state !== 'ready'}
+			{:else if data.state !== "ready"}
 				<div class="flash-error" role="alert">
-					{#if data.state === 'expired'}
+					{#if data.state === "expired"}
 						再設定リンクの有効期限が切れています。
-					{:else if data.state === 'invalid'}
+					{:else if data.state === "invalid"}
 						再設定リンクが無効です。すでに使用済みか、申請したときと別のブラウザで開いている可能性があります。
 					{:else}
 						再設定の手続きが確認できませんでした。リンクの有効期限切れ、または設定済みのリンクを再度開いた可能性があります。
@@ -57,7 +57,7 @@ const submitPassword: SubmitFunction = () => {
 				</p>
 				<a href={FORGOT_PASSWORD_PATH} class="btn btn-primary auth-wide-button">再設定メールを申請する</a>
 			{:else}
-				{#if form && 'message' in form && !('field' in form)}
+				{#if form && "message" in form && !("field" in form)}
 					<div class="flash-error" role="alert">{form.message}</div>
 				{/if}
 
@@ -72,9 +72,9 @@ const submitPassword: SubmitFunction = () => {
 							<input
 								id="reset-password"
 								name="password"
-								type={showNewPassword ? 'text' : 'password'}
+								type={showNewPassword ? "text" : "password"}
 								class="field-input password-input"
-								class:field-error={form && 'field' in form && form.field === 'password'}
+								class:field-error={form && "field" in form && form.field === "password"}
 								autocomplete="new-password"
 								minlength={MIN_PASSWORD_LENGTH}
 								required
@@ -82,8 +82,8 @@ const submitPassword: SubmitFunction = () => {
 							<button
 								type="button"
 								class="password-toggle"
-								aria-label={showNewPassword ? 'パスワードを隠す' : 'パスワードを表示'}
-								title={showNewPassword ? 'パスワードを隠す' : 'パスワードを表示'}
+								aria-label={showNewPassword ? "パスワードを隠す" : "パスワードを表示"}
+								title={showNewPassword ? "パスワードを隠す" : "パスワードを表示"}
 								onclick={() => {
 									showNewPassword = !showNewPassword;
 								}}
@@ -95,7 +95,7 @@ const submitPassword: SubmitFunction = () => {
 								{/if}
 							</button>
 						</div>
-						{#if form && 'field' in form && form.field === 'password'}
+						{#if form && "field" in form && form.field === "password"}
 							<p class="field-error-msg">{form.message}</p>
 						{:else}
 							<p class="field-hint">{MIN_PASSWORD_LENGTH}文字以上で入力してください。</p>
@@ -108,9 +108,9 @@ const submitPassword: SubmitFunction = () => {
 							<input
 								id="reset-password-confirm"
 								name="confirm"
-								type={showConfirmPassword ? 'text' : 'password'}
+								type={showConfirmPassword ? "text" : "password"}
 								class="field-input password-input"
-								class:field-error={form && 'field' in form && form.field === 'confirm'}
+								class:field-error={form && "field" in form && form.field === "confirm"}
 								autocomplete="new-password"
 								minlength={MIN_PASSWORD_LENGTH}
 								required
@@ -118,8 +118,8 @@ const submitPassword: SubmitFunction = () => {
 							<button
 								type="button"
 								class="password-toggle"
-								aria-label={showConfirmPassword ? 'パスワードを隠す' : 'パスワードを表示'}
-								title={showConfirmPassword ? 'パスワードを隠す' : 'パスワードを表示'}
+								aria-label={showConfirmPassword ? "パスワードを隠す" : "パスワードを表示"}
+								title={showConfirmPassword ? "パスワードを隠す" : "パスワードを表示"}
 								onclick={() => {
 									showConfirmPassword = !showConfirmPassword;
 								}}
@@ -131,13 +131,13 @@ const submitPassword: SubmitFunction = () => {
 								{/if}
 							</button>
 						</div>
-						{#if form && 'field' in form && form.field === 'confirm'}
+						{#if form && "field" in form && form.field === "confirm"}
 							<p class="field-error-msg">{form.message}</p>
 						{/if}
 					</div>
 
 					<button type="submit" class="btn btn-primary auth-wide-button" disabled={saving}>
-						{saving ? '設定中...' : 'パスワードを再設定'}
+						{saving ? "設定中..." : "パスワードを再設定"}
 					</button>
 				</form>
 			{/if}

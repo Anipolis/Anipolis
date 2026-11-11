@@ -58,6 +58,8 @@ let avatarMessage = $state("");
 let avatarPreviewUrl = $state<string | null>(null);
 let avatarPendingFile = $state<File | null>(null);
 let avatarPendingDelete = $state(false);
+let avatarFileInput = $state<HTMLInputElement | null>(null);
+let headerFileInput = $state<HTMLInputElement | null>(null);
 let showProfileEditModal = $state(false);
 let showUserReportModal = $state(false);
 let reportReason = $state("harassment");
@@ -479,7 +481,12 @@ function listButtonFor(anime: Anime) {
 	{/if}
 </svelte:head>
 
-<svelte:window onkeydown={handleReportModalKeydown} onclick={() => { if (showKebabMenu) showKebabMenu = false; }} />
+<svelte:window
+	onkeydown={handleReportModalKeydown}
+	onclick={() => {
+		if (showKebabMenu) showKebabMenu = false;
+	}}
+/>
 
 <div class="page-container">
 	<main class="feed-column">
@@ -511,37 +518,48 @@ function listButtonFor(anime: Anime) {
 									method="POST"
 									action="?/follow"
 									use:enhance={({ cancel }) => {
-                            if (isProcessing) {
-                                cancel();
-                                return;
-                            }
-                            isProcessing = true;
-                            return async ({ result }) => {
-                                try {
-                                    if (result.type === 'success' && result.data) {
-                                        const payload = result.data as { followed: boolean; requestStatus?: "none" | "pending" };
-                                        const followed = payload.followed;
-                                        isFollowing = followed;
-                                        followRequestStatus = payload.requestStatus ?? "none";
-                                        if (followed !== data.isFollowing) {
-                                            followerCount += followed ? 1 : -1;
-                                        }
-                                        await invalidateAll();
-                                    }
-                                } finally {
-                                    isProcessing = false;
-                                }
-                            };
-                        }}
+										if (isProcessing) {
+											cancel();
+											return;
+										}
+										isProcessing = true;
+										return async ({ result }) => {
+											try {
+												if (result.type === "success" && result.data) {
+													const payload = result.data as {
+														followed: boolean;
+														requestStatus?: "none" | "pending";
+													};
+													const followed = payload.followed;
+													isFollowing = followed;
+													followRequestStatus = payload.requestStatus ?? "none";
+													if (followed !== data.isFollowing) {
+														followerCount += followed ? 1 : -1;
+													}
+													await invalidateAll();
+												}
+											} finally {
+												isProcessing = false;
+											}
+										};
+									}}
 								>
 									<input type="hidden" name="target_id" value={profile.id}>
 									<button
 										type="submit"
-										class="btn {isFollowing || followRequestStatus === 'pending' ? 'btn-secondary' : 'btn-primary'}"
-										disabled={isProcessing || followRequestStatus === 'pending'}
+										class="btn {isFollowing || followRequestStatus === "pending"
+											? "btn-secondary"
+											: "btn-primary"}"
+										disabled={isProcessing || followRequestStatus === "pending"}
 										style="font-size: 13px;"
 									>
-										{isFollowing ? 'フォロー中' : followRequestStatus === 'pending' ? '申請中' : profile.is_private ? 'フォロー申請' : 'フォローする'}
+										{isFollowing
+											? "フォロー中"
+											: followRequestStatus === "pending"
+												? "申請中"
+												: profile.is_private
+													? "フォロー申請"
+													: "フォローする"}
 									</button>
 								</form>
 							{/if}
@@ -552,7 +570,10 @@ function listButtonFor(anime: Anime) {
 									aria-label="その他のオプション"
 									aria-haspopup="true"
 									aria-expanded={showKebabMenu}
-									onclick={(e) => { e.stopPropagation(); showKebabMenu = !showKebabMenu; }}
+									onclick={(e) => {
+										e.stopPropagation();
+										showKebabMenu = !showKebabMenu;
+									}}
 								>
 									<span class="i-lucide-ellipsis-vertical" aria-hidden="true"></span>
 								</button>
@@ -598,7 +619,10 @@ function listButtonFor(anime: Anime) {
 										<button
 											type="button"
 											role="menuitem"
-											onclick={() => { showKebabMenu = false; showUserReportModal = true; }}
+											onclick={() => {
+												showKebabMenu = false;
+												showUserReportModal = true;
+											}}
 										>
 											通報
 										</button>
@@ -654,14 +678,20 @@ function listButtonFor(anime: Anime) {
 		</div>
 
 		{#if showUserReportModal}
-			<div class="report-modal-overlay" role="presentation" onclick={() => (showUserReportModal = false)}>
+			<div class="report-modal-overlay">
+				<button
+					type="button"
+					class="modal-click-target modal-click-layer"
+					tabindex="-1"
+					aria-label="閉じる"
+					onclick={() => (showUserReportModal = false)}
+				></button>
 				<div
-					class="report-modal-card"
+					class="report-modal-card modal-content-layer"
 					role="dialog"
 					aria-modal="true"
 					aria-labelledby="user-report-title"
 					tabindex="-1"
-					onclick={(event) => event.stopPropagation()}
 					onkeydown={(event) => event.stopPropagation()}
 				>
 					<div class="report-modal-header">
@@ -702,7 +732,7 @@ function listButtonFor(anime: Anime) {
 							disabled={reportSubmitting}
 							onclick={submitUserReport}
 						>
-							{reportSubmitting ? '送信中...' : '送信'}
+							{reportSubmitting ? "送信中..." : "送信"}
 						</button>
 					</div>
 				</div>
@@ -719,14 +749,20 @@ function listButtonFor(anime: Anime) {
 		{/if}
 
 		{#if showProfileEditModal && isOwn}
-			<div class="profile-edit-modal-overlay" role="presentation" onclick={closeProfileEditModal}>
+			<div class="profile-edit-modal-overlay">
+				<button
+					type="button"
+					class="modal-click-target modal-click-layer"
+					tabindex="-1"
+					aria-label="閉じる"
+					onclick={closeProfileEditModal}
+				></button>
 				<div
-					class="profile-edit-modal-card"
+					class="profile-edit-modal-card modal-content-layer"
 					role="dialog"
 					aria-modal="true"
 					aria-labelledby="profile-edit-title"
 					tabindex="-1"
-					onclick={(event) => event.stopPropagation()}
 					onkeydown={(event) => {
 						event.stopPropagation();
 						if (event.key === "Escape") closeProfileEditModal();
@@ -756,7 +792,7 @@ function listButtonFor(anime: Anime) {
 								<div class="flash-success">プロフィールを更新しました。</div>
 							{/if}
 
-							{#if form && 'message' in form && !('field' in form)}
+							{#if form && "message" in form && !("field" in form)}
 								<div class="flash-error">{form.message}</div>
 							{/if}
 
@@ -764,17 +800,29 @@ function listButtonFor(anime: Anime) {
 								<span class="field-label">アイコン画像</span>
 								<!-- 左にアイコン、右にボタン（初期設定と同じ並び）。アイコンを押しても選べる。Tab の移動先と読み上げはボタンだけ -->
 								<div class="profile-avatar-editor">
-									<label for="profile-avatar-input" class="avatar-pick" aria-hidden="true">
+									<!-- アイコンのクリックはマウス向けの補助。読み上げとキーボードは右のボタンだけに任せる -->
+									<button
+										type="button"
+										class="avatar-pick"
+										aria-hidden="true"
+										tabindex="-1"
+										onclick={() => avatarFileInput?.click()}
+									>
 										<UserAvatar
 											src={editableAvatarUrl}
 											username={profile.display_name || profile.username}
 											size="lg"
 										/>
-									</label>
+									</button>
 									<div class="profile-image-actions">
 										<label class="btn btn-secondary profile-image-button">
-											{avatarUploading ? '処理中...' : editableAvatarUrl ? '画像を変更' : '画像を選択'}
+											{avatarUploading
+												? "処理中..."
+												: editableAvatarUrl
+													? "画像を変更"
+													: "画像を選択"}
 											<input
+												bind:this={avatarFileInput}
 												id="profile-avatar-input"
 												type="file"
 												accept="image/jpeg,image/png,image/webp"
@@ -801,18 +849,29 @@ function listButtonFor(anime: Anime) {
 
 							<div class="field">
 								<span class="field-label">ヘッダー画像</span>
-								<!-- プレビューを押しても選べる（読み上げはボタンだけ） -->
-								<label for="profile-header-input" class="profile-header-editor" aria-hidden="true">
+								<!-- プレビューのクリックはマウス向けの補助。読み上げとキーボードは下のボタンだけに任せる -->
+								<button
+									type="button"
+									class="profile-header-editor"
+									aria-hidden="true"
+									tabindex="-1"
+									onclick={() => headerFileInput?.click()}
+								>
 									{#if editableHeaderUrl}
 										<img src={editableHeaderUrl} alt="">
 									{:else}
 										<span class="profile-header-editor-empty">ヘッダー画像は未設定です</span>
 									{/if}
-								</label>
+								</button>
 								<div class="profile-image-actions profile-header-actions-row">
 									<label class="btn btn-secondary profile-image-button">
-										{headerUploading ? '処理中...' : editableHeaderUrl ? '画像を変更' : '画像を選択'}
+										{headerUploading
+											? "処理中..."
+											: editableHeaderUrl
+												? "画像を変更"
+												: "画像を選択"}
 										<input
+											bind:this={headerFileInput}
 											id="profile-header-input"
 											type="file"
 											accept="image/jpeg,image/png,image/webp"
@@ -843,11 +902,11 @@ function listButtonFor(anime: Anime) {
 									name="display_name"
 									type="text"
 									class="field-input"
-									class:field-error={form && 'field' in form && form.field === 'display_name'}
+									class:field-error={form && "field" in form && form.field === "display_name"}
 									maxlength="50"
 									bind:value={editDisplayName}
 								>
-								{#if form && 'field' in form && form.field === 'display_name'}
+								{#if form && "field" in form && form.field === "display_name"}
 									<p class="field-error-msg">{form.message}</p>
 								{/if}
 							</div>
@@ -858,14 +917,14 @@ function listButtonFor(anime: Anime) {
 									id="bio"
 									name="bio"
 									class="field-textarea"
-									class:field-error={form && 'field' in form && form.field === 'bio'}
+									class:field-error={form && "field" in form && form.field === "bio"}
 									placeholder="好きな作品や今見ているアニメなど"
 									rows="3"
 									maxlength="160"
 									bind:value={editBio}
 								></textarea>
 								<p class="field-hint" class:danger={bioRemaining < 0}>
-									{#if form && 'field' in form && form.field === 'bio'}
+									{#if form && "field" in form && form.field === "bio"}
 										{form.message}
 									{:else}
 										残り {bioRemaining} 文字
@@ -885,10 +944,10 @@ function listButtonFor(anime: Anime) {
 							</button>
 							<button
 								type="submit"
-								class="btn {profileChanged ? 'btn-primary' : 'btn-secondary'}"
+								class="btn {profileChanged ? "btn-primary" : "btn-secondary"}"
 								disabled={profileSubmitting || headerUploading || !profileChanged}
 							>
-								{profileSubmitting ? '保存中...' : '保存する'}
+								{profileSubmitting ? "保存中..." : "保存する"}
 							</button>
 						</div>
 					</form>
@@ -902,11 +961,11 @@ function listButtonFor(anime: Anime) {
 			aria-label="プロフィールタブ"
 			{@attach scrollableTabs(".profile-tab.active", activeTab)}
 		>
-			<a href="/profile/{profile.username}" class="profile-tab" class:active={activeTab === 'posts'}>投稿</a>
-			<a href="/profile/{profile.username}?tab=images" class="profile-tab" class:active={activeTab === 'images'}
+			<a href="/profile/{profile.username}" class="profile-tab" class:active={activeTab === "posts"}>投稿</a>
+			<a href="/profile/{profile.username}?tab=images" class="profile-tab" class:active={activeTab === "images"}
 				>画像</a
 			>
-			<a href="/profile/{profile.username}?tab=list" class="profile-tab" class:active={activeTab === 'list'}>
+			<a href="/profile/{profile.username}?tab=list" class="profile-tab" class:active={activeTab === "list"}>
 				マイリスト
 				{#if !canViewContent || !profile.list_is_public}
 					<span class="tab-lock i-lucide-lock-keyhole" aria-hidden="true"></span>
@@ -915,7 +974,7 @@ function listButtonFor(anime: Anime) {
 			<a
 				href="/profile/{profile.username}?tab=activity"
 				class="profile-tab"
-				class:active={activeTab === 'activity'}
+				class:active={activeTab === "activity"}
 			>
 				アクティビティ
 				{#if !canViewContent || !profile.list_is_public}
@@ -923,13 +982,13 @@ function listButtonFor(anime: Anime) {
 				{/if}
 			</a>
 			{#if isOwn}
-				<a href="/profile/{profile.username}?tab=likes" class="profile-tab" class:active={activeTab === 'likes'}
+				<a href="/profile/{profile.username}?tab=likes" class="profile-tab" class:active={activeTab === "likes"}
 					>いいね</a
 				>
 				<a
 					href="/profile/{profile.username}?tab=bookmarks"
 					class="profile-tab"
-					class:active={activeTab === 'bookmarks'}
+					class:active={activeTab === "bookmarks"}
 				>
 					ブックマーク
 				</a>
@@ -937,7 +996,7 @@ function listButtonFor(anime: Anime) {
 		</nav>
 
 		<!-- 投稿タブ -->
-		{#if activeTab === 'posts'}
+		{#if activeTab === "posts"}
 			{#if data.isBlocked}
 				<div class="empty-state">
 					<p>@{profile.username} さんをブロックしています</p>
@@ -961,7 +1020,7 @@ function listButtonFor(anime: Anime) {
 		{/if}
 
 		<!-- 画像タブ -->
-		{#if activeTab === 'images'}
+		{#if activeTab === "images"}
 			{#if !canViewContent}
 				<div class="empty-state profile-private-state">
 					<p>このアカウントの画像投稿はフォロワーだけが見ることができます</p>
@@ -981,7 +1040,7 @@ function listButtonFor(anime: Anime) {
 		{/if}
 
 		<!-- マイリストタブ -->
-		{#if activeTab === 'list'}
+		{#if activeTab === "list"}
 			{#if !canViewContent || (!profile.list_is_public && !isOwn)}
 				<div class="empty-state list-private">
 					<svg
@@ -1000,7 +1059,9 @@ function listButtonFor(anime: Anime) {
 						<path d="M7 11V7a5 5 0 0 1 10 0v4" />
 					</svg>
 					<p>
-						{!canViewContent ? 'このアカウントのマイリストはフォロワーだけが見ることができます' : 'このユーザーのマイリストは非公開です'}
+						{!canViewContent
+							? "このアカウントのマイリストはフォロワーだけが見ることができます"
+							: "このユーザーのマイリストは非公開です"}
 					</p>
 				</div>
 			{:else if animeList.length === 0}
@@ -1025,7 +1086,7 @@ function listButtonFor(anime: Anime) {
 						{:else}
 							<AnimeStatusSection
 								animes={grouped[selectedStatus]}
-								scoreLabel={isOwn ? '自分のスコア' : `${displayName}のスコア`}
+								scoreLabel={isOwn ? "自分のスコア" : `${displayName}のスコア`}
 								scoreButtonFor={isOwn ? scoreButtonFor : undefined}
 								listButtonFor={showListButtons ? listButtonFor : undefined}
 							/>
@@ -1036,11 +1097,13 @@ function listButtonFor(anime: Anime) {
 		{/if}
 
 		<!-- アクティビティタブ（181）。マイリストと同じ相手に見せる -->
-		{#if activeTab === 'activity'}
+		{#if activeTab === "activity"}
 			{#if !canViewContent || (!profile.list_is_public && !isOwn)}
 				<div class="empty-state profile-private-state">
 					<p>
-						{!canViewContent ? 'このアカウントのアクティビティはフォロワーだけが見ることができます' : 'このユーザーのマイリストは非公開です'}
+						{!canViewContent
+							? "このアカウントのアクティビティはフォロワーだけが見ることができます"
+							: "このユーザーのマイリストは非公開です"}
 					</p>
 				</div>
 			{:else if data.activity === null}
@@ -1050,7 +1113,9 @@ function listButtonFor(anime: Anime) {
 			{:else if data.activity.items.length === 0 && !data.activity.nextCursor}
 				<div class="empty-state">
 					<p>
-						{isOwn ? 'マイリストを視聴予定・視聴中・完了にすると、ここに流れます' : 'まだアクティビティがありません'}
+						{isOwn
+							? "マイリストを視聴予定・視聴中・完了にすると、ここに流れます"
+							: "まだアクティビティがありません"}
 					</p>
 				</div>
 			{:else}
@@ -1064,7 +1129,7 @@ function listButtonFor(anime: Anime) {
 		{/if}
 
 		<!-- いいねタブ -->
-		{#if activeTab === 'likes'}
+		{#if activeTab === "likes"}
 			{#if !isOwn}
 				<div class="empty-state profile-private-state">
 					<p>他のユーザーのいいねは表示できません</p>
@@ -1084,7 +1149,7 @@ function listButtonFor(anime: Anime) {
 		{/if}
 
 		<!-- ブックマークタブ（自分だけ） -->
-		{#if activeTab === 'bookmarks' && isOwn}
+		{#if activeTab === "bookmarks" && isOwn}
 			{#if listPosts.length === 0 && !data.listNextCursor}
 				<div class="empty-state">
 					<p>保存した投稿はまだありません</p>
@@ -1462,6 +1527,10 @@ function listButtonFor(anime: Anime) {
 
 .profile-header-editor {
 	display: block;
+	padding: 0;
+	font: inherit;
+	color: inherit;
+	text-align: inherit;
 	cursor: pointer;
 	transition: opacity 0.15s;
 	overflow: hidden;

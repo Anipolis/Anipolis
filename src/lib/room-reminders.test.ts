@@ -123,6 +123,7 @@ describe("roomReminderToastKey", () => {
 		const [at30] = toActiveRoomReminders([animeRow({ created_at: "2026-11-10T12:00:00Z" })], now);
 		const [at5] = toActiveRoomReminders([animeRow({ created_at: "2026-11-10T12:25:00Z" })], now);
 		expect(at30?.id).toBe(at5?.id);
-		expect(roomReminderToastKey(at30!)).not.toBe(roomReminderToastKey(at5!));
+		if (!at30 || !at5) throw new Error("expected reminders");
+		expect(roomReminderToastKey(at30)).not.toBe(roomReminderToastKey(at5));
 	});
 });

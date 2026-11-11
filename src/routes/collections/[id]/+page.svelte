@@ -322,7 +322,7 @@ async function copyLink() {
 					src={coverThumbSrc(anime.cover_url)}
 					{@attach coverThumbFallback(anime.cover_url)}
 					alt=""
-					loading={eager ? 'eager' : 'lazy'}
+					loading={eager ? "eager" : "lazy"}
 				>
 			{/if}
 			<!-- 題名はカバーに重ね、指すかフォーカスしたときだけ出す（カバーが無い作品は真ん中に常に出す） -->
@@ -357,7 +357,7 @@ async function copyLink() {
 					コレクション一覧
 				</a>
 			{/if}
-			<a href={data.isOwn ? '/collections' : `/profile/${collection.owner.username}`} class="collection-owner">
+			<a href={data.isOwn ? "/collections" : `/profile/${collection.owner.username}`} class="collection-owner">
 				<UserAvatar src={collection.owner.avatar_url} username={ownerName} size="xs" />
 				<span>{ownerName}のコレクション</span>
 			</a>
@@ -373,7 +373,7 @@ async function copyLink() {
 				</h1>
 				{#if data.isOwn}
 					<div class="collection-tools">
-						<span class="collection-save-state" aria-live="polite">{saving > 0 ? '保存中...' : ''}</span>
+						<span class="collection-save-state" aria-live="polite">{saving > 0 ? "保存中..." : ""}</span>
 						<!-- 動かしたあとだけ出す。直前の操作（続けて動かした分はまとめて）を取り消す -->
 						{#if undoTo}
 							<button
@@ -417,7 +417,7 @@ async function copyLink() {
 							onclick={importCollection}
 						>
 							<span class="i-lucide-copy-plus" aria-hidden="true"></span>
-							{importing ? '取り込み中...' : '取り込む'}
+							{importing ? "取り込み中..." : "取り込む"}
 						</button>
 					</div>
 				{/if}
@@ -438,8 +438,8 @@ async function copyLink() {
 			{#if SHOW_COPY_LINK && collection.is_public}
 				<div class="collection-actions">
 					<button type="button" class="btn btn-secondary collection-action" onclick={copyLink}>
-						<span class={copied ? 'i-lucide-check' : 'i-lucide-link'} aria-hidden="true"></span>
-						{copied ? 'コピーしました' : 'リンクをコピー'}
+						<span class={copied ? "i-lucide-check" : "i-lucide-link"} aria-hidden="true"></span>
+						{copied ? "コピーしました" : "リンクをコピー"}
 					</button>
 				</div>
 			{/if}
@@ -452,7 +452,7 @@ async function copyLink() {
 						bind:this={board}
 						items={reorderItems}
 						tiers={isTier ? collection.tiers : undefined}
-						showRank={collection.kind === 'ranking'}
+						showRank={collection.kind === "ranking"}
 						onchange={onBoardChange}
 						ontierschange={onTiersChange}
 					/>
@@ -485,20 +485,22 @@ async function copyLink() {
 					</section>
 				{/each}
 			</div>
-		{:else if collection.kind === 'ranking'}
+		{:else if collection.kind === "ranking"}
 			<!-- ランキングは、順位・カバー・題名の横長の行を上から積む -->
 			<ol class="collection-ranking">
 				{#each collection.items as anime, index (anime.id)}
 					<li>
 						<a href="/anime/{anime.id}" class="collection-ranking-row">
-							<span class="rank-cell rank-cell--{index + 1}" aria-label="{index + 1}位">{index + 1}</span>
+							<span class="rank-cell rank-cell--{index + 1}" role="img" aria-label="{index + 1}位"
+								>{index + 1}</span
+							>
 							<span class="collection-ranking-cover">
 								{#if anime.cover_url}
 									<img
 										src={coverThumbSrc(anime.cover_url)}
 										{@attach coverThumbFallback(anime.cover_url)}
 										alt=""
-										loading={index < 8 ? 'eager' : 'lazy'}
+										loading={index < 8 ? "eager" : "lazy"}
 									>
 								{/if}
 							</span>

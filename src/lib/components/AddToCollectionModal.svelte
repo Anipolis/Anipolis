@@ -131,15 +131,21 @@ function close() {
 	}}
 />
 
-<div class="add-collection-overlay" role="presentation" onclick={close}>
+<div class="add-collection-overlay">
+	<button
+		type="button"
+		class="modal-click-target modal-click-layer"
+		tabindex="-1"
+		aria-label="閉じる"
+		onclick={close}
+	></button>
 	<div
 		use:trapFocus
-		class="add-collection-card"
+		class="add-collection-card modal-content-layer"
 		role="dialog"
 		aria-modal="true"
 		aria-label="「{animeTitle}」をコレクションに追加"
 		tabindex="-1"
-		onclick={(event) => event.stopPropagation()}
 		onkeydown={(event) => {
 			event.stopPropagation();
 			if (event.key !== "Escape") return;
@@ -195,7 +201,7 @@ function close() {
 								</span>
 								<!-- 入っているコレクションにだけチェックの印を出す（入っていなければ空けておく） -->
 								<span
-									class={['add-collection-mark', collection.has_anime && 'i-lucide-check']}
+									class={["add-collection-mark", collection.has_anime && "i-lucide-check"]}
 									aria-hidden="true"
 								></span>
 							</button>
@@ -224,7 +230,7 @@ function close() {
 							{@attach (input) => input.focus()}
 						>
 						<button type="submit" class="btn btn-primary" disabled={busy || !newTitle.trim()}>
-							{creating ? '作成中…' : '作成'}
+							{creating ? "作成中…" : "作成"}
 						</button>
 					</form>
 				{:else}

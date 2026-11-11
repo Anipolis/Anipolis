@@ -78,6 +78,7 @@ let imageFile = $state<File | null>(null);
 let imagePreview = $state<string | null>(null);
 let resizedBlob = $state<Blob | null>(null);
 let imageProcessing = $state(false);
+let coverFileInput = $state<HTMLInputElement | null>(null);
 
 async function resizeImage(file: File, maxWidth = 800): Promise<Blob> {
 	return new Promise((resolve, reject) => {
@@ -153,15 +154,15 @@ async function handleFileChange(e: Event) {
 		method="POST"
 		{action}
 		use:enhance={async ({ formData }) => {
-        if (resizedBlob) formData.set('image_file', resizedBlob, `cover_${Date.now()}.jpg`);
-        return async ({ result, update }) => {
-            await update();
-            // 失敗でも作品データは更新済みのことがある（保護レコードだけ失敗など）。
-            // 再読み込みしないと画面が古い値のままになり、そのフォームで再保存すると
-            // 古い値で上書きしてしまう
-            if (result.type === "failure") await invalidateAll();
-        };
-    }}
+			if (resizedBlob) formData.set("image_file", resizedBlob, `cover_${Date.now()}.jpg`);
+			return async ({ result, update }) => {
+				await update();
+				// 失敗でも作品データは更新済みのことがある（保護レコードだけ失敗など）。
+				// 再読み込みしないと画面が古い値のままになり、そのフォームで再保存すると
+				// 古い値で上書きしてしまう
+				if (result.type === "failure") await invalidateAll();
+			};
+		}}
 		class="register-form"
 		class:register-form--edit={isEditMode}
 	>
@@ -363,12 +364,28 @@ async function handleFileChange(e: Event) {
 						class="rf-input"
 						placeholder="スタジオ名を入力"
 						bind:value={studioInput}
-						onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(studios, studioInput, v => studios = v, () => studioInput = ''); } }}
+						onkeydown={(e) => {
+							if (e.key === "Enter") {
+								e.preventDefault();
+								addTag(
+									studios,
+									studioInput,
+									(v) => (studios = v),
+									() => (studioInput = ""),
+								);
+							}
+						}}
 					>
 					<button
 						type="button"
 						class="tag-add-btn"
-						onclick={() => addTag(studios, studioInput, v => studios = v, () => studioInput = '')}
+						onclick={() =>
+							addTag(
+								studios,
+								studioInput,
+								(v) => (studios = v),
+								() => (studioInput = ""),
+							)}
 					>
 						追加
 					</button>
@@ -380,7 +397,7 @@ async function handleFileChange(e: Event) {
 							<button
 								type="button"
 								class="chip-remove"
-								onclick={() => removeTag(studios, s, v => studios = v)}
+								onclick={() => removeTag(studios, s, (v) => (studios = v))}
 							>
 								✕
 							</button></span
@@ -398,12 +415,28 @@ async function handleFileChange(e: Event) {
 						class="rf-input"
 						placeholder="プロデューサー名を入力"
 						bind:value={producerInput}
-						onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(producers, producerInput, v => producers = v, () => producerInput = ''); } }}
+						onkeydown={(e) => {
+							if (e.key === "Enter") {
+								e.preventDefault();
+								addTag(
+									producers,
+									producerInput,
+									(v) => (producers = v),
+									() => (producerInput = ""),
+								);
+							}
+						}}
 					>
 					<button
 						type="button"
 						class="tag-add-btn"
-						onclick={() => addTag(producers, producerInput, v => producers = v, () => producerInput = '')}
+						onclick={() =>
+							addTag(
+								producers,
+								producerInput,
+								(v) => (producers = v),
+								() => (producerInput = ""),
+							)}
 					>
 						追加
 					</button>
@@ -415,7 +448,7 @@ async function handleFileChange(e: Event) {
 							<button
 								type="button"
 								class="chip-remove"
-								onclick={() => removeTag(producers, p, v => producers = v)}
+								onclick={() => removeTag(producers, p, (v) => (producers = v))}
 							>
 								✕
 							</button></span
@@ -433,12 +466,28 @@ async function handleFileChange(e: Event) {
 						class="rf-input"
 						placeholder="#アニメタグ"
 						bind:value={hashtagInput}
-						onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(hashtags, hashtagInput, v => hashtags = v, () => hashtagInput = ''); } }}
+						onkeydown={(e) => {
+							if (e.key === "Enter") {
+								e.preventDefault();
+								addTag(
+									hashtags,
+									hashtagInput,
+									(v) => (hashtags = v),
+									() => (hashtagInput = ""),
+								);
+							}
+						}}
 					>
 					<button
 						type="button"
 						class="tag-add-btn"
-						onclick={() => addTag(hashtags, hashtagInput, v => hashtags = v, () => hashtagInput = '')}
+						onclick={() =>
+							addTag(
+								hashtags,
+								hashtagInput,
+								(v) => (hashtags = v),
+								() => (hashtagInput = ""),
+							)}
 					>
 						追加
 					</button>
@@ -450,7 +499,7 @@ async function handleFileChange(e: Event) {
 							<button
 								type="button"
 								class="chip-remove"
-								onclick={() => removeTag(hashtags, h, v => hashtags = v)}
+								onclick={() => removeTag(hashtags, h, (v) => (hashtags = v))}
 							>
 								✕
 							</button></span
@@ -498,7 +547,12 @@ async function handleFileChange(e: Event) {
 				</div>
 				<div class="form-group form-group--wide">
 					<span class="field-label">カバー画像</span>
-					<label class="cover-upload-label" class:has-preview={!!imagePreview}>
+					<button
+						type="button"
+						class="cover-upload-label"
+						class:has-preview={!!imagePreview}
+						onclick={() => coverFileInput?.click()}
+					>
 						{#if imagePreview}
 							<img src={imagePreview} alt="カバープレビュー" class="cover-preview">
 							<span class="cover-change-hint">クリックして変更</span>
@@ -517,17 +571,18 @@ async function handleFileChange(e: Event) {
 								<line x1="12" y1="3" x2="12" y2="15" />
 							</svg>
 							<span class="cover-upload-hint"
-								>{imageProcessing ? '処理中...' : '画像をアップロード（JPEG/PNG/WebP）'}</span
+								>{imageProcessing ? "処理中..." : "画像をアップロード（JPEG/PNG/WebP）"}</span
 							>
 						{/if}
-						<input
-							type="file"
-							accept="image/jpeg,image/png,image/webp,image/avif"
-							onchange={handleFileChange}
-							disabled={imageProcessing}
-							class="cover-file-input"
-						>
-					</label>
+					</button>
+					<input
+						bind:this={coverFileInput}
+						type="file"
+						accept="image/jpeg,image/png,image/webp,image/avif"
+						onchange={handleFileChange}
+						disabled={imageProcessing}
+						class="cover-file-input"
+					>
 					{#if !imageFile}
 						<input
 							id="rf-cover"
@@ -790,14 +845,17 @@ async function handleFileChange(e: Event) {
 	gap: 6px;
 	width: 100%;
 	height: 110px;
+	padding: 0;
+	color: var(--color-text-muted);
+	font: inherit;
+	font-size: 0.82rem;
+	background: transparent;
 	border: 2px dashed var(--color-border);
 	border-radius: 12px;
 	cursor: pointer;
 	transition:
 		border-color 0.15s,
 		background 0.15s;
-	color: var(--color-text-muted);
-	font-size: 0.82rem;
 	overflow: hidden;
 	position: relative;
 }

@@ -70,7 +70,7 @@ function notificationLabel(type: string): string {
 			<ul class="notification-list">
 				{#each entries as { notif, others } (notif.id)}
 					<li class="notification-item">
-						{#if notif.type === 'exchange_matched'}
+						{#if notif.type === "exchange_matched"}
 							<div class="notification-room-icon" aria-hidden="true">
 								<span class="i-lucide-arrow-left-right"></span>
 							</div>
@@ -81,17 +81,17 @@ function notificationLabel(type: string): string {
 										<img
 											src={coverThumbSrc(notif.exchange_anime_cover_url)}
 											{@attach coverThumbFallback(notif.exchange_anime_cover_url)}
-											alt={notif.exchange_anime_title ?? '受け取った作品'}
+											alt={notif.exchange_anime_title ?? "受け取った作品"}
 										>
 									{/if}
 									<span>
-										<strong>{notif.exchange_anime_title ?? '受け取った作品'}</strong>
+										<strong>{notif.exchange_anime_title ?? "受け取った作品"}</strong>
 										<small>を受け取りました</small>
 									</span>
 								</a>
 								<span class="notification-time">{formatRelativeTime(notif.created_at)}</span>
 							</div>
-						{:else if notif.type === 'activity_like'}
+						{:else if notif.type === "activity_like"}
 							<a href="/profile/{notif.actor_username}" class="notification-avatar">
 								<UserAvatar src={notif.actor_avatar_url} username={notif.actor_username} size="md" />
 							</a>
@@ -111,11 +111,11 @@ function notificationLabel(type: string): string {
 											<img
 												src={coverThumbSrc(notif.activity_anime_cover_url)}
 												{@attach coverThumbFallback(notif.activity_anime_cover_url)}
-												alt={notif.activity_anime_title ?? '作品'}
+												alt={notif.activity_anime_title ?? "作品"}
 											>
 										{/if}
 										<span>
-											<strong>{notif.activity_anime_title ?? '作品'}</strong>
+											<strong>{notif.activity_anime_title ?? "作品"}</strong>
 											{#if notif.activity_status}
 												<small>を{activityStatusPhrase(notif.activity_status)}</small>
 											{/if}
@@ -136,7 +136,7 @@ function notificationLabel(type: string): string {
 									</a>
 									{notificationLabel(notif.type)}
 								</p>
-								{#if postPreview?.kind === 'link'}
+								{#if postPreview?.kind === "link"}
 									<!-- 本文なし（画像・作品引用のみ等）でも post_id があれば投稿へ移動できるようにする -->
 									<a
 										href={postPreview.href}
@@ -145,24 +145,24 @@ function notificationLabel(type: string): string {
 									>
 										{postPreview.text}
 									</a>
-								{:else if postPreview?.kind === 'deleted'}
+								{:else if postPreview?.kind === "deleted"}
 									<span class="notification-post-preview notification-post-preview--deleted">
 										{postPreview.text}
 									</span>
 								{/if}
-								{#if notif.type === 'anime_recommendation' && notif.recommendation_anime_id}
+								{#if notif.type === "anime_recommendation" && notif.recommendation_anime_id}
 									<a href="/anime/{notif.recommendation_anime_id}" class="notification-anime-preview">
 										{#if notif.recommendation_anime_cover_url}
 											<img
 												src={coverThumbSrc(notif.recommendation_anime_cover_url)}
 												{@attach coverThumbFallback(notif.recommendation_anime_cover_url)}
-												alt={notif.recommendation_anime_title ?? '推薦作品'}
+												alt={notif.recommendation_anime_title ?? "推薦作品"}
 											>
 										{/if}
-										<span> <strong>{notif.recommendation_anime_title ?? '推薦作品'}</strong> </span>
+										<span> <strong>{notif.recommendation_anime_title ?? "推薦作品"}</strong> </span>
 									</a>
 								{/if}
-								{#if notif.type === 'follow_request'}
+								{#if notif.type === "follow_request"}
 									<a href="/settings/follow-requests" class="notification-action-link">申請を確認</a>
 								{/if}
 								<span class="notification-time">{formatRelativeTime(notif.created_at)}</span>

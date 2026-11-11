@@ -711,7 +711,7 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 			</div>
 
 			<!-- 追加機能（画像・アニメ引用・CW・実況ルーム）のタイル -->
-			<div class="composer-tools" role="group" aria-label="投稿の追加機能">
+			<fieldset class="composer-tools fieldset-reset" aria-label="投稿の追加機能">
 				<button
 					type="button"
 					class="composer-tool-tile"
@@ -769,7 +769,7 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 					<span class="i-lucide-door-open" aria-hidden="true"></span>
 					<span class="composer-tool-label">ルーム</span>
 				</button>
-			</div>
+			</fieldset>
 
 			{#if selectedAnime || selectedCwAnime || selectedRoom}
 				<div class="flex flex-wrap gap-2 mt-2 mb-0.5">
@@ -921,10 +921,10 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 					<button type="button" class="composer-draft-discard" onclick={discardDraft}>下書きを破棄</button>
 				{/if}
 				{#if remaining <= 40}
-					<span class="char-count {countClass}" aria-label="残り文字数">{remaining}</span>
+					<span class="char-count {countClass}" role="status" aria-label="残り文字数">{remaining}</span>
 				{/if}
 				<button type="submit" class="btn btn-primary" disabled={!canSubmit}>
-					{submitting ? '投稿中…' : '投稿'}
+					{submitting ? "投稿中…" : "投稿"}
 				</button>
 			</div>
 		</form>
@@ -937,7 +937,9 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<div
 		class="anime-search-overlay"
-		onclick={(e) => { if (e.target === e.currentTarget) closeAnimeSearch(); }}
+		onclick={(e) => {
+			if (e.target === e.currentTarget) closeAnimeSearch();
+		}}
 		onkeydown={(e) => handleOverlayEscape(e, closeAnimeSearch)}
 		role="dialog"
 		aria-modal="true"
@@ -986,7 +988,9 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<div
 		class="anime-search-overlay"
-		onclick={(e) => { if (e.target === e.currentTarget) closeCwSearch(); }}
+		onclick={(e) => {
+			if (e.target === e.currentTarget) closeCwSearch();
+		}}
 		onkeydown={(e) => handleOverlayEscape(e, closeCwSearch)}
 		role="dialog"
 		aria-modal="true"
@@ -1013,7 +1017,7 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 				{:else if cwQuery.trim().length > 0 && cwResults.length === 0}
 					<p class="anime-search-empty">見つかりませんでした</p>
 				{:else}
-					{#each (cwQuery.trim() ? cwResults : watchingAnime) as anime}
+					{#each cwQuery.trim() ? cwResults : watchingAnime as anime}
 						<AnimeRow
 							coverUrl={anime.cover_url}
 							title={anime.title}
@@ -1033,7 +1037,9 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<div
 		class="anime-search-overlay"
-		onclick={(e) => { if (e.target === e.currentTarget) closeRoomModal(); }}
+		onclick={(e) => {
+			if (e.target === e.currentTarget) closeRoomModal();
+		}}
 		onkeydown={(e) => handleOverlayEscape(e, closeRoomModal)}
 		role="dialog"
 		aria-modal="true"
