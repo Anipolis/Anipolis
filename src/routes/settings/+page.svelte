@@ -325,6 +325,11 @@ let privacyStatus = $state<"idle" | "saving" | "saved">("idle");
 	border-bottom: 1px solid var(--color-border);
 }
 
+/* スイッチの項目名も、リンクの項目名と同じ大きさにそろえる */
+.settings-toggles :global(.toggle-row-text strong) {
+	font-size: 0.95rem;
+}
+
 .settings-item-list {
 	display: flex;
 	flex-direction: column;
@@ -440,6 +445,18 @@ let privacyStatus = $state<"idle" | "saving" | "saved">("idle");
 
 	.settings-section-block:last-child .settings-item-link:last-child {
 		border-bottom: none;
+	}
+
+	/* スマホの一覧は項目名だけにする（見出し・項目名・説明の段が多く分かりにくいため）。
+	   スイッチの詳しい説明は横の ⓘ で読める。PC は項目が少なく余白もあるので説明を残す */
+	.settings-item-link small,
+	.settings-toggles :global(.toggle-row-text small) {
+		display: none;
+	}
+
+	.settings-item-link,
+	.settings-toggles :global(.toggle-row) {
+		padding: 14px 0;
 	}
 }
 </style>
