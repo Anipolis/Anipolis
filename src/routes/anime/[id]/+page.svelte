@@ -2482,7 +2482,7 @@ $effect(() => {
 }
 .broadcast-override-table-wrap {
 	overflow-x: auto;
-	border: 1px solid #27272a;
+	border: 1px solid var(--color-border);
 	border-radius: 18px;
 	background: #111113;
 }
@@ -3181,7 +3181,7 @@ $effect(() => {
 .user-list-modal-backdrop {
 	position: fixed;
 	inset: 0;
-	z-index: 50;
+	z-index: 1000;
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -3193,9 +3193,10 @@ $effect(() => {
 	width: 100%;
 	max-width: 448px;
 	padding: 24px;
-	border: 1px solid #27272a;
+	border: 1px solid var(--color-border);
 	border-radius: 22px;
-	background: #18181b;
+	background: var(--color-bg);
+	color: var(--color-text);
 	box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.65);
 }
 .recommend-modal {
@@ -3239,7 +3240,7 @@ $effect(() => {
 	cursor: pointer;
 }
 .user-list-modal-close:hover {
-	background: #27272a;
+	background: var(--color-surface-hover);
 	color: var(--text);
 }
 .user-list-modal-close:focus-visible {
@@ -3270,7 +3271,7 @@ $effect(() => {
 	transition: background 0.12s;
 }
 .listed-user-card:hover {
-	background: #27272a;
+	background: var(--color-surface-hover);
 }
 
 .listed-user-avatar {
@@ -3307,7 +3308,7 @@ $effect(() => {
 	height: 10px;
 	border-radius: 50%;
 	corner-shape: round;
-	border: 2px solid #18181b;
+	border: 2px solid var(--color-bg);
 }
 
 .listed-user-details {
