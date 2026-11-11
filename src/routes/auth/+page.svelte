@@ -634,7 +634,7 @@ async function handlePasskeyLogin(): Promise<void> {
 	padding: 4px;
 	margin: 18px 0;
 	border: 1px solid var(--border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: color-mix(in srgb, var(--surface) 75%, transparent);
 }
 
@@ -643,7 +643,7 @@ async function handlePasskeyLogin(): Promise<void> {
 	align-items: center;
 	justify-content: center;
 	min-height: 38px;
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	color: var(--fg-muted);
 	font-size: 0.9rem;
 	font-weight: 700;
@@ -702,6 +702,7 @@ async function handlePasskeyLogin(): Promise<void> {
 	right: 14px;
 	padding: 0 8px;
 	border-radius: 999px;
+	corner-shape: round;
 	background: var(--accent);
 	color: var(--color-bg);
 	font-size: 0.68rem;
@@ -755,6 +756,7 @@ async function handlePasskeyLogin(): Promise<void> {
 	padding: 2px 10px;
 	border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
 	border-radius: 999px;
+	corner-shape: round;
 	background: var(--accent-muted);
 	color: var(--accent);
 	font-size: 0.75rem;
@@ -833,7 +835,7 @@ async function handlePasskeyLogin(): Promise<void> {
 	margin-top: 24px;
 	padding: 12px 16px;
 	border: 1px solid var(--border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--bg-hover);
 	color: var(--fg-muted);
 	font-size: 0.8rem;

@@ -310,6 +310,7 @@ function isActive(path: string): boolean {
 	height: 10px;
 	border: 2px solid var(--color-bg);
 	border-radius: 9999px;
+	corner-shape: round;
 	background: var(--color-accent);
 	pointer-events: none;
 }

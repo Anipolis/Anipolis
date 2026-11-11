@@ -147,7 +147,7 @@ function inviteStatus(invite: (typeof data.invites)[number]): { label: string; a
 .invite-table-wrap {
 	overflow-x: auto;
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--color-surface);
 }
 

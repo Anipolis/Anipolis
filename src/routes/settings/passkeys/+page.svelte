@@ -174,7 +174,7 @@ const confirmDelete: SubmitFunction = ({ cancel }) => {
 	gap: 10px;
 	padding: 14px;
 	border: 1px solid var(--border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 }
 
 .passkey-reauth-text {
@@ -205,7 +205,7 @@ const confirmDelete: SubmitFunction = ({ cancel }) => {
 
 .passkey-item {
 	border: 1px solid var(--border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	padding: 12px 14px;
 	display: flex;
 	align-items: center;

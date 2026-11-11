@@ -1101,7 +1101,7 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 .compact-composer .composer-footer .btn {
 	min-height: 36px;
 	padding: 6px 14px;
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	font-size: 13px;
 }
 .composer-tools {
@@ -1170,7 +1170,7 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 	right: 0;
 	background: var(--color-surface);
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 	z-index: 50;
 	max-height: 200px;
@@ -1219,7 +1219,7 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 	margin-top: 10px;
 	padding: 10px;
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--color-bg);
 }
 .composer-collection-preview {

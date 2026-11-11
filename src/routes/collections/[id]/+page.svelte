@@ -590,6 +590,7 @@ async function copyLink() {
 	height: 40px;
 	border: 1px solid var(--color-border);
 	border-radius: 999px;
+	corner-shape: round;
 	background: transparent;
 	color: var(--color-text);
 	cursor: pointer;
@@ -782,7 +783,7 @@ async function copyLink() {
 	align-items: center;
 	overflow: hidden;
 	border: 1px solid var(--color-border);
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	background: var(--color-bg-card);
 	color: var(--color-text);
 	text-decoration: none;
@@ -825,7 +826,7 @@ async function copyLink() {
 	display: flex;
 	overflow: hidden;
 	border: 1px solid var(--color-border);
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 }
 .collection-tier-label {
 	display: flex;

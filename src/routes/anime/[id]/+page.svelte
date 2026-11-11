@@ -2066,7 +2066,7 @@ $effect(() => {
 	padding: 14px;
 	background: var(--color-surface);
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 }
 /* 「作品情報」の見出しはスマホだけ（PC は左の列のカードで分かる） */
 .info-heading {
@@ -2245,6 +2245,7 @@ $effect(() => {
 	width: 7px;
 	height: 7px;
 	border-radius: 50%;
+	corner-shape: round;
 	background: var(--color-text-muted);
 }
 .meta-status.status-airing::before {
@@ -2358,7 +2359,7 @@ $effect(() => {
 	justify-content: center;
 	min-height: 40px;
 	padding: 9px 16px;
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	border: 1px solid var(--border);
 	background: var(--card-bg);
 	color: var(--text);
@@ -2381,7 +2382,7 @@ $effect(() => {
 	gap: 8px;
 	padding: 4px;
 	border: 1px solid var(--border);
-	border-radius: 18px;
+	border-radius: var(--radius);
 	background: var(--hover-bg);
 }
 .admin-tab {
@@ -2447,7 +2448,7 @@ $effect(() => {
 .broadcast-override-table-wrap {
 	overflow-x: auto;
 	border: 1px solid var(--color-border);
-	border-radius: 18px;
+	border-radius: var(--radius);
 	background: #111113;
 }
 .broadcast-override-table {
@@ -2520,7 +2521,7 @@ $effect(() => {
 	border: 1px solid var(--border);
 	background: var(--card-bg);
 	color: var(--text);
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	padding: 4px 10px;
 	font-size: 0.78rem;
 	cursor: pointer;
@@ -2554,7 +2555,7 @@ $effect(() => {
 	animation: override-form-enter 0.18s ease-out;
 	padding: 14px;
 	border: 1px solid var(--border);
-	border-radius: 18px;
+	border-radius: var(--radius);
 	background: var(--card-bg);
 }
 .broadcast-override-form {
@@ -2581,7 +2582,7 @@ $effect(() => {
 	min-height: 56px;
 	padding: 9px 11px;
 	border: 1px solid var(--border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--card-bg);
 	color: var(--text);
 	text-align: left;
@@ -2624,7 +2625,7 @@ $effect(() => {
 .broadcast-override-field input {
 	height: 36px;
 	padding: 0 10px;
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	border: 1px solid var(--border);
 	background: var(--card-bg);
 	color: var(--text);
@@ -2681,7 +2682,7 @@ $effect(() => {
 .broadcast-override-submit,
 .broadcast-override-cancel {
 	height: 40px;
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	font-weight: 700;
 	font-size: 0.88rem;
 	cursor: pointer;
@@ -2750,7 +2751,7 @@ $effect(() => {
 	width: 100%;
 	box-sizing: border-box;
 	padding: 14px 16px;
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	border: 1px solid color-mix(in srgb, #0f766e 36%, var(--border));
 	background: color-mix(in srgb, #14b8a6 13%, var(--card-bg));
 	color: var(--text);
@@ -2942,7 +2943,7 @@ $effect(() => {
 	width: 100%;
 	box-sizing: border-box;
 	padding: 6px 10px;
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	border: 1px solid var(--color-border);
 	background: var(--bg);
 	color: var(--text);
@@ -2961,7 +2962,7 @@ $effect(() => {
 	align-items: center;
 	gap: 7px;
 	padding: 11px 24px;
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--accent);
 	color: #fff;
 	border: none;
@@ -2993,7 +2994,7 @@ $effect(() => {
 }
 .btn-danger {
 	padding: 8px 18px;
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	background: transparent;
 	color: var(--danger, #ef4444);
 	border: 1px solid var(--danger, #ef4444);
@@ -3077,7 +3078,7 @@ $effect(() => {
 	right: 0;
 	background: var(--color-surface);
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
 	max-height: 240px;
 	overflow-y: auto;
@@ -3452,7 +3453,7 @@ $effect(() => {
 	aspect-ratio: auto;
 	width: fit-content;
 	padding: 9px 18px;
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	border-color: var(--color-accent);
 	background: var(--color-accent);
 	color: var(--color-bg);
@@ -3499,6 +3500,7 @@ $effect(() => {
 	width: 7px;
 	height: 7px;
 	border-radius: 50%;
+	corner-shape: round;
 	background: #ef4444;
 }
 .room-log-live-badge {

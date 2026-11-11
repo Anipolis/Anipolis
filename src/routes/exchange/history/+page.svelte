@@ -94,7 +94,7 @@ let { data }: PageProps = $props();
 	padding: 12px;
 	background: var(--color-surface);
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 }
 
 .history-anime {

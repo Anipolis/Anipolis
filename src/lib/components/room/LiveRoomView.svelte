@@ -1509,6 +1509,7 @@ function formatCompactDate(iso: string) {
 .room-airing-heading-live {
 	padding: 1px 6px;
 	border-radius: 999px;
+	corner-shape: round;
 	background: color-mix(in srgb, var(--color-primary) 14%, transparent);
 	color: var(--color-primary);
 	font-size: 11px;
@@ -1544,6 +1545,7 @@ function formatCompactDate(iso: string) {
 	padding: 6px 10px;
 	border: 1px solid color-mix(in srgb, var(--color-primary) 28%, transparent);
 	border-radius: 999px;
+	corner-shape: round;
 	background: color-mix(in srgb, var(--color-surface) 92%, var(--color-primary));
 	color: var(--color-primary);
 	font-size: 12px;
@@ -1765,7 +1767,7 @@ function formatCompactDate(iso: string) {
 .room-order-toggle button {
 	min-width: 78px;
 	padding: 6px 10px;
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	color: var(--color-text-muted);
 	font-size: 13px;
 	font-weight: 600;
@@ -1894,7 +1896,7 @@ function formatCompactDate(iso: string) {
 		margin-top: 8px;
 		margin-bottom: 0;
 		padding: 8px 10px;
-		border-radius: 6px;
+		border-radius: var(--radius-xs);
 		transform: translateY(calc(0px - max(env(keyboard-inset-height, 0px), var(--room-keyboard-offset, 0px))));
 		transition: transform 160ms ease;
 		will-change: transform;

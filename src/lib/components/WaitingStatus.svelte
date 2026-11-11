@@ -86,7 +86,7 @@ let {
 	gap: 14px;
 	padding: 18px;
 	border: 1px solid rgba(255, 255, 255, 0.16);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background:
 		radial-gradient(circle at 82% 18%, rgba(52, 211, 153, 0.2), transparent 30%),
 		linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04));

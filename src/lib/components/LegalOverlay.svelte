@@ -91,7 +91,7 @@ function handleKeydown(event: KeyboardEvent) {
 	max-height: min(88dvh, 900px);
 	overflow: hidden;
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--color-surface);
 	box-shadow: 0 24px 64px rgb(0 0 0 / 0.34);
 	color: var(--color-text);

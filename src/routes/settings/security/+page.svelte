@@ -173,7 +173,7 @@ function confirmRemove(event: SubmitEvent) {
 	gap: 10px;
 	padding: 12px 14px;
 	border: 1px solid var(--border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 }
 
 .security-item-icon {

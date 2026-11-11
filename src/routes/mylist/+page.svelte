@@ -459,7 +459,7 @@ $effect(() => {
 	display: inline-grid;
 	place-items: center;
 	width: 30px;
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	font-size: 0.9rem;
 	cursor: pointer;
 	border: none;

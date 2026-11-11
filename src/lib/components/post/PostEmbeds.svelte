@@ -135,7 +135,7 @@ function openLightbox(event: MouseEvent, url: string) {
 	margin: 8px 0 0;
 	padding: 10px 12px;
 	border: 1px dashed var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	color: var(--color-text-muted);
 	font-size: 13px;
 }

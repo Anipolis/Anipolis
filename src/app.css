@@ -24,8 +24,10 @@
 	--feed-width: 680px;
 	--sidebar-width: 240px;
 	--icon-bar-width: 208px;
-	--radius: 18px;
+	--radius-xs: 6px;
 	--radius-sm: 12px;
+	--radius: 18px;
+	--radius-lg: 28px;
 	--color-primary: var(--color-accent);
 	--color-hover: var(--color-surface-hover);
 	--color-bg-card: var(--color-surface);
@@ -60,7 +62,9 @@
 	--ribbon-text: #fff;
 }
 
-/* 角丸は全てスクワークル。円とピルだけは round に戻す */
+/*
+円とピルは corner-shape: round で描く。カード・モーダル・入力欄等の面は既定の squircle で描く。通常の円弧は corner-shape を解さないブラウザの表示として扱う。border-radius を高さの半分以上にする要素は corner-shape: round を併記する。半径は --radius-xs、--radius-sm、--radius、--radius-lg のトークンを参照して記述する。入れ子の面の半径は外側から余白を差し引いた値を上限とする。主ボタン等の独立した操作はピルとし、面に埋まる操作は --radius-sm とする。
+*/
 *,
 ::before,
 ::after {
@@ -370,7 +374,7 @@ textarea {
 	width: 100%;
 	height: 44px;
 	padding: 0 12px;
-	border-radius: 18px;
+	border-radius: var(--radius);
 	color: var(--color-accent);
 	text-decoration: none;
 	margin-bottom: 8px;
@@ -422,7 +426,7 @@ textarea {
 	padding: 0 12px;
 	width: 100%;
 	height: 44px;
-	border-radius: 18px;
+	border-radius: var(--radius);
 	color: var(--color-text-muted);
 	text-decoration: none;
 	transition:
@@ -686,7 +690,7 @@ textarea {
 	position: relative;
 	width: 100px;
 	height: 100px;
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	overflow: hidden;
 	border: 1px solid var(--color-border);
 }
@@ -723,7 +727,7 @@ textarea {
 	grid-template-columns: repeat(2, 1fr);
 	gap: 4px;
 	margin-top: 10px;
-	border-radius: 18px;
+	border-radius: var(--radius);
 	overflow: hidden;
 }
 .post-images-single {
@@ -1183,7 +1187,7 @@ textarea {
 	background:
 		linear-gradient(100deg, var(--color-surface-hover) 30%, var(--color-border) 50%, var(--color-surface-hover) 70%)
 		0 0 / 220% 100%;
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	animation: skeleton-shimmer 1.4s ease-in-out infinite;
 }
 
@@ -2387,7 +2391,7 @@ textarea {
 	width: min(300px, calc(100vw - 32px));
 	overflow: hidden;
 	border: 1px solid var(--color-border, #313244);
-	border-radius: 18px;
+	border-radius: var(--radius);
 	background: var(--color-bg-card, #1e1e2e);
 	box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
 }
@@ -2946,7 +2950,7 @@ textarea {
 	margin: 8px 0 4px;
 	padding: 8px;
 	border: 1px solid color-mix(in srgb, var(--color-border) 48%, transparent);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: color-mix(in srgb, var(--color-surface) 38%, transparent);
 	cursor: pointer;
 	transition:
@@ -3026,7 +3030,7 @@ textarea {
 	max-height: calc(100vh - 32px);
 	overflow: hidden;
 	border: 1px solid var(--color-border);
-	border-radius: 18px;
+	border-radius: var(--radius);
 	background: var(--color-bg-card);
 	box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
 }
@@ -3051,7 +3055,7 @@ textarea {
 	place-items: center;
 	width: 32px;
 	height: 32px;
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	color: var(--color-text-muted);
 	transition:
 		background 0.15s,
@@ -3239,7 +3243,8 @@ textarea {
 	align-items: center;
 	gap: 6px;
 	padding: 7px 14px;
-	border-radius: 28px;
+	border-radius: 999px;
+	corner-shape: round;
 	border: 1px solid var(--color-accent);
 	background: transparent;
 	color: var(--color-accent);
@@ -3314,7 +3319,7 @@ textarea {
 	min-width: 180px;
 	background: var(--color-bg-card, #1e1e2e);
 	border: 1px solid var(--color-border, #313244);
-	border-radius: 18px;
+	border-radius: var(--radius);
 	box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 	overflow: hidden;
 }
@@ -3391,7 +3396,7 @@ form + .repost-menu-item {
 	font-size: 16px;
 	cursor: pointer;
 	padding: 4px 8px;
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	transition: background 0.12s;
 }
 
@@ -3411,7 +3416,7 @@ form + .repost-menu-item {
 	resize: none;
 	background: var(--color-bg, #181825);
 	border: 1px solid var(--color-border, #313244);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	padding: 10px 12px;
 	font-size: 14px;
 	font-family: inherit;
@@ -3480,7 +3485,7 @@ form + .repost-menu-item {
 	margin-top: 10px;
 	padding: 10px 12px;
 	border: 1px solid var(--color-border, #313244);
-	border-radius: 18px;
+	border-radius: var(--radius);
 	text-decoration: none;
 	color: inherit;
 	transition: background-color 0.15s;
