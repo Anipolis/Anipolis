@@ -1,16 +1,15 @@
 <script lang="ts">
 import type { SubmitFunction } from "@sveltejs/kit";
 import { tick, untrack } from "svelte";
-import { fade, scale } from "svelte/transition";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
-import { trapFocus } from "$lib/actions/trapFocus";
 import { isCoverHiddenWithoutCopyright } from "$lib/anime-cover";
 import { animeRelationLabel, animeSeasonLabel, animeTypeLabel } from "$lib/anime-labels";
 import AddToCollectionModal from "$lib/components/AddToCollectionModal.svelte";
 import AnimePosterTile from "$lib/components/AnimePosterTile.svelte";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
+import Modal from "$lib/components/Modal.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
 import MyListStatusPopover from "$lib/components/MyListStatusPopover.svelte";
 import {
@@ -283,20 +282,6 @@ const overrideKindOptions: { kind: BroadcastOverrideKind; label: string; descrip
 function selectOverrideKind(kind: BroadcastOverrideKind) {
 	selectedOverrideKind = kind;
 	overrideAdvancedOpen = kind === "custom";
-}
-
-function handleModalKeydown(event: KeyboardEvent) {
-	if (event.key !== "Escape") return;
-	if (showUserListModal) showUserListModal = false;
-	if (recommendModalOpen) recommendModalOpen = false;
-}
-
-function handleUserListBackdropClick(event: MouseEvent) {
-	if (event.target === event.currentTarget) showUserListModal = false;
-}
-
-function handleRecommendBackdropClick(event: MouseEvent) {
-	if (event.target === event.currentTarget) recommendModalOpen = false;
 }
 
 function openRecommendModal() {
@@ -1754,26 +1739,9 @@ $effect(() => {
 	</div>
 </div>
 
-<svelte:window onkeydown={handleModalKeydown} />
-
 {#if showUserListModal}
-	<div class="user-list-modal-backdrop" transition:fade={{ duration: 180 }}>
-		<button
-			type="button"
-			class="modal-click-target modal-click-layer"
-			tabindex="-1"
-			aria-label="閉じる"
-			onclick={handleUserListBackdropClick}
-		></button>
-		<div
-			class="user-list-modal modal-content-layer"
-			role="dialog"
-			aria-modal="true"
-			aria-labelledby="user-list-modal-title"
-			tabindex="-1"
-			use:trapFocus
-			in:scale={{ duration: 200, start: 0.95 }}
-		>
+	<Modal onclose={() => (showUserListModal = false)} labelledby="user-list-modal-title">
+		<div class="user-list-modal">
 			<header class="user-list-modal-header">
 				<h2 id="user-list-modal-title">リスト登録中のユーザー <span>({data.listedUsers.length}人)</span></h2>
 				<button
@@ -1814,7 +1782,7 @@ $effect(() => {
 				{/each}
 			</div>
 		</div>
-	</div>
+	</Modal>
 {/if}
 
 {#if myListStatusOpen && myListStatusAnchor && data.user}
@@ -1844,23 +1812,12 @@ $effect(() => {
 {/if}
 
 {#if recommendModalOpen}
-	<div class="user-list-modal-backdrop" transition:fade={{ duration: 180 }}>
-		<button
-			type="button"
-			class="modal-click-target modal-click-layer"
-			tabindex="-1"
-			aria-label="閉じる"
-			onclick={handleRecommendBackdropClick}
-		></button>
-		<div
-			class="user-list-modal recommend-modal modal-content-layer"
-			role="dialog"
-			aria-modal="true"
-			aria-labelledby="recommend-modal-title"
-			tabindex="-1"
-			use:trapFocus
-			in:scale={{ duration: 200, start: 0.95 }}
-		>
+	<Modal
+		onclose={() => (recommendModalOpen = false)}
+		dismissible={!recommendSubmitting}
+		labelledby="recommend-modal-title"
+	>
+		<div class="user-list-modal recommend-modal">
 			<header class="user-list-modal-header">
 				<h2 id="recommend-modal-title">この作品を推薦する</h2>
 				<button
@@ -1943,7 +1900,7 @@ $effect(() => {
 				</button>
 			</form>
 		</div>
-	</div>
+	</Modal>
 {/if}
 
 <MyListModal
@@ -3177,18 +3134,7 @@ $effect(() => {
 	transform: none;
 }
 
-/* Listed users modal */
-.user-list-modal-backdrop {
-	position: fixed;
-	inset: 0;
-	z-index: 1000;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	padding: 16px;
-	background: rgba(0, 0, 0, 0.7);
-	backdrop-filter: blur(4px);
-}
+/* Listed users modal（背景と重なり順は Modal が受け持つ） */
 .user-list-modal {
 	width: 100%;
 	max-width: 448px;
