@@ -85,7 +85,7 @@ describe("PostRow の onOpen", () => {
 	it("行を押すとページ遷移の代わりに onOpen へ投稿を渡す", async () => {
 		const { goto } = await import("$app/navigation");
 		const onOpen = vi.fn();
-		const post = fixture(0);
+		const post = $state(fixture(0));
 		const target = document.body.appendChild(document.createElement("div"));
 		const component = mount(PostRow, { target, props: { post, currentUserId: null, onOpen } });
 		cleanup.push(() => unmount(component));
@@ -95,6 +95,9 @@ describe("PostRow の onOpen", () => {
 		expect(onOpen).toHaveBeenCalledTimes(1);
 		expect(onOpen.mock.calls[0]?.[0]).toMatchObject({ id: post.id });
 		expect(goto).not.toHaveBeenCalled();
+
+		// 履歴に保存できる形で渡す（$state のプロキシのままだと pushState が失敗して、詳細が開けなくなる）
+		expect(() => structuredClone(onOpen.mock.calls[0]?.[0])).not.toThrow();
 
 		// 新しいタブに開く操作は通常のリンクのまま
 		link?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, ctrlKey: true }));

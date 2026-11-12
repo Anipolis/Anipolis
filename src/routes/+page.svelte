@@ -1,5 +1,5 @@
 <script lang="ts">
-import { pushState, replaceState } from "$app/navigation";
+import { goto, pushState, replaceState } from "$app/navigation";
 import { page as routePage } from "$app/state";
 import { trapFocus } from "$lib/actions/trapFocus";
 import ActivityFeed from "$lib/components/ActivityFeed.svelte";
@@ -83,7 +83,14 @@ let scrollBeforeDetail = 0;
 
 function openPost(post: Post) {
 	scrollBeforeDetail = window.scrollY;
-	pushState(`/posts/${post.id}`, { postDetail: { post } });
+	try {
+		// 履歴に保存するので、$state のプロキシではなく素のオブジェクトにする
+		pushState(`/posts/${post.id}`, { postDetail: { post: $state.snapshot(post) } });
+	} catch (error) {
+		// 重ねて出せなくても、詳細を開けなくならないよう通常の遷移にする
+		console.error("[timeline] open post in place failed:", error);
+		void goto(`/posts/${post.id}`);
+	}
 }
 
 function closeDetail() {
