@@ -13,5 +13,15 @@
 	},
 	"observability": {
 		"enabled": true
-	}
+	},
+	// $env/dynamic/public で実行時に読む公開値。ブラウザにも配る値なのでここに書いてよい。
+	// wrangler deploy は設定ファイルに無い平文の変数を消すので、ダッシュボードではなくここを正本にする
+	"vars": {
+		"PUBLIC_SUPABASE_URL": "https://jxrfsbhluooyrkrooger.supabase.co",
+		"PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_ZEfawievEHmoSkrn-IMHwg_kq9rq8Qd",
+		"PUBLIC_CLOSED_BETA": "true",
+		"PUBLIC_PASSKEY_ENABLED": "true"
+	},
+	// ダッシュボードで足した変数（ADMIN_MFA_REQUIRED などの一時的なスイッチ）も deploy で消さない
+	"keep_vars": true
 }
