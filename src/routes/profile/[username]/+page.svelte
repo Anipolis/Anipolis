@@ -13,6 +13,8 @@ import MyListQuickEdit from "$lib/components/MyListQuickEdit.svelte";
 import MylistSortSelect from "$lib/components/MylistSortSelect.svelte";
 import MylistStatusTabs from "$lib/components/MylistStatusTabs.svelte";
 import PostRow from "$lib/components/PostRow.svelte";
+import SeoMeta from "$lib/components/SeoMeta.svelte";
+import ShareMenu from "$lib/components/ShareMenu.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
 import { checkCropSource } from "$lib/image-crop";
@@ -26,6 +28,7 @@ import {
 	parseMylistTab,
 	sortMylist,
 } from "$lib/mylist/sort";
+import { crawlerSafeImage } from "$lib/seo";
 import { timelineCursorHref } from "$lib/timeline-cursor";
 import type { Anime, AnimeStatus, UserAnimeEntry } from "$lib/types";
 import type { PageProps } from "./$types";
@@ -36,7 +39,11 @@ const { profile, isOwn, canViewContent } = $derived(data);
 // 開いているタブ（投稿・画像・いいね・ブックマーク）の一覧。サーバーは開いているタブの分だけを読む（#250）
 const listPosts = $derived(data.listPosts);
 const displayName = $derived(profile.display_name ?? profile.username);
-const profileSocialImage = $derived(profile.header_url ?? profile.avatar_url);
+// 共有したときのカード（#271）。鍵アカウントは自己紹介とアイコンを出さない
+const profileSocialImage = $derived(profile.is_private ? null : crawlerSafeImage(profile.avatar_url));
+const profileSocialDescription = $derived(
+	!profile.is_private && profile.bio?.trim() ? profile.bio : `@${profile.username}さんの Anipolis のプロフィール`,
+);
 
 // 最初からサーバーの値で始める（false で始めると、サーバーで出す HTML と開いた直後に「フォローする」が一瞬見える）。
 // そのあとの変化は下の $effect で合わせる
@@ -470,16 +477,13 @@ function listButtonFor(anime: Anime) {
 }
 </script>
 
-<svelte:head>
-	<title>{displayName} (@{profile.username}) - Anipolis</title>
-	<meta property="og:title" content="{displayName} (@{profile.username}) - Anipolis">
-	<meta property="og:description" content={profile.bio ?? `@${profile.username}のAnipolisプロフィール`}>
-	<meta property="og:type" content="website">
-	<meta property="og:url" content={page.url.href}>
-	{#if profileSocialImage}
-		<meta property="og:image" content={profileSocialImage}>
-	{/if}
-</svelte:head>
+<SeoMeta
+	title="{displayName} (@{profile.username}) - Anipolis"
+	description={profileSocialDescription}
+	image={profileSocialImage}
+	imageAlt="{displayName}のアイコン"
+	type="profile"
+/>
 
 <svelte:window
 	onkeydown={handleReportModalKeydown}
@@ -500,6 +504,8 @@ function listButtonFor(anime: Anime) {
 				<div class="profile-header-top">
 					<UserAvatar src={profile.avatar_url} username={profile.username} size="lg" />
 					<div class="profile-header-actions">
+						<!-- 共有（#271）。自分のプロフィールを広めるのにも使うので、誰のページでも出す -->
+						<ShareMenu title="{displayName} (@{profile.username})" />
 						{#if isOwn}
 							<button
 								type="button"

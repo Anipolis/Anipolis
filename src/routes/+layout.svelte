@@ -168,8 +168,9 @@ function handleFabClick() {
 </script>
 
 <svelte:head>
+	<!-- ページごとの説明・カードは SeoMeta（共有用のメタ、#271）で出す -->
 	<meta property="og:site_name" content="Anipolis">
-	<meta name="twitter:card" content="summary">
+	<meta property="og:locale" content="ja_JP">
 </svelte:head>
 
 <div class="app-layout">

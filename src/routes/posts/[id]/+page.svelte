@@ -1,5 +1,6 @@
 <script lang="ts">
 import type { SubmitFunction } from "@sveltejs/kit";
+import { untrack } from "svelte";
 import { enhance } from "$app/forms";
 import { page } from "$app/state";
 import BackLink from "$lib/components/BackLink.svelte";
@@ -7,6 +8,7 @@ import PostCardSkeleton from "$lib/components/PostCardSkeleton.svelte";
 import PostDetail from "$lib/components/PostDetail.svelte";
 import PostRow from "$lib/components/PostRow.svelte";
 import { classifyComposerSubmitResult } from "$lib/components/post-composer-submit";
+import SeoMeta from "$lib/components/SeoMeta.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
 import { createLatestResolved } from "$lib/latest-resolved.svelte";
@@ -19,7 +21,8 @@ const MAX_LENGTH = 280;
 let content = $state("");
 let submitting = $state(false);
 let replyError = $state<string | null>(null);
-let pageTitle = $state("投稿 - Anipolis");
+// サーバーで決めた題名（投稿者の名前入り）で始め、スレッドが読めたら最新の名前に合わせる
+let pageTitle = $state(untrack(() => data.meta.title));
 
 // data.enrichedData は deferred Promise。返信の送信・削除のあとの再取得で新しい Promise になっても、
 // 解決するまでは前回のスレッドを表示し続ける（スケルトンは初回だけ、#296）。
@@ -58,17 +61,13 @@ $effect(() => {
 });
 </script>
 
-<svelte:head>
-	<title>{pageTitle}</title>
-	<meta property="og:title" content={pageTitle}>
-	<meta property="og:description" content={data.post.content.slice(0, 120)}>
-	<meta property="og:type" content="website">
-	<meta property="og:url" content={page.url.href}>
-	{#if data.ogImageUrl}
-		<meta property="og:image" content={data.ogImageUrl}>
-		<meta name="twitter:card" content="summary_large_image">
-	{/if}
-</svelte:head>
+<SeoMeta
+	title={pageTitle}
+	description={data.meta.description}
+	image={data.meta.image}
+	card={data.meta.image ? "summary_large_image" : null}
+	type="article"
+/>
 
 <div class="page-container">
 	<main class="feed-column">

@@ -6,6 +6,7 @@ import { beforeNavigate, goto, preloadData, pushState, replaceState } from "$app
 import { page } from "$app/state";
 import LegalOverlay from "$lib/components/LegalOverlay.svelte";
 import PasswordInput from "$lib/components/PasswordInput.svelte";
+import SeoMeta from "$lib/components/SeoMeta.svelte";
 import { signInWithPasskey } from "$lib/passkey";
 import { MIN_PASSWORD_LENGTH } from "$lib/utils/password-reset";
 import type { PageProps } from "./$types";
@@ -209,12 +210,20 @@ async function handlePasskeyLogin(): Promise<void> {
 }
 </script>
 
-<svelte:head>
-	<title>
-		{activeMode === "register" ? "アカウント作成" : activeMode === "add_account" ? "アカウントを追加" : "ログイン"}
-		- Anipolis
-	</title>
-</svelte:head>
+<!-- 招待リンク（/auth?invite=...）を共有したときのカードは、招待だと分かる文面にする（#271） -->
+<SeoMeta
+	title="{activeMode === "register"
+		? "アカウント作成"
+		: activeMode === "add_account"
+			? "アカウントを追加"
+			: "ログイン"} - Anipolis"
+	description={page.url.searchParams.has("invite")
+		? "Anipolis に招待されています。アニメの感想・実況・視聴記録を、みんなと共有しよう。"
+		: undefined}
+	url={page.url.searchParams.has("invite")
+		? `/auth?invite=${encodeURIComponent(page.url.searchParams.get("invite") ?? "")}`
+		: null}
+/>
 
 <svelte:window
 	onpageshow={() => {

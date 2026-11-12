@@ -6,6 +6,7 @@ import LiveRoomsPanel from "$lib/components/LiveRoomsPanel.svelte";
 import PostCardSkeleton from "$lib/components/PostCardSkeleton.svelte";
 import PostComposer from "$lib/components/PostComposer.svelte";
 import PostRow from "$lib/components/PostRow.svelte";
+import SeoMeta from "$lib/components/SeoMeta.svelte";
 import TimelineLiveRun from "$lib/components/TimelineLiveRun.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import WelcomeCard from "$lib/components/WelcomeCard.svelte";
@@ -140,15 +141,7 @@ $effect(() => {
 });
 </script>
 
-<svelte:head>
-	<title>タイムライン - Anipolis</title>
-	<meta property="og:title" content="Anipolis">
-	<meta
-		property="og:description"
-		content="アニメファンのためのSNS。視聴中のアニメを記録して、感想を投稿・共有しよう。"
-	>
-	<meta property="og:type" content="website">
-</svelte:head>
+<SeoMeta title={data.user ? "タイムライン - Anipolis" : "Anipolis — アニメファンのためのSNS"} />
 
 <div class="page-container">
 	<main class="feed-column">

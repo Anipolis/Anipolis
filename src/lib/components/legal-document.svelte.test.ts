@@ -1,7 +1,10 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const pageState = vi.hoisted(() => ({ data: {} as Record<string, unknown> }));
+const pageState = vi.hoisted(() => ({
+	data: {} as Record<string, unknown>,
+	url: new URL("https://anipolis.test/terms"),
+}));
 
 vi.mock("$app/state", () => ({ page: pageState }));
 

@@ -1,15 +1,17 @@
 <script lang="ts">
 import { onDestroy, untrack } from "svelte";
 import { beforeNavigate, goto, invalidateAll } from "$app/navigation";
-import { page } from "$app/state";
 import type { AnimePick } from "$lib/anime-picker";
 import { collectionKindPrefix, collectionTierColor, MAX_COLLECTION_ITEMS, orderByTier } from "$lib/collections";
 import BackLink from "$lib/components/BackLink.svelte";
 import CollectionBoard from "$lib/components/CollectionBoard.svelte";
 import CollectionFormModal from "$lib/components/CollectionFormModal.svelte";
 import CollectionSearch from "$lib/components/CollectionSearch.svelte";
+import SeoMeta from "$lib/components/SeoMeta.svelte";
+import ShareMenu from "$lib/components/ShareMenu.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
+import { crawlerSafeImage } from "$lib/seo";
 import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();
@@ -297,22 +299,6 @@ $effect(() => {
 		if (undoGroupTimer) clearTimeout(undoGroupTimer);
 	};
 });
-
-// 「リンクをコピー」は今は動いていないので隠しておく（直したら true に戻す）
-const SHOW_COPY_LINK = false;
-let copied = $state(false);
-let copyTimer: ReturnType<typeof setTimeout> | null = null;
-
-async function copyLink() {
-	try {
-		await navigator.clipboard.writeText(page.url.href);
-		copied = true;
-		if (copyTimer) clearTimeout(copyTimer);
-		copyTimer = setTimeout(() => (copied = false), 2000);
-	} catch {
-		window.prompt("このリンクをコピーしてください", page.url.href);
-	}
-}
 </script>
 
 {#snippet animeCard(anime: (typeof collection.items)[number], eager: boolean)}
@@ -332,22 +318,13 @@ async function copyLink() {
 	</a>
 {/snippet}
 
-<svelte:head>
-	<title>{collection.title}（{ownerName}のコレクション） - Anipolis</title>
-	<meta property="og:title" content="{collection.title}（{ownerName}のコレクション）">
-	<meta
-		property="og:description"
-		content={collection.description ?? `${ownerName}さんのコレクション・${collection.items.length}作品`}
-	>
-	<meta property="og:type" content="website">
-	<meta property="og:url" content={page.url.href}>
-	{#if collection.items[0]?.cover_url}
-		<meta property="og:image" content={collection.items[0].cover_url}>
-	{/if}
-	{#if !collection.is_public}
-		<meta name="robots" content="noindex">
-	{/if}
-</svelte:head>
+<SeoMeta
+	title="{collection.title}（{ownerName}のコレクション） - Anipolis"
+	description={collection.description ?? `${ownerName}さんのコレクション・${collection.items.length}作品`}
+	image={crawlerSafeImage(collection.items[0]?.cover_url)}
+	imageAlt={collection.items[0]?.title ?? null}
+	noindex={!collection.is_public}
+/>
 
 <div class="page-container">
 	<main class="feed-column feed-column--wide collection-page">
@@ -433,12 +410,10 @@ async function copyLink() {
 				{collectionKindPrefix(collection.kind)}{collection.items.length}作品・{updatedLabel}更新
 			</p>
 
-			{#if SHOW_COPY_LINK && collection.is_public}
+			<!-- 共有（#271）。非公開のコレクションは本人しか開けないので出さない -->
+			{#if collection.is_public}
 				<div class="collection-actions">
-					<button type="button" class="btn btn-secondary collection-action" onclick={copyLink}>
-						<span class={copied ? "i-lucide-check" : "i-lucide-link"} aria-hidden="true"></span>
-						{copied ? "コピーしました" : "リンクをコピー"}
-					</button>
+					<ShareMenu title="{collection.title}（{ownerName}のコレクション）" />
 				</div>
 			{/if}
 		</header>
@@ -676,9 +651,6 @@ async function copyLink() {
 	flex-wrap: wrap;
 	gap: 8px;
 	margin-top: 4px;
-}
-.collection-action {
-	font-size: 13px;
 }
 .collection-grid {
 	display: grid;

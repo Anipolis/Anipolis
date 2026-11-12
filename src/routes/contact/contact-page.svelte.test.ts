@@ -1,7 +1,7 @@
 import { flushSync, mount, tick, unmount } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("$app/state", () => ({ page: { data: { user: null } } }));
+vi.mock("$app/state", () => ({ page: { data: { user: null }, url: new URL("https://anipolis.test/contact") } }));
 
 import ContactPage from "./+page.svelte";
 
