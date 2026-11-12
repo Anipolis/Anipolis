@@ -1,7 +1,8 @@
 <script lang="ts">
 import { onMount, untrack } from "svelte";
-import { invalidate } from "$app/navigation";
+import { afterNavigate, invalidate } from "$app/navigation";
 import { navigating, page } from "$app/state";
+import { recordNavigation } from "$lib/back-navigation";
 import AccountBoundary from "$lib/components/AccountBoundary.svelte";
 import DevEnvBadge from "$lib/components/DevEnvBadge.svelte";
 import MobileBottomNav from "$lib/components/MobileBottomNav.svelte";
@@ -22,6 +23,9 @@ import "@fontsource/zen-maru-gothic/900.css";
 import "../app.css";
 
 let { data, children }: LayoutProps = $props();
+
+// 戻るボタン（BackLink）が直前のページへ戻ってよいかの判断に使う
+afterNavigate((navigation) => recordNavigation(navigation.type));
 let unreadNotificationCount = $state(0);
 let reminderToasts = $state<ReturnType<typeof RoomReminderToasts>>();
 // カレンダーの点は、まだ終わっていない放送前のお知らせのうち、カレンダーを開いて見ていないものがあるとき

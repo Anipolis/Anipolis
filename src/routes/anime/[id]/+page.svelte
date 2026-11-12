@@ -10,6 +10,7 @@ import { animeRelationLabel, animeSeasonLabel, animeTypeLabel } from "$lib/anime
 import AddToCollectionModal from "$lib/components/AddToCollectionModal.svelte";
 import AnimePosterTile from "$lib/components/AnimePosterTile.svelte";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
+import BackLink from "$lib/components/BackLink.svelte";
 import Modal from "$lib/components/Modal.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
 import MyListStatusPopover from "$lib/components/MyListStatusPopover.svelte";
@@ -482,7 +483,7 @@ $effect(() => {
 {/snippet}
 
 <div class="detail-page">
-	<a href={animeListHref} class="back-link">← アニメ一覧</a>
+	<BackLink fallbackHref={animeListHref} class="anime-detail-back">← 戻る</BackLink>
 
 	<div class="anime-layout">
 		<div class="title-block">
@@ -1934,14 +1935,14 @@ $effect(() => {
 	margin: 0 auto;
 }
 
-.back-link {
+:global(.anime-detail-back) {
 	display: inline-block;
 	margin-bottom: 20px;
 	color: var(--color-text-muted);
 	text-decoration: none;
 	font-size: 0.9rem;
 }
-.back-link:hover {
+:global(.anime-detail-back:hover) {
 	color: var(--text);
 }
 

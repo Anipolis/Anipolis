@@ -16,7 +16,7 @@ const backHref = $derived.by(() => {
 
 <a href={backHref} class="btn btn-ghost settings-back-link" aria-label="設定メニューへ戻る">
 	<span class="i-lucide-arrow-left" aria-hidden="true"></span>
-	戻る
+	設定
 </a>
 
 <style>
