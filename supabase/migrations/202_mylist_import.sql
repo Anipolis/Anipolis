@@ -12,7 +12,8 @@
 --       - 日付の自動入力（fill_mylist_watch_dates）をしない。取り込んだ「完了」が今日見終えたことになるため
 --     この設定はこの関数の中でだけ立つ（PostgREST から set_config は呼べない）。
 --   * 登録済みの作品は、p_overwrite が false なら残し、true なら取り込んだ値で上書きする。
---     上書きでも、取り込み側に無いスコア・日付は今の値を残す（空で消さない）。
+--     上書きでも、取り込み側に無いスコア・日付は今の値を残す（空で消さない）。ただし残した日付と
+--     取り込んだ日付で順番が逆になるときは、残した方を空にする。
 --   * 戻り値は { inserted, updated, skipped }。
 
 CREATE OR REPLACE FUNCTION public.import_mylist_entries(p_entries jsonb, p_overwrite boolean DEFAULT false)
@@ -45,7 +46,10 @@ BEGIN
 
     WITH src AS (
         SELECT DISTINCT ON (e.anime_id)
-            e.anime_id, e.status, e.score, GREATEST(COALESCE(e.progress, 0), 0) AS progress, e.started_on, e.finished_on
+            e.anime_id, e.status, e.score, GREATEST(COALESCE(e.progress, 0), 0) AS progress,
+            -- 日付の順番が逆なら見始めた日を捨てる（アプリでも直しているが、制約違反で 500 件まとめて落とさないため）
+            CASE WHEN e.started_on > e.finished_on THEN NULL ELSE e.started_on END AS started_on,
+            e.finished_on
         FROM jsonb_to_recordset(p_entries)
             AS e(anime_id integer, status text, score smallint, progress integer, started_on date, finished_on date)
         WHERE e.anime_id IS NOT NULL
@@ -59,8 +63,16 @@ BEGIN
             SET status = EXCLUDED.status,
                 score = COALESCE(EXCLUDED.score, l.score),
                 progress = EXCLUDED.progress,
-                started_on = COALESCE(EXCLUDED.started_on, l.started_on),
-                finished_on = COALESCE(EXCLUDED.finished_on, l.finished_on)
+                -- 空の日付は今の値を残すが、残した値とファイルの値で順番が逆になるなら、残した方を空にする
+                -- （180 の user_anime_list_watch_dates_order に反して同じ回の 500 件が落ちないように）
+                started_on = CASE
+                    WHEN EXCLUDED.started_on IS NULL AND l.started_on > COALESCE(EXCLUDED.finished_on, l.finished_on) THEN NULL
+                    ELSE COALESCE(EXCLUDED.started_on, l.started_on)
+                END,
+                finished_on = CASE
+                    WHEN EXCLUDED.finished_on IS NULL AND l.finished_on < COALESCE(EXCLUDED.started_on, l.started_on) THEN NULL
+                    ELSE COALESCE(EXCLUDED.finished_on, l.finished_on)
+                END
             WHERE p_overwrite
         RETURNING (xmax = 0) AS is_insert
     )
