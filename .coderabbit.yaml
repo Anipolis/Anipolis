@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+#yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
 # CodeRabbit の設定（リポジトリ直下に置く）。
 # レビューは日本語。すべての PR（base は master）の自動レビューを対象にする。
 
