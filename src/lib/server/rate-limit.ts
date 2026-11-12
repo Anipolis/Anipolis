@@ -69,6 +69,9 @@ export const API_RATE_RULES: RateRule[] = [
 	{ name: "anime-count", pattern: /^\/api\/anime\/count$/, limit: 30, windowMs: 10_000 },
 	// 全件エクスポート系はDB走査・巨大レスポンスを伴うため厳しめに絞る（通常はCDNキャッシュが受ける）
 	{ name: "data-export", pattern: /^\/api\/data\//, methods: ["GET"], limit: 2, windowMs: 60_000 },
+	// マイリストの読み込み（#358）。1 回で数千件を書くので少なく、書き出しは全件読むので少し絞る
+	{ name: "mylist-import", pattern: /^\/api\/mylist\/import$/, methods: ["POST"], limit: 5, windowMs: 10 * 60_000 },
+	{ name: "mylist-export", pattern: /^\/api\/mylist\/export$/, methods: ["GET"], limit: 10, windowMs: 60_000 },
 	{ name: "room-posts", pattern: /^\/api\/rooms\/posts$/, limit: 60, windowMs: 60_000 },
 	// 投稿画像の固定リンク。投稿欄のプレビュー（最大4枚）と外部からの参照で使う
 	{ name: "media", pattern: /^\/api\/media\//, methods: ["GET"], limit: 120, windowMs: 60_000 },

@@ -92,6 +92,7 @@ describe("設定の一覧", () => {
 		expect(linksIn(target, "account").map(([, href]) => href)).toEqual([
 			"/settings/account",
 			"/settings/invites",
+			"/settings/mylist-data",
 			"/settings/account/delete",
 		]);
 	});

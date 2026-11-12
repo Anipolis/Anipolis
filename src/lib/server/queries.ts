@@ -5061,3 +5061,70 @@ export async function getOpenBroadcastRoomSessions(
 			};
 		});
 }
+
+/** マイリストの書き出し（#358）。本人のリストを作品の MAL の ID・題名つきで全部読む */
+export async function getMylistForExport(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+): Promise<
+	{
+		malId: number | null;
+		title: string;
+		type: string | null;
+		episodeCount: number | null;
+		status: AnimeStatus;
+		score: number | null;
+		progress: number;
+		startedOn: string | null;
+		finishedOn: string | null;
+	}[]
+> {
+	const rows: {
+		status: string;
+		score: number | null;
+		progress: number;
+		started_on: string | null;
+		finished_on: string | null;
+		// episode_count は DB では文字列で返ってくる（生成型も string）
+		anime: {
+			mal_id: number | null;
+			title: string;
+			type: string | null;
+			episode_count: string | number | null;
+		} | null;
+	}[] = [];
+	// 本番の max_rows は 1000 なので、ページに分けて読む
+	for (let start = 0; ; start += 1000) {
+		const { data, error } = await supabase
+			.from("user_anime_list")
+			.select(
+				"status, score, progress, started_on, finished_on, anime:anime_id ( mal_id, title, type, episode_count )",
+			)
+			.eq("user_id", userId)
+			.order("anime_id", { ascending: true })
+			.range(start, start + 999);
+		if (error) failQuery("getMylistForExport", error);
+		rows.push(...((data ?? []) as unknown as typeof rows));
+		if (!data || data.length < 1000) break;
+	}
+	return rows.flatMap((row) =>
+		row.anime
+			? [
+					{
+						malId: row.anime.mal_id,
+						title: row.anime.title,
+						type: row.anime.type,
+						episodeCount:
+							row.anime.episode_count === null || !Number.isFinite(Number(row.anime.episode_count))
+								? null
+								: Number(row.anime.episode_count),
+						status: row.status as AnimeStatus,
+						score: row.score,
+						progress: row.progress,
+						startedOn: row.started_on,
+						finishedOn: row.finished_on,
+					},
+				]
+			: [],
+	);
+}

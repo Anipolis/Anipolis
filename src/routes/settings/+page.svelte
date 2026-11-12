@@ -76,6 +76,11 @@ const sections = $derived.by((): Section[] => {
 					href: "/settings/invites",
 				},
 				{
+					label: "マイリストの読み込み・書き出し",
+					description: "MyAnimeList などとの間で視聴記録を移します",
+					href: "/settings/mylist-data",
+				},
+				{
 					label: "退会",
 					description: "アカウントと投稿・マイリストをすべて削除します",
 					href: "/settings/account/delete",
