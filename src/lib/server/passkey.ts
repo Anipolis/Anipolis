@@ -1,4 +1,3 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
 import {
 	type AuthenticationResponseJSON,
 	generateAuthenticationOptions,
@@ -13,9 +12,9 @@ import { isoBase64URL } from "@simplewebauthn/server/helpers";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { type Cookies, json } from "@sveltejs/kit";
 import { dev } from "$app/environment";
-import { env } from "$env/dynamic/private";
 import { env as publicEnv } from "$env/dynamic/public";
 import { getLastSignInAt } from "$lib/server/auth";
+import { getCookieSigningSecret, signCookiePayload, verifyCookieSignature } from "$lib/server/cookie-signing";
 import { isBetaGateEnabled, isBetaMember } from "$lib/server/discord";
 import { createServiceRoleClient } from "$lib/server/supabase-admin";
 import type { Database } from "$lib/supabase/database.types";
@@ -88,32 +87,18 @@ const CHALLENGE_COOKIE_NAME = "anipolis_passkey_challenge";
 const CHALLENGE_COOKIE_PATH = "/api/auth/passkey";
 const CHALLENGE_TTL_MS = 5 * 60_000;
 
-function getChallengeSigningSecret(): string {
-	return env["MULTI_ACCOUNT_COOKIE_SECRET"] ?? env["SUPABASE_SECRET_KEY"] ?? env["SUPABASE_SERVICE_ROLE_KEY"] ?? "";
-}
-
-function signChallenge(payload: string, secret: string): string {
-	return createHmac("sha256", secret).update(payload).digest("base64url");
-}
-
-function verifyChallengeSignature(payload: string, signature: string, secret: string): boolean {
-	const expectedDigest = createHmac("sha256", secret).update(signChallenge(payload, secret)).digest();
-	const actualDigest = createHmac("sha256", secret).update(signature).digest();
-	return expectedDigest.length === actualDigest.length && timingSafeEqual(expectedDigest, actualDigest);
-}
-
 export function setChallengeCookie(
 	cookies: Cookies,
 	state: Omit<ChallengeState, "expiresAt">,
 	now = Date.now(),
 ): boolean {
-	const secret = getChallengeSigningSecret();
+	const secret = getCookieSigningSecret();
 	if (!secret) {
 		console.error("No signing secret configured for passkey challenge cookie");
 		return false;
 	}
 	const payload = Buffer.from(JSON.stringify({ ...state, expiresAt: now + CHALLENGE_TTL_MS })).toString("base64url");
-	cookies.set(CHALLENGE_COOKIE_NAME, `${payload}.${signChallenge(payload, secret)}`, {
+	cookies.set(CHALLENGE_COOKIE_NAME, `${payload}.${signCookiePayload("passkey-challenge", payload, secret)}`, {
 		httpOnly: true,
 		secure: !dev,
 		sameSite: "strict",
@@ -133,11 +118,11 @@ export function takeChallengeCookie(
 	cookies.delete(CHALLENGE_COOKIE_NAME, { path: CHALLENGE_COOKIE_PATH });
 	if (!raw) return null;
 
-	const secret = getChallengeSigningSecret();
+	const secret = getCookieSigningSecret();
 	const dotIndex = raw.lastIndexOf(".");
 	if (!secret || dotIndex <= 0) return null;
 	const payload = raw.slice(0, dotIndex);
-	if (!verifyChallengeSignature(payload, raw.slice(dotIndex + 1), secret)) return null;
+	if (!verifyCookieSignature("passkey-challenge", payload, raw.slice(dotIndex + 1), secret)) return null;
 
 	let state: Partial<ChallengeState>;
 	try {

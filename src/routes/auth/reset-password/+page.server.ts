@@ -1,5 +1,6 @@
 import { fail, redirect } from "@sveltejs/kit";
 import { hasPasswordProvider } from "$lib/server/auth";
+import { isEmailLinkNavigation } from "$lib/server/email-link";
 import {
 	clearPasswordRecoveryCookie,
 	getPasswordRecoveryUserId,
@@ -34,12 +35,15 @@ function pageData(state: ResetPasswordState, extra: Partial<ResetPasswordPageDat
 	return { state, email: null, providers: [], ...extra };
 }
 
-export const load: PageServerLoad = async ({ url, cookies, locals: { supabase, safeGetSession } }) => {
+export const load: PageServerLoad = async ({ url, request, cookies, locals: { supabase, safeGetSession } }) => {
 	const link = parseRecoveryLink(url.searchParams);
 
 	// メールのリンクから着地した場合はここでセッションを確立し、クエリを落とした
 	// クリーンな URL に戻す（リロードで使用済みトークンを再送しないため）。
 	if (link.kind === "token_hash" || link.kind === "code") {
+		// 画像や fetch として読み込まれたときは確認しない（トークンも使わない）。email-link.ts のコメント参照
+		if (!isEmailLinkNavigation(request)) return pageData("invalid");
+
 		const { data, error } =
 			link.kind === "token_hash"
 				? await supabase.auth.verifyOtp({ type: "recovery", token_hash: link.tokenHash })

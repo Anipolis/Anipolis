@@ -37,7 +37,7 @@ const posterOnly = $derived(variant === "poster-only");
 <div class="eac" class:eac--highlight={highlight} class:eac--summary={summary} class:eac--poster-only={posterOnly}>
 	<svelte:element
 		this={asLink ? "a" : "div"}
-		href={asLink && anime ? `/anime/${anime.id}` : undefined}
+		href={asLink && anime ? `/anime/${encodeURIComponent(anime.id)}` : undefined}
 		aria-label={posterOnly && anime ? anime.title : undefined}
 		class="eac-main"
 		class:eac-main--link={asLink}

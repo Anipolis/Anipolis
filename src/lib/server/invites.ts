@@ -1,8 +1,7 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Cookies } from "@sveltejs/kit";
 import { dev } from "$app/environment";
-import { env } from "$env/dynamic/private";
+import { getCookieSigningSecret, signCookiePayload, verifyCookieSignature } from "$lib/server/cookie-signing";
 import type { Database } from "$lib/supabase/database.types";
 
 const inviteRedeemErrorMessages = {
@@ -58,7 +57,7 @@ export async function redeemInviteCode(supabase: SupabaseClient<Database>, code:
 
 // ----------------------------------------------------------------
 // 招待コードを OAuth のリダイレクト往復を挟んでも持ち越すための
-// 署名付き httpOnly Cookie。multi-account.ts の HMAC 署名パターンを踏襲。
+// 署名付き httpOnly Cookie。署名は cookie-signing.ts（用途ごとに別の署名）。
 // ----------------------------------------------------------------
 
 const INVITE_COOKIE_NAME = "anipolis_invite_code";
@@ -70,35 +69,32 @@ const INVITE_COOKIE_OPTS = {
 	maxAge: 60 * 60, // 1時間。OAuthの往復とその場の手入力が持てば十分
 };
 
-function getInviteCookieSigningSecret(): string {
-	return env["MULTI_ACCOUNT_COOKIE_SECRET"] ?? env["SUPABASE_SECRET_KEY"] ?? env["SUPABASE_SERVICE_ROLE_KEY"] ?? "";
-}
+/**
+ * Cookie に持ち越してよい招待コードの形。入力はまだ検証していない文字列なので、
+ * 招待コードとしてありえないものは署名しない。発行するコードは英数字 10 文字
+ * （migration 116 の create_invite）で、照合は大文字・小文字を区別しない。
+ */
+const INVITE_CODE_COOKIE_PATTERN = /^[0-9A-Za-z]{1,32}$/;
 
-function signInviteCode(code: string, secret: string): string {
-	return createHmac("sha256", secret).update(code).digest("base64url");
-}
-
-function verifyInviteCodeSignature(code: string, signature: string, secret: string): boolean {
-	const expectedDigest = createHmac("sha256", secret).update(signInviteCode(code, secret)).digest();
-	const actualDigest = createHmac("sha256", secret).update(signature).digest();
-	return expectedDigest.length === actualDigest.length && timingSafeEqual(expectedDigest, actualDigest);
-}
-
-/** 招待コードを署名付き Cookie に保存する。空文字なら Cookie を消すだけ。 */
+/** 招待コードを署名付き Cookie に保存する。空文字・コードの形でない値なら Cookie を消すだけ。 */
 export function setInviteCodeCookie(cookies: Cookies, code: string): void {
 	const normalized = code.trim();
-	if (!normalized) {
+	if (!INVITE_CODE_COOKIE_PATTERN.test(normalized)) {
 		cookies.delete(INVITE_COOKIE_NAME, { path: "/" });
 		return;
 	}
 
-	const secret = getInviteCookieSigningSecret();
+	const secret = getCookieSigningSecret();
 	if (!secret) {
 		console.error("No signing secret configured for invite code cookie; skipping");
 		return;
 	}
 
-	cookies.set(INVITE_COOKIE_NAME, `${normalized}.${signInviteCode(normalized, secret)}`, INVITE_COOKIE_OPTS);
+	cookies.set(
+		INVITE_COOKIE_NAME,
+		`${normalized}.${signCookiePayload("invite-code", normalized, secret)}`,
+		INVITE_COOKIE_OPTS,
+	);
 }
 
 /** 署名付き Cookie から招待コードを取り出す。改ざん・未署名時は null。 */
@@ -106,14 +102,14 @@ export function getInviteCodeCookie(cookies: Cookies): string | null {
 	const raw = cookies.get(INVITE_COOKIE_NAME);
 	if (!raw) return null;
 
-	const secret = getInviteCookieSigningSecret();
+	const secret = getCookieSigningSecret();
 	if (!secret) return null;
 
 	const dotIndex = raw.lastIndexOf(".");
 	if (dotIndex <= 0) return null;
 	const code = raw.slice(0, dotIndex);
 	const signature = raw.slice(dotIndex + 1);
-	return verifyInviteCodeSignature(code, signature, secret) ? code : null;
+	return verifyCookieSignature("invite-code", code, signature, secret) ? code : null;
 }
 
 export function clearInviteCodeCookie(cookies: Cookies): void {

@@ -24,12 +24,18 @@ const { GET } = await import("./+server");
 
 type User = { id: string; app_metadata?: Record<string, unknown>; user_metadata?: Record<string, unknown> };
 
-async function run(search: string, verify: { user: User | null; error: { code?: string } | null }) {
+async function run(
+	search: string,
+	verify: { user: User | null; error: { code?: string } | null },
+	headers: Record<string, string> = { "sec-fetch-dest": "document" },
+) {
 	const signOut = vi.fn(async () => ({}));
 	const verifyOtp = vi.fn(async () => ({ data: { user: verify.user }, error: verify.error }));
+	const url = new URL(`https://anipolis.net/auth/confirm${search}`);
 	try {
 		await GET({
-			url: new URL(`https://anipolis.net/auth/confirm${search}`),
+			url,
+			request: new Request(url, { headers }),
 			cookies: {},
 			locals: { supabase: { auth: { verifyOtp, signOut } } },
 		} as never);
@@ -48,6 +54,25 @@ describe("/auth/confirm", () => {
 		grantBetaAccess.mockClear();
 		setInviteCodeCookie.mockClear();
 		vi.spyOn(console, "error").mockImplementation(() => {});
+	});
+
+	it("画像や fetch として読み込まれたときは確認せず、トークンも使わない", async () => {
+		// アイコンの URL などにこのリンクを入れられても、表示しただけの人をログインさせない
+		for (const destination of ["image", "empty", "iframe", "script"]) {
+			const blocked = await run(
+				"?token_hash=abc&type=email&next=%2F",
+				{ user: { id: "attacker" }, error: null },
+				{ "sec-fetch-dest": destination },
+			);
+			expect(blocked.location).toBe("/auth?error=confirm_failed&reason=invalid_link");
+			expect(blocked.verifyOtp).not.toHaveBeenCalled();
+		}
+	});
+
+	it("Sec-Fetch-Dest を送らないブラウザ・メールアプリからは、これまで通り確認する", async () => {
+		const ok = await run("?token_hash=abc&type=email", { user: { id: "u1" }, error: null }, {});
+		expect(ok.location).toBe("/");
+		expect(ok.verifyOtp).toHaveBeenCalledWith({ type: "email", token_hash: "abc" });
 	});
 
 	it("確認できたら next（内部のパスだけ）へ進む", async () => {
