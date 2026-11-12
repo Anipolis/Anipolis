@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
 # CodeRabbit の設定（リポジトリ直下に置く）。
-# レビューは日本語。作業ブランチ→develop の PR も自動レビュー対象にする。
+# レビューは日本語。すべての PR（base は master）の自動レビューを対象にする。
 
 language: "ja-JP"
 
@@ -13,10 +13,8 @@ reviews:
   auto_review:
     enabled: true
     drafts: false
-    # 既定ではデフォルトブランチ(master)宛ての MR しか自動レビューしない。
-    # 日常の MR は develop 宛てなので明示する。
+    # 既定ではデフォルトブランチ(master)宛ての MR しか自動レビューしないため明示する。
     base_branches:
-      - "develop"
       - "master"
   path_filters:
     - "!**/pnpm-lock.yaml"
