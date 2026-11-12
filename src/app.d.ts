@@ -1,5 +1,6 @@
 import type { Session, SupabaseClient, User } from "@supabase/supabase-js";
 import type { Database } from "$lib/supabase/database.types";
+import type { Post } from "$lib/types";
 
 declare module "*.md?raw" {
 	const content: string;
@@ -25,6 +26,8 @@ declare global {
 		interface PageState {
 			/** ログイン画面の上に重ねて出している規約・ポリシー */
 			legal?: { title: string; html: string };
+			/** タイムラインの上に重ねて出している投稿詳細。本文はタイムラインで取得済みのものを使う */
+			postDetail?: { post: Post };
 		}
 	}
 }

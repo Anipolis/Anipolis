@@ -1,6 +1,7 @@
 <script lang="ts">
 import type { Snippet } from "svelte";
 import { goto } from "$app/navigation";
+import { rememberPostSeed } from "$lib/post-seed";
 import type { Post } from "$lib/types";
 import {
 	formatBroadcastRelativeTime,
@@ -37,6 +38,11 @@ interface Props {
 	broadcastStartAt?: string | null;
 	/** When set, clicking the row toggles `children` (e.g. replies) instead of opening the post. */
 	onExpand?: () => void;
+	/**
+	 * 渡すと、投稿詳細へのページ遷移の代わりにこれを呼ぶ（呼び出し側が詳細をその場に出す）。
+	 * Ctrl・Shift＋クリックなど新しいタブに開く操作は、これまでどおり通常のリンクとして動く
+	 */
+	onOpen?: (post: Post) => void;
 	expanded?: boolean;
 	children?: Snippet;
 }
@@ -50,6 +56,7 @@ let {
 	insideRoom = false,
 	broadcastStartAt = null,
 	onExpand,
+	onOpen,
 	expanded = false,
 	children,
 }: Props = $props();
@@ -78,6 +85,9 @@ let showActions = $state(false);
 const actionsOpen = $derived(showActions || expanded);
 
 function handleClick(e: MouseEvent) {
+	// 詳細へ移る行は、移動先がスレッドを読み込む間の仮表示に使うため、表示済みの投稿を渡しておく。
+	// 行内のリンク（詳細を開く当たり判定・時刻）を押した場合も、この前に通るのでここで覚える
+	if (!onExpand && !joinPrevious) rememberPostSeed(post);
 	if ((e.target as HTMLElement).closest("a, button, input, textarea, select, form")) return;
 	if (window.getSelection()?.toString()) return;
 	if (onExpand) {
@@ -88,7 +98,31 @@ function handleClick(e: MouseEvent) {
 		toggleActions();
 		return;
 	}
+	if (onOpen) {
+		openWithCurrentState();
+		return;
+	}
 	goto(`/posts/${post.id}`);
+}
+
+function openFromLink(event: MouseEvent) {
+	if (!onOpen) return;
+	if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+	event.preventDefault();
+	openWithCurrentState();
+}
+
+/** 行で付けたいいね・リポスト・ブックマークの結果を反映した投稿を渡す（古い件数のまま開かないように） */
+function openWithCurrentState() {
+	onOpen?.({
+		...post,
+		like_count: controller.likeCount,
+		liked_by_me: controller.likedByMe,
+		repost_count: controller.repostCount,
+		reposted_by_me: controller.repostedByMe,
+		bookmarked_by_me: controller.bookmarkedByMe,
+		repost_context: null,
+	});
 }
 
 function toggleActions() {
@@ -135,7 +169,7 @@ function handleKeydown(event: KeyboardEvent) {
 			onclick={toggleActions}
 		></button>
 	{:else}
-		<a href="/posts/{post.id}" class="post-row-hitarea" aria-label="投稿詳細を開く"
+		<a href="/posts/{post.id}" class="post-row-hitarea" aria-label="投稿詳細を開く" onclick={openFromLink}
 			><span class="sr-only">投稿詳細を開く</span></a
 		>
 	{/if}
@@ -146,7 +180,7 @@ function handleKeydown(event: KeyboardEvent) {
 				<UserAvatar src={post.avatar_url} username={post.username} size="sm" />
 			</a>
 			<a href="/profile/{post.username}" class="post-row-name" title={displayName}>{displayName}</a>
-			<a href="/posts/{post.id}" class="post-row-time" title={postDateTime}
+			<a href="/posts/{post.id}" class="post-row-time" title={postDateTime} onclick={openFromLink}
 				><time datetime={post.created_at}>{headTime}</time></a
 			>
 			{#if post.repost_context}

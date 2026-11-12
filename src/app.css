@@ -306,6 +306,11 @@ textarea {
 }
 
 /* 横のトレンド欄を置かないページ（マイリスト・コレクション）。トレンド欄の分まで本文を広げる */
+/* 投稿詳細を重ねている間は、タイムラインを消さずに隠す（戻ったときに作り直さず、位置も保てる） */
+.feed-column.has-post-pane > :not(.post-pane) {
+	display: none;
+}
+
 .feed-column--wide {
 	flex-basis: calc(var(--feed-width) + 20px + var(--sidebar-width));
 	max-width: calc(var(--feed-width) + 20px + var(--sidebar-width));
