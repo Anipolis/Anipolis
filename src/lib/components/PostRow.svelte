@@ -114,8 +114,9 @@ function openFromLink(event: MouseEvent) {
 
 /** 行で付けたいいね・リポスト・ブックマークの結果を反映した投稿を渡す（古い件数のまま開かないように） */
 function openWithCurrentState() {
+	// post は $state のプロキシのことがある。履歴（history.state）には保存できないので、素のオブジェクトにして渡す
 	onOpen?.({
-		...post,
+		...$state.snapshot(post),
 		like_count: controller.likeCount,
 		liked_by_me: controller.likedByMe,
 		repost_count: controller.repostCount,
