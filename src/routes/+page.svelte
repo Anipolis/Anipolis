@@ -1,10 +1,12 @@
 <script lang="ts">
-import { replaceState } from "$app/navigation";
+import { pushState, replaceState } from "$app/navigation";
+import { page as routePage } from "$app/state";
 import { trapFocus } from "$lib/actions/trapFocus";
 import ActivityFeed from "$lib/components/ActivityFeed.svelte";
 import LiveRoomsPanel from "$lib/components/LiveRoomsPanel.svelte";
 import PostCardSkeleton from "$lib/components/PostCardSkeleton.svelte";
 import PostComposer from "$lib/components/PostComposer.svelte";
+import PostDetailPane from "$lib/components/PostDetailPane.svelte";
 import PostRow from "$lib/components/PostRow.svelte";
 import SeoMeta from "$lib/components/SeoMeta.svelte";
 import TimelineLiveRun from "$lib/components/TimelineLiveRun.svelte";
@@ -12,6 +14,7 @@ import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import WelcomeCard from "$lib/components/WelcomeCard.svelte";
 import { createLatestResolved } from "$lib/latest-resolved.svelte";
 import { composeOpen } from "$lib/stores/compose";
+import type { Post } from "$lib/types";
 import { groupLiveRuns } from "$lib/utils/live-runs";
 import type { PageProps } from "./$types";
 
@@ -69,6 +72,37 @@ function dismissOnboarding() {
 	localStorage.setItem("anipolis_onboarding_dismissed", "1");
 	onboardingDismissed = true;
 }
+
+/**
+ * 投稿詳細はタイムラインの上に重ねて出す（URL だけ /posts/ID にする浅いルーティング）。
+ * 本文はタイムラインで取得済みのものを使うので、ページの読み込みも本文の再取得もしない。
+ * タイムラインは隠すだけで残すので、戻ると読み込み直しなしで元の位置に戻れる
+ */
+const detail = $derived(routePage.state.postDetail?.post ?? null);
+let scrollBeforeDetail = 0;
+
+function openPost(post: Post) {
+	scrollBeforeDetail = window.scrollY;
+	pushState(`/posts/${post.id}`, { postDetail: { post } });
+}
+
+function closeDetail() {
+	history.back();
+}
+
+let detailWasOpen = false;
+$effect(() => {
+	const open = detail !== null;
+	if (open === detailWasOpen) return;
+	detailWasOpen = open;
+	// 開いたら先頭から読ませ、閉じたら開く前の位置へ戻す（ブラウザの「戻る」で閉じたときも同じ）
+	window.scrollTo(0, open ? 0 : scrollBeforeDetail);
+});
+
+// 詳細で投稿を削除したら、消えた投稿を見せ続けずにタイムラインへ戻る
+$effect(() => {
+	if (detail && (routePage.form as { deleted?: boolean } | null)?.deleted) closeDetail();
+});
 
 function closeModal() {
 	composeOpen.set(false);
@@ -144,7 +178,18 @@ $effect(() => {
 <SeoMeta title={data.user ? "タイムライン - Anipolis" : "Anipolis — アニメファンのためのSNS"} />
 
 <div class="page-container">
-	<main class="feed-column">
+	<main class="feed-column" class:has-post-pane={detail !== null}>
+		{#if detail}
+			{#key detail.id}
+				<PostDetailPane
+					post={detail}
+					currentUserId={data.user?.id ?? null}
+					profile={data.profile}
+					hasSession={Boolean(data.session)}
+					onback={closeDetail}
+				/>
+			{/key}
+		{/if}
 		<!-- Desktop: composer / landing hero -->
 		<div class="composer-desktop" id="compose">
 			{#if data.profile}
@@ -339,7 +384,7 @@ $effect(() => {
 								currentUserId={data.user?.id ?? null}
 							/>
 						{:else}
-							<PostRow post={item.post} currentUserId={data.user?.id ?? null} />
+							<PostRow post={item.post} currentUserId={data.user?.id ?? null} onOpen={openPost} />
 						{/if}
 					{/each}
 					{#if nextCursor}
