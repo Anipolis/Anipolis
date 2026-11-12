@@ -43,7 +43,7 @@ let debugStart = $state<SwipeStartDecision>("TRACK");
 const signedInTabs: RouteEntry[] = [
 	{ path: "/" },
 	{ path: "/search" },
-	{ path: "/schedule", matches: (pathname) => pathname.startsWith("/schedule") || pathname.startsWith("/events") },
+	{ path: "/anime" },
 	{ path: "/notifications" },
 	{ path: "/mylist" },
 ];
