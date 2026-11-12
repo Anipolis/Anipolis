@@ -1,4 +1,5 @@
 <script lang="ts">
+import { page } from "$app/state";
 import PostRow from "$lib/components/PostRow.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
@@ -87,7 +88,8 @@ let queryInput = $derived(data.query);
 				{#if !data.user}
 					<div class="empty-state">
 						<p>
-							投稿は<a href="/auth?next={encodeURIComponent(`/search?q=${data.query}`)}">ログイン</a
+							投稿は<a href="/auth?next={encodeURIComponent(page.url.pathname + page.url.search)}"
+								>ログイン</a
 							>すると検索できます
 						</p>
 					</div>
