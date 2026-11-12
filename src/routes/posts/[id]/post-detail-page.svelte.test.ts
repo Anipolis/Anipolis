@@ -3,6 +3,7 @@ import { flushSync, mount, unmount } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeTimelinePosts } from "$lib/components/fixtures/timeline";
 import { NETWORK_ERROR_MESSAGE } from "$lib/components/post-composer-submit";
+import { rememberPostSeed } from "$lib/post-seed";
 import type { Post } from "$lib/types";
 
 // 返信フォームの use:enhance に渡された送信処理を受け取り、送信結果をこのテストから流し込む
@@ -36,8 +37,7 @@ function pageData(enrichedData: Promise<Thread>) {
 		profile: { id: "me", username: "me", display_name: null, avatar_url: null },
 		session: { access_token: "t" },
 		currentUserId: "me",
-		trending: [],
-		animeTrending: [],
+		sidebar: Promise.resolve({ trending: [], animeTrending: [] }),
 	};
 }
 
@@ -104,6 +104,30 @@ describe("投稿詳細（#296）", () => {
 		reload.resolve({ ...first, replies: [fixture(1), fixture(2)] });
 		await settle();
 		expect(replyCount(target)).toBe(2);
+	});
+
+	it("タイムラインから来たときは、スレッドが届く前でも本文を仮に出す", async () => {
+		const seeded = { ...fixture(0), id: "post-0" };
+		rememberPostSeed(seeded);
+		const pending = deferred<Thread>();
+		const props = $state({ data: pageData(pending.promise), form: null });
+		const target = document.body.appendChild(document.createElement("div"));
+		const component = mount(PostDetailPage, { target, props: props as never });
+		cleanup.push(() => unmount(component));
+		await settle();
+
+		// 本文は先に出て、返信の欄だけが読み込み中になる
+		expect(target.querySelector(".thread-main")).not.toBeNull();
+		expect(target.querySelector("textarea[name=content]")).toBeNull();
+		expect(target.querySelectorAll(".posts-loading-spinner")).toHaveLength(1);
+		const detail = target.querySelector(".post-detail");
+
+		pending.resolve({ post: seeded, parentPost: null, replies: [fixture(1)] });
+		await settle();
+		expect(target.querySelector(".posts-loading-spinner")).toBeNull();
+		expect(replyCount(target)).toBe(1);
+		// 本文は作り直されない
+		expect(target.querySelector(".post-detail")).toBe(detail);
 	});
 
 	it("通信エラーでは書きかけの返信を残し、理由を出す（エラーページへ進まない）", async () => {

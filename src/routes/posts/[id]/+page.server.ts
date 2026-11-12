@@ -10,7 +10,7 @@ import {
 } from "$lib/server/actions";
 import { buildPostCardSelect } from "$lib/server/post-selects";
 import { enrichPostsWithCounts, getAnimeRankingTrending } from "$lib/server/queries";
-import type { Post, RawPost } from "$lib/types";
+import type { Anime, Post, RawPost } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
 const POSTS_SELECT = buildPostCardSelect();
@@ -38,17 +38,25 @@ function buildPostMeta(post: RawPost, origin: string) {
 }
 
 export const load: PageServerLoad = async ({ params, url, locals: { supabase, safeGetSession } }) => {
+	// サイドバーのトレンドは本文と関係がないので、投稿の取得と同時に始めて待たずに返す。
+	// 画面の切り替えが待つのは投稿の取得（404 と OGP に必要）だけにする。
+	// 読めなくてもページは出す（失敗したら空のトレンドにする）
+	const sidebar = Promise.all([
+		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
+		getAnimeRankingTrending(supabase, 5),
+	])
+		.then(([trendingResult, animeTrending]) => ({ trending: trendingResult.data ?? [], animeTrending }))
+		.catch((err) => {
+			console.error("[posts/id] sidebar error:", err);
+			return { trending: [], animeTrending: [] as Anime[] };
+		});
+
 	const { user } = await safeGetSession();
 
 	const { data: rawPost } = await supabase.from("posts").select(POSTS_SELECT).eq("id", params.id).maybeSingle();
 
 	if (!rawPost) error(404, "投稿が見つかりません");
 	const post = rawPost as unknown as RawPost;
-
-	const [trendingResult, animeTrending] = await Promise.all([
-		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
-		getAnimeRankingTrending(supabase, 5),
-	]);
 
 	const enrichedDataPromise = (async () => {
 		const [rawParentRes, rawRepliesRes] = await Promise.all([
@@ -86,8 +94,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 	return {
 		enrichedData: enrichedDataPromise,
 		currentUserId: user?.id ?? null,
-		trending: trendingResult.data ?? [],
-		animeTrending,
+		sidebar,
 		post: { content: post.content },
 		meta: buildPostMeta(post, url.origin),
 	};
