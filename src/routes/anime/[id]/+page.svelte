@@ -14,12 +14,15 @@ import BackLink from "$lib/components/BackLink.svelte";
 import Modal from "$lib/components/Modal.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
 import MyListStatusPopover from "$lib/components/MyListStatusPopover.svelte";
+import SeoMeta from "$lib/components/SeoMeta.svelte";
+import ShareMenu from "$lib/components/ShareMenu.svelte";
 import {
 	episodeRoomChipLabels,
 	episodeRoomEntryState,
 	formatAiringTime,
 	isEpisodeRoomEntryLive,
 } from "$lib/episode-room";
+import { crawlerSafeImage } from "$lib/seo";
 import type { AnimeStatus, UserAnimeEntry } from "$lib/types";
 import {
 	type BroadcastOverrideKind,
@@ -39,10 +42,16 @@ let { data, form }: PageProps = $props();
 
 const displayStudios = $derived(data.anime.studio ?? []);
 const displayGenres = $derived(data.anime.genre ?? []);
-const ogDescription = $derived(
-	displayGenres.length > 0
-		? `${displayGenres.slice(0, 3).join(" · ")} — Anipolis`
-		: `${data.anime.title}の情報・視聴記録 — Anipolis`,
+// 共有したときのカードの説明（#271）: 「2026年秋・TV アニメ。ジャンル」＋ Anipolis でできること
+const ogDescription = $derived.by(() => {
+	const facts = [animeSeasonLabel(data.anime.season), animeTypeLabel(data.anime.type)].filter(Boolean).join("・");
+	const genres = displayGenres.slice(0, 3).join("・");
+	const lead = [facts, genres].filter(Boolean).join("。");
+	return `${lead ? `${lead}。` : ""}${data.anime.title}の感想・実況・視聴記録を Anipolis で。`;
+});
+// © が無いカバーは作品ページで隠しているので、カードにも出さない。AVIF はカードに出ないので既定の画像にする
+const ogImage = $derived(
+	data.anime.cover_url && !isCoverHiddenWithoutCopyright(data.anime) ? crawlerSafeImage(data.anime.cover_url) : null,
 );
 const displayOfficialLinks = $derived(
 	buildDisplayOfficialLinks(data.anime.official_site_url, data.anime.official_x_url),
@@ -439,17 +448,12 @@ $effect(() => {
 });
 </script>
 
-<svelte:head>
-	<title>{data.anime.title} - Anipolis</title>
-	<meta property="og:title" content="{data.anime.title} - Anipolis">
-	<meta property="og:description" content={ogDescription}>
-	<meta property="og:type" content="website">
-	<meta property="og:url" content={page.url.href}>
-	{#if data.anime.cover_url}
-		<meta property="og:image" content={data.anime.cover_url}>
-		<meta name="twitter:card" content="summary_large_image">
-	{/if}
-</svelte:head>
+<SeoMeta
+	title="{data.anime.title} - Anipolis"
+	description={ogDescription}
+	image={ogImage}
+	imageAlt="{data.anime.title}のカバー"
+/>
 
 {#snippet relationsSection()}
 	{#if data.relations.length > 0}
@@ -513,6 +517,10 @@ $effect(() => {
 						>{animeSeasonLabel(data.anime.season)}</a
 					>
 				{/if}
+				<!-- 共有（#271）。未ログインでも使えるよう、操作の段ではなく作品情報の行の右端に置く -->
+				<span class="meta-share">
+					<ShareMenu title={data.anime.title} variant="text" />
+				</span>
 			</div>
 		</div>
 
@@ -2195,6 +2203,10 @@ $effect(() => {
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
+}
+.meta-share {
+	margin-left: auto;
+	color: var(--color-text-muted);
 }
 .anime-title {
 	font-size: 1.6rem;

@@ -32,7 +32,7 @@ function pageData(enrichedData: Promise<Thread>) {
 	return {
 		post: { content: "本文" },
 		enrichedData,
-		ogImageUrl: null,
+		meta: { title: "投稿 - Anipolis", description: "本文", image: null },
 		profile: { id: "me", username: "me", display_name: null, avatar_url: null },
 		session: { access_token: "t" },
 		currentUserId: "me",

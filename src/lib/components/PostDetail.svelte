@@ -9,6 +9,7 @@ import PostOverlays from "./post/PostOverlays.svelte";
 import PostText from "./post/PostText.svelte";
 import { PostController } from "./post/post-controller.svelte";
 import ReactionErrorNotice from "./ReactionErrorNotice.svelte";
+import ShareMenu from "./ShareMenu.svelte";
 import UserAvatar from "./UserAvatar.svelte";
 
 interface Props {
@@ -60,6 +61,8 @@ function handleKeydown(event: KeyboardEvent) {
 		<span class="post-time" title={post.created_at}>
 			<time datetime={post.created_at}>{relativeTime}</time>
 		</span>
+		<!-- 共有（#271）。未ログインでも使えるよう、メニュー（ログイン中だけ）の外に置く -->
+		<ShareMenu url="/posts/{post.id}" title="{displayName}の投稿" variant="text" />
 		{#if controller.isLoggedIn}
 			<div class="post-kebab-wrapper">
 				<button

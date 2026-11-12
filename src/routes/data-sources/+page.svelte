@@ -10,12 +10,11 @@ import { WIKIDATA_CC0_URL, WIKIDATA_TRANSFORMATION_URL } from "$lib/wikidata-ani
 import { WIKIDATA_STUDIO_TRANSFORMATION_URL } from "$lib/wikidata-studio-names";
 </script>
 
-<svelte:head>
-	<meta name="description" content="Anipolisの作品情報の出典、ライセンス、画像と権利表記、権利者の方への窓口">
-</svelte:head>
-
 <!-- 利用規約・お問い合わせと同じ見た目にする（#439）。タイトルは LegalDocument が付ける -->
-<LegalDocument title="出典・権利">
+<LegalDocument
+	title="出典・権利"
+	description="Anipolisの作品情報の出典、ライセンス、画像と権利表記、権利者の方への窓口"
+>
 	<h1>出典・権利</h1>
 	<p class="lead">
 		Anipolisが表示する作品情報の参照元と、画像・権利表記の扱い、権利者の方へのご案内をまとめています。

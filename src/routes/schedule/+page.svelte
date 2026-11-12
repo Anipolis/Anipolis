@@ -4,6 +4,7 @@ import { untrack } from "svelte";
 import { enhance } from "$app/forms";
 import { animePickMeta } from "$lib/anime-picker";
 import AnimeRow from "$lib/components/AnimeRow.svelte";
+import SeoMeta from "$lib/components/SeoMeta.svelte";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import { roomReminderStatus, roomReminderTime } from "$lib/room-reminders";
 import { roomReminders } from "$lib/stores/notifications";
@@ -467,7 +468,10 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 }
 </script>
 
-<svelte:head> <title>カレンダー - Anipolis</title> </svelte:head>
+<SeoMeta
+	title="カレンダー - Anipolis"
+	description="今週放送のアニメを曜日・時刻ごとに。放送が始まったら作品のルームでみんなと実況できます。"
+/>
 
 <div class="schedule-page">
 	<header class="schedule-header">

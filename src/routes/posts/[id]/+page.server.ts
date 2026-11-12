@@ -1,5 +1,6 @@
 ﻿import { error, fail } from "@sveltejs/kit";
 import { postImageMediaUrl } from "$lib/post-image-url";
+import { postMetaDescription } from "$lib/seo";
 import {
 	deletePostAction,
 	insertPostWithHashtags,
@@ -13,6 +14,28 @@ import type { Post, RawPost } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
 const POSTS_SELECT = buildPostCardSelect();
+
+/**
+ * 共有したときのカード（#271）。スレッドは後から読む（deferred）ので、クローラーにも見える
+ * ここで投稿者の名前と説明文を決める。ネタバレ注意の投稿は本文も画像も出さない。
+ */
+function buildPostMeta(post: RawPost, origin: string) {
+	const author = post.profiles?.display_name || post.profiles?.username || null;
+	const hasCw = post.cw_anime_id !== null && post.cw_anime_id !== undefined;
+	const firstImage = hasCw ? null : (post.image_urls?.[0] ?? null);
+	return {
+		title: author ? `${author}の投稿 - Anipolis` : "投稿 - Anipolis",
+		description: postMetaDescription({
+			content: post.content,
+			hasCw,
+			cwAnimeTitle: post.cw_anime?.title ?? null,
+			animeTitle: post.anime?.title ?? null,
+		}),
+		// SNS のカード（OGP）は後から画像を取り直すことがあるので、期限付き URL ではなく
+		// 閲覧権限を確かめて転送する固定リンクを出す（#316）
+		image: firstImage ? new URL(postImageMediaUrl(firstImage), origin).href : null,
+	};
+}
 
 export const load: PageServerLoad = async ({ params, url, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
@@ -66,9 +89,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 		trending: trendingResult.data ?? [],
 		animeTrending,
 		post: { content: post.content },
-		// SNS のカード（OGP）は後から画像を取り直すことがあるので、期限付き URL ではなく
-		// 閲覧権限を確かめて転送する固定リンクを出す（#316）
-		ogImageUrl: post.image_urls?.[0] ? new URL(postImageMediaUrl(post.image_urls[0]), url.origin).href : null,
+		meta: buildPostMeta(post, url.origin),
 	};
 };
 

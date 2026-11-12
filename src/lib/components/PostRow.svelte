@@ -18,6 +18,7 @@ import PostOverlays from "./post/PostOverlays.svelte";
 import PostText from "./post/PostText.svelte";
 import { PostController } from "./post/post-controller.svelte";
 import ReactionErrorNotice from "./ReactionErrorNotice.svelte";
+import ShareMenu from "./ShareMenu.svelte";
 import UserAvatar from "./UserAvatar.svelte";
 
 interface Props {
@@ -207,6 +208,8 @@ function handleKeydown(event: KeyboardEvent) {
 				{#if broadcastRelativeTime}
 					<span class="post-time">放送開始から {broadcastRelativeTime}</span>
 				{/if}
+				<!-- 共有（#271）。アイコンは増やさず、削除・通報と同じ文字のボタンにする -->
+				<ShareMenu url="/posts/{post.id}" title="{displayName}の投稿" variant="text" placement="above" />
 				{#if controller.isOwn}
 					<button
 						type="button"

@@ -7,6 +7,7 @@ import AnimeCard from "$lib/components/AnimeCard.svelte";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
 import InfoTip from "$lib/components/InfoTip.svelte";
 import MyListQuickEdit from "$lib/components/MyListQuickEdit.svelte";
+import SeoMeta from "$lib/components/SeoMeta.svelte";
 import { createDebouncedCommit } from "$lib/debounced-commit";
 import { isSamePageRefresh } from "$lib/navigation-skeleton";
 import type { ActiveAnimeSeasonChip, AnimeListItem, AnimeStatus, UserAnimeEntry } from "$lib/types";
@@ -388,7 +389,10 @@ $effect(() => {
 });
 </script>
 
-<svelte:head> <title>アニメ - Anipolis</title> </svelte:head>
+<SeoMeta
+	title="アニメ - Anipolis"
+	description="今期・来期・過去のアニメを、放送中や季節ごとに探せます。感想や実況は作品のページから。"
+/>
 
 <div class="anime-page-wrap">
 	<main class="anime-main">
