@@ -63,7 +63,8 @@ describe("話数ルームの投稿（153）", () => {
 			room_href: "/rooms/anime/1/ep/15",
 			episode_number: 15,
 			episode_room: true,
-			user_score: null,
+			meta: "",
+			avg_score: null,
 		};
 		expect(buildAnimeRoomLabel(room)).toBe("天は赤い河のほとり 第15話");
 		// 放送日のルーム（旧）は今どおりハッシュタグと話数
@@ -91,6 +92,42 @@ describe("話数ルームの投稿（153）", () => {
 			title: "天は赤い河のほとり 第15話",
 		});
 		expect(getPostDisplayContent(post)).toBe("よかった");
+	});
+
+	it("特番ルームの投稿は、放送時間外でも特番ルームへのリンクと名前を使う", () => {
+		const raw: RawPost = {
+			id: "p3",
+			user_id: "u1",
+			content: "総集編よかった",
+			created_at: "2026-10-14T00:00:00Z",
+			anime_id: 1129,
+			broadcast_room_session_id: null,
+			episode_room_id: "room-sp",
+			episode_room: { kind: "special", episode_number: null, special_key: "recap 1", label: "総集編" },
+			anime: { id: 1129, title: "天は赤い河のほとり", cover_url: null, official_hashtag: null },
+			profiles: { username: "u", display_name: null, avatar_url: null },
+			post_hashtags: [],
+		};
+		expect(getPostRoomContext(toPost(raw))).toEqual({
+			href: "/rooms/anime/1129/sp/recap%201",
+			title: "天は赤い河のほとり 総集編",
+		});
+	});
+
+	it("作品ルームの投稿は「作品名 作品ルーム」と出す", () => {
+		const raw: RawPost = {
+			id: "p4",
+			user_id: "u1",
+			content: "x",
+			created_at: "2026-10-14T00:00:00Z",
+			anime_id: 7,
+			broadcast_room_session_id: "s1",
+			broadcast_room_session: { room_date: "2026-10-14", room_kind: "global", room_key: "7:global" },
+			anime: { id: 7, title: "名探偵", cover_url: null, official_hashtag: null },
+			profiles: { username: "u", display_name: null, avatar_url: null },
+			post_hashtags: [],
+		};
+		expect(getPostRoomContext(toPost(raw))).toEqual({ href: "/rooms/anime/7/lobby", title: "名探偵 作品ルーム" });
 	});
 
 	it("統合済みのルームに残った投稿は、その話数を使わない（遷移先と食い違わないように）", () => {

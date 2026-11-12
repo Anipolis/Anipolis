@@ -554,7 +554,7 @@ form {
 	width: 44px;
 	height: 44px;
 	border: 1px solid var(--color-border);
-	border-radius: 18px;
+	border-radius: var(--radius);
 	background: var(--color-surface);
 	color: var(--color-text);
 	cursor: pointer;
@@ -575,7 +575,7 @@ form {
 	width: 66px;
 	height: 44px;
 	border: 1px solid var(--color-border);
-	border-radius: 18px;
+	border-radius: var(--radius);
 	outline: none;
 	background: var(--color-bg);
 	color: var(--color-text);
@@ -730,7 +730,7 @@ form {
 	.modal-card {
 		width: 100%;
 		max-height: calc(100dvh - 24px);
-		border-radius: 28px 28px 0 0;
+		border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 	}
 	.modal-header {
 		padding: 20px 18px 16px;
@@ -793,7 +793,7 @@ form {
 	min-width: 0;
 	box-sizing: border-box;
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--color-surface);
 	color: var(--color-text);
 	font: inherit;

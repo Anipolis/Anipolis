@@ -89,6 +89,7 @@ let { data, form }: PageProps = $props();
 	width: 36px;
 	height: 36px;
 	border-radius: 50%;
+	corner-shape: round;
 	flex-shrink: 0;
 	object-fit: cover;
 }

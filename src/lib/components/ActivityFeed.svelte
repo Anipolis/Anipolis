@@ -6,19 +6,25 @@ import { formatRelativeTime } from "$lib/utils/format";
 import UserAvatar from "./UserAvatar.svelte";
 
 /**
- * 「アクティビティ」（181）。タイムラインではフォロー中の人の、プロフィールではその人のマイリストの動きを並べる。
+ * 「アクティビティ」（181）。タイムラインでは自分とフォロー中の人の（195）、プロフィールではその人のマイリストの動きを並べる。
  * 同じ人が同じステータスに続けて入れた分は1行にまとめ、まとまりは広げてから作品ごとにいいねする
  * （まとまり全体へのいいねは、何に共感したのかが伝わらないため置かない）
  */
 interface Props {
 	items: MylistActivity[];
-	/** いいねを押せるか。押せないとき（未ログイン・自分の記録）はいいねの数だけ出す */
+	/** いいねを押せるか。押せないとき（未ログイン）はいいねの数だけ出す。自分の記録は viewerId で見分ける */
 	canLike: boolean;
 	/** 行ごとに人のアイコンと名前を出すか。プロフィールでは全部同じ人なので出さない */
 	showUser?: boolean;
+	/** 見ている人の ID。その人の記録はいいねボタンを出さず（数だけ）、スコアを「自分のもの」の青で出す */
+	viewerId?: string | null | undefined;
 }
 
-let { items, canLike, showUser = true }: Props = $props();
+let { items, canLike, showUser = true, viewerId = null }: Props = $props();
+
+function isOwn(item: MylistActivity): boolean {
+	return viewerId != null && item.user.id === viewerId;
+}
 
 const groups = $derived(groupActivities(items));
 const expanded = new SvelteSet<string>();
@@ -34,10 +40,6 @@ let popping = $state<string | null>(null);
 
 function likeState(item: MylistActivity) {
 	return likeOverrides[item.id] ?? { liked: item.liked, count: item.like_count };
-}
-
-function groupLikeCount(group: ActivityGroup): number {
-	return group.items.reduce((sum, item) => sum + likeState(item).count, 0);
 }
 
 async function toggleLike(item: MylistActivity) {
@@ -91,7 +93,7 @@ function userName(group: ActivityGroup): string {
 
 {#snippet likeButton(item: MylistActivity)}
 	{@const state = likeState(item)}
-	{#if !canLike}
+	{#if !canLike || isOwn(item)}
 		{#if state.count > 0}
 			<span class="activity-like activity-like--static" role="img" aria-label="いいね {state.count}">
 				<span class="i-lucide-heart" aria-hidden="true"></span>
@@ -143,7 +145,13 @@ function userName(group: ActivityGroup): string {
 			<span class="activity-anime-text">
 				<span class="activity-anime-title">{item.anime.title}</span>
 				{#if item.score != null}
-					<span class="activity-score" role="img" aria-label="スコア {item.score}">★ {item.score}</span>
+					<span
+						class="activity-score"
+						class:activity-score--mine={isOwn(item)}
+						role="img"
+						aria-label="スコア {item.score}"
+						>★ {item.score}</span
+					>
 				{/if}
 			</span>
 		</a>
@@ -198,11 +206,10 @@ function userName(group: ActivityGroup): string {
 							aria-expanded="true"
 							onclick={() => toggleExpanded(group.key)}
 						>
-							<span class="i-lucide-chevron-up" aria-hidden="true"></span>
 							たたむ
+							<span class="i-lucide-chevron-up" aria-hidden="true"></span>
 						</button>
 					{:else}
-						{@const totalLikes = groupLikeCount(group)}
 						<button
 							type="button"
 							class="activity-collapsed"
@@ -218,13 +225,6 @@ function userName(group: ActivityGroup): string {
 									<span class="activity-cover-more">+{group.items.length - PREVIEW_COVERS}</span>
 								{/if}
 							</span>
-							{#if totalLikes > 0}
-								<!-- 中のいいねが閉じたままでも分かるように、合計だけ出す -->
-								<span class="activity-group-likes" role="img" aria-label="いいね {totalLikes}">
-									<span class="i-lucide-heart" aria-hidden="true"></span>
-									{totalLikes}
-								</span>
-							{/if}
 							<span class="activity-toggle-label">
 								広げる
 								<span class="i-lucide-chevron-down" aria-hidden="true"></span>
@@ -320,6 +320,10 @@ function userName(group: ActivityGroup): string {
 	font-size: 12px;
 	font-weight: 700;
 }
+/* 自分のスコアは青（一覧カードと同じ「自分のもの」の色）。他の人のスコアは黄色 */
+.activity-score--mine {
+	color: var(--color-accent);
+}
 .activity-cover {
 	display: block;
 	flex-shrink: 0;
@@ -328,11 +332,12 @@ function userName(group: ActivityGroup): string {
 	border-radius: 4px;
 	background: var(--color-bg-card);
 }
+/* コレクションを共有したカードのカバーと同じ大きさ（60px）。たたんだ並びは1行に収めるので少し小さく */
 .activity-cover--md {
-	width: 36px;
+	width: 60px;
 }
 .activity-cover--sm {
-	width: 32px;
+	width: 44px;
 }
 .activity-cover img {
 	display: block;
@@ -406,19 +411,6 @@ function userName(group: ActivityGroup): string {
 	font-weight: 700;
 	white-space: nowrap;
 }
-.activity-group-likes {
-	display: inline-flex;
-	flex-shrink: 0;
-	align-items: center;
-	gap: 3px;
-	color: #f43f5e;
-	font-size: 12px;
-	font-weight: 700;
-}
-.activity-group-likes span {
-	width: 13px;
-	height: 13px;
-}
 .activity-toggle-label,
 .activity-toggle {
 	display: inline-flex;
@@ -430,12 +422,14 @@ function userName(group: ActivityGroup): string {
 	font-size: 12px;
 	font-weight: 600;
 }
+/* 「広げる」と同じく右端に置く。文字の右端が「広げる」とそろうよう、左右の余白の分だけはみ出させる */
 .activity-toggle {
-	align-self: flex-start;
-	margin-left: 0;
+	align-self: flex-end;
+	margin-right: -8px;
 	padding: 4px 8px;
 	border: 0;
 	border-radius: 999px;
+	corner-shape: round;
 	background: transparent;
 	color: var(--color-text-muted);
 	cursor: pointer;

@@ -440,7 +440,7 @@ const handleCancelSubmit: SubmitFunction = () => {
 	.modal-card {
 		width: 100%;
 		max-height: calc(100dvh - 24px);
-		border-radius: 28px 28px 0 0;
+		border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 	}
 }
 </style>

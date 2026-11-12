@@ -261,7 +261,7 @@ async function loadMoreReplies(event: MouseEvent) {
 	align-self: flex-start;
 	padding: 4px 6px;
 	border: none;
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	background: transparent;
 	cursor: pointer;
 }

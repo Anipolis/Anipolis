@@ -18,10 +18,10 @@ import type { Actions, PageServerLoad } from "./$types";
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 	const anime = await getAnime(supabase, params.id, user?.id ?? null);
-	if (anime?.room_type !== "global") throw error(404, "総合ロビーが見つかりません");
+	if (anime?.room_type !== "global") throw error(404, "作品ルームが見つかりません");
 
 	const session = await getGlobalAnimeLobbySession(supabase, anime.id);
-	if (!session) throw error(404, "総合ロビーが見つかりません");
+	if (!session) throw error(404, "作品ルームが見つかりません");
 
 	const hashtag = roomHashtag(anime);
 	const [posts, trending, animeTrending] = await Promise.all([
@@ -41,7 +41,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, safeGet
 			posting_opens_at: session.posting_opens_at,
 			posting_closes_at: session.posting_closes_at,
 			duration_minutes: session.duration_minutes,
-			title: `${anime.title} 総合ロビー`,
+			title: `${anime.title} 作品ルーム`,
 		},
 		posts,
 		trending: trending.data ?? [],
@@ -66,10 +66,10 @@ export const actions: Actions = {
 		if (!user) return fail(401, { message: "ログインが必要です" });
 
 		const anime = await getAnime(supabase, params.id, user.id);
-		if (anime?.room_type !== "global") return fail(404, { message: "総合ロビーが見つかりません" });
+		if (anime?.room_type !== "global") return fail(404, { message: "作品ルームが見つかりません" });
 
 		const session = await getGlobalAnimeLobbySession(supabase, anime.id);
-		if (!session) return fail(404, { message: "総合ロビーが見つかりません" });
+		if (!session) return fail(404, { message: "作品ルームが見つかりません" });
 
 		const form = await request.formData();
 		const rawContent = (form.get("content") as string | null) ?? "";

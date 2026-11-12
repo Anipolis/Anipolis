@@ -7,6 +7,7 @@ import {
 	validateExchangeSubjectiveTags,
 } from "$lib/exchange-tags";
 import { parseMylistNote, parseWatchDates } from "$lib/mylist/entry-details";
+import type { TransferEntry } from "$lib/mylist-transfer";
 import { normalizePostContent } from "$lib/post-content";
 import { isPostImageUsable } from "$lib/post-image-lifetime";
 import { ownedPostImagePath } from "$lib/post-image-url";
@@ -1905,4 +1906,103 @@ export async function revokeInviteAction(request: Request, supabase: SupabaseCli
 	}
 
 	return { inviteRevoked: true };
+}
+
+// ---------- マイリストの読み込み（#358） ----------
+
+/** 1 回の RPC に渡す件数（202 の上限と同じ） */
+const MYLIST_IMPORT_CHUNK = 500;
+
+export interface MylistImportResult {
+	inserted: number;
+	updated: number;
+	skipped: number;
+	/** MAL の ID に当たる作品が Anipolis に無かった行 */
+	unmatched: { malId: number; title: string }[];
+}
+
+/**
+ * 読み込んだ行を MAL の ID で作品に突き合わせ、import_mylist_entries（202）で書き込む。
+ * 取り込み中はアクティビティを作らず、日付の自動入力もしない（202 のトリガー側の扱い）。
+ * 話数の進捗は作品の話数を超えないように丸める。
+ */
+export async function importMylistEntries(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+	entries: TransferEntry[],
+	overwrite: boolean,
+): Promise<{ ok: true; result: MylistImportResult } | { ok: false; status: number; message: string }> {
+	const moderationFailure = await ensureAccountCanWrite(supabase, userId);
+	if (moderationFailure) {
+		return { ok: false, status: moderationFailure.status, message: moderationFailure.data.message };
+	}
+
+	const malIds = [...new Set(entries.map((entry) => entry.malId))];
+	const animeByMalId = new Map<number, { id: number; episode_count: number | null }>();
+	for (let start = 0; start < malIds.length; start += 300) {
+		const { data, error: lookupError } = await supabase
+			.from("anime")
+			.select("id, mal_id, episode_count")
+			.in("mal_id", malIds.slice(start, start + 300))
+			.order("id", { ascending: true });
+		if (lookupError) return { ok: false, status: 500, message: "作品の突き合わせに失敗しました" };
+		for (const row of data ?? []) {
+			// 同じ MAL の ID の作品が複数あれば、先に登録された方を使う
+			if (row.mal_id !== null && !animeByMalId.has(row.mal_id)) {
+				const episodes = row.episode_count === null ? null : Number(row.episode_count);
+				animeByMalId.set(row.mal_id, {
+					id: row.id,
+					episode_count: episodes !== null && Number.isFinite(episodes) ? episodes : null,
+				});
+			}
+		}
+	}
+
+	const unmatched: MylistImportResult["unmatched"] = [];
+	const rows: Json[] = [];
+	for (const entry of entries) {
+		const anime = animeByMalId.get(entry.malId);
+		if (!anime) {
+			unmatched.push({ malId: entry.malId, title: entry.title });
+			continue;
+		}
+		const maxEpisodes = anime.episode_count && anime.episode_count > 0 ? anime.episode_count : null;
+		rows.push({
+			anime_id: anime.id,
+			status: entry.status,
+			score: entry.score,
+			progress: maxEpisodes ? Math.min(entry.progress, maxEpisodes) : entry.progress,
+			started_on: entry.startedOn,
+			finished_on: entry.finishedOn,
+		});
+	}
+
+	const result: MylistImportResult = { inserted: 0, updated: 0, skipped: 0, unmatched };
+	// 202 の RPC。生成された型（database.types.ts）に入るまでは、引数と戻り値をここで決める
+	const rpc = supabase.rpc as unknown as (
+		name: "import_mylist_entries",
+		args: { p_entries: Json; p_overwrite: boolean },
+	) => PromiseLike<{ data: { inserted: number; updated: number; skipped: number } | null; error: unknown }>;
+	for (let start = 0; start < rows.length; start += MYLIST_IMPORT_CHUNK) {
+		const { data, error: importError } = await rpc.call(supabase, "import_mylist_entries", {
+			p_entries: rows.slice(start, start + MYLIST_IMPORT_CHUNK),
+			p_overwrite: overwrite,
+		});
+		if (importError || !data) {
+			console.error("[mylist import] rpc failed", importError);
+			const done = result.inserted + result.updated + result.skipped;
+			return {
+				ok: false,
+				status: 500,
+				message:
+					done > 0
+						? `途中で失敗しました（${done} 件までは取り込み済み）。もう一度読み込むと続きから入ります`
+						: "マイリストの読み込みに失敗しました",
+			};
+		}
+		result.inserted += data.inserted;
+		result.updated += data.updated;
+		result.skipped += data.skipped;
+	}
+	return { ok: true, result };
 }

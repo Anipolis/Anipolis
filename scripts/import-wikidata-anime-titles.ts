@@ -134,7 +134,7 @@ async function fetchAnimeSeasonSourceRows(
 			.order("mal_id", { ascending: true })
 			.order("source", { ascending: true })
 			.range(start, start + DATABASE_BATCH_SIZE - 1);
-		if (error) throw new Error(`Could not read ODbL/Jikan season source records: ${error.message}`);
+		if (error) throw new Error(`Could not read ODbL/Jikan/MAL season source records: ${error.message}`);
 		rows.push(...((data ?? []) as AnimeSeasonSourceRow[]));
 		if (!data || data.length < DATABASE_BATCH_SIZE) break;
 	}
@@ -217,7 +217,7 @@ async function main() {
 	const season = `${options.year}-${options.season}`;
 	const supabase = getSupabaseClient();
 	const seasonSourceRows = await fetchAnimeSeasonSourceRows(supabase, season);
-	if (seasonSourceRows.length === 0) throw new Error(`No ODbL or Jikan source records found for ${season}.`);
+	if (seasonSourceRows.length === 0) throw new Error(`No ODbL, Jikan or MAL source records found for ${season}.`);
 	const malIds = collectAnimeCatalogSeasonMalIds(seasonSourceRows);
 
 	const bindings = await fetchWikidataBindings(malIds);

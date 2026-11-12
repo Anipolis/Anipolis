@@ -39,12 +39,17 @@ function fakeSupabase(anime: TableResult, overrides: Record<string, TableResult>
 	return { client: { from, rpc }, calls };
 }
 
-async function runLoad(q: string, anime: TableResult, overrides: Record<string, TableResult> = {}) {
+async function runLoad(
+	q: string,
+	anime: TableResult,
+	overrides: Record<string, TableResult> = {},
+	user: { id: string } | null = { id: "viewer" },
+) {
 	const { client, calls } = fakeSupabase(anime, overrides);
 	const url = new URL(`http://localhost/search?q=${encodeURIComponent(q)}`);
 	const event = {
 		url,
-		locals: { supabase: client, safeGetSession: async () => ({ user: null, session: null }) },
+		locals: { supabase: client, safeGetSession: async () => ({ user, session: null }) },
 	} as unknown as Parameters<typeof load>[0];
 	const data = (await load(event)) as { posts: unknown[] } & Record<string, unknown>;
 	const postsFilter = calls.find((c) => c.table === "posts" && c.method === "or")?.args[0] as string | undefined;
@@ -105,5 +110,17 @@ describe("search page load: failures are not shown as empty results（#262）", 
 		expect(data["postsFailed"]).toBe(false);
 		expect(data["usersFailed"]).toBe(true);
 		expect(data.posts).toHaveLength(1);
+	});
+});
+
+describe("search page load: 未ログイン", () => {
+	it("投稿は検索せず、アカウントだけ返す", async () => {
+		const users = { data: [{ id: "u1", username: "alice", display_name: null, avatar_url: null }], error: null };
+		const { data, postsFilter, animeQueried } = await runLoad("レイアース", ids(17644), { profiles: users }, null);
+		expect(postsFilter).toBeUndefined();
+		expect(animeQueried).toBe(false);
+		expect(data.posts).toEqual([]);
+		expect(data["postsFailed"]).toBe(false);
+		expect(data["users"]).toHaveLength(1);
 	});
 });

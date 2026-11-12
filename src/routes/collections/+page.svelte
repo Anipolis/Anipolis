@@ -183,7 +183,7 @@ const editing = $derived(data.collections?.find((collection) => collection.id ==
 	margin: 16px;
 	padding: 20px;
 	border: 1px dashed var(--color-border-hover);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: transparent;
 	color: var(--color-text-muted);
 	cursor: pointer;
@@ -232,6 +232,7 @@ const editing = $derived(data.collections?.find((collection) => collection.id ==
 	height: 36px;
 	border: 0;
 	border-radius: 999px;
+	corner-shape: round;
 	background: transparent;
 	color: var(--color-text-muted);
 	cursor: pointer;
@@ -250,7 +251,7 @@ const editing = $derived(data.collections?.find((collection) => collection.id ==
 	min-width: 140px;
 	overflow: hidden;
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--color-surface);
 	box-shadow: 0 8px 24px rgb(0 0 0 / 0.24);
 }

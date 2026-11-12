@@ -4,6 +4,7 @@ import { untrack } from "svelte";
 import { enhance } from "$app/forms";
 import { animePickMeta } from "$lib/anime-picker";
 import AnimeRow from "$lib/components/AnimeRow.svelte";
+import SeoMeta from "$lib/components/SeoMeta.svelte";
 import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
 import { roomReminderStatus, roomReminderTime } from "$lib/room-reminders";
 import { roomReminders } from "$lib/stores/notifications";
@@ -467,7 +468,10 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 }
 </script>
 
-<svelte:head> <title>カレンダー - Anipolis</title> </svelte:head>
+<SeoMeta
+	title="カレンダー - Anipolis"
+	description="今週放送のアニメを曜日・時刻ごとに。放送が始まったら作品のルームでみんなと実況できます。"
+/>
 
 <div class="schedule-page">
 	<header class="schedule-header">
@@ -1326,7 +1330,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	align-items: center;
 	padding: 8px;
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--color-bg-card);
 	color: var(--color-text);
 	text-decoration: none;
@@ -1342,7 +1346,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	width: 36px;
 	aspect-ratio: 400 / 566;
 	overflow: hidden;
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	background: var(--color-border);
 	color: var(--color-accent);
 	font-size: 16px;
@@ -1386,7 +1390,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	justify-content: center;
 	gap: 0.15rem;
 	border: 1px solid var(--border);
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	color: var(--color-text);
 	background: var(--color-surface);
 	text-decoration: none;
@@ -1396,7 +1400,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	cursor: default;
 }
 .create-event-btn {
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	white-space: nowrap;
 }
 .schedule-grid {
@@ -1413,7 +1417,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	font-size: 0.82rem;
 	font-weight: 700;
 	padding: 6px 8px;
-	border-radius: 6px 6px 0 0;
+	border-radius: var(--radius-xs) var(--radius-xs) 0 0;
 	border: 1px solid var(--color-border);
 	border-bottom: none;
 }
@@ -1447,7 +1451,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 /* Anime slot wrapper — holds the card + notify button */
 .anime-slot-wrap {
 	position: relative;
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 }
 .anime-slot-wrap--menu-open {
 	z-index: 4;
@@ -1461,7 +1465,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 /* Event slot wrapper — holds the card + bell button, mirrors .anime-slot-wrap */
 .event-slot-wrap {
 	position: relative;
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 }
 .event-slot-wrap--menu-open {
 	z-index: 4;
@@ -1483,7 +1487,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	display: flex;
 	align-items: flex-start;
 	padding: 6px;
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	border: 1px solid var(--color-border);
 	background: var(--color-surface);
 	text-decoration: none;
@@ -1755,7 +1759,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	width: 240px;
 	padding: 12px;
 	border: 1px solid var(--border);
-	border-radius: 18px;
+	border-radius: var(--radius);
 	background: var(--card-bg);
 	box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
 	display: flex;
@@ -1777,7 +1781,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	gap: 8px;
 	padding: 8px 10px;
 	border: 1px solid var(--border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--hover-bg);
 	color: var(--text-muted);
 	font-size: 0.78rem;
@@ -1913,7 +1917,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	max-height: min(720px, calc(100vh - 2rem));
 	overflow-y: auto;
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--color-surface);
 	padding: 16px;
 	box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
@@ -1935,7 +1939,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	color: var(--color-text-muted);
 }
 .dialog-close:hover {
@@ -1983,7 +1987,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 	gap: 8px;
 	width: 100%;
 	border: 1px solid var(--color-border);
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	background: var(--color-surface);
 	color: var(--color-text);
 }

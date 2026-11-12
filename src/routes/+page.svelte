@@ -6,6 +6,7 @@ import LiveRoomsPanel from "$lib/components/LiveRoomsPanel.svelte";
 import PostCardSkeleton from "$lib/components/PostCardSkeleton.svelte";
 import PostComposer from "$lib/components/PostComposer.svelte";
 import PostRow from "$lib/components/PostRow.svelte";
+import SeoMeta from "$lib/components/SeoMeta.svelte";
 import TimelineLiveRun from "$lib/components/TimelineLiveRun.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import WelcomeCard from "$lib/components/WelcomeCard.svelte";
@@ -140,15 +141,7 @@ $effect(() => {
 });
 </script>
 
-<svelte:head>
-	<title>タイムライン - Anipolis</title>
-	<meta property="og:title" content="Anipolis">
-	<meta
-		property="og:description"
-		content="アニメファンのためのSNS。視聴中のアニメを記録して、感想を投稿・共有しよう。"
-	>
-	<meta property="og:type" content="website">
-</svelte:head>
+<SeoMeta title={data.user ? "タイムライン - Anipolis" : "Anipolis — アニメファンのためのSNS"} />
 
 <div class="page-container">
 	<main class="feed-column">
@@ -254,8 +247,17 @@ $effect(() => {
 			</div>
 		{/if}
 
-		{#if data.tab === "activity"}
-			<!-- フォロー中の人のマイリストの動き（181） -->
+		{#if !data.user}
+			<!-- 投稿の一覧は登録した人だけに見せる。未ログインでも作品とカレンダーは見られる -->
+			<div class="home-guest">
+				<p>投稿は登録すると読めるようになります。</p>
+				<div class="home-guest-links">
+					<a href="/anime" class="btn btn-ghost">アニメを探す</a>
+					<a href="/schedule" class="btn btn-ghost">放送カレンダー</a>
+				</div>
+			</div>
+		{:else if data.tab === "activity"}
+			<!-- 自分とフォロー中の人のマイリストの動き（181・195） -->
 			{#if activity.error}
 				<div class="home-deferred-error" role="alert" data-deferred-error="true">
 					アクティビティを読み込めませんでした。<a href={TAB_HREFS.activity}>再読み込み</a>
@@ -273,12 +275,12 @@ $effect(() => {
 				{#if page.items.length === 0 && !page.nextCursor}
 					<div class="empty-state">
 						<p>
-							フォロー中の人のマイリストの動きはまだありません。<br>
-							フォローしている人が作品を視聴予定・視聴中・完了にすると、ここに流れます。
+							マイリストの動きはまだありません。<br>
+							あなたやフォローしている人が作品を視聴予定・視聴中・完了にすると、ここに流れます。
 						</p>
 					</div>
 				{:else}
-					<ActivityFeed items={page.items} canLike={Boolean(data.profile)} />
+					<ActivityFeed items={page.items} canLike={Boolean(data.profile)} viewerId={data.user?.id} />
 					{#if page.nextCursor}
 						<a href={loadMoreHref(page.nextCursor.createdAt, page.nextCursor.id)} class="load-more-btn">
 							さらに読み込む
@@ -481,6 +483,22 @@ $effect(() => {
 	display: block;
 }
 
+.home-guest {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 12px;
+	padding: 40px 12px;
+	color: var(--color-text-muted);
+	text-align: center;
+}
+.home-guest-links {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 8px;
+}
+
 /* Compose modal */
 .compose-modal-backdrop {
 	position: fixed;
@@ -502,6 +520,8 @@ $effect(() => {
 	display: flex;
 	flex-direction: column;
 	overflow: hidden;
+	/* 投稿欄の上で回したホイールを後ろのタイムラインへ伝えない（#599） */
+	overscroll-behavior: contain;
 }
 
 .compose-modal-header {
