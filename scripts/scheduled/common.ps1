@@ -71,6 +71,11 @@ function Stop-SyncLog {
     $base = $leaf -replace '-[0-9]{8}-[0-9]{4}\.log$', ''
     $latest = Join-Path -Path $script:LogDir -ChildPath ("last-" + $base + ".log")
     Copy-Item -Path $script:LogFile -Destination $latest -Force
+    try {
+        Update-SyncStateAndAlert -Name $base -ExitCode $ExitCode -LogFile $script:LogFile
+    } catch {
+        Write-Host ("warning: sync state/alert update failed: " + $_.Exception.Message)
+    }
 }
 
 function Resolve-Pnpm {
@@ -110,6 +115,172 @@ function Invoke-Step {
         $ErrorActionPreference = $previousPreference
     }
     if ($null -eq $code) { $code = 1 }
-    if ($code -ne 0) { Write-Host ("!!! " + $Label + " failed (exit " + $code + ")") }
+    if ($code -ne 0) {
+        Write-Host ("!!! " + $Label + " failed (exit " + $code + ")")
+        $script:FailedSteps += $Label
+    }
     return [int]$code
+}
+
+# ---- 失敗の知らせ（#596） ----
+# 同期が黙って3週間失敗していたことへの対策。結果を .sync-logs/state-<名前>.json に残し、
+# 失敗したとき・続けて失敗しているステップがあるとき・失敗から戻ったときに Discord の
+# Webhook へ知らせる。Webhook の URL は環境変数か .env の SYNC_ALERT_WEBHOOK_URL。
+# 未設定なら知らせは送らず、状態ファイルだけ更新する。
+$script:FailedSteps = @()
+# 警告扱いのステップでも、この回数続けて失敗したら一度だけ知らせる（慣れて見過ごさないため。毎回は送らない）
+$script:StepStreakAlertThreshold = 3
+
+function Get-EnvFileValue {
+    param([string]$Name)
+    $fromEnv = [System.Environment]::GetEnvironmentVariable($Name)
+    if ($fromEnv) { return $fromEnv }
+    $envFile = Join-Path $script:RepoRoot ".env"
+    if (-not (Test-Path $envFile)) { return $null }
+    foreach ($line in [System.IO.File]::ReadAllLines($envFile, [System.Text.Encoding]::UTF8)) {
+        if ($line -match ('^\s*' + [regex]::Escape($Name) + '\s*=\s*(.*)$')) {
+            return $Matches[1].Trim().Trim('"').Trim("'")
+        }
+    }
+    return $null
+}
+
+function Get-SyncState {
+    param([string]$Name)
+    $path = Join-Path $script:LogDir ("state-" + $Name + ".json")
+    $state = @{ lastSuccessAt = $null; lastRunAt = $null; firstObservedAt = $null; consecutiveFailures = 0; stepStreaks = @{} }
+    if (Test-Path $path) {
+        try {
+            $raw = [System.IO.File]::ReadAllText($path, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
+            if ($raw.lastSuccessAt) { $state.lastSuccessAt = [string]$raw.lastSuccessAt }
+            if ($raw.lastRunAt) { $state.lastRunAt = [string]$raw.lastRunAt }
+            if ($raw.PSObject.Properties.Name -contains "firstObservedAt" -and $raw.firstObservedAt) {
+                $state.firstObservedAt = [string]$raw.firstObservedAt
+            }
+            if ($raw.consecutiveFailures) { $state.consecutiveFailures = [int]$raw.consecutiveFailures }
+            if ($raw.stepStreaks) {
+                foreach ($p in $raw.stepStreaks.PSObject.Properties) { $state.stepStreaks[$p.Name] = [int]$p.Value }
+            }
+        } catch {
+            Write-Host ("warning: could not read " + $path + ": " + $_.Exception.Message)
+        }
+    }
+    return $state
+}
+
+function Save-SyncState {
+    param([string]$Name, [hashtable]$State)
+    $path = Join-Path $script:LogDir ("state-" + $Name + ".json")
+    $json = $State | ConvertTo-Json -Depth 4
+    [System.IO.File]::WriteAllText($path, $json, (New-Object System.Text.UTF8Encoding($false)))
+}
+
+function Get-DaysSince {
+    param([string]$IsoText)
+    if (-not $IsoText) { return $null }
+    try {
+        $then = [DateTime]::Parse($IsoText, [System.Globalization.CultureInfo]::InvariantCulture)
+        return [int][Math]::Floor(((Get-JstNow) - $then).TotalDays)
+    } catch { return $null }
+}
+
+function Send-SyncAlert {
+    param([string]$Message)
+    $url = Get-EnvFileValue -Name "SYNC_ALERT_WEBHOOK_URL"
+    if (-not $url) {
+        Write-Host "SYNC_ALERT_WEBHOOK_URL is not set; alert not sent"
+        return
+    }
+    # Discord の content は 2000 文字まで
+    if ($Message.Length -gt 1900) { $Message = $Message.Substring(0, 1900) + "`n…" }
+    $body = @{ content = $Message } | ConvertTo-Json -Compress
+    try {
+        # PowerShell 5.1 は既定で本文を UTF-8 にしないため、バイト列で送る
+        Invoke-RestMethod -Uri $url -Method Post -ContentType "application/json; charset=utf-8" `
+            -Body ([System.Text.Encoding]::UTF8.GetBytes($body)) -TimeoutSec 20 | Out-Null
+    } catch {
+        Write-Host ("warning: could not send sync alert: " + $_.Exception.Message)
+    }
+}
+
+function Update-SyncStateAndAlert {
+    # Stop-SyncLog から呼ぶ。ログ（トランスクリプト）を閉じた後なので Write-Host はログに残らない。
+    param([string]$Name, [int]$ExitCode, [string]$LogFile)
+    $state = Get-SyncState -Name $Name
+    $nowText = (Get-JstNow).ToString("yyyy-MM-ddTHH:mm:ss")
+    $previousFailures = $state.consecutiveFailures
+    $daysSinceSuccess = Get-DaysSince -IsoText $state.lastSuccessAt
+    $state.lastRunAt = $nowText
+    if ($ExitCode -eq 0) {
+        $state.lastSuccessAt = $nowText
+        $state.consecutiveFailures = 0
+    } else {
+        $state.consecutiveFailures = $previousFailures + 1
+    }
+    # ステップごとの連続失敗。今回失敗しなかったステップは数え直す
+    $streaks = @{}
+    foreach ($label in ($script:FailedSteps | Select-Object -Unique)) {
+        $count = 1
+        if ($state.stepStreaks.ContainsKey($label)) { $count = $state.stepStreaks[$label] + 1 }
+        $streaks[$label] = $count
+    }
+    $state.stepStreaks = $streaks
+    Save-SyncState -Name $Name -State $state
+
+    $longStreaks = @($streaks.GetEnumerator() | Where-Object { $_.Value -eq $script:StepStreakAlertThreshold })
+    $lines = @()
+    if ($ExitCode -ne 0) {
+        $lines += ("[Anipolis] " + $Name + " が失敗しました（" + $state.consecutiveFailures + " 回連続）")
+        if ($null -ne $daysSinceSuccess) { $lines += ("最後に成功: " + $state.lastSuccessAt + "（" + $daysSinceSuccess + " 日前）") }
+        else { $lines += "最後に成功: 記録なし" }
+    } elseif ($longStreaks.Count -gt 0) {
+        $lines += ("[Anipolis] " + $Name + " は成功しましたが、続けて失敗しているステップがあります")
+    } elseif ($previousFailures -gt 0) {
+        Send-SyncAlert -Message ("[Anipolis] " + $Name + " が復旧しました（" + $previousFailures + " 回の失敗のあと成功）")
+        return
+    } else {
+        return
+    }
+    if ($script:FailedSteps.Count -gt 0) {
+        $lines += "失敗したステップ:"
+        foreach ($label in ($script:FailedSteps | Select-Object -Unique)) {
+            $lines += ("- " + $label + "（" + $streaks[$label] + " 回連続）")
+        }
+    }
+    if ($LogFile -and (Test-Path $LogFile)) {
+        $tail = Get-Content -Path $LogFile -Tail 15 -Encoding UTF8 | Where-Object { $_ -notmatch '^\*+$' }
+        $lines += "ログの末尾:"
+        $lines += '```'
+        $lines += ($tail -join "`n")
+        $lines += '```'
+        $lines += ("ログ: " + $LogFile)
+    }
+    Send-SyncAlert -Message ($lines -join "`n")
+}
+
+function Test-StaleSync {
+    # PC が止まっていてタスク自体が動かなかった場合は失敗の知らせも出ない。日次から週次の
+    # 最終成功日を見て、古すぎれば知らせる（$Name の最終成功が $MaxDays 日より前）。
+    # 一度も成功していない（導入後に一度も起動していない）タスクは、最初に見た日時を
+    # firstObservedAt に残し、そこから $MaxDays 日を過ぎたら知らせる。
+    param([string]$Name, [int]$MaxDays)
+    $state = Get-SyncState -Name $Name
+    if ($state.lastSuccessAt) {
+        $days = Get-DaysSince -IsoText $state.lastSuccessAt
+        if ($null -ne $days -and $days -gt $MaxDays) {
+            Write-Host ("warning: " + $Name + " last succeeded " + $days + " days ago")
+            Send-SyncAlert -Message ("[Anipolis] " + $Name + " が " + $days + " 日間成功していません（最後に成功: " + $state.lastSuccessAt + "）")
+        }
+        return
+    }
+    if (-not $state.firstObservedAt) {
+        $state.firstObservedAt = (Get-JstNow).ToString("yyyy-MM-ddTHH:mm:ss")
+        Save-SyncState -Name $Name -State $state
+        return
+    }
+    $days = Get-DaysSince -IsoText $state.firstObservedAt
+    if ($null -ne $days -and $days -gt $MaxDays) {
+        Write-Host ("warning: " + $Name + " has never succeeded since " + $state.firstObservedAt)
+        Send-SyncAlert -Message ("[Anipolis] " + $Name + " が一度も成功していません（見張り始め: " + $state.firstObservedAt + "、" + $days + " 日前）")
+    }
 }

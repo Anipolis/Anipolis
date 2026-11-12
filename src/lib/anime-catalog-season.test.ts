@@ -21,3 +21,11 @@ describe("collectAnimeCatalogSeasonMalIds", () => {
 		).toEqual([100, 200]);
 	});
 });
+
+describe("ANIME_CATALOG_SEASON_SOURCES", () => {
+	it("counts MAL-only anime so a Jikan outage does not drop new seasons", async () => {
+		const { ANIME_CATALOG_SEASON_SOURCES } = await import("./anime-catalog-season");
+		expect(ANIME_CATALOG_SEASON_SOURCES).toContain("mal");
+		expect(collectAnimeCatalogSeasonMalIds([{ mal_id: 300, source: "mal" }])).toEqual([300]);
+	});
+});
