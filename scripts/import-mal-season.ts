@@ -258,7 +258,7 @@ async function fetchSeasonMalIds(supabase: ReturnType<typeof getSupabaseClient>,
 			.order("mal_id", { ascending: true })
 			.order("source", { ascending: true })
 			.range(start, start + DATABASE_BATCH_SIZE - 1);
-		if (error) throw new Error(`Could not read ODbL/Jikan season source records: ${error.message}`);
+		if (error) throw new Error(`Could not read ODbL/Jikan/MAL season source records: ${error.message}`);
 		rows.push(...((data ?? []) as SeasonSourceRow[]));
 		if (!data || data.length < DATABASE_BATCH_SIZE) break;
 	}

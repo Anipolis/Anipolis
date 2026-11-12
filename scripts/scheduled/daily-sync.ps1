@@ -12,6 +12,8 @@ try {
         -PnpmArgs @("sync:syobocal-programs", "--", "--year", [string]$current.Year, "--season", $current.Season)
     $thumbExit = Invoke-Step -Label "generate:cover-thumbnails" -PnpmArgs @("generate:cover-thumbnails")
     if ($exit -eq 0) { $exit = $thumbExit }
+    # 週次（月曜）が動いていない・失敗し続けている場合に気づけるよう、最終成功から 8 日を超えたら知らせる
+    Test-StaleSync -Name "weekly-sync" -MaxDays 8
 } catch {
     Write-Host ("!!! unhandled: " + $_.Exception.Message)
     $exit = 1
