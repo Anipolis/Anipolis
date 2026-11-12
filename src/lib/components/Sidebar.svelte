@@ -136,7 +136,14 @@ function isActive(path: string): boolean {
 <!-- Mobile header (≤960px only) -->
 <header class="mobile-header">
 	<!-- svelte-ignore a11y_consider_explicit_label -->
-	<button type="button" class="mobile-hamburger" onclick={() => (drawerOpen = true)} aria-label="メニューを開く">
+	<button
+		type="button"
+		class="mobile-hamburger"
+		onclick={() => (drawerOpen = true)}
+		aria-label={session && unreadReminderCount > 0
+			? "メニューを開く（放送前のお知らせがあります）"
+			: "メニューを開く"}
+	>
 		<svg
 			width="22"
 			height="22"
@@ -152,6 +159,10 @@ function isActive(path: string): boolean {
 			<line x1="3" y1="12" x2="21" y2="12" />
 			<line x1="3" y1="18" x2="21" y2="18" />
 		</svg>
+		<!-- カレンダーはメニューの中にあるので、放送前のお知らせはメニューのボタンにも点で出す -->
+		{#if session && unreadReminderCount > 0}
+			<span class="mobile-hamburger-dot" aria-hidden="true"></span>
+		{/if}
 	</button>
 	<!-- 初期設定の途中（minimal）は、押すと入力が消えて初期設定に戻されるだけなのでリンクにしない -->
 	<svelte:element
@@ -275,11 +286,6 @@ function isActive(path: string): boolean {
 	{#if !minimal}
 		<nav class="mobile-drawer-nav">
 			{#if session}
-				<a href="/anime" class="mobile-drawer-btn" class:active={isActive("/anime")} onclick={closeDrawer}>
-					<AnimeIcon size={20} />
-					アニメ
-				</a>
-
 				{#if profile}
 					<a
 						href="/profile/{profile.username}"
@@ -304,6 +310,32 @@ function isActive(path: string): boolean {
 						プロフィール
 					</a>
 				{/if}
+
+				<a
+					href="/schedule"
+					class="mobile-drawer-btn"
+					class:active={isActive("/schedule") || isActive("/events")}
+					onclick={closeDrawer}
+				>
+					<svg
+						width="20"
+						height="20"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+						<path d="M16 2l-4 5-4-5" />
+					</svg>
+					カレンダー
+					{#if unreadReminderCount > 0}
+						<span class="mobile-drawer-dot" role="status" aria-label="放送前のお知らせがあります"></span>
+					{/if}
+				</a>
 
 				<a
 					href="/collections"
@@ -1157,6 +1189,32 @@ function isActive(path: string): boolean {
 .mobile-drawer-btn.active {
 	color: var(--color-accent);
 	background: rgba(99, 102, 241, 0.08);
+}
+
+.mobile-hamburger {
+	position: relative;
+}
+
+.mobile-hamburger-dot {
+	position: absolute;
+	top: 5px;
+	right: 4px;
+	width: 10px;
+	height: 10px;
+	border: 2px solid var(--color-bg);
+	border-radius: 9999px;
+	corner-shape: round;
+	background: var(--color-accent);
+	pointer-events: none;
+}
+
+.mobile-drawer-dot {
+	margin-left: auto;
+	width: 8px;
+	height: 8px;
+	border-radius: 9999px;
+	corner-shape: round;
+	background: var(--color-accent);
 }
 
 .mobile-drawer-badge {
