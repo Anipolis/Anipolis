@@ -148,12 +148,15 @@ function Get-EnvFileValue {
 function Get-SyncState {
     param([string]$Name)
     $path = Join-Path $script:LogDir ("state-" + $Name + ".json")
-    $state = @{ lastSuccessAt = $null; lastRunAt = $null; consecutiveFailures = 0; stepStreaks = @{} }
+    $state = @{ lastSuccessAt = $null; lastRunAt = $null; firstObservedAt = $null; consecutiveFailures = 0; stepStreaks = @{} }
     if (Test-Path $path) {
         try {
             $raw = [System.IO.File]::ReadAllText($path, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
             if ($raw.lastSuccessAt) { $state.lastSuccessAt = [string]$raw.lastSuccessAt }
             if ($raw.lastRunAt) { $state.lastRunAt = [string]$raw.lastRunAt }
+            if ($raw.PSObject.Properties.Name -contains "firstObservedAt" -and $raw.firstObservedAt) {
+                $state.firstObservedAt = [string]$raw.firstObservedAt
+            }
             if ($raw.consecutiveFailures) { $state.consecutiveFailures = [int]$raw.consecutiveFailures }
             if ($raw.stepStreaks) {
                 foreach ($p in $raw.stepStreaks.PSObject.Properties) { $state.stepStreaks[$p.Name] = [int]$p.Value }
@@ -258,12 +261,26 @@ function Update-SyncStateAndAlert {
 function Test-StaleSync {
     # PC が止まっていてタスク自体が動かなかった場合は失敗の知らせも出ない。日次から週次の
     # 最終成功日を見て、古すぎれば知らせる（$Name の最終成功が $MaxDays 日より前）。
+    # 一度も成功していない（導入後に一度も起動していない）タスクは、最初に見た日時を
+    # firstObservedAt に残し、そこから $MaxDays 日を過ぎたら知らせる。
     param([string]$Name, [int]$MaxDays)
     $state = Get-SyncState -Name $Name
-    $days = Get-DaysSince -IsoText $state.lastSuccessAt
-    if ($null -eq $days) { return }
-    if ($days -gt $MaxDays) {
-        Write-Host ("warning: " + $Name + " last succeeded " + $days + " days ago")
-        Send-SyncAlert -Message ("[Anipolis] " + $Name + " が " + $days + " 日間成功していません（最後に成功: " + $state.lastSuccessAt + "）")
+    if ($state.lastSuccessAt) {
+        $days = Get-DaysSince -IsoText $state.lastSuccessAt
+        if ($null -ne $days -and $days -gt $MaxDays) {
+            Write-Host ("warning: " + $Name + " last succeeded " + $days + " days ago")
+            Send-SyncAlert -Message ("[Anipolis] " + $Name + " が " + $days + " 日間成功していません（最後に成功: " + $state.lastSuccessAt + "）")
+        }
+        return
+    }
+    if (-not $state.firstObservedAt) {
+        $state.firstObservedAt = (Get-JstNow).ToString("yyyy-MM-ddTHH:mm:ss")
+        Save-SyncState -Name $Name -State $state
+        return
+    }
+    $days = Get-DaysSince -IsoText $state.firstObservedAt
+    if ($null -ne $days -and $days -gt $MaxDays) {
+        Write-Host ("warning: " + $Name + " has never succeeded since " + $state.firstObservedAt)
+        Send-SyncAlert -Message ("[Anipolis] " + $Name + " が一度も成功していません（見張り始め: " + $state.firstObservedAt + "、" + $days + " 日前）")
     }
 }
