@@ -4,6 +4,7 @@ import { beforeNavigate, goto, invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
 import type { AnimePick } from "$lib/anime-picker";
 import { collectionKindPrefix, collectionTierColor, MAX_COLLECTION_ITEMS, orderByTier } from "$lib/collections";
+import BackLink from "$lib/components/BackLink.svelte";
 import CollectionBoard from "$lib/components/CollectionBoard.svelte";
 import CollectionFormModal from "$lib/components/CollectionFormModal.svelte";
 import CollectionSearch from "$lib/components/CollectionSearch.svelte";
@@ -352,10 +353,7 @@ async function copyLink() {
 	<main class="feed-column feed-column--wide collection-page">
 		<header class="collection-header">
 			{#if data.isOwn}
-				<a href="/collections" class="collection-back">
-					<span class="i-lucide-arrow-left" aria-hidden="true"></span>
-					コレクション一覧
-				</a>
+				<BackLink fallbackHref="/collections" class="collection-back" />
 			{/if}
 			<a href={data.isOwn ? "/collections" : `/profile/${collection.owner.username}`} class="collection-owner">
 				<UserAvatar src={collection.owner.avatar_url} username={ownerName} size="xs" />
@@ -613,7 +611,7 @@ async function copyLink() {
 	padding: 20px 16px 16px;
 	border-bottom: 1px solid var(--color-border);
 }
-.collection-back {
+:global(.collection-back) {
 	display: inline-flex;
 	align-items: center;
 	align-self: flex-start;
@@ -623,7 +621,7 @@ async function copyLink() {
 	font-size: 13px;
 	text-decoration: none;
 }
-.collection-back:hover {
+:global(.collection-back:hover) {
 	color: var(--color-text);
 }
 .collection-owner {

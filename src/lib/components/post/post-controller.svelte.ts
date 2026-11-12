@@ -1,5 +1,6 @@
 import type { SubmitFunction } from "@sveltejs/kit";
 import { tick } from "svelte";
+import { goto } from "$app/navigation";
 import { confirmReaction } from "$lib/reaction-confirm";
 import { isReactionFailure } from "$lib/reaction-feedback";
 import { createReactionFeedback } from "$lib/reaction-feedback.svelte";
@@ -156,6 +157,11 @@ export class PostController {
 					return;
 				}
 				this.deleteModalOpen = false;
+				// 詳細ページで消したら親（ホーム）へ。履歴を置き換えて、戻るで消した投稿に戻らないようにする
+				if (location.pathname === `/posts/${this.post.id}`) {
+					await goto("/", { replaceState: true });
+					return;
+				}
 				await update();
 			} finally {
 				this.deleting = false;

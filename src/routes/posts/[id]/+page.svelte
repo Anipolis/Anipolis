@@ -2,6 +2,7 @@
 import type { SubmitFunction } from "@sveltejs/kit";
 import { enhance } from "$app/forms";
 import { page } from "$app/state";
+import BackLink from "$lib/components/BackLink.svelte";
 import PostCardSkeleton from "$lib/components/PostCardSkeleton.svelte";
 import PostDetail from "$lib/components/PostDetail.svelte";
 import PostRow from "$lib/components/PostRow.svelte";
@@ -71,8 +72,7 @@ $effect(() => {
 
 <div class="page-container">
 	<main class="feed-column">
-		<a href="/" class="post-detail-back" aria-label="タイムラインに戻る">
-			<span class="sr-only">タイムラインに戻る</span>
+		<BackLink fallbackHref="/" class="post-detail-back">
 			<svg
 				width="18"
 				height="18"
@@ -86,7 +86,7 @@ $effect(() => {
 			>
 				<path d="m15 18-6-6 6-6" />
 			</svg>
-		</a>
+		</BackLink>
 
 		{#if thread.value === null && thread.error}
 			<div class="empty-state" role="alert">

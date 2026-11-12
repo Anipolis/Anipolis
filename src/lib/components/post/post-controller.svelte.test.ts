@@ -3,6 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import type { Post } from "$lib/types";
 import { PostController } from "./post-controller.svelte";
 
+const { goto } = vi.hoisted(() => ({ goto: vi.fn(async () => {}) }));
+vi.mock("$app/navigation", () => ({ goto }));
+
 function makePost(overrides: Partial<Post> = {}): Post {
 	return {
 		id: "p1",
@@ -139,5 +142,33 @@ describe("PostController reactions", () => {
 		expect(controller.bookmarkedByMe).toBe(true);
 		expect(controller.repostedByMe).toBe(true);
 		expect(controller.repostCount).toBe(3);
+	});
+});
+
+describe("PostController delete", () => {
+	it("詳細ページで消したらホームへ移り、履歴を置き換える", async () => {
+		history.replaceState(null, "", "/posts/p1");
+		goto.mockClear();
+		const controller = new PostController(
+			() => makePost(),
+			() => "author",
+		);
+		const { callback } = start(controller.handleDelete as Submit);
+		const update = await finish(callback, success({}));
+		expect(goto).toHaveBeenCalledWith("/", { replaceState: true });
+		expect(update).not.toHaveBeenCalled();
+	});
+
+	it("タイムラインで消したらページを移らずに読み直す", async () => {
+		history.replaceState(null, "", "/");
+		goto.mockClear();
+		const controller = new PostController(
+			() => makePost(),
+			() => "author",
+		);
+		const { callback } = start(controller.handleDelete as Submit);
+		const update = await finish(callback, success({}));
+		expect(goto).not.toHaveBeenCalled();
+		expect(update).toHaveBeenCalled();
 	});
 });
