@@ -1005,6 +1005,13 @@ function listButtonFor(anime: Anime) {
 				<div class="empty-state profile-private-state">
 					<p>このアカウントの投稿はフォロワーだけが見ることができます</p>
 				</div>
+			{:else if !data.user}
+				<div class="empty-state">
+					<p>
+						<a href="/auth?next={encodeURIComponent(page.url.pathname + page.url.search)}">ログイン</a
+						>すると投稿が見られます
+					</p>
+				</div>
 			{:else if listPosts.length === 0 && !data.listNextCursor}
 				<div class="empty-state">
 					<p>まだ投稿がありません</p>
@@ -1024,6 +1031,13 @@ function listButtonFor(anime: Anime) {
 			{#if !canViewContent}
 				<div class="empty-state profile-private-state">
 					<p>このアカウントの画像投稿はフォロワーだけが見ることができます</p>
+				</div>
+			{:else if !data.user}
+				<div class="empty-state">
+					<p>
+						<a href="/auth?next={encodeURIComponent(page.url.pathname + page.url.search)}">ログイン</a
+						>すると投稿が見られます
+					</p>
 				</div>
 			{:else if listPosts.length === 0 && !data.listNextCursor}
 				<div class="empty-state">

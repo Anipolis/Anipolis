@@ -2,13 +2,16 @@
 import { deletePostAction, toggleBookmarkAction, toggleLikeAction, toggleRepostAction } from "$lib/server/actions";
 import { buildPostCardSelect } from "$lib/server/post-selects";
 import { enrichPostsWithCounts, getAnimeRankingTrending } from "$lib/server/queries";
+import { redirectToLogin } from "$lib/server/require-login";
 import type { RawPost } from "$lib/types";
 import type { Actions, PageServerLoad } from "./$types";
 
 const POSTS_SELECT = buildPostCardSelect();
 
-export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {
+export const load: PageServerLoad = async ({ params, url, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
+	// 投稿の一覧は登録した人だけに見せる（共有された投稿の詳細だけは未ログインでも開ける）
+	if (!user) redirectToLogin(url);
 	const tag = params.tag.toLowerCase();
 
 	const { data: hashtag } = await supabase.from("hashtags").select("id").eq("name", tag).maybeSingle();

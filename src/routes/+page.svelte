@@ -254,7 +254,16 @@ $effect(() => {
 			</div>
 		{/if}
 
-		{#if data.tab === "activity"}
+		{#if !data.user}
+			<!-- 投稿の一覧は登録した人だけに見せる。未ログインでも作品とカレンダーは見られる -->
+			<div class="home-guest">
+				<p>投稿は登録すると読めるようになります。</p>
+				<div class="home-guest-links">
+					<a href="/anime" class="btn btn-ghost">アニメを探す</a>
+					<a href="/schedule" class="btn btn-ghost">放送カレンダー</a>
+				</div>
+			</div>
+		{:else if data.tab === "activity"}
 			<!-- 自分とフォロー中の人のマイリストの動き（181・195） -->
 			{#if activity.error}
 				<div class="home-deferred-error" role="alert" data-deferred-error="true">
@@ -479,6 +488,22 @@ $effect(() => {
 /* The inline composer is available on every viewport. */
 .composer-desktop {
 	display: block;
+}
+
+.home-guest {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 12px;
+	padding: 40px 12px;
+	color: var(--color-text-muted);
+	text-align: center;
+}
+.home-guest-links {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 8px;
 }
 
 /* Compose modal */
