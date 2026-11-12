@@ -1,4 +1,4 @@
-# macOS dummy files
+# macOS dummy file
 .DS_Store
 
 # Node.js dependencies
@@ -36,9 +36,6 @@ supabase/.temp/
 .env.*
 !.env.example
 
-# Personal references
-refs/
-
 # ローカル同期(scripts/scheduled)のログ
 .sync-logs/
 
@@ -50,3 +47,6 @@ docs/professor-*.md
 
 # 個人の VS Code ワークスペース設定
 *.code-workspace
+
+# Personal references
+refs/
