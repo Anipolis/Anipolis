@@ -5,11 +5,19 @@
  * - 入口が一つのページ（設定の各ページ・管理画面など）は常に親へ移動し、行き先を表記する
  */
 
-let navigatedInApp = false;
+/** SvelteKit が history.state に入れる履歴の通し番号（同じ文書の中で 1 ずつ増え、置き換えでは変わらない） */
+const HISTORY_INDEX_KEY = "sveltekit:history";
 
-/** ルートのレイアウトの afterNavigate から呼ぶ。アプリ内の遷移があったかを覚える（Navigation API が無いブラウザ用） */
+let entryHistoryIndex: number | null = null;
+
+function currentHistoryIndex(): number | null {
+	const index = (history.state as Record<string, unknown> | null)?.[HISTORY_INDEX_KEY];
+	return typeof index === "number" ? index : null;
+}
+
+/** ルートのレイアウトの afterNavigate から呼ぶ。読み込んだ時点の履歴の位置を覚える（Navigation API が無いブラウザ用） */
 export function recordNavigation(type: string): void {
-	if (type !== "enter") navigatedInApp = true;
+	if (type === "enter") entryHistoryIndex = currentHistoryIndex();
 }
 
 type NavigationLike = { currentEntry?: { index: number } | null };
@@ -19,5 +27,7 @@ export function canGoBackInApp(): boolean {
 	const navigation = (globalThis as { navigation?: NavigationLike }).navigation;
 	// entries は同じオリジンで連続した履歴だけを数えるので、index が 1 以上なら直前もこのサイト
 	if (navigation?.currentEntry) return navigation.currentEntry.index > 0;
-	return navigatedInApp;
+	// 読み込んだ位置より先にいるときだけ戻れる（読み込んだページへ履歴で戻ったら親へ送る）
+	const current = currentHistoryIndex();
+	return entryHistoryIndex !== null && current !== null && current > entryHistoryIndex;
 }
