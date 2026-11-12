@@ -70,32 +70,14 @@ function isActive(path: string): boolean {
 		</a>
 
 		<a
-			href="/schedule"
+			href="/anime"
 			class="mobile-tab"
-			class:active={isActive("/schedule") || isActive("/events")}
-			aria-label="カレンダー"
-			aria-current={isActive("/schedule") || isActive("/events") ? "page" : undefined}
+			class:active={isActive("/anime")}
+			aria-label="アニメ"
+			aria-current={isActive("/anime") ? "page" : undefined}
 		>
-			<span class="mobile-tab-icon-wrap">
-				<svg
-					width="22"
-					height="22"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
-					<path d="M16 2l-4 5-4-5" />
-				</svg>
-				{#if unreadReminderCount > 0}
-					<span class="mobile-tab-dot" role="status" aria-label="放送前のお知らせがあります"></span>
-				{/if}
-			</span>
-			<span class="mobile-tab-label">カレンダー</span>
+			<AnimeIcon size={22} />
+			<span class="mobile-tab-label">アニメ</span>
 		</a>
 
 		<a
@@ -182,6 +164,17 @@ function isActive(path: string): boolean {
 		</a>
 
 		<a
+			href="/anime"
+			class="mobile-tab"
+			class:active={isActive("/anime")}
+			aria-label="アニメ"
+			aria-current={isActive("/anime") ? "page" : undefined}
+		>
+			<AnimeIcon size={22} />
+			<span class="mobile-tab-label">アニメ</span>
+		</a>
+
+		<a
 			href="/schedule"
 			class="mobile-tab"
 			class:active={isActive("/schedule") || isActive("/events")}
@@ -208,17 +201,6 @@ function isActive(path: string): boolean {
 				{/if}
 			</span>
 			<span class="mobile-tab-label">カレンダー</span>
-		</a>
-
-		<a
-			href="/anime"
-			class="mobile-tab"
-			class:active={isActive("/anime")}
-			aria-label="アニメ"
-			aria-current={isActive("/anime") ? "page" : undefined}
-		>
-			<AnimeIcon size={22} />
-			<span class="mobile-tab-label">アニメ</span>
 		</a>
 
 		<a
@@ -310,6 +292,7 @@ function isActive(path: string): boolean {
 	height: 10px;
 	border: 2px solid var(--color-bg);
 	border-radius: 9999px;
+	corner-shape: round;
 	background: var(--color-accent);
 	pointer-events: none;
 }

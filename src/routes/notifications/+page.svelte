@@ -295,7 +295,7 @@ function notificationLabel(type: string): string {
 	margin-top: 4px;
 	padding: 8px 10px;
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	color: inherit;
 	text-decoration: none;
 	background: var(--color-surface);

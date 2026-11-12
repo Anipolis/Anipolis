@@ -194,9 +194,7 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 							{/if}
 							<div>
 								<strong>{anime.title}</strong>
-								<span
-									>{anime.room_type === "global" ? "グローバルロビー作品" : "放送回ルーム作品"}</span
-								>
+								<span>{anime.room_type === "global" ? "作品ルームの作品" : "放送回ルーム作品"}</span>
 							</div>
 						</div>
 						{#if anime.active_run_id}
@@ -417,7 +415,7 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 
 	<section class="note-box">
 		<p>※この画面では、検証対象化後のログインユーザーによる放送回ルーム内の行動のみ集計しています。</p>
-		<p>※グローバルロビー、未ログイン閲覧、対象化前の入室・投稿は含まれません。</p>
+		<p>※作品ルーム、未ログイン閲覧、対象化前の入室・投稿は含まれません。</p>
 		<p>※滞在時間は exit が送信されなかった場合、最後の heartbeat 時刻で補完されます。</p>
 	</section>
 </main>
@@ -495,7 +493,7 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 .note-box {
 	margin-top: 16px;
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--color-surface);
 	overflow: hidden;
 }
@@ -526,7 +524,7 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 	justify-content: center;
 	min-height: 36px;
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--color-bg);
 	color: var(--color-text-muted);
 	padding: 0 14px;
@@ -568,7 +566,7 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 .input {
 	width: 100%;
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--color-bg);
 	color: var(--color-text);
 	padding: 10px 12px;
@@ -581,7 +579,7 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 	justify-content: center;
 	min-height: 40px;
 	border: 1px solid var(--color-accent);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--color-accent);
 	color: white;
 	padding: 0 14px;
@@ -650,7 +648,7 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 	width: 36px;
 	height: 50px;
 	flex: 0 0 auto;
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	object-fit: cover;
 	background: var(--color-border);
 }
@@ -674,7 +672,7 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 
 .run-panel {
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	overflow: hidden;
 }
 
@@ -743,7 +741,7 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 	margin-bottom: 12px;
 	background: var(--color-border);
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	overflow: hidden;
 }
 
@@ -776,7 +774,7 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 .survey-distributions > div,
 .survey-comments {
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	padding: 12px;
 }
 
@@ -869,7 +867,7 @@ th {
 
 .form-message {
 	border: 1px solid var(--color-accent);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface));
 	padding: 12px 14px;
 	font-weight: 700;
@@ -893,7 +891,7 @@ th {
 .modal {
 	width: min(420px, 100%);
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--color-surface);
 	padding: 20px;
 	box-shadow: 0 24px 60px rgb(0 0 0 / 0.35);

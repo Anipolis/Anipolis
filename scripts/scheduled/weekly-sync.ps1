@@ -1,6 +1,8 @@
 ﻿# 週次: 当季+次季のフルインポートとカタログ再解決、公開カタログの再生成。
 # 旧ワークフローの "Weekly imports and resolve" と同じ順序・同じ失敗方針。毎週月曜 04:15 JST。
-#   - Jikan / Wikidata の失敗は警告のみ（公開 Jikan は慢性的に 504。Wikidata は翌週に自然回復）
+#   - Jikan / Wikidata の失敗は警告のみ（公開 Jikan は 2026-10 から停止中。シーズンの作品一覧は MAL の記録でも決まる。
+#     同じステップが 3 回続けて失敗したら一度だけ知らせる。Wikidata は翌週に自然回復）
+#   - 失敗したら SYNC_ALERT_WEBHOOK_URL（Discord）へ知らせる（common.ps1 の Update-SyncStateAndAlert）
 #   - MAL / しょぼい / resolve / export の失敗は同期不全なので終了コードを非 0 にする
 #   - シーズン単位で失敗を隔離し、1 シーズン目が落ちても 2 シーズン目を実行する
 #   - 権利表記（©）は前期・今期・次期だけ collect:copyright → import:annict → resolve:copyright-seasons
@@ -11,6 +13,20 @@
 Start-SyncLog -Name "weekly-sync"
 $failed = 0
 try {
+    # 日次が動いていない場合にも気づけるよう、最終成功から 2 日を超えたら知らせる
+    Test-StaleSync -Name "daily-sync" -MaxDays 2
+    # 公開 Jikan は 2026-10 から落ちたまま（#595）。手元の jikan-rest（d:\tmp\jikan-rest、Docker）が
+    # 動いていればそちらから取る。どちらも無ければ Jikan は失敗するが、シーズンの作品一覧は
+    # MAL 公式 API の記録でも決まるので、カタログの更新は止まらない。
+    if (-not $env:JIKAN_BASE_URL) {
+        try {
+            Invoke-WebRequest -Uri "http://localhost:8080/v4/anime/1" -UseBasicParsing -TimeoutSec 5 | Out-Null
+            $env:JIKAN_BASE_URL = "http://localhost:8080/v4"
+            Write-Host "Using local jikan-rest at http://localhost:8080/v4"
+        } catch {
+            Write-Host "Local jikan-rest is not running; using public Jikan"
+        }
+    }
     foreach ($t in (Get-SeasonTargets)) {
         $tag = [string]$t.Year + "-" + $t.Season
         # $args は PowerShell の自動変数なので別名にする

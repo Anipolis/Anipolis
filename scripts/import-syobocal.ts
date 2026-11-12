@@ -378,6 +378,11 @@ async function readCachedXml(command: string, params: Record<string, string>, ca
 
 function responseItems(payload: unknown, responseKey: string, itemsKey: string, itemKey: string) {
 	const response = asRecord(asRecord(payload)[responseKey]);
+	// しょぼいはエラーでも HTTP 200 を返す（#596）。応答の形そのものが違う（HTML のエラーページ、
+	// 空の本文など）ときは、空の結果として黙って進まず失敗にする。
+	if (Object.keys(response).length === 0) {
+		throw new Error(`Syobocal response has no <${responseKey}> element.`);
+	}
 	const result = asRecord(response["Result"]);
 	const code = textValue(result, "Code");
 	// 404 means "no rows matched" (e.g. a program lookup for titles with no
@@ -1833,7 +1838,7 @@ async function main() {
 	const supabase = getSupabaseClient();
 	const seasonRows = await fetchSeasonRows(supabase, season);
 	const malIds = collectAnimeCatalogSeasonMalIds(seasonRows);
-	if (malIds.length === 0) throw new Error(`No ODbL or Jikan source records found for ${season}.`);
+	if (malIds.length === 0) throw new Error(`No ODbL, Jikan or MAL source records found for ${season}.`);
 	const records = await fetchSourceRecords(supabase, malIds);
 	const candidates = catalogCandidates(records, malIds, options.year);
 	const candidatesByMal = new Map(candidates.map((candidate) => [candidate.malId, candidate]));

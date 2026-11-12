@@ -234,7 +234,7 @@ function toggleRow(id: string) {
 
 .report-list {
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--color-surface);
 	overflow: hidden;
 }
@@ -364,7 +364,7 @@ function toggleRow(id: string) {
 	gap: 8px;
 	padding: 14px;
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--color-bg);
 	align-self: start;
 }
@@ -378,7 +378,7 @@ function toggleRow(id: string) {
 	flex: 1;
 	min-height: 34px;
 	border: 1px solid var(--color-border);
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	background: var(--color-surface);
 	color: var(--color-text);
 	padding: 0 8px;
@@ -409,7 +409,7 @@ function toggleRow(id: string) {
 .date-input {
 	min-height: 34px;
 	border: 1px solid var(--color-border);
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	background: var(--color-surface);
 	color: var(--color-text);
 	padding: 0 8px;
@@ -418,7 +418,7 @@ function toggleRow(id: string) {
 
 .reason-textarea {
 	border: 1px solid var(--color-border);
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	background: var(--color-surface);
 	color: var(--color-text);
 	padding: 6px 8px;

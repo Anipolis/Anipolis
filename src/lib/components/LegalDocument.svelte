@@ -2,6 +2,7 @@
 import type { Snippet } from "svelte";
 import { page } from "$app/state";
 import LegalBody from "./LegalBody.svelte";
+import SeoMeta from "./SeoMeta.svelte";
 
 interface Props {
 	title: string;
@@ -9,15 +10,17 @@ interface Props {
 	html?: string;
 	/** HTML の代わりに Svelte で書く本文（お問い合わせページなど） */
 	children?: Snippet;
+	/** 共有したときのカードと検索結果に出す説明（省略時はサイトの既定の説明） */
+	description?: string;
 }
 
-let { title, html, children }: Props = $props();
+let { title, html, children, description }: Props = $props();
 
 // 設定メニューはログイン必須なので、未ログインの閲覧者には戻り先として出さない
 const showSettingsLink = $derived(Boolean(page.data.user));
 </script>
 
-<svelte:head><title>{title} - Anipolis</title></svelte:head>
+<SeoMeta title="{title} - Anipolis" {description} />
 
 <div class="page-container" style="justify-content: center;">
 	<main style="flex: 0 1 720px; min-width: 0;">

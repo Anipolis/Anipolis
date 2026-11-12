@@ -98,7 +98,7 @@ let { animeTitle, removeAction, submitting, oncancel }: Props = $props();
 .confirm-cancel,
 .confirm-remove {
 	min-height: 40px;
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	cursor: pointer;
 	font-size: 0.86rem;
 	font-weight: 600;

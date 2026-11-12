@@ -107,6 +107,7 @@ function handleToggle(event: ToggleEvent) {
 	padding: 0;
 	border: 0;
 	border-radius: 999px;
+	corner-shape: round;
 	background: transparent;
 	color: var(--color-text-muted);
 	font-size: 0.95rem;

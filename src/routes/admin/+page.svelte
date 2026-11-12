@@ -173,7 +173,7 @@ const copyrightReviewSub = $derived(
 	min-height: 84px;
 	padding: 14px;
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--color-surface);
 }
 
@@ -195,7 +195,7 @@ const copyrightReviewSub = $derived(
 .admin-section {
 	margin-top: 16px;
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--color-surface);
 	overflow: hidden;
 }
@@ -249,7 +249,7 @@ const copyrightReviewSub = $derived(
 	gap: 12px;
 	padding: 20px;
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--color-surface);
 	text-decoration: none;
 	color: inherit;

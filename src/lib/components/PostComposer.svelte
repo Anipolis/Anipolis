@@ -10,6 +10,7 @@ import { animePickMeta } from "$lib/anime-picker";
 import type { CollectionShare } from "$lib/collections";
 import {
 	type ComposeDraft,
+	type ComposeRoom,
 	clearComposeContext,
 	clearComposeDraft,
 	getBrowserDraftStorage,
@@ -28,6 +29,7 @@ import { createSearchGate } from "$lib/utils/search-gate";
 import AnimeExchangeResult from "./AnimeExchangeResult.svelte";
 import AnimeRow from "./AnimeRow.svelte";
 import CollectionShareCard from "./CollectionShareCard.svelte";
+import ComposerRoomPicker from "./ComposerRoomPicker.svelte";
 import { classifyComposerSubmitResult } from "./post-composer-submit";
 import UserAvatar from "./UserAvatar.svelte";
 
@@ -120,11 +122,9 @@ let selectedCwAnime = $state<AnimeResult | null>(null);
 let cwSearchDebounce: ReturnType<typeof setTimeout> | null = null;
 let cwInputEl = $state<HTMLInputElement | null>(null);
 
-// 実況ルームリンク
-let selectedRoom = $state<OpenBroadcastRoomSummary | null>(null);
+// ルームリンク（放送中の話・話数ルーム・特番ルーム・作品ルーム）
+let selectedRoom = $state<ComposeRoom | null>(null);
 let roomModalOpen = $state(false);
-let openRooms = $state<OpenBroadcastRoomSummary[] | null>(null);
-let roomsLoading = $state(false);
 
 // @メンション
 let textareaEl = $state<HTMLTextAreaElement | null>(null);
@@ -361,19 +361,27 @@ function persistComposeContext() {
 	saveComposeContext(getBrowserDraftStorage(), draftKey, { cwAnime: selectedCwAnime, room: selectedRoom });
 }
 
-/** 期限内の CW と、まだ受付中のルームだけを戻す（下書きや引用リンクで既に入っていれば上書きしない） */
+/**
+ * 期限内の CW と、まだ書けるルームだけを戻す（下書きや引用リンクで既に入っていれば上書きしない）。
+ * 話数ルーム・特番ルームは期限なしで書けるのでそのまま戻し、放送枠は受付中かを確かめる
+ */
 async function restoreComposeContext(key: string) {
 	const context = loadComposeContext(getBrowserDraftStorage(), key);
 	if (!selectedCwAnime && context.cwAnime) selectedCwAnime = context.cwAnime;
 	if (selectedRoom || !context.room) return;
-	const roomId = context.room.id;
+	const saved = context.room;
+	const roomId = saved.session_id;
+	if (!roomId) {
+		selectedRoom = saved;
+		return;
+	}
 	const request = roomRestoreGate.start();
 	try {
 		const res = await fetch("/api/rooms/open", { signal: request.signal });
 		const rooms = res.ok ? ((await res.json()) as OpenBroadcastRoomSummary[]) : [];
-		const open = rooms.find((room) => room.id === roomId);
+		const open = rooms.some((room) => room.id === roomId);
 		// 確認中に破棄・ルームの選び直し・アンマウントがあれば反映しない
-		if (open && !selectedRoom && request.isCurrent()) selectedRoom = open;
+		if (open && !selectedRoom && request.isCurrent()) selectedRoom = saved;
 	} catch {
 		// 確かめられなければ戻さない（受付が終わったルームに投稿させない）
 	}
@@ -417,23 +425,13 @@ function clearCwAnime() {
 	persistComposeContext();
 }
 
-async function openRoomSearch() {
+function openRoomSearch() {
 	roomModalOpen = true;
-	roomsLoading = true;
-	try {
-		const res = await fetch("/api/rooms/open");
-		if (!res.ok) throw new Error(`HTTP ${res.status}`);
-		openRooms = await res.json();
-	} catch {
-		openRooms = [];
-	} finally {
-		roomsLoading = false;
-	}
 }
 function closeRoomModal() {
 	roomModalOpen = false;
 }
-function selectRoom(room: OpenBroadcastRoomSummary) {
+function selectRoom(room: ComposeRoom) {
 	roomRestoreGate.cancel();
 	selectedRoom = room;
 	roomModalOpen = false;
@@ -763,8 +761,8 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 					class="composer-tool-tile"
 					class:active={selectedRoom !== null}
 					onclick={openRoomSearch}
-					aria-label="実況ルームにリンク"
-					title="実況ルームにリンク"
+					aria-label="ルームにリンク"
+					title="ルームにリンク"
 				>
 					<span class="i-lucide-door-open" aria-hidden="true"></span>
 					<span class="composer-tool-label">ルーム</span>
@@ -818,8 +816,8 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 							class="inline-flex items-center gap-1.5 max-w-full rounded-full border border-green-500/50 bg-green-950/40 px-3 py-1 text-sm font-semibold leading-tight text-green-300"
 						>
 							<span class="i-lucide-door-open shrink-0" aria-hidden="true"></span>
-							<span class="min-w-0 max-w-[24ch] truncate"
-								>{selectedRoom.anime?.title ?? "実況ルーム"}</span
+							<span class="min-w-0 max-w-[28ch] truncate"
+								>{[selectedRoom.anime?.title, selectedRoom.label].filter(Boolean).join(" ")}</span
 							>
 							<button
 								type="button"
@@ -845,7 +843,14 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 			{/if}
 
 			{#if selectedRoom}
-				<input type="hidden" name="broadcast_room_session_id" value={selectedRoom.id}>
+				<input type="hidden" name="room_anime_id" value={selectedRoom.anime_id}>
+				{#if selectedRoom.session_id}
+					<input type="hidden" name="broadcast_room_session_id" value={selectedRoom.session_id}>
+				{:else if selectedRoom.special_key}
+					<input type="hidden" name="room_special_key" value={selectedRoom.special_key}>
+				{:else if selectedRoom.episode_number != null}
+					<input type="hidden" name="room_episode" value={selectedRoom.episode_number}>
+				{/if}
 			{/if}
 
 			{#if selectedExchangeShare}
@@ -1031,45 +1036,9 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 	</div>
 {/if}
 
-<!-- 実況ルーム選択モーダル -->
+<!-- ルーム選択（放送中の話・作品を探して話数・特番・作品ルーム） -->
 {#if roomModalOpen}
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
-	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<div
-		class="anime-search-overlay"
-		onclick={(e) => {
-			if (e.target === e.currentTarget) closeRoomModal();
-		}}
-		onkeydown={(e) => handleOverlayEscape(e, closeRoomModal)}
-		role="dialog"
-		aria-modal="true"
-		aria-label="実況ルームを選択"
-		tabindex="-1"
-		use:trapFocus
-	>
-		<div class="anime-search-modal">
-			<div class="anime-search-header">
-				<span class="anime-search-title">実況ルームを選択</span>
-				<button type="button" class="anime-search-close" onclick={closeRoomModal} aria-label="閉じる">✕</button>
-			</div>
-			<div class="anime-search-results">
-				{#if roomsLoading}
-					<p class="anime-search-empty">読み込み中…</p>
-				{:else if openRooms !== null && openRooms.length === 0}
-					<p class="anime-search-empty">現在開放中のルームはありません</p>
-				{:else if openRooms}
-					{#each openRooms as room (room.id)}
-						<AnimeRow
-							coverUrl={room.anime?.cover_url}
-							title={room.anime?.title ?? "不明"}
-							meta={room.room_kind === "episode" ? room.room_date : "総合ロビー"}
-							onclick={() => selectRoom(room)}
-						/>
-					{/each}
-				{/if}
-			</div>
-		</div>
-	</div>
+	<ComposerRoomPicker onselect={selectRoom} onclose={closeRoomModal} />
 {/if}
 
 <style>
@@ -1132,7 +1101,7 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 .compact-composer .composer-footer .btn {
 	min-height: 36px;
 	padding: 6px 14px;
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	font-size: 13px;
 }
 .composer-tools {
@@ -1201,7 +1170,7 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 	right: 0;
 	background: var(--color-surface);
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 	z-index: 50;
 	max-height: 200px;
@@ -1250,7 +1219,7 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 	margin-top: 10px;
 	padding: 10px;
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--color-bg);
 }
 .composer-collection-preview {

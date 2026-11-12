@@ -18,6 +18,7 @@ import PostOverlays from "./post/PostOverlays.svelte";
 import PostText from "./post/PostText.svelte";
 import { PostController } from "./post/post-controller.svelte";
 import ReactionErrorNotice from "./ReactionErrorNotice.svelte";
+import ShareMenu from "./ShareMenu.svelte";
 import UserAvatar from "./UserAvatar.svelte";
 
 interface Props {
@@ -184,18 +185,11 @@ function handleKeydown(event: KeyboardEvent) {
 								><span class="i-lucide-door-open" aria-hidden="true"></span
 								><span class="post-context-title">{roomContext.title}</span></a
 							>
-						{:else if !insideRoom && post.anime_quote && !post.exchange_share}
-							<a
-								href="/anime/{post.anime_quote.id}"
-								class="post-inline-context"
-								title={post.anime_quote.title}
-								><span class="i-lucide-tv" aria-hidden="true"></span
-								><span class="post-context-title">{post.anime_quote.title}</span></a
-							>
 						{/if}
 					{/snippet}
 				</PostText>
-				<PostEmbeds {controller} />
+				<!-- 引用した作品は本文の下にカードで出す（ルームの投稿は上の文字リンクだけ） -->
+				<PostEmbeds {controller} animeCard={!insideRoom && !roomContext} />
 			</PostCwGuard>
 		</div>
 		<LikeButton {controller} />
@@ -214,6 +208,8 @@ function handleKeydown(event: KeyboardEvent) {
 				{#if broadcastRelativeTime}
 					<span class="post-time">放送開始から {broadcastRelativeTime}</span>
 				{/if}
+				<!-- 共有（#271）。アイコンは増やさず、削除・通報と同じ文字のボタンにする -->
+				<ShareMenu url="/posts/{post.id}" title="{displayName}の投稿" variant="text" placement="above" />
 				{#if controller.isOwn}
 					<button
 						type="button"

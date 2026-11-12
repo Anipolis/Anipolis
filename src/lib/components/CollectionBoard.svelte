@@ -742,7 +742,7 @@ function onWindowKeyDown(event: KeyboardEvent) {
 .board-tier {
 	display: flex;
 	border: 1px solid var(--color-border);
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 }
 .board-tier-head {
 	position: relative;
@@ -777,7 +777,7 @@ function onWindowKeyDown(event: KeyboardEvent) {
 	gap: 6px;
 	padding: 10px;
 	border: 1px dashed var(--color-border);
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	background: transparent;
 	color: var(--color-text-muted);
 	font-size: 13px;
@@ -807,7 +807,7 @@ function onWindowKeyDown(event: KeyboardEvent) {
 	flex-direction: column;
 	width: min(100%, 400px);
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--color-surface);
 	box-shadow: 0 24px 60px rgb(0 0 0 / 0.36);
 	outline: none;
@@ -840,6 +840,7 @@ function onWindowKeyDown(event: KeyboardEvent) {
 	height: 32px;
 	border: 0;
 	border-radius: 999px;
+	corner-shape: round;
 	background: transparent;
 	color: var(--color-text-muted);
 	font-size: 20px;
@@ -1044,7 +1045,7 @@ function onWindowKeyDown(event: KeyboardEvent) {
 	justify-content: flex-start;
 	aspect-ratio: auto;
 	padding: 0;
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 }
 .board-row-cover {
 	flex-shrink: 0;
@@ -1091,6 +1092,7 @@ function onWindowKeyDown(event: KeyboardEvent) {
 	padding: 0;
 	border: none;
 	border-radius: 999px;
+	corner-shape: round;
 	background: rgb(0 0 0 / 0.72);
 	color: #fff;
 	font-size: 13px;
@@ -1112,6 +1114,7 @@ function onWindowKeyDown(event: KeyboardEvent) {
 	height: 64px;
 	border: 2px dashed var(--color-danger);
 	border-radius: 999px;
+	corner-shape: round;
 	background: var(--color-surface);
 	box-shadow: 0 8px 24px rgb(0 0 0 / 0.24);
 	color: var(--color-danger);
@@ -1134,7 +1137,7 @@ function onWindowKeyDown(event: KeyboardEvent) {
 	width: 80px;
 	aspect-ratio: 400 / 566;
 	overflow: hidden;
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	background: var(--color-border);
 	box-shadow: 0 12px 28px rgb(0 0 0 / 0.36);
 	pointer-events: none;

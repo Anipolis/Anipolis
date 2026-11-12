@@ -338,7 +338,7 @@ async function save() {
 	height: min(640px, calc(100dvh - 32px));
 	overflow: hidden;
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--color-surface);
 	box-shadow: 0 24px 60px rgb(0 0 0 / 0.36);
 }

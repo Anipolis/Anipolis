@@ -4,33 +4,16 @@ import { deletePostAction, toggleBookmarkAction, toggleLikeAction, toggleRepostA
 import {
 	buildEpisodeRoomPageData,
 	createEpisodeRoomPost,
+	findEpisodeRoom,
 	undoRoomProgressAdvance,
 } from "$lib/server/episode-room-page";
-import {
-	ensureEpisodeRoom,
-	getAnime,
-	getEpisodeRoomBounds,
-	getEpisodeRoomById,
-	getEpisodeRoomByNumber,
-} from "$lib/server/queries";
-import type { EpisodeRoom } from "$lib/types";
+import { ensureEpisodeRoom, getAnime, getEpisodeRoomBounds } from "$lib/server/queries";
 import type { Actions, PageServerLoad } from "./$types";
 
 /**
  * 話数ルーム（実況ルームの話数単位化・153）。作品×話数のルームで、投稿の期限は無い。
  * 放送枠（初回・再放送・イベント）はルームの中の区切りとして見出しに使う。
  */
-
-/** 話数ルームを探す。統合済みなら統合先を返す。ページを開くだけではルームを作らない */
-async function findEpisodeRoom(
-	supabase: App.Locals["supabase"],
-	animeId: number,
-	episodeNumber: number,
-): Promise<EpisodeRoom | null> {
-	const room = await getEpisodeRoomByNumber(supabase, animeId, episodeNumber);
-	if (room?.merged_into) return (await getEpisodeRoomById(supabase, room.merged_into)) ?? room;
-	return room;
-}
 
 export const load: PageServerLoad = async ({ params, url, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();

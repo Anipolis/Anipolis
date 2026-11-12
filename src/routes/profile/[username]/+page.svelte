@@ -13,6 +13,8 @@ import MyListQuickEdit from "$lib/components/MyListQuickEdit.svelte";
 import MylistSortSelect from "$lib/components/MylistSortSelect.svelte";
 import MylistStatusTabs from "$lib/components/MylistStatusTabs.svelte";
 import PostRow from "$lib/components/PostRow.svelte";
+import SeoMeta from "$lib/components/SeoMeta.svelte";
+import ShareMenu from "$lib/components/ShareMenu.svelte";
 import TrendingPanel from "$lib/components/TrendingPanel.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";
 import { checkCropSource } from "$lib/image-crop";
@@ -26,6 +28,7 @@ import {
 	parseMylistTab,
 	sortMylist,
 } from "$lib/mylist/sort";
+import { crawlerSafeImage } from "$lib/seo";
 import { timelineCursorHref } from "$lib/timeline-cursor";
 import type { Anime, AnimeStatus, UserAnimeEntry } from "$lib/types";
 import type { PageProps } from "./$types";
@@ -36,7 +39,11 @@ const { profile, isOwn, canViewContent } = $derived(data);
 // 開いているタブ（投稿・画像・いいね・ブックマーク）の一覧。サーバーは開いているタブの分だけを読む（#250）
 const listPosts = $derived(data.listPosts);
 const displayName = $derived(profile.display_name ?? profile.username);
-const profileSocialImage = $derived(profile.header_url ?? profile.avatar_url);
+// 共有したときのカード（#271）。鍵アカウントは自己紹介とアイコンを出さない
+const profileSocialImage = $derived(profile.is_private ? null : crawlerSafeImage(profile.avatar_url));
+const profileSocialDescription = $derived(
+	!profile.is_private && profile.bio?.trim() ? profile.bio : `@${profile.username}さんの Anipolis のプロフィール`,
+);
 
 // 最初からサーバーの値で始める（false で始めると、サーバーで出す HTML と開いた直後に「フォローする」が一瞬見える）。
 // そのあとの変化は下の $effect で合わせる
@@ -470,16 +477,13 @@ function listButtonFor(anime: Anime) {
 }
 </script>
 
-<svelte:head>
-	<title>{displayName} (@{profile.username}) - Anipolis</title>
-	<meta property="og:title" content="{displayName} (@{profile.username}) - Anipolis">
-	<meta property="og:description" content={profile.bio ?? `@${profile.username}のAnipolisプロフィール`}>
-	<meta property="og:type" content="website">
-	<meta property="og:url" content={page.url.href}>
-	{#if profileSocialImage}
-		<meta property="og:image" content={profileSocialImage}>
-	{/if}
-</svelte:head>
+<SeoMeta
+	title="{displayName} (@{profile.username}) - Anipolis"
+	description={profileSocialDescription}
+	image={profileSocialImage}
+	imageAlt="{displayName}のアイコン"
+	type="profile"
+/>
 
 <svelte:window
 	onkeydown={handleReportModalKeydown}
@@ -500,6 +504,8 @@ function listButtonFor(anime: Anime) {
 				<div class="profile-header-top">
 					<UserAvatar src={profile.avatar_url} username={profile.username} size="lg" />
 					<div class="profile-header-actions">
+						<!-- 共有（#271）。自分のプロフィールを広めるのにも使うので、誰のページでも出す -->
+						<ShareMenu title="{displayName} (@{profile.username})" />
 						{#if isOwn}
 							<button
 								type="button"
@@ -1005,6 +1011,13 @@ function listButtonFor(anime: Anime) {
 				<div class="empty-state profile-private-state">
 					<p>このアカウントの投稿はフォロワーだけが見ることができます</p>
 				</div>
+			{:else if !data.user}
+				<div class="empty-state">
+					<p>
+						<a href="/auth?next={encodeURIComponent(page.url.pathname + page.url.search)}">ログイン</a
+						>すると投稿が見られます
+					</p>
+				</div>
 			{:else if listPosts.length === 0 && !data.listNextCursor}
 				<div class="empty-state">
 					<p>まだ投稿がありません</p>
@@ -1024,6 +1037,13 @@ function listButtonFor(anime: Anime) {
 			{#if !canViewContent}
 				<div class="empty-state profile-private-state">
 					<p>このアカウントの画像投稿はフォロワーだけが見ることができます</p>
+				</div>
+			{:else if !data.user}
+				<div class="empty-state">
+					<p>
+						<a href="/auth?next={encodeURIComponent(page.url.pathname + page.url.search)}">ログイン</a
+						>すると投稿が見られます
+					</p>
 				</div>
 			{:else if listPosts.length === 0 && !data.listNextCursor}
 				<div class="empty-state">
@@ -1119,7 +1139,12 @@ function listButtonFor(anime: Anime) {
 					</p>
 				</div>
 			{:else}
-				<ActivityFeed items={data.activity.items} canLike={Boolean(data.user) && !isOwn} showUser={false} />
+				<ActivityFeed
+					items={data.activity.items}
+					canLike={Boolean(data.user)}
+					showUser={false}
+					viewerId={data.user?.id}
+				/>
 				{#if data.activity.nextCursor}
 					<a href={timelineCursorHref(page.url, data.activity.nextCursor)} class="load-more-btn"
 						>さらに読み込む</a
@@ -1244,7 +1269,7 @@ function listButtonFor(anime: Anime) {
 	z-index: 100;
 	min-width: 140px;
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--color-surface);
 	box-shadow: 0 8px 24px rgb(0 0 0 / 0.24);
 	overflow: hidden;
@@ -1346,7 +1371,7 @@ function listButtonFor(anime: Anime) {
 .report-modal-card {
 	width: min(100%, 420px);
 	border: 1px solid var(--color-border, var(--border, #334155));
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--color-surface, var(--surface, #1e293b));
 	box-shadow: 0 24px 60px rgb(0 0 0 / 0.36);
 }
@@ -1410,7 +1435,7 @@ function listButtonFor(anime: Anime) {
 .report-field textarea {
 	width: 100%;
 	border: 1px solid var(--color-border, var(--border, #334155));
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--color-bg, var(--bg, #0f172a));
 	color: var(--color-text, var(--fg, #e2e8f0));
 	padding: 9px 10px;
@@ -1446,7 +1471,7 @@ function listButtonFor(anime: Anime) {
 	max-height: calc(100dvh - 32px);
 	overflow: hidden;
 	border: 1px solid var(--color-border, var(--border, #334155));
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--color-surface, var(--surface, #1e293b));
 	box-shadow: 0 24px 60px rgb(0 0 0 / 0.36);
 }
@@ -1537,7 +1562,7 @@ function listButtonFor(anime: Anime) {
 	width: 100%;
 	aspect-ratio: 3 / 1;
 	border: 1px solid var(--color-border, var(--border, #334155));
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--color-bg, var(--bg, #0f172a));
 }
 

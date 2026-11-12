@@ -559,17 +559,20 @@ export async function enrichPostsWithCounts(
 	// p_user_id が NULL（未ログイン）の場合は各 *_by_me が全て false になる。
 	const { counts: countsByPostId } = await fetchPostCountsById(supabase, postIds, userId);
 
-	// ── アニメ引用がある投稿のスコアを一括取得 ────────────────────
+	// ── アニメ引用のカードに出す平均スコアを一括取得（一覧カード・作品ページと同じ anime_top_rated）──
 	const animeIds = Array.from(new Set(visibleRawPosts.map((p) => p.anime_id).filter((n): n is number => n != null)));
-	const userScoreMap = new Map<string, number | null>();
-	if (userId && animeIds.length > 0) {
-		const { data: entries } = await supabase
-			.from("user_anime_list")
-			.select("anime_id, score")
-			.eq("user_id", userId)
+	const avgScoreMap = new Map<string, number | null>();
+	if (animeIds.length > 0) {
+		const { data: rows, error } = await supabase
+			.from("anime_top_rated")
+			.select("anime_id, avg_score, score_count")
 			.in("anime_id", animeIds);
-		for (const e of entries ?? []) {
-			userScoreMap.set(String(e.anime_id), e.score);
+		if (error) console.error("[enrichPostsWithCounts] avg score", error);
+		for (const row of rows ?? []) {
+			avgScoreMap.set(
+				String(row.anime_id),
+				normalizeAverageScore(Number(row.avg_score ?? 0), Number(row.score_count ?? 0)),
+			);
 		}
 	}
 
@@ -590,7 +593,7 @@ export async function enrichPostsWithCounts(
 			bookmarked_by_me: countsByPostId.get(raw["id"])?.bookmarked_by_me ?? false,
 		});
 		if (post.anime_quote && post.anime_id) {
-			post.anime_quote.user_score = normalizeScore(userScoreMap.get(post.anime_id));
+			post.anime_quote.avg_score = avgScoreMap.get(post.anime_id) ?? null;
 		}
 		if (post.image_urls.length > 0) {
 			post.image_urls = post.image_urls
@@ -2239,7 +2242,7 @@ export type FollowingActivityPage = {
 };
 
 /**
- * フォロー中の人のマイリストの動きを新しい順に読む（181）。見えるかどうか（マイリストの公開設定・
+ * 自分とフォロー中の人のマイリストの動きを新しい順に読む（181・195）。見えるかどうか（マイリストの公開設定・
  * 鍵アカウント・ブロック）は記録の RLS が決める。ミュート中の作品の記録は出さない。
  * 読めない作品（非表示など）の記録も出さない。
  */
@@ -4968,7 +4971,7 @@ export async function getOpenBroadcastRoomSessions(
 	let query = sessionReader
 		.from("broadcast_room_sessions")
 		.select(
-			"id, anime_id, room_date, room_kind, room_key, scheduled_at, schedule_source, anime:anime!broadcast_room_sessions_anime_id_fkey ( id, title, cover_url, aired_from, aired_to, broadcast_day )",
+			"id, anime_id, room_date, room_kind, room_key, scheduled_at, schedule_source, episode_number, anime:anime!broadcast_room_sessions_anime_id_fkey ( id, title, cover_url, aired_from, aired_to, broadcast_day )",
 		)
 		.lte("posting_opens_at", now)
 		.gte("posting_closes_at", now)
@@ -4987,6 +4990,7 @@ export async function getOpenBroadcastRoomSessions(
 		room_key: string;
 		scheduled_at: string;
 		schedule_source: string | null;
+		episode_number: number | null;
 		anime: unknown;
 	};
 	const rows = (data ?? []) as RawOpenBroadcastRoomRow[];
@@ -5052,7 +5056,101 @@ export async function getOpenBroadcastRoomSessions(
 				room_kind: row.room_kind as "episode" | "global",
 				room_key: row.room_key,
 				scheduled_at: row.scheduled_at,
+				episode_number: row.episode_number ?? null,
 				anime: anime ? { id: String(anime.id), title: anime.title, cover_url: anime.cover_url ?? null } : null,
 			};
 		});
+}
+
+/** マイリストの書き出し（#358）。本人のリストを作品の MAL の ID・題名つきで全部読む */
+export async function getMylistForExport(
+	supabase: SupabaseClient<Database>,
+	userId: string,
+): Promise<
+	{
+		malId: number | null;
+		title: string;
+		type: string | null;
+		episodeCount: number | null;
+		status: AnimeStatus;
+		score: number | null;
+		progress: number;
+		startedOn: string | null;
+		finishedOn: string | null;
+	}[]
+> {
+	const rows: {
+		status: string;
+		score: number | null;
+		progress: number;
+		started_on: string | null;
+		finished_on: string | null;
+		// episode_count は DB では文字列で返ってくる（生成型も string）
+		anime: {
+			mal_id: number | null;
+			title: string;
+			type: string | null;
+			episode_count: string | number | null;
+		} | null;
+	}[] = [];
+	// 本番の max_rows は 1000 なので、ページに分けて読む
+	for (let start = 0; ; start += 1000) {
+		const { data, error } = await supabase
+			.from("user_anime_list")
+			.select(
+				"status, score, progress, started_on, finished_on, anime:anime_id ( mal_id, title, type, episode_count )",
+			)
+			.eq("user_id", userId)
+			.order("anime_id", { ascending: true })
+			.range(start, start + 999);
+		if (error) failQuery("getMylistForExport", error);
+		rows.push(...((data ?? []) as unknown as typeof rows));
+		if (!data || data.length < 1000) break;
+	}
+	return rows.flatMap((row) =>
+		row.anime
+			? [
+					{
+						malId: row.anime.mal_id,
+						title: row.anime.title,
+						type: row.anime.type,
+						episodeCount:
+							row.anime.episode_count === null || !Number.isFinite(Number(row.anime.episode_count))
+								? null
+								: Number(row.anime.episode_count),
+						status: row.status as AnimeStatus,
+						score: row.score,
+						progress: row.progress,
+						startedOn: row.started_on,
+						finishedOn: row.finished_on,
+					},
+				]
+			: [],
+	);
+}
+
+/**
+ * 作品の共有用カード（/og/anime/[id]、#271）を決めるための最小限の列。
+ * 公開されている作品の列だけなので、未ログイン（クローラー）でも読める
+ */
+export async function getAnimeOgSource(
+	supabase: SupabaseClient<Database>,
+	animeId: number,
+): Promise<{
+	title: string;
+	cover_url: string | null;
+	copyright: string | null;
+	season: string | null;
+	type: string | null;
+} | null> {
+	const { data, error } = await supabase
+		.from("anime")
+		.select("title,cover_url,copyright,season,type")
+		.eq("id", animeId)
+		.maybeSingle();
+	if (error) {
+		logQueryFailure("getAnimeOgSource", error);
+		return null;
+	}
+	return data;
 }

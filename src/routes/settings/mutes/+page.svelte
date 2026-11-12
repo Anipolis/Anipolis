@@ -434,6 +434,7 @@ const activeTab = $derived.by((): "word" | "anime" | "account" => {
 	width: 36px;
 	height: 36px;
 	border-radius: 50%;
+	corner-shape: round;
 	flex-shrink: 0;
 	object-fit: cover;
 }
@@ -459,7 +460,7 @@ const activeTab = $derived.by((): "word" | "anime" | "account" => {
 }
 .mute-tab {
 	padding: 8px 18px;
-	border-radius: 6px 6px 0 0;
+	border-radius: var(--radius-xs) var(--radius-xs) 0 0;
 	font-size: 0.9rem;
 	font-weight: 500;
 	color: var(--color-text-muted);

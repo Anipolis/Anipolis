@@ -6,6 +6,7 @@ import { beforeNavigate, goto, preloadData, pushState, replaceState } from "$app
 import { page } from "$app/state";
 import LegalOverlay from "$lib/components/LegalOverlay.svelte";
 import PasswordInput from "$lib/components/PasswordInput.svelte";
+import SeoMeta from "$lib/components/SeoMeta.svelte";
 import { signInWithPasskey } from "$lib/passkey";
 import { MIN_PASSWORD_LENGTH } from "$lib/utils/password-reset";
 import type { PageProps } from "./$types";
@@ -209,12 +210,20 @@ async function handlePasskeyLogin(): Promise<void> {
 }
 </script>
 
-<svelte:head>
-	<title>
-		{activeMode === "register" ? "アカウント作成" : activeMode === "add_account" ? "アカウントを追加" : "ログイン"}
-		- Anipolis
-	</title>
-</svelte:head>
+<!-- 招待リンク（/auth?invite=...）を共有したときのカードは、招待だと分かる文面にする（#271） -->
+<SeoMeta
+	title="{activeMode === "register"
+		? "アカウント作成"
+		: activeMode === "add_account"
+			? "アカウントを追加"
+			: "ログイン"} - Anipolis"
+	description={page.url.searchParams.has("invite")
+		? "Anipolis に招待されています。アニメの感想・実況・視聴記録を、みんなと共有しよう。"
+		: undefined}
+	url={page.url.searchParams.has("invite")
+		? `/auth?invite=${encodeURIComponent(page.url.searchParams.get("invite") ?? "")}`
+		: null}
+/>
 
 <svelte:window
 	onpageshow={() => {
@@ -634,7 +643,7 @@ async function handlePasskeyLogin(): Promise<void> {
 	padding: 4px;
 	margin: 18px 0;
 	border: 1px solid var(--border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: color-mix(in srgb, var(--surface) 75%, transparent);
 }
 
@@ -643,7 +652,7 @@ async function handlePasskeyLogin(): Promise<void> {
 	align-items: center;
 	justify-content: center;
 	min-height: 38px;
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	color: var(--fg-muted);
 	font-size: 0.9rem;
 	font-weight: 700;
@@ -702,6 +711,7 @@ async function handlePasskeyLogin(): Promise<void> {
 	right: 14px;
 	padding: 0 8px;
 	border-radius: 999px;
+	corner-shape: round;
 	background: var(--accent);
 	color: var(--color-bg);
 	font-size: 0.68rem;
@@ -755,6 +765,7 @@ async function handlePasskeyLogin(): Promise<void> {
 	padding: 2px 10px;
 	border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
 	border-radius: 999px;
+	corner-shape: round;
 	background: var(--accent-muted);
 	color: var(--accent);
 	font-size: 0.75rem;
@@ -833,7 +844,7 @@ async function handlePasskeyLogin(): Promise<void> {
 	margin-top: 24px;
 	padding: 12px 16px;
 	border: 1px solid var(--border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--bg-hover);
 	color: var(--fg-muted);
 	font-size: 0.8rem;

@@ -1,18 +1,22 @@
 <script lang="ts">
 import type { SubmitFunction } from "@sveltejs/kit";
 import { tick, untrack } from "svelte";
-import { fade, scale } from "svelte/transition";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
-import { trapFocus } from "$lib/actions/trapFocus";
+import { tabListKeys } from "$lib/actions/tabListKeys";
 import { isCoverHiddenWithoutCopyright } from "$lib/anime-cover";
 import { animeRelationLabel, animeSeasonLabel, animeTypeLabel } from "$lib/anime-labels";
+import { canRenderAnimeOg } from "$lib/anime-og";
 import AddToCollectionModal from "$lib/components/AddToCollectionModal.svelte";
 import AnimePosterTile from "$lib/components/AnimePosterTile.svelte";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
+import BackLink from "$lib/components/BackLink.svelte";
+import Modal from "$lib/components/Modal.svelte";
 import MyListModal from "$lib/components/MyListModal.svelte";
 import MyListStatusPopover from "$lib/components/MyListStatusPopover.svelte";
+import SeoMeta from "$lib/components/SeoMeta.svelte";
+import ShareMenu from "$lib/components/ShareMenu.svelte";
 import {
 	episodeRoomChipLabels,
 	episodeRoomEntryState,
@@ -38,11 +42,16 @@ let { data, form }: PageProps = $props();
 
 const displayStudios = $derived(data.anime.studio ?? []);
 const displayGenres = $derived(data.anime.genre ?? []);
-const ogDescription = $derived(
-	displayGenres.length > 0
-		? `${displayGenres.slice(0, 3).join(" · ")} — Anipolis`
-		: `${data.anime.title}の情報・視聴記録 — Anipolis`,
-);
+// 共有したときのカードの説明（#271）: 「2026年秋・TV アニメ。ジャンル」＋ Anipolis でできること
+const ogDescription = $derived.by(() => {
+	const facts = [animeSeasonLabel(data.anime.season), animeTypeLabel(data.anime.type)].filter(Boolean).join("・");
+	const genres = displayGenres.slice(0, 3).join("・");
+	const lead = [facts, genres].filter(Boolean).join("。");
+	return `${lead ? `${lead}。` : ""}${data.anime.title}の感想・実況・視聴記録を Anipolis で。`;
+});
+// 共有用カード（1200x630、/og/anime/[id]）。© の無いカバーは作品ページで隠しているので、カードも既定の画像にする。
+// カードが未作成の作品は /og/anime/[id] が既定の画像を返す
+const ogImage = $derived(canRenderAnimeOg(data.anime) ? `/og/anime/${data.anime.id}` : null);
 const displayOfficialLinks = $derived(
 	buildDisplayOfficialLinks(data.anime.official_site_url, data.anime.official_x_url),
 );
@@ -285,20 +294,6 @@ function selectOverrideKind(kind: BroadcastOverrideKind) {
 	overrideAdvancedOpen = kind === "custom";
 }
 
-function handleModalKeydown(event: KeyboardEvent) {
-	if (event.key !== "Escape") return;
-	if (showUserListModal) showUserListModal = false;
-	if (recommendModalOpen) recommendModalOpen = false;
-}
-
-function handleUserListBackdropClick(event: MouseEvent) {
-	if (event.target === event.currentTarget) showUserListModal = false;
-}
-
-function handleRecommendBackdropClick(event: MouseEvent) {
-	if (event.target === event.currentTarget) recommendModalOpen = false;
-}
-
 function openRecommendModal() {
 	recommendError = "";
 	recommendFeedback = "";
@@ -452,17 +447,13 @@ $effect(() => {
 });
 </script>
 
-<svelte:head>
-	<title>{data.anime.title} - Anipolis</title>
-	<meta property="og:title" content="{data.anime.title} - Anipolis">
-	<meta property="og:description" content={ogDescription}>
-	<meta property="og:type" content="website">
-	<meta property="og:url" content={page.url.href}>
-	{#if data.anime.cover_url}
-		<meta property="og:image" content={data.anime.cover_url}>
-		<meta name="twitter:card" content="summary_large_image">
-	{/if}
-</svelte:head>
+<SeoMeta
+	title="{data.anime.title} - Anipolis"
+	description={ogDescription}
+	image={ogImage}
+	imageAlt="{data.anime.title}のカバー"
+	card={ogImage ? "summary_large_image" : null}
+/>
 
 {#snippet relationsSection()}
 	{#if data.relations.length > 0}
@@ -496,7 +487,7 @@ $effect(() => {
 {/snippet}
 
 <div class="detail-page">
-	<a href={animeListHref} class="back-link">← アニメ一覧</a>
+	<BackLink fallbackHref={animeListHref} class="anime-detail-back">← 戻る</BackLink>
 
 	<div class="anime-layout">
 		<div class="title-block">
@@ -526,6 +517,10 @@ $effect(() => {
 						>{animeSeasonLabel(data.anime.season)}</a
 					>
 				{/if}
+				<!-- 共有（#271）。未ログインでも使えるよう、操作の段ではなく作品情報の行の右端に置く -->
+				<span class="meta-share">
+					<ShareMenu title={data.anime.title} variant="text" />
+				</span>
 			</div>
 		</div>
 
@@ -534,7 +529,8 @@ $effect(() => {
 			<div class="cover-col">
 				<div class="anime-cover">
 					{#if coverUrl}
-						<img src={coverUrl} alt={data.anime.title}>
+						<!-- ページでいちばん大きい画像（LCP）なので先に取りに行く。描画には影響しない -->
+						<img src={coverUrl} alt={data.anime.title} fetchpriority="high">
 					{:else}
 						<div class="anime-cover-placeholder">
 							<svg
@@ -910,13 +906,14 @@ $effect(() => {
 						{adminEditOpen ? "作品情報フォームを閉じる" : "作品情報を編集"}
 					</button>
 					{#if adminEditOpen}
-						<div class="admin-tab-list" role="tablist" aria-label="作品管理">
+						<div class="admin-tab-list" role="tablist" aria-label="作品管理" {@attach tabListKeys}>
 							<button
 								type="button"
 								class="admin-tab"
 								class:admin-tab--active={activeAdminTab === "basic"}
 								role="tab"
 								aria-selected={activeAdminTab === "basic"}
+								tabindex={activeAdminTab === "basic" ? 0 : -1}
 								onclick={() => {
 									activeAdminTab = "basic";
 								}}
@@ -930,6 +927,7 @@ $effect(() => {
 								class:admin-tab--active={activeAdminTab === "overrides"}
 								role="tab"
 								aria-selected={activeAdminTab === "overrides"}
+								tabindex={activeAdminTab === "overrides" ? 0 : -1}
 								onclick={() => {
 									activeAdminTab = "overrides";
 								}}
@@ -943,6 +941,7 @@ $effect(() => {
 								class:admin-tab--active={activeAdminTab === "rooms"}
 								role="tab"
 								aria-selected={activeAdminTab === "rooms"}
+								tabindex={activeAdminTab === "rooms" ? 0 : -1}
 								onclick={() => {
 									activeAdminTab = "rooms";
 								}}
@@ -1601,7 +1600,7 @@ $effect(() => {
 			{/if}
 
 			<section class="room-tabs-section">
-				<div class="room-tabs" role="tablist" aria-label="ルーム表示切り替え">
+				<div class="room-tabs" role="tablist" aria-label="ルーム表示切り替え" {@attach tabListKeys}>
 					<button
 						type="button"
 						role="tab"
@@ -1610,6 +1609,7 @@ $effect(() => {
 						class:room-tab--active={activeRoomTab === "log"}
 						aria-selected={activeRoomTab === "log"}
 						aria-controls="room-tabpanel"
+						tabindex={activeRoomTab === "log" ? 0 : -1}
 						onclick={() => (activeRoomTab = "log")}
 					>
 						ルーム
@@ -1622,6 +1622,7 @@ $effect(() => {
 						class:room-tab--active={activeRoomTab === "event"}
 						aria-selected={activeRoomTab === "event"}
 						aria-controls="room-tabpanel"
+						tabindex={activeRoomTab === "event" ? 0 : -1}
 						onclick={() => (activeRoomTab = "event")}
 					>
 						イベント
@@ -1639,7 +1640,7 @@ $effect(() => {
 								<a href="/rooms/anime/{data.anime.id}/lobby" class="global-lobby-link">
 									<span class="i-lucide-messages-square" aria-hidden="true"></span>
 									<span>
-										<strong>この作品の総合実況・雑談ロビーへ入る</strong>
+										<strong>この作品の作品ルームに入る</strong>
 									</span>
 								</a>
 							</section>
@@ -1754,26 +1755,9 @@ $effect(() => {
 	</div>
 </div>
 
-<svelte:window onkeydown={handleModalKeydown} />
-
 {#if showUserListModal}
-	<div class="user-list-modal-backdrop" transition:fade={{ duration: 180 }}>
-		<button
-			type="button"
-			class="modal-click-target modal-click-layer"
-			tabindex="-1"
-			aria-label="閉じる"
-			onclick={handleUserListBackdropClick}
-		></button>
-		<div
-			class="user-list-modal modal-content-layer"
-			role="dialog"
-			aria-modal="true"
-			aria-labelledby="user-list-modal-title"
-			tabindex="-1"
-			use:trapFocus
-			in:scale={{ duration: 200, start: 0.95 }}
-		>
+	<Modal onclose={() => (showUserListModal = false)} labelledby="user-list-modal-title">
+		<div class="user-list-modal">
 			<header class="user-list-modal-header">
 				<h2 id="user-list-modal-title">リスト登録中のユーザー <span>({data.listedUsers.length}人)</span></h2>
 				<button
@@ -1814,7 +1798,7 @@ $effect(() => {
 				{/each}
 			</div>
 		</div>
-	</div>
+	</Modal>
 {/if}
 
 {#if myListStatusOpen && myListStatusAnchor && data.user}
@@ -1844,23 +1828,12 @@ $effect(() => {
 {/if}
 
 {#if recommendModalOpen}
-	<div class="user-list-modal-backdrop" transition:fade={{ duration: 180 }}>
-		<button
-			type="button"
-			class="modal-click-target modal-click-layer"
-			tabindex="-1"
-			aria-label="閉じる"
-			onclick={handleRecommendBackdropClick}
-		></button>
-		<div
-			class="user-list-modal recommend-modal modal-content-layer"
-			role="dialog"
-			aria-modal="true"
-			aria-labelledby="recommend-modal-title"
-			tabindex="-1"
-			use:trapFocus
-			in:scale={{ duration: 200, start: 0.95 }}
-		>
+	<Modal
+		onclose={() => (recommendModalOpen = false)}
+		dismissible={!recommendSubmitting}
+		labelledby="recommend-modal-title"
+	>
+		<div class="user-list-modal recommend-modal">
 			<header class="user-list-modal-header">
 				<h2 id="recommend-modal-title">この作品を推薦する</h2>
 				<button
@@ -1943,7 +1916,7 @@ $effect(() => {
 				</button>
 			</form>
 		</div>
-	</div>
+	</Modal>
 {/if}
 
 <MyListModal
@@ -1970,14 +1943,14 @@ $effect(() => {
 	margin: 0 auto;
 }
 
-.back-link {
+:global(.anime-detail-back) {
 	display: inline-block;
 	margin-bottom: 20px;
 	color: var(--color-text-muted);
 	text-decoration: none;
 	font-size: 0.9rem;
 }
-.back-link:hover {
+:global(.anime-detail-back:hover) {
 	color: var(--text);
 }
 
@@ -2102,7 +2075,7 @@ $effect(() => {
 	padding: 14px;
 	background: var(--color-surface);
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 }
 /* 「作品情報」の見出しはスマホだけ（PC は左の列のカードで分かる） */
 .info-heading {
@@ -2231,6 +2204,10 @@ $effect(() => {
 	flex-direction: column;
 	gap: 10px;
 }
+.meta-share {
+	margin-left: auto;
+	color: var(--color-text-muted);
+}
 .anime-title {
 	font-size: 1.6rem;
 	font-weight: 700;
@@ -2281,6 +2258,7 @@ $effect(() => {
 	width: 7px;
 	height: 7px;
 	border-radius: 50%;
+	corner-shape: round;
 	background: var(--color-text-muted);
 }
 .meta-status.status-airing::before {
@@ -2394,7 +2372,7 @@ $effect(() => {
 	justify-content: center;
 	min-height: 40px;
 	padding: 9px 16px;
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	border: 1px solid var(--border);
 	background: var(--card-bg);
 	color: var(--text);
@@ -2417,7 +2395,7 @@ $effect(() => {
 	gap: 8px;
 	padding: 4px;
 	border: 1px solid var(--border);
-	border-radius: 18px;
+	border-radius: var(--radius);
 	background: var(--hover-bg);
 }
 .admin-tab {
@@ -2482,8 +2460,8 @@ $effect(() => {
 }
 .broadcast-override-table-wrap {
 	overflow-x: auto;
-	border: 1px solid #27272a;
-	border-radius: 18px;
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius);
 	background: #111113;
 }
 .broadcast-override-table {
@@ -2556,7 +2534,7 @@ $effect(() => {
 	border: 1px solid var(--border);
 	background: var(--card-bg);
 	color: var(--text);
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	padding: 4px 10px;
 	font-size: 0.78rem;
 	cursor: pointer;
@@ -2590,7 +2568,7 @@ $effect(() => {
 	animation: override-form-enter 0.18s ease-out;
 	padding: 14px;
 	border: 1px solid var(--border);
-	border-radius: 18px;
+	border-radius: var(--radius);
 	background: var(--card-bg);
 }
 .broadcast-override-form {
@@ -2617,7 +2595,7 @@ $effect(() => {
 	min-height: 56px;
 	padding: 9px 11px;
 	border: 1px solid var(--border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--card-bg);
 	color: var(--text);
 	text-align: left;
@@ -2660,7 +2638,7 @@ $effect(() => {
 .broadcast-override-field input {
 	height: 36px;
 	padding: 0 10px;
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	border: 1px solid var(--border);
 	background: var(--card-bg);
 	color: var(--text);
@@ -2717,7 +2695,7 @@ $effect(() => {
 .broadcast-override-submit,
 .broadcast-override-cancel {
 	height: 40px;
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	font-weight: 700;
 	font-size: 0.88rem;
 	cursor: pointer;
@@ -2786,7 +2764,7 @@ $effect(() => {
 	width: 100%;
 	box-sizing: border-box;
 	padding: 14px 16px;
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	border: 1px solid color-mix(in srgb, #0f766e 36%, var(--border));
 	background: color-mix(in srgb, #14b8a6 13%, var(--card-bg));
 	color: var(--text);
@@ -2978,7 +2956,7 @@ $effect(() => {
 	width: 100%;
 	box-sizing: border-box;
 	padding: 6px 10px;
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	border: 1px solid var(--color-border);
 	background: var(--bg);
 	color: var(--text);
@@ -2997,7 +2975,7 @@ $effect(() => {
 	align-items: center;
 	gap: 7px;
 	padding: 11px 24px;
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	background: var(--accent);
 	color: #fff;
 	border: none;
@@ -3029,7 +3007,7 @@ $effect(() => {
 }
 .btn-danger {
 	padding: 8px 18px;
-	border-radius: 6px;
+	border-radius: var(--radius-xs);
 	background: transparent;
 	color: var(--danger, #ef4444);
 	border: 1px solid var(--danger, #ef4444);
@@ -3113,7 +3091,7 @@ $effect(() => {
 	right: 0;
 	background: var(--color-surface);
 	border: 1px solid var(--color-border);
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
 	max-height: 240px;
 	overflow-y: auto;
@@ -3177,25 +3155,15 @@ $effect(() => {
 	transform: none;
 }
 
-/* Listed users modal */
-.user-list-modal-backdrop {
-	position: fixed;
-	inset: 0;
-	z-index: 50;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	padding: 16px;
-	background: rgba(0, 0, 0, 0.7);
-	backdrop-filter: blur(4px);
-}
+/* Listed users modal（背景と重なり順は Modal が受け持つ） */
 .user-list-modal {
 	width: 100%;
 	max-width: 448px;
 	padding: 24px;
-	border: 1px solid #27272a;
+	border: 1px solid var(--color-border);
 	border-radius: 22px;
-	background: #18181b;
+	background: var(--color-bg);
+	color: var(--color-text);
 	box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.65);
 }
 .recommend-modal {
@@ -3239,7 +3207,7 @@ $effect(() => {
 	cursor: pointer;
 }
 .user-list-modal-close:hover {
-	background: #27272a;
+	background: var(--color-surface-hover);
 	color: var(--text);
 }
 .user-list-modal-close:focus-visible {
@@ -3270,7 +3238,7 @@ $effect(() => {
 	transition: background 0.12s;
 }
 .listed-user-card:hover {
-	background: #27272a;
+	background: var(--color-surface-hover);
 }
 
 .listed-user-avatar {
@@ -3307,7 +3275,7 @@ $effect(() => {
 	height: 10px;
 	border-radius: 50%;
 	corner-shape: round;
-	border: 2px solid #18181b;
+	border: 2px solid var(--color-bg);
 }
 
 .listed-user-details {
@@ -3498,7 +3466,7 @@ $effect(() => {
 	aspect-ratio: auto;
 	width: fit-content;
 	padding: 9px 18px;
-	border-radius: 12px;
+	border-radius: var(--radius-sm);
 	border-color: var(--color-accent);
 	background: var(--color-accent);
 	color: var(--color-bg);
@@ -3545,6 +3513,7 @@ $effect(() => {
 	width: 7px;
 	height: 7px;
 	border-radius: 50%;
+	corner-shape: round;
 	background: #ef4444;
 }
 .room-log-live-badge {

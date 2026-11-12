@@ -255,6 +255,7 @@ Before changing code:
 
 - Read nearby files first. Follow existing route, component, and Supabase patterns.
 - Check `CLAUDE.md` as well; it may contain recently discovered implementation hazards.
+- Follow `docs/branching.md` for branch and PR rules (base is `master`, no long-lived `develop`, Squash merge).
 - Keep diffs minimal and scoped to the requested feature or fix.
 - Avoid unrelated refactors, formatting churn, dependency changes, or schema changes.
 
