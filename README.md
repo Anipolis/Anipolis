@@ -52,9 +52,11 @@ pnpm test
 
 ### ブランチとマージの流れ
 
-- `master` … 本番。`develop` からのマージのみ
-- `develop` … 統合ブランチ。作業ブランチからの Pull Request で取り込む
-- 作業ブランチは `feat/…` `fix/…` `chore/…` など目的が分かる名前で `develop` から切り、Pull Request の base も `develop` にする
+詳細は [docs/branching.md](docs/branching.md) を参照してください。概要は次のとおりです。
+
+- すべての Pull Request のマージ先（base）は `master` とする
+- 常設の `develop` ブランチは持たない
+- `master` への直接 push は禁止し、マージは Squash マージに統一する
 - CodeRabbit が Pull Request を自動レビューする（設定は `.coderabbit.yaml`）
 
 ### GitHub Actions の使い方
