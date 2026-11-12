@@ -5128,3 +5128,29 @@ export async function getMylistForExport(
 			: [],
 	);
 }
+
+/**
+ * 作品の共有用カード（/og/anime/[id]、#271）を決めるための最小限の列。
+ * 公開されている作品の列だけなので、未ログイン（クローラー）でも読める
+ */
+export async function getAnimeOgSource(
+	supabase: SupabaseClient<Database>,
+	animeId: number,
+): Promise<{
+	title: string;
+	cover_url: string | null;
+	copyright: string | null;
+	season: string | null;
+	type: string | null;
+} | null> {
+	const { data, error } = await supabase
+		.from("anime")
+		.select("title,cover_url,copyright,season,type")
+		.eq("id", animeId)
+		.maybeSingle();
+	if (error) {
+		logQueryFailure("getAnimeOgSource", error);
+		return null;
+	}
+	return data;
+}

@@ -50,6 +50,7 @@
 		"audit:episode-numbers": "node --env-file-if-exists=.env --experimental-strip-types scripts/audit-episode-numbers.ts",
 		"resolve:anime-catalog": "node --env-file-if-exists=.env --experimental-strip-types scripts/resolve-anime-catalog.ts",
 		"export:anime-catalog": "node --env-file-if-exists=.env --experimental-strip-types scripts/export-anime-catalog.ts",
+		"generate:anime-og-cards": "node --env-file-if-exists=.env --experimental-strip-types scripts/generate-anime-og-cards.ts",
 		"generate:cover-thumbnails": "node --env-file-if-exists=.env --experimental-strip-types scripts/generate-cover-thumbnails.ts",
 		"enrich:jikan-links": "node --env-file-if-exists=.env --experimental-strip-types scripts/enrich-jikan-links.ts",
 		"collect:copyright": "node --env-file-if-exists=.env --experimental-strip-types scripts/collect-copyright-notices.ts",
