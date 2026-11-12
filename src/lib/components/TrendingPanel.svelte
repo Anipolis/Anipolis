@@ -32,7 +32,7 @@ const showFooterLinks = $derived(!page.data.user);
 		<div class="trending-empty">まだトレンドがありません</div>
 	{:else}
 		{#each trending as tag, index}
-			<a href="/hashtag/{tag.name}" class="trending-item">
+			<a href="/hashtag/{encodeURIComponent(tag.name)}" class="trending-item">
 				<span class="trending-rank">{index + 1}</span>
 				<span class="trending-name">#{tag.name}</span>
 				<span class="trending-count">{tag.post_count.toLocaleString("ja-JP")}件</span>

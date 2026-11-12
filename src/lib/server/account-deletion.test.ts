@@ -93,6 +93,25 @@ describe("checkDeletionGate", () => {
 		expect(stale).toEqual({ ok: false, reason: "reauth_required" });
 	});
 
+	it("2要素目（TOTP）を確認し直しただけでは、直近のログインとみなさない", () => {
+		// 古いログインのセッションでも、TOTP は自分で登録して今の時刻の amr を付けられる
+		const payload = {
+			amr: [
+				{ method: "oauth", timestamp: Math.floor((Date.now() - DELETE_REAUTH_WINDOW_MS - 60_000) / 1000) },
+				{ method: "totp", timestamp: Math.floor(Date.now() / 1000) },
+			],
+			app_metadata: { provider: "discord" },
+		};
+		const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
+		const gate = checkDeletionGate({
+			user: oauthUser,
+			session: { access_token: `header.${encoded}.signature` } as unknown as AuthSession,
+			username: "animetaro",
+			confirmation: "animetaro",
+		});
+		expect(gate).toEqual({ ok: false, reason: "reauth_required" });
+	});
+
 	it("ログイン時刻が読めないセッションは退会させない", () => {
 		const gate = checkDeletionGate({
 			user: oauthUser,

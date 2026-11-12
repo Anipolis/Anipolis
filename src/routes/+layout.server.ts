@@ -7,7 +7,7 @@ import {
 	getProfileById,
 	getUnreadNotificationCount,
 } from "$lib/server/queries";
-import type { StoredAccount } from "$lib/types";
+import type { LinkedAccountSummary, StoredAccount } from "$lib/types";
 
 // 初回オンボーディング誘導を免除するパス（オンボーディング画面自身と認証フロー、
 // 登録前にも読めるべき規約・ポリシー・出典・お問い合わせ）
@@ -100,6 +100,9 @@ export const load: ServerLoad = async ({ locals: { supabase, safeGetSession }, c
 		unreadNotificationCount: stream ? unreadNotificationCount : await unreadNotificationCount,
 		roomReminders: stream ? roomReminders : await roomReminders,
 		pendingReportsCount: stream ? pendingReportsCount : await pendingReportsCount,
-		extraAccounts,
+		// リフレッシュトークンは画面に渡さない（Cookie の中だけに置く。LinkedAccountSummary のコメント参照）
+		extraAccounts: extraAccounts.map(
+			({ userId, profile: linkedProfile }): LinkedAccountSummary => ({ userId, profile: linkedProfile }),
+		),
 	};
 };
