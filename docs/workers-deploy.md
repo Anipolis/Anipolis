@@ -23,7 +23,12 @@ SvelteKit の `$env/static/*` は**ビルド時に埋め込まれる**ので、�
 | 種類 | 変数 | 必要な場所 |
 |---|---|---|
 | ビルド時に埋め込む | `PUBLIC_SUPABASE_URL`（`$env/static/public`）、`DISCORD_BOT_TOKEN` / `DISCORD_GUILD_ID`（`$env/static/private`） | `pnpm build` を実行する環境（手元の `.env`、または Workers Builds のビルド変数） |
-| 実行時に読む | `SUPABASE_SECRET_KEY`、`MULTI_ACCOUNT_COOKIE_SECRET`、`MAL_*`、`ANNICT_ACCESS_TOKEN`、`ADMIN_*`、`PUBLIC_*` など `$env/dynamic/*` で読んでいるもの | Worker の変数・シークレット（`wrangler secret put` かダッシュボード） |
+| 実行時に読む公開値 | `PUBLIC_SUPABASE_URL`、`PUBLIC_SUPABASE_PUBLISHABLE_KEY`、`PUBLIC_CLOSED_BETA`、`PUBLIC_PASSKEY_ENABLED`（`$env/dynamic/public`） | `wrangler.jsonc` の `vars` |
+| 実行時に読む秘密の値 | `SUPABASE_SECRET_KEY`、`MULTI_ACCOUNT_COOKIE_SECRET`、`MAL_*`、`ANNICT_ACCESS_TOKEN` など `$env/dynamic/private` で読んでいるもの | Worker のシークレット（`wrangler secret put`） |
+
+`wrangler deploy` は、設定ファイルに無い平文の変数をダッシュボードから消す。2026-11-12 にこれで `PUBLIC_SUPABASE_URL` などが消え、全ページが 500 になった。
+公開値は `wrangler.jsonc` の `vars` を正本にし、`keep_vars: true` でダッシュボードだけにある一時的なスイッチ（`ADMIN_MFA_REQUIRED` など）も残す。
+シークレット（`wrangler secret put`）は deploy では消えない。
 
 値の一覧は `.env.example` にある。シークレットはリポジトリにもビルドログにも出さないこと。
 
