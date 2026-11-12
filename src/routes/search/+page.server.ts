@@ -48,17 +48,19 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 	const accountPattern = accountQuery ? buildIlikeContainsPattern(accountQuery) : null;
 
 	// 検索語に一致する作品を引いてから、本文一致に「その作品の引用投稿」を加えて投稿を検索する
-	const animeIdsPromise = shouldMatchQuotedAnime(query)
-		? fetchMatchingAnimeIds(supabase, query)
-		: Promise.resolve([]);
-	const postsPromise = animeIdsPromise.then((animeIds) =>
-		supabase
-			.from("posts")
-			.select(POSTS_SELECT)
-			.or(buildPostSearchFilter(query, animeIds))
-			.order("created_at", { ascending: false })
-			.limit(30),
-	);
+	const animeIdsPromise =
+		user && shouldMatchQuotedAnime(query) ? fetchMatchingAnimeIds(supabase, query) : Promise.resolve([]);
+	// 投稿の一覧は登録した人だけに見せる。未ログインはアカウントだけ検索する
+	const postsPromise = user
+		? animeIdsPromise.then((animeIds) =>
+				supabase
+					.from("posts")
+					.select(POSTS_SELECT)
+					.or(buildPostSearchFilter(query, animeIds))
+					.order("created_at", { ascending: false })
+					.limit(30),
+			)
+		: Promise.resolve({ data: [], error: null });
 
 	const [postsResult, usersResult, trendingResult, animeTrending] = await Promise.all([
 		postsPromise,

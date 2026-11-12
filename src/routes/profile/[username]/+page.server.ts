@@ -77,7 +77,8 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase, sa
 	const viewerId = user?.id ?? null;
 
 	const loadActiveList = async (): Promise<{ posts: Post[]; nextCursor: TimelineCursor | null }> => {
-		if (!canViewContent) return EMPTY_PAGE;
+		// 投稿の一覧は登録した人だけに見せる（マイリスト・アクティビティは投稿ではないので見せる）
+		if (!canViewContent || !user) return EMPTY_PAGE;
 		let page: { posts: Post[]; error: unknown | null; nextCursor: TimelineCursor | null };
 		if (activeTab === "posts") {
 			const repostContext = {

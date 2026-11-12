@@ -84,7 +84,14 @@ let queryInput = $derived(data.query);
 
 			<div class="search-section">
 				<h3>投稿</h3>
-				{#if data.postsFailed}
+				{#if !data.user}
+					<div class="empty-state">
+						<p>
+							投稿は<a href="/auth?next={encodeURIComponent(`/search?q=${data.query}`)}">ログイン</a
+							>すると検索できます
+						</p>
+					</div>
+				{:else if data.postsFailed}
 					<p class="flash-error" role="alert">
 						投稿を検索できませんでした。時間をおいてもう一度検索してください
 					</p>

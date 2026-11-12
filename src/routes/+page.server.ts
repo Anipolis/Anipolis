@@ -182,7 +182,11 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 
 	return {
 		// アクティビティのタブでは投稿を読まない
-		timeline: tab === "activity" ? Promise.resolve<TimelinePage>({ posts: [], nextCursor: null }) : fetchTimeline(),
+		// 投稿の一覧は登録した人だけに見せる（未ログインは取得もしない）
+		timeline:
+			!user || tab === "activity"
+				? Promise.resolve<TimelinePage>({ posts: [], nextCursor: null })
+				: fetchTimeline(),
 		activity: tab === "activity" ? fetchActivity() : null,
 		pageExtras,
 		profile,
