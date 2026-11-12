@@ -1,13 +1,6 @@
-# デフォルトでテキストファイルはすべて Git 内部で LF として管理し、チェックアウト時も LF にする
 * text=auto eol=lf
 
-# 画像やバイナリファイルは改行コード変換の対象外にする
 *.png binary
-*.jpg binary
-*.jpeg binary
-*.gif binary
-*.ico binary
-*.webp binary
 
 # Windows PowerShell 5.1 は BOM 無し UTF-8 を cp932 として読むため、.ps1 は BOM 付き CRLF のまま扱う
 *.ps1 text eol=crlf
