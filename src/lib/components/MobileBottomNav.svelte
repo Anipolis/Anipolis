@@ -164,6 +164,17 @@ function isActive(path: string): boolean {
 		</a>
 
 		<a
+			href="/anime"
+			class="mobile-tab"
+			class:active={isActive("/anime")}
+			aria-label="アニメ"
+			aria-current={isActive("/anime") ? "page" : undefined}
+		>
+			<AnimeIcon size={22} />
+			<span class="mobile-tab-label">アニメ</span>
+		</a>
+
+		<a
 			href="/schedule"
 			class="mobile-tab"
 			class:active={isActive("/schedule") || isActive("/events")}
@@ -190,17 +201,6 @@ function isActive(path: string): boolean {
 				{/if}
 			</span>
 			<span class="mobile-tab-label">カレンダー</span>
-		</a>
-
-		<a
-			href="/anime"
-			class="mobile-tab"
-			class:active={isActive("/anime")}
-			aria-label="アニメ"
-			aria-current={isActive("/anime") ? "page" : undefined}
-		>
-			<AnimeIcon size={22} />
-			<span class="mobile-tab-label">アニメ</span>
 		</a>
 
 		<a

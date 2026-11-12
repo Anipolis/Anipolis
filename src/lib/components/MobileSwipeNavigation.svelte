@@ -50,8 +50,8 @@ const signedInTabs: RouteEntry[] = [
 
 const signedOutTabs: RouteEntry[] = [
 	{ path: "/" },
-	{ path: "/schedule", matches: (pathname) => pathname.startsWith("/schedule") || pathname.startsWith("/events") },
 	{ path: "/anime" },
+	{ path: "/schedule", matches: (pathname) => pathname.startsWith("/schedule") || pathname.startsWith("/events") },
 	{ path: "/auth" },
 ];
 
