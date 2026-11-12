@@ -7,6 +7,7 @@ import { page } from "$app/state";
 import { tabListKeys } from "$lib/actions/tabListKeys";
 import { isCoverHiddenWithoutCopyright } from "$lib/anime-cover";
 import { animeRelationLabel, animeSeasonLabel, animeTypeLabel } from "$lib/anime-labels";
+import { canRenderAnimeOg } from "$lib/anime-og";
 import AddToCollectionModal from "$lib/components/AddToCollectionModal.svelte";
 import AnimePosterTile from "$lib/components/AnimePosterTile.svelte";
 import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
@@ -22,7 +23,6 @@ import {
 	formatAiringTime,
 	isEpisodeRoomEntryLive,
 } from "$lib/episode-room";
-import { crawlerSafeImage } from "$lib/seo";
 import type { AnimeStatus, UserAnimeEntry } from "$lib/types";
 import {
 	type BroadcastOverrideKind,
@@ -49,10 +49,9 @@ const ogDescription = $derived.by(() => {
 	const lead = [facts, genres].filter(Boolean).join("。");
 	return `${lead ? `${lead}。` : ""}${data.anime.title}の感想・実況・視聴記録を Anipolis で。`;
 });
-// © が無いカバーは作品ページで隠しているので、カードにも出さない。AVIF はカードに出ないので既定の画像にする
-const ogImage = $derived(
-	data.anime.cover_url && !isCoverHiddenWithoutCopyright(data.anime) ? crawlerSafeImage(data.anime.cover_url) : null,
-);
+// 共有用カード（1200x630、/og/anime/[id]）。© の無いカバーは作品ページで隠しているので、カードも既定の画像にする。
+// カードが未作成の作品は /og/anime/[id] が既定の画像を返す
+const ogImage = $derived(canRenderAnimeOg(data.anime) ? `/og/anime/${data.anime.id}` : null);
 const displayOfficialLinks = $derived(
 	buildDisplayOfficialLinks(data.anime.official_site_url, data.anime.official_x_url),
 );
@@ -453,6 +452,7 @@ $effect(() => {
 	description={ogDescription}
 	image={ogImage}
 	imageAlt="{data.anime.title}のカバー"
+	card={ogImage ? "summary_large_image" : null}
 />
 
 {#snippet relationsSection()}
