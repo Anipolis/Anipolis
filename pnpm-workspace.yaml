@@ -3,6 +3,3 @@ allowBuilds:
   sharp: true
   simple-git-hooks: true
   workerd: true
-# .npmrc の engine-strict は pnpm 12 ではルートの engines.node を見ないため、
-# mise.toml の Node.js とずれた環境ではここで止める。
-engineStrict: true
