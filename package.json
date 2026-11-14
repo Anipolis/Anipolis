@@ -69,7 +69,7 @@
 		"@simplewebauthn/server": "^14.0.3",
 		"@supabase/ssr": "^0.6.1",
 		"@supabase/supabase-js": "^2.105.4",
-		"fast-xml-parser": "^5.10.1",
+		"fast-xml-parser": "^5.12.0",
 		"marked": "^18.0.5"
 	},
 	"devDependencies": {
@@ -85,7 +85,7 @@
 		"@unocss/preset-wind3": "^66.6.8",
 		"@vitest/coverage-v8": "^4.1.6",
 		"happy-dom": "^20.9.0",
-		"sharp": "^0.34.5",
+		"sharp": "^0.35.5",
 		"simple-git-hooks": "^2.13.1",
 		"supabase": "^2.107.0",
 		"svelte": "^5.55.7",
