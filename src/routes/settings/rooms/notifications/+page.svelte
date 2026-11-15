@@ -1,6 +1,6 @@
 <script lang="ts">
-import type { SubmitFunction } from "@sveltejs/kit";
 import { untrack } from "svelte";
+import type { SubmitFunction } from "$app/forms";
 import { enhance } from "$app/forms";
 import InfoTip from "$lib/components/InfoTip.svelte";
 import SettingsBackLink from "$lib/components/SettingsBackLink.svelte";

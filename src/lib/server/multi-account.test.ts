@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("$app/environment", () => ({ dev: true }));
-vi.mock("$env/dynamic/private", () => ({ env: { MULTI_ACCOUNT_COOKIE_SECRET: "unit-test-secret-value" } }));
+vi.mock("$app/env", () => ({ dev: true }));
+vi.mock("$app/env/private", () => ({
+	MULTI_ACCOUNT_COOKIE_SECRET: "unit-test-secret-value",
+	SUPABASE_SECRET_KEY: undefined,
+	SUPABASE_SERVICE_ROLE_KEY: undefined,
+}));
 
 import type { Cookies } from "@sveltejs/kit";
 import type { StoredAccount } from "$lib/types";

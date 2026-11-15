@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Cookies } from "@sveltejs/kit";
-import { dev } from "$app/environment";
+import { dev } from "$app/env";
 import { getCookieSigningSecret, signCookiePayload, verifyCookieSignature } from "$lib/server/cookie-signing";
 import type { Database } from "$lib/supabase/database.types";
 

@@ -182,7 +182,7 @@ const TEXT_FILTER_DELAY_MS = 400;
 const CHOICE_FILTER_DELAY_MS = 250;
 
 function syncFiltersToUrl(filters: AnimeFilterState, replaceState = false) {
-	goto(buildAnimeFilterUrl(filters), { keepFocus: true, noScroll: true, replaceState });
+	goto(buildAnimeFilterUrl(filters), { reset: false, replace: replaceState });
 }
 
 // URL へ未反映のローカル編集。保留中（pending）の間は、遅れて届いた読み込み結果で入力欄を巻き戻さない。
@@ -234,7 +234,7 @@ function toggleSidebarSeason(season: ActiveSeasonChip) {
 function clearSidebarFilters() {
 	cancelPendingFilterSync();
 	filterState = { search: "", genres: [], year: "", seasons: [], studio: "", producer: "", source: "" };
-	goto("/anime", { keepFocus: true, noScroll: true });
+	goto("/anime", { reset: false });
 }
 
 // 同じページのままクエリを変えて再取得している最中は、一覧を残したまま薄く表示する
@@ -336,7 +336,7 @@ function applyFilters() {
 	if (pendingSource) params.set("source", pendingSource);
 	if (data.tab && data.tab !== "popular") params.set("tab", data.tab);
 	const qs = params.toString();
-	goto(qs ? `/anime?${qs}` : "/anime", { keepFocus: true, noScroll: true });
+	goto(qs ? `/anime?${qs}` : "/anime", { reset: false });
 	closeFilterSheet();
 }
 

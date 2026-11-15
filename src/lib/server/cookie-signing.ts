@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { env } from "$env/dynamic/private";
+import { MULTI_ACCOUNT_COOKIE_SECRET, SUPABASE_SECRET_KEY, SUPABASE_SERVICE_ROLE_KEY } from "$app/env/private";
 
 /**
  * 署名付き Cookie の用途。署名の入力に混ぜて、用途ごとに別の署名になるようにする。
@@ -18,7 +18,7 @@ export type SignedCookiePurpose = "invite-code" | "password-recovery" | "passkey
  * 空文字で設定されている場合（.env.example の `MULTI_ACCOUNT_COOKIE_SECRET=` のまま）も未設定として扱う。
  */
 export function getCookieSigningSecret(): string {
-	return env["MULTI_ACCOUNT_COOKIE_SECRET"] || env["SUPABASE_SECRET_KEY"] || env["SUPABASE_SERVICE_ROLE_KEY"] || "";
+	return MULTI_ACCOUNT_COOKIE_SECRET || SUPABASE_SECRET_KEY || SUPABASE_SERVICE_ROLE_KEY || "";
 }
 
 /** 用途と中身に署名する。用途は固定の文字列で NUL を含まないので、区切りの NUL で中身と混ざらない */

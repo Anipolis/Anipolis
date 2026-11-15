@@ -1,7 +1,11 @@
 import { isRedirect } from "@sveltejs/kit";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("$env/dynamic/private", () => ({ env: {} }));
+vi.mock("$app/env/private", () => ({
+	DISCORD_REQUIRED_ROLE_ID: undefined,
+	DISCORD_BOT_TOKEN: "",
+	DISCORD_GUILD_ID: "",
+}));
 vi.mock("$lib/server/discord", () => ({
 	grantBetaAccess: vi.fn(),
 	isBetaGateEnabled: () => false,

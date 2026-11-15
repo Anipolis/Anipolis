@@ -1,6 +1,6 @@
 <script lang="ts">
 import type { Session } from "@supabase/supabase-js";
-import { browser } from "$app/environment";
+import { browser } from "$app/env";
 import { goto, invalidateAll } from "$app/navigation";
 import { navigating, page } from "$app/state";
 import type { Database } from "$lib/supabase/database.types";

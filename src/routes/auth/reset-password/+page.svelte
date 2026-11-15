@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { SubmitFunction } from "@sveltejs/kit";
+import type { SubmitFunction } from "$app/forms";
 import { enhance } from "$app/forms";
 import { FORGOT_PASSWORD_PATH, MIN_PASSWORD_LENGTH } from "$lib/utils/password-reset";
 import type { PageProps } from "./$types";

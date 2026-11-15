@@ -1,6 +1,6 @@
 <script lang="ts">
-import type { SubmitFunction } from "@sveltejs/kit";
 import { onDestroy } from "svelte";
+import type { SubmitFunction } from "$app/forms";
 import { enhance } from "$app/forms";
 import { animePickMeta } from "$lib/anime-picker";
 import AnimeExchangeResult from "$lib/components/AnimeExchangeResult.svelte";

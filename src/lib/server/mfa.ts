@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { env } from "$env/dynamic/private";
+import { ADMIN_MFA_REQUIRED } from "$app/env/private";
 import type { Database } from "$lib/supabase/database.types";
 
 /**
@@ -17,7 +17,7 @@ export type AssuranceLevel = "aal1" | "aal2" | null;
  * このスイッチを true → migration 177 を適用（177 が先だと DB で管理者の権限が使えなくなる）
  */
 export function isAdminMfaRequired(): boolean {
-	return env["ADMIN_MFA_REQUIRED"] === "true";
+	return ADMIN_MFA_REQUIRED === "true";
 }
 
 /**

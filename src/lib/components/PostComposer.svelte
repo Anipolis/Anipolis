@@ -1,6 +1,6 @@
 <script lang="ts">
-import type { SubmitFunction } from "@sveltejs/kit";
 import { onDestroy, onMount } from "svelte";
+import type { SubmitFunction } from "$app/forms";
 import { enhance } from "$app/forms";
 import { replaceState } from "$app/navigation";
 import { page } from "$app/state";
@@ -470,7 +470,7 @@ function clearExchangeShare() {
 	selectedExchangeShare = null;
 
 	if (page.url.searchParams.has("share_exchange")) {
-		const url = new URL(page.url);
+		const url = new URL(page.url.href);
 		url.searchParams.delete("share_exchange");
 		replaceState(url, page.state);
 	}
@@ -488,7 +488,7 @@ function clearCollectionShare() {
 	selectedCollection = null;
 
 	if (page.url.searchParams.has("share_collection")) {
-		const url = new URL(page.url);
+		const url = new URL(page.url.href);
 		url.searchParams.delete("share_collection");
 		replaceState(url, page.state);
 	}

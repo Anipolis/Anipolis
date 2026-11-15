@@ -1,5 +1,5 @@
-import type { SubmitFunction } from "@sveltejs/kit";
 import { tick } from "svelte";
+import type { SubmitFunction } from "$app/forms";
 import { goto } from "$app/navigation";
 import { confirmReaction } from "$lib/reaction-confirm";
 import { isReactionFailure } from "$lib/reaction-feedback";

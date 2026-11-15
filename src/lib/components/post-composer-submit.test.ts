@@ -3,24 +3,33 @@ import { classifyComposerSubmitResult, FAILURE_FALLBACK_MESSAGE, NETWORK_ERROR_M
 
 describe("classifyComposerSubmitResult", () => {
 	it("clears the form only on success", () => {
-		expect(classifyComposerSubmitResult({ type: "success", status: 200 })).toEqual({ kind: "success" });
+		expect(classifyComposerSubmitResult({ type: "success", status: 200, location: "/" })).toEqual({
+			kind: "success",
+		});
 	});
 
 	it("keeps the input and shows the server message on failure", () => {
 		expect(
-			classifyComposerSubmitResult({ type: "failure", status: 400, data: { message: "文字数が多すぎます" } }),
+			classifyComposerSubmitResult({
+				type: "failure",
+				status: 400,
+				location: "/",
+				data: { message: "文字数が多すぎます" },
+			}),
 		).toEqual({ kind: "retry", message: "文字数が多すぎます" });
 	});
 
 	it("falls back to a retry hint when the failure carries no message", () => {
-		expect(classifyComposerSubmitResult({ type: "failure", status: 500 })).toEqual({
+		expect(classifyComposerSubmitResult({ type: "failure", status: 500, location: "/" })).toEqual({
 			kind: "retry",
 			message: FAILURE_FALLBACK_MESSAGE,
 		});
 	});
 
 	it("treats network and server exceptions as retryable instead of rendering the error page", () => {
-		expect(classifyComposerSubmitResult({ type: "error", status: 500, error: new Error("offline") })).toEqual({
+		expect(
+			classifyComposerSubmitResult({ type: "error", status: 500, error: { message: "offline", status: 500 } }),
+		).toEqual({
 			kind: "retry",
 			message: NETWORK_ERROR_MESSAGE,
 		});

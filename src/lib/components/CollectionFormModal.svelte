@@ -1,6 +1,6 @@
 <script lang="ts">
-import type { SubmitFunction } from "@sveltejs/kit";
 import { untrack } from "svelte";
+import type { SubmitFunction } from "$app/forms";
 import { applyAction, enhance } from "$app/forms";
 import { trapFocus } from "$lib/actions/trapFocus";
 import {

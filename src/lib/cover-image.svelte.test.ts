@@ -42,6 +42,7 @@ describe("coverThumbFallback", () => {
 
 	it("stops listening after cleanup", () => {
 		const img = createImage(THUMB);
+		Object.defineProperty(img, "complete", { value: false });
 		const cleanup = coverThumbFallback(FULL)(img);
 		if (typeof cleanup === "function") cleanup();
 		img.dispatchEvent(new Event("error"));

@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { error, json } from "@sveltejs/kit";
-import { env } from "$env/dynamic/private";
-import { PUBLIC_SUPABASE_URL } from "$env/static/public";
+import { SUPABASE_SECRET_KEY, SUPABASE_SERVICE_ROLE_KEY } from "$app/env/private";
+import { PUBLIC_SUPABASE_URL } from "$app/env/public";
 import { ANIME_COVER_BUCKET, coverThumbObjectName } from "$lib/anime-cover";
 import { upsertManualSourceRecord } from "$lib/server/anime-admin";
 import { isAdminUser } from "$lib/server/queries";
@@ -54,7 +54,7 @@ export const POST: RequestHandler = async ({ request, locals: { supabase, safeGe
 		data: { publicUrl },
 	} = supabase.storage.from("anime-covers").getPublicUrl(path);
 
-	const secretKey = env["SUPABASE_SECRET_KEY"] ?? env["SUPABASE_SERVICE_ROLE_KEY"];
+	const secretKey = SUPABASE_SECRET_KEY ?? SUPABASE_SERVICE_ROLE_KEY;
 	if (!secretKey) error(500, "Supabaseの管理キーが設定されていません");
 	const adminClient = createClient(PUBLIC_SUPABASE_URL, secretKey);
 	const { data: updatedRow, error: updateError } = await adminClient

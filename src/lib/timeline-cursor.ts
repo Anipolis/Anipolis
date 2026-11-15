@@ -22,7 +22,7 @@ export function parseTimelineCursor(searchParams: URLSearchParams): TimelineCurs
 }
 
 /** 続きのページの URL。今のクエリ（tab など）は残し、before / before_id だけを差し替える */
-export function timelineCursorHref(url: URL, cursor: TimelineCursor): string {
+export function timelineCursorHref(url: Pick<URL, "pathname" | "search">, cursor: TimelineCursor): string {
 	const params = new URLSearchParams(url.search);
 	params.set("before", cursor.createdAt);
 	params.set("before_id", cursor.id);

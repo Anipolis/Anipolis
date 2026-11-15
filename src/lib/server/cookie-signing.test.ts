@@ -5,9 +5,19 @@ const secrets = vi.hoisted(() => ({
 	env: { MULTI_ACCOUNT_COOKIE_SECRET: "unit-test-secret-value" } as Record<string, string>,
 }));
 
-vi.mock("$app/environment", () => ({ dev: true }));
-vi.mock("$env/dynamic/private", () => secrets);
-vi.mock("$env/dynamic/public", () => ({ env: {} }));
+vi.mock("$app/env", () => ({ dev: true }));
+vi.mock("$app/env/private", () => ({
+	get MULTI_ACCOUNT_COOKIE_SECRET() {
+		return secrets.env["MULTI_ACCOUNT_COOKIE_SECRET"];
+	},
+	get SUPABASE_SECRET_KEY() {
+		return secrets.env["SUPABASE_SECRET_KEY"];
+	},
+	get SUPABASE_SERVICE_ROLE_KEY() {
+		return secrets.env["SUPABASE_SERVICE_ROLE_KEY"];
+	},
+}));
+vi.mock("$app/env/public", () => ({ PUBLIC_PASSKEY_ENABLED: undefined }));
 vi.mock("@simplewebauthn/server", () => ({}));
 vi.mock("$lib/server/supabase-admin", () => ({ createServiceRoleClient: () => null }));
 vi.mock("$lib/server/discord", () => ({ isBetaGateEnabled: () => false, isBetaMember: () => true }));

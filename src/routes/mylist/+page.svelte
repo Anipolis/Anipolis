@@ -1,6 +1,6 @@
 <script lang="ts">
-import type { ActionResult } from "@sveltejs/kit";
 import { onDestroy, untrack } from "svelte";
+import type { ActionResult } from "$app/forms";
 import { deserialize } from "$app/forms";
 import { beforeNavigate, invalidateAll } from "$app/navigation";
 import { page } from "$app/state";

@@ -1,6 +1,6 @@
 <script lang="ts">
-import type { SubmitFunction } from "@sveltejs/kit";
 import { onDestroy, untrack } from "svelte";
+import type { SubmitFunction } from "$app/forms";
 import { enhance } from "$app/forms";
 import ImageCropper from "$lib/components/ImageCropper.svelte";
 import UserAvatar from "$lib/components/UserAvatar.svelte";

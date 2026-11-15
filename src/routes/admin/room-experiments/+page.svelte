@@ -1,6 +1,6 @@
 <script lang="ts">
-import type { SubmitFunction } from "@sveltejs/kit";
 import { onMount } from "svelte";
+import type { SubmitFunction } from "$app/forms";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
 import { trapFocus } from "$lib/actions/trapFocus";

@@ -1,4 +1,5 @@
 import { fail, redirect } from "@sveltejs/kit";
+import { PUBLIC_SUPABASE_URL } from "$app/env/public";
 import { linkAccounts } from "$lib/server/actions";
 import { grantBetaAccess, isBetaGateEnabled, isBetaMember } from "$lib/server/discord";
 import {
@@ -473,5 +474,6 @@ async function startOAuth(
 		return fail(400, { mode: "login", message: `${label}ログインを開始できませんでした` });
 	}
 
-	redirect(303, data.url);
+	// 転送先は Supabase の認可エンドポイントだけに限る（kit 3 は外部 URL への転送に許可するオリジンを要求する）
+	redirect(303, data.url, { external: [new URL(PUBLIC_SUPABASE_URL).origin] });
 }

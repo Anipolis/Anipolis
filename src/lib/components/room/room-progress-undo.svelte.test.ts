@@ -1,6 +1,6 @@
-import type { SubmitFunction } from "@sveltejs/kit";
 import { mount, tick, unmount } from "svelte";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import type { SubmitFunction } from "$app/forms";
 import type { LiveRoomData } from "$lib/types/live-room";
 import LiveRoomView from "./LiveRoomView.svelte";
 

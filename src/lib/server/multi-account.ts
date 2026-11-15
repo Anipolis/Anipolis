@@ -1,5 +1,5 @@
 import type { Cookies } from "@sveltejs/kit";
-import { dev } from "$app/environment";
+import { dev } from "$app/env";
 import { getCookieSigningSecret, signCookiePayload, verifyCookieSignature } from "$lib/server/cookie-signing";
 import type { StoredAccount } from "$lib/types";
 

@@ -1,7 +1,7 @@
 <script lang="ts">
-import type { SubmitFunction } from "@sveltejs/kit";
 import type { Snippet } from "svelte";
 import { onDestroy, onMount, tick, untrack } from "svelte";
+import type { SubmitFunction } from "$app/forms";
 import { enhance } from "$app/forms";
 import { goto, invalidateAll } from "$app/navigation";
 import { autosize } from "$lib/actions/autosize";

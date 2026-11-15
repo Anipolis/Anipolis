@@ -162,8 +162,7 @@ let privacyStatus = $state<"idle" | "saving" | "saved">("idle");
 									type="button"
 									class="settings-nav-item"
 									class:active={activeSection === section.id}
-									onclick={() =>
-										goto(`?section=${section.id}`, { replaceState: true, noScroll: true })}
+									onclick={() => goto(`?section=${section.id}`, { replace: true, reset: false })}
 									aria-current={activeSection === section.id ? "page" : undefined}
 								>
 									{section.label}

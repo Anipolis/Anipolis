@@ -1,5 +1,5 @@
 import { error, redirect } from "@sveltejs/kit";
-import { env as publicEnv } from "$env/dynamic/public";
+import { PUBLIC_SUPABASE_URL } from "$app/env/public";
 import { signPostImageUrls } from "$lib/server/post-image-signing";
 import type { RequestHandler } from "./$types";
 
@@ -19,7 +19,7 @@ export const GET: RequestHandler = async ({ params, setHeaders, locals: { supaba
 	const path = params.path;
 	if (!PATH_PATTERN.test(path)) error(404, "画像が見つかりません");
 
-	const supabaseUrl = publicEnv["PUBLIC_SUPABASE_URL"];
+	const supabaseUrl = PUBLIC_SUPABASE_URL;
 	if (!supabaseUrl) error(500, "設定が不足しています");
 	// image_urls には getPublicUrl の形で保存している（識別子として使う）
 	const storedUrl = `${supabaseUrl}/storage/v1/object/public/post-images/${path}`;
@@ -47,5 +47,6 @@ export const GET: RequestHandler = async ({ params, setHeaders, locals: { supaba
 
 	// 閲覧者によって結果が変わるので、共有キャッシュには載せない。転送先の URL は期限まで使える
 	setHeaders({ "cache-control": "private, max-age=300" });
-	redirect(302, signed);
+	// 転送先は Supabase Storage だけに限る（kit 3 は外部 URL への転送に許可するオリジンを要求する）
+	redirect(302, signed, { external: [new URL(supabaseUrl).origin] });
 };

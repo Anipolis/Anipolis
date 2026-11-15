@@ -1,8 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
 // 署名鍵がどれも設定されていない環境を再現する
-vi.mock("$app/environment", () => ({ dev: true }));
-vi.mock("$env/dynamic/private", () => ({ env: {} }));
+vi.mock("$app/env", () => ({ dev: true }));
+vi.mock("$app/env/private", () => ({
+	MULTI_ACCOUNT_COOKIE_SECRET: undefined,
+	SUPABASE_SECRET_KEY: undefined,
+	SUPABASE_SERVICE_ROLE_KEY: undefined,
+}));
 
 import type { Cookies } from "@sveltejs/kit";
 import type { StoredAccount } from "$lib/types";

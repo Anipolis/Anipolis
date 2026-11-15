@@ -19,7 +19,7 @@ export function toAbsoluteUrl(value: string, origin: string): string {
  * og:url に使う URL。共有の行き先は同じページでも、検索語や開いているタブの違いで
  * 別のカードとして数えられないよう、クエリと # を落とす（ページの本体を指す URL にする）。
  */
-export function canonicalUrl(url: URL): string {
+export function canonicalUrl(url: Pick<URL, "origin" | "pathname">): string {
 	return `${url.origin}${url.pathname}`;
 }
 
