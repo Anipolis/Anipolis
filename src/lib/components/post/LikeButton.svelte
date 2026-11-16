@@ -1,7 +1,7 @@
 <script lang="ts">
 import { untrack } from "svelte";
+import ReactionUsersPopover from "#lib/components/ReactionUsersPopover.svelte";
 import { enhance } from "$app/forms";
-import ReactionUsersPopover from "$lib/components/ReactionUsersPopover.svelte";
 import type { PostController } from "./post-controller.svelte";
 
 interface Props {

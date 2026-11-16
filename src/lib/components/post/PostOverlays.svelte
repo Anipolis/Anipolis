@@ -1,9 +1,9 @@
 <script lang="ts">
+import { trapFocus } from "#lib/actions/trapFocus.ts";
+import AnimeExchangeResult from "#lib/components/AnimeExchangeResult.svelte";
+import UserAvatar from "#lib/components/UserAvatar.svelte";
+import { contentWarningLabel, hasContentWarning } from "#lib/content-warning.ts";
 import { enhance } from "$app/forms";
-import { trapFocus } from "$lib/actions/trapFocus";
-import AnimeExchangeResult from "$lib/components/AnimeExchangeResult.svelte";
-import UserAvatar from "$lib/components/UserAvatar.svelte";
-import { contentWarningLabel, hasContentWarning } from "$lib/content-warning";
 import type { PostController } from "./post-controller.svelte";
 
 interface Props {

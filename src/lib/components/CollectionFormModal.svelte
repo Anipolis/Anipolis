@@ -1,8 +1,6 @@
 <script lang="ts">
-import type { SubmitFunction } from "@sveltejs/kit";
 import { untrack } from "svelte";
-import { applyAction, enhance } from "$app/forms";
-import { trapFocus } from "$lib/actions/trapFocus";
+import { trapFocus } from "#lib/actions/trapFocus.ts";
 import {
 	COLLECTION_KINDS,
 	type CollectionKind,
@@ -11,7 +9,9 @@ import {
 	MAX_COLLECTION_TIER_LABEL_LENGTH,
 	MAX_COLLECTION_TIERS,
 	MAX_COLLECTION_TITLE_LENGTH,
-} from "$lib/collections";
+} from "#lib/collections.ts";
+import type { SubmitFunction } from "$app/forms";
+import { applyAction, enhance } from "$app/forms";
 
 /**
  * コレクションを作る・題名などを直す画面（#515）。送り先はページのフォームアクション。

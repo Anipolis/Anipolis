@@ -1,6 +1,6 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { RoomReminder } from "$lib/room-reminders";
+import type { RoomReminder } from "#lib/room-reminders.ts";
 import RoomReminderToasts from "./RoomReminderToasts.svelte";
 
 function reminder(id: string, firedAt = "2026-11-10T12:00:00Z"): RoomReminder {

@@ -1,12 +1,12 @@
-import { jstBroadcastDate } from "$lib/syobocal-schedule";
-import type { Anime, BroadcastRoomOverride } from "$lib/types";
+import { jstBroadcastDate } from "#lib/syobocal-schedule.ts";
+import type { Anime, BroadcastRoomOverride } from "#lib/types.ts";
 import {
 	type BroadcastEpisodeSlot,
 	inferEpisodeNumbersBackward,
 	inferEpisodeNumbersForward,
 	normalizedBroadcastEpisodeLabel,
-} from "$lib/utils/broadcast-episodes";
-import { broadcastTimeMinutes, isEligibleForRoomLog, roomDateKey } from "$lib/utils/broadcast-room";
+} from "#lib/utils/broadcast-episodes.ts";
+import { broadcastTimeMinutes, isEligibleForRoomLog, roomDateKey } from "#lib/utils/broadcast-room.ts";
 
 export type BroadcastEpisodeLogSlot = BroadcastEpisodeSlot & { opened: boolean };
 

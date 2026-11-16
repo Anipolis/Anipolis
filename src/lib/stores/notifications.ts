@@ -1,5 +1,5 @@
 import { writable } from "svelte/store";
-import type { RoomReminder } from "$lib/room-reminders";
+import type { RoomReminder } from "#lib/room-reminders.ts";
 
 /**
  * 未読バッジの再取得を layout に依頼するためのカウンター。

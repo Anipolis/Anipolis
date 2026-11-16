@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Cookies } from "@sveltejs/kit";
-import type { Database } from "$lib/supabase/database.types";
+import type { Database } from "#lib/supabase/database.types.ts";
 import { grantBetaAccess } from "./discord";
 import { clearInviteCodeCookie, redeemInviteCode } from "./invites";
 

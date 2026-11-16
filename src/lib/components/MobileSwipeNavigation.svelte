@@ -1,9 +1,6 @@
 <script lang="ts">
 import type { Session } from "@supabase/supabase-js";
 import { onDestroy, onMount } from "svelte";
-import { browser, dev } from "$app/environment";
-import { goto } from "$app/navigation";
-import { page } from "$app/state";
 import {
 	classifySwipe,
 	decideSwipeStart,
@@ -13,7 +10,10 @@ import {
 	type SwipeElementLike,
 	type SwipeResult,
 	type SwipeStartDecision,
-} from "$lib/utils/swipe-gesture";
+} from "#lib/utils/swipe-gesture.ts";
+import { browser, dev } from "$app/env";
+import { goto } from "$app/navigation";
+import { page } from "$app/state";
 
 interface Props {
 	session: Session | null;

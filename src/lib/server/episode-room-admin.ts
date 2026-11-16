@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fail } from "@sveltejs/kit";
-import { MAX_EPISODE_NUMBER } from "$lib/episode-room";
-import type { Database } from "$lib/supabase/database.types";
+import { MAX_EPISODE_NUMBER } from "#lib/episode-room.ts";
+import type { Database } from "#lib/supabase/database.types.ts";
 
 /**
  * 話数ルーム（153）の管理操作。作品ページの管理タブから呼ぶ。

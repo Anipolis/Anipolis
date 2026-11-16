@@ -1,8 +1,8 @@
 <script lang="ts">
-import AnimeExchangeResult from "$lib/components/AnimeExchangeResult.svelte";
-import TrendingPanel from "$lib/components/TrendingPanel.svelte";
-import UserAvatar from "$lib/components/UserAvatar.svelte";
-import { formatRelativeTime } from "$lib/utils/format";
+import AnimeExchangeResult from "#lib/components/AnimeExchangeResult.svelte";
+import TrendingPanel from "#lib/components/TrendingPanel.svelte";
+import UserAvatar from "#lib/components/UserAvatar.svelte";
+import { formatRelativeTime } from "#lib/utils/format.ts";
 import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();

@@ -1,16 +1,16 @@
 ﻿import { error, fail } from "@sveltejs/kit";
-import { postImageMediaUrl } from "$lib/post-image-url";
-import { postMetaDescription } from "$lib/seo";
+import { postImageMediaUrl } from "#lib/post-image-url.ts";
+import { postMetaDescription } from "#lib/seo.ts";
 import {
 	deletePostAction,
 	insertPostWithHashtags,
 	toggleBookmarkAction,
 	toggleLikeAction,
 	toggleRepostAction,
-} from "$lib/server/actions";
-import { buildPostCardSelect } from "$lib/server/post-selects";
-import { enrichPostsWithCounts, getAnimeRankingTrending } from "$lib/server/queries";
-import type { Post, RawPost } from "$lib/types";
+} from "#lib/server/actions.ts";
+import { buildPostCardSelect } from "#lib/server/post-selects.ts";
+import { enrichPostsWithCounts, getAnimeRankingTrending } from "#lib/server/queries.ts";
+import type { Post, RawPost } from "#lib/types.ts";
 import type { Actions, PageServerLoad } from "./$types";
 
 const POSTS_SELECT = buildPostCardSelect();

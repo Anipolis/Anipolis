@@ -1,4 +1,4 @@
-import type { AnimeStatus } from "$lib/types";
+import type { AnimeStatus } from "#lib/types.ts";
 
 /** マイリストのステータスの表示名とアイコン（プロフィールのマイリストタブと同じ） */
 export const ANIME_STATUS_LABELS: Record<AnimeStatus, string> = {

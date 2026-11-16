@@ -1,5 +1,5 @@
 <script lang="ts">
-import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
+import { coverThumbFallback, coverThumbSrc } from "#lib/cover-image.ts";
 
 /**
  * 作品の画像だけのタイル。題名はマウスを乗せるかキーボードで選ぶと出す（マウスの無い端末とスマホでは常に出す）。

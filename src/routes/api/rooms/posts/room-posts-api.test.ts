@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("$lib/server/queries", () => ({
+vi.mock("#lib/server/queries.ts", () => ({
 	getRoomPostsAfter: vi.fn(async () => ({ posts: [], nextCursor: null, hasMore: false })),
 	getRoomPostsBefore: vi.fn(async () => ({ posts: [], nextCursor: null, hasMore: false })),
 	getVisiblePostReplyCounts: vi.fn(
@@ -8,8 +8,8 @@ vi.mock("$lib/server/queries", () => ({
 	),
 }));
 
-import { getRoomPostsAfter, getRoomPostsBefore, getVisiblePostReplyCounts } from "$lib/server/queries";
-import { ROOM_STATE_MAX_IDS } from "$lib/utils/room-connection";
+import { getRoomPostsAfter, getRoomPostsBefore, getVisiblePostReplyCounts } from "#lib/server/queries.ts";
+import { ROOM_STATE_MAX_IDS } from "#lib/utils/room-connection.ts";
 import { GET } from "./+server";
 import { POST } from "./state/+server";
 

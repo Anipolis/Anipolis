@@ -1,5 +1,5 @@
 <script lang="ts">
-import { trapFocus } from "$lib/actions/trapFocus";
+import { trapFocus } from "#lib/actions/trapFocus.ts";
 
 /**
  * 「マイリストから外す」の確認のポップアップ。スコアやメモごと消えて元に戻せないので、1回押しただけでは外さない。

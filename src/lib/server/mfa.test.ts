@@ -2,7 +2,11 @@ import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const env = vi.hoisted((): Record<string, string | undefined> => ({ ADMIN_MFA_REQUIRED: "true" }));
-vi.mock("$env/dynamic/private", () => ({ env }));
+vi.mock("$app/env/private", () => ({
+	get ADMIN_MFA_REQUIRED() {
+		return env["ADMIN_MFA_REQUIRED"];
+	},
+}));
 
 import { getAssuranceLevel, isMfaExemptPath, isTotpCodeShape, needsMfaChallenge, normalizeTotpCode } from "./mfa";
 import { isAdminUser } from "./queries";

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("$lib/server/queries", async (importOriginal) => {
-	const original = await importOriginal<typeof import("$lib/server/queries")>();
+vi.mock("#lib/server/queries.ts", async (importOriginal) => {
+	const original = await importOriginal<typeof import("#lib/server/queries.ts")>();
 	return {
 		...original,
 		// 件数・ミュートの付与はこのテストの対象外。取得した行をそのまま返す

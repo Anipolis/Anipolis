@@ -1,26 +1,26 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { error, fail } from "@sveltejs/kit";
-import { computeMutedUntil } from "$lib/anime-mute-schedule";
+import { computeMutedUntil } from "#lib/anime-mute-schedule.ts";
 import {
 	MAX_EXCHANGE_SUBJECTIVE_TAGS,
 	toExchangeSubjectiveTags,
 	validateExchangeSubjectiveTags,
-} from "$lib/exchange-tags";
-import { parseMylistNote, parseWatchDates } from "$lib/mylist/entry-details";
-import type { TransferEntry } from "$lib/mylist-transfer";
-import { normalizePostContent } from "$lib/post-content";
-import { isPostImageUsable } from "$lib/post-image-lifetime";
-import { ownedPostImagePath } from "$lib/post-image-url";
-import { fetchOAuthAvatar } from "$lib/server/oauth-avatar";
-import { getEvent, isAdminUser, USERNAME_HELD_ERROR_MESSAGE, USERNAME_HELD_USER_MESSAGE } from "$lib/server/queries";
-import { createServiceRoleClient } from "$lib/server/supabase-admin";
-import { MULTIPART_OVERHEAD_BYTES, readFormDataWithLimit, validateImageBuffer } from "$lib/server/upload";
-import type { Database, Json } from "$lib/supabase/database.types";
-import type { AnimeExchangeShare, AnimeStatus, BroadcastRoomMuteDuration, UserAnimeEntry } from "$lib/types";
-import { eventScheduledAtIsoFromBroadcastInput } from "$lib/utils/event-time";
-import { extractHashtags } from "$lib/utils/hashtag";
-import { jstDateKey } from "$lib/utils/jst";
-import { MIN_PASSWORD_LENGTH } from "$lib/utils/password-reset";
+} from "#lib/exchange-tags.ts";
+import { parseMylistNote, parseWatchDates } from "#lib/mylist/entry-details.ts";
+import type { TransferEntry } from "#lib/mylist-transfer.ts";
+import { normalizePostContent } from "#lib/post-content.ts";
+import { isPostImageUsable } from "#lib/post-image-lifetime.ts";
+import { ownedPostImagePath } from "#lib/post-image-url.ts";
+import { fetchOAuthAvatar } from "#lib/server/oauth-avatar.ts";
+import { getEvent, isAdminUser, USERNAME_HELD_ERROR_MESSAGE, USERNAME_HELD_USER_MESSAGE } from "#lib/server/queries.ts";
+import { createServiceRoleClient } from "#lib/server/supabase-admin.ts";
+import { MULTIPART_OVERHEAD_BYTES, readFormDataWithLimit, validateImageBuffer } from "#lib/server/upload.ts";
+import type { Database, Json } from "#lib/supabase/database.types.ts";
+import type { AnimeExchangeShare, AnimeStatus, BroadcastRoomMuteDuration, UserAnimeEntry } from "#lib/types.ts";
+import { eventScheduledAtIsoFromBroadcastInput } from "#lib/utils/event-time.ts";
+import { extractHashtags } from "#lib/utils/hashtag.ts";
+import { jstDateKey } from "#lib/utils/jst.ts";
+import { MIN_PASSWORD_LENGTH } from "#lib/utils/password-reset.ts";
 
 const MAX_POST_IMAGES = 4;
 /** 147 のトリガーが投稿の回数制限で返す SQLSTATE（PostgREST は HTTP 429 にする） */
@@ -1361,7 +1361,7 @@ export async function toggleBroadcastSubscription(
 export async function updateBroadcastNotificationSettings(
 	supabase: SupabaseClient<Database>,
 	userId: string,
-	settings: import("$lib/types").BroadcastNotificationSettings,
+	settings: import("#lib/types.ts").BroadcastNotificationSettings,
 ): Promise<void> {
 	const { error } = await supabase.from("broadcast_notification_settings").upsert({
 		user_id: userId,

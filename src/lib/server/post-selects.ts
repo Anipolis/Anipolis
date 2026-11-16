@@ -1,4 +1,4 @@
-import { COLLECTION_SHARE_SELECT } from "$lib/collections";
+import { COLLECTION_SHARE_SELECT } from "#lib/collections.ts";
 
 const POST_BASE_FIELDS = [
 	"id",

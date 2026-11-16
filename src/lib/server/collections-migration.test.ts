@@ -5,7 +5,7 @@ import {
 	MAX_COLLECTION_ITEMS,
 	MAX_COLLECTION_TITLE_LENGTH,
 	MAX_COLLECTIONS_PER_USER,
-} from "$lib/collections";
+} from "#lib/collections.ts";
 
 const migration = readFileSync(new URL("../../../supabase/migrations/179_collections.sql", import.meta.url), "utf8");
 

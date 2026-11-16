@@ -1,10 +1,10 @@
-import type { SubmitFunction } from "@sveltejs/kit";
 import { tick } from "svelte";
+import { confirmReaction } from "#lib/reaction-confirm.ts";
+import { createReactionFeedback } from "#lib/reaction-feedback.svelte.ts";
+import { isReactionFailure } from "#lib/reaction-feedback.ts";
+import type { Post, ReactionType, ReactionUser } from "#lib/types.ts";
+import type { SubmitFunction } from "$app/forms";
 import { goto } from "$app/navigation";
-import { confirmReaction } from "$lib/reaction-confirm";
-import { isReactionFailure } from "$lib/reaction-feedback";
-import { createReactionFeedback } from "$lib/reaction-feedback.svelte";
-import type { Post, ReactionType, ReactionUser } from "$lib/types";
 
 /** Per-post interaction state shared by the timeline row and the detail layout. */
 export class PostController {

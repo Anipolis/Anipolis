@@ -1,7 +1,7 @@
 import { error, fail } from "@sveltejs/kit";
-import { deletePostAction, toggleBookmarkAction, toggleLikeAction, toggleRepostAction } from "$lib/server/actions";
-import { buildEpisodeRoomPageData, createEpisodeRoomPost } from "$lib/server/episode-room-page";
-import { getAnime, getSpecialEpisodeRoom } from "$lib/server/queries";
+import { deletePostAction, toggleBookmarkAction, toggleLikeAction, toggleRepostAction } from "#lib/server/actions.ts";
+import { buildEpisodeRoomPageData, createEpisodeRoomPost } from "#lib/server/episode-room-page.ts";
+import { getAnime, getSpecialEpisodeRoom } from "#lib/server/queries.ts";
 import type { Actions, PageServerLoad } from "./$types";
 
 /**

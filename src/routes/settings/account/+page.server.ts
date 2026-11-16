@@ -1,8 +1,8 @@
 import { fail } from "@sveltejs/kit";
-import { hasPasswordProvider } from "$lib/server/auth";
-import { USERNAME_HELD_ERROR_MESSAGE, USERNAME_HELD_USER_MESSAGE } from "$lib/server/queries";
-import { redirectToLogin } from "$lib/server/require-login";
-import { createServiceRoleClient } from "$lib/server/supabase-admin";
+import { hasPasswordProvider } from "#lib/server/auth.ts";
+import { USERNAME_HELD_ERROR_MESSAGE, USERNAME_HELD_USER_MESSAGE } from "#lib/server/queries.ts";
+import { redirectToLogin } from "#lib/server/require-login.ts";
+import { createServiceRoleClient } from "#lib/server/supabase-admin.ts";
 import type { Actions, PageServerLoad } from "./$types";
 
 async function verifyCurrentPassword(

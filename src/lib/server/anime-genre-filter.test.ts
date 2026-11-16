@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
-import type { Database } from "$lib/supabase/database.types";
+import type { Database } from "#lib/supabase/database.types.ts";
 import { parseAnimeListFilters } from "./anime-list-filters";
 import { getAnimeCount } from "./queries";
 

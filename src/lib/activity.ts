@@ -1,4 +1,4 @@
-import type { AnimeStatus } from "$lib/types";
+import type { AnimeStatus } from "#lib/types.ts";
 
 /** アクティビティに流すステータス（181。視聴予定・視聴中・完了） */
 export type ActivityStatus = Extract<AnimeStatus, "plan_to_watch" | "watching" | "completed">;

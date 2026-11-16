@@ -3,12 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const setPasswordRecoveryCookie = vi.fn();
 
-vi.mock("$lib/server/password-reset", () => ({
+vi.mock("#lib/server/password-reset.ts", () => ({
 	clearPasswordRecoveryCookie: vi.fn(),
 	getPasswordRecoveryUserId: () => null,
 	setPasswordRecoveryCookie: (...args: unknown[]) => setPasswordRecoveryCookie(...(args as [])),
 }));
-vi.mock("$lib/server/rate-limit", () => ({ isRateLimited: () => false }));
+vi.mock("#lib/server/rate-limit.ts", () => ({ isRateLimited: () => false }));
 
 const { load } = await import("./+page.server");
 

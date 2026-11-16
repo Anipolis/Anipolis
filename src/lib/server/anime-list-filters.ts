@@ -1,8 +1,8 @@
-import { translateAnimeGenres } from "$lib/anime-vocabulary";
-import type { AnimeListOptions } from "$lib/server/queries";
-import type { ActiveAnimeSeasonChip, AnimeSeasonChip } from "$lib/types";
+import { translateAnimeGenres } from "#lib/anime-vocabulary.ts";
+import type { AnimeListOptions } from "#lib/server/queries.ts";
+import type { ActiveAnimeSeasonChip, AnimeSeasonChip } from "#lib/types.ts";
 
-export type { ActiveAnimeSeasonChip, AnimeSeasonChip } from "$lib/types";
+export type { ActiveAnimeSeasonChip, AnimeSeasonChip } from "#lib/types.ts";
 
 export type AnimeListTab = "popular" | "trending" | "top_rated" | "mylist" | "airing" | "upcoming" | "register" | "all";
 

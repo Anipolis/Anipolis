@@ -1,23 +1,19 @@
 <script lang="ts">
-import type { SubmitFunction } from "@sveltejs/kit";
 import { untrack } from "svelte";
-import { enhance } from "$app/forms";
-import { invalidateAll } from "$app/navigation";
-import { page } from "$app/state";
-import { scrollableTabs } from "$lib/actions/scrollableTabs";
-import ActivityFeed from "$lib/components/ActivityFeed.svelte";
-import AnimeStatusSection from "$lib/components/AnimeStatusSection.svelte";
-import FavoriteAnimeShelf from "$lib/components/FavoriteAnimeShelf.svelte";
-import ImageCropper from "$lib/components/ImageCropper.svelte";
-import MyListQuickEdit from "$lib/components/MyListQuickEdit.svelte";
-import MylistSortSelect from "$lib/components/MylistSortSelect.svelte";
-import MylistStatusTabs from "$lib/components/MylistStatusTabs.svelte";
-import PostRow from "$lib/components/PostRow.svelte";
-import SeoMeta from "$lib/components/SeoMeta.svelte";
-import ShareMenu from "$lib/components/ShareMenu.svelte";
-import TrendingPanel from "$lib/components/TrendingPanel.svelte";
-import UserAvatar from "$lib/components/UserAvatar.svelte";
-import { checkCropSource } from "$lib/image-crop";
+import { scrollableTabs } from "#lib/actions/scrollableTabs.ts";
+import ActivityFeed from "#lib/components/ActivityFeed.svelte";
+import AnimeStatusSection from "#lib/components/AnimeStatusSection.svelte";
+import FavoriteAnimeShelf from "#lib/components/FavoriteAnimeShelf.svelte";
+import ImageCropper from "#lib/components/ImageCropper.svelte";
+import MyListQuickEdit from "#lib/components/MyListQuickEdit.svelte";
+import MylistSortSelect from "#lib/components/MylistSortSelect.svelte";
+import MylistStatusTabs from "#lib/components/MylistStatusTabs.svelte";
+import PostRow from "#lib/components/PostRow.svelte";
+import SeoMeta from "#lib/components/SeoMeta.svelte";
+import ShareMenu from "#lib/components/ShareMenu.svelte";
+import TrendingPanel from "#lib/components/TrendingPanel.svelte";
+import UserAvatar from "#lib/components/UserAvatar.svelte";
+import { checkCropSource } from "#lib/image-crop.ts";
 import {
 	countMylistByStatus,
 	groupMylistByStatus,
@@ -27,10 +23,14 @@ import {
 	parseMylistSort,
 	parseMylistTab,
 	sortMylist,
-} from "$lib/mylist/sort";
-import { crawlerSafeImage } from "$lib/seo";
-import { timelineCursorHref } from "$lib/timeline-cursor";
-import type { Anime, AnimeStatus, UserAnimeEntry } from "$lib/types";
+} from "#lib/mylist/sort.ts";
+import { crawlerSafeImage } from "#lib/seo.ts";
+import { timelineCursorHref } from "#lib/timeline-cursor.ts";
+import type { Anime, AnimeStatus, UserAnimeEntry } from "#lib/types.ts";
+import type { SubmitFunction } from "$app/forms";
+import { enhance } from "$app/forms";
+import { invalidateAll } from "$app/navigation";
+import { page } from "$app/state";
 import type { PageProps } from "./$types";
 
 let { data, form }: PageProps = $props();

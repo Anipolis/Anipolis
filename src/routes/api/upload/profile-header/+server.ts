@@ -1,11 +1,11 @@
 import { error, json } from "@sveltejs/kit";
-import { requireAccountCanWrite } from "$lib/server/actions";
+import { requireAccountCanWrite } from "#lib/server/actions.ts";
 import {
 	MULTIPART_OVERHEAD_BYTES,
 	publicUrlToStoragePath,
 	readFormDataWithLimit,
 	validateImageBuffer,
-} from "$lib/server/upload";
+} from "#lib/server/upload.ts";
 import type { RequestHandler } from "./$types";
 
 const BUCKET = "profile-headers";

@@ -1,7 +1,7 @@
 <script lang="ts">
-import MyListModal from "$lib/components/MyListModal.svelte";
-import MyListStatusPopover from "$lib/components/MyListStatusPopover.svelte";
-import type { UserAnimeEntry } from "$lib/types";
+import MyListModal from "#lib/components/MyListModal.svelte";
+import MyListStatusPopover from "#lib/components/MyListStatusPopover.svelte";
+import type { UserAnimeEntry } from "#lib/types.ts";
 
 /**
  * 作品カードのマイリストボタンから開く欄。マウスで操作する PC は状態だけを選ぶ小さな欄（MyListStatusPopover）、

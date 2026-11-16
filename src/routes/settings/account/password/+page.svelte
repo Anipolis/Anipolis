@@ -1,8 +1,8 @@
 <script lang="ts">
-import type { SubmitFunction } from "@sveltejs/kit";
+import SettingsBackLink from "#lib/components/SettingsBackLink.svelte";
+import { MIN_PASSWORD_LENGTH } from "#lib/utils/password-reset.ts";
+import type { SubmitFunction } from "$app/forms";
 import { enhance } from "$app/forms";
-import SettingsBackLink from "$lib/components/SettingsBackLink.svelte";
-import { MIN_PASSWORD_LENGTH } from "$lib/utils/password-reset";
 import type { PageProps } from "./$types";
 
 let { data, form }: PageProps = $props();

@@ -1,5 +1,5 @@
 import { error, json } from "@sveltejs/kit";
-import { getExtraAccounts, setExtraAccounts } from "$lib/server/multi-account";
+import { getExtraAccounts, setExtraAccounts } from "#lib/server/multi-account.ts";
 import type { RequestHandler } from "./$types";
 
 export const POST: RequestHandler = async ({ request, cookies, locals: { supabase, safeGetSession } }) => {

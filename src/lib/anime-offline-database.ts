@@ -1,4 +1,4 @@
-import type { AnimeResourceLink } from "$lib/types";
+import type { AnimeResourceLink } from "#lib/types.ts";
 
 export const ANIME_OFFLINE_SOURCE_NAME = "anime-offline-database";
 export const ANIME_OFFLINE_REPOSITORY_URL = "https://github.com/manami-project/anime-offline-database";

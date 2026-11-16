@@ -1,6 +1,6 @@
 <script lang="ts">
-import UserAvatar from "$lib/components/UserAvatar.svelte";
-import UserCardSkeleton from "$lib/components/UserCardSkeleton.svelte";
+import UserAvatar from "#lib/components/UserAvatar.svelte";
+import UserCardSkeleton from "#lib/components/UserCardSkeleton.svelte";
 import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();

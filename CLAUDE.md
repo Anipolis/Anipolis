@@ -82,4 +82,4 @@ Post reads are restricted by RLS, including private-account visibility, blocks, 
 - Route files use `+page.server.ts` for data loading (returns typed `PageData`) and server actions
 - Form actions call helpers from `actions.ts`, passing `request`, `supabase`, and `userId`
 - API routes live under `src/routes/api/` (e.g., `/api/posts` for post creation)
-- Path alias `$lib/` maps to `src/lib/`
+- Subpath import `#lib/*` (`imports` in `package.json`) maps to `src/lib/*`. SvelteKit 3 removed `$lib` and deprecated the `config.alias` option

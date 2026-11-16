@@ -1,8 +1,8 @@
 <script lang="ts">
+import PostRow from "#lib/components/PostRow.svelte";
+import TrendingPanel from "#lib/components/TrendingPanel.svelte";
+import UserAvatar from "#lib/components/UserAvatar.svelte";
 import { page } from "$app/state";
-import PostRow from "$lib/components/PostRow.svelte";
-import TrendingPanel from "$lib/components/TrendingPanel.svelte";
-import UserAvatar from "$lib/components/UserAvatar.svelte";
 import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();

@@ -1,13 +1,13 @@
 <script lang="ts">
-import type { SubmitFunction } from "@sveltejs/kit";
+import { trapFocus } from "#lib/actions/trapFocus.ts";
+import MyListRemoveConfirm from "#lib/components/MyListRemoveConfirm.svelte";
+import { MYLIST_NOTE_MAX_LENGTH } from "#lib/mylist/entry-details.ts";
+import { savedEntryFromResult } from "#lib/mylist/entry-from-form.ts";
+import type { AnimeStatus, UserAnimeEntry } from "#lib/types.ts";
+import { jstDateKey } from "#lib/utils/jst.ts";
+import type { SubmitFunction } from "$app/forms";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
-import { trapFocus } from "$lib/actions/trapFocus";
-import MyListRemoveConfirm from "$lib/components/MyListRemoveConfirm.svelte";
-import { MYLIST_NOTE_MAX_LENGTH } from "$lib/mylist/entry-details";
-import { savedEntryFromResult } from "$lib/mylist/entry-from-form";
-import type { AnimeStatus, UserAnimeEntry } from "$lib/types";
-import { jstDateKey } from "$lib/utils/jst";
 
 type Props = {
 	open: boolean;

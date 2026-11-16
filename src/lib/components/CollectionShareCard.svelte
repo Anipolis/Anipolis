@@ -1,6 +1,6 @@
 <script lang="ts">
-import { type CollectionShare, collectionTierColor } from "$lib/collections";
-import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
+import { type CollectionShare, collectionTierColor } from "#lib/collections.ts";
+import { coverThumbFallback, coverThumbSrc } from "#lib/cover-image.ts";
 
 /**
  * 投稿でシェアしたコレクションのカード（193）。投稿の中ではコレクションのページへのリンク、

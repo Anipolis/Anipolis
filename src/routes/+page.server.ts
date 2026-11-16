@@ -1,15 +1,15 @@
 ﻿import { fail } from "@sveltejs/kit";
-import type { MylistActivity } from "$lib/activity";
-import { COLLECTION_SHARE_SELECT, type CollectionShare, isCollectionId, toCollectionShare } from "$lib/collections";
+import type { MylistActivity } from "#lib/activity.ts";
+import { COLLECTION_SHARE_SELECT, type CollectionShare, isCollectionId, toCollectionShare } from "#lib/collections.ts";
 import {
 	deletePostAction,
 	insertPostWithHashtags,
 	toggleBookmarkAction,
 	toggleLikeAction,
 	toggleRepostAction,
-} from "$lib/server/actions";
-import { episodeRoomPostFailure, resolveComposerEpisodeRoom } from "$lib/server/episode-room-page";
-import { buildPostCardSelect } from "$lib/server/post-selects";
+} from "#lib/server/actions.ts";
+import { episodeRoomPostFailure, resolveComposerEpisodeRoom } from "#lib/server/episode-room-page.ts";
+import { buildPostCardSelect } from "#lib/server/post-selects.ts";
 import {
 	fillTimelinePage,
 	getAnime,
@@ -21,11 +21,11 @@ import {
 	getOpenBroadcastRoomSessions,
 	getUserAnimeList,
 	type TimelineCursor,
-} from "$lib/server/queries";
-import { failQuery } from "$lib/server/query-failure";
-import { roomHashtag } from "$lib/server/room-hashtag";
-import { parseTimelineCursor } from "$lib/timeline-cursor";
-import type { AnimeExchangeShare, Post } from "$lib/types";
+} from "#lib/server/queries.ts";
+import { failQuery } from "#lib/server/query-failure.ts";
+import { roomHashtag } from "#lib/server/room-hashtag.ts";
+import { parseTimelineCursor } from "#lib/timeline-cursor.ts";
+import type { AnimeExchangeShare, Post } from "#lib/types.ts";
 import type { Actions, PageServerLoad } from "./$types";
 
 // どちらも CW を含む。CW を外したフォールバックはネタバレ本文を出してしまうので用意しない（#317）

@@ -1,5 +1,5 @@
 import { json } from "@sveltejs/kit";
-import { getOpenBroadcastRoomSessions } from "$lib/server/queries";
+import { getOpenBroadcastRoomSessions } from "#lib/server/queries.ts";
 import type { RequestHandler } from "./$types";
 
 export const GET: RequestHandler = async ({ url, locals: { supabase, safeGetSession } }) => {

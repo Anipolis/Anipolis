@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isHttpError } from "@sveltejs/kit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Database } from "$lib/supabase/database.types";
+import type { Database } from "#lib/supabase/database.types.ts";
 import { getEvent, getNotifications, getOwnAnimeList, getUserAnimeList } from "./queries";
 import { failQuery, QUERY_FAILED_MESSAGE } from "./query-failure";
 

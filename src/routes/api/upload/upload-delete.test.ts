@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const referenced = { value: false };
-vi.mock("$lib/server/supabase-admin", () => ({
+vi.mock("#lib/server/supabase-admin.ts", () => ({
 	createServiceRoleClient: () => ({
 		from: () => ({
 			select: () => ({
@@ -12,7 +12,7 @@ vi.mock("$lib/server/supabase-admin", () => ({
 		}),
 	}),
 }));
-vi.mock("$lib/server/actions", () => ({ requireAccountCanWrite: vi.fn() }));
+vi.mock("#lib/server/actions.ts", () => ({ requireAccountCanWrite: vi.fn() }));
 
 import { DELETE } from "./+server";
 

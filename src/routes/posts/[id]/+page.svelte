@@ -1,18 +1,18 @@
 <script lang="ts">
-import type { SubmitFunction } from "@sveltejs/kit";
 import { untrack } from "svelte";
+import BackLink from "#lib/components/BackLink.svelte";
+import PostCardSkeleton from "#lib/components/PostCardSkeleton.svelte";
+import PostDetail from "#lib/components/PostDetail.svelte";
+import PostRow from "#lib/components/PostRow.svelte";
+import { classifyComposerSubmitResult } from "#lib/components/post-composer-submit.ts";
+import SeoMeta from "#lib/components/SeoMeta.svelte";
+import TrendingPanel from "#lib/components/TrendingPanel.svelte";
+import UserAvatar from "#lib/components/UserAvatar.svelte";
+import { createLatestResolved } from "#lib/latest-resolved.svelte.ts";
+import { charCountClass } from "#lib/utils/format.ts";
+import type { SubmitFunction } from "$app/forms";
 import { enhance } from "$app/forms";
 import { page } from "$app/state";
-import BackLink from "$lib/components/BackLink.svelte";
-import PostCardSkeleton from "$lib/components/PostCardSkeleton.svelte";
-import PostDetail from "$lib/components/PostDetail.svelte";
-import PostRow from "$lib/components/PostRow.svelte";
-import { classifyComposerSubmitResult } from "$lib/components/post-composer-submit";
-import SeoMeta from "$lib/components/SeoMeta.svelte";
-import TrendingPanel from "$lib/components/TrendingPanel.svelte";
-import UserAvatar from "$lib/components/UserAvatar.svelte";
-import { createLatestResolved } from "$lib/latest-resolved.svelte";
-import { charCountClass } from "$lib/utils/format";
 import type { PageProps } from "./$types";
 
 let { data, form }: PageProps = $props();

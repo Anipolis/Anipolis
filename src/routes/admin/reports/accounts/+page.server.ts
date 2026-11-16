@@ -1,7 +1,7 @@
 import { fail, redirect } from "@sveltejs/kit";
-import { updateAccountModerationAction, updateReportStatusAction } from "$lib/server/actions";
-import { getAdminReportsByTargetType, isAdminUser } from "$lib/server/queries";
-import { redirectToLogin } from "$lib/server/require-login";
+import { updateAccountModerationAction, updateReportStatusAction } from "#lib/server/actions.ts";
+import { getAdminReportsByTargetType, isAdminUser } from "#lib/server/queries.ts";
+import { redirectToLogin } from "#lib/server/require-login.ts";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {

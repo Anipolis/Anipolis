@@ -1,6 +1,6 @@
 <script lang="ts">
+import type { Anime, TrendingHashtag } from "#lib/types.ts";
 import { page } from "$app/state";
-import type { Anime, TrendingHashtag } from "$lib/types";
 import AnimePosterTile from "./AnimePosterTile.svelte";
 import InfoTip from "./InfoTip.svelte";
 

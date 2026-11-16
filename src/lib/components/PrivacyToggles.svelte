@@ -1,9 +1,9 @@
 <script lang="ts">
-import type { SubmitFunction } from "@sveltejs/kit";
 import { untrack } from "svelte";
+import InfoTip from "#lib/components/InfoTip.svelte";
+import ToggleSwitch from "#lib/components/ToggleSwitch.svelte";
+import type { SubmitFunction } from "$app/forms";
 import { enhance } from "$app/forms";
-import InfoTip from "$lib/components/InfoTip.svelte";
-import ToggleSwitch from "$lib/components/ToggleSwitch.svelte";
 
 /**
  * 鍵アカウントとマイリストの公開のスイッチ。設定の一覧（公開範囲）と /settings/privacy の両方で使う。

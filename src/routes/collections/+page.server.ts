@@ -1,8 +1,8 @@
 import { fail, redirect } from "@sveltejs/kit";
-import { MAX_COLLECTIONS_PER_USER, parseCollectionInput } from "$lib/collections";
-import { ensureAccountCanWrite } from "$lib/server/actions";
-import { getUserCollections } from "$lib/server/queries";
-import { redirectToLogin } from "$lib/server/require-login";
+import { MAX_COLLECTIONS_PER_USER, parseCollectionInput } from "#lib/collections.ts";
+import { ensureAccountCanWrite } from "#lib/server/actions.ts";
+import { getUserCollections } from "#lib/server/queries.ts";
+import { redirectToLogin } from "#lib/server/require-login.ts";
 import type { Actions, PageServerLoad } from "./$types";
 
 /**

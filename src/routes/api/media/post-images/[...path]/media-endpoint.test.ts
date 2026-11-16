@@ -1,10 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("$env/dynamic/public", () => ({ env: { PUBLIC_SUPABASE_URL: "https://project.supabase.co" } }));
+vi.mock("$app/env/public", () => ({ PUBLIC_SUPABASE_URL: "https://project.supabase.co" }));
 const sign = vi.fn(
-	async (urls: string[]) => new Map(urls.map((url) => [url, `https://signed.example/${url.split("/").pop()}`])),
+	async (urls: string[]) =>
+		new Map(
+			urls.map((url) => [
+				url,
+				`https://project.supabase.co/storage/v1/object/sign/post-images/${url.split("/").pop()}`,
+			]),
+		),
 );
-vi.mock("$lib/server/post-image-signing", () => ({ signPostImageUrls: (urls: string[]) => sign(urls) }));
+vi.mock("#lib/server/post-image-signing.ts", () => ({ signPostImageUrls: (urls: string[]) => sign(urls) }));
 
 import { GET } from "./+server";
 
@@ -35,7 +41,7 @@ describe("GET /api/media/post-images/…（#316）", () => {
 		const { result, headers } = call(PATH, { visiblePosts: 1 });
 		await expect(result).rejects.toMatchObject({
 			status: 302,
-			location: expect.stringContaining("https://signed.example/"),
+			location: expect.stringContaining("https://project.supabase.co/storage/v1/object/sign/post-images/"),
 		});
 		expect(headers["cache-control"]).toBe("private, max-age=300");
 	});

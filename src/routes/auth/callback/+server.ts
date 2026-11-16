@@ -1,11 +1,11 @@
 import { redirect } from "@sveltejs/kit";
-import { env } from "$env/dynamic/private";
-import { admitWithInviteCode } from "$lib/server/beta-admission";
-import { grantBetaAccess, isBetaGateEnabled, isBetaMember, verifyGuildMembership } from "$lib/server/discord";
-import { getInviteCodeCookie } from "$lib/server/invites";
-import { detectOAuthLoginMethod, setLastLoginMethod } from "$lib/server/last-login-method";
-import { PASSWORD_RESET_PATH } from "$lib/utils/password-reset";
-import { sanitizeInternalRedirect } from "$lib/utils/url";
+import { admitWithInviteCode } from "#lib/server/beta-admission.ts";
+import { grantBetaAccess, isBetaGateEnabled, isBetaMember, verifyGuildMembership } from "#lib/server/discord.ts";
+import { getInviteCodeCookie } from "#lib/server/invites.ts";
+import { detectOAuthLoginMethod, setLastLoginMethod } from "#lib/server/last-login-method.ts";
+import { PASSWORD_RESET_PATH } from "#lib/utils/password-reset.ts";
+import { sanitizeInternalRedirect } from "#lib/utils/url.ts";
+import { DISCORD_REQUIRED_ROLE_ID } from "$app/env/private";
 import type { RequestHandler } from "./$types";
 
 /**
@@ -85,7 +85,7 @@ export const GET: RequestHandler = async ({ url, cookies, locals: { supabase } }
 		if (discordUserId) {
 			try {
 				const { isMember, roles } = await verifyGuildMembership(discordUserId);
-				const requiredRole = env["DISCORD_REQUIRED_ROLE_ID"];
+				const requiredRole = DISCORD_REQUIRED_ROLE_ID;
 				granted = isMember && (!requiredRole || roles.includes(requiredRole));
 			} catch (e) {
 				// 検証不能（レート制限・トークン不正・Discord 障害）は安全側に倒して不許可

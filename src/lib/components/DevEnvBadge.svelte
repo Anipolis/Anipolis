@@ -1,12 +1,12 @@
 <script lang="ts">
-import { dev } from "$app/environment";
-import { env } from "$env/dynamic/public";
-import { supabaseTarget } from "$lib/supabase-target";
+import { supabaseTarget } from "#lib/supabase-target.ts";
+import { dev } from "$app/env";
+import { PUBLIC_ANIPOLIS_ENV, PUBLIC_SUPABASE_URL } from "$app/env/public";
 
 // 開発サーバーで、いまどの DB につながっているかを常に見せる（本番には出ない）。
 // pnpm dev は .env.staging を読むのでステージング、pnpm dev:prod は本番 DB。
 // 目印だけでなく実際の接続先 URL で判定する（.env.staging に本番の値を書いてしまっても緑にしない）
-const target = supabaseTarget(env["PUBLIC_SUPABASE_URL"], env["PUBLIC_ANIPOLIS_ENV"]);
+const target = supabaseTarget(PUBLIC_SUPABASE_URL, PUBLIC_ANIPOLIS_ENV);
 const LABELS = { staging: "ステージング", production: "本番 DB", unknown: "接続先不明" } as const;
 </script>
 

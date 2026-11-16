@@ -1,20 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Anime, EpisodeRoom } from "$lib/types";
+import type { Anime, EpisodeRoom } from "#lib/types.ts";
 
 const insertPostWithHashtags = vi.hoisted(() => vi.fn());
 const getAnime = vi.hoisted(() => vi.fn());
 const resolveComposerEpisodeRoom = vi.hoisted(() => vi.fn());
 
-vi.mock("$lib/server/actions", () => ({
+vi.mock("#lib/server/actions.ts", () => ({
 	insertPostWithHashtags,
 	deletePostAction: vi.fn(),
 	toggleBookmarkAction: vi.fn(),
 	toggleLikeAction: vi.fn(),
 	toggleRepostAction: vi.fn(),
 }));
-vi.mock("$lib/server/queries", () => ({ getAnime, getAnimeExchangeShareForUser: vi.fn() }));
-vi.mock("$lib/server/episode-room-page", async (importOriginal) => ({
-	...(await importOriginal<typeof import("$lib/server/episode-room-page")>()),
+vi.mock("#lib/server/queries.ts", () => ({ getAnime, getAnimeExchangeShareForUser: vi.fn() }));
+vi.mock("#lib/server/episode-room-page.ts", async (importOriginal) => ({
+	...(await importOriginal<typeof import("#lib/server/episode-room-page.ts")>()),
 	resolveComposerEpisodeRoom,
 }));
 

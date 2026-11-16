@@ -1,26 +1,26 @@
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
-import { isActivityStatus, type MylistActivity } from "$lib/activity";
-import { isRepeatMuteActive } from "$lib/anime-mute-schedule";
-import { groupGenreFilters, translateAnimeGenres } from "$lib/anime-vocabulary";
-import { computeBroadcastStatus } from "$lib/broadcast-status";
-import { type CollectionKind, type CollectionMembership, isCollectionKind } from "$lib/collections";
-import type { EpisodeRoomBounds } from "$lib/episode-room";
-import { toValidExchangeSubjectiveTags } from "$lib/exchange-tags";
-import { isOwnPostImage, postImageMediaUrl } from "$lib/post-image-url";
+import { isActivityStatus, type MylistActivity } from "#lib/activity.ts";
+import { isRepeatMuteActive } from "#lib/anime-mute-schedule.ts";
+import { groupGenreFilters, translateAnimeGenres } from "#lib/anime-vocabulary.ts";
+import { computeBroadcastStatus } from "#lib/broadcast-status.ts";
+import { type CollectionKind, type CollectionMembership, isCollectionKind } from "#lib/collections.ts";
+import type { EpisodeRoomBounds } from "#lib/episode-room.ts";
+import { toValidExchangeSubjectiveTags } from "#lib/exchange-tags.ts";
+import { isOwnPostImage, postImageMediaUrl } from "#lib/post-image-url.ts";
 import {
 	ROOM_REMINDER_LOOKBACK_MS,
 	type RoomReminder,
 	type RoomReminderRow,
 	roomSessionKey,
 	toActiveRoomReminders,
-} from "$lib/room-reminders";
-import { getAssuranceLevel, isAdminMfaRequired } from "$lib/server/mfa";
-import { signPostImageUrls } from "$lib/server/post-image-signing";
-import { buildPostCardSelect, POST_CW_ANIME_SELECT } from "$lib/server/post-selects";
-import { failQuery, logQueryFailure } from "$lib/server/query-failure";
-import type { Database } from "$lib/supabase/database.types";
-import { isEpisodeSuppressedSnapshot } from "$lib/syobocal-episodes";
-import { compareTimelineDesc, type TimelineCursor, timelineCursorFilter } from "$lib/timeline-cursor";
+} from "#lib/room-reminders.ts";
+import { getAssuranceLevel, isAdminMfaRequired } from "#lib/server/mfa.ts";
+import { signPostImageUrls } from "#lib/server/post-image-signing.ts";
+import { buildPostCardSelect, POST_CW_ANIME_SELECT } from "#lib/server/post-selects.ts";
+import { failQuery, logQueryFailure } from "#lib/server/query-failure.ts";
+import type { Database } from "#lib/supabase/database.types.ts";
+import { isEpisodeSuppressedSnapshot } from "#lib/syobocal-episodes.ts";
+import { compareTimelineDesc, type TimelineCursor, timelineCursorFilter } from "#lib/timeline-cursor.ts";
 import type {
 	Anime,
 	AnimeExchangeItem,
@@ -44,10 +44,10 @@ import type {
 	ReactionUser,
 	RoomAiring,
 	UserAnimeEntry,
-} from "$lib/types";
-import { toPost } from "$lib/types";
-import { animeIsScheduledForRoomDate } from "$lib/utils/broadcast-room";
-import { escapeIlikePattern } from "$lib/utils/search";
+} from "#lib/types.ts";
+import { toPost } from "#lib/types.ts";
+import { animeIsScheduledForRoomDate } from "#lib/utils/broadcast-room.ts";
+import { escapeIlikePattern } from "#lib/utils/search.ts";
 
 type NotificationActor = {
 	username: string;
@@ -4565,7 +4565,7 @@ export async function getBroadcastSubscriptions(supabase: SupabaseClient<Databas
 export async function getBroadcastNotificationSettings(
 	supabase: SupabaseClient<Database>,
 	userId: string,
-): Promise<import("$lib/types").BroadcastNotificationSettings> {
+): Promise<import("#lib/types.ts").BroadcastNotificationSettings> {
 	const { data } = await supabase
 		.from("broadcast_notification_settings")
 		.select("notify_1min, notify_5min, notify_30min")
@@ -4593,7 +4593,7 @@ export async function getBroadcastRoomSession(
 export async function getBroadcastRoomScheduleSnapshotsForAnime(
 	supabase: SupabaseClient<Database>,
 	animeId: number,
-): Promise<(import("$lib/utils/broadcast-episodes").BroadcastEpisodeSlot & { opened: boolean })[]> {
+): Promise<(import("#lib/utils/broadcast-episodes.ts").BroadcastEpisodeSlot & { opened: boolean })[]> {
 	const reader = supabase;
 	// 未来セッションも返す: しょぼい話数はローリング同期の範囲でしか付かないため、
 	// 未開場の番号付きセッションが過去日付への逆算の唯一のアンカーになることがある。

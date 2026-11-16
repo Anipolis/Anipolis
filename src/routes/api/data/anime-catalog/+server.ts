@@ -3,7 +3,7 @@ import {
 	ANIME_CATALOG_EXPORT_BUCKET,
 	ANIME_CATALOG_EXPORT_OBJECT,
 	buildAnimeCatalogExport,
-} from "$lib/anime-catalog-export";
+} from "#lib/anime-catalog-export.ts";
 import type { RequestHandler } from "./$types";
 
 const CACHE_CONTROL = "public, max-age=3600, s-maxage=86400";

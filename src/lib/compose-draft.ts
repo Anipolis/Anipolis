@@ -12,8 +12,8 @@
  * - localStorage が使えない環境（プライベートモード等）では例外を握りつぶし、保存無しで動作する
  */
 
-import { type CollectionShare, isCollectionKind } from "$lib/collections";
-import { isPostImageUsable } from "$lib/post-image-lifetime";
+import { type CollectionShare, isCollectionKind } from "#lib/collections.ts";
+import { isPostImageUsable } from "#lib/post-image-lifetime.ts";
 
 /**
  * 投稿に付けるルーム。放送枠（放送中の話・作品ルーム）か、話数ルーム（話数・特番）のどれか1つを指す。

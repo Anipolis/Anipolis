@@ -1,13 +1,13 @@
 import type { ServerLoad } from "@sveltejs/kit";
 import { error, redirect } from "@sveltejs/kit";
-import { getExtraAccounts, setExtraAccounts } from "$lib/server/multi-account";
+import { getExtraAccounts, setExtraAccounts } from "#lib/server/multi-account.ts";
 import {
 	getActiveRoomReminders,
 	getPendingReportsCount,
 	getProfileById,
 	getUnreadNotificationCount,
-} from "$lib/server/queries";
-import type { LinkedAccountSummary, StoredAccount } from "$lib/types";
+} from "#lib/server/queries.ts";
+import type { LinkedAccountSummary, StoredAccount } from "#lib/types.ts";
 
 // 初回オンボーディング誘導を免除するパス（オンボーディング画面自身と認証フロー、
 // 登録前にも読めるべき規約・ポリシー・出典・お問い合わせ）

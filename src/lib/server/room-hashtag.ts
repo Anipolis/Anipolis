@@ -1,4 +1,4 @@
-import type { Anime } from "$lib/types";
+import type { Anime } from "#lib/types.ts";
 
 /** 公式ハッシュタグが無い作品は、タイトルから空白と記号を除いたものをルームのハッシュタグにする */
 function fallbackRoomHashtag(title: string) {

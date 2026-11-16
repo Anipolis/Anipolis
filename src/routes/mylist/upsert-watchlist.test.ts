@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const upsertUserAnimeEntry = vi.fn(async () => ({ success: true }));
-vi.mock("$lib/server/actions", () => ({
+vi.mock("#lib/server/actions.ts", () => ({
 	upsertUserAnimeEntry,
 	removeUserAnimeEntry: vi.fn(),
 }));
-vi.mock("$lib/server/queries", () => ({
+vi.mock("#lib/server/queries.ts", () => ({
 	getAnimeRankingTrending: vi.fn(),
 	getUserAnimeList: vi.fn(),
 }));

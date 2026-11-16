@@ -1,7 +1,7 @@
 <script lang="ts">
 // テスト専用: 設定ページを layout と同じ AccountBoundary で包んで描画する（#298）
 import type { Component } from "svelte";
-import AccountBoundary from "$lib/components/AccountBoundary.svelte";
+import AccountBoundary from "#lib/components/AccountBoundary.svelte";
 
 interface Props {
 	userId: string | null;

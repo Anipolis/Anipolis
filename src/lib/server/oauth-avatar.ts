@@ -8,7 +8,7 @@ import { validateImageBuffer } from "./upload.ts";
  * ことにもなるので、プロフィール作成時に一度だけ取得して自前で配信する。
  *
  * 任意の URL を取得するとサーバーから内部・外部へ好きにリクエストさせられるため、取得先は
- * 各プロバイダーの画像配信元に限定する。scripts/ からも使うので $lib の別名は使わない。
+ * 各プロバイダーの画像配信元に限定する。scripts/ からも使うので SvelteKit 固有の import（$app/*・$env/*）は使わない。
  */
 export const OAUTH_AVATAR_HOSTS = ["cdn.discordapp.com", "lh3.googleusercontent.com", "pbs.twimg.com"] as const;
 export const OAUTH_AVATAR_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;

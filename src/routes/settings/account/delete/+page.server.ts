@@ -1,8 +1,8 @@
 import { fail, redirect } from "@sveltejs/kit";
-import { checkDeletionGate, DELETE_REAUTH_WINDOW_MS, deleteAccount } from "$lib/server/account-deletion";
-import { hasPasswordProvider } from "$lib/server/auth";
-import { setExtraAccounts } from "$lib/server/multi-account";
-import { redirectToLogin } from "$lib/server/require-login";
+import { checkDeletionGate, DELETE_REAUTH_WINDOW_MS, deleteAccount } from "#lib/server/account-deletion.ts";
+import { hasPasswordProvider } from "#lib/server/auth.ts";
+import { setExtraAccounts } from "#lib/server/multi-account.ts";
+import { redirectToLogin } from "#lib/server/require-login.ts";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ url, locals: { safeGetSession } }) => {

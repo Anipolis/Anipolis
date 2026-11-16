@@ -1,5 +1,5 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
-import type { Anime, Post, RoomAiring, TrendingHashtag } from "$lib/types";
+import type { Anime, Post, RoomAiring, TrendingHashtag } from "#lib/types.ts";
 
 /**
  * LiveRoomView が期待するデータ形状。

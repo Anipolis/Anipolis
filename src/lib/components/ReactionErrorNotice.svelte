@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { ReactionFeedback } from "$lib/reaction-feedback.svelte";
+import type { ReactionFeedback } from "#lib/reaction-feedback.svelte.ts";
 
 interface Props {
 	feedback: ReactionFeedback;

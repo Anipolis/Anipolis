@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type RawPost, toPost } from "$lib/types";
+import { type RawPost, toPost } from "#lib/types.ts";
 
 /** posts.exchange_share（投稿した人が書ける JSON）を付けた投稿を変換する */
 function toPostWithShare(exchangeShare: unknown) {

@@ -1,5 +1,5 @@
 <script lang="ts">
-import { trapFocus } from "$lib/actions/trapFocus";
+import { trapFocus } from "#lib/actions/trapFocus.ts";
 import LegalBody from "./LegalBody.svelte";
 
 /**

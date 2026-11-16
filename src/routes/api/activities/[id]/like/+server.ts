@@ -1,5 +1,5 @@
 import { error, json } from "@sveltejs/kit";
-import { requireAccountCanWrite } from "$lib/server/actions";
+import { requireAccountCanWrite } from "#lib/server/actions.ts";
 import type { RequestEvent, RequestHandler } from "./$types";
 
 const ACTIVITY_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

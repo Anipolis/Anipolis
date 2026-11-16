@@ -1,7 +1,7 @@
 <script lang="ts">
 import { untrack } from "svelte";
-import { trapFocus } from "$lib/actions/trapFocus";
-import { type AnimePick, animePickMeta } from "$lib/anime-picker";
+import { trapFocus } from "#lib/actions/trapFocus.ts";
+import { type AnimePick, animePickMeta } from "#lib/anime-picker.ts";
 import AnimeRow from "./AnimeRow.svelte";
 
 /**

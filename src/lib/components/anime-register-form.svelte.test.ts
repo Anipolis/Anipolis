@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("$app/forms", () => ({ enhance: () => ({ destroy() {} }) }));
 vi.mock("$app/navigation", () => ({ invalidateAll: vi.fn() }));
 
-import type { Anime } from "$lib/types";
+import type { Anime } from "#lib/types.ts";
 import AnimeRegisterForm from "./AnimeRegisterForm.svelte";
 
 let cleanup: (() => Promise<void>) | null = null;

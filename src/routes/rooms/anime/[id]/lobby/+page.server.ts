@@ -5,14 +5,14 @@ import {
 	toggleBookmarkAction,
 	toggleLikeAction,
 	toggleRepostAction,
-} from "$lib/server/actions";
+} from "#lib/server/actions.ts";
 import {
 	getAnime,
 	getAnimeRankingTrending,
 	getBroadcastRoomPosts,
 	getGlobalAnimeLobbySession,
-} from "$lib/server/queries";
-import { roomHashtag, stripTrailingRoomHashtag } from "$lib/server/room-hashtag";
+} from "#lib/server/queries.ts";
+import { roomHashtag, stripTrailingRoomHashtag } from "#lib/server/room-hashtag.ts";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {

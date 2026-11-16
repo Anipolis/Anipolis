@@ -7,6 +7,7 @@ describe("confirmReaction", () => {
 		const result = {
 			type: "success" as const,
 			status: 200,
+			location: "/",
 			data: { liked: true, count: 10 },
 		};
 		expect(confirmReaction("like", result, { wasActive: false, countBefore: 0 })).toEqual({
@@ -19,14 +20,14 @@ describe("confirmReaction", () => {
 		expect(
 			confirmReaction(
 				"like",
-				{ type: "success", status: 200, data: { liked: true } },
+				{ type: "success", status: 200, location: "/", data: { liked: true } },
 				{ wasActive: false, countBefore: 5 },
 			),
 		).toEqual({ active: true, count: 6 });
 		expect(
 			confirmReaction(
 				"like",
-				{ type: "success", status: 200, data: { liked: false } },
+				{ type: "success", status: 200, location: "/", data: { liked: false } },
 				{ wasActive: true, countBefore: 5 },
 			),
 		).toEqual({ active: false, count: 4 });
@@ -37,7 +38,7 @@ describe("confirmReaction", () => {
 		expect(
 			confirmReaction(
 				"like",
-				{ type: "success", status: 200, data: { liked: false } },
+				{ type: "success", status: 200, location: "/", data: { liked: false } },
 				{ wasActive: false, countBefore: 5 },
 			),
 		).toEqual({ active: false, count: 5 });
@@ -47,27 +48,37 @@ describe("confirmReaction", () => {
 		expect(
 			confirmReaction(
 				"bookmark",
-				{ type: "success", status: 200, data: { bookmarked: true } },
+				{ type: "success", status: 200, location: "/", data: { bookmarked: true } },
 				{ wasActive: false, countBefore: 0 },
 			).active,
 		).toBe(true);
 		expect(
 			confirmReaction(
 				"repost",
-				{ type: "success", status: 200, data: { reposted: false } },
+				{ type: "success", status: 200, location: "/", data: { reposted: false } },
 				{ wasActive: true, countBefore: 2 },
 			),
 		).toEqual({ active: false, count: 1 });
 	});
 
 	it("falls back to the optimistic state when the result carries no flag and never goes negative", () => {
-		expect(confirmReaction("like", { type: "success", status: 200 }, { wasActive: false, countBefore: 0 })).toEqual(
-			{
-				active: true,
-				count: 1,
-			},
-		);
-		expect(confirmReaction("like", { type: "success", status: 200 }, { wasActive: true, countBefore: 0 })).toEqual({
+		expect(
+			confirmReaction(
+				"like",
+				{ type: "success", status: 200, location: "/" },
+				{ wasActive: false, countBefore: 0 },
+			),
+		).toEqual({
+			active: true,
+			count: 1,
+		});
+		expect(
+			confirmReaction(
+				"like",
+				{ type: "success", status: 200, location: "/" },
+				{ wasActive: true, countBefore: 0 },
+			),
+		).toEqual({
 			active: false,
 			count: 0,
 		});

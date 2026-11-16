@@ -1,5 +1,5 @@
-import { animeOgPublicUrl } from "$lib/anime-og";
-import { getAnimeOgSource } from "$lib/server/queries";
+import { animeOgPublicUrl } from "#lib/anime-og.ts";
+import { getAnimeOgSource } from "#lib/server/queries.ts";
 import type { RequestHandler } from "./$types";
 
 // 作品の共有用カード（#271）。作品ページの og:image はここを指す。

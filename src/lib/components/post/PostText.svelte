@@ -1,6 +1,6 @@
 <script lang="ts">
 import type { Snippet } from "svelte";
-import { parseContentParts } from "$lib/utils/hashtag";
+import { parseContentParts } from "#lib/utils/hashtag.ts";
 
 interface Props {
 	content: string;

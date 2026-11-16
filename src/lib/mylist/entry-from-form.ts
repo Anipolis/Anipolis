@@ -1,4 +1,4 @@
-import type { AnimeStatus, UserAnimeEntry } from "$lib/types";
+import type { AnimeStatus, UserAnimeEntry } from "#lib/types.ts";
 
 /**
  * マイリストの保存フォームで送った内容を、保存後のエントリとして組み立てる。

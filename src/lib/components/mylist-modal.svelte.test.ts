@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("$app/forms", () => ({ enhance: () => ({ destroy() {} }) }));
 vi.mock("$app/navigation", () => ({ invalidateAll: vi.fn() }));
 
-import type { UserAnimeEntry } from "$lib/types";
+import type { UserAnimeEntry } from "#lib/types.ts";
 import MyListModal from "./MyListModal.svelte";
 import Harness from "./mylist-modal.harness.svelte";
 

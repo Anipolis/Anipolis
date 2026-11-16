@@ -1,4 +1,4 @@
-import type { BroadcastRoomOverride } from "$lib/types";
+import type { BroadcastRoomOverride } from "#lib/types.ts";
 
 export type BroadcastOverrideKind = BroadcastRoomOverride["override_kind"];
 

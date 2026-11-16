@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { UserAnimeEntry } from "$lib/types";
+import type { UserAnimeEntry } from "#lib/types.ts";
 import MyListModal from "./MyListModal.svelte";
 
 // アニメ一覧ページと同じく、開くたびに {#if} でマウントし直す使い方を再現する

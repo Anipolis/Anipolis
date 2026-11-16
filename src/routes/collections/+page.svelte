@@ -1,7 +1,7 @@
 <script lang="ts">
-import { collectionKindPrefix } from "$lib/collections";
-import CollectionFormModal from "$lib/components/CollectionFormModal.svelte";
-import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
+import { collectionKindPrefix } from "#lib/collections.ts";
+import CollectionFormModal from "#lib/components/CollectionFormModal.svelte";
+import { coverThumbFallback, coverThumbSrc } from "#lib/cover-image.ts";
 import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();

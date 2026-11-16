@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { postImageMediaUrl, postImagePathFromUrl } from "$lib/post-image-url";
-import { createServiceRoleClient } from "$lib/server/supabase-admin";
-import type { Database } from "$lib/supabase/database.types";
+import { postImageMediaUrl, postImagePathFromUrl } from "#lib/post-image-url.ts";
+import { createServiceRoleClient } from "#lib/server/supabase-admin.ts";
+import type { Database } from "#lib/supabase/database.types.ts";
 
 /**
  * 投稿画像の期限付き URL を発行する（#316）。

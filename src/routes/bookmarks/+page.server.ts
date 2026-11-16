@@ -1,5 +1,5 @@
 import { redirect } from "@sveltejs/kit";
-import { redirectToLogin } from "$lib/server/require-login";
+import { redirectToLogin } from "#lib/server/require-login.ts";
 import type { PageServerLoad } from "./$types";
 
 /** ブックマークはプロフィールの「ブックマーク」のタブへ移した（サイドバーの場所はコレクションに譲った）。前のリンクはそちらへ送る */

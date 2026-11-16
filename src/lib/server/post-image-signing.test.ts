@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Database } from "$lib/supabase/database.types";
+import type { Database } from "#lib/supabase/database.types.ts";
 import {
 	clearPostImageSignatureCache,
 	POST_IMAGE_SIGNED_URL_TTL_SECONDS,

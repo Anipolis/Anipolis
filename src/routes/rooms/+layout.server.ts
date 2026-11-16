@@ -1,4 +1,4 @@
-import { redirectToLogin } from "$lib/server/require-login";
+import { redirectToLogin } from "#lib/server/require-login.ts";
 import type { LayoutServerLoad } from "./$types";
 
 export const load: LayoutServerLoad = async ({ locals: { safeGetSession }, url }) => {

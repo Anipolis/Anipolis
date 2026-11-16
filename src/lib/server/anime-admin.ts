@@ -1,8 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fail } from "@sveltejs/kit";
-import { validateImageBuffer } from "$lib/server/upload";
-import type { Database, Json } from "$lib/supabase/database.types";
-import type { BroadcastOverrideKind } from "$lib/utils/broadcast-episodes";
+import { validateImageBuffer } from "#lib/server/upload.ts";
+import type { Database, Json } from "#lib/supabase/database.types.ts";
+import type { BroadcastOverrideKind } from "#lib/utils/broadcast-episodes.ts";
 
 const ALLOWED_INLINE_COVER_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];
 

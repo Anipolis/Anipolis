@@ -7,11 +7,11 @@ import {
 	toggleLikeAction,
 	toggleRepostAction,
 	updateEventAction,
-} from "$lib/server/actions";
-import { getAnime, getAnimeRankingTrending, getEvent, getEventRoomPosts, isAdminUser } from "$lib/server/queries";
-import { getRoomExitSurveyLoadState, ROOM_EXIT_SURVEY_VERSION } from "$lib/server/room-exit-survey";
-import { createRoomExperimentServiceClient, getActiveRoomExperimentRunForEvent } from "$lib/server/room-experiments";
-import { eventBroadcastDateKey } from "$lib/utils/event-time";
+} from "#lib/server/actions.ts";
+import { getAnime, getAnimeRankingTrending, getEvent, getEventRoomPosts, isAdminUser } from "#lib/server/queries.ts";
+import { getRoomExitSurveyLoadState, ROOM_EXIT_SURVEY_VERSION } from "#lib/server/room-exit-survey.ts";
+import { createRoomExperimentServiceClient, getActiveRoomExperimentRunForEvent } from "#lib/server/room-experiments.ts";
+import { eventBroadcastDateKey } from "#lib/utils/event-time.ts";
 import type { Actions, PageServerLoad } from "./$types";
 
 const DEFAULT_EVENT_DURATION_MINUTES = 6 * 60;

@@ -1,16 +1,13 @@
 <script lang="ts">
-import type { SubmitFunction } from "@sveltejs/kit";
 import type { Snippet } from "svelte";
 import { onDestroy, onMount, tick, untrack } from "svelte";
-import { enhance } from "$app/forms";
-import { goto, invalidateAll } from "$app/navigation";
-import { autosize } from "$lib/actions/autosize";
-import { timelineScroll } from "$lib/actions/timelineScroll";
-import ExitSurveyModal from "$lib/components/ExitSurveyModal.svelte";
-import LiveRoomPostCard from "$lib/components/LiveRoomPostCard.svelte";
-import TrendingPanel from "$lib/components/TrendingPanel.svelte";
-import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
-import { airingAt, airingHeading, airingOnAirAt, formatAiringTime } from "$lib/episode-room";
+import { autosize } from "#lib/actions/autosize.ts";
+import { timelineScroll } from "#lib/actions/timelineScroll.ts";
+import ExitSurveyModal from "#lib/components/ExitSurveyModal.svelte";
+import LiveRoomPostCard from "#lib/components/LiveRoomPostCard.svelte";
+import TrendingPanel from "#lib/components/TrendingPanel.svelte";
+import { coverThumbFallback, coverThumbSrc } from "#lib/cover-image.ts";
+import { airingAt, airingHeading, airingOnAirAt, formatAiringTime } from "#lib/episode-room.ts";
 import {
 	applyPostStates,
 	carryOverOlderPosts,
@@ -20,10 +17,10 @@ import {
 	mergeRoomPosts,
 	type RoomPostCursor,
 	type RoomPostPage,
-} from "$lib/room-live-sync";
-import type { Post, RoomAiring, RoomExitSurveyComparisonWithX, RoomExitSurveyNextParticipation } from "$lib/types";
-import type { LiveRoomActionData, LiveRoomData, RoomProgressAdvance } from "$lib/types/live-room";
-import { isPostContinuation } from "$lib/utils/post-presentation";
+} from "#lib/room-live-sync.ts";
+import type { LiveRoomActionData, LiveRoomData, RoomProgressAdvance } from "#lib/types/live-room.ts";
+import type { Post, RoomAiring, RoomExitSurveyComparisonWithX, RoomExitSurveyNextParticipation } from "#lib/types.ts";
+import { isPostContinuation } from "#lib/utils/post-presentation.ts";
 import {
 	createRoomConnectionState,
 	deriveRoomConnectionPhase,
@@ -39,7 +36,10 @@ import {
 	shouldOfferManualReconnect,
 	shouldShowRoomConnectionStatus,
 	shouldShowRoomLastUpdate,
-} from "$lib/utils/room-connection";
+} from "#lib/utils/room-connection.ts";
+import type { SubmitFunction } from "$app/forms";
+import { enhance } from "$app/forms";
+import { goto, invalidateAll } from "$app/navigation";
 
 let { data, form, headerActions }: { data: LiveRoomData; form: LiveRoomActionData; headerActions?: Snippet } = $props();
 

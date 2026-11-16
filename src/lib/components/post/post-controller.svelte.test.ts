@@ -1,6 +1,6 @@
-import type { ActionResult } from "@sveltejs/kit";
 import { describe, expect, it, vi } from "vitest";
-import type { Post } from "$lib/types";
+import type { Post } from "#lib/types.ts";
+import type { ActionResult } from "$app/forms";
 import { PostController } from "./post-controller.svelte";
 
 const { goto } = vi.hoisted(() => ({ goto: vi.fn(async () => {}) }));
@@ -38,8 +38,13 @@ async function finish(callback: ReturnType<Submit>, result: ActionResult): Promi
 	return update;
 }
 
-const success = (data: Record<string, unknown>): ActionResult => ({ type: "success", status: 200, data });
-const failure: ActionResult = { type: "failure", status: 500, data: { message: "失敗しました" } };
+const success = (data: Record<string, unknown>): ActionResult => ({
+	type: "success",
+	status: 200,
+	location: "/",
+	data,
+});
+const failure: ActionResult = { type: "failure", status: 500, location: "/", data: { message: "失敗しました" } };
 
 describe("PostController reactions", () => {
 	it("confirms a like from the action result without reloading the page", async () => {

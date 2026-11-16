@@ -1,14 +1,14 @@
 import { fail, redirect } from "@sveltejs/kit";
-import { COPYRIGHT_REVIEW_KINDS, isCopyrightReviewKind } from "$lib/copyright-reviews";
+import { COPYRIGHT_REVIEW_KINDS, isCopyrightReviewKind } from "#lib/copyright-reviews.ts";
 import {
 	approveCopyrightReviewsAsIsAction,
 	COPYRIGHT_REVIEW_PAGE_SIZE,
 	countPendingCopyrightReviews,
 	getPendingCopyrightReviews,
 	resolveCopyrightReviewAction,
-} from "$lib/server/copyright-reviews";
-import { isAdminUser } from "$lib/server/queries";
-import { redirectToLogin } from "$lib/server/require-login";
+} from "#lib/server/copyright-reviews.ts";
+import { isAdminUser } from "#lib/server/queries.ts";
+import { redirectToLogin } from "#lib/server/require-login.ts";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {

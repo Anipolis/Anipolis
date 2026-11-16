@@ -5,9 +5,9 @@ import {
 	MAX_IMPORT_ENTRIES,
 	type ParseResult,
 	parseMylistFile,
-} from "$lib/mylist-transfer";
-import { importMylistEntries } from "$lib/server/actions";
-import { MULTIPART_OVERHEAD_BYTES, readFormDataWithLimit } from "$lib/server/upload";
+} from "#lib/mylist-transfer.ts";
+import { importMylistEntries } from "#lib/server/actions.ts";
+import { MULTIPART_OVERHEAD_BYTES, readFormDataWithLimit } from "#lib/server/upload.ts";
 import type { RequestHandler } from "./$types";
 
 // マイリストの読み込み（#358）。MyAnimeList のエクスポート（.xml / .xml.gz）か Anipolis の CSV を受け取る。

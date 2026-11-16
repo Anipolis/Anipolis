@@ -1,6 +1,6 @@
 import { error, json } from "@sveltejs/kit";
-import { parseRoomExitSurveyRequest, saveRoomExitSurveyResponse } from "$lib/server/room-exit-survey";
-import { createRoomExperimentServiceClient } from "$lib/server/room-experiments";
+import { parseRoomExitSurveyRequest, saveRoomExitSurveyResponse } from "#lib/server/room-exit-survey.ts";
+import { createRoomExperimentServiceClient } from "#lib/server/room-experiments.ts";
 import type { RequestHandler } from "./$types";
 
 async function readBody(request: Request): Promise<unknown> {

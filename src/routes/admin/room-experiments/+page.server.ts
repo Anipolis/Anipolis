@@ -1,12 +1,12 @@
 import { fail, redirect } from "@sveltejs/kit";
-import { isAdminUser } from "$lib/server/queries";
-import { redirectToLogin } from "$lib/server/require-login";
+import { isAdminUser } from "#lib/server/queries.ts";
+import { redirectToLogin } from "#lib/server/require-login.ts";
 import {
 	getRoomExperimentDashboardData,
 	searchRoomExperimentEvents,
 	startRoomExperimentRun,
 	stopRoomExperimentRun,
-} from "$lib/server/room-experiments";
+} from "#lib/server/room-experiments.ts";
 import type { Actions, PageServerLoad } from "./$types";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

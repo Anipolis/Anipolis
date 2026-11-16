@@ -1,15 +1,15 @@
 <script lang="ts">
-import { page } from "$app/state";
-import { scrollableTabs } from "$lib/actions/scrollableTabs";
-import { tabListKeys } from "$lib/actions/tabListKeys";
+import { scrollableTabs } from "#lib/actions/scrollableTabs.ts";
+import { tabListKeys } from "#lib/actions/tabListKeys.ts";
 import {
 	DEFAULT_MYLIST_TAB,
 	MYLIST_TAB_LABELS,
 	MYLIST_TAB_ORDER,
 	type MylistTab,
 	parseMylistTab,
-} from "$lib/mylist/sort";
-import { replaceMylistParam } from "$lib/mylist/url";
+} from "#lib/mylist/sort.ts";
+import { replaceMylistParam } from "#lib/mylist/url.ts";
+import { page } from "$app/state";
 
 /**
  * マイリスト（自分のページとプロフィールのタブ）の上に置く、ステータスのタブ。

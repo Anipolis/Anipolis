@@ -1,11 +1,11 @@
-import type { ActivityStatus } from "$lib/activity";
-import { animeCardMeta } from "$lib/anime-labels";
-import { type CollectionShare, toCollectionShare } from "$lib/collections";
+import type { ActivityStatus } from "#lib/activity.ts";
+import { animeCardMeta } from "#lib/anime-labels.ts";
+import { type CollectionShare, toCollectionShare } from "#lib/collections.ts";
 // ================================================================
 // アプリ共通型定義
 // ================================================================
 
-import { toValidExchangeSubjectiveTags } from "$lib/exchange-tags";
+import { toValidExchangeSubjectiveTags } from "#lib/exchange-tags.ts";
 
 export type AnimeSeasonChip = "" | "冬" | "春" | "夏" | "秋";
 export type ActiveAnimeSeasonChip = Exclude<AnimeSeasonChip, "">;

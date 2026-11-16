@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
-import type { Database } from "$lib/supabase/database.types";
+import type { Database } from "#lib/supabase/database.types.ts";
 import { getNotifications } from "./queries";
 
 const CHAIN_METHODS = ["select", "eq", "order", "limit", "in", "not", "or"] as const;

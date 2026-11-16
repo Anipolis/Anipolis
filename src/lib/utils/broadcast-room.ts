@@ -1,4 +1,4 @@
-import type { Anime, BroadcastRoomOverride } from "$lib/types";
+import type { Anime, BroadcastRoomOverride } from "#lib/types.ts";
 import { dateKeyToUtcMidnight, jstWallClockToDate } from "./jst";
 
 export type BroadcastRoomOverridesByAnimeId = Record<string, BroadcastRoomOverride[]>;

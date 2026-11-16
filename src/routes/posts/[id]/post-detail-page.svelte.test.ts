@@ -1,9 +1,9 @@
-import type { ActionResult, SubmitFunction } from "@sveltejs/kit";
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { makeTimelinePosts } from "$lib/components/fixtures/timeline";
-import { NETWORK_ERROR_MESSAGE } from "$lib/components/post-composer-submit";
-import type { Post } from "$lib/types";
+import { makeTimelinePosts } from "#lib/components/fixtures/timeline.ts";
+import { NETWORK_ERROR_MESSAGE } from "#lib/components/post-composer-submit.ts";
+import type { Post } from "#lib/types.ts";
+import type { ActionResult, SubmitFunction } from "$app/forms";
 
 // 返信フォームの use:enhance に渡された送信処理を受け取り、送信結果をこのテストから流し込む
 const forms = vi.hoisted(() => ({ submit: null as SubmitFunction | null }));
@@ -117,7 +117,10 @@ describe("投稿詳細（#296）", () => {
 		const update = vi.fn(async () => {});
 		const finish = await forms.submit({} as never);
 		if (typeof finish !== "function") throw new Error("submit handler did not return a callback");
-		await finish({ result: { type: "error", error: new Error("offline") } as ActionResult, update } as never);
+		await finish({
+			result: { type: "error", error: { message: "offline", status: 500 } } as ActionResult,
+			update,
+		} as never);
 		flushSync();
 
 		expect(update).not.toHaveBeenCalled();
@@ -136,7 +139,12 @@ describe("投稿詳細（#296）", () => {
 		const update = vi.fn(async () => {});
 		const finish = await forms.submit({} as never);
 		if (typeof finish !== "function") throw new Error("submit handler did not return a callback");
-		const failure = { type: "failure", status: 400, data: { message: "本文に表示できる文字がありません" } };
+		const failure = {
+			type: "failure",
+			status: 400,
+			location: "/",
+			data: { message: "本文に表示できる文字がありません" },
+		};
 		await finish({ result: failure as ActionResult, update } as never);
 		flushSync();
 
@@ -158,7 +166,7 @@ describe("投稿詳細（#296）", () => {
 		const update = vi.fn(async () => {});
 		const finish = await forms.submit({} as never);
 		if (typeof finish !== "function") throw new Error("submit handler did not return a callback");
-		await finish({ result: { type: "success", status: 200 } as ActionResult, update } as never);
+		await finish({ result: { type: "success", status: 200, location: "/" } as ActionResult, update } as never);
 		flushSync();
 
 		expect(update).toHaveBeenCalledTimes(1);

@@ -1,5 +1,5 @@
 import { error, fail, redirect } from "@sveltejs/kit";
-import type { MylistActivity } from "$lib/activity";
+import type { MylistActivity } from "#lib/activity.ts";
 import {
 	blockUserAction,
 	deletePostAction,
@@ -12,7 +12,7 @@ import {
 	unblockUserAction,
 	unmuteUserAction,
 	upsertUserAnimeEntry,
-} from "$lib/server/actions";
+} from "#lib/server/actions.ts";
 import {
 	checkIsFollowing,
 	fillTimelinePage,
@@ -31,9 +31,9 @@ import {
 	getUserAnimeList,
 	isBlockedByMe,
 	isMutedByMe,
-} from "$lib/server/queries";
-import { parseTimelineCursor, type TimelineCursor } from "$lib/timeline-cursor";
-import type { Post } from "$lib/types";
+} from "#lib/server/queries.ts";
+import { parseTimelineCursor, type TimelineCursor } from "#lib/timeline-cursor.ts";
+import type { Post } from "#lib/types.ts";
 import type { Actions, PageServerLoad } from "./$types";
 
 const EMPTY_PAGE: { posts: Post[]; nextCursor: TimelineCursor | null } = { posts: [], nextCursor: null };

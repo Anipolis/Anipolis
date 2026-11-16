@@ -1,6 +1,6 @@
 import { flushSync, mount, tick, unmount } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Anime, AnimeStatus } from "$lib/types";
+import type { Anime, AnimeStatus } from "#lib/types.ts";
 import AnimeProgressRow from "./AnimeProgressRow.svelte";
 
 let cleanup: (() => Promise<void>) | null = null;

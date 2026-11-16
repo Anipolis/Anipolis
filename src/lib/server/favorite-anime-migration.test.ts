@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { MAX_FAVORITE_ANIME } from "$lib/favorite-anime";
+import { MAX_FAVORITE_ANIME } from "#lib/favorite-anime.ts";
 
 const migration = readFileSync(new URL("../../../supabase/migrations/178_favorite_anime.sql", import.meta.url), "utf8");
 

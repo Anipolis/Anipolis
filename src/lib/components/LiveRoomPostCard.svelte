@@ -1,8 +1,8 @@
 <script lang="ts">
-import { contentWarningLabel, hasContentWarning } from "$lib/content-warning";
-import { fetchRoomPostPages, mergeReplies, type RoomPostCursor, type RoomPostPage } from "$lib/room-live-sync";
-import type { Post } from "$lib/types";
-import { formatRelativeTime } from "$lib/utils/format";
+import { contentWarningLabel, hasContentWarning } from "#lib/content-warning.ts";
+import { fetchRoomPostPages, mergeReplies, type RoomPostCursor, type RoomPostPage } from "#lib/room-live-sync.ts";
+import type { Post } from "#lib/types.ts";
+import { formatRelativeTime } from "#lib/utils/format.ts";
 import PostRow from "./PostRow.svelte";
 import UserAvatar from "./UserAvatar.svelte";
 

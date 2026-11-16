@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
-import type { Database } from "$lib/supabase/database.types";
+import type { Database } from "#lib/supabase/database.types.ts";
 import { animeListOrderColumns, getAnimeListPage } from "./queries";
 
 /** 本番の PostgREST と同じく、1回の応答は最大 1000 行 */

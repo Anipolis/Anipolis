@@ -1,12 +1,12 @@
 import { createBrowserClient, createServerClient, isBrowser } from "@supabase/ssr";
-import { env as publicEnv } from "$env/dynamic/public";
-import type { Database } from "$lib/supabase/database.types";
+import type { Database } from "#lib/supabase/database.types.ts";
+import { PUBLIC_SUPABASE_ANON_KEY, PUBLIC_SUPABASE_PUBLISHABLE_KEY, PUBLIC_SUPABASE_URL } from "$app/env/public";
 import type { LayoutLoad } from "./$types";
 
 export const load: LayoutLoad = async ({ data, depends, fetch }) => {
 	depends("supabase:auth");
-	const supabaseUrl = publicEnv["PUBLIC_SUPABASE_URL"];
-	const supabaseKey = publicEnv["PUBLIC_SUPABASE_PUBLISHABLE_KEY"] ?? publicEnv["PUBLIC_SUPABASE_ANON_KEY"];
+	const supabaseUrl = PUBLIC_SUPABASE_URL;
+	const supabaseKey = PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? PUBLIC_SUPABASE_ANON_KEY;
 	if (!supabaseUrl || !supabaseKey) throw new Error("Supabase public environment variables are not configured");
 
 	const supabase = isBrowser()

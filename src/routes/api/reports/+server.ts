@@ -1,5 +1,5 @@
 import { json, type RequestHandler } from "@sveltejs/kit";
-import { ensureAccountCanWrite } from "$lib/server/actions";
+import { ensureAccountCanWrite } from "#lib/server/actions.ts";
 
 const reportReasons = new Set(["spam", "harassment", "sexual", "violence", "illegal", "other"]);
 const reportTargetTypes = new Set(["post", "user"]);

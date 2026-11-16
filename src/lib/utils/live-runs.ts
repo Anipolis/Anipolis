@@ -1,4 +1,4 @@
-import type { Post } from "$lib/types";
+import type { Post } from "#lib/types.ts";
 import { getPostRoomContext, type PostRoomContext } from "./post-presentation";
 
 /** タイムラインで、同じ人の同じルームへの実況がこの件数以上続いたらたたむ */

@@ -1,14 +1,14 @@
 import { fail } from "@sveltejs/kit";
-import { hasPasswordProvider } from "$lib/server/auth";
+import { hasPasswordProvider } from "#lib/server/auth.ts";
 import {
 	isInvalidNonceError,
 	isReauthenticationRequiredError,
 	isSamePasswordError,
 	normalizeNonce,
-} from "$lib/server/password-change";
-import { isRateLimited } from "$lib/server/rate-limit";
-import { redirectToLogin } from "$lib/server/require-login";
-import { MIN_PASSWORD_LENGTH } from "$lib/utils/password-reset";
+} from "#lib/server/password-change.ts";
+import { isRateLimited } from "#lib/server/rate-limit.ts";
+import { redirectToLogin } from "#lib/server/require-login.ts";
+import { MIN_PASSWORD_LENGTH } from "#lib/utils/password-reset.ts";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ url, locals: { safeGetSession } }) => {

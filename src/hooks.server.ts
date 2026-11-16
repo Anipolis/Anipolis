@@ -1,12 +1,18 @@
 import { createServerClient } from "@supabase/ssr";
-import { type Handle, json, redirect } from "@sveltejs/kit";
-import { dev } from "$app/environment";
-import { env as publicEnv } from "$env/dynamic/public";
-import { isBetaGateEnabled, isBetaMember } from "$lib/server/discord";
-import { getAssuranceLevel, isAdminMfaRequired, isMfaExemptPath, needsMfaChallenge } from "$lib/server/mfa";
-import { isAdminAccount } from "$lib/server/queries";
-import { isApiRateLimited } from "$lib/server/rate-limit";
-import { supabaseTarget } from "$lib/supabase-target";
+import { json, redirect } from "@sveltejs/kit";
+import type { Handle } from "@sveltejs/kit/hooks";
+import { isBetaGateEnabled, isBetaMember } from "#lib/server/discord.ts";
+import { getAssuranceLevel, isAdminMfaRequired, isMfaExemptPath, needsMfaChallenge } from "#lib/server/mfa.ts";
+import { isAdminAccount } from "#lib/server/queries.ts";
+import { isApiRateLimited } from "#lib/server/rate-limit.ts";
+import { supabaseTarget } from "#lib/supabase-target.ts";
+import { dev } from "$app/env";
+import {
+	PUBLIC_ANIPOLIS_ENV,
+	PUBLIC_SUPABASE_ANON_KEY,
+	PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+	PUBLIC_SUPABASE_URL,
+} from "$app/env/public";
 
 // クローズドβ：これらのプレフィックス配下は未資格ユーザーでもアクセス可
 // 規約・ポリシー・出典は、参加資格のないログインユーザーも登録前に読めるようにする
@@ -17,15 +23,11 @@ function isPublicPath(pathname: string): boolean {
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
-	const supabaseUrl = publicEnv["PUBLIC_SUPABASE_URL"];
-	const supabaseKey = publicEnv["PUBLIC_SUPABASE_PUBLISHABLE_KEY"] ?? publicEnv["PUBLIC_SUPABASE_ANON_KEY"];
+	const supabaseUrl = PUBLIC_SUPABASE_URL;
+	const supabaseKey = PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? PUBLIC_SUPABASE_ANON_KEY;
 	if (!supabaseUrl || !supabaseKey) throw new Error("Supabase public environment variables are not configured");
 	// ステージングのつもり（.env.staging）で本番につながっていたら、書き込む前に止める
-	if (
-		dev &&
-		publicEnv["PUBLIC_ANIPOLIS_ENV"] === "staging" &&
-		supabaseTarget(supabaseUrl, "staging") === "production"
-	) {
+	if (dev && PUBLIC_ANIPOLIS_ENV === "staging" && supabaseTarget(supabaseUrl, "staging") === "production") {
 		throw new Error(".env.staging の PUBLIC_SUPABASE_URL が本番を指しています。ステージングの値に直してください");
 	}
 

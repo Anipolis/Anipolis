@@ -11,9 +11,13 @@ const admin = vi.hoisted(() => ({ client: null as unknown }));
 const beta = vi.hoisted(() => ({ gate: false, member: true }));
 
 vi.mock("@simplewebauthn/server", () => webauthn);
-vi.mock("$env/dynamic/private", () => ({ env: { MULTI_ACCOUNT_COOKIE_SECRET: "test-secret" } }));
-vi.mock("$lib/server/supabase-admin", () => ({ createServiceRoleClient: () => admin.client }));
-vi.mock("$lib/server/discord", () => ({
+vi.mock("$app/env/private", () => ({
+	MULTI_ACCOUNT_COOKIE_SECRET: "test-secret",
+	SUPABASE_SECRET_KEY: undefined,
+	SUPABASE_SERVICE_ROLE_KEY: undefined,
+}));
+vi.mock("#lib/server/supabase-admin.ts", () => ({ createServiceRoleClient: () => admin.client }));
+vi.mock("#lib/server/discord.ts", () => ({
 	isBetaGateEnabled: () => beta.gate,
 	isBetaMember: () => beta.member,
 }));

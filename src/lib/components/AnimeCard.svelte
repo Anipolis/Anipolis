@@ -1,5 +1,5 @@
 <script module lang="ts">
-import type { AnimeListItem, AnimeStatus } from "$lib/types";
+import type { AnimeListItem, AnimeStatus } from "#lib/types.ts";
 
 /**
  * アニメ一覧・マイリスト・プロフィールのマイリストで使う作品カード。
@@ -49,8 +49,8 @@ export type AnimeCardProps = {
 </script>
 
 <script lang="ts">
-import { animeCardMeta } from "$lib/anime-labels";
-import { dateKeyWeekday, jstBroadcastDateKey } from "$lib/utils/jst";
+import { animeCardMeta } from "#lib/anime-labels.ts";
+import { dateKeyWeekday, jstBroadcastDateKey } from "#lib/utils/jst.ts";
 
 let {
 	anime,

@@ -1,8 +1,8 @@
 <script lang="ts">
 import { onMount, tick } from "svelte";
-import { trapFocus } from "$lib/actions/trapFocus";
-import { type CollectionMembership, MAX_COLLECTION_TITLE_LENGTH } from "$lib/collections";
-import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
+import { trapFocus } from "#lib/actions/trapFocus.ts";
+import { type CollectionMembership, MAX_COLLECTION_TITLE_LENGTH } from "#lib/collections.ts";
+import { coverThumbFallback, coverThumbSrc } from "#lib/cover-image.ts";
 
 /**
  * 作品ページの「コレクションに追加」（#515）。自分のコレクションを並べ、押した時点で出し入れを保存する。

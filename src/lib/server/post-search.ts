@@ -9,7 +9,7 @@
  *   付くので除外し、従来どおり本文一致（公式ハッシュタグ）でのみ拾う
  * - ネタバレ指定（CW）付きの投稿も作品一致では拾わない。検索設定で選べるようにするかは #300 で検討
  */
-import { escapeIlikePattern } from "$lib/utils/search";
+import { escapeIlikePattern } from "#lib/utils/search.ts";
 
 /** 作品一致を使う検索語の最小文字数（コードポイント単位で数える） */
 export const MIN_ANIME_MATCH_QUERY_LENGTH = 2;

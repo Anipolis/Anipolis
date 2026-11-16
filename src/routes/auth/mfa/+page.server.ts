@@ -1,7 +1,7 @@
 import { fail, redirect } from "@sveltejs/kit";
-import { getAssuranceLevel, isTotpCodeShape, needsMfaChallenge, normalizeTotpCode } from "$lib/server/mfa";
-import { isRateLimited } from "$lib/server/rate-limit";
-import { sanitizeInternalRedirect } from "$lib/utils/url";
+import { getAssuranceLevel, isTotpCodeShape, needsMfaChallenge, normalizeTotpCode } from "#lib/server/mfa.ts";
+import { isRateLimited } from "#lib/server/rate-limit.ts";
+import { sanitizeInternalRedirect } from "#lib/utils/url.ts";
 import type { Actions, PageServerLoad } from "./$types";
 
 function getSafeNext(raw: FormDataEntryValue | string | null): string {

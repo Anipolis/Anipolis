@@ -8,7 +8,7 @@
  *   * 投稿するとき、期限切れの画像は受け付けない（insertPostWithHashtags）
  *   * 回収はそれより1日長い8日を過ぎ、どの投稿にも使われていない画像だけ（scripts/sweep-orphan-post-images）
  * アップロード時刻は、サーバーが付けるファイル名（<user_id>/<Date.now()>-<uuid>.<拡張子>）から読む。
- * scripts/ からも使うので $lib の別名は使わない。
+ * scripts/ からも使うので SvelteKit 固有の import（$app/*・$env/*）は使わない。
  */
 export const POST_IMAGE_UNPOSTED_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 /** 回収はこの期間を過ぎたものだけ。使用期限より長くして、期限ぎりぎりの投稿と競合しないようにする */

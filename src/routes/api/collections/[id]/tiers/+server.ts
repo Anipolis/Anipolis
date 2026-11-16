@@ -1,6 +1,6 @@
 import { error, json } from "@sveltejs/kit";
-import { collectionTiersError, isCollectionId, MAX_COLLECTION_TIERS } from "$lib/collections";
-import { requireAccountCanWrite } from "$lib/server/actions";
+import { collectionTiersError, isCollectionId, MAX_COLLECTION_TIERS } from "#lib/collections.ts";
+import { requireAccountCanWrite } from "#lib/server/actions.ts";
 import type { RequestHandler } from "./$types";
 
 // ティア表の段の名前と並びを変える（詳細ページで段の名前を直す・段を足す・消す）。

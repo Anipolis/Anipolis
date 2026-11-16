@@ -1,16 +1,21 @@
 <script lang="ts">
 import { onDestroy } from "svelte";
+import {
+	ANIME_GENRE_FILTER_HELP,
+	ANIME_GENRE_GROUPS,
+	ANIME_GENRES,
+	ANIME_SOURCE_OPTIONS,
+} from "#lib/anime-vocabulary.ts";
+import AnimeCard from "#lib/components/AnimeCard.svelte";
+import AnimeRegisterForm from "#lib/components/AnimeRegisterForm.svelte";
+import InfoTip from "#lib/components/InfoTip.svelte";
+import MyListQuickEdit from "#lib/components/MyListQuickEdit.svelte";
+import SeoMeta from "#lib/components/SeoMeta.svelte";
+import { createDebouncedCommit } from "#lib/debounced-commit.ts";
+import { isSamePageRefresh } from "#lib/navigation-skeleton.ts";
+import type { ActiveAnimeSeasonChip, AnimeListItem, AnimeStatus, UserAnimeEntry } from "#lib/types.ts";
 import { beforeNavigate, goto } from "$app/navigation";
 import { navigating } from "$app/state";
-import { ANIME_GENRE_FILTER_HELP, ANIME_GENRE_GROUPS, ANIME_GENRES, ANIME_SOURCE_OPTIONS } from "$lib/anime-vocabulary";
-import AnimeCard from "$lib/components/AnimeCard.svelte";
-import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
-import InfoTip from "$lib/components/InfoTip.svelte";
-import MyListQuickEdit from "$lib/components/MyListQuickEdit.svelte";
-import SeoMeta from "$lib/components/SeoMeta.svelte";
-import { createDebouncedCommit } from "$lib/debounced-commit";
-import { isSamePageRefresh } from "$lib/navigation-skeleton";
-import type { ActiveAnimeSeasonChip, AnimeListItem, AnimeStatus, UserAnimeEntry } from "$lib/types";
 import type { PageProps } from "./$types";
 
 let { data, form }: PageProps = $props();
@@ -182,7 +187,7 @@ const TEXT_FILTER_DELAY_MS = 400;
 const CHOICE_FILTER_DELAY_MS = 250;
 
 function syncFiltersToUrl(filters: AnimeFilterState, replaceState = false) {
-	goto(buildAnimeFilterUrl(filters), { keepFocus: true, noScroll: true, replaceState });
+	goto(buildAnimeFilterUrl(filters), { reset: false, replace: replaceState });
 }
 
 // URL へ未反映のローカル編集。保留中（pending）の間は、遅れて届いた読み込み結果で入力欄を巻き戻さない。
@@ -234,7 +239,7 @@ function toggleSidebarSeason(season: ActiveSeasonChip) {
 function clearSidebarFilters() {
 	cancelPendingFilterSync();
 	filterState = { search: "", genres: [], year: "", seasons: [], studio: "", producer: "", source: "" };
-	goto("/anime", { keepFocus: true, noScroll: true });
+	goto("/anime", { reset: false });
 }
 
 // 同じページのままクエリを変えて再取得している最中は、一覧を残したまま薄く表示する
@@ -336,7 +341,7 @@ function applyFilters() {
 	if (pendingSource) params.set("source", pendingSource);
 	if (data.tab && data.tab !== "popular") params.set("tab", data.tab);
 	const qs = params.toString();
-	goto(qs ? `/anime?${qs}` : "/anime", { keepFocus: true, noScroll: true });
+	goto(qs ? `/anime?${qs}` : "/anime", { reset: false });
 	closeFilterSheet();
 }
 

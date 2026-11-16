@@ -1,7 +1,7 @@
 <script lang="ts">
+import PrivacyToggles from "#lib/components/PrivacyToggles.svelte";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
-import PrivacyToggles from "$lib/components/PrivacyToggles.svelte";
 import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();
@@ -162,8 +162,7 @@ let privacyStatus = $state<"idle" | "saving" | "saved">("idle");
 									type="button"
 									class="settings-nav-item"
 									class:active={activeSection === section.id}
-									onclick={() =>
-										goto(`?section=${section.id}`, { replaceState: true, noScroll: true })}
+									onclick={() => goto(`?section=${section.id}`, { replace: true, reset: false })}
 									aria-current={activeSection === section.id ? "page" : undefined}
 								>
 									{section.label}

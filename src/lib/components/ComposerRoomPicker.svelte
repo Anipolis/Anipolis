@@ -1,11 +1,11 @@
 <script lang="ts">
 import { onDestroy, onMount } from "svelte";
 import type { Attachment } from "svelte/attachments";
-import { animePickMeta } from "$lib/anime-picker";
-import type { ComposeRoom } from "$lib/compose-draft";
-import type { ComposerRoomEntry, ComposerRoomsResponse } from "$lib/composer-rooms";
-import type { OpenBroadcastRoomSummary } from "$lib/types";
-import { createSearchGate } from "$lib/utils/search-gate";
+import { animePickMeta } from "#lib/anime-picker.ts";
+import type { ComposeRoom } from "#lib/compose-draft.ts";
+import type { ComposerRoomEntry, ComposerRoomsResponse } from "#lib/composer-rooms.ts";
+import type { OpenBroadcastRoomSummary } from "#lib/types.ts";
+import { createSearchGate } from "#lib/utils/search-gate.ts";
 import AnimeRow from "./AnimeRow.svelte";
 import Modal from "./Modal.svelte";
 

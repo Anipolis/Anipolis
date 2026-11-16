@@ -1,6 +1,6 @@
 <script lang="ts">
+import SettingsBackLink from "#lib/components/SettingsBackLink.svelte";
 import { invalidateAll } from "$app/navigation";
-import SettingsBackLink from "$lib/components/SettingsBackLink.svelte";
 
 // マイリストの読み込み・書き出し（#358）。MyAnimeList のエクスポートをそのまま読み込める
 

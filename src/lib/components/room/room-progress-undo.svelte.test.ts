@@ -1,7 +1,7 @@
-import type { SubmitFunction } from "@sveltejs/kit";
 import { mount, tick, unmount } from "svelte";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { LiveRoomData } from "$lib/types/live-room";
+import type { LiveRoomData } from "#lib/types/live-room.ts";
+import type { SubmitFunction } from "$app/forms";
 import LiveRoomView from "./LiveRoomView.svelte";
 
 const submitters = vi.hoisted(() => new Map<string, unknown>());

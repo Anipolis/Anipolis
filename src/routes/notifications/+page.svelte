@@ -1,15 +1,15 @@
 <script lang="ts">
 import { untrack } from "svelte";
-import { activityStatusPhrase } from "$lib/activity";
-import InfoTip from "$lib/components/InfoTip.svelte";
-import TrendingPanel from "$lib/components/TrendingPanel.svelte";
-import UserAvatar from "$lib/components/UserAvatar.svelte";
-import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
-import { groupActivityLikes } from "$lib/notification-groups";
-import { notificationPostPreview } from "$lib/notification-post-preview";
-import { requestNotificationCountsRefresh } from "$lib/stores/notifications";
-import type { Notification } from "$lib/types";
-import { formatRelativeTime } from "$lib/utils/format";
+import { activityStatusPhrase } from "#lib/activity.ts";
+import InfoTip from "#lib/components/InfoTip.svelte";
+import TrendingPanel from "#lib/components/TrendingPanel.svelte";
+import UserAvatar from "#lib/components/UserAvatar.svelte";
+import { coverThumbFallback, coverThumbSrc } from "#lib/cover-image.ts";
+import { groupActivityLikes } from "#lib/notification-groups.ts";
+import { notificationPostPreview } from "#lib/notification-post-preview.ts";
+import { requestNotificationCountsRefresh } from "#lib/stores/notifications.ts";
+import type { Notification } from "#lib/types.ts";
+import { formatRelativeTime } from "#lib/utils/format.ts";
 import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();

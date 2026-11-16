@@ -1,6 +1,6 @@
 import { error, json } from "@sveltejs/kit";
-import { MAX_FAVORITE_ANIME } from "$lib/favorite-anime";
-import { requireAccountCanWrite } from "$lib/server/actions";
+import { MAX_FAVORITE_ANIME } from "#lib/favorite-anime.ts";
+import { requireAccountCanWrite } from "#lib/server/actions.ts";
 import type { RequestHandler } from "./$types";
 
 // ベスト作品を、送られた順番で丸ごと置き換える（#361）

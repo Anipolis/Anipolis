@@ -1,14 +1,14 @@
 <script lang="ts">
-import type { SubmitFunction } from "@sveltejs/kit";
 import { untrack } from "svelte";
+import { trackFormChanges } from "#lib/actions/trackFormChanges.ts";
+import InfoTip from "#lib/components/InfoTip.svelte";
+import SettingsBackLink from "#lib/components/SettingsBackLink.svelte";
+import { coverThumbFallback, coverThumbSrc } from "#lib/cover-image.ts";
+import type { AnimeMute, EventMute } from "#lib/types.ts";
+import type { SubmitFunction } from "$app/forms";
 import { enhance } from "$app/forms";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
-import { trackFormChanges } from "$lib/actions/trackFormChanges";
-import InfoTip from "$lib/components/InfoTip.svelte";
-import SettingsBackLink from "$lib/components/SettingsBackLink.svelte";
-import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
-import type { AnimeMute, EventMute } from "$lib/types";
 import type { PageProps } from "./$types";
 
 let { data, form }: PageProps = $props();

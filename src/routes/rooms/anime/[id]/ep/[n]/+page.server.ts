@@ -1,13 +1,13 @@
 import { error, fail, redirect } from "@sveltejs/kit";
-import { episodeRoomPath, hasEpisodeRooms, parseEpisodeNumberParam } from "$lib/episode-room";
-import { deletePostAction, toggleBookmarkAction, toggleLikeAction, toggleRepostAction } from "$lib/server/actions";
+import { episodeRoomPath, hasEpisodeRooms, parseEpisodeNumberParam } from "#lib/episode-room.ts";
+import { deletePostAction, toggleBookmarkAction, toggleLikeAction, toggleRepostAction } from "#lib/server/actions.ts";
 import {
 	buildEpisodeRoomPageData,
 	createEpisodeRoomPost,
 	findEpisodeRoom,
 	undoRoomProgressAdvance,
-} from "$lib/server/episode-room-page";
-import { ensureEpisodeRoom, getAnime, getEpisodeRoomBounds } from "$lib/server/queries";
+} from "#lib/server/episode-room-page.ts";
+import { ensureEpisodeRoom, getAnime, getEpisodeRoomBounds } from "#lib/server/queries.ts";
 import type { Actions, PageServerLoad } from "./$types";
 
 /**

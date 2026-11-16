@@ -1,8 +1,8 @@
 <script lang="ts">
+import SelectControl from "#lib/components/SelectControl.svelte";
+import { DEFAULT_MYLIST_SORT, MYLIST_SORTS, type MylistSort, parseMylistSort } from "#lib/mylist/sort.ts";
+import { replaceMylistParam } from "#lib/mylist/url.ts";
 import { page } from "$app/state";
-import SelectControl from "$lib/components/SelectControl.svelte";
-import { DEFAULT_MYLIST_SORT, MYLIST_SORTS, type MylistSort, parseMylistSort } from "$lib/mylist/sort";
-import { replaceMylistParam } from "$lib/mylist/url";
 
 /**
  * マイリストの並び替えの欄。並び順は URL（?sort=）に残し、再読み込みや戻るでも同じ表示にする。

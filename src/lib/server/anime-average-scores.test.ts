@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Database } from "$lib/supabase/database.types";
-import type { Anime } from "$lib/types";
+import type { Database } from "#lib/supabase/database.types.ts";
+import type { Anime } from "#lib/types.ts";
 import { attachAnimeAverageScores } from "./queries";
 
 type Result = { data: unknown[] | null; error: { message: string } | null };

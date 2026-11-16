@@ -1,14 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("$lib/server/actions", () => ({ markCategoryNotificationsRead: vi.fn() }));
-vi.mock("$lib/server/queries", () => ({
+vi.mock("#lib/server/actions.ts", () => ({ markCategoryNotificationsRead: vi.fn() }));
+vi.mock("#lib/server/queries.ts", () => ({
 	getNotifications: vi.fn(async () => [{ id: "n1" }]),
 	getUnreadNotificationCount: vi.fn(async () => 2),
 	getAnimeRankingTrending: vi.fn(async () => []),
 }));
 
-import { markCategoryNotificationsRead } from "$lib/server/actions";
-import { getNotifications } from "$lib/server/queries";
+import { markCategoryNotificationsRead } from "#lib/server/actions.ts";
+import { getNotifications } from "#lib/server/queries.ts";
 import { load } from "./+page.server";
 
 // load の戻り値型には Record の索引シグネチャが混ざるため、検証したい形に絞って扱う

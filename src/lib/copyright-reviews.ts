@@ -1,5 +1,5 @@
 // 権利表記（©）の人力確認キュー（anime_copyright_reviews）の種類。
-// サーバー処理（$lib/server/copyright-reviews）と管理画面の両方で使う。
+// サーバー処理（#lib/server/copyright-reviews）と管理画面の両方で使う。
 
 export const COPYRIGHT_REVIEW_KINDS = [
 	"collector_multiple",

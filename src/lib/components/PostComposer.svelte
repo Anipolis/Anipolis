@@ -1,13 +1,9 @@
 <script lang="ts">
-import type { SubmitFunction } from "@sveltejs/kit";
 import { onDestroy, onMount } from "svelte";
-import { enhance } from "$app/forms";
-import { replaceState } from "$app/navigation";
-import { page } from "$app/state";
-import { autosize } from "$lib/actions/autosize";
-import { trapFocus } from "$lib/actions/trapFocus";
-import { animePickMeta } from "$lib/anime-picker";
-import type { CollectionShare } from "$lib/collections";
+import { autosize } from "#lib/actions/autosize.ts";
+import { trapFocus } from "#lib/actions/trapFocus.ts";
+import { animePickMeta } from "#lib/anime-picker.ts";
+import type { CollectionShare } from "#lib/collections.ts";
 import {
 	type ComposeDraft,
 	type ComposeRoom,
@@ -19,13 +15,17 @@ import {
 	loadComposeDraft,
 	saveComposeContext,
 	saveComposeDraft,
-} from "$lib/compose-draft";
-import { postImageMediaUrl } from "$lib/post-image-url";
-import type { AnimeExchangeShare, OpenBroadcastRoomSummary } from "$lib/types";
-import { animeQuoteChipLabel, cwChipLabel } from "$lib/utils/composer-chips";
-import { charCountClass } from "$lib/utils/format";
-import { applyMention, findMentionQuery, mentionOptionId, resolveMentionKey } from "$lib/utils/mention-suggest";
-import { createSearchGate } from "$lib/utils/search-gate";
+} from "#lib/compose-draft.ts";
+import { postImageMediaUrl } from "#lib/post-image-url.ts";
+import type { AnimeExchangeShare, OpenBroadcastRoomSummary } from "#lib/types.ts";
+import { animeQuoteChipLabel, cwChipLabel } from "#lib/utils/composer-chips.ts";
+import { charCountClass } from "#lib/utils/format.ts";
+import { applyMention, findMentionQuery, mentionOptionId, resolveMentionKey } from "#lib/utils/mention-suggest.ts";
+import { createSearchGate } from "#lib/utils/search-gate.ts";
+import type { SubmitFunction } from "$app/forms";
+import { enhance } from "$app/forms";
+import { replaceState } from "$app/navigation";
+import { page } from "$app/state";
 import AnimeExchangeResult from "./AnimeExchangeResult.svelte";
 import AnimeRow from "./AnimeRow.svelte";
 import CollectionShareCard from "./CollectionShareCard.svelte";
@@ -470,7 +470,7 @@ function clearExchangeShare() {
 	selectedExchangeShare = null;
 
 	if (page.url.searchParams.has("share_exchange")) {
-		const url = new URL(page.url);
+		const url = new URL(page.url.href);
 		url.searchParams.delete("share_exchange");
 		replaceState(url, page.state);
 	}
@@ -488,7 +488,7 @@ function clearCollectionShare() {
 	selectedCollection = null;
 
 	if (page.url.searchParams.has("share_collection")) {
-		const url = new URL(page.url);
+		const url = new URL(page.url.href);
 		url.searchParams.delete("share_collection");
 		replaceState(url, page.state);
 	}

@@ -1,7 +1,7 @@
 /**
  * 一覧の続きの目印（#243 / #250）。作成日時と、同じ時刻の中での並びを決める ID の組。
  * 一覧は（作成日時, ID）の降順で並べ、次のページは目印より前の行を取る。
- * クライアントからも使うので $lib/server に置かない。
+ * クライアントからも使うので #lib/server に置かない。
  */
 export type TimelineCursor = {
 	createdAt: string;
@@ -22,7 +22,7 @@ export function parseTimelineCursor(searchParams: URLSearchParams): TimelineCurs
 }
 
 /** 続きのページの URL。今のクエリ（tab など）は残し、before / before_id だけを差し替える */
-export function timelineCursorHref(url: URL, cursor: TimelineCursor): string {
+export function timelineCursorHref(url: Pick<URL, "pathname" | "search">, cursor: TimelineCursor): string {
 	const params = new URLSearchParams(url.search);
 	params.set("before", cursor.createdAt);
 	params.set("before_id", cursor.id);

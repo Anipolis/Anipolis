@@ -1,10 +1,10 @@
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { redirect } from "@sveltejs/kit";
-import { admitWithInviteCode } from "$lib/server/beta-admission";
-import { isBetaGateEnabled, isBetaMember } from "$lib/server/discord";
-import { isEmailLinkNavigation } from "$lib/server/email-link";
-import { getInviteCodeCookie, setInviteCodeCookie } from "$lib/server/invites";
-import { sanitizeInternalRedirect } from "$lib/utils/url";
+import { admitWithInviteCode } from "#lib/server/beta-admission.ts";
+import { isBetaGateEnabled, isBetaMember } from "#lib/server/discord.ts";
+import { isEmailLinkNavigation } from "#lib/server/email-link.ts";
+import { getInviteCodeCookie, setInviteCodeCookie } from "#lib/server/invites.ts";
+import { sanitizeInternalRedirect } from "#lib/utils/url.ts";
 import type { RequestHandler } from "./$types";
 
 /**

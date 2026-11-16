@@ -1,6 +1,6 @@
 <script lang="ts">
-import { trapFocus } from "$lib/actions/trapFocus";
-import type { OpenBroadcastRoomSummary } from "$lib/types";
+import { trapFocus } from "#lib/actions/trapFocus.ts";
+import type { OpenBroadcastRoomSummary } from "#lib/types.ts";
 import AnimeRow from "./AnimeRow.svelte";
 
 type Props = {

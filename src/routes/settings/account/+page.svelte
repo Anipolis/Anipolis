@@ -1,8 +1,8 @@
 <script lang="ts">
-import type { SubmitFunction } from "@sveltejs/kit";
 import { untrack } from "svelte";
+import SettingsBackLink from "#lib/components/SettingsBackLink.svelte";
+import type { SubmitFunction } from "$app/forms";
 import { enhance } from "$app/forms";
-import SettingsBackLink from "$lib/components/SettingsBackLink.svelte";
 import type { PageProps } from "./$types";
 
 let { data, form }: PageProps = $props();

@@ -1,24 +1,24 @@
 ﻿import type { SupabaseClient } from "@supabase/supabase-js";
 import { fail } from "@sveltejs/kit";
-import { deletePostAction, toggleBookmarkAction, toggleLikeAction, toggleRepostAction } from "$lib/server/actions";
+import { deletePostAction, toggleBookmarkAction, toggleLikeAction, toggleRepostAction } from "#lib/server/actions.ts";
 import {
 	buildPostSearchFilter,
 	MAX_ANIME_MATCHES,
 	quotedAnimeIdsForSearch,
 	shouldMatchQuotedAnime,
-} from "$lib/server/post-search";
-import { buildPostCardSelect } from "$lib/server/post-selects";
+} from "#lib/server/post-search.ts";
+import { buildPostCardSelect } from "#lib/server/post-selects.ts";
 import {
 	buildTitleSearchFilter,
 	enrichPostsWithCounts,
 	getAnimeRankingTrending,
 	getBlockedUserIds,
 	quoteOrFilterValue,
-} from "$lib/server/queries";
-import { logQueryFailure } from "$lib/server/query-failure";
-import type { Database } from "$lib/supabase/database.types";
-import type { RawPost } from "$lib/types";
-import { buildIlikeContainsPattern, normalizeAccountQuery } from "$lib/utils/search";
+} from "#lib/server/queries.ts";
+import { logQueryFailure } from "#lib/server/query-failure.ts";
+import type { Database } from "#lib/supabase/database.types.ts";
+import type { RawPost } from "#lib/types.ts";
+import { buildIlikeContainsPattern, normalizeAccountQuery } from "#lib/utils/search.ts";
 import type { Actions, PageServerLoad } from "./$types";
 
 const POSTS_SELECT = buildPostCardSelect();

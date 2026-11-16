@@ -1,5 +1,5 @@
-import { getAnimeRankingTrending, getNotifications, getUnreadNotificationCount } from "$lib/server/queries";
-import { redirectToLogin } from "$lib/server/require-login";
+import { getAnimeRankingTrending, getNotifications, getUnreadNotificationCount } from "#lib/server/queries.ts";
+import { redirectToLogin } from "#lib/server/require-login.ts";
 import type { PageServerLoad } from "./$types";
 
 // 放送前のお知らせ（broadcast）は通知ではなくカレンダーに出す。

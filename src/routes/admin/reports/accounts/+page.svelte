@@ -1,6 +1,6 @@
 <script lang="ts">
+import { formatRelativeTime } from "#lib/utils/format.ts";
 import { enhance } from "$app/forms";
-import { formatRelativeTime } from "$lib/utils/format";
 import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();

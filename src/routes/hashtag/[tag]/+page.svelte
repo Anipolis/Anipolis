@@ -1,9 +1,9 @@
 <script lang="ts">
-import BackLink from "$lib/components/BackLink.svelte";
-import PostCardSkeleton from "$lib/components/PostCardSkeleton.svelte";
-import PostRow from "$lib/components/PostRow.svelte";
-import TrendingPanel from "$lib/components/TrendingPanel.svelte";
-import { createLatestResolved } from "$lib/latest-resolved.svelte";
+import BackLink from "#lib/components/BackLink.svelte";
+import PostCardSkeleton from "#lib/components/PostCardSkeleton.svelte";
+import PostRow from "#lib/components/PostRow.svelte";
+import TrendingPanel from "#lib/components/TrendingPanel.svelte";
+import { createLatestResolved } from "#lib/latest-resolved.svelte.ts";
 import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();

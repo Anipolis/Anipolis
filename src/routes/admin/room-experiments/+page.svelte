@@ -1,11 +1,11 @@
 <script lang="ts">
-import type { SubmitFunction } from "@sveltejs/kit";
 import { onMount } from "svelte";
+import { trapFocus } from "#lib/actions/trapFocus.ts";
+import { coverThumbFallback, coverThumbSrc } from "#lib/cover-image.ts";
+import type { RoomExitSurveyComparisonWithX, RoomExitSurveyNextParticipation } from "#lib/types.ts";
+import type { SubmitFunction } from "$app/forms";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
-import { trapFocus } from "$lib/actions/trapFocus";
-import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
-import type { RoomExitSurveyComparisonWithX, RoomExitSurveyNextParticipation } from "$lib/types";
 import type { PageProps } from "./$types";
 
 let { data, form }: PageProps = $props();

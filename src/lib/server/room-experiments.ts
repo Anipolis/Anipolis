@@ -1,8 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { buildTitleSearchFilter } from "$lib/server/queries";
-import { type RoomExitSurveyAggregateRow, summarizeRoomExitSurveyRows } from "$lib/server/room-exit-survey";
-import { createServiceRoleClient } from "$lib/server/supabase-admin";
-import type { Database } from "$lib/supabase/database.types";
+import { buildTitleSearchFilter } from "#lib/server/queries.ts";
+import { type RoomExitSurveyAggregateRow, summarizeRoomExitSurveyRows } from "#lib/server/room-exit-survey.ts";
+import { createServiceRoleClient } from "#lib/server/supabase-admin.ts";
+import type { Database } from "#lib/supabase/database.types.ts";
 import type {
 	RoomExitSurveyComparisonWithX,
 	RoomExitSurveyNextParticipation,
@@ -10,7 +10,7 @@ import type {
 	RoomExperimentAnimeSearchResult,
 	RoomExperimentDashboardRun,
 	RoomExperimentRun,
-} from "$lib/types";
+} from "#lib/types.ts";
 import {
 	calculateRoomExperimentMetrics,
 	type ExperimentPostCandidate,

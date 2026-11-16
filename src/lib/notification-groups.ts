@@ -1,4 +1,4 @@
-import type { Notification } from "$lib/types";
+import type { Notification } from "#lib/types.ts";
 
 /** 通知1件の表示。アクティビティへのいいねは、同じ記録への分を others にまとめる */
 export interface NotificationEntry {

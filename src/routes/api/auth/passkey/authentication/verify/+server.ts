@@ -1,7 +1,7 @@
 import { json } from "@sveltejs/kit";
-import { setLastLoginMethod } from "$lib/server/last-login-method";
-import { finishPasskeyLogin, isPasskeyEnabled } from "$lib/server/passkey";
-import { sanitizeInternalRedirect } from "$lib/utils/url";
+import { setLastLoginMethod } from "#lib/server/last-login-method.ts";
+import { finishPasskeyLogin, isPasskeyEnabled } from "#lib/server/passkey.ts";
+import { sanitizeInternalRedirect } from "#lib/utils/url.ts";
 import type { RequestHandler } from "./$types";
 
 export const POST: RequestHandler = async ({ request, url, cookies, locals: { supabase } }) => {

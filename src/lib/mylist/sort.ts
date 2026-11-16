@@ -1,4 +1,4 @@
-import type { Anime, AnimeStatus } from "$lib/types";
+import type { Anime, AnimeStatus } from "#lib/types.ts";
 
 /** マイリストのタブ。全部を並べる「すべて」と、ステータスごと。URL の ?status= に入れる値 */
 export type MylistTab = AnimeStatus | "all";

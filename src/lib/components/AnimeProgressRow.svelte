@@ -1,11 +1,11 @@
 <script lang="ts">
 import { tick } from "svelte";
-import { animeCardMeta } from "$lib/anime-labels";
-import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
-import { changeProgress } from "$lib/mylist/progress";
-import type { RowSaveState } from "$lib/mylist/save-queue";
-import { parseEpisodeCount } from "$lib/syobocal-episodes";
-import type { Anime, AnimeStatus } from "$lib/types";
+import { animeCardMeta } from "#lib/anime-labels.ts";
+import { coverThumbFallback, coverThumbSrc } from "#lib/cover-image.ts";
+import { changeProgress } from "#lib/mylist/progress.ts";
+import type { RowSaveState } from "#lib/mylist/save-queue.ts";
+import { parseEpisodeCount } from "#lib/syobocal-episodes.ts";
+import type { Anime, AnimeStatus } from "#lib/types.ts";
 
 /**
  * マイリストの話数を記録する行。ここで変えるのは話数（と話数に連動するステータス）だけで、

@@ -1,6 +1,6 @@
 <script lang="ts">
+import { canonicalUrl, shareText, toAbsoluteUrl, xIntentUrl } from "#lib/seo.ts";
 import { page } from "$app/state";
-import { canonicalUrl, shareText, toAbsoluteUrl, xIntentUrl } from "$lib/seo";
 
 /**
  * 共有の入口（#271）。スマホなど端末の共有シートが使えるときはそれを開き、

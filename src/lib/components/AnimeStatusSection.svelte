@@ -1,6 +1,6 @@
 <script lang="ts">
-import AnimeCard, { type AnimeCardProps } from "$lib/components/AnimeCard.svelte";
-import type { Anime, AnimeStatus } from "$lib/types";
+import AnimeCard, { type AnimeCardProps } from "#lib/components/AnimeCard.svelte";
+import type { Anime, AnimeStatus } from "#lib/types.ts";
 
 let {
 	animes,

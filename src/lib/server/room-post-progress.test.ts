@@ -1,12 +1,12 @@
 import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Anime, EpisodeRoom } from "$lib/types";
+import type { Anime, EpisodeRoom } from "#lib/types.ts";
 
 const insertPostWithHashtags = vi.hoisted(() => vi.fn());
 const advanceMylistProgressFromRoom = vi.hoisted(() => vi.fn());
 
-vi.mock("$lib/server/actions", () => ({ insertPostWithHashtags }));
-vi.mock("$lib/server/queries", () => ({ advanceMylistProgressFromRoom }));
+vi.mock("#lib/server/actions.ts", () => ({ insertPostWithHashtags }));
+vi.mock("#lib/server/queries.ts", () => ({ advanceMylistProgressFromRoom }));
 
 import { createEpisodeRoomPost, undoRoomProgressAdvance } from "./episode-room-page";
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { makeTimelinePosts } from "$lib/components/fixtures/timeline";
-import type { Post } from "$lib/types";
+import { makeTimelinePosts } from "#lib/components/fixtures/timeline.ts";
+import type { Post } from "#lib/types.ts";
 import { groupLiveRuns } from "./live-runs";
 
 const base = makeTimelinePosts(1)[0] as Post;

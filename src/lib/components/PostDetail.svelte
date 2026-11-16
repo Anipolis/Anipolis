@@ -1,7 +1,7 @@
 <script lang="ts">
-import type { Post } from "$lib/types";
-import { formatRelativeTime } from "$lib/utils/format";
-import { getPostDisplayContent, getPostRoomContext } from "$lib/utils/post-presentation";
+import type { Post } from "#lib/types.ts";
+import { formatRelativeTime } from "#lib/utils/format.ts";
+import { getPostDisplayContent, getPostRoomContext } from "#lib/utils/post-presentation.ts";
 import PostActionBar from "./post/PostActionBar.svelte";
 import PostCwGuard from "./post/PostCwGuard.svelte";
 import PostEmbeds from "./post/PostEmbeds.svelte";

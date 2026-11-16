@@ -1,17 +1,17 @@
 <script lang="ts">
 import { onDestroy, untrack } from "svelte";
+import type { AnimePick } from "#lib/anime-picker.ts";
+import { collectionKindPrefix, collectionTierColor, MAX_COLLECTION_ITEMS, orderByTier } from "#lib/collections.ts";
+import BackLink from "#lib/components/BackLink.svelte";
+import CollectionBoard from "#lib/components/CollectionBoard.svelte";
+import CollectionFormModal from "#lib/components/CollectionFormModal.svelte";
+import CollectionSearch from "#lib/components/CollectionSearch.svelte";
+import SeoMeta from "#lib/components/SeoMeta.svelte";
+import ShareMenu from "#lib/components/ShareMenu.svelte";
+import UserAvatar from "#lib/components/UserAvatar.svelte";
+import { coverThumbFallback, coverThumbSrc } from "#lib/cover-image.ts";
+import { crawlerSafeImage } from "#lib/seo.ts";
 import { beforeNavigate, goto, invalidateAll } from "$app/navigation";
-import type { AnimePick } from "$lib/anime-picker";
-import { collectionKindPrefix, collectionTierColor, MAX_COLLECTION_ITEMS, orderByTier } from "$lib/collections";
-import BackLink from "$lib/components/BackLink.svelte";
-import CollectionBoard from "$lib/components/CollectionBoard.svelte";
-import CollectionFormModal from "$lib/components/CollectionFormModal.svelte";
-import CollectionSearch from "$lib/components/CollectionSearch.svelte";
-import SeoMeta from "$lib/components/SeoMeta.svelte";
-import ShareMenu from "$lib/components/ShareMenu.svelte";
-import UserAvatar from "$lib/components/UserAvatar.svelte";
-import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
-import { crawlerSafeImage } from "$lib/seo";
 import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();

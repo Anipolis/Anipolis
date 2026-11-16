@@ -1,5 +1,5 @@
 import { error } from "@sveltejs/kit";
-import { getFollowCounts, getFollowerProfiles } from "$lib/server/queries";
+import { getFollowCounts, getFollowerProfiles } from "#lib/server/queries.ts";
 import type { PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {

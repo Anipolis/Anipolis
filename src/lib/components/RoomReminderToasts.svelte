@@ -1,6 +1,6 @@
 <script lang="ts">
-import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
-import { type RoomReminder, roomReminderStatus, roomReminderTime, roomReminderToastKey } from "$lib/room-reminders";
+import { coverThumbFallback, coverThumbSrc } from "#lib/cover-image.ts";
+import { type RoomReminder, roomReminderStatus, roomReminderTime, roomReminderToastKey } from "#lib/room-reminders.ts";
 
 /**
  * 放送前のお知らせが鳴った瞬間に、パソコンは右下・スマホは上に小さく出す。

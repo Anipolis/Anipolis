@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { ReactionUser } from "$lib/types";
+import type { ReactionUser } from "#lib/types.ts";
 import UserAvatar from "./UserAvatar.svelte";
 
 interface Props {
