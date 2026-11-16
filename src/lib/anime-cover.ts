@@ -1,5 +1,5 @@
 // アニメカバー画像のサムネイル規約。アプリ（表示）とスクリプト（生成）で共有するので
-// $lib エイリアスや SvelteKit 固有の import を持ち込まないこと。
+// SvelteKit 固有の import（$app/*・$env/*）を持ち込まないこと。#lib は Node でも解決できる。
 //
 // 原寸: anime-covers/<name>.<ext>
 // サムネイル: anime-covers/thumbs/160/<name>.avif

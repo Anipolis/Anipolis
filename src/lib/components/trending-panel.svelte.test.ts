@@ -1,6 +1,6 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Anime } from "$lib/types";
+import type { Anime } from "#lib/types.ts";
 
 vi.mock("$app/state", () => ({ page: { data: { user: { id: "user-1" } } } }));
 

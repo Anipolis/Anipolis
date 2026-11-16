@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "#lib/supabase/database.types.ts";
 import { ADMIN_MFA_REQUIRED } from "$app/env/private";
-import type { Database } from "$lib/supabase/database.types";
 
 /**
  * 二段階認証（認証アプリの 6 桁のコード、TOTP）。Supabase Auth の MFA を使う。

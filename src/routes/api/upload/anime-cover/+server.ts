@@ -1,11 +1,11 @@
 import { createClient } from "@supabase/supabase-js";
 import { error, json } from "@sveltejs/kit";
+import { ANIME_COVER_BUCKET, coverThumbObjectName } from "#lib/anime-cover.ts";
+import { upsertManualSourceRecord } from "#lib/server/anime-admin.ts";
+import { isAdminUser } from "#lib/server/queries.ts";
+import { MULTIPART_OVERHEAD_BYTES, readFormDataWithLimit, validateImageBuffer } from "#lib/server/upload.ts";
 import { SUPABASE_SECRET_KEY, SUPABASE_SERVICE_ROLE_KEY } from "$app/env/private";
 import { PUBLIC_SUPABASE_URL } from "$app/env/public";
-import { ANIME_COVER_BUCKET, coverThumbObjectName } from "$lib/anime-cover";
-import { upsertManualSourceRecord } from "$lib/server/anime-admin";
-import { isAdminUser } from "$lib/server/queries";
-import { MULTIPART_OVERHEAD_BYTES, readFormDataWithLimit, validateImageBuffer } from "$lib/server/upload";
 import type { RequestHandler } from "./$types";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];

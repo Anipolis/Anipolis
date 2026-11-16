@@ -1,7 +1,7 @@
 <script lang="ts">
+import { supabaseTarget } from "#lib/supabase-target.ts";
 import { dev } from "$app/env";
 import { PUBLIC_ANIPOLIS_ENV, PUBLIC_SUPABASE_URL } from "$app/env/public";
-import { supabaseTarget } from "$lib/supabase-target";
 
 // 開発サーバーで、いまどの DB につながっているかを常に見せる（本番には出ない）。
 // pnpm dev は .env.staging を読むのでステージング、pnpm dev:prod は本番 DB。

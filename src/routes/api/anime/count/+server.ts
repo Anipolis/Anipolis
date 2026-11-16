@@ -1,6 +1,6 @@
 import { json } from "@sveltejs/kit";
-import { buildAnimeCountOptions, parseAnimeListFilters } from "$lib/server/anime-list-filters.js";
-import { getAnimeCount } from "$lib/server/queries.js";
+import { buildAnimeCountOptions, parseAnimeListFilters } from "#lib/server/anime-list-filters.ts";
+import { getAnimeCount } from "#lib/server/queries.ts";
 import type { RequestHandler } from "./$types";
 
 export const GET: RequestHandler = async ({ url, locals: { supabase } }) => {

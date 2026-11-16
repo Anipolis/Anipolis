@@ -1,6 +1,6 @@
 <script lang="ts">
+import SettingsBackLink from "#lib/components/SettingsBackLink.svelte";
 import { enhance } from "$app/forms";
-import SettingsBackLink from "$lib/components/SettingsBackLink.svelte";
 import type { PageProps } from "./$types";
 
 let { data, form }: PageProps = $props();

@@ -1,11 +1,11 @@
 <script lang="ts">
 import { tick, untrack } from "svelte";
+import MyListRemoveConfirm from "#lib/components/MyListRemoveConfirm.svelte";
+import { savedEntryFromResult } from "#lib/mylist/entry-from-form.ts";
+import type { AnimeStatus, UserAnimeEntry } from "#lib/types.ts";
 import type { SubmitFunction } from "$app/forms";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
-import MyListRemoveConfirm from "$lib/components/MyListRemoveConfirm.svelte";
-import { savedEntryFromResult } from "$lib/mylist/entry-from-form";
-import type { AnimeStatus, UserAnimeEntry } from "$lib/types";
 
 /**
  * PC のアニメ一覧で、カードのボタンから開く小さな視聴ステータス欄。

@@ -1,13 +1,17 @@
 import { error, fail } from "@sveltejs/kit";
-import { buildEpisodeRoomList, hasEpisodeRooms } from "$lib/episode-room";
-import { recommendAnimeAction, removeUserAnimeEntry, upsertUserAnimeEntry } from "$lib/server/actions";
-import { addBroadcastOverrideAction, deleteBroadcastOverrideAction, updateAnimeAction } from "$lib/server/anime-admin";
+import { buildEpisodeRoomList, hasEpisodeRooms } from "#lib/episode-room.ts";
+import { recommendAnimeAction, removeUserAnimeEntry, upsertUserAnimeEntry } from "#lib/server/actions.ts";
+import {
+	addBroadcastOverrideAction,
+	deleteBroadcastOverrideAction,
+	updateAnimeAction,
+} from "#lib/server/anime-admin.ts";
 import {
 	addEpisodeAiringAction,
 	addSpecialRoomAction,
 	mergeEpisodeRoomsAction,
 	setEpisodeRoomOpensAtAction,
-} from "$lib/server/episode-room-admin";
+} from "#lib/server/episode-room-admin.ts";
 import {
 	getAdminEpisodeRooms,
 	getAnime,
@@ -19,8 +23,8 @@ import {
 	getEventsForAnime,
 	getUsersWhoListedAnime,
 	isAdminUser,
-} from "$lib/server/queries";
-import { createServiceRoleClient } from "$lib/server/supabase-admin";
+} from "#lib/server/queries.ts";
+import { createServiceRoleClient } from "#lib/server/supabase-admin.ts";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {

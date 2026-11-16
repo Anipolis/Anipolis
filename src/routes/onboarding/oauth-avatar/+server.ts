@@ -1,5 +1,5 @@
 import { error } from "@sveltejs/kit";
-import { fetchOAuthAvatar, getOAuthAvatarUrl } from "$lib/server/oauth-avatar";
+import { fetchOAuthAvatar, getOAuthAvatarUrl } from "#lib/server/oauth-avatar.ts";
 import type { RequestHandler } from "./$types";
 
 /**

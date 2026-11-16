@@ -1,6 +1,6 @@
 import { error, json } from "@sveltejs/kit";
-import { isCollectionId, MAX_COLLECTION_ITEMS, MAX_COLLECTION_TIERS } from "$lib/collections";
-import { requireAccountCanWrite } from "$lib/server/actions";
+import { isCollectionId, MAX_COLLECTION_ITEMS, MAX_COLLECTION_TIERS } from "#lib/collections.ts";
+import { requireAccountCanWrite } from "#lib/server/actions.ts";
 import type { RequestHandler } from "./$types";
 
 // コレクションの作品を、送られた順番で丸ごと置き換える（#515）。

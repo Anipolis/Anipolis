@@ -142,7 +142,7 @@ describe("minutesUntilBroadcast (JST wall clock)", () => {
 		id: "1",
 		broadcast_time: "25:30",
 		broadcast_day: 1,
-	} as unknown as import("$lib/types").Anime;
+	} as unknown as import("#lib/types.ts").Anime;
 
 	it("interprets broadcast_time as JST regardless of the runtime timezone", () => {
 		// 月曜 25:30 = 火曜 01:30 JST = 月曜 16:30 UTC

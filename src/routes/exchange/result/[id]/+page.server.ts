@@ -1,7 +1,7 @@
 import { error } from "@sveltejs/kit";
-import { toValidExchangeSubjectiveTags } from "$lib/exchange-tags";
-import { getAnimeRankingTrending } from "$lib/server/queries";
-import type { AnimeExchangeShare } from "$lib/types";
+import { toValidExchangeSubjectiveTags } from "#lib/exchange-tags.ts";
+import { getAnimeRankingTrending } from "#lib/server/queries.ts";
+import type { AnimeExchangeShare } from "#lib/types.ts";
 import type { PageServerLoad } from "./$types";
 
 type ExchangeShareRaw = {

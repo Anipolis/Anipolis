@@ -1,13 +1,13 @@
 import { error, fail, redirect } from "@sveltejs/kit";
-import { episodeRoomPath } from "$lib/episode-room";
+import { episodeRoomPath } from "#lib/episode-room.ts";
 import {
 	deletePostAction,
 	insertPostWithHashtags,
 	toggleBookmarkAction,
 	toggleLikeAction,
 	toggleRepostAction,
-} from "$lib/server/actions";
-import { buildBroadcastEpisodeLog } from "$lib/server/broadcast-episode-log";
+} from "#lib/server/actions.ts";
+import { buildBroadcastEpisodeLog } from "#lib/server/broadcast-episode-log.ts";
 import {
 	getAnime,
 	getAnimeRankingTrending,
@@ -17,20 +17,20 @@ import {
 	getBroadcastRoomScheduleSnapshotsForAnime,
 	getBroadcastRoomSession,
 	getEpisodeRoomById,
-} from "$lib/server/queries";
-import { getRoomExitSurveyLoadState, ROOM_EXIT_SURVEY_VERSION } from "$lib/server/room-exit-survey";
+} from "#lib/server/queries.ts";
+import { getRoomExitSurveyLoadState, ROOM_EXIT_SURVEY_VERSION } from "#lib/server/room-exit-survey.ts";
 import {
 	createRoomExperimentServiceClient,
 	getActiveRoomExperimentRunForAnime as getActiveExperimentRun,
-} from "$lib/server/room-experiments";
-import { roomHashtag, stripTrailingRoomHashtag } from "$lib/server/room-hashtag";
-import type { Anime, BroadcastRoomOverride, BroadcastRoomSession } from "$lib/types";
+} from "#lib/server/room-experiments.ts";
+import { roomHashtag, stripTrailingRoomHashtag } from "#lib/server/room-hashtag.ts";
+import type { Anime, BroadcastRoomOverride, BroadcastRoomSession } from "#lib/types.ts";
 import {
 	animeIsScheduledForRoomDate,
 	broadcastTimeMinutes,
 	isEligibleForRoomLog,
 	isValidRoomDate,
-} from "$lib/utils/broadcast-room";
+} from "#lib/utils/broadcast-room.ts";
 import type { Actions, PageServerLoad } from "./$types";
 
 // 過去ルームの表示専用セッション。かつては閲覧時にフォールバックがセッション行を

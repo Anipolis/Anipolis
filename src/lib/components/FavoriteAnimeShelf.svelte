@@ -1,9 +1,9 @@
 <script lang="ts">
+import { toAnimePick } from "#lib/anime-picker.ts";
+import AnimePickerModal from "#lib/components/AnimePickerModal.svelte";
+import { MAX_FAVORITE_ANIME } from "#lib/favorite-anime.ts";
+import type { Anime } from "#lib/types.ts";
 import { invalidateAll } from "$app/navigation";
-import { toAnimePick } from "$lib/anime-picker";
-import AnimePickerModal from "$lib/components/AnimePickerModal.svelte";
-import { MAX_FAVORITE_ANIME } from "$lib/favorite-anime";
-import type { Anime } from "$lib/types";
 
 // favorites が null のときは読み込みに失敗している（未登録の [] とは別）。中身が分からないので編集させない
 let { favorites, isOwn }: { favorites: Anime[] | null; isOwn: boolean } = $props();

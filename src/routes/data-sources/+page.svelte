@@ -4,10 +4,10 @@ import {
 	ANIME_OFFLINE_ODBL_URL,
 	ANIME_OFFLINE_REPOSITORY_URL,
 	ANIPOLIS_TRANSFORMATION_URL,
-} from "$lib/anime-offline-database";
-import LegalDocument from "$lib/components/LegalDocument.svelte";
-import { WIKIDATA_CC0_URL, WIKIDATA_TRANSFORMATION_URL } from "$lib/wikidata-anime-titles";
-import { WIKIDATA_STUDIO_TRANSFORMATION_URL } from "$lib/wikidata-studio-names";
+} from "#lib/anime-offline-database.ts";
+import LegalDocument from "#lib/components/LegalDocument.svelte";
+import { WIKIDATA_CC0_URL, WIKIDATA_TRANSFORMATION_URL } from "#lib/wikidata-anime-titles.ts";
+import { WIKIDATA_STUDIO_TRANSFORMATION_URL } from "#lib/wikidata-studio-names.ts";
 </script>
 
 <!-- 利用規約・お問い合わせと同じ見た目にする（#439）。タイトルは LegalDocument が付ける -->

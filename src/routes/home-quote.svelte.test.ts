@@ -141,7 +141,7 @@ describe("home page quote flow (#294)", () => {
 
 		await unmount(component);
 		target.remove();
-		const { composeOpen } = await import("$lib/stores/compose");
+		const { composeOpen } = await import("#lib/stores/compose.ts");
 		composeOpen.set(false);
 	});
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { BroadcastRoomOverride } from "$lib/types";
+import type { BroadcastRoomOverride } from "#lib/types.ts";
 import {
 	type BroadcastEpisodeSlot,
 	inferEpisodeNumbersBackward,

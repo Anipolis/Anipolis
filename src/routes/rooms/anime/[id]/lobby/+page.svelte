@@ -1,5 +1,5 @@
 <script lang="ts">
-import LiveRoomView from "$lib/components/room/LiveRoomView.svelte";
+import LiveRoomView from "#lib/components/room/LiveRoomView.svelte";
 import type { ActionData, PageData } from "./$types";
 
 let { data, form }: { data: PageData; form: ActionData } = $props();

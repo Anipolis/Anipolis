@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("$app/navigation", () => ({ invalidateAll: vi.fn() }));
 
-import type { Anime } from "$lib/types";
+import type { Anime } from "#lib/types.ts";
 import FavoriteAnimeShelf from "./FavoriteAnimeShelf.svelte";
 
 let cleanup: (() => void) | null = null;

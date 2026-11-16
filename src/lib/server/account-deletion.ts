@@ -4,12 +4,12 @@ import {
 	recordAccountStorageCleanup,
 	retryPendingAccountStorageCleanups,
 	runAccountStorageCleanup,
-} from "$lib/server/account-storage-cleanup";
-import { getLastSignInAt, hasPasswordProvider } from "$lib/server/auth";
-import { createServiceRoleClient } from "$lib/server/supabase-admin";
-import type { Database } from "$lib/supabase/database.types";
+} from "#lib/server/account-storage-cleanup.ts";
+import { getLastSignInAt, hasPasswordProvider } from "#lib/server/auth.ts";
+import { createServiceRoleClient } from "#lib/server/supabase-admin.ts";
+import type { Database } from "#lib/supabase/database.types.ts";
 
-export { STORAGE_LIST_PAGE_SIZE, USER_OWNED_BUCKETS } from "$lib/server/account-storage-cleanup";
+export { STORAGE_LIST_PAGE_SIZE, USER_OWNED_BUCKETS } from "#lib/server/account-storage-cleanup.ts";
 
 type AuthUser = NonNullable<Awaited<ReturnType<App.Locals["safeGetSession"]>>["user"]>;
 type AuthSession = NonNullable<Awaited<ReturnType<App.Locals["safeGetSession"]>>["session"]>;

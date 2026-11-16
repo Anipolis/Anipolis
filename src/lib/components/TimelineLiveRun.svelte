@@ -1,7 +1,7 @@
 <script lang="ts">
-import { comparePostsAsc } from "$lib/room-live-sync";
-import type { Post } from "$lib/types";
-import type { PostRoomContext } from "$lib/utils/post-presentation";
+import { comparePostsAsc } from "#lib/room-live-sync.ts";
+import type { Post } from "#lib/types.ts";
+import type { PostRoomContext } from "#lib/utils/post-presentation.ts";
 import PostRow from "./PostRow.svelte";
 
 /**

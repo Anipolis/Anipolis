@@ -1,4 +1,4 @@
-import type { Post } from "$lib/types/post";
+import type { Post } from "#lib/types/post.ts";
 
 export const mockTimeline: Post[] = [
 	{

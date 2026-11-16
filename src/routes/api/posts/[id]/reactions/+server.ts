@@ -1,6 +1,6 @@
 import { json, type RequestHandler } from "@sveltejs/kit";
-import { getPostReactionUsers } from "$lib/server/queries";
-import type { ReactionType } from "$lib/types";
+import { getPostReactionUsers } from "#lib/server/queries.ts";
+import type { ReactionType } from "#lib/types.ts";
 
 export const GET: RequestHandler = async ({ params, url, locals: { supabase } }) => {
 	const postId = params.id;

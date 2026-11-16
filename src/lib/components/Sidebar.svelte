@@ -1,10 +1,10 @@
 <script lang="ts">
 import type { Session } from "@supabase/supabase-js";
+import type { Database } from "#lib/supabase/database.types.ts";
+import type { LinkedAccountSummary, OpenBroadcastRoomSummary } from "#lib/types.ts";
 import { browser } from "$app/env";
 import { goto, invalidateAll } from "$app/navigation";
 import { navigating, page } from "$app/state";
-import type { Database } from "$lib/supabase/database.types";
-import type { LinkedAccountSummary, OpenBroadcastRoomSummary } from "$lib/types";
 import AnimeIcon from "./AnimeIcon.svelte";
 import LiveRoomPickerModal from "./LiveRoomPickerModal.svelte";
 import UserAvatar from "./UserAvatar.svelte";

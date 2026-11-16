@@ -1,18 +1,18 @@
 <script lang="ts">
+import { trapFocus } from "#lib/actions/trapFocus.ts";
+import ActivityFeed from "#lib/components/ActivityFeed.svelte";
+import LiveRoomsPanel from "#lib/components/LiveRoomsPanel.svelte";
+import PostCardSkeleton from "#lib/components/PostCardSkeleton.svelte";
+import PostComposer from "#lib/components/PostComposer.svelte";
+import PostRow from "#lib/components/PostRow.svelte";
+import SeoMeta from "#lib/components/SeoMeta.svelte";
+import TimelineLiveRun from "#lib/components/TimelineLiveRun.svelte";
+import TrendingPanel from "#lib/components/TrendingPanel.svelte";
+import WelcomeCard from "#lib/components/WelcomeCard.svelte";
+import { createLatestResolved } from "#lib/latest-resolved.svelte.ts";
+import { composeOpen } from "#lib/stores/compose.ts";
+import { groupLiveRuns } from "#lib/utils/live-runs.ts";
 import { replaceState } from "$app/navigation";
-import { trapFocus } from "$lib/actions/trapFocus";
-import ActivityFeed from "$lib/components/ActivityFeed.svelte";
-import LiveRoomsPanel from "$lib/components/LiveRoomsPanel.svelte";
-import PostCardSkeleton from "$lib/components/PostCardSkeleton.svelte";
-import PostComposer from "$lib/components/PostComposer.svelte";
-import PostRow from "$lib/components/PostRow.svelte";
-import SeoMeta from "$lib/components/SeoMeta.svelte";
-import TimelineLiveRun from "$lib/components/TimelineLiveRun.svelte";
-import TrendingPanel from "$lib/components/TrendingPanel.svelte";
-import WelcomeCard from "$lib/components/WelcomeCard.svelte";
-import { createLatestResolved } from "$lib/latest-resolved.svelte";
-import { composeOpen } from "$lib/stores/compose";
-import { groupLiveRuns } from "$lib/utils/live-runs";
 import type { PageProps } from "./$types";
 
 /** スケルトンの枚数（タイムラインの典型的な表示密度に合わせた仮枠） */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { BroadcastRoomOverride } from "$lib/types";
+import type { BroadcastRoomOverride } from "#lib/types.ts";
 import { type BackfillAnime, type BackfillSession, planEpisodeRoomBackfill } from "./episode-room-backfill";
 
 // broadcast_day/time を null にして、今日基準の合成補完を切り、放送枠だけで決定的に確かめる

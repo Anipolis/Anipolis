@@ -1,8 +1,8 @@
 <script lang="ts">
+import SettingsBackLink from "#lib/components/SettingsBackLink.svelte";
+import { formatRelativeTime } from "#lib/utils/format.ts";
 import type { SubmitFunction } from "$app/forms";
 import { enhance } from "$app/forms";
-import SettingsBackLink from "$lib/components/SettingsBackLink.svelte";
-import { formatRelativeTime } from "$lib/utils/format";
 import type { PageProps } from "./$types";
 
 let { data, form }: PageProps = $props();

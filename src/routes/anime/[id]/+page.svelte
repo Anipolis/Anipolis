@@ -1,34 +1,34 @@
 <script lang="ts">
 import { tick, untrack } from "svelte";
-import type { SubmitFunction } from "$app/forms";
-import { enhance } from "$app/forms";
-import { invalidateAll } from "$app/navigation";
-import { page } from "$app/state";
-import { tabListKeys } from "$lib/actions/tabListKeys";
-import { isCoverHiddenWithoutCopyright } from "$lib/anime-cover";
-import { animeRelationLabel, animeSeasonLabel, animeTypeLabel } from "$lib/anime-labels";
-import { canRenderAnimeOg } from "$lib/anime-og";
-import AddToCollectionModal from "$lib/components/AddToCollectionModal.svelte";
-import AnimePosterTile from "$lib/components/AnimePosterTile.svelte";
-import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
-import BackLink from "$lib/components/BackLink.svelte";
-import Modal from "$lib/components/Modal.svelte";
-import MyListModal from "$lib/components/MyListModal.svelte";
-import MyListStatusPopover from "$lib/components/MyListStatusPopover.svelte";
-import SeoMeta from "$lib/components/SeoMeta.svelte";
-import ShareMenu from "$lib/components/ShareMenu.svelte";
+import { tabListKeys } from "#lib/actions/tabListKeys.ts";
+import { isCoverHiddenWithoutCopyright } from "#lib/anime-cover.ts";
+import { animeRelationLabel, animeSeasonLabel, animeTypeLabel } from "#lib/anime-labels.ts";
+import { canRenderAnimeOg } from "#lib/anime-og.ts";
+import AddToCollectionModal from "#lib/components/AddToCollectionModal.svelte";
+import AnimePosterTile from "#lib/components/AnimePosterTile.svelte";
+import AnimeRegisterForm from "#lib/components/AnimeRegisterForm.svelte";
+import BackLink from "#lib/components/BackLink.svelte";
+import Modal from "#lib/components/Modal.svelte";
+import MyListModal from "#lib/components/MyListModal.svelte";
+import MyListStatusPopover from "#lib/components/MyListStatusPopover.svelte";
+import SeoMeta from "#lib/components/SeoMeta.svelte";
+import ShareMenu from "#lib/components/ShareMenu.svelte";
 import {
 	episodeRoomChipLabels,
 	episodeRoomEntryState,
 	formatAiringTime,
 	isEpisodeRoomEntryLive,
-} from "$lib/episode-room";
-import type { AnimeStatus, UserAnimeEntry } from "$lib/types";
+} from "#lib/episode-room.ts";
+import type { AnimeStatus, UserAnimeEntry } from "#lib/types.ts";
 import {
 	type BroadcastOverrideKind,
 	formatBroadcastOverrideEpisodeSummary,
 	formatBroadcastOverrideKindLabel,
-} from "$lib/utils/broadcast-episodes";
+} from "#lib/utils/broadcast-episodes.ts";
+import type { SubmitFunction } from "$app/forms";
+import { enhance } from "$app/forms";
+import { invalidateAll } from "$app/navigation";
+import { page } from "$app/state";
 import type { PageProps } from "./$types";
 
 interface UserResult {
@@ -157,8 +157,8 @@ function formatEpisodeCount(value: string): string {
 	return /^\d+$/.test(value) ? `全${value}話` : `${value}話`;
 }
 
-import { formatCompactCount, formatCount } from "$lib/utils/format";
-import { isHttpUrl, isMalUrl } from "$lib/utils/url";
+import { formatCompactCount, formatCount } from "#lib/utils/format.ts";
+import { isHttpUrl, isMalUrl } from "#lib/utils/url.ts";
 
 function buildDisplayOfficialLinks(officialSiteUrl: string | null, officialXUrl: string | null) {
 	const links: { name: string; url: string }[] = [];

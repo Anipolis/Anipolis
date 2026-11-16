@@ -1,4 +1,4 @@
-import { isDateKey } from "$lib/utils/jst";
+import { isDateKey } from "#lib/utils/jst.ts";
 
 /** マイリストのメモの上限（DB の user_anime_notes_body_length と同じ） */
 export const MYLIST_NOTE_MAX_LENGTH = 1000;

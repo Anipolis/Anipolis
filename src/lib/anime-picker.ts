@@ -1,4 +1,4 @@
-import type { Anime } from "$lib/types";
+import type { Anime } from "#lib/types.ts";
 import { animeTypeLabel } from "./anime-labels";
 
 /** 作品を選ぶ画面（AnimePickerModal）で扱う作品。検索 API（/api/anime/search）の結果と同じ形 */

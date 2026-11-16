@@ -1,7 +1,7 @@
 import { error, json } from "@sveltejs/kit";
-import { MAX_COLLECTIONS_PER_USER, parseCollectionInput } from "$lib/collections";
-import { requireAccountCanWrite } from "$lib/server/actions";
-import { getAnimeCoverUrl, getCollectionsForAnime } from "$lib/server/queries";
+import { MAX_COLLECTIONS_PER_USER, parseCollectionInput } from "#lib/collections.ts";
+import { requireAccountCanWrite } from "#lib/server/actions.ts";
+import { getAnimeCoverUrl, getCollectionsForAnime } from "#lib/server/queries.ts";
 import type { RequestHandler } from "./$types";
 
 function parseAnimeId(value: unknown): number {

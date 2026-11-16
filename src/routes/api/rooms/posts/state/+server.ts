@@ -1,6 +1,6 @@
 import { json } from "@sveltejs/kit";
-import { getVisiblePostReplyCounts } from "$lib/server/queries";
-import { ROOM_STATE_MAX_IDS } from "$lib/utils/room-connection";
+import { getVisiblePostReplyCounts } from "#lib/server/queries.ts";
+import { ROOM_STATE_MAX_IDS } from "#lib/utils/room-connection.ts";
 import type { RequestHandler } from "./$types";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

@@ -7,7 +7,7 @@ import {
 	toggleEventNotificationSubscription,
 	updateEventMuteAction,
 	upsertAnimeMute,
-} from "$lib/server/actions";
+} from "#lib/server/actions.ts";
 import {
 	getActiveAnimeMuteIds,
 	getAnimeList,
@@ -21,10 +21,10 @@ import {
 	getOverrideAnimeIdsInRange,
 	getScheduleBroadcastSessionsInRange,
 	isAdminUser,
-} from "$lib/server/queries";
-import { jstBroadcastTimeLabel } from "$lib/syobocal-schedule";
-import type { Anime, BroadcastNotificationSettings, BroadcastRoomOverride, Event } from "$lib/types";
-import { formatBroadcastOverrideAnnouncement } from "$lib/utils/broadcast-episodes";
+} from "#lib/server/queries.ts";
+import { jstBroadcastTimeLabel } from "#lib/syobocal-schedule.ts";
+import type { Anime, BroadcastNotificationSettings, BroadcastRoomOverride, Event } from "#lib/types.ts";
+import { formatBroadcastOverrideAnnouncement } from "#lib/utils/broadcast-episodes.ts";
 import {
 	animeIsScheduledForRoomDate,
 	broadcastTimeSortValue,
@@ -32,8 +32,8 @@ import {
 	isEligibleForRoomLog,
 	overrideForRoomDate,
 	roomDateKey,
-} from "$lib/utils/broadcast-room";
-import { eventBroadcastDateKey } from "$lib/utils/event-time";
+} from "#lib/utils/broadcast-room.ts";
+import { eventBroadcastDateKey } from "#lib/utils/event-time.ts";
 import {
 	addDaysToDateKey,
 	dateKeyWeekday,
@@ -42,7 +42,7 @@ import {
 	jstDateKey,
 	jstWeekRange,
 	startOfWeekDateKey,
-} from "$lib/utils/jst";
+} from "#lib/utils/jst.ts";
 import type { Actions, PageServerLoad } from "./$types";
 
 interface BroadcastAnnouncement {
@@ -93,7 +93,7 @@ function pushAnnouncement(
 export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 
-	// 週間スケジュールの時間基準は JST 固定・放送日は午前4時境界（$lib/utils/jst 参照）。
+	// 週間スケジュールの時間基準は JST 固定・放送日は午前4時境界（#lib/utils/jst 参照）。
 	// Cloudflare Workers のサーバー TZ は UTC なので Date のローカル getter は使わず、
 	// 「今日」「今週」「日付キー」「イベント取得範囲」をすべて同じ基準から導出する。
 	// 「今週」は今日の放送日を含む週: JST 日曜 00:00〜03:59 はまだ土曜の放送日なので

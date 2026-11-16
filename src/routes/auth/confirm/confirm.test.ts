@@ -8,12 +8,12 @@ const clearInviteCodeCookie = vi.fn();
 const setInviteCodeCookie = vi.fn();
 let cookieCode: string | null = null;
 
-vi.mock("$lib/server/discord", () => ({
+vi.mock("#lib/server/discord.ts", () => ({
 	grantBetaAccess: (...args: unknown[]) => grantBetaAccess(...(args as [])),
 	isBetaGateEnabled: () => gate.enabled,
 	isBetaMember: (user: { app_metadata?: { beta_member?: boolean } }) => user.app_metadata?.beta_member === true,
 }));
-vi.mock("$lib/server/invites", () => ({
+vi.mock("#lib/server/invites.ts", () => ({
 	clearInviteCodeCookie: (...args: unknown[]) => clearInviteCodeCookie(...(args as [])),
 	getInviteCodeCookie: () => cookieCode,
 	setInviteCodeCookie: (...args: unknown[]) => setInviteCodeCookie(...(args as [])),

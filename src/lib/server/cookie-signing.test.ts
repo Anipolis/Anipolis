@@ -19,8 +19,8 @@ vi.mock("$app/env/private", () => ({
 }));
 vi.mock("$app/env/public", () => ({ PUBLIC_PASSKEY_ENABLED: undefined }));
 vi.mock("@simplewebauthn/server", () => ({}));
-vi.mock("$lib/server/supabase-admin", () => ({ createServiceRoleClient: () => null }));
-vi.mock("$lib/server/discord", () => ({ isBetaGateEnabled: () => false, isBetaMember: () => true }));
+vi.mock("#lib/server/supabase-admin.ts", () => ({ createServiceRoleClient: () => null }));
+vi.mock("#lib/server/discord.ts", () => ({ isBetaGateEnabled: () => false, isBetaMember: () => true }));
 
 const { getCookieSigningSecret, signCookiePayload, verifyCookieSignature } = await import("./cookie-signing");
 const { getInviteCodeCookie, setInviteCodeCookie } = await import("./invites");

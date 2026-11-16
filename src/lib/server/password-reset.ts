@@ -1,6 +1,6 @@
 import type { Cookies } from "@sveltejs/kit";
+import { getCookieSigningSecret, signCookiePayload, verifyCookieSignature } from "#lib/server/cookie-signing.ts";
 import { dev } from "$app/env";
-import { getCookieSigningSecret, signCookiePayload, verifyCookieSignature } from "$lib/server/cookie-signing";
 
 // ----------------------------------------------------------------
 // パスワード再設定リンクの検証に成功したことを示す短命の署名付き httpOnly Cookie。

@@ -1,6 +1,6 @@
 import { fail, isActionFailure } from "@sveltejs/kit";
-import { airingOnAirAt, OPENABLE_WITHOUT_ROOM } from "$lib/episode-room";
-import { insertPostWithHashtags } from "$lib/server/actions";
+import { airingOnAirAt, OPENABLE_WITHOUT_ROOM } from "#lib/episode-room.ts";
+import { insertPostWithHashtags } from "#lib/server/actions.ts";
 import {
 	advanceMylistProgressFromRoom,
 	ensureEpisodeRoom,
@@ -10,10 +10,10 @@ import {
 	getEpisodeRoomByNumber,
 	getEpisodeRoomPosts,
 	getSpecialEpisodeRoom,
-} from "$lib/server/queries";
-import { roomHashtag, stripTrailingRoomHashtag } from "$lib/server/room-hashtag";
-import type { Anime, EpisodeRoom } from "$lib/types";
-import type { RoomProgressAdvance } from "$lib/types/live-room";
+} from "#lib/server/queries.ts";
+import { roomHashtag, stripTrailingRoomHashtag } from "#lib/server/room-hashtag.ts";
+import type { RoomProgressAdvance } from "#lib/types/live-room.ts";
+import type { Anime, EpisodeRoom } from "#lib/types.ts";
 
 /**
  * 話数ルーム・特番ルーム（153）のページの共通部分。

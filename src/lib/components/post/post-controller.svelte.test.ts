@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import type { Post } from "#lib/types.ts";
 import type { ActionResult } from "$app/forms";
-import type { Post } from "$lib/types";
 import { PostController } from "./post-controller.svelte";
 
 const { goto } = vi.hoisted(() => ({ goto: vi.fn(async () => {}) }));

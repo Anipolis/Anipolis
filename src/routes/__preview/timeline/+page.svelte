@@ -1,13 +1,13 @@
 <script lang="ts">
 import { onMount } from "svelte";
-import { makeTimelinePosts } from "$lib/components/fixtures/timeline";
-import PostComposer from "$lib/components/PostComposer.svelte";
-import PostRow from "$lib/components/PostRow.svelte";
-import LiveRoomView from "$lib/components/room/LiveRoomView.svelte";
-import TimelineLiveRun from "$lib/components/TimelineLiveRun.svelte";
-import TrendingPanel from "$lib/components/TrendingPanel.svelte";
-import type { LiveRoomData } from "$lib/types/live-room";
-import { groupLiveRuns } from "$lib/utils/live-runs";
+import { makeTimelinePosts } from "#lib/components/fixtures/timeline.ts";
+import PostComposer from "#lib/components/PostComposer.svelte";
+import PostRow from "#lib/components/PostRow.svelte";
+import LiveRoomView from "#lib/components/room/LiveRoomView.svelte";
+import TimelineLiveRun from "#lib/components/TimelineLiveRun.svelte";
+import TrendingPanel from "#lib/components/TrendingPanel.svelte";
+import type { LiveRoomData } from "#lib/types/live-room.ts";
+import { groupLiveRuns } from "#lib/utils/live-runs.ts";
 
 // 4〜9 件目を同じ人の連投にして、ホームで実況のまとまり（groupLiveRuns）を確かめられるようにする。
 // 「○分前」や当日だけ出す時刻を確かめられるよう、いちばん新しい投稿が 5 分前になるよう時刻をずらす

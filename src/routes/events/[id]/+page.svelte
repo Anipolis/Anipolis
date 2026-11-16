@@ -1,6 +1,6 @@
 <script lang="ts">
-import EventSettingsModal from "$lib/components/EventSettingsModal.svelte";
-import LiveRoomView from "$lib/components/room/LiveRoomView.svelte";
+import EventSettingsModal from "#lib/components/EventSettingsModal.svelte";
+import LiveRoomView from "#lib/components/room/LiveRoomView.svelte";
 import type { ActionData, PageData } from "./$types";
 
 let { data, form }: { data: PageData; form: ActionData } = $props();

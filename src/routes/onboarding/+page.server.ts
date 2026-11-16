@@ -1,8 +1,8 @@
 import { fail, redirect } from "@sveltejs/kit";
-import { completeProfileSetupAction, readProfileSetupForm } from "$lib/server/actions";
-import { getOAuthAvatarUrl, parseOAuthAvatarUrl } from "$lib/server/oauth-avatar";
-import { isUsernameAvailable } from "$lib/server/queries";
-import { sanitizeInternalRedirect } from "$lib/utils/url";
+import { completeProfileSetupAction, readProfileSetupForm } from "#lib/server/actions.ts";
+import { getOAuthAvatarUrl, parseOAuthAvatarUrl } from "#lib/server/oauth-avatar.ts";
+import { isUsernameAvailable } from "#lib/server/queries.ts";
+import { sanitizeInternalRedirect } from "#lib/utils/url.ts";
 import type { Actions, PageServerLoad } from "./$types";
 
 const USERNAME_PATTERN = /^[a-zA-Z0-9_]{3,20}$/;

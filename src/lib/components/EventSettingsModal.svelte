@@ -1,10 +1,10 @@
 <script lang="ts">
+import { trackFormChanges } from "#lib/actions/trackFormChanges.ts";
+import { trapFocus } from "#lib/actions/trapFocus.ts";
+import type { Event } from "#lib/types.ts";
+import { eventBroadcastDateInputValue, eventBroadcastTimeInputValue } from "#lib/utils/event-time.ts";
 import type { SubmitFunction } from "$app/forms";
 import { enhance } from "$app/forms";
-import { trackFormChanges } from "$lib/actions/trackFormChanges";
-import { trapFocus } from "$lib/actions/trapFocus";
-import type { Event } from "$lib/types";
-import { eventBroadcastDateInputValue, eventBroadcastTimeInputValue } from "$lib/utils/event-time";
 
 type EventSettingsEventData = Pick<
 	Event,

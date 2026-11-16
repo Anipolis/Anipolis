@@ -8,7 +8,6 @@ import { defineConfig } from "vite";
 const svelteConfig = {
 	preprocess: vitePreprocess(),
 	adapter: adapter(),
-	alias: { $lib: "src/lib" },
 	csp: {
 		mode: "auto",
 		directives: {
@@ -57,6 +56,8 @@ const svelteConfig = {
 	},
 };
 
+// SvelteKit は UnoCSS の transformIndexHtml フックを呼ばず、transform_index_html_unsupported の警告を出す。
+// このフックは index.html 内のクラスを抽出するためのもので、src/app.html は UnoCSS のクラスを使わないため影響はない。
 export default defineConfig({
 	plugins: [UnoCSS(), sveltekit(svelteConfig)],
 });

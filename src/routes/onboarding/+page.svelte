@@ -1,10 +1,10 @@
 <script lang="ts">
 import { onDestroy, untrack } from "svelte";
+import ImageCropper from "#lib/components/ImageCropper.svelte";
+import UserAvatar from "#lib/components/UserAvatar.svelte";
+import { checkCropSource } from "#lib/image-crop.ts";
 import type { SubmitFunction } from "$app/forms";
 import { enhance } from "$app/forms";
-import ImageCropper from "$lib/components/ImageCropper.svelte";
-import UserAvatar from "$lib/components/UserAvatar.svelte";
-import { checkCropSource } from "$lib/image-crop";
 import type { PageProps } from "./$types";
 
 let { data, form }: PageProps = $props();

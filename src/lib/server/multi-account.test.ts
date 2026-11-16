@@ -8,7 +8,7 @@ vi.mock("$app/env/private", () => ({
 }));
 
 import type { Cookies } from "@sveltejs/kit";
-import type { StoredAccount } from "$lib/types";
+import type { StoredAccount } from "#lib/types.ts";
 import { getExtraAccounts, setExtraAccounts } from "./multi-account";
 
 const COOKIE_NAME = "anipolis_extra_accounts";

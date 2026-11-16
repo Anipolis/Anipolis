@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Anime } from "$lib/types";
+import type { Anime } from "#lib/types.ts";
 import { countMylistByStatus, groupMylistByStatus, parseMylistSort, parseMylistTab, sortMylist } from "./sort";
 
 function anime(

@@ -1,7 +1,7 @@
 import { redirect } from "@sveltejs/kit";
-import { countPendingCopyrightReviews } from "$lib/server/copyright-reviews";
-import { getAdminDashboardData, isAdminUser } from "$lib/server/queries";
-import { redirectToLogin } from "$lib/server/require-login";
+import { countPendingCopyrightReviews } from "#lib/server/copyright-reviews.ts";
+import { getAdminDashboardData, isAdminUser } from "#lib/server/queries.ts";
+import { redirectToLogin } from "#lib/server/require-login.ts";
 import type { PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {

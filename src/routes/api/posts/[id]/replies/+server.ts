@@ -1,5 +1,10 @@
 import { json, type RequestHandler } from "@sveltejs/kit";
-import { enrichPostsWithCounts, getPostReplies, getPostRepliesAfter, type TimelineCursor } from "$lib/server/queries";
+import {
+	enrichPostsWithCounts,
+	getPostReplies,
+	getPostRepliesAfter,
+	type TimelineCursor,
+} from "#lib/server/queries.ts";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ANY_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

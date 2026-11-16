@@ -1,6 +1,6 @@
 <script lang="ts">
 import type { Snippet } from "svelte";
-import type { AnimeExchangeShareAnime } from "$lib/types";
+import type { AnimeExchangeShareAnime } from "#lib/types.ts";
 import ExchangeSubjectiveTags from "./ExchangeSubjectiveTags.svelte";
 
 interface Props {

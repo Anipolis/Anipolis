@@ -1,15 +1,15 @@
 <script lang="ts">
 import { tick, untrack } from "svelte";
-import { trapFocus } from "$lib/actions/trapFocus";
-import type { AnimePick } from "$lib/anime-picker";
+import { trapFocus } from "#lib/actions/trapFocus.ts";
+import type { AnimePick } from "#lib/anime-picker.ts";
 import {
 	collectionTierColor,
 	MAX_COLLECTION_ITEMS,
 	MAX_COLLECTION_TIER_LABEL_LENGTH,
 	MAX_COLLECTION_TIERS,
 	orderByTier,
-} from "$lib/collections";
-import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
+} from "#lib/collections.ts";
+import { coverThumbFallback, coverThumbSrc } from "#lib/cover-image.ts";
 import CollectionSearch from "./CollectionSearch.svelte";
 
 /**

@@ -1,7 +1,7 @@
 import type { RequestEvent } from "@sveltejs/kit";
 import { json } from "@sveltejs/kit";
-import { getBlockedUserIds } from "$lib/server/queries";
-import { buildIlikeContainsPattern, MAX_ACCOUNT_QUERY_LENGTH, normalizeAccountQuery } from "$lib/utils/search";
+import { getBlockedUserIds } from "#lib/server/queries.ts";
+import { buildIlikeContainsPattern, MAX_ACCOUNT_QUERY_LENGTH, normalizeAccountQuery } from "#lib/utils/search.ts";
 
 export async function GET({ url, locals: { supabase, safeGetSession } }: RequestEvent) {
 	// "@name" で打っても username で当たるように先頭の @ を外す。

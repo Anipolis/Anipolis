@@ -1,7 +1,7 @@
 import { fail } from "@sveltejs/kit";
-import { cancelAnimeExchangeAction, exchangeAnimeAction } from "$lib/server/actions";
-import { getAnimeExchangeEntries, getAnimeRankingTrending, getTrendingHashtags } from "$lib/server/queries";
-import { redirectToLogin } from "$lib/server/require-login";
+import { cancelAnimeExchangeAction, exchangeAnimeAction } from "#lib/server/actions.ts";
+import { getAnimeExchangeEntries, getAnimeRankingTrending, getTrendingHashtags } from "#lib/server/queries.ts";
+import { redirectToLogin } from "#lib/server/require-login.ts";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {

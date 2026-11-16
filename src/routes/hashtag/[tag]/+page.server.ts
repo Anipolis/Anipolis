@@ -1,9 +1,9 @@
 ﻿import { fail } from "@sveltejs/kit";
-import { deletePostAction, toggleBookmarkAction, toggleLikeAction, toggleRepostAction } from "$lib/server/actions";
-import { buildPostCardSelect } from "$lib/server/post-selects";
-import { enrichPostsWithCounts, getAnimeRankingTrending } from "$lib/server/queries";
-import { redirectToLogin } from "$lib/server/require-login";
-import type { RawPost } from "$lib/types";
+import { deletePostAction, toggleBookmarkAction, toggleLikeAction, toggleRepostAction } from "#lib/server/actions.ts";
+import { buildPostCardSelect } from "#lib/server/post-selects.ts";
+import { enrichPostsWithCounts, getAnimeRankingTrending } from "#lib/server/queries.ts";
+import { redirectToLogin } from "#lib/server/require-login.ts";
+import type { RawPost } from "#lib/types.ts";
 import type { Actions, PageServerLoad } from "./$types";
 
 const POSTS_SELECT = buildPostCardSelect();

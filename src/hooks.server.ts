@@ -1,6 +1,11 @@
 import { createServerClient } from "@supabase/ssr";
 import { json, redirect } from "@sveltejs/kit";
 import type { Handle } from "@sveltejs/kit/hooks";
+import { isBetaGateEnabled, isBetaMember } from "#lib/server/discord.ts";
+import { getAssuranceLevel, isAdminMfaRequired, isMfaExemptPath, needsMfaChallenge } from "#lib/server/mfa.ts";
+import { isAdminAccount } from "#lib/server/queries.ts";
+import { isApiRateLimited } from "#lib/server/rate-limit.ts";
+import { supabaseTarget } from "#lib/supabase-target.ts";
 import { dev } from "$app/env";
 import {
 	PUBLIC_ANIPOLIS_ENV,
@@ -8,11 +13,6 @@ import {
 	PUBLIC_SUPABASE_PUBLISHABLE_KEY,
 	PUBLIC_SUPABASE_URL,
 } from "$app/env/public";
-import { isBetaGateEnabled, isBetaMember } from "$lib/server/discord";
-import { getAssuranceLevel, isAdminMfaRequired, isMfaExemptPath, needsMfaChallenge } from "$lib/server/mfa";
-import { isAdminAccount } from "$lib/server/queries";
-import { isApiRateLimited } from "$lib/server/rate-limit";
-import { supabaseTarget } from "$lib/supabase-target";
 
 // クローズドβ：これらのプレフィックス配下は未資格ユーザーでもアクセス可
 // 規約・ポリシー・出典は、参加資格のないログインユーザーも登録前に読めるようにする

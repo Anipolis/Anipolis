@@ -1,6 +1,6 @@
 import { mount, tick, unmount } from "svelte";
 import { expect, it, vi } from "vitest";
-import type { LiveRoomData } from "$lib/types/live-room";
+import type { LiveRoomData } from "#lib/types/live-room.ts";
 import LiveRoomView from "./LiveRoomView.svelte";
 
 vi.mock("$app/forms", () => ({ enhance: () => ({ destroy() {} }) }));

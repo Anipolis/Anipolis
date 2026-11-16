@@ -1,10 +1,10 @@
 <script lang="ts">
 import type { Snippet } from "svelte";
-import { canGoBackInApp } from "$lib/back-navigation";
+import { canGoBackInApp } from "#lib/back-navigation.ts";
 
 /**
  * 直前のページへ戻るリンク。直前がサイトの外なら fallbackHref（そのページの親）へ移動する。
- * 入口が一つのページでは使わず、行き先を書いた普通のリンクにする（$lib/back-navigation のルール）
+ * 入口が一つのページでは使わず、行き先を書いた普通のリンクにする（#lib/back-navigation のルール）
  */
 let {
 	fallbackHref,

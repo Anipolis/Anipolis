@@ -1,7 +1,12 @@
 import { json } from "@sveltejs/kit";
-import type { ComposerRoomsResponse } from "$lib/composer-rooms";
-import { buildEpisodeRoomList, episodeRoomChipLabels, episodeRoomEntryState, hasEpisodeRooms } from "$lib/episode-room";
-import { getAnime, getEpisodeRoomBounds, getEpisodeRoomLog, getGlobalAnimeLobbySession } from "$lib/server/queries";
+import type { ComposerRoomsResponse } from "#lib/composer-rooms.ts";
+import {
+	buildEpisodeRoomList,
+	episodeRoomChipLabels,
+	episodeRoomEntryState,
+	hasEpisodeRooms,
+} from "#lib/episode-room.ts";
+import { getAnime, getEpisodeRoomBounds, getEpisodeRoomLog, getGlobalAnimeLobbySession } from "#lib/server/queries.ts";
 import type { RequestHandler } from "./$types";
 
 /**

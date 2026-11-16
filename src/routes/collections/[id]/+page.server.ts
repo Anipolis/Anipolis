@@ -1,7 +1,7 @@
 import { error, fail, redirect } from "@sveltejs/kit";
-import { isCollectionId, parseCollectionInput } from "$lib/collections";
-import { ensureAccountCanWrite } from "$lib/server/actions";
-import { getCollection } from "$lib/server/queries";
+import { isCollectionId, parseCollectionInput } from "#lib/collections.ts";
+import { ensureAccountCanWrite } from "#lib/server/actions.ts";
+import { getCollection } from "#lib/server/queries.ts";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ params, locals: { supabase, safeGetSession } }) => {

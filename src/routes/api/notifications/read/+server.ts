@@ -1,6 +1,6 @@
 import { error, json } from "@sveltejs/kit";
-import { markCategoryNotificationsRead } from "$lib/server/actions";
-import { parseNotificationCategory } from "$lib/server/notification-category";
+import { markCategoryNotificationsRead } from "#lib/server/actions.ts";
+import { parseNotificationCategory } from "#lib/server/notification-category.ts";
 import type { RequestHandler } from "./$types";
 
 /**

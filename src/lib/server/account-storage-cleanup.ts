@@ -10,7 +10,7 @@ import type { Database } from "../supabase/database.types.ts";
  *   * 退会のたびに、残っている分を少しだけやり直す
  *   * scripts/cleanup-deleted-account-files.ts で残りをまとめて消せる
  *
- * スクリプトからも読み込むので、$lib の別名は使わない（型の import は実行時に消える）。
+ * スクリプトからも読み込むので、SvelteKit 固有の import（$app/*・$env/*）は使わない（型の import は実行時に消える）。
  */
 
 /** 退会時に本人のファイルが残るバケット。パスは `<user_id>/...` で統一されている */

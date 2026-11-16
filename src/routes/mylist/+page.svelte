@@ -1,21 +1,17 @@
 <script lang="ts">
 import { onDestroy, untrack } from "svelte";
-import type { ActionResult } from "$app/forms";
-import { deserialize } from "$app/forms";
-import { beforeNavigate, invalidateAll } from "$app/navigation";
-import { page } from "$app/state";
-import AnimeProgressRow from "$lib/components/AnimeProgressRow.svelte";
-import AnimeStatusSection from "$lib/components/AnimeStatusSection.svelte";
-import MyListModal from "$lib/components/MyListModal.svelte";
-import MyListQuickEdit from "$lib/components/MyListQuickEdit.svelte";
-import MylistSortSelect from "$lib/components/MylistSortSelect.svelte";
-import MylistStatusTabs from "$lib/components/MylistStatusTabs.svelte";
+import AnimeProgressRow from "#lib/components/AnimeProgressRow.svelte";
+import AnimeStatusSection from "#lib/components/AnimeStatusSection.svelte";
+import MyListModal from "#lib/components/MyListModal.svelte";
+import MyListQuickEdit from "#lib/components/MyListQuickEdit.svelte";
+import MylistSortSelect from "#lib/components/MylistSortSelect.svelte";
+import MylistStatusTabs from "#lib/components/MylistStatusTabs.svelte";
 import {
 	createSaveQueue,
 	DEFAULT_SAVE_ERROR_MESSAGE,
 	type RowSaveState,
 	type SaveResult,
-} from "$lib/mylist/save-queue";
+} from "#lib/mylist/save-queue.ts";
 import {
 	countMylistByStatus,
 	groupMylistByStatus,
@@ -25,8 +21,12 @@ import {
 	parseMylistSort,
 	parseMylistTab,
 	sortMylist,
-} from "$lib/mylist/sort";
-import type { Anime, AnimeStatus } from "$lib/types";
+} from "#lib/mylist/sort.ts";
+import type { Anime, AnimeStatus } from "#lib/types.ts";
+import type { ActionResult } from "$app/forms";
+import { deserialize } from "$app/forms";
+import { beforeNavigate, invalidateAll } from "$app/navigation";
+import { page } from "$app/state";
 import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();

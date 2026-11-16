@@ -42,7 +42,7 @@ function normalizeChannelName(value: string): string {
 	return value.normalize("NFKC").toLocaleLowerCase().replace(/\s+/g, "");
 }
 
-/** 瞬間 → JST の暦日キー（午前0時境界）。実装は $lib/utils/jst に集約 */
+/** 瞬間 → JST の暦日キー（午前0時境界）。実装は #lib/utils/jst に集約 */
 export function jstDate(value: string | Date): string {
 	return jstDateKey(value);
 }

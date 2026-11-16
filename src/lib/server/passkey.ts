@@ -11,13 +11,13 @@ import {
 import { isoBase64URL } from "@simplewebauthn/server/helpers";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { type Cookies, json } from "@sveltejs/kit";
+import { getLastSignInAt } from "#lib/server/auth.ts";
+import { getCookieSigningSecret, signCookiePayload, verifyCookieSignature } from "#lib/server/cookie-signing.ts";
+import { isBetaGateEnabled, isBetaMember } from "#lib/server/discord.ts";
+import { createServiceRoleClient } from "#lib/server/supabase-admin.ts";
+import type { Database } from "#lib/supabase/database.types.ts";
 import { dev } from "$app/env";
 import { PUBLIC_PASSKEY_ENABLED } from "$app/env/public";
-import { getLastSignInAt } from "$lib/server/auth";
-import { getCookieSigningSecret, signCookiePayload, verifyCookieSignature } from "$lib/server/cookie-signing";
-import { isBetaGateEnabled, isBetaMember } from "$lib/server/discord";
-import { createServiceRoleClient } from "$lib/server/supabase-admin";
-import type { Database } from "$lib/supabase/database.types";
 
 type Supabase = SupabaseClient<Database>;
 type AuthUser = NonNullable<Awaited<ReturnType<App.Locals["safeGetSession"]>>["user"]>;

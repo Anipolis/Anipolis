@@ -4,6 +4,9 @@
 	"license": "MIT",
 	"private": true,
 	"type": "module",
+	"imports": {
+		"#lib/*": "./src/lib/*"
+	},
 	"packageManager": "pnpm@12.18.0",
 	"engines": {
 		"node": ">=26.13.0"

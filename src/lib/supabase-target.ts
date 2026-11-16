@@ -1,5 +1,5 @@
 // いまどの Supabase プロジェクトにつながっているか。開発時に本番とステージングを取り違えないために使う。
-// scripts/staging からも読むので、$lib エイリアスや SvelteKit 固有の import を持ち込まないこと。
+// scripts/staging からも読むので、SvelteKit 固有の import（$app/*・$env/*）を持ち込まないこと。
 
 /** 本番のプロジェクト（公開 URL にも出ている ID で、秘密ではない） */
 export const PRODUCTION_SUPABASE_REF = "jxrfsbhluooyrkrooger";

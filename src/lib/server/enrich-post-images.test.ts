@@ -1,9 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
-import type { Database } from "$lib/supabase/database.types";
-import type { RawPost } from "$lib/types";
+import type { Database } from "#lib/supabase/database.types.ts";
+import type { RawPost } from "#lib/types.ts";
 
-vi.mock("$lib/server/post-image-signing", () => ({
+vi.mock("#lib/server/post-image-signing.ts", () => ({
 	signPostImageUrls: async (urls: string[]) =>
 		new Map(urls.map((url) => [url, `https://signed.example/${url.split("/").pop()}`])),
 }));

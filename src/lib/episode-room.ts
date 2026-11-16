@@ -1,4 +1,4 @@
-import type { EpisodeRoom, RoomAiring } from "$lib/types";
+import type { EpisodeRoom, RoomAiring } from "#lib/types.ts";
 
 /**
  * 話数ルーム（実況ルームの話数単位化）の、クライアントからも使う判定と表示。

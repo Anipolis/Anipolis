@@ -1,4 +1,4 @@
-import { buildAnimeRoomLabel, buildEventRoomLabel, type Post } from "$lib/types";
+import { buildAnimeRoomLabel, buildEventRoomLabel, type Post } from "#lib/types.ts";
 
 /** Only adjacent reactions in the same explicit context can share an author heading. */
 export function isPostContinuation(post: Post, previous: Post | undefined): boolean {

@@ -1,7 +1,7 @@
-import { hasPasswordProvider } from "$lib/server/auth";
-import { isPasskeyEnabled } from "$lib/server/passkey";
-import { getPendingFollowRequestCount } from "$lib/server/queries";
-import { redirectToLogin } from "$lib/server/require-login";
+import { hasPasswordProvider } from "#lib/server/auth.ts";
+import { isPasskeyEnabled } from "#lib/server/passkey.ts";
+import { getPendingFollowRequestCount } from "#lib/server/queries.ts";
+import { redirectToLogin } from "#lib/server/require-login.ts";
 import type { PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {

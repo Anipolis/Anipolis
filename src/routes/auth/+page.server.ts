@@ -1,7 +1,6 @@
 import { fail, redirect } from "@sveltejs/kit";
-import { PUBLIC_SUPABASE_URL } from "$app/env/public";
-import { linkAccounts } from "$lib/server/actions";
-import { grantBetaAccess, isBetaGateEnabled, isBetaMember } from "$lib/server/discord";
+import { linkAccounts } from "#lib/server/actions.ts";
+import { grantBetaAccess, isBetaGateEnabled, isBetaMember } from "#lib/server/discord.ts";
 import {
 	clearInviteCodeCookie,
 	getInviteCodeCookie,
@@ -9,14 +8,15 @@ import {
 	redeemInviteCode,
 	setInviteCodeCookie,
 	validateInviteCode,
-} from "$lib/server/invites";
-import { getLastLoginMethod, setLastLoginMethod } from "$lib/server/last-login-method";
-import { getExtraAccounts, setExtraAccounts } from "$lib/server/multi-account";
-import { isPasskeyEnabled } from "$lib/server/passkey";
-import { getClientKey, isRateLimited } from "$lib/server/rate-limit";
-import { createServiceRoleClient } from "$lib/server/supabase-admin";
-import { MIN_PASSWORD_LENGTH } from "$lib/utils/password-reset";
-import { sanitizeInternalRedirect } from "$lib/utils/url";
+} from "#lib/server/invites.ts";
+import { getLastLoginMethod, setLastLoginMethod } from "#lib/server/last-login-method.ts";
+import { getExtraAccounts, setExtraAccounts } from "#lib/server/multi-account.ts";
+import { isPasskeyEnabled } from "#lib/server/passkey.ts";
+import { getClientKey, isRateLimited } from "#lib/server/rate-limit.ts";
+import { createServiceRoleClient } from "#lib/server/supabase-admin.ts";
+import { MIN_PASSWORD_LENGTH } from "#lib/utils/password-reset.ts";
+import { sanitizeInternalRedirect } from "#lib/utils/url.ts";
+import { PUBLIC_SUPABASE_URL } from "$app/env/public";
 import type { Actions, PageServerLoad, RequestEvent } from "./$types";
 
 function getSafeNext(raw: FormDataEntryValue | string | null): string {

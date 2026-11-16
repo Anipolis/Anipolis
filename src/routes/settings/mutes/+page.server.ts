@@ -5,15 +5,15 @@ import {
 	removeEventMuteAction,
 	unmuteUserAction,
 	updateAnimeMuteAction,
-} from "$lib/server/actions";
+} from "#lib/server/actions.ts";
 import {
 	getAnimeMuteCandidate,
 	getAnimeMutes,
 	getEventMutes,
 	getMutedProfiles,
 	getMutedWordRows,
-} from "$lib/server/queries";
-import { redirectToLogin } from "$lib/server/require-login";
+} from "#lib/server/queries.ts";
+import { redirectToLogin } from "#lib/server/require-login.ts";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {

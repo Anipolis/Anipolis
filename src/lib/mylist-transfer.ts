@@ -3,7 +3,7 @@
 // サーバー（/api/mylist/*）とテストで使う純粋な関数だけを置く。
 
 import { XMLParser } from "fast-xml-parser";
-import type { AnimeStatus } from "$lib/types";
+import type { AnimeStatus } from "#lib/types.ts";
 
 export interface TransferEntry {
 	malId: number;

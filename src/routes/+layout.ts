@@ -1,6 +1,6 @@
 import { createBrowserClient, createServerClient, isBrowser } from "@supabase/ssr";
+import type { Database } from "#lib/supabase/database.types.ts";
 import { PUBLIC_SUPABASE_ANON_KEY, PUBLIC_SUPABASE_PUBLISHABLE_KEY, PUBLIC_SUPABASE_URL } from "$app/env/public";
-import type { Database } from "$lib/supabase/database.types";
 import type { LayoutLoad } from "./$types";
 
 export const load: LayoutLoad = async ({ data, depends, fetch }) => {

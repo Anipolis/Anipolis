@@ -1,9 +1,9 @@
 import { error, fail, redirect } from "@sveltejs/kit";
-import { getAssuranceLevel, isTotpCodeShape, normalizeTotpCode } from "$lib/server/mfa";
-import { isAdminAccount } from "$lib/server/queries";
-import { isRateLimited } from "$lib/server/rate-limit";
-import { redirectToLogin } from "$lib/server/require-login";
-import { sanitizeInternalRedirect } from "$lib/utils/url";
+import { getAssuranceLevel, isTotpCodeShape, normalizeTotpCode } from "#lib/server/mfa.ts";
+import { isAdminAccount } from "#lib/server/queries.ts";
+import { isRateLimited } from "#lib/server/rate-limit.ts";
+import { redirectToLogin } from "#lib/server/require-login.ts";
+import { sanitizeInternalRedirect } from "#lib/utils/url.ts";
 import type { Actions, PageServerLoad } from "./$types";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

@@ -1,6 +1,6 @@
 <script lang="ts">
-import { trapFocus } from "$lib/actions/trapFocus";
-import type { RoomExitSurveyComparisonWithX, RoomExitSurveyNextParticipation } from "$lib/types";
+import { trapFocus } from "#lib/actions/trapFocus.ts";
+import type { RoomExitSurveyComparisonWithX, RoomExitSurveyNextParticipation } from "#lib/types.ts";
 
 type SurveyAnswers = {
 	overallRating: number;

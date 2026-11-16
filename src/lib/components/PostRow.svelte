@@ -1,15 +1,15 @@
 <script lang="ts">
 import type { Snippet } from "svelte";
-import { goto } from "$app/navigation";
-import type { Post } from "$lib/types";
+import type { Post } from "#lib/types.ts";
 import {
 	formatBroadcastRelativeTime,
 	formatPostClock,
 	formatPostDateTime,
 	formatPostDay,
 	formatRelativeTime,
-} from "$lib/utils/format";
-import { getPostDisplayContent, getPostRoomContext } from "$lib/utils/post-presentation";
+} from "#lib/utils/format.ts";
+import { getPostDisplayContent, getPostRoomContext } from "#lib/utils/post-presentation.ts";
+import { goto } from "$app/navigation";
 import LikeButton from "./post/LikeButton.svelte";
 import PostActionBar from "./post/PostActionBar.svelte";
 import PostCwGuard from "./post/PostCwGuard.svelte";

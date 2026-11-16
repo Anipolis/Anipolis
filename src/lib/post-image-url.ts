@@ -1,5 +1,5 @@
 /**
- * 投稿画像の URL の扱い（#316）。クライアントからも使うので $lib/server に置かない。
+ * 投稿画像の URL の扱い（#316）。クライアントからも使うので #lib/server に置かない。
  *
  * image_urls には Storage の公開 URL の形（…/storage/v1/object/public/post-images/<path>）を
  * 識別子として保存している。バケットは非公開（166）なので、この URL では取得できない。

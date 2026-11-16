@@ -1,7 +1,7 @@
 <script lang="ts">
 import { type Snippet, tick } from "svelte";
-import { contentWarningSubject, hasContentWarning } from "$lib/content-warning";
-import type { Post } from "$lib/types";
+import { contentWarningSubject, hasContentWarning } from "#lib/content-warning.ts";
+import type { Post } from "#lib/types.ts";
 
 interface Props {
 	post: Pick<Post, "id" | "cw_anime_id" | "cw_anime">;

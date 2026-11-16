@@ -1,10 +1,10 @@
 <script lang="ts">
+import SettingsBackLink from "#lib/components/SettingsBackLink.svelte";
+import { registerPasskey } from "#lib/passkey.ts";
+import { formatRelativeTime } from "#lib/utils/format.ts";
 import type { SubmitFunction } from "$app/forms";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
-import SettingsBackLink from "$lib/components/SettingsBackLink.svelte";
-import { registerPasskey } from "$lib/passkey";
-import { formatRelativeTime } from "$lib/utils/format";
 import type { PageProps } from "./$types";
 
 let { data, form }: PageProps = $props();

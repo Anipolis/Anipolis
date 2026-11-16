@@ -1,5 +1,5 @@
 <script lang="ts">
-import PostCardSkeleton from "$lib/components/PostCardSkeleton.svelte";
+import PostCardSkeleton from "#lib/components/PostCardSkeleton.svelte";
 
 interface Props {
 	pathname: string;

@@ -1,7 +1,7 @@
 import { json } from "@sveltejs/kit";
-import { toMalXml, toMylistCsv } from "$lib/mylist-transfer";
-import { getMylistForExport } from "$lib/server/queries";
-import { jstDateKey } from "$lib/utils/jst";
+import { toMalXml, toMylistCsv } from "#lib/mylist-transfer.ts";
+import { getMylistForExport } from "#lib/server/queries.ts";
+import { jstDateKey } from "#lib/utils/jst.ts";
 import type { RequestHandler } from "./$types";
 
 // マイリストの書き出し（#358）。format=mal は MyAnimeList の取り込み形式（XML）、format=csv は Anipolis の CSV。

@@ -1,6 +1,6 @@
 <script lang="ts">
+import { COPYRIGHT_REVIEW_KIND_LABELS, COPYRIGHT_REVIEW_KINDS } from "#lib/copyright-reviews.ts";
 import { enhance } from "$app/forms";
-import { COPYRIGHT_REVIEW_KIND_LABELS, COPYRIGHT_REVIEW_KINDS } from "$lib/copyright-reviews";
 import type { PageProps } from "./$types";
 
 let { data, form }: PageProps = $props();

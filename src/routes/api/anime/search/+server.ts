@@ -1,5 +1,5 @@
 import { json } from "@sveltejs/kit";
-import { buildTitleSearchFilter } from "$lib/server/queries";
+import { buildTitleSearchFilter } from "#lib/server/queries.ts";
 import type { RequestHandler } from "./$types";
 
 export const GET: RequestHandler = async ({ url, locals: { supabase } }) => {

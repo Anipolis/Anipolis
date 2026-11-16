@@ -1,18 +1,18 @@
 import { fail, redirect } from "@sveltejs/kit";
-import { hasPasswordProvider } from "$lib/server/auth";
-import { isEmailLinkNavigation } from "$lib/server/email-link";
+import { hasPasswordProvider } from "#lib/server/auth.ts";
+import { isEmailLinkNavigation } from "#lib/server/email-link.ts";
 import {
 	clearPasswordRecoveryCookie,
 	getPasswordRecoveryUserId,
 	setPasswordRecoveryCookie,
-} from "$lib/server/password-reset";
-import { isRateLimited } from "$lib/server/rate-limit";
+} from "#lib/server/password-reset.ts";
+import { isRateLimited } from "#lib/server/rate-limit.ts";
 import {
 	listSignInProviderLabels,
 	PASSWORD_RESET_PATH,
 	parseRecoveryLink,
 	validateNewPassword,
-} from "$lib/utils/password-reset";
+} from "#lib/utils/password-reset.ts";
 import type { Actions, PageServerLoad } from "./$types";
 
 /**

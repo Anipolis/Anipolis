@@ -1,8 +1,8 @@
 <script lang="ts">
 import { SvelteSet } from "svelte/reactivity";
-import { type ActivityGroup, activityStatusPhrase, groupActivities, type MylistActivity } from "$lib/activity";
-import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
-import { formatRelativeTime } from "$lib/utils/format";
+import { type ActivityGroup, activityStatusPhrase, groupActivities, type MylistActivity } from "#lib/activity.ts";
+import { coverThumbFallback, coverThumbSrc } from "#lib/cover-image.ts";
+import { formatRelativeTime } from "#lib/utils/format.ts";
 import UserAvatar from "./UserAvatar.svelte";
 
 /**

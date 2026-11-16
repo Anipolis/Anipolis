@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("$lib/server/actions", () => ({ requireAccountCanWrite: vi.fn() }));
+vi.mock("#lib/server/actions.ts", () => ({ requireAccountCanWrite: vi.fn() }));
 
 import { DELETE } from "./+server";
 

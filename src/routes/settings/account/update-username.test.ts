@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const serviceUpdate = vi.fn();
 const serviceEq = vi.fn();
-vi.mock("$lib/server/supabase-admin", () => ({
+vi.mock("#lib/server/supabase-admin.ts", () => ({
 	createServiceRoleClient: () => ({
 		from: (table: string) => ({
 			update: (values: unknown) => {

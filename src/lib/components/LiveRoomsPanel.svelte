@@ -1,6 +1,6 @@
 <script lang="ts">
-import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
-import type { OpenBroadcastRoomSummary } from "$lib/types";
+import { coverThumbFallback, coverThumbSrc } from "#lib/cover-image.ts";
+import type { OpenBroadcastRoomSummary } from "#lib/types.ts";
 import LiveRoomPickerModal from "./LiveRoomPickerModal.svelte";
 
 interface Props {

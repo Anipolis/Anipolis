@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fail } from "@sveltejs/kit";
-import { COPYRIGHT_REVIEW_KINDS, type CopyrightReviewKind, isCopyrightReviewKind } from "$lib/copyright-reviews";
-import type { Database } from "$lib/supabase/database.types";
+import { COPYRIGHT_REVIEW_KINDS, type CopyrightReviewKind, isCopyrightReviewKind } from "#lib/copyright-reviews.ts";
+import type { Database } from "#lib/supabase/database.types.ts";
 
 // 権利表記（©）の人力確認キュー（anime_copyright_reviews, migration 137）。
 // 取り込みスクリプトが積んだ作品を、管理画面の「©確認」で決める。

@@ -4,7 +4,7 @@ import {
 	jstBroadcastDateKey,
 	jstWallClockToDate,
 	LATE_NIGHT_BOUNDARY_HOUR,
-} from "$lib/utils/jst";
+} from "#lib/utils/jst.ts";
 
 /**
  * アニメのミュート期間の判定（#326）。

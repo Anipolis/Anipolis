@@ -1,14 +1,14 @@
 import { error, fail } from "@sveltejs/kit";
-import { hasPasswordProvider } from "$lib/server/auth";
+import { hasPasswordProvider } from "#lib/server/auth.ts";
 import {
 	deletePasskey,
 	isPasskeyEnabled,
 	isRecentlyAuthenticated,
 	listPasskeys,
 	PASSKEY_REAUTH_WINDOW_MS,
-} from "$lib/server/passkey";
-import { isRateLimited } from "$lib/server/rate-limit";
-import { redirectToLogin } from "$lib/server/require-login";
+} from "#lib/server/passkey.ts";
+import { isRateLimited } from "#lib/server/rate-limit.ts";
+import { redirectToLogin } from "#lib/server/require-login.ts";
 import type { Actions, PageServerLoad } from "./$types";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

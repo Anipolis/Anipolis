@@ -1,6 +1,6 @@
 <script lang="ts">
 import type { Snippet } from "svelte";
-import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
+import { coverThumbFallback, coverThumbSrc } from "#lib/cover-image.ts";
 
 /**
  * 作品を探して選ぶ場所（コレクション・引用・ネタバレ・トレード・ルーム選びなど）で使う、作品の1行。

@@ -1,5 +1,5 @@
 import { json } from "@sveltejs/kit";
-import { getActiveRoomReminders, getUnreadNotificationCount } from "$lib/server/queries";
+import { getActiveRoomReminders, getUnreadNotificationCount } from "#lib/server/queries.ts";
 import type { RequestHandler } from "./$types";
 
 /** layout が30秒ごとに読む。通知の未読数と、放送前のお知らせ（カレンダーの点と小さな表示に使う） */

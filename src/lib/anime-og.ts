@@ -1,6 +1,6 @@
 // 作品ごとの共有用カード画像（OGP、1200x630 の JPEG）の命名規約（#271）。
 // アプリ（/og/anime/[id] で配信）とスクリプト（scripts/generate-anime-og-cards.ts で生成）が共有するので、
-// $lib エイリアスや SvelteKit 固有の import を持ち込まないこと。
+// SvelteKit 固有の import（$app/*・$env/*）を持ち込まないこと。#lib は Node でも解決できる。
 //
 // カード: anime-covers/og/<原寸カバーの名前（拡張子なし）>-<題名・©・期・種類のハッシュ>.jpg
 // 題名や © が変わればハッシュが変わり、別の名前になる（古いカードは使われなくなるだけ）。

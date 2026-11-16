@@ -1,4 +1,4 @@
-import type { Post } from "$lib/types";
+import type { Post } from "#lib/types.ts";
 
 /** 取得済みの境界。created_at だけだと同じ時刻の投稿を落とすので id も持つ（#320） */
 export type RoomPostCursor = { createdAt: string; id: string };

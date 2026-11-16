@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
-import type { Database } from "$lib/supabase/database.types";
+import type { Database } from "#lib/supabase/database.types.ts";
 import { MYLIST_SCORE_INVALID_MESSAGE, parseMylistScore, upsertUserAnimeEntry } from "./actions";
 
 describe("parseMylistScore（#355）", () => {

@@ -1,6 +1,6 @@
 ﻿import { fail } from "@sveltejs/kit";
-import { registerAnimeAction } from "$lib/server/anime-admin";
-import { buildAnimeListOptions, parseAnimeListFilters } from "$lib/server/anime-list-filters";
+import { registerAnimeAction } from "#lib/server/anime-admin.ts";
+import { buildAnimeListOptions, parseAnimeListFilters } from "#lib/server/anime-list-filters.ts";
 import {
 	type AnimeListPageResult,
 	attachAnimeAverageScores,
@@ -13,9 +13,9 @@ import {
 	getAnimeRankingTrending,
 	getUserAnimeList,
 	isAdminUser,
-} from "$lib/server/queries";
-import type { Anime, AnimeListItem } from "$lib/types";
-import { dateKeyWeekday, jstBroadcastDateKey } from "$lib/utils/jst";
+} from "#lib/server/queries.ts";
+import type { Anime, AnimeListItem } from "#lib/types.ts";
+import { dateKeyWeekday, jstBroadcastDateKey } from "#lib/utils/jst.ts";
 import type { Actions, PageServerLoad } from "./$types";
 
 /** Anime 全フィールドを HTML に埋め込まず、カード描画に必要なフィールドだけへ射影する。 */
@@ -149,14 +149,14 @@ export const actions: Actions = {
 	upsertWatchlist: async ({ request, locals: { supabase, safeGetSession } }) => {
 		const { user } = await safeGetSession();
 		if (!user) return fail(401, { message: "ログインが必要です" });
-		const { upsertUserAnimeEntry } = await import("$lib/server/actions");
+		const { upsertUserAnimeEntry } = await import("#lib/server/actions.ts");
 		return upsertUserAnimeEntry(supabase, request, user.id);
 	},
 
 	removeWatchlist: async ({ request, locals: { supabase, safeGetSession } }) => {
 		const { user } = await safeGetSession();
 		if (!user) return fail(401, { message: "ログインが必要です" });
-		const { removeUserAnimeEntry } = await import("$lib/server/actions");
+		const { removeUserAnimeEntry } = await import("#lib/server/actions.ts");
 		return removeUserAnimeEntry(supabase, request, user.id);
 	},
 

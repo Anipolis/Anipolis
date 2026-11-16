@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
-import type { Database } from "$lib/supabase/database.types";
-import type { RawPost } from "$lib/types";
+import type { Database } from "#lib/supabase/database.types.ts";
+import type { RawPost } from "#lib/types.ts";
 import {
 	getBookmarkedPostsPage,
 	getLikedPostsPage,

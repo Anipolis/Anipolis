@@ -1,5 +1,5 @@
 <script lang="ts">
-import LegalDocument from "$lib/components/LegalDocument.svelte";
+import LegalDocument from "#lib/components/LegalDocument.svelte";
 
 type Contact = { id: string; heading: string; description: string; email: string };
 

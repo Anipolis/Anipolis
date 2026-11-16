@@ -1,6 +1,6 @@
-import { hasEpisodeRooms } from "$lib/episode-room";
-import { buildBroadcastEpisodeLog } from "$lib/server/broadcast-episode-log";
-import type { Anime, BroadcastRoomOverride } from "$lib/types";
+import { hasEpisodeRooms } from "#lib/episode-room.ts";
+import { buildBroadcastEpisodeLog } from "#lib/server/broadcast-episode-log.ts";
+import type { Anime, BroadcastRoomOverride } from "#lib/types.ts";
 
 /**
  * 話数ルームにつながっていない放送枠を、どこにつなぐかを決める（#484）。

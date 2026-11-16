@@ -1,7 +1,7 @@
 import { fail } from "@sveltejs/kit";
-import { createInviteAction, revokeInviteAction } from "$lib/server/actions";
-import { getInvites } from "$lib/server/queries";
-import { redirectToLogin } from "$lib/server/require-login";
+import { createInviteAction, revokeInviteAction } from "#lib/server/actions.ts";
+import { getInvites } from "#lib/server/queries.ts";
+import { redirectToLogin } from "#lib/server/require-login.ts";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession } }) => {

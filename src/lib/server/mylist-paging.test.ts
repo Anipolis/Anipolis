@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
-import type { Database } from "$lib/supabase/database.types";
+import type { Database } from "#lib/supabase/database.types.ts";
 import { getOwnAnimeList, getUserAnimeList } from "./queries";
 
 /** range ごとに行を返す偽の Supabase。読んだ範囲と並び順を記録する */

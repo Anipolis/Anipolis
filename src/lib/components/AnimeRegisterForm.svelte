@@ -1,9 +1,9 @@
 <script lang="ts">
+import { isCoverHiddenWithoutCopyright } from "#lib/anime-cover.ts";
+import { ANIME_GENRES, ANIME_SOURCE_OPTIONS } from "#lib/anime-vocabulary.ts";
+import type { Anime } from "#lib/types.ts";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
-import { isCoverHiddenWithoutCopyright } from "$lib/anime-cover";
-import { ANIME_GENRES, ANIME_SOURCE_OPTIONS } from "$lib/anime-vocabulary";
-import type { Anime } from "$lib/types";
 
 type FormResult =
 	| { success?: boolean; animeId?: string | number; message?: string; coverHidden?: boolean }

@@ -1,7 +1,7 @@
 import type { Cookies } from "@sveltejs/kit";
+import { getCookieSigningSecret, signCookiePayload, verifyCookieSignature } from "#lib/server/cookie-signing.ts";
+import type { StoredAccount } from "#lib/types.ts";
 import { dev } from "$app/env";
-import { getCookieSigningSecret, signCookiePayload, verifyCookieSignature } from "$lib/server/cookie-signing";
-import type { StoredAccount } from "$lib/types";
 
 const COOKIE_NAME = "anipolis_extra_accounts";
 const COOKIE_OPTS = {

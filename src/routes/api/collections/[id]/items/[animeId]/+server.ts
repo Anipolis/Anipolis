@@ -5,9 +5,9 @@ import {
 	MAX_COLLECTION_ITEMS,
 	withAnimeAdded,
 	withAnimeRemoved,
-} from "$lib/collections";
-import { requireAccountCanWrite } from "$lib/server/actions";
-import { getAnimeCoverUrl } from "$lib/server/queries";
+} from "#lib/collections.ts";
+import { requireAccountCanWrite } from "#lib/server/actions.ts";
+import { getAnimeCoverUrl } from "#lib/server/queries.ts";
 import type { RequestEvent, RequestHandler } from "./$types";
 
 /**

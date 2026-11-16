@@ -10,7 +10,7 @@ const sign = vi.fn(
 			]),
 		),
 );
-vi.mock("$lib/server/post-image-signing", () => ({ signPostImageUrls: (urls: string[]) => sign(urls) }));
+vi.mock("#lib/server/post-image-signing.ts", () => ({ signPostImageUrls: (urls: string[]) => sign(urls) }));
 
 import { GET } from "./+server";
 

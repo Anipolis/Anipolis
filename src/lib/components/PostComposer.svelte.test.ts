@@ -1,6 +1,6 @@
 import { flushSync, mount, tick, unmount } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { composeContextKey, composeDraftKey } from "$lib/compose-draft";
+import { composeContextKey, composeDraftKey } from "#lib/compose-draft.ts";
 import PostComposer from "./PostComposer.svelte";
 
 // happy-dom の複製フォームは method を "post" と報告しないため use:enhance が開発時チェックで投げる。

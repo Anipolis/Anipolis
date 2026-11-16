@@ -1,9 +1,9 @@
 <script lang="ts">
+import InfoTip from "#lib/components/InfoTip.svelte";
+import SettingsBackLink from "#lib/components/SettingsBackLink.svelte";
+import { formatRelativeTime } from "#lib/utils/format.ts";
 import { enhance } from "$app/forms";
 import { page } from "$app/state";
-import InfoTip from "$lib/components/InfoTip.svelte";
-import SettingsBackLink from "$lib/components/SettingsBackLink.svelte";
-import { formatRelativeTime } from "$lib/utils/format";
 import type { PageProps } from "./$types";
 
 let { data, form }: PageProps = $props();

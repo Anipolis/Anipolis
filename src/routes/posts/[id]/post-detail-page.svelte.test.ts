@@ -1,9 +1,9 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { makeTimelinePosts } from "#lib/components/fixtures/timeline.ts";
+import { NETWORK_ERROR_MESSAGE } from "#lib/components/post-composer-submit.ts";
+import type { Post } from "#lib/types.ts";
 import type { ActionResult, SubmitFunction } from "$app/forms";
-import { makeTimelinePosts } from "$lib/components/fixtures/timeline";
-import { NETWORK_ERROR_MESSAGE } from "$lib/components/post-composer-submit";
-import type { Post } from "$lib/types";
 
 // 返信フォームの use:enhance に渡された送信処理を受け取り、送信結果をこのテストから流し込む
 const forms = vi.hoisted(() => ({ submit: null as SubmitFunction | null }));

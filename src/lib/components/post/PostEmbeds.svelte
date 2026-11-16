@@ -1,9 +1,9 @@
 <script lang="ts">
-import AnimeExchangeResult from "$lib/components/AnimeExchangeResult.svelte";
-import CollectionShareCard from "$lib/components/CollectionShareCard.svelte";
-import UserAvatar from "$lib/components/UserAvatar.svelte";
-import { contentWarningLabel, hasContentWarning } from "$lib/content-warning";
-import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
+import AnimeExchangeResult from "#lib/components/AnimeExchangeResult.svelte";
+import CollectionShareCard from "#lib/components/CollectionShareCard.svelte";
+import UserAvatar from "#lib/components/UserAvatar.svelte";
+import { contentWarningLabel, hasContentWarning } from "#lib/content-warning.ts";
+import { coverThumbFallback, coverThumbSrc } from "#lib/cover-image.ts";
 import type { PostController } from "./post-controller.svelte";
 
 interface Props {

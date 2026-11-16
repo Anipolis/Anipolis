@@ -1,29 +1,29 @@
 <script lang="ts">
 import { untrack } from "svelte";
-import type { SubmitFunction } from "$app/forms";
-import { enhance } from "$app/forms";
-import { animePickMeta } from "$lib/anime-picker";
-import AnimeRow from "$lib/components/AnimeRow.svelte";
-import SeoMeta from "$lib/components/SeoMeta.svelte";
-import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
-import { roomReminderStatus, roomReminderTime } from "$lib/room-reminders";
-import { roomReminders } from "$lib/stores/notifications";
-import type { Anime, BroadcastRoomOverride } from "$lib/types";
+import { animePickMeta } from "#lib/anime-picker.ts";
+import AnimeRow from "#lib/components/AnimeRow.svelte";
+import SeoMeta from "#lib/components/SeoMeta.svelte";
+import { coverThumbFallback, coverThumbSrc } from "#lib/cover-image.ts";
+import { roomReminderStatus, roomReminderTime } from "#lib/room-reminders.ts";
+import { roomReminders } from "#lib/stores/notifications.ts";
+import type { Anime, BroadcastRoomOverride } from "#lib/types.ts";
 import {
 	type BroadcastEpisodeSlot,
 	formatMarathonBadge,
 	isMarathonEpisodeSlot,
 	resolveBroadcastEpisodeSlot,
-} from "$lib/utils/broadcast-episodes";
+} from "#lib/utils/broadcast-episodes.ts";
 import {
 	broadcastTimeMinutes,
 	effectiveBroadcastTime as resolveEffectiveBroadcastTime,
 	isRoomLive as resolveIsRoomLive,
 	minutesUntilBroadcast as resolveMinutesUntilBroadcast,
 	roomLiveKey,
-} from "$lib/utils/broadcast-room";
-import { eventBroadcastMinutes, eventBroadcastTimeInputValue } from "$lib/utils/event-time";
-import { dateKeyWeekday, formatDateKeyShort, jstBroadcastDateKey } from "$lib/utils/jst";
+} from "#lib/utils/broadcast-room.ts";
+import { eventBroadcastMinutes, eventBroadcastTimeInputValue } from "#lib/utils/event-time.ts";
+import { dateKeyWeekday, formatDateKeyShort, jstBroadcastDateKey } from "#lib/utils/jst.ts";
+import type { SubmitFunction } from "$app/forms";
+import { enhance } from "$app/forms";
 import type { ActionData, PageProps } from "./$types";
 
 let { data, form }: PageProps & { form: ActionData } = $props();

@@ -1,5 +1,5 @@
 import { json } from "@sveltejs/kit";
-import { finishPasskeyRegistration, isPasskeyEnabled, passkeyJson } from "$lib/server/passkey";
+import { finishPasskeyRegistration, isPasskeyEnabled, passkeyJson } from "#lib/server/passkey.ts";
 import type { RequestHandler } from "./$types";
 
 export const POST: RequestHandler = async ({ request, url, cookies, locals: { supabase, safeGetSession } }) => {

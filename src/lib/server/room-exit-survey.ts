@@ -1,11 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database, Json } from "$lib/supabase/database.types";
+import type { Database, Json } from "#lib/supabase/database.types.ts";
 import type {
 	RoomExitSurveyComment,
 	RoomExitSurveyComparisonWithX,
 	RoomExitSurveyNextParticipation,
 	RoomExitSurveySummary,
-} from "$lib/types";
+} from "#lib/types.ts";
 
 export const ROOM_EXIT_SURVEY_VERSION = "room_exit_v1";
 

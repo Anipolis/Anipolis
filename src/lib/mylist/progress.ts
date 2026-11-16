@@ -1,4 +1,4 @@
-import type { AnimeStatus } from "$lib/types";
+import type { AnimeStatus } from "#lib/types.ts";
 
 /** 全話数が分からない作品の上限（押し間違いで極端な値にしない） */
 const MAX_PROGRESS_WITHOUT_TOTAL = 9999;

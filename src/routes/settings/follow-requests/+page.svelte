@@ -1,8 +1,8 @@
 <script lang="ts">
+import SettingsBackLink from "#lib/components/SettingsBackLink.svelte";
+import UserAvatar from "#lib/components/UserAvatar.svelte";
+import { formatRelativeTime } from "#lib/utils/format.ts";
 import { enhance } from "$app/forms";
-import SettingsBackLink from "$lib/components/SettingsBackLink.svelte";
-import UserAvatar from "$lib/components/UserAvatar.svelte";
-import { formatRelativeTime } from "$lib/utils/format";
 import type { PageProps } from "./$types";
 
 let { data, form }: PageProps = $props();

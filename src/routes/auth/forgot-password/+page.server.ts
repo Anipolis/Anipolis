@@ -1,12 +1,12 @@
 import { fail } from "@sveltejs/kit";
-import { getClientKey, isRateLimited } from "$lib/server/rate-limit";
+import { getClientKey, isRateLimited } from "#lib/server/rate-limit.ts";
 import {
 	getPasswordResetRedirectTo,
 	isPlausibleEmail,
 	normalizeEmail,
 	PASSWORD_RESET_REQUESTED_MESSAGE,
 	withFixedDuration,
-} from "$lib/utils/password-reset";
+} from "#lib/utils/password-reset.ts";
 import type { Actions } from "./$types";
 
 /** 登録の有無で応答時間が変わらないよう、申請の応答はいつもこの時間で返す */

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("$lib/server/actions", () => ({ requireAccountCanWrite: vi.fn() }));
-vi.mock("$lib/server/queries", () => ({ getAnimeCoverUrl: vi.fn(async (_supabase, id: number) => `cover-${id}`) }));
+vi.mock("#lib/server/actions.ts", () => ({ requireAccountCanWrite: vi.fn() }));
+vi.mock("#lib/server/queries.ts", () => ({ getAnimeCoverUrl: vi.fn(async (_supabase, id: number) => `cover-${id}`) }));
 
 import { DELETE, POST } from "./+server";
 

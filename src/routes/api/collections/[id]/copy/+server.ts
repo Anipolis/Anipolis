@@ -1,6 +1,6 @@
 import { error, json } from "@sveltejs/kit";
-import { isCollectionId, MAX_COLLECTIONS_PER_USER } from "$lib/collections";
-import { requireAccountCanWrite } from "$lib/server/actions";
+import { isCollectionId, MAX_COLLECTIONS_PER_USER } from "#lib/collections.ts";
+import { requireAccountCanWrite } from "#lib/server/actions.ts";
 import type { RequestHandler } from "./$types";
 
 // 他の人のコレクションを取り込む（自分のコレクションとして写す。194）。写したものは非公開で始まる

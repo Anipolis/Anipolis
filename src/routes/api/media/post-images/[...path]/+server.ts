@@ -1,6 +1,6 @@
 import { error, redirect } from "@sveltejs/kit";
+import { signPostImageUrls } from "#lib/server/post-image-signing.ts";
 import { PUBLIC_SUPABASE_URL } from "$app/env/public";
-import { signPostImageUrls } from "$lib/server/post-image-signing";
 import type { RequestHandler } from "./$types";
 
 /** <user_id>/<ファイル名> の形だけを受け付ける（.. やサブフォルダは不可） */

@@ -1,6 +1,6 @@
 <script lang="ts">
-import { type AnimePick, animePickMeta } from "$lib/anime-picker";
-import { MAX_COLLECTION_ITEMS } from "$lib/collections";
+import { type AnimePick, animePickMeta } from "#lib/anime-picker.ts";
+import { MAX_COLLECTION_ITEMS } from "#lib/collections.ts";
 import AnimeRow from "./AnimeRow.svelte";
 
 /**

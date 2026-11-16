@@ -1,6 +1,6 @@
 <script lang="ts">
 import { onDestroy, onMount, untrack } from "svelte";
-import { trapFocus } from "$lib/actions/trapFocus";
+import { trapFocus } from "#lib/actions/trapFocus.ts";
 import {
 	AVATAR_CROP,
 	type CropState,
@@ -12,7 +12,7 @@ import {
 	MAX_ZOOM,
 	sourceRect,
 	zoomTo,
-} from "$lib/image-crop";
+} from "#lib/image-crop.ts";
 
 /**
  * 画像の使う範囲を選ぶ画面。アイコン（初期設定・プロフィールの編集）とヘッダー画像（プロフィールの編集）で共用。

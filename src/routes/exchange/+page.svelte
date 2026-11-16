@@ -1,17 +1,17 @@
 <script lang="ts">
 import { onDestroy } from "svelte";
+import { animePickMeta } from "#lib/anime-picker.ts";
+import AnimeExchangeResult from "#lib/components/AnimeExchangeResult.svelte";
+import AnimeRow from "#lib/components/AnimeRow.svelte";
+import InfoTip from "#lib/components/InfoTip.svelte";
+import MyListModal from "#lib/components/MyListModal.svelte";
+import TrendingPanel from "#lib/components/TrendingPanel.svelte";
+import WaitingStatus from "#lib/components/WaitingStatus.svelte";
+import { coverThumbFallback, coverThumbSrc } from "#lib/cover-image.ts";
+import { EXCHANGE_SUBJECTIVE_TAG_OPTIONS, MAX_EXCHANGE_SUBJECTIVE_TAGS } from "#lib/exchange-tags.ts";
+import type { UserAnimeEntry } from "#lib/types.ts";
 import type { SubmitFunction } from "$app/forms";
 import { enhance } from "$app/forms";
-import { animePickMeta } from "$lib/anime-picker";
-import AnimeExchangeResult from "$lib/components/AnimeExchangeResult.svelte";
-import AnimeRow from "$lib/components/AnimeRow.svelte";
-import InfoTip from "$lib/components/InfoTip.svelte";
-import MyListModal from "$lib/components/MyListModal.svelte";
-import TrendingPanel from "$lib/components/TrendingPanel.svelte";
-import WaitingStatus from "$lib/components/WaitingStatus.svelte";
-import { coverThumbFallback, coverThumbSrc } from "$lib/cover-image";
-import { EXCHANGE_SUBJECTIVE_TAG_OPTIONS, MAX_EXCHANGE_SUBJECTIVE_TAGS } from "$lib/exchange-tags";
-import type { UserAnimeEntry } from "$lib/types";
 import type { PageProps } from "./$types";
 
 interface AnimeResult {

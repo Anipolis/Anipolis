@@ -1,6 +1,6 @@
 <script lang="ts">
-import PrivacyToggles from "$lib/components/PrivacyToggles.svelte";
-import SettingsBackLink from "$lib/components/SettingsBackLink.svelte";
+import PrivacyToggles from "#lib/components/PrivacyToggles.svelte";
+import SettingsBackLink from "#lib/components/SettingsBackLink.svelte";
 import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();

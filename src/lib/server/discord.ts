@@ -1,7 +1,7 @@
 import type { User } from "@supabase/supabase-js";
+import { createServiceRoleClient } from "#lib/server/supabase-admin.ts";
 import { DISCORD_BOT_TOKEN, DISCORD_GUILD_ID } from "$app/env/private";
 import { PUBLIC_CLOSED_BETA } from "$app/env/public";
-import { createServiceRoleClient } from "$lib/server/supabase-admin";
 
 /**
  * クローズドβのアクセスゲートが有効かどうか。

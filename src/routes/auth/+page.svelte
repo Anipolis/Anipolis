@@ -1,14 +1,14 @@
 <script lang="ts">
 import { onDestroy, tick, untrack } from "svelte";
+import LegalOverlay from "#lib/components/LegalOverlay.svelte";
+import PasswordInput from "#lib/components/PasswordInput.svelte";
+import SeoMeta from "#lib/components/SeoMeta.svelte";
+import { signInWithPasskey } from "#lib/passkey.ts";
+import { MIN_PASSWORD_LENGTH } from "#lib/utils/password-reset.ts";
 import type { SubmitFunction } from "$app/forms";
 import { enhance } from "$app/forms";
 import { beforeNavigate, goto, preloadData, pushState, replaceState } from "$app/navigation";
 import { page } from "$app/state";
-import LegalOverlay from "$lib/components/LegalOverlay.svelte";
-import PasswordInput from "$lib/components/PasswordInput.svelte";
-import SeoMeta from "$lib/components/SeoMeta.svelte";
-import { signInWithPasskey } from "$lib/passkey";
-import { MIN_PASSWORD_LENGTH } from "$lib/utils/password-reset";
 import type { PageProps } from "./$types";
 import { type InviteCodeState, syncInviteCodeState } from "./invite-code";
 

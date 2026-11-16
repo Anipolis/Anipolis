@@ -1,5 +1,4 @@
 <script lang="ts">
-import { page } from "$app/state";
 import {
 	canonicalUrl,
 	DEFAULT_DESCRIPTION,
@@ -7,7 +6,8 @@ import {
 	DEFAULT_OG_IMAGE_PATH,
 	metaText,
 	toAbsoluteUrl,
-} from "$lib/seo";
+} from "#lib/seo.ts";
+import { page } from "$app/state";
 
 /**
  * ページの <title> と、共有したときのカード（OGP / X）をまとめて出す（#271）。

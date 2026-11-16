@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { makeTimelinePosts } from "$lib/components/fixtures/timeline";
-import { buildAnimeRoomLabel, type RawPost, toPost } from "$lib/types";
+import { makeTimelinePosts } from "#lib/components/fixtures/timeline.ts";
+import { buildAnimeRoomLabel, type RawPost, toPost } from "#lib/types.ts";
 import { getPostDisplayContent, getPostRoomContext, isPostContinuation } from "./post-presentation";
 
 describe("adjacent post headings", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { BroadcastRoomOverride } from "$lib/types";
+import type { BroadcastRoomOverride } from "#lib/types.ts";
 import { type BroadcastEpisodeLogSlot, buildBroadcastEpisodeLog } from "./broadcast-episode-log";
 
 // broadcast_day/time を null にして今日基準の合成補完を切り、実在セッションの

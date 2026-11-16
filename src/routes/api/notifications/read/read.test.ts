@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { parseNotificationCategory } from "$lib/server/notification-category";
+import { parseNotificationCategory } from "#lib/server/notification-category.ts";
 import { POST } from "./+server";
 
 type Call = { method: string; args: unknown[] };

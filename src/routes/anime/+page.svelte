@@ -1,16 +1,21 @@
 <script lang="ts">
 import { onDestroy } from "svelte";
+import {
+	ANIME_GENRE_FILTER_HELP,
+	ANIME_GENRE_GROUPS,
+	ANIME_GENRES,
+	ANIME_SOURCE_OPTIONS,
+} from "#lib/anime-vocabulary.ts";
+import AnimeCard from "#lib/components/AnimeCard.svelte";
+import AnimeRegisterForm from "#lib/components/AnimeRegisterForm.svelte";
+import InfoTip from "#lib/components/InfoTip.svelte";
+import MyListQuickEdit from "#lib/components/MyListQuickEdit.svelte";
+import SeoMeta from "#lib/components/SeoMeta.svelte";
+import { createDebouncedCommit } from "#lib/debounced-commit.ts";
+import { isSamePageRefresh } from "#lib/navigation-skeleton.ts";
+import type { ActiveAnimeSeasonChip, AnimeListItem, AnimeStatus, UserAnimeEntry } from "#lib/types.ts";
 import { beforeNavigate, goto } from "$app/navigation";
 import { navigating } from "$app/state";
-import { ANIME_GENRE_FILTER_HELP, ANIME_GENRE_GROUPS, ANIME_GENRES, ANIME_SOURCE_OPTIONS } from "$lib/anime-vocabulary";
-import AnimeCard from "$lib/components/AnimeCard.svelte";
-import AnimeRegisterForm from "$lib/components/AnimeRegisterForm.svelte";
-import InfoTip from "$lib/components/InfoTip.svelte";
-import MyListQuickEdit from "$lib/components/MyListQuickEdit.svelte";
-import SeoMeta from "$lib/components/SeoMeta.svelte";
-import { createDebouncedCommit } from "$lib/debounced-commit";
-import { isSamePageRefresh } from "$lib/navigation-skeleton";
-import type { ActiveAnimeSeasonChip, AnimeListItem, AnimeStatus, UserAnimeEntry } from "$lib/types";
 import type { PageProps } from "./$types";
 
 let { data, form }: PageProps = $props();
