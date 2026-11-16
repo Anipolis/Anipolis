@@ -1,18 +1,27 @@
 <script lang="ts">
 import { onMount } from "svelte";
+import FollowSuggestions from "#lib/components/FollowSuggestions.svelte";
+import type { FollowSuggestion } from "#lib/types.ts";
 
 /**
- * はじめての人への案内（ホーム）。まだ誰もフォローしておらず、マイリストも空の人や、
+ * はじめての人への案内（ホーム）。まだ誰もフォローしていないか、マイリストが空の人や、
  * プロフィール（表示名・アイコン）が未設定の人に、最初にやることを示す。
+ * 誰もフォローしていない人には、フォローのおすすめ（共通の作品）をその場でフォローできる形で出す。
  * × で閉じたら、この端末では出さない（localStorage。読めない環境では毎回出る）
  */
 interface Props {
 	userId: string;
 	/** プロフィールが未設定のときだけ渡す。案内の先頭にプロフィールの編集を出す */
 	profileEditHref?: string | null;
+	/** マイリストが空なら、作品を探す案内を出す */
+	listEmpty: boolean;
+	/** フォローのおすすめ。誰もフォローしていない人にだけ渡る */
+	suggestions: FollowSuggestion[];
+	/** おすすめを同じ画面の別の場所（フォロー中タブの空の表示）に出しているときは、ここでは出さない */
+	suggestionsElsewhere?: boolean;
 }
 
-let { userId, profileEditHref = null }: Props = $props();
+let { userId, profileEditHref = null, listEmpty, suggestions, suggestionsElsewhere = false }: Props = $props();
 
 const storageKey = $derived(`anipolis:welcome-dismissed:${userId}`);
 // 閉じたかどうかを読むまでは出さない（閉じた人に一瞬出てから消えるのを防ぐ）
@@ -51,19 +60,33 @@ function dismiss(): void {
 					アイコンと表示名を設定する
 				</a>
 			{/if}
-			<a href="/anime" class="btn btn-secondary welcome-card-action">
-				<span class="i-lucide-list-plus" aria-hidden="true"></span>
-				アニメを探してマイリストに追加
-			</a>
+			{#if listEmpty}
+				<a href="/anime" class="btn btn-secondary welcome-card-action">
+					<span class="i-lucide-list-plus" aria-hidden="true"></span>
+					アニメを探してマイリストに追加
+				</a>
+			{/if}
 			<a href="/schedule" class="btn btn-secondary welcome-card-action">
 				<span class="i-lucide-tv" aria-hidden="true"></span>
 				今日の放送と実況ルームを見る
 			</a>
-			<a href="/search" class="btn btn-secondary welcome-card-action">
-				<span class="i-lucide-user-search" aria-hidden="true"></span>
-				ユーザーを探してフォロー
-			</a>
+			<!-- おすすめが出せないとき（ほかに見える人がいない等）だけ、検索へ送る -->
+			{#if suggestions.length === 0 && !suggestionsElsewhere}
+				<a href="/search" class="btn btn-secondary welcome-card-action">
+					<span class="i-lucide-user-search" aria-hidden="true"></span>
+					ユーザーを探してフォロー
+				</a>
+			{/if}
 		</div>
+		{#if suggestions.length > 0 && !suggestionsElsewhere}
+			<section class="welcome-card-suggestions" aria-labelledby="welcome-card-suggestions-title">
+				<h3 id="welcome-card-suggestions-title">フォローしてみませんか</h3>
+				{#if listEmpty}
+					<p class="welcome-card-hint">マイリストに作品を追加すると、同じ作品を見ている人が出てきます。</p>
+				{/if}
+				<FollowSuggestions {suggestions} />
+			</section>
+		{/if}
 	</section>
 {/if}
 
@@ -128,6 +151,24 @@ function dismiss(): void {
 	background: var(--color-surface-hover);
 	color: var(--color-text);
 	text-decoration: none;
+}
+
+.welcome-card-suggestions {
+	margin-top: 16px;
+	padding-top: 12px;
+	border-top: 1px solid var(--color-border);
+}
+
+.welcome-card-suggestions h3 {
+	margin: 0 0 4px;
+	font-size: 14px;
+	font-weight: 700;
+}
+
+.welcome-card-hint {
+	margin: 0 0 4px;
+	font-size: 12px;
+	color: var(--color-text-muted);
 }
 
 .welcome-card-action [class^="i-lucide"] {

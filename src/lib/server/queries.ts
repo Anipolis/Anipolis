@@ -36,6 +36,7 @@ import type {
 	EpisodeRoom,
 	Event,
 	EventMute,
+	FollowSuggestion,
 	Notification,
 	OpenBroadcastRoomSummary,
 	Post,
@@ -5153,4 +5154,38 @@ export async function getAnimeOgSource(
 		return null;
 	}
 	return data;
+}
+
+interface FollowSuggestionRow {
+	user_id: string;
+	username: string;
+	display_name: string | null;
+	avatar_url: string | null;
+	shared_count: number;
+	shared_titles: string[] | null;
+}
+
+/**
+ * フォローのおすすめ（203）。マイリストの共通の作品が多い人、足りなければ最近よく投稿している人。
+ * 案内の補助なので、読めなければ空にする（失敗はログに残す）
+ */
+export async function getFollowSuggestions(supabase: SupabaseClient<Database>, limit = 5): Promise<FollowSuggestion[]> {
+	// 203 の RPC。生成された型（database.types.ts）に入るまでは、引数と戻り値をここで決める
+	const rpc = supabase.rpc as unknown as (
+		name: "get_follow_suggestions",
+		args: { p_limit: number },
+	) => PromiseLike<{ data: FollowSuggestionRow[] | null; error: unknown }>;
+	const { data, error } = await rpc.call(supabase, "get_follow_suggestions", { p_limit: limit });
+	if (error) {
+		logQueryFailure("getFollowSuggestions", error);
+		return [];
+	}
+	return (data ?? []).map((row) => ({
+		id: row.user_id,
+		username: row.username,
+		displayName: row.display_name,
+		avatarUrl: row.avatar_url,
+		sharedCount: row.shared_count,
+		sharedTitles: row.shared_titles ?? [],
+	}));
 }

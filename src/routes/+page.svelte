@@ -1,6 +1,7 @@
 <script lang="ts">
 import { trapFocus } from "#lib/actions/trapFocus.ts";
 import ActivityFeed from "#lib/components/ActivityFeed.svelte";
+import FollowSuggestions from "#lib/components/FollowSuggestions.svelte";
 import LiveRoomsPanel from "#lib/components/LiveRoomsPanel.svelte";
 import PostCardSkeleton from "#lib/components/PostCardSkeleton.svelte";
 import PostComposer from "#lib/components/PostComposer.svelte";
@@ -181,13 +182,17 @@ $effect(() => {
 			{/if}
 		</div>
 
-		<!-- はじめての人への案内。プロフィール（表示名・アイコン）が未設定の人にも出し、案内の先頭でプロフィールの編集へ誘う -->
-		{#if data.user && (pageExtras.value?.newcomer || profileIncomplete)}
+		<!-- はじめての人への案内。プロフィール（表示名・アイコン）が未設定の人にも出し、案内の先頭でプロフィールの編集へ誘う。
+		     フォロー中タブでは、おすすめはタブの空の表示に出す（同じ一覧を 2 か所に並べない） -->
+		{#if data.user && (pageExtras.value?.welcome.show || profileIncomplete)}
 			<WelcomeCard
 				userId={data.user.id}
 				profileEditHref={profileIncomplete && data.profile
 					? `/profile/${data.profile.username}?edit=profile`
 					: null}
+				listEmpty={pageExtras.value?.welcome.listEmpty ?? false}
+				suggestions={pageExtras.value?.welcome.suggestions ?? []}
+				suggestionsElsewhere={data.tab === "following"}
 			/>
 		{/if}
 
@@ -273,6 +278,11 @@ $effect(() => {
 							<p>
 								フォロー中のユーザーの投稿がありません。<br>気になるユーザーをフォローしてみましょう！
 							</p>
+							{#if (pageExtras.value?.welcome.suggestions.length ?? 0) > 0}
+								<div class="following-empty-suggestions">
+									<FollowSuggestions suggestions={pageExtras.value?.welcome.suggestions ?? []} />
+								</div>
+							{/if}
 						{:else}
 							<p>まだ投稿がありません。最初の投稿をしてみましょう！</p>
 						{/if}
@@ -565,6 +575,13 @@ $effect(() => {
 }
 
 /* Landing hero (unauthenticated) */
+/* 空の表示は中央寄せなので、おすすめの一覧だけ左揃えに戻す */
+.following-empty-suggestions {
+	max-width: 420px;
+	margin: 16px auto 0;
+	text-align: left;
+}
+
 .timeline-back-link {
 	display: block;
 	padding: 10px 16px;
