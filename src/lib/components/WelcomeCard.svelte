@@ -2,14 +2,17 @@
 import { onMount } from "svelte";
 
 /**
- * はじめての人への案内（ホーム）。まだ誰もフォローしておらず、マイリストも空の人に、最初にやることを示す。
+ * はじめての人への案内（ホーム）。まだ誰もフォローしておらず、マイリストも空の人や、
+ * プロフィール（表示名・アイコン）が未設定の人に、最初にやることを示す。
  * × で閉じたら、この端末では出さない（localStorage。読めない環境では毎回出る）
  */
 interface Props {
 	userId: string;
+	/** プロフィールが未設定のときだけ渡す。案内の先頭にプロフィールの編集を出す */
+	profileEditHref?: string | null;
 }
 
-let { userId }: Props = $props();
+let { userId, profileEditHref = null }: Props = $props();
 
 const storageKey = $derived(`anipolis:welcome-dismissed:${userId}`);
 // 閉じたかどうかを読むまでは出さない（閉じた人に一瞬出てから消えるのを防ぐ）
@@ -42,6 +45,12 @@ function dismiss(): void {
 			</button>
 		</div>
 		<div class="welcome-card-actions">
+			{#if profileEditHref}
+				<a href={profileEditHref} class="btn btn-secondary welcome-card-action">
+					<span class="i-lucide-user-pen" aria-hidden="true"></span>
+					アイコンと表示名を設定する
+				</a>
+			{/if}
 			<a href="/anime" class="btn btn-secondary welcome-card-action">
 				<span class="i-lucide-list-plus" aria-hidden="true"></span>
 				アニメを探してマイリストに追加
