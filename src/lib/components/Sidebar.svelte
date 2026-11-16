@@ -812,7 +812,7 @@ function isActive(path: string): boolean {
 		</nav>
 	{/if}
 
-	<div class="sidebar-bottom">
+	<div class="sidebar-bottom" class:is-pinned={minimal}>
 		<button
 			type="button"
 			class="sidebar-btn"

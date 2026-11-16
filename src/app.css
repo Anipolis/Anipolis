@@ -417,6 +417,11 @@ textarea {
 	margin-top: 8px;
 }
 
+/* 初期設定の途中（minimal）はメニュー（.sidebar-nav の flex: 1）が無いので、自分で下端へ寄せる */
+.sidebar-bottom.is-pinned {
+	margin-top: auto;
+}
+
 .sidebar-btn {
 	position: relative;
 	display: flex;

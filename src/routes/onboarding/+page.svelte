@@ -118,44 +118,52 @@ onDestroy(clearSelectedAvatarFile);
 				<input type="hidden" name="next" value={data.next}>
 				<input type="hidden" name="avatar_choice" value={avatarChoice}>
 
-				<div class="onboarding-avatar-row">
-					<!-- アイコンを押しても画像を選べる。Tab の移動先と読み上げは「画像を選択／変更」だけにする（同じ操作を 2 つ並べない） -->
-					<button
-						type="button"
-						class="avatar-pick"
-						aria-hidden="true"
-						tabindex="-1"
-						onclick={() => avatarFileInput?.click()}
-					>
-						<UserAvatar src={selectedAvatarUrl} username={displayName || username} size="lg" />
-					</button>
-					<div class="onboarding-avatar-copy">
-						<div class="field-label">アイコン画像</div>
-						<div class="onboarding-avatar-actions">
-							<label class="btn btn-secondary onboarding-avatar-file">
-								{avatarChoice === "none" ? "画像を選択" : "画像を変更"}
-								<input
-									id="onboarding-avatar-input"
-									type="file"
-									name="avatar_file"
-									accept="image/jpeg,image/png,image/webp"
-									disabled={submitting}
-									bind:this={avatarFileInput}
-									onchange={updateAvatarFile}
-								>
-							</label>
-							<!-- 画像が入っているときだけ出す。外すと頭文字のアイコンに戻る（外部サービスのアイコンも、アップロードした画像も同じ） -->
-							{#if avatarChoice !== "none"}
-								<button type="button" class="btn btn-ghost" disabled={submitting} onclick={clearAvatar}>
-									削除
-								</button>
+				<!-- 見出しはほかの欄（ユーザー名・表示名）と同じく左端の上に置き、その下にアイコンとボタンを並べる -->
+				<div class="field onboarding-avatar-field">
+					<div class="field-label">アイコン画像</div>
+					<div class="onboarding-avatar-row">
+						<!-- アイコンを押しても画像を選べる。Tab の移動先と読み上げは「画像を選択／変更」だけにする（同じ操作を 2 つ並べない） -->
+						<button
+							type="button"
+							class="avatar-pick"
+							aria-hidden="true"
+							tabindex="-1"
+							onclick={() => avatarFileInput?.click()}
+						>
+							<UserAvatar src={selectedAvatarUrl} username={displayName || username} size="lg" />
+						</button>
+						<div class="onboarding-avatar-copy">
+							<div class="onboarding-avatar-actions">
+								<label class="btn btn-secondary onboarding-avatar-file">
+									{avatarChoice === "none" ? "画像を選択" : "画像を変更"}
+									<input
+										id="onboarding-avatar-input"
+										type="file"
+										name="avatar_file"
+										accept="image/jpeg,image/png,image/webp"
+										disabled={submitting}
+										bind:this={avatarFileInput}
+										onchange={updateAvatarFile}
+									>
+								</label>
+								<!-- 画像が入っているときだけ出す。外すと頭文字のアイコンに戻る（外部サービスのアイコンも、アップロードした画像も同じ） -->
+								{#if avatarChoice !== "none"}
+									<button
+										type="button"
+										class="btn btn-ghost"
+										disabled={submitting}
+										onclick={clearAvatar}
+									>
+										削除
+									</button>
+								{/if}
+							</div>
+							{#if form && "field" in form && form.field === "avatar"}
+								<p class="field-error-msg">{form.message}</p>
+							{:else if avatarMessage}
+								<p class="field-error-msg">{avatarMessage}</p>
 							{/if}
 						</div>
-						{#if form && "field" in form && form.field === "avatar"}
-							<p class="field-error-msg">{form.message}</p>
-						{:else if avatarMessage}
-							<p class="field-error-msg">{avatarMessage}</p>
-						{/if}
 					</div>
 				</div>
 
@@ -229,13 +237,16 @@ onDestroy(clearSelectedAvatarFile);
 {/if}
 
 <style>
+.onboarding-avatar-field {
+	margin-bottom: 24px;
+	padding-bottom: 24px;
+	border-bottom: 1px solid var(--color-border);
+}
+
 .onboarding-avatar-row {
 	display: flex;
 	align-items: center;
 	gap: 16px;
-	margin-bottom: 24px;
-	padding-bottom: 24px;
-	border-bottom: 1px solid var(--color-border);
 }
 
 .onboarding-avatar-copy {
@@ -247,7 +258,6 @@ onDestroy(clearSelectedAvatarFile);
 	display: flex;
 	flex-wrap: wrap;
 	gap: 8px;
-	margin: 12px 0 6px;
 }
 
 /* ファイルの欄は隠し、ボタン（label。補助の操作なので灰色の枠の .btn-secondary）を押して選ぶ */
@@ -263,10 +273,6 @@ onDestroy(clearSelectedAvatarFile);
 }
 
 @media (max-width: 560px) {
-	.onboarding-avatar-row {
-		align-items: flex-start;
-	}
-
 	/* スマホではログイン画面のボタンと同じく横幅いっぱいにする */
 	.onboarding-submit {
 		width: 100%;
