@@ -5,6 +5,7 @@ import ActivityFeed from "#lib/components/ActivityFeed.svelte";
 import AnimeStatusSection from "#lib/components/AnimeStatusSection.svelte";
 import FavoriteAnimeShelf from "#lib/components/FavoriteAnimeShelf.svelte";
 import ImageCropper from "#lib/components/ImageCropper.svelte";
+import Modal from "#lib/components/Modal.svelte";
 import MyListQuickEdit from "#lib/components/MyListQuickEdit.svelte";
 import MylistSortSelect from "#lib/components/MylistSortSelect.svelte";
 import MylistStatusTabs from "#lib/components/MylistStatusTabs.svelte";
@@ -408,14 +409,9 @@ async function submitUserReport() {
 	reportSubmitting = false;
 }
 
-function handleReportModalKeydown(event: KeyboardEvent) {
-	if (showKebabMenu && event.key === "Escape") {
-		showKebabMenu = false;
-		return;
-	}
-	if (showUserReportModal && event.key === "Escape") {
-		showUserReportModal = false;
-	}
+// 通報・プロフィール編集のモーダルの Esc は Modal が受け持つ（#600）。ここではメニューだけ閉じる
+function handleKebabKeydown(event: KeyboardEvent) {
+	if (showKebabMenu && event.key === "Escape") showKebabMenu = false;
 }
 
 const statusLabel: Record<AnimeStatus, string> = {
@@ -486,7 +482,7 @@ function listButtonFor(anime: Anime) {
 />
 
 <svelte:window
-	onkeydown={handleReportModalKeydown}
+	onkeydown={handleKebabKeydown}
 	onclick={() => {
 		if (showKebabMenu) showKebabMenu = false;
 	}}
@@ -684,22 +680,8 @@ function listButtonFor(anime: Anime) {
 		</div>
 
 		{#if showUserReportModal}
-			<div class="report-modal-overlay">
-				<button
-					type="button"
-					class="modal-click-target modal-click-layer"
-					tabindex="-1"
-					aria-label="閉じる"
-					onclick={() => (showUserReportModal = false)}
-				></button>
-				<div
-					class="report-modal-card modal-content-layer"
-					role="dialog"
-					aria-modal="true"
-					aria-labelledby="user-report-title"
-					tabindex="-1"
-					onkeydown={(event) => event.stopPropagation()}
-				>
+			<Modal onclose={() => (showUserReportModal = false)} labelledby="user-report-title">
+				<div class="report-modal-card">
 					<div class="report-modal-header">
 						<span id="user-report-title" class="report-modal-title">@{profile.username} を通報</span>
 						<button
@@ -742,7 +724,7 @@ function listButtonFor(anime: Anime) {
 						</button>
 					</div>
 				</div>
-			</div>
+			</Modal>
 		{/if}
 
 		{#if showListButtons}
@@ -755,25 +737,22 @@ function listButtonFor(anime: Anime) {
 		{/if}
 
 		{#if showProfileEditModal && isOwn}
-			<div class="profile-edit-modal-overlay">
-				<button
-					type="button"
-					class="modal-click-target modal-click-layer"
-					tabindex="-1"
-					aria-label="閉じる"
-					onclick={closeProfileEditModal}
-				></button>
-				<div
-					class="profile-edit-modal-card modal-content-layer"
-					role="dialog"
-					aria-modal="true"
-					aria-labelledby="profile-edit-title"
-					tabindex="-1"
-					onkeydown={(event) => {
-						event.stopPropagation();
-						if (event.key === "Escape") closeProfileEditModal();
-					}}
-				>
+			<!--
+				保存・画像の処理中は閉じない（closeProfileEditModal と同じ条件）。切り抜きの画面を開いている間も、
+				Esc や背景のクリックで後ろの編集画面まで閉じないようにする
+			-->
+			<Modal
+				onclose={closeProfileEditModal}
+				dismissible={!(
+					profileSubmitting ||
+					headerUploading ||
+					avatarUploading ||
+					avatarCropSource ||
+					headerCropSource
+				)}
+				labelledby="profile-edit-title"
+			>
+				<div class="profile-edit-modal-card">
 					<div class="profile-edit-modal-header">
 						<span id="profile-edit-title" class="profile-edit-modal-title">プロフィールを編集</span>
 						<button
@@ -958,7 +937,32 @@ function listButtonFor(anime: Anime) {
 						</div>
 					</form>
 				</div>
-			</div>
+
+				<!--
+					切り抜きの画面は編集画面の <dialog> の中に置く。外に置くと、showModal() で開いた編集画面の後ろに隠れ、
+					操作もできなくなる（<dialog> の外は inert になる）
+				-->
+				{#if avatarCropSource}
+					<ImageCropper
+						file={avatarCropSource}
+						onconfirm={applyCroppedAvatar}
+						oncancel={() => {
+							avatarCropSource = null;
+						}}
+					/>
+				{/if}
+
+				{#if headerCropSource}
+					<ImageCropper
+						file={headerCropSource}
+						kind="header"
+						onconfirm={applyCroppedHeader}
+						oncancel={() => {
+							headerCropSource = null;
+						}}
+					/>
+				{/if}
+			</Modal>
 		{/if}
 
 		<!-- タブ -->
@@ -1195,27 +1199,6 @@ function listButtonFor(anime: Anime) {
 	</aside>
 </div>
 
-{#if avatarCropSource}
-	<ImageCropper
-		file={avatarCropSource}
-		onconfirm={applyCroppedAvatar}
-		oncancel={() => {
-			avatarCropSource = null;
-		}}
-	/>
-{/if}
-
-{#if headerCropSource}
-	<ImageCropper
-		file={headerCropSource}
-		kind="header"
-		onconfirm={applyCroppedHeader}
-		oncancel={() => {
-			headerCropSource = null;
-		}}
-	/>
-{/if}
-
 <style>
 .load-more-btn {
 	display: block;
@@ -1357,17 +1340,6 @@ function listButtonFor(anime: Anime) {
 	font-weight: 700;
 }
 
-.report-modal-overlay {
-	position: fixed;
-	inset: 0;
-	z-index: 1000;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	padding: 16px;
-	background: rgb(15 23 42 / 0.68);
-}
-
 .report-modal-card {
 	width: min(100%, 420px);
 	border: 1px solid var(--color-border, var(--border, #334155));
@@ -1451,17 +1423,6 @@ function listButtonFor(anime: Anime) {
 	margin: 0;
 	color: var(--color-text-muted, var(--fg-muted, #94a3b8));
 	font-size: 13px;
-}
-
-.profile-edit-modal-overlay {
-	position: fixed;
-	inset: 0;
-	z-index: 1000;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	padding: 16px;
-	background: rgb(15 23 42 / 0.68);
 }
 
 .profile-edit-modal-card {

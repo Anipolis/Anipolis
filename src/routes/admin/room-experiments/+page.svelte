@@ -1,6 +1,6 @@
 <script lang="ts">
 import { onMount } from "svelte";
-import { trapFocus } from "#lib/actions/trapFocus.ts";
+import Modal from "#lib/components/Modal.svelte";
 import { coverThumbFallback, coverThumbSrc } from "#lib/cover-image.ts";
 import type { RoomExitSurveyComparisonWithX, RoomExitSurveyNextParticipation } from "#lib/types.ts";
 import type { SubmitFunction } from "$app/forms";
@@ -421,28 +421,11 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 </main>
 
 {#if stopTarget}
-	<div class="modal-backdrop">
-		<button
-			type="button"
-			class="modal-click-target modal-click-layer"
-			tabindex="-1"
-			aria-label="閉じる"
-			onclick={() => (stopTarget = null)}
-		></button>
-		<div
-			class="modal modal-content-layer"
-			use:trapFocus
-			role="dialog"
-			aria-modal="true"
-			aria-labelledby="stop-run-title"
-			tabindex="-1"
-			onkeydown={(event) => {
-				if (event.key === "Escape") stopTarget = null;
-			}}
-		>
+	<Modal onclose={() => (stopTarget = null)} labelledby="stop-run-title">
+		<div class="stop-run-card">
 			<h2 id="stop-run-title">検証runを停止</h2>
 			<p>「{stopTarget.title}」の検証runを停止します。以後、このrunには新規入室・投稿が集計されません。</p>
-			<div class="modal-actions">
+			<div class="stop-run-actions">
 				<button class="btn btn-ghost" type="button" onclick={() => (stopTarget = null)}>キャンセル</button>
 				<form method="POST" action="?/stopRun" use:enhance={closeStopModalAfterSubmit}>
 					<input type="hidden" name="run_id" value={stopTarget.id}>
@@ -450,7 +433,7 @@ const closeStopModalAfterSubmit: SubmitFunction = () => {
 				</form>
 			</div>
 		</div>
-	</div>
+	</Modal>
 {/if}
 
 <style>
@@ -878,17 +861,7 @@ th {
 	background: color-mix(in srgb, var(--color-danger) 10%, var(--color-surface));
 }
 
-.modal-backdrop {
-	position: fixed;
-	inset: 0;
-	z-index: 80;
-	display: grid;
-	place-items: center;
-	background: rgb(0 0 0 / 0.5);
-	padding: 18px;
-}
-
-.modal {
+.stop-run-card {
 	width: min(420px, 100%);
 	border: 1px solid var(--color-border);
 	border-radius: var(--radius-sm);
@@ -897,18 +870,18 @@ th {
 	box-shadow: 0 24px 60px rgb(0 0 0 / 0.35);
 }
 
-.modal h2 {
+.stop-run-card h2 {
 	margin: 0 0 8px;
 	font-size: 18px;
 }
 
-.modal p {
+.stop-run-card p {
 	margin: 0;
 	color: var(--color-text-muted);
 	line-height: 1.7;
 }
 
-.modal-actions {
+.stop-run-actions {
 	display: flex;
 	justify-content: flex-end;
 	gap: 10px;

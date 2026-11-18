@@ -2,6 +2,7 @@
 import { untrack } from "svelte";
 import { animePickMeta } from "#lib/anime-picker.ts";
 import AnimeRow from "#lib/components/AnimeRow.svelte";
+import Modal from "#lib/components/Modal.svelte";
 import SeoMeta from "#lib/components/SeoMeta.svelte";
 import { coverThumbFallback, coverThumbSrc } from "#lib/cover-image.ts";
 import { roomReminderStatus, roomReminderTime } from "#lib/room-reminders.ts";
@@ -1139,14 +1140,8 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 </div>
 
 {#if showEventDialog && data.isAdmin}
-	<div class="dialog-backdrop">
-		<button
-			type="button"
-			class="dialog-backdrop-hit"
-			aria-label="閉じる"
-			onclick={() => (showEventDialog = false)}
-		></button>
-		<div class="event-dialog" role="dialog" aria-modal="true" aria-labelledby="event-dialog-title">
+	<Modal onclose={() => (showEventDialog = false)} labelledby="event-dialog-title">
+		<div class="event-dialog">
 			<header class="dialog-header">
 				<h2 id="event-dialog-title">イベント作成</h2>
 				<button
@@ -1270,7 +1265,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 				<button type="submit" class="btn btn-primary">作成してルームへ</button>
 			</form>
 		</div>
-	</div>
+	</Modal>
 {/if}
 
 <style>
@@ -1893,26 +1888,7 @@ function formatEpisodeBadge(ep: BroadcastEpisodeSlot, total: string | null): str
 .menu-settings-link-anchor:hover {
 	color: var(--accent);
 }
-.dialog-backdrop {
-	position: fixed;
-	inset: 0;
-	z-index: 900;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	padding: 1rem;
-	background: rgba(0, 0, 0, 0.58);
-}
-.dialog-backdrop-hit {
-	position: absolute;
-	inset: 0;
-	width: 100%;
-	height: 100%;
-	cursor: default;
-}
 .event-dialog {
-	position: relative;
-	z-index: 1;
 	width: min(520px, 100%);
 	max-height: min(720px, calc(100vh - 2rem));
 	overflow-y: auto;
