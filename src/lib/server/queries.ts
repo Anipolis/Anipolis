@@ -2191,6 +2191,54 @@ function toAdminReport(
 	};
 }
 
+/** ハッシュタグの画面の1ページの件数（#248） */
+export const HASHTAG_PAGE_SIZE = 50;
+
+/**
+ * ハッシュタグの画面の投稿を1ページ返す（#248）。
+ * 「タグの付いた投稿」と「そのタグのイベントの投稿」は get_hashtag_post_page（208）が DB の側で合わせ、
+ * 1ページ分の ID だけを返す。本文などはその ID（50件まで）で posts から読む。
+ * 続きの目印は、ミュートで間引く前の RPC の行から決める（間引いても先へ進める）
+ */
+export async function getHashtagPostsPage(
+	supabase: SupabaseClient<Database>,
+	tag: string,
+	userId: string | null,
+	cursor?: TimelineCursor,
+	limit = HASHTAG_PAGE_SIZE,
+): Promise<TimelinePageResult<Post>> {
+	// 208 の RPC。生成された型（database.types.ts）に入るまでは、引数と戻り値をここで決める
+	const rpc = supabase.rpc as unknown as (
+		name: "get_hashtag_post_page",
+		args: { p_tag: string; p_before_created_at?: string; p_before_id?: string; p_limit: number },
+	) => PromiseLike<{ data: { id: string; created_at: string }[] | null; error: unknown }>;
+	const { data: rows, error } = await rpc.call(supabase, "get_hashtag_post_page", {
+		p_tag: tag.toLowerCase(),
+		...(cursor ? { p_before_created_at: cursor.createdAt, p_before_id: cursor.id } : {}),
+		p_limit: limit,
+	});
+	if (error) return { posts: [], error, nextCursor: null };
+
+	const pageRows = rows ?? [];
+	const nextCursor = buildTimelineNextCursor(pageRows, limit, (row) => ({ createdAt: row.created_at, id: row.id }));
+	if (pageRows.length === 0) return { posts: [], error: null, nextCursor };
+
+	const { data: postsData, error: postsError } = await supabase
+		.from("posts")
+		.select(POST_LIST_SELECT)
+		.in(
+			"id",
+			pageRows.map((row) => row.id),
+		);
+	if (postsError) return { posts: [], error: postsError, nextCursor: null };
+
+	const order = new Map(pageRows.map((row, index) => [row.id, index]));
+	const rawPosts = ((postsData ?? []) as unknown as RawPost[]).sort(
+		(a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0),
+	);
+	return { posts: await enrichPostsWithCounts(supabase, rawPosts, userId), error: null, nextCursor };
+}
+
 export async function getFollowerProfiles(
 	supabase: SupabaseClient<Database>,
 	profileId: string,

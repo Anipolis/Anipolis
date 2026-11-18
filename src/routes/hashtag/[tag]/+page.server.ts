@@ -1,81 +1,35 @@
-﻿import { fail } from "@sveltejs/kit";
+import { fail } from "@sveltejs/kit";
 import { deletePostAction, toggleBookmarkAction, toggleLikeAction, toggleRepostAction } from "#lib/server/actions.ts";
-import { buildPostCardSelect } from "#lib/server/post-selects.ts";
-import { enrichPostsWithCounts, getAnimeRankingTrending } from "#lib/server/queries.ts";
+import { fillTimelinePage, getAnimeRankingTrending, getHashtagPostsPage } from "#lib/server/queries.ts";
 import { redirectToLogin } from "#lib/server/require-login.ts";
-import type { RawPost } from "#lib/types.ts";
+import { parseTimelineCursor } from "#lib/timeline-cursor.ts";
 import type { Actions, PageServerLoad } from "./$types";
-
-const POSTS_SELECT = buildPostCardSelect();
 
 export const load: PageServerLoad = async ({ params, url, locals: { supabase, safeGetSession } }) => {
 	const { user } = await safeGetSession();
 	// 投稿の一覧は登録した人だけに見せる（共有された投稿の詳細だけは未ログインでも開ける）
 	if (!user) redirectToLogin(url);
 	const tag = params.tag.toLowerCase();
+	const cursor = parseTimelineCursor(url.searchParams);
 
-	const { data: hashtag } = await supabase.from("hashtags").select("id").eq("name", tag).maybeSingle();
-
-	const [postsResult, trendingResult, animeTrending] = await Promise.all([
-		(async () => {
-			const { data: links } = hashtag
-				? await supabase.from("post_hashtags").select("post_id").eq("hashtag_id", hashtag.id)
-				: { data: [] };
-			const { data: events } = await supabase
-				.from("events")
-				.select("id")
-				.eq("hashtag", tag)
-				.eq("is_cancelled", false);
-
-			const postIds = (links ?? []).map((l) => l.post_id);
-			const eventIds = (events ?? []).map((event) => event.id);
-			if (postIds.length === 0 && eventIds.length === 0) return { data: [] };
-
-			const [taggedPosts, eventPosts] = await Promise.all([
-				postIds.length > 0
-					? supabase
-							.from("posts")
-							.select(POSTS_SELECT)
-							.in("id", postIds)
-							.order("created_at", { ascending: false })
-							.limit(50)
-					: Promise.resolve({ data: [] }),
-				eventIds.length > 0
-					? supabase
-							.from("posts")
-							.select(POSTS_SELECT)
-							.in("event_id", eventIds)
-							.order("created_at", { ascending: false })
-							.limit(50)
-					: Promise.resolve({ data: [] }),
-			]);
-
-			const postsById = new Map<string, RawPost>();
-			for (const post of [
-				...((taggedPosts.data ?? []) as unknown as RawPost[]),
-				...((eventPosts.data ?? []) as unknown as RawPost[]),
-			]) {
-				postsById.set(post.id, post);
-			}
-
-			return {
-				data: [...postsById.values()]
-					.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-					.slice(0, 50),
-			};
-		})(),
-
+	// タグの付いた投稿とイベントの投稿は DB の側で合わせ、50件ずつ読む（208、#248）。
+	// ミュートで間引かれて少ないときは、ほかの一覧と同じく続きを取り足す
+	const [page, trendingResult, animeTrending] = await Promise.all([
+		fillTimelinePage((next) => getHashtagPostsPage(supabase, tag, user.id, next), cursor),
 		supabase.rpc("get_trending_hashtags", { limit_count: 10 }),
 		getAnimeRankingTrending(supabase, 5),
 	]);
+	if (page.error) console.error("[hashtag] posts query failed:", page.error);
 
-	const posts = await enrichPostsWithCounts(
-		supabase,
-		(postsResult.data ?? []) as unknown as RawPost[],
-		user?.id ?? null,
-	);
-
-	return { tag, posts, trending: trendingResult.data ?? [], animeTrending };
+	return {
+		tag,
+		posts: page.posts,
+		postsFailed: page.error != null,
+		nextCursor: page.nextCursor,
+		isContinuation: cursor != null,
+		trending: trendingResult.data ?? [],
+		animeTrending,
+	};
 };
 
 export const actions: Actions = {
