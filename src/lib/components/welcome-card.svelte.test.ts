@@ -60,6 +60,11 @@ describe("WelcomeCard", () => {
 		expect(target.textContent).not.toContain("ユーザーを探してフォロー");
 	});
 
+	it("おすすめが 0 人なら、フォロー中タブでも検索へ送る", () => {
+		const target = render({ followsNobody: true, suggestions: [], suggestionsElsewhere: true });
+		expect(target.textContent).toContain("ユーザーを探してフォロー");
+	});
+
 	it("出す項目が無ければ、カードごと出さない", () => {
 		const target = render({ followsNobody: true, suggestions: [alice], suggestionsElsewhere: true });
 		expect(target.querySelector(".welcome-card")).toBeNull();

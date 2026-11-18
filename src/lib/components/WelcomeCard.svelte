@@ -34,10 +34,10 @@ let {
 	suggestionsElsewhere = false,
 }: Props = $props();
 
-const followHere = $derived(followsNobody && !suggestionsElsewhere);
-const showSuggestions = $derived(followHere && suggestions.length > 0);
-// おすすめが出せないとき（ほかに見える人がいない等）だけ、検索へ送る
-const showSearch = $derived(followHere && suggestions.length === 0);
+// おすすめの一覧は、フォロー中タブの空の表示に出しているときはここでは出さない
+const showSuggestions = $derived(followsNobody && suggestions.length > 0 && !suggestionsElsewhere);
+// おすすめが 1 人も出せないときだけ、検索へ送る（どのタブでも。空の表示の側には検索の導線が無いため）
+const showSearch = $derived(followsNobody && suggestions.length === 0);
 const hasActions = $derived(Boolean(profileEditHref) || listEmpty || showSearch);
 const hasItems = $derived(hasActions || showSuggestions);
 
