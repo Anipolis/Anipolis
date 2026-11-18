@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
 import type { Database } from "#lib/supabase/database.types.ts";
+import { chainableRpc } from "../../test/chainable-rpc.ts";
 import {
 	buildTimelineNextCursor,
 	fillTimelinePage,
@@ -12,7 +13,19 @@ import {
 
 type TableResult = { data: unknown; error: { message: string } | null };
 
-const CHAIN_METHODS = ["select", "is", "order", "limit", "or", "eq", "in", "not", "maybeSingle", "single"] as const;
+const CHAIN_METHODS = [
+	"select",
+	"is",
+	"order",
+	"limit",
+	"or",
+	"eq",
+	"in",
+	"not",
+	"maybeSingle",
+	"single",
+	"range",
+] as const;
 
 /**
  * Supabase のクエリビルダーを模す: どのフィルターを挟んでも await でテーブルごとの結果を返す。
@@ -30,14 +43,16 @@ function fakeSupabase(tables: Record<string, TableResult>, rpc: Record<string, T
 		if (!result) throw new Error(`unexpected table: ${table}`);
 		return awaitableChain(result);
 	});
-	const rpcFn = vi.fn((name: string) => {
-		// ブロックの除外（141 の get_blocked_user_ids）はこのテストの対象外。
-		// 個別に指定されていなければ「ブロック無し」として扱う。
-		if (name === "get_blocked_user_ids" && !rpc[name]) return Promise.resolve({ data: [], error: null });
-		const result = rpc[name];
-		if (!result) throw new Error(`unexpected rpc: ${name}`);
-		return Promise.resolve(result);
-	});
+	const rpcFn = vi.fn(
+		chainableRpc((name: string) => {
+			// ブロックの除外（141 の get_blocked_user_ids）はこのテストの対象外。
+			// 個別に指定されていなければ「ブロック無し」として扱う。
+			if (name === "get_blocked_user_ids" && !rpc[name]) return Promise.resolve({ data: [], error: null });
+			const result = rpc[name];
+			if (!result) throw new Error(`unexpected rpc: ${name}`);
+			return Promise.resolve(result);
+		}),
+	);
 	return { from, rpc: rpcFn } as unknown as SupabaseClient<Database>;
 }
 
@@ -221,7 +236,7 @@ describe("getRoomPostsAfter（#320）", () => {
 			}
 			return chain;
 		});
-		const rpc = vi.fn(async () => ({ data: [], error: null }));
+		const rpc = vi.fn(chainableRpc(async () => ({ data: [], error: null })));
 		return { client: { from, rpc } as unknown as SupabaseClient<Database>, calls };
 	}
 

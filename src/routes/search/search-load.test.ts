@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { chainableRpc } from "../../test/chainable-rpc.ts";
 
 vi.mock("#lib/server/queries.ts", async (importOriginal) => {
 	const original = await importOriginal<typeof import("#lib/server/queries.ts")>();
@@ -27,7 +28,7 @@ function fakeSupabase(anime: TableResult, overrides: Record<string, TableResult>
 		const result = results[table];
 		if (!result) throw new Error(`unexpected table: ${table}`);
 		const chain = Object.assign(Promise.resolve(result), {}) as Promise<unknown> & Record<string, unknown>;
-		for (const method of ["select", "or", "ilike", "eq", "order", "limit"]) {
+		for (const method of ["select", "or", "ilike", "eq", "order", "limit", "range"]) {
 			chain[method] = (...args: unknown[]) => {
 				calls.push({ table, method, args });
 				return chain;
@@ -35,7 +36,7 @@ function fakeSupabase(anime: TableResult, overrides: Record<string, TableResult>
 		}
 		return chain;
 	});
-	const rpc = vi.fn(async () => ({ data: [], error: null }));
+	const rpc = vi.fn(chainableRpc(async () => ({ data: [], error: null })));
 	return { client: { from, rpc }, calls };
 }
 

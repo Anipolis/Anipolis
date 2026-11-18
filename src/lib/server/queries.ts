@@ -295,12 +295,35 @@ export async function getBlockedUserIds(
 	userId: string | null,
 ): Promise<Set<string>> {
 	if (!userId) return new Set();
-	const { data, error } = await supabase.rpc("get_blocked_user_ids");
+	const { rows, error } = await fetchAllPages<{ user_id: string }>((from, to) =>
+		supabase.rpc("get_blocked_user_ids").order("user_id").range(from, to),
+	);
 	if (error) {
 		console.error("getBlockedUserIds error:", error);
 		return new Set();
 	}
-	return new Set(((data ?? []) as { user_id: string }[]).map((row) => row.user_id));
+	return new Set(rows.map((row) => row.user_id));
+}
+
+/** 1回の取得の件数。本番の API の取得上限（max_rows = 1000）と同じにする */
+export const FETCH_ALL_PAGE_SIZE = 1000;
+
+/**
+ * 取得上限（max_rows）を超えても全件を読むため、range で区切って最後まで取る（#558）。
+ * 並びが毎回同じになるよう、呼び出し側で一意な順序（order）を付けること。
+ * 途中で失敗したら、それまでの行と error を返す
+ */
+export async function fetchAllPages<T>(
+	fetchPage: (from: number, to: number) => PromiseLike<{ data: unknown; error: unknown }>,
+): Promise<{ rows: T[]; error: unknown }> {
+	const rows: T[] = [];
+	for (let from = 0; ; from += FETCH_ALL_PAGE_SIZE) {
+		const { data, error } = await fetchPage(from, from + FETCH_ALL_PAGE_SIZE - 1);
+		if (error) return { rows, error };
+		const page = (data ?? []) as T[];
+		rows.push(...page);
+		if (page.length < FETCH_ALL_PAGE_SIZE) return { rows, error: null };
+	}
 }
 
 /** 自分がブロックした相手の一覧（設定画面用。自分をブロックしている相手は含めない） */
@@ -308,21 +331,25 @@ export async function getBlockedProfiles(
 	supabase: SupabaseClient<Database>,
 	userId: string,
 ): Promise<(ProfileSummary & { blocked_at: string })[]> {
-	const { data, error } = await supabase
-		.from("user_blocks")
-		.select(
-			"created_at, blocked:profiles!user_blocks_blocked_id_fkey ( id, username, display_name, avatar_url, bio )",
-		)
-		.eq("blocker_id", userId)
-		.order("created_at", { ascending: false });
+	type BlockRow = { created_at: string; blocked: ProfileSummary | ProfileSummary[] | null };
+	const { rows, error } = await fetchAllPages<BlockRow>((from, to) =>
+		supabase
+			.from("user_blocks")
+			.select(
+				"created_at, blocked:profiles!user_blocks_blocked_id_fkey ( id, username, display_name, avatar_url, bio )",
+			)
+			.eq("blocker_id", userId)
+			.order("created_at", { ascending: false })
+			.order("blocked_id")
+			.range(from, to),
+	);
 
 	if (error) {
 		console.error("getBlockedProfiles error:", error);
 		return [];
 	}
 
-	type BlockRow = { created_at: string; blocked: ProfileSummary | ProfileSummary[] | null };
-	return ((data ?? []) as unknown as BlockRow[]).flatMap((row) => {
+	return rows.flatMap((row) => {
 		const profile = Array.isArray(row.blocked) ? row.blocked[0] : row.blocked;
 		return profile ? [{ ...profile, blocked_at: row.created_at }] : [];
 	});
@@ -355,12 +382,14 @@ function getBlockedUserIdsCached(supabase: SupabaseClient<Database>, userId: str
 /** 自分がミュートした相手の ID（191）。ミュートは片方向なので、相手からのミュートは関係ない */
 export async function getMutedUserIds(supabase: SupabaseClient<Database>, userId: string | null): Promise<Set<string>> {
 	if (!userId) return new Set();
-	const { data, error } = await supabase.from("user_mutes").select("muted_id").eq("muter_id", userId);
+	const { rows, error } = await fetchAllPages<{ muted_id: string }>((from, to) =>
+		supabase.from("user_mutes").select("muted_id").eq("muter_id", userId).order("muted_id").range(from, to),
+	);
 	if (error) {
 		console.error("getMutedUserIds error:", error);
 		return new Set();
 	}
-	return new Set((data ?? []).map((row) => row.muted_id));
+	return new Set(rows.map((row) => row.muted_id));
 }
 
 /** 自分がミュートした相手の一覧（設定画面用） */
@@ -368,19 +397,25 @@ export async function getMutedProfiles(
 	supabase: SupabaseClient<Database>,
 	userId: string,
 ): Promise<(ProfileSummary & { muted_at: string })[]> {
-	const { data, error } = await supabase
-		.from("user_mutes")
-		.select("created_at, muted:profiles!user_mutes_muted_id_fkey ( id, username, display_name, avatar_url, bio )")
-		.eq("muter_id", userId)
-		.order("created_at", { ascending: false });
+	type MuteRow = { created_at: string; muted: ProfileSummary | ProfileSummary[] | null };
+	const { rows, error } = await fetchAllPages<MuteRow>((from, to) =>
+		supabase
+			.from("user_mutes")
+			.select(
+				"created_at, muted:profiles!user_mutes_muted_id_fkey ( id, username, display_name, avatar_url, bio )",
+			)
+			.eq("muter_id", userId)
+			.order("created_at", { ascending: false })
+			.order("muted_id")
+			.range(from, to),
+	);
 
 	if (error) {
 		console.error("getMutedProfiles error:", error);
 		return [];
 	}
 
-	type MuteRow = { created_at: string; muted: ProfileSummary | ProfileSummary[] | null };
-	return ((data ?? []) as unknown as MuteRow[]).flatMap((row) => {
+	return rows.flatMap((row) => {
 		const profile = Array.isArray(row.muted) ? row.muted[0] : row.muted;
 		return profile ? [{ ...profile, muted_at: row.created_at }] : [];
 	});
@@ -736,14 +771,8 @@ export async function getNotifications(
 	limit = 50,
 	types?: readonly string[],
 ): Promise<Notification[]> {
-	// ブロック相手からの通知は、ブロック前に作られた行も含めて出さない。
-	// 取得上限を無駄にしないよう、絞り込みはクエリ側で行う。
-	const [blockedUserIds, mutedUserIds] = await Promise.all([
-		getBlockedUserIdsCached(supabase, userId),
-		getMutedUserIdsCached(supabase, userId),
-	]);
-	const hiddenActorIds = new Set([...blockedUserIds, ...mutedUserIds]);
-
+	// ミュート・ブロック相手からの通知（ブロック前に作られた行も含む）は、
+	// notifications の RLS（206）で読めないので、ここでは絞らない（#558）
 	let query = supabase
 		.from("notifications")
 		.select(`
@@ -811,11 +840,6 @@ export async function getNotifications(
 		query = query.in("type", types as string[]);
 	}
 
-	if (hiddenActorIds.size > 0) {
-		// NOT IN は NULL を落とすため、actor_id が NULL のシステム通知（放送・トレード成立）は明示的に残す
-		query = query.or(`actor_id.is.null,actor_id.not.in.(${[...hiddenActorIds].join(",")})`);
-	}
-
 	const { data, error } = await query;
 
 	// 取得の失敗を「通知はありません」と見せない（#262）
@@ -875,8 +899,9 @@ export async function getNotifications(
  * 未読通知数を返す（ナビゲーションバッジ用）
  */
 export async function getUnreadNotificationCount(supabase: SupabaseClient<Database>, userId: string): Promise<number> {
-	const mutedUserIds = await getMutedUserIdsCached(supabase, userId);
-	let query = supabase
+	// ミュート・ブロックした相手からの通知は一覧に出さないので、未読にも数えない。
+	// 絞り込みは notifications の RLS（206）が行う（#558）
+	const { count } = await supabase
 		.from("notifications")
 		.select("id", { count: "exact", head: true })
 		.eq("recipient_id", userId)
@@ -884,11 +909,6 @@ export async function getUnreadNotificationCount(supabase: SupabaseClient<Databa
 		// 181 より前のマイリスト通知（フォロー中の人の動き）は、もう画面に出さないので数えない。
 		// 放送前のお知らせ（broadcast）は通知ではなくカレンダーに出すので数えない
 		.not("type", "in", "(broadcast,mylist_status)");
-	// ミュートした相手からの通知は一覧に出さないので、未読にも数えない（191）
-	if (mutedUserIds.size > 0) {
-		query = query.or(`actor_id.is.null,actor_id.not.in.(${[...mutedUserIds].join(",")})`);
-	}
-	const { count } = await query;
 
 	return count ?? 0;
 }

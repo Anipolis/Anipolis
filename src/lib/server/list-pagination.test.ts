@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
 import type { Database } from "#lib/supabase/database.types.ts";
 import type { RawPost } from "#lib/types.ts";
+import { chainableRpc } from "../../test/chainable-rpc.ts";
 import {
 	getBookmarkedPostsPage,
 	getLikedPostsPage,
@@ -12,7 +13,7 @@ import {
 
 type TableResult = { data: unknown; error: { message: string } | null };
 
-const CHAIN_METHODS = ["select", "is", "order", "limit", "or", "eq", "in", "not", "filter", "neq"] as const;
+const CHAIN_METHODS = ["select", "is", "order", "limit", "or", "eq", "in", "not", "filter", "neq", "range"] as const;
 
 /** await でテーブルの結果を返すクエリビルダーの模造。呼ばれたフィルターは calls に残す */
 function awaitableChain(result: TableResult, calls: string[]) {
@@ -40,10 +41,12 @@ function fakeSupabase(tables: Record<string, TableResult[]>) {
 		queueMicrotask(() => calls[table]?.push(...tableCalls));
 		return chain;
 	});
-	const rpc = vi.fn(async (name: string) => {
-		if (name === "get_post_counts" || name === "get_blocked_user_ids") return { data: [], error: null };
-		throw new Error(`unexpected rpc: ${name}`);
-	});
+	const rpc = vi.fn(
+		chainableRpc(async (name: string) => {
+			if (name === "get_post_counts" || name === "get_blocked_user_ids") return { data: [], error: null };
+			throw new Error(`unexpected rpc: ${name}`);
+		}),
+	);
 	return { client: { from, rpc } as unknown as SupabaseClient<Database>, calls };
 }
 
