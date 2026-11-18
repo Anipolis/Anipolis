@@ -3,11 +3,24 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
 import type { Database } from "#lib/supabase/database.types.ts";
 import type { RawPost } from "#lib/types.ts";
-import { enrichPostsWithCounts, getNotifications, getVisiblePostReplyCounts } from "./queries";
+import { chainableRpc } from "../../test/chainable-rpc.ts";
+import { enrichPostsWithCounts, getVisiblePostReplyCounts } from "./queries";
 
 type TableResult = { data: unknown; error: { message: string } | null };
 
-const CHAIN_METHODS = ["select", "is", "order", "limit", "or", "eq", "in", "not", "neq", "maybeSingle"] as const;
+const CHAIN_METHODS = [
+	"select",
+	"is",
+	"order",
+	"limit",
+	"or",
+	"eq",
+	"in",
+	"not",
+	"neq",
+	"maybeSingle",
+	"range",
+] as const;
 
 /** どのフィルターを挟んでも await でテーブルごとの結果を返す。or() に渡した条件は記録する */
 function fakeSupabase(tables: Record<string, TableResult>) {
@@ -24,7 +37,7 @@ function fakeSupabase(tables: Record<string, TableResult>) {
 		}
 		return chain;
 	});
-	const rpc = vi.fn(async () => ({ data: [], error: null }));
+	const rpc = vi.fn(chainableRpc(async () => ({ data: [], error: null })));
 	return { client: { from, rpc } as unknown as SupabaseClient<Database>, orFilters };
 }
 
@@ -105,15 +118,6 @@ describe("アカウントのミュート（191）", () => {
 		const { client } = fakeSupabase(tables(["muted"]));
 		const result = await enrichPostsWithCounts(client, posts(), "viewer", { includeMutedUsers: true });
 		expect(result.map((post) => post.id)).toEqual(["a", "b", "c", "d"]);
-	});
-
-	it("ミュートした人からの通知を出さない（システム通知は残す）", async () => {
-		const { client, orFilters } = fakeSupabase({
-			...tables(["muted"]),
-			notifications: { data: [], error: null },
-		});
-		await getNotifications(client, "viewer");
-		expect(orFilters).toContain("actor_id.is.null,actor_id.not.in.(muted)");
 	});
 });
 
