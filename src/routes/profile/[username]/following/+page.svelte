@@ -1,6 +1,8 @@
 <script lang="ts">
 import UserAvatar from "#lib/components/UserAvatar.svelte";
 import UserCardSkeleton from "#lib/components/UserCardSkeleton.svelte";
+import { timelineCursorHref } from "#lib/timeline-cursor.ts";
+import { page } from "$app/state";
 import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();
@@ -33,7 +35,7 @@ const displayName = $derived(profile.display_name ?? profile.username);
 			<p class="page-subtitle">{data.followCounts.following}人</p>
 		</div>
 
-		{#await data.following}
+		{#await data.list}
 			<div class="posts-loading-spinner" role="status" aria-label="読み込み中">
 				<div class="spinner" aria-hidden="true"></div>
 				<span>読み込み中…</span>
@@ -41,14 +43,18 @@ const displayName = $derived(profile.display_name ?? profile.username);
 			{#each { length: 5 } as _, i (i)}
 				<UserCardSkeleton />
 			{/each}
-		{:then following}
-			{#if following.length === 0}
+		{:then list}
+			{#if list.failed}
+				<div class="empty-state" role="alert">
+					<p>一覧を読み込めませんでした。時間をおいて開き直してください</p>
+				</div>
+			{:else if list.users.length === 0 && !list.nextCursor}
 				<div class="empty-state">
-					<p>まだフォローしているユーザーがいません</p>
+					<p>{data.isContinuation ? "これより前はいません" : "まだフォローしているユーザーがいません"}</p>
 				</div>
 			{:else}
 				<div class="user-list">
-					{#each following as user (user.id)}
+					{#each list.users as user (user.id)}
 						<a href="/profile/{user.username}" class="user-card">
 							<UserAvatar src={user.avatar_url} username={user.username} size="md" />
 							<div class="user-info">
@@ -61,6 +67,9 @@ const displayName = $derived(profile.display_name ?? profile.username);
 						</a>
 					{/each}
 				</div>
+				{#if list.nextCursor}
+					<a href={timelineCursorHref(page.url, list.nextCursor)} class="load-more-btn">さらに読み込む</a>
+				{/if}
 			{/if}
 		{/await}
 	</main>
@@ -141,6 +150,22 @@ const displayName = $derived(profile.display_name ?? profile.username);
 	font-size: 0.82rem;
 	color: var(--color-text-muted);
 	margin-bottom: 4px;
+}
+
+/* プロフィールの一覧の「さらに読み込む」と同じ見た目 */
+.load-more-btn {
+	display: block;
+	padding: 14px 16px;
+	text-align: center;
+	font-size: 0.9rem;
+	font-weight: 500;
+	color: var(--color-accent);
+	text-decoration: none;
+	transition: background 0.12s;
+}
+
+.load-more-btn:hover {
+	background: color-mix(in srgb, var(--color-accent) 6%, transparent);
 }
 
 .user-bio {

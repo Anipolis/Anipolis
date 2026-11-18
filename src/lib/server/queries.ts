@@ -2191,36 +2191,62 @@ function toAdminReport(
 	};
 }
 
-export async function getFollowerProfiles(
-	supabase: SupabaseClient<Database>,
-	profileId: string,
-	viewerId: string | null = null,
-): Promise<ProfileSummary[]> {
-	const { data: follows } = await supabase.from("follows").select("follower_id").eq("following_id", profileId);
-	const blockedUserIds = await getBlockedUserIdsCached(supabase, viewerId);
-	const ids = (follows ?? []).map((r) => r.follower_id).filter((id) => !blockedUserIds.has(id));
-	if (ids.length === 0) return [];
-	const { data } = await supabase
-		.from("profiles")
-		.select("id, username, display_name, avatar_url, bio")
-		.in("id", ids);
-	return (data ?? []) as ProfileSummary[];
-}
+/** フォロワー・フォロー中の一覧の1ページの人数（#244） */
+export const FOLLOW_LIST_PAGE_SIZE = 50;
 
-export async function getFollowingProfiles(
+export type FollowListPage = { users: ProfileSummary[]; nextCursor: TimelineCursor | null };
+
+const FOLLOW_LIST_COLUMNS = {
+	followers: {
+		filterColumn: "following_id",
+		otherColumn: "follower_id",
+		embed: "user:profiles!follows_follower_id_fkey ( id, username, display_name, avatar_url, bio )",
+	},
+	following: {
+		filterColumn: "follower_id",
+		otherColumn: "following_id",
+		embed: "user:profiles!follows_following_id_fkey ( id, username, display_name, avatar_url, bio )",
+	},
+} as const;
+
+/**
+ * フォロワー（followers）・フォロー中（following）の一覧を、フォローした日時の新しい順に1ページずつ返す（#244）。
+ * 以前は follows の ID を全件読んで profiles の in 句に並べていたので、人数に比例して URL と応答が膨らみ、並びも決まっていなかった。
+ * follows と profiles は埋め込みで1回で取り、（created_at, 相手の ID）のカーソルで続きを読む（207 のインデックス）。
+ * 見ている人とブロック関係にある相手は外す。続きの目印は外す前の取得行から決める（外しても先へ進める）
+ */
+export async function getFollowListPage(
 	supabase: SupabaseClient<Database>,
+	direction: "followers" | "following",
 	profileId: string,
 	viewerId: string | null = null,
-): Promise<ProfileSummary[]> {
-	const { data: follows } = await supabase.from("follows").select("following_id").eq("follower_id", profileId);
-	const blockedUserIds = await getBlockedUserIdsCached(supabase, viewerId);
-	const ids = (follows ?? []).map((r) => r.following_id).filter((id) => !blockedUserIds.has(id));
-	if (ids.length === 0) return [];
-	const { data } = await supabase
-		.from("profiles")
-		.select("id, username, display_name, avatar_url, bio")
-		.in("id", ids);
-	return (data ?? []) as ProfileSummary[];
+	cursor?: TimelineCursor,
+	limit = FOLLOW_LIST_PAGE_SIZE,
+): Promise<FollowListPage> {
+	const { filterColumn, otherColumn, embed } = FOLLOW_LIST_COLUMNS[direction];
+	let query = supabase
+		.from("follows")
+		.select(`created_at, ${otherColumn}, ${embed}`)
+		.eq(filterColumn, profileId)
+		.order("created_at", { ascending: false })
+		.order(otherColumn, { ascending: false })
+		.limit(limit);
+	if (cursor) query = query.or(timelineCursorFilter(cursor, otherColumn));
+
+	const [{ data, error }, blockedUserIds] = await Promise.all([query, getBlockedUserIdsCached(supabase, viewerId)]);
+	if (error) failQuery(`getFollowListPage(${direction})`, error);
+
+	type FollowRow = { created_at: string; user: ProfileSummary | ProfileSummary[] | null } & Record<string, unknown>;
+	const rows = (data ?? []) as unknown as FollowRow[];
+	const users = rows.flatMap((row) => {
+		const user = Array.isArray(row.user) ? row.user[0] : row.user;
+		return user && !blockedUserIds.has(user.id) ? [user] : [];
+	});
+	const nextCursor = buildTimelineNextCursor(rows, limit, (row) => ({
+		createdAt: row.created_at,
+		id: String(row[otherColumn]),
+	}));
+	return { users, nextCursor };
 }
 
 type ProfileRepostContext = {
