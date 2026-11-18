@@ -24,6 +24,7 @@ Get-Content .sync-logs\last-daily-sync.log -Tail 20
 - 既定ではログオン中のみ実行される（Interactive）。ログオン前にも走らせたい場合は、**管理者として起動した PowerShell** で `register-tasks.ps1` を実行すると S4U（パスワード保存なしで「ログオンの有無にかかわらず実行」）で登録される。
 - PC が起動していない時刻の実行は、次回起動時に繰り越される（`StartWhenAvailable`）。
 - ログは `.sync-logs/`（gitignore 済み）。60 日で自動削除。`last-*.log` が直近結果。
+- 週次の Jikan は手元の jikan-rest（Docker、既定は `D:\tmp\jikan-rest`、`JIKAN_REST_DIR` で変更可）から取る。公開 Jikan は 2026-10 から停止中（#595）。動いていなければ週次の最初に Docker Desktop と jikan-rest を起動し（2 分ほどかかる）、終わったらコンテナだけ止める。Docker Desktop はログオン中でないと起動できないので、S4U で登録した場合にログオン前に走ると公開 Jikan に落ちる（Jikan の失敗は警告のみ）。
 
 ## 含めていないもの
 
