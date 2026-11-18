@@ -28,6 +28,7 @@ import { failQuery } from "#lib/server/query-failure.ts";
 import { roomHashtag } from "#lib/server/room-hashtag.ts";
 import { parseTimelineCursor } from "#lib/timeline-cursor.ts";
 import type { AnimeExchangeShare, FollowSuggestion, Post } from "#lib/types.ts";
+import { isWithinWelcomePeriod } from "#lib/welcome.ts";
 import type { Actions, PageServerLoad } from "./$types";
 
 // どちらも CW を含む。CW を外したフォールバックはネタバレ本文を出してしまうので用意しない（#317）
@@ -132,7 +133,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 			// 視聴中の作品は投稿欄の補助。読めなくても投稿欄は出す（失敗は failQuery がログに残す）
 			user ? getUserAnimeList(supabase, user.id, "watching").catch(() => []) : Promise.resolve([]),
 			user ? getOpenBroadcastRoomSessions(supabase, { kind: "episode" }) : Promise.resolve([]),
-			user ? getWelcome(user.id) : Promise.resolve(NO_WELCOME),
+			user ? getWelcome(user.id, user.created_at) : Promise.resolve(NO_WELCOME),
 		] as const);
 
 	// コレクションのシェア（193）。シェアできるのは自分の公開コレクションだけ（投稿時は DB のトリガーも確かめる）
@@ -148,9 +149,11 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		return toCollectionShare(data);
 	}
 
-	// はじめての人への案内（ホーム）。まだ誰もフォローしていないか、マイリストが空の人に出す。
-	// 誰もフォローしていない人には、フォローのおすすめ（共通の作品）も添える。読めなければ案内しない
-	async function getWelcome(userId: string): Promise<HomeWelcome> {
+	// はじめての人への案内（ホーム）。登録から 30 日以内で、まだ誰もフォローしていないか、マイリストが空の人に出す。
+	// 誰もフォローしていない人には、フォローのおすすめ（共通の作品）も添える。読めなければ案内しない。
+	// プロフィール未設定の案内は登録日に関係なく出す（+page.svelte の profileIncomplete）
+	async function getWelcome(userId: string, createdAt: string | undefined): Promise<HomeWelcome> {
+		if (!isWithinWelcomePeriod(createdAt)) return NO_WELCOME;
 		const [following, list] = await Promise.all([
 			supabase.from("follows").select("following_id", { count: "exact", head: true }).eq("follower_id", userId),
 			supabase.from("user_anime_list").select("anime_id", { count: "exact", head: true }).eq("user_id", userId),
