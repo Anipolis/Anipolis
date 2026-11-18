@@ -10,21 +10,103 @@
 # それ以外の外部サイト巡回系（enrich:jikan-links / collect:official-x / collect:wayback）は含めない。必要時に手動で実行する。
 . (Join-Path $PSScriptRoot "common.ps1")
 
+# 手元の jikan-rest（Docker）。置き場所は JIKAN_REST_DIR で変えられる
+$script:LocalJikanUrl = "http://localhost:8080/v4"
+$script:JikanRestDir = if ($env:JIKAN_REST_DIR) { $env:JIKAN_REST_DIR } else { "D:\tmp\jikan-rest" }
+
+function Test-LocalJikan {
+    try {
+        Invoke-WebRequest -Uri ($script:LocalJikanUrl + "/anime/1") -UseBasicParsing -TimeoutSec 10 | Out-Null
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+# docker は警告（compose の version 属性など）も stderr に出す。common.ps1 の $ErrorActionPreference = "Stop" の
+# ままだと、それが終了エラーになって週次全体が止まる（Invoke-Step と同じ理由）。下の関数では関数内だけ Continue にする
+function Write-DockerOutput {
+    process { if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.ToString() } else { $_ } }
+}
+
+function Test-DockerEngine {
+    $ErrorActionPreference = "Continue"
+    # エンジンが止まっているときの stderr はログに要らない
+    & docker info --format "{{.ServerVersion}}" 2>$null | Out-Null
+    return ($LASTEXITCODE -eq 0)
+}
+
+# 動いていなければ Docker Desktop と jikan-rest を起動する。このスクリプトがコンテナを起動したときだけ $true
+# （終わったらコンテナを止める。Docker Desktop 自体は止めない）
+function Start-LocalJikan {
+    $ErrorActionPreference = "Continue"
+    if (Test-LocalJikan) { return $false }
+    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+        Write-Host "docker is not installed; skipping local jikan-rest"
+        return $false
+    }
+    if (-not (Test-Path (Join-Path $script:JikanRestDir "docker-compose.yml"))) {
+        Write-Host ("jikan-rest not found at " + $script:JikanRestDir)
+        return $false
+    }
+    if (-not (Test-DockerEngine)) {
+        $desktop = Join-Path $env:ProgramFiles "Docker\Docker\Docker Desktop.exe"
+        if (-not (Test-Path $desktop)) {
+            Write-Host "Docker Desktop is not installed; skipping local jikan-rest"
+            return $false
+        }
+        Write-Host "Starting Docker Desktop"
+        Start-Process -FilePath $desktop | Out-Null
+        $deadline = (Get-Date).AddMinutes(5)
+        while (-not (Test-DockerEngine)) {
+            if ((Get-Date) -gt $deadline) {
+                Write-Host "Docker engine did not start within 5 minutes"
+                return $false
+            }
+            Start-Sleep -Seconds 5
+        }
+    }
+    Write-Host "Starting local jikan-rest"
+    & docker compose --project-directory $script:JikanRestDir up -d 2>&1 | Write-DockerOutput | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host ("docker compose up failed (exit " + $LASTEXITCODE + ")")
+        return $false
+    }
+    # 一部だけ起動していることがあるので、ここから先は失敗しても止める対象にする
+    $deadline = (Get-Date).AddMinutes(5)
+    while (-not (Test-LocalJikan)) {
+        if ((Get-Date) -gt $deadline) {
+            Write-Host "Local jikan-rest did not respond within 5 minutes"
+            return $true
+        }
+        Start-Sleep -Seconds 5
+    }
+    return $true
+}
+
+function Stop-LocalJikan {
+    $ErrorActionPreference = "Continue"
+    Write-Host "Stopping local jikan-rest"
+    & docker compose --project-directory $script:JikanRestDir stop 2>&1 | Write-DockerOutput | Out-Host
+}
+
 Start-SyncLog -Name "weekly-sync"
 $failed = 0
+$startedJikan = $false
 try {
     # 日次が動いていない場合にも気づけるよう、最終成功から 2 日を超えたら知らせる
     Test-StaleSync -Name "daily-sync" -MaxDays 2
     # 公開 Jikan は 2026-10 から落ちたまま（#595）。手元の jikan-rest（d:\tmp\jikan-rest、Docker）が
     # 動いていればそちらから取る。どちらも無ければ Jikan は失敗するが、シーズンの作品一覧は
     # MAL 公式 API の記録でも決まるので、カタログの更新は止まらない。
+    # 動いていなければ Docker Desktop と jikan-rest をここで起動し、終わったらコンテナを止める（#595）
     if (-not $env:JIKAN_BASE_URL) {
-        try {
-            Invoke-WebRequest -Uri "http://localhost:8080/v4/anime/1" -UseBasicParsing -TimeoutSec 5 | Out-Null
-            $env:JIKAN_BASE_URL = "http://localhost:8080/v4"
-            Write-Host "Using local jikan-rest at http://localhost:8080/v4"
-        } catch {
-            Write-Host "Local jikan-rest is not running; using public Jikan"
+        $startedJikan = Start-LocalJikan
+        if (Test-LocalJikan) {
+            $env:JIKAN_BASE_URL = $script:LocalJikanUrl
+            Write-Host ("Using local jikan-rest at " + $script:LocalJikanUrl)
+        } else {
+            Write-Host "Local jikan-rest is not available; using public Jikan"
         }
     }
     foreach ($t in (Get-SeasonTargets)) {
@@ -93,6 +175,7 @@ try {
     Write-Host ("!!! unhandled: " + $_.Exception.Message)
     $failed = 1
 } finally {
+    if ($startedJikan) { Stop-LocalJikan }
     Stop-SyncLog -ExitCode $failed
 }
 exit $failed
