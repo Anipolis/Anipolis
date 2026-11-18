@@ -39,7 +39,7 @@ function extras(initialAnime: typeof QUOTED_ANIME | null) {
 		initialExchangeShare: null,
 		initialContent: "",
 		watchingAnime: [],
-		welcome: { show: false, listEmpty: false, suggestions: [] },
+		welcome: { show: false, listEmpty: false, followsNobody: false, suggestions: [] },
 	};
 }
 

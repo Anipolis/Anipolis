@@ -191,6 +191,7 @@ $effect(() => {
 					? `/profile/${data.profile.username}?edit=profile`
 					: null}
 				listEmpty={pageExtras.value?.welcome.listEmpty ?? false}
+				followsNobody={pageExtras.value?.welcome.followsNobody ?? false}
 				suggestions={pageExtras.value?.welcome.suggestions ?? []}
 				suggestionsElsewhere={data.tab === "following"}
 			/>

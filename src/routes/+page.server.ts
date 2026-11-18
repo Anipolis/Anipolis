@@ -38,10 +38,11 @@ const POSTS_SELECT_BASE = buildPostCardSelect({ exchangeShare: false });
 interface HomeWelcome {
 	show: boolean;
 	listEmpty: boolean;
+	followsNobody: boolean;
 	suggestions: FollowSuggestion[];
 }
 
-const NO_WELCOME: HomeWelcome = { show: false, listEmpty: false, suggestions: [] };
+const NO_WELCOME: HomeWelcome = { show: false, listEmpty: false, followsNobody: false, suggestions: [] };
 
 export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSession }, parent }) => {
 	// parent()を早めに発火（まだawaitしない）し、キャッシュ済みのsafeGetSessionでuserを並列取得
@@ -161,6 +162,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, safeGetSes
 		return {
 			show: true,
 			listEmpty,
+			followsNobody,
 			suggestions: followsNobody ? await getFollowSuggestions(supabase, 5) : [],
 		};
 	}

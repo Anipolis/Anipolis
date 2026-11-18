@@ -6,6 +6,8 @@ import type { FollowSuggestion } from "#lib/types.ts";
 /**
  * はじめての人への案内（ホーム）。まだ誰もフォローしていないか、マイリストが空の人や、
  * プロフィール（表示名・アイコン）が未設定の人に、最初にやることを示す。
+ * 出すのは済ませれば消える初期設定だけ（放送・実況ルームはサイドバーから行けるので案内しない）。
+ * 出す項目が 1 つも無ければ、カードごと出さない。
  * 誰もフォローしていない人には、フォローのおすすめ（共通の作品）をその場でフォローできる形で出す。
  * × で閉じたら、この端末では出さない（localStorage。読めない環境では毎回出る）
  */
@@ -15,13 +17,29 @@ interface Props {
 	profileEditHref?: string | null;
 	/** マイリストが空なら、作品を探す案内を出す */
 	listEmpty: boolean;
+	/** まだ誰もフォローしていなければ、フォローの案内（おすすめ、無ければ検索）を出す */
+	followsNobody: boolean;
 	/** フォローのおすすめ。誰もフォローしていない人にだけ渡る */
 	suggestions: FollowSuggestion[];
 	/** おすすめを同じ画面の別の場所（フォロー中タブの空の表示）に出しているときは、ここでは出さない */
 	suggestionsElsewhere?: boolean;
 }
 
-let { userId, profileEditHref = null, listEmpty, suggestions, suggestionsElsewhere = false }: Props = $props();
+let {
+	userId,
+	profileEditHref = null,
+	listEmpty,
+	followsNobody,
+	suggestions,
+	suggestionsElsewhere = false,
+}: Props = $props();
+
+const followHere = $derived(followsNobody && !suggestionsElsewhere);
+const showSuggestions = $derived(followHere && suggestions.length > 0);
+// おすすめが出せないとき（ほかに見える人がいない等）だけ、検索へ送る
+const showSearch = $derived(followHere && suggestions.length === 0);
+const hasActions = $derived(Boolean(profileEditHref) || listEmpty || showSearch);
+const hasItems = $derived(hasActions || showSuggestions);
 
 const storageKey = $derived(`anipolis:welcome-dismissed:${userId}`);
 // 閉じたかどうかを読むまでは出さない（閉じた人に一瞬出てから消えるのを防ぐ）
@@ -45,7 +63,7 @@ function dismiss(): void {
 }
 </script>
 
-{#if visible}
+{#if visible && hasItems}
 	<section class="welcome-card" aria-labelledby="welcome-card-title">
 		<div class="welcome-card-header">
 			<h2 id="welcome-card-title">Anipolisへようこそ</h2>
@@ -53,32 +71,29 @@ function dismiss(): void {
 				<span class="i-lucide-x" aria-hidden="true"></span>
 			</button>
 		</div>
-		<div class="welcome-card-actions">
-			{#if profileEditHref}
-				<a href={profileEditHref} class="btn btn-secondary welcome-card-action">
-					<span class="i-lucide-user-pen" aria-hidden="true"></span>
-					アイコンと表示名を設定する
-				</a>
-			{/if}
-			{#if listEmpty}
-				<a href="/anime" class="btn btn-secondary welcome-card-action">
-					<span class="i-lucide-list-plus" aria-hidden="true"></span>
-					アニメを探してマイリストに追加
-				</a>
-			{/if}
-			<a href="/schedule" class="btn btn-secondary welcome-card-action">
-				<span class="i-lucide-tv" aria-hidden="true"></span>
-				今日の放送と実況ルームを見る
-			</a>
-			<!-- おすすめが出せないとき（ほかに見える人がいない等）だけ、検索へ送る -->
-			{#if suggestions.length === 0 && !suggestionsElsewhere}
-				<a href="/search" class="btn btn-secondary welcome-card-action">
-					<span class="i-lucide-user-search" aria-hidden="true"></span>
-					ユーザーを探してフォロー
-				</a>
-			{/if}
-		</div>
-		{#if suggestions.length > 0 && !suggestionsElsewhere}
+		{#if hasActions}
+			<div class="welcome-card-actions">
+				{#if profileEditHref}
+					<a href={profileEditHref} class="btn btn-secondary welcome-card-action">
+						<span class="i-lucide-user-pen" aria-hidden="true"></span>
+						アイコンと表示名を設定する
+					</a>
+				{/if}
+				{#if listEmpty}
+					<a href="/anime" class="btn btn-secondary welcome-card-action">
+						<span class="i-lucide-list-plus" aria-hidden="true"></span>
+						アニメを探してマイリストに追加
+					</a>
+				{/if}
+				{#if showSearch}
+					<a href="/search" class="btn btn-secondary welcome-card-action">
+						<span class="i-lucide-user-search" aria-hidden="true"></span>
+						ユーザーを探してフォロー
+					</a>
+				{/if}
+			</div>
+		{/if}
+		{#if showSuggestions}
 			<section class="welcome-card-suggestions" aria-labelledby="welcome-card-suggestions-title">
 				<h3 id="welcome-card-suggestions-title">フォローしてみませんか</h3>
 				{#if listEmpty}
@@ -153,7 +168,8 @@ function dismiss(): void {
 	text-decoration: none;
 }
 
-.welcome-card-suggestions {
+/* 上に案内のボタンがあるときだけ、区切り線を入れる */
+.welcome-card-actions + .welcome-card-suggestions {
 	margin-top: 16px;
 	padding-top: 12px;
 	border-top: 1px solid var(--color-border);
