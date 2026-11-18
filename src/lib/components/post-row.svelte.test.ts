@@ -105,13 +105,13 @@ describe("shared reaction rows", () => {
 		await tick();
 		target.querySelector<HTMLButtonElement>(".repost-menu-item-quote")?.click();
 		await tick();
-		const overlay = target.querySelector<HTMLElement>(".quote-modal-overlay");
-		if (!overlay) throw new Error("Missing quote modal");
-		const backdrop = overlay.querySelector<HTMLElement>(".modal-click-target");
-		if (!backdrop) throw new Error("Missing quote modal backdrop");
-		backdrop.click();
+		// 共通の Modal（<dialog>）では、カードの外（= <dialog> 自身）を押すと閉じる
+		const dialog = target.querySelector<HTMLDialogElement>("dialog:has(.quote-modal-card)");
+		if (!dialog) throw new Error("Missing quote modal");
+		dialog.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+		dialog.click();
 		await tick();
-		expect(target.querySelector(".quote-modal-overlay")).toBeNull();
+		expect(target.querySelector(".quote-modal-card")).toBeNull();
 		expect(goto).not.toHaveBeenCalled();
 	});
 	it("starts the composer on one line with its tools visible and a counter near the limit", async () => {

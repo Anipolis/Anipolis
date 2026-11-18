@@ -1,5 +1,6 @@
 <script lang="ts">
 import type { Post } from "#lib/types/post.ts";
+import Modal from "./Modal.svelte";
 
 interface Props {
 	post: Post;
@@ -176,21 +177,9 @@ function closeQuoteModal() {
 </article>
 
 {#if showQuoteModal}
-	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-		<button
-			type="button"
-			class="modal-click-target modal-click-layer"
-			tabindex="-1"
-			aria-label="閉じる"
-			onclick={closeQuoteModal}
-		></button>
+	<Modal onclose={closeQuoteModal} labelledby="quote-modal-title">
 		<div
-			class="modal-content-layer w-full max-w-lg rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl"
-			role="dialog"
-			aria-modal="true"
-			aria-labelledby="quote-modal-title"
-			tabindex="-1"
-			onkeydown={(e) => e.stopPropagation()}
+			class="w-full max-w-lg rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl"
 		>
 			<div class="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-3">
 				<h2 id="quote-modal-title" class="font-bold text-[var(--color-text)]">引用リポスト</h2>
@@ -235,5 +224,5 @@ function closeQuoteModal() {
 				</button>
 			</div>
 		</div>
-	</div>
+	</Modal>
 {/if}

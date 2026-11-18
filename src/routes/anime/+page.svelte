@@ -9,6 +9,7 @@ import {
 import AnimeCard from "#lib/components/AnimeCard.svelte";
 import AnimeRegisterForm from "#lib/components/AnimeRegisterForm.svelte";
 import InfoTip from "#lib/components/InfoTip.svelte";
+import Modal from "#lib/components/Modal.svelte";
 import MyListQuickEdit from "#lib/components/MyListQuickEdit.svelte";
 import SeoMeta from "#lib/components/SeoMeta.svelte";
 import { createDebouncedCommit } from "#lib/debounced-commit.ts";
@@ -344,15 +345,6 @@ function applyFilters() {
 	goto(qs ? `/anime?${qs}` : "/anime", { reset: false });
 	closeFilterSheet();
 }
-
-$effect(() => {
-	if (!filterSheetOpen) return;
-	const handler = (e: KeyboardEvent) => {
-		if (e.key === "Escape") closeFilterSheet();
-	};
-	window.addEventListener("keydown", handler);
-	return () => window.removeEventListener("keydown", handler);
-});
 
 $effect(() => {
 	const gMap = pendingGenreMap;
@@ -840,21 +832,8 @@ $effect(() => {
 	{/if}
 
 	{#if filterSheetOpen}
-		<div class="filter-sheet-overlay">
-			<button
-				type="button"
-				class="modal-click-target modal-click-layer"
-				tabindex="-1"
-				aria-label="閉じる"
-				onclick={closeFilterSheet}
-			></button>
-			<div
-				class="filter-sheet modal-content-layer"
-				role="dialog"
-				aria-modal="true"
-				aria-label="フィルター"
-				tabindex="-1"
-			>
+		<Modal onclose={closeFilterSheet} label="フィルター">
+			<div class="filter-sheet">
 				<div class="filter-sheet-header">
 					<span class="filter-sheet-title">フィルター</span>
 					<button type="button" class="filter-sheet-close" onclick={closeFilterSheet} aria-label="閉じる">
@@ -977,7 +956,7 @@ $effect(() => {
 					</button>
 				</div>
 			</div>
-		</div>
+		</Modal>
 	{/if}
 </div>
 
@@ -1544,26 +1523,12 @@ $effect(() => {
 	background: var(--accent);
 }
 
-/* ─── フィルターボトムシート ─── */
-.filter-sheet-overlay {
-	position: fixed;
-	inset: 0;
-	background: rgba(0, 0, 0, 0.45);
-	z-index: 1100;
-	display: flex;
-	align-items: flex-end;
-	backdrop-filter: blur(2px);
-	animation: overlay-fadein 0.2s ease;
-}
-@keyframes overlay-fadein {
-	from {
-		opacity: 0;
-	}
-	to {
-		opacity: 1;
-	}
-}
+/* ─── フィルターボトムシート（背景・最前面への表示は Modal の <dialog> が受け持つ。シートは画面の下端に付ける） ─── */
 .filter-sheet {
+	position: fixed;
+	right: 0;
+	bottom: 0;
+	left: 0;
 	background: var(--card-bg);
 	border-top: 1px solid var(--border);
 	border-radius: 22px 22px 0 0;

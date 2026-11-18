@@ -1,6 +1,6 @@
 <script lang="ts">
-import { trapFocus } from "#lib/actions/trapFocus.ts";
 import type { RoomExitSurveyComparisonWithX, RoomExitSurveyNextParticipation } from "#lib/types.ts";
+import Modal from "./Modal.svelte";
 
 type SurveyAnswers = {
 	overallRating: number;
@@ -99,15 +99,10 @@ function submit() {
 }
 </script>
 
-<div class="survey-backdrop" role="presentation">
-	<div
-		class="survey-modal"
-		use:trapFocus
-		role="dialog"
-		aria-modal="true"
-		aria-labelledby="exit-survey-title"
-		tabindex="-1"
-	>
+<!-- 書きかけの回答を失わないよう、Esc と背景のクリックでは閉じない（閉じるのは「スキップ」か「送信」だけ）。
+     それでもブラウザが閉じたとき（Esc の連打はブラウザが止めさせない）は、スキップと同じに扱う -->
+<Modal onclose={onSkip} dismissible={false} labelledby="exit-survey-title">
+	<div class="survey-modal">
 		<div class="survey-header">
 			<h2 id="exit-survey-title">ご参加ありがとうございました！</h2>
 			<p>
@@ -203,19 +198,9 @@ function submit() {
 			</button>
 		</div>
 	</div>
-</div>
+</Modal>
 
 <style>
-.survey-backdrop {
-	position: fixed;
-	inset: 0;
-	z-index: 1000;
-	display: grid;
-	place-items: center;
-	background: rgb(0 0 0 / 0.54);
-	padding: 16px;
-}
-
 .survey-modal {
 	display: flex;
 	width: min(640px, 100%);
@@ -414,7 +399,8 @@ function submit() {
 }
 
 @media (max-width: 560px) {
-	.survey-backdrop {
+	/* スマホでは下に寄せる（共通の Modal は中央寄せなので、この中身のときだけ下へ寄せる） */
+	:global(.modal):has(> .survey-modal) {
 		align-items: end;
 		padding: 10px;
 	}

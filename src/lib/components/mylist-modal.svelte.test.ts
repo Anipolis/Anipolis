@@ -39,6 +39,21 @@ function renderModal(props: { open: boolean; entry?: UserAnimeEntry | null; remo
 	return target;
 }
 
+/**
+ * ブラウザの Esc を再現する。happy-dom の <dialog> は Esc で cancel を出さないので、
+ * いちばん上（最後に開いた）の <dialog> に keydown → cancel を送り、止められなければ閉じる
+ */
+function pressEscape() {
+	const dialogs = document.querySelectorAll<HTMLDialogElement>("dialog[open]");
+	const top = dialogs[dialogs.length - 1];
+	if (!top) return;
+	top.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+	const cancel = new Event("cancel", { cancelable: true });
+	top.dispatchEvent(cancel);
+	if (!cancel.defaultPrevented) top.close();
+	flushSync();
+}
+
 function pressedStatus(target: HTMLElement) {
 	return target
 		.querySelector<HTMLButtonElement>(".status-grid button[aria-pressed='true']")
@@ -92,12 +107,12 @@ describe("MyListModal の「マイリストから外す」", () => {
 	it("ゴミ箱を押してもすぐには外さず、確認のポップアップを出す", () => {
 		const target = openWithRemove();
 		expect(removeSubmit(target)).toBeNull();
-		expect(target.querySelector("[role='alertdialog']")).toBeNull();
+		expect(target.querySelector(".confirm-dialog")).toBeNull();
 
 		target.querySelector<HTMLButtonElement>(".remove-button")?.click();
 		flushSync();
 		expect(removeSubmit(target)?.getAttribute("formaction")).toBe("?/removeWatchlist");
-		expect(target.querySelector("[role='alertdialog']")?.textContent).toContain("メモ");
+		expect(target.querySelector(".confirm-dialog")?.textContent).toContain("メモ");
 	});
 
 	it("入力欄の Enter で押される先頭の送信ボタンは、確認中も「保存する」", () => {
@@ -115,7 +130,7 @@ describe("MyListModal の「マイリストから外す」", () => {
 		expect(target.querySelector(".remove-button")).toBeNull();
 
 		const registered = openWithRemove();
-		const buttons = registered.querySelectorAll("[role='dialog'] button");
+		const buttons = registered.querySelectorAll(".modal-card button");
 		expect(buttons[buttons.length - 1]?.classList.contains("remove-button")).toBe(true);
 	});
 
@@ -143,21 +158,20 @@ describe("MyListModal の「マイリストから外す」", () => {
 		const openConfirm = () => {
 			target.querySelector<HTMLButtonElement>(".remove-button")?.click();
 			flushSync();
-			expect(target.querySelector("[role='alertdialog']")).not.toBeNull();
+			expect(target.querySelector(".confirm-dialog")).not.toBeNull();
 		};
 
 		openConfirm();
 		target.querySelector<HTMLButtonElement>(".confirm-cancel")?.click();
 		flushSync();
-		expect(target.querySelector("[role='alertdialog']")).toBeNull();
+		expect(target.querySelector(".confirm-dialog")).toBeNull();
 
 		openConfirm();
-		window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
-		flushSync();
-		expect(target.querySelector("[role='alertdialog']")).toBeNull();
+		pressEscape();
+		expect(target.querySelector(".confirm-dialog")).toBeNull();
 		expect(onclose).not.toHaveBeenCalled();
 
-		window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+		pressEscape();
 		expect(onclose).toHaveBeenCalledTimes(1);
 	});
 });
@@ -176,12 +190,12 @@ describe("MyListModal の開閉", () => {
 		for (let round = 1; round <= 3; round++) {
 			target.querySelector<HTMLButtonElement>(".open-modal")?.click();
 			flushSync();
-			expect(target.querySelector("[role='dialog']"), `${round}回目に開く`).not.toBeNull();
+			expect(target.querySelector("dialog"), `${round}回目に開く`).not.toBeNull();
 			expect(pressedStatus(target)).toBe("watching");
 
 			target.querySelector<HTMLButtonElement>(".cancel-button")?.click();
 			flushSync();
-			expect(target.querySelector("[role='dialog']"), `${round}回目に閉じる`).toBeNull();
+			expect(target.querySelector("dialog"), `${round}回目に閉じる`).toBeNull();
 		}
 	});
 });

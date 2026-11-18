@@ -1,8 +1,8 @@
 <script lang="ts">
-import { trapFocus } from "#lib/actions/trapFocus.ts";
 import ActivityFeed from "#lib/components/ActivityFeed.svelte";
 import FollowSuggestions from "#lib/components/FollowSuggestions.svelte";
 import LiveRoomsPanel from "#lib/components/LiveRoomsPanel.svelte";
+import Modal from "#lib/components/Modal.svelte";
 import PostCardSkeleton from "#lib/components/PostCardSkeleton.svelte";
 import PostComposer from "#lib/components/PostComposer.svelte";
 import PostRow from "#lib/components/PostRow.svelte";
@@ -67,17 +67,6 @@ let homeSidebarReady = $state(false);
 
 function closeModal() {
 	composeOpen.set(false);
-}
-
-/**
- * Escape でモーダルを閉じる（GitLab #12）。
- * 内側の作品選択ダイアログやメンション候補は自分で Escape を処理して伝播を止めるので、
- * ここまで届いた Escape は投稿モーダル自身を閉じてよい。
- */
-function handleModalKeydown(e: KeyboardEvent) {
-	if (e.key !== "Escape" || e.defaultPrevented) return;
-	e.preventDefault();
-	closeModal();
 }
 
 function loadMoreHref(lastCreatedAt: string, lastPostId: string): string {
@@ -340,78 +329,62 @@ $effect(() => {
 
 <!-- Mobile compose modal -->
 {#if $composeOpen && data.profile}
-	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<button
-		type="button"
-		class="compose-modal-backdrop modal-click-target"
-		tabindex="-1"
-		aria-label="投稿画面を閉じる"
-		onclick={closeModal}
-	></button>
 	<!--
-		ダイアログとして読み上げられるようにし、フォーカスを内部に閉じ込める（GitLab #12）。
-		trapFocus は開いた時に内部へフォーカスを移し、閉じた時に起点（FAB）へ戻す。
+		共通の Modal（<dialog>）で開く（#600）。フォーカスの閉じ込め・Esc・閉じたあと起点（FAB）へ戻すのは Modal に任せる。
+		内側の作品選択ダイアログやメンション候補は Esc を自分で処理して preventDefault するので、投稿画面までは閉じない。
 	-->
-	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-	<div
-		class="compose-modal"
-		role="dialog"
-		aria-modal="true"
-		aria-labelledby="compose-modal-title"
-		tabindex="-1"
-		use:trapFocus
-		onkeydown={handleModalKeydown}
-	>
-		<div class="compose-modal-header">
-			<h2 class="compose-modal-title" id="compose-modal-title">投稿する</h2>
-			<button type="button" class="compose-modal-close" onclick={closeModal} aria-label="閉じる">
-				<svg
-					width="20"
-					height="20"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<line x1="18" y1="6" x2="6" y2="18" />
-					<line x1="6" y1="6" x2="18" y2="18" />
-				</svg>
-			</button>
+	<Modal onclose={closeModal} labelledby="compose-modal-title">
+		<div class="compose-modal">
+			<div class="compose-modal-header">
+				<h2 class="compose-modal-title" id="compose-modal-title">投稿する</h2>
+				<button type="button" class="compose-modal-close" onclick={closeModal} aria-label="閉じる">
+					<svg
+						width="20"
+						height="20"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<line x1="18" y1="6" x2="6" y2="18" />
+						<line x1="6" y1="6" x2="18" y2="18" />
+					</svg>
+				</button>
+			</div>
+			<div class="compose-modal-body">
+				{#if pageExtras.value}
+					{@const extras = pageExtras.value}
+					<PostComposer
+						username={data.profile.username}
+						displayName={data.profile.display_name}
+						avatarUrl={data.profile.avatar_url}
+						initialAnime={extras.initialAnime}
+						initialContent={extras.initialContent}
+						initialExchangeId={extras.initialExchangeId}
+						initialExchangeShare={extras.initialExchangeShare}
+						initialCollectionShare={extras.initialCollectionShare?.id === clearedCollectionShareId
+							? null
+							: extras.initialCollectionShare}
+						oncollectionsharecleared={(id) => (clearedCollectionShareId = id)}
+						{clearedCollectionShareId}
+						watchingAnime={extras.watchingAnime}
+						onsubmitsuccess={closeModal}
+						focusOnMount
+						draftKey={data.profile.id}
+					/>
+				{:else if pageExtras.error}
+					<div class="home-deferred-error" role="alert" data-deferred-error="true">
+						投稿フォームを読み込めませんでした。<a href="/">再読み込み</a>
+					</div>
+				{:else}
+					<div class="composer-loading" role="status" aria-label="投稿フォームを読み込み中"></div>
+				{/if}
+			</div>
 		</div>
-		<div class="compose-modal-body">
-			{#if pageExtras.value}
-				{@const extras = pageExtras.value}
-				<PostComposer
-					username={data.profile.username}
-					displayName={data.profile.display_name}
-					avatarUrl={data.profile.avatar_url}
-					initialAnime={extras.initialAnime}
-					initialContent={extras.initialContent}
-					initialExchangeId={extras.initialExchangeId}
-					initialExchangeShare={extras.initialExchangeShare}
-					initialCollectionShare={extras.initialCollectionShare?.id === clearedCollectionShareId
-						? null
-						: extras.initialCollectionShare}
-					oncollectionsharecleared={(id) => (clearedCollectionShareId = id)}
-					{clearedCollectionShareId}
-					watchingAnime={extras.watchingAnime}
-					onsubmitsuccess={closeModal}
-					focusOnMount
-					draftKey={data.profile.id}
-				/>
-			{:else if pageExtras.error}
-				<div class="home-deferred-error" role="alert" data-deferred-error="true">
-					投稿フォームを読み込めませんでした。<a href="/">再読み込み</a>
-				</div>
-			{:else}
-				<div class="composer-loading" role="status" aria-label="投稿フォームを読み込み中"></div>
-			{/if}
-		</div>
-	</div>
+	</Modal>
 {/if}
 
 <style>
@@ -464,14 +437,7 @@ $effect(() => {
 	gap: 8px;
 }
 
-/* Compose modal */
-.compose-modal-backdrop {
-	position: fixed;
-	inset: 0;
-	background: rgba(0, 0, 0, 0.6);
-	z-index: 200;
-}
-
+/* Compose modal（上から出るシート。背景・最前面への表示は Modal の <dialog> が受け持つ） */
 .compose-modal {
 	position: fixed;
 	top: 0;
@@ -480,7 +446,6 @@ $effect(() => {
 	background: var(--color-bg);
 	border-bottom: 1px solid var(--color-border);
 	border-radius: 0 0 22px 22px;
-	z-index: 201;
 	max-height: 90dvh;
 	display: flex;
 	flex-direction: column;

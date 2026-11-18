@@ -1,10 +1,10 @@
 <script lang="ts">
 import { trackFormChanges } from "#lib/actions/trackFormChanges.ts";
-import { trapFocus } from "#lib/actions/trapFocus.ts";
 import type { Event } from "#lib/types.ts";
 import { eventBroadcastDateInputValue, eventBroadcastTimeInputValue } from "#lib/utils/event-time.ts";
 import type { SubmitFunction } from "$app/forms";
 import { enhance } from "$app/forms";
+import Modal from "./Modal.svelte";
 
 type EventSettingsEventData = Pick<
 	Event,
@@ -33,15 +33,6 @@ $effect(() => {
 	confirmingCancel = false;
 	editError = "";
 	cancelError = "";
-});
-
-$effect(() => {
-	if (!open) return;
-	const handleKeydown = (e: KeyboardEvent) => {
-		if (e.key === "Escape") onclose();
-	};
-	window.addEventListener("keydown", handleKeydown);
-	return () => window.removeEventListener("keydown", handleKeydown);
 });
 
 const handleEditSubmit: SubmitFunction = () => {
@@ -83,22 +74,8 @@ const handleCancelSubmit: SubmitFunction = () => {
 </script>
 
 {#if open}
-	<div class="modal-backdrop">
-		<button
-			type="button"
-			class="modal-click-target modal-click-layer"
-			tabindex="-1"
-			aria-label="閉じる"
-			onclick={() => onclose()}
-		></button>
-		<div
-			class="modal-card modal-content-layer"
-			role="dialog"
-			aria-modal="true"
-			aria-labelledby="event-settings-modal-title"
-			tabindex="-1"
-			use:trapFocus
-		>
+	<Modal {onclose} labelledby="event-settings-modal-title">
+		<div class="modal-card">
 			<header class="modal-header">
 				<h2 id="event-settings-modal-title">イベント設定</h2>
 				<button type="button" class="modal-close" aria-label="閉じる" onclick={() => onclose()}>
@@ -247,20 +224,10 @@ const handleCancelSubmit: SubmitFunction = () => {
 				{/if}
 			</div>
 		</div>
-	</div>
+	</Modal>
 {/if}
 
 <style>
-.modal-backdrop {
-	position: fixed;
-	inset: 0;
-	z-index: 1000;
-	display: grid;
-	place-items: center;
-	padding: 16px;
-	background: rgb(0 0 0 / 72%);
-	backdrop-filter: blur(6px);
-}
 .modal-card {
 	width: min(100%, 520px);
 	max-height: min(760px, calc(100dvh - 32px));
@@ -433,7 +400,8 @@ const handleCancelSubmit: SubmitFunction = () => {
 }
 
 @media (max-width: 520px) {
-	.modal-backdrop {
+	/* スマホでは下から出るシートにする（共通の Modal は中央寄せなので、この中身のときだけ下へ寄せる） */
+	:global(.modal):has(> .modal-card) {
 		align-items: end;
 		padding: 0;
 	}

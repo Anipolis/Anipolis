@@ -1,8 +1,8 @@
 <script lang="ts">
 import { onMount, tick } from "svelte";
-import { trapFocus } from "#lib/actions/trapFocus.ts";
 import { type CollectionMembership, MAX_COLLECTION_TITLE_LENGTH } from "#lib/collections.ts";
 import { coverThumbFallback, coverThumbSrc } from "#lib/cover-image.ts";
+import Modal from "./Modal.svelte";
 
 /**
  * 作品ページの「コレクションに追加」（#515）。自分のコレクションを並べ、押した時点で出し入れを保存する。
@@ -118,40 +118,17 @@ async function create(event: SubmitEvent) {
 		creating = false;
 	}
 }
-
-function close() {
-	if (!busy) onclose();
-}
 </script>
 
-<!-- フォーカスがモーダルの外に出ていても Esc で閉じられるようにする -->
-<svelte:window
-	onkeydown={(event) => {
-		if (event.key === "Escape") close();
-	}}
-/>
-
-<div class="add-collection-overlay">
-	<button
-		type="button"
-		class="modal-click-target modal-click-layer"
-		tabindex="-1"
-		aria-label="閉じる"
-		onclick={close}
-	></button>
+<Modal {onclose} dismissible={!busy} label="「{animeTitle}」をコレクションに追加">
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<!-- biome-ignore lint/a11y/noStaticElementInteractions: 題名の入力中の Esc は、入力をやめるだけにする（keydown を止めると <dialog> は閉じない） -->
 	<div
-		use:trapFocus
-		class="add-collection-card modal-content-layer"
-		role="dialog"
-		aria-modal="true"
-		aria-label="「{animeTitle}」をコレクションに追加"
-		tabindex="-1"
+		class="add-collection-card"
 		onkeydown={(event) => {
-			event.stopPropagation();
-			if (event.key !== "Escape") return;
-			// 題名の入力中は、入力をやめるだけにする
-			if (createOpen) void closeCreate();
-			else close();
+			if (event.key !== "Escape" || !createOpen) return;
+			event.preventDefault();
+			void closeCreate();
 		}}
 	>
 		{#if loadError}
@@ -251,19 +228,9 @@ function close() {
 			</div>
 		{/if}
 	</div>
-</div>
+</Modal>
 
 <style>
-.add-collection-overlay {
-	position: fixed;
-	inset: 0;
-	z-index: 1000;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	padding: 16px;
-	background: rgb(15 23 42 / 0.68);
-}
 .add-collection-card {
 	display: flex;
 	flex-direction: column;
@@ -274,7 +241,6 @@ function close() {
 	border-radius: var(--radius-sm);
 	background: var(--color-surface);
 	box-shadow: 0 24px 60px rgb(0 0 0 / 0.36);
-	outline: none;
 }
 .add-collection-list {
 	display: flex;

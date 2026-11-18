@@ -803,16 +803,6 @@ textarea {
 }
 
 /* 繝ｩ繧､繝医・繝・け繧ｹ */
-.lightbox-overlay {
-	position: fixed;
-	inset: 0;
-	z-index: 1000;
-	background: rgba(0, 0, 0, 0.85);
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	cursor: zoom-out;
-}
 .lightbox-content {
 	display: flex;
 	align-items: center;
@@ -3056,18 +3046,6 @@ textarea {
 	text-decoration: none;
 }
 
-.exchange-result-modal-overlay {
-	position: fixed;
-	inset: 0;
-	z-index: 1000;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	padding: 16px;
-	background: rgba(0, 0, 0, 0.58);
-	backdrop-filter: blur(3px);
-}
-
 .exchange-result-modal-card {
 	width: min(720px, 100%);
 	max-height: calc(100vh - 32px);
@@ -3197,16 +3175,6 @@ textarea {
 }
 
 /* 笏笏 繧｢繝九Γ讀懃ｴ｢繝｢繝ｼ繝繝ｫ 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏 */
-.anime-search-overlay {
-	position: fixed;
-	inset: 0;
-	background: rgba(0, 0, 0, 0.5);
-	z-index: 200;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	padding: 16px;
-}
 .anime-search-modal {
 	background: var(--color-bg);
 	border: 1px solid var(--color-border);
@@ -3321,23 +3289,13 @@ textarea {
 	cursor: pointer;
 }
 
-.modal-click-layer {
-	position: absolute;
-	inset: 0;
-	z-index: 0;
-}
-
-:where(.modal-content-layer) {
-	position: relative;
-	z-index: 1;
-}
-
-/* モーダルの背景で回したホイールやスワイプを、後ろのページへ伝えない（#599）。
+/* メニュー・ドロワーの背景で回したホイールやスワイプを、後ろのページへ伝えない（#599）。
+   モーダルは共通の Modal（<dialog>、#600）が同じことをしている。
    overflow で「スクロールしない入れ物」にし、overscroll-behavior で伝わりを止める。
    body に overflow: hidden を付けるやり方は、スクロールバーが消えて横にずれ、sticky も壊れるので使わない。
    スクロールしない要素にも効くのは Chrome 144 / Firefox 150 以降で、Safari では今までどおり。
    :where で詳細度を 0 にし、各モーダルが自分で overflow を決めていればそちらを優先する */
-:where(:has(> .modal-click-layer), .modal-click-target, .survey-backdrop, .dialog-backdrop, .anime-search-overlay) {
+:where(.modal-click-target) {
 	overflow: hidden;
 	overscroll-behavior: contain;
 }
@@ -3397,16 +3355,6 @@ form + .repost-menu-item {
 }
 
 /* --- Quote repost modal --- */
-.quote-modal-overlay {
-	position: fixed;
-	inset: 0;
-	z-index: 200;
-	background: rgba(0, 0, 0, 0.6);
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	padding: 16px;
-}
 
 .quote-modal-card {
 	width: 100%;

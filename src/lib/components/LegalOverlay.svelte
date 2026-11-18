@@ -1,6 +1,6 @@
 <script lang="ts">
-import { trapFocus } from "#lib/actions/trapFocus.ts";
 import LegalBody from "./LegalBody.svelte";
+import Modal from "./Modal.svelte";
 
 /**
  * ログイン画面の上に重ねて出す規約・ポリシー（shallow routing）。
@@ -35,29 +35,11 @@ $effect(() => {
 	node.addEventListener("click", handleBodyClick);
 	return () => node.removeEventListener("click", handleBodyClick);
 });
-
-function handleKeydown(event: KeyboardEvent) {
-	if (event.key === "Escape") onclose();
-}
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
-
-<div class="legal-overlay-backdrop">
-	<button
-		type="button"
-		class="modal-click-target modal-click-layer"
-		tabindex="-1"
-		aria-label="閉じる"
-		onclick={onclose}
-	></button>
-	<div
-		class="legal-overlay modal-content-layer"
-		use:trapFocus
-		role="dialog"
-		aria-modal="true"
-		aria-labelledby="legal-overlay-title"
-	>
+<!-- Esc・背景のクリックは Modal が受けて閉じる -->
+<Modal {onclose} labelledby="legal-overlay-title">
+	<div class="legal-overlay">
 		<div class="legal-overlay-header">
 			<h2 id="legal-overlay-title">{title}</h2>
 			<button type="button" class="legal-overlay-close" onclick={onclose} aria-label="閉じて入力画面に戻る">
@@ -71,19 +53,9 @@ function handleKeydown(event: KeyboardEvent) {
 			<button type="button" class="btn btn-primary legal-overlay-back" onclick={onclose}>入力画面に戻る</button>
 		</div>
 	</div>
-</div>
+</Modal>
 
 <style>
-.legal-overlay-backdrop {
-	position: fixed;
-	inset: 0;
-	z-index: 1000;
-	display: grid;
-	place-items: center;
-	padding: 16px;
-	background: rgb(0 0 0 / 0.54);
-}
-
 .legal-overlay {
 	display: flex;
 	flex-direction: column;
@@ -156,7 +128,8 @@ function handleKeydown(event: KeyboardEvent) {
 }
 
 @media (max-width: 640px) {
-	.legal-overlay-backdrop {
+	/* スマホでは画面いっぱいに出す（Modal の入れ物の余白を外す） */
+	:global(dialog.modal):has(> .legal-overlay) {
 		padding: 0;
 	}
 

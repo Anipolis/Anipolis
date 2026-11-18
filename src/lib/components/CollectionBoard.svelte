@@ -1,6 +1,5 @@
 <script lang="ts">
 import { tick, untrack } from "svelte";
-import { trapFocus } from "#lib/actions/trapFocus.ts";
 import type { AnimePick } from "#lib/anime-picker.ts";
 import {
 	collectionTierColor,
@@ -11,6 +10,7 @@ import {
 } from "#lib/collections.ts";
 import { coverThumbFallback, coverThumbSrc } from "#lib/cover-image.ts";
 import CollectionSearch from "./CollectionSearch.svelte";
+import Modal from "./Modal.svelte";
 
 /**
  * 自分のコレクションの編集面（詳細ページ）。切り替えなしで、いつでも動かせる。
@@ -607,24 +607,16 @@ function onWindowKeyDown(event: KeyboardEvent) {
 
 {#if dialogTier !== null}
 	{@const tier = dialogTier}
-	<div class="tier-dialog-overlay">
-		<button
-			type="button"
-			class="modal-click-target modal-click-layer"
-			tabindex="-1"
-			aria-label="閉じる"
-			onclick={closeTierDialog}
-		></button>
+	<!-- 名前が空の間は背景のクリックで閉じない（閉じると入力が消えて段の名前が決まらない） -->
+	<Modal onclose={closeTierDialog} dismissible={dialogLabel.trim() !== ""} labelledby="tier-dialog-title">
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<!-- biome-ignore lint/a11y/noStaticElementInteractions: Esc は閉じるボタンと同じに扱う（名前がだめならエラーを出して開いたままにする）。keydown を止めて <dialog> 自身には閉じさせない -->
 		<div
-			use:trapFocus
-			class="tier-dialog modal-content-layer"
-			role="dialog"
-			aria-modal="true"
-			aria-labelledby="tier-dialog-title"
-			tabindex="-1"
+			class="tier-dialog"
 			onkeydown={(event) => {
-				event.stopPropagation();
-				if (event.key === "Escape") closeTierDialog();
+				if (event.key !== "Escape") return;
+				event.preventDefault();
+				closeTierDialog();
 			}}
 		>
 			<div class="tier-dialog-header">
@@ -685,7 +677,7 @@ function onWindowKeyDown(event: KeyboardEvent) {
 				<button type="button" class="btn btn-secondary" onclick={closeTierDialog}>閉じる</button>
 			</div>
 		</div>
-	</div>
+	</Modal>
 {/if}
 
 <!-- つかんでいる間だけ出すゴミ箱と、指に付いてくる作品の影 -->
@@ -792,16 +784,6 @@ function onWindowKeyDown(event: KeyboardEvent) {
 	cursor: default;
 	opacity: 0.6;
 }
-.tier-dialog-overlay {
-	position: fixed;
-	inset: 0;
-	z-index: 1000;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	padding: 16px;
-	background: rgb(15 23 42 / 0.68);
-}
 .tier-dialog {
 	display: flex;
 	flex-direction: column;
@@ -810,7 +792,6 @@ function onWindowKeyDown(event: KeyboardEvent) {
 	border-radius: var(--radius-sm);
 	background: var(--color-surface);
 	box-shadow: 0 24px 60px rgb(0 0 0 / 0.36);
-	outline: none;
 }
 .tier-dialog-header,
 .tier-dialog-footer {

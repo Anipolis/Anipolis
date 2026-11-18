@@ -1,11 +1,12 @@
 <script lang="ts">
-import { trapFocus } from "#lib/actions/trapFocus.ts";
+import Modal from "#lib/components/Modal.svelte";
 
 /**
  * 「マイリストから外す」の確認のポップアップ。スコアやメモごと消えて元に戻せないので、1回押しただけでは外さない。
  * 外すボタンは親のフォームの送信ボタンなので、親のフォームの中に置く。親は送信時に data-remove で外す操作と見分ける。
  * 入力欄があるフォームでは、入力欄の Enter で押されないよう、ほかの送信ボタンより後ろに置く。
- * Esc は親が受けて oncancel と同じことをする
+ * 共通の Modal（<dialog>）で開くので、Esc と背景のクリックは oncancel と同じことをする（外している最中は閉じない）。
+ * Modal が Esc の伝わりを止めるので、親のモーダルやポップアップまでは閉じない
  */
 type Props = {
 	animeTitle: string;
@@ -17,22 +18,14 @@ type Props = {
 let { animeTitle, removeAction, submitting, oncancel }: Props = $props();
 </script>
 
-<div class="confirm-layer">
-	<button
-		type="button"
-		class="confirm-backdrop"
-		aria-label="確認を閉じる"
-		disabled={submitting}
-		onclick={oncancel}
-	></button>
-	<div
-		class="confirm-dialog"
-		role="alertdialog"
-		aria-modal="true"
-		aria-labelledby="mylist-remove-title"
-		aria-describedby="mylist-remove-description"
-		use:trapFocus
-	>
+<Modal
+	onclose={oncancel}
+	dismissible={!submitting}
+	role="alertdialog"
+	labelledby="mylist-remove-title"
+	describedby="mylist-remove-description"
+>
+	<div class="confirm-dialog">
 		<h3 id="mylist-remove-title">マイリストから外しますか？</h3>
 		<p id="mylist-remove-description">
 			「{animeTitle}」のスコア、話数、日付、メモの記録も消えます。元に戻せません。
@@ -44,29 +37,10 @@ let { animeTitle, removeAction, submitting, oncancel }: Props = $props();
 			</button>
 		</div>
 	</div>
-</div>
+</Modal>
 
 <style>
-.confirm-layer {
-	position: fixed;
-	z-index: 10;
-	inset: 0;
-	display: grid;
-	place-items: center;
-	padding: 20px;
-}
-
-.confirm-backdrop {
-	position: absolute;
-	inset: 0;
-	padding: 0;
-	border: 0;
-	background: color-mix(in srgb, var(--color-bg) 65%, transparent);
-	cursor: default;
-}
-
 .confirm-dialog {
-	position: relative;
 	width: min(100%, 360px);
 	padding: 22px;
 	border: 1px solid var(--color-border-hover);
