@@ -3,8 +3,10 @@ import type { Snippet } from "svelte";
 import { onDestroy, onMount, tick, untrack } from "svelte";
 import { autosize } from "#lib/actions/autosize.ts";
 import { timelineScroll } from "#lib/actions/timelineScroll.ts";
+import { canRenderAnimeOg } from "#lib/anime-og.ts";
 import ExitSurveyModal from "#lib/components/ExitSurveyModal.svelte";
 import LiveRoomPostCard from "#lib/components/LiveRoomPostCard.svelte";
+import SeoMeta from "#lib/components/SeoMeta.svelte";
 import TrendingPanel from "#lib/components/TrendingPanel.svelte";
 import { coverThumbFallback, coverThumbSrc } from "#lib/cover-image.ts";
 import { airingAt, airingHeading, airingOnAirAt, formatAiringTime } from "#lib/episode-room.ts";
@@ -112,6 +114,14 @@ const roomNameLabel = $derived(
 		? data.room.title.slice(data.anime.title.length).trim()
 		: data.room.title,
 );
+// 共有したときのカード（#271）。作品のルームは作品ページと同じカード（/og/anime/[id]）を使い、
+// © の無いカバーの作品・作品の無いイベントは既定の画像にする
+const ogDescription = $derived(
+	data.anime
+		? `${data.anime.title}の${roomNameLabel || "ルーム"}。放送に合わせて、みんなで実況しよう。`
+		: `${data.room.title}。Anipolis で、みんなで実況しよう。`,
+);
+const ogImage = $derived(data.anime && canRenderAnimeOg(data.anime) ? `/og/anime/${data.anime.id}` : null);
 const charCount = $derived(postContent.length);
 const overLimit = $derived(charCount > maxLen);
 const surveyPostCount = $derived(data.roomExitSurvey.postCount + localSurveyPostCount);
@@ -972,7 +982,13 @@ function formatCompactDate(iso: string) {
 }
 </script>
 
-<svelte:head> <title>{data.room.title} - Anipolis</title> </svelte:head>
+<SeoMeta
+	title="{data.room.title} - Anipolis"
+	description={ogDescription}
+	image={ogImage}
+	imageAlt={data.anime ? `${data.anime.title}のカバー` : null}
+	card={ogImage ? "summary_large_image" : null}
+/>
 
 <div class="page-container room-page-container">
 	<div class="feed-column">

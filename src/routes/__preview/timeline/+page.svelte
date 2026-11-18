@@ -113,10 +113,7 @@ $effect(() => {
 });
 </script>
 
-<svelte:head
-	><title>投稿UIの確認 - Anipolis</title>
-	<meta name="robots" content="noindex"></svelte:head
->
+<svelte:head><title>投稿UIの確認 - Anipolis</title> </svelte:head>
 <div class="preview-controls">
 	<span>開発用 · 40件の混在投稿</span>
 	<button type="button" onclick={() => (room = !room)}>{room ? "ホーム表示へ" : "実況表示へ"}</button>

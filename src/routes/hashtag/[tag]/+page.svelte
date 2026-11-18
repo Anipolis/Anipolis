@@ -2,6 +2,7 @@
 import BackLink from "#lib/components/BackLink.svelte";
 import PostCardSkeleton from "#lib/components/PostCardSkeleton.svelte";
 import PostRow from "#lib/components/PostRow.svelte";
+import SeoMeta from "#lib/components/SeoMeta.svelte";
 import TrendingPanel from "#lib/components/TrendingPanel.svelte";
 import { createLatestResolved } from "#lib/latest-resolved.svelte.ts";
 import { timelineCursorHref } from "#lib/timeline-cursor.ts";
@@ -17,7 +18,7 @@ const timeline = createLatestResolved(
 );
 </script>
 
-<svelte:head> <title>#{data.tag} - Anipolis</title> </svelte:head>
+<SeoMeta title="#{data.tag} - Anipolis" description="#{data.tag} の投稿 - Anipolis" />
 
 <div class="page-container">
 	<main class="feed-column">
