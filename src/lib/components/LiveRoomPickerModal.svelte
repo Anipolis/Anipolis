@@ -1,7 +1,7 @@
 <script lang="ts">
-import { trapFocus } from "#lib/actions/trapFocus.ts";
 import type { OpenBroadcastRoomSummary } from "#lib/types.ts";
 import AnimeRow from "./AnimeRow.svelte";
+import Modal from "./Modal.svelte";
 
 type Props = {
 	open: boolean;
@@ -11,34 +11,11 @@ type Props = {
 };
 
 let { open, rooms, loadError = false, onclose }: Props = $props();
-
-$effect(() => {
-	if (!open) return;
-	const handleKeydown = (event: KeyboardEvent) => {
-		if (event.key === "Escape") onclose();
-	};
-	window.addEventListener("keydown", handleKeydown);
-	return () => window.removeEventListener("keydown", handleKeydown);
-});
 </script>
 
 {#if open}
-	<div
-		class="anime-search-overlay live-room-picker-overlay"
-		role="dialog"
-		aria-modal="true"
-		aria-label="ライブ実況ルームを選択"
-		tabindex="-1"
-		use:trapFocus
-	>
-		<button
-			type="button"
-			class="modal-click-target modal-click-layer"
-			tabindex="-1"
-			aria-label="閉じる"
-			onclick={onclose}
-		></button>
-		<div class="anime-search-modal live-room-picker-modal modal-content-layer">
+	<Modal {onclose} label="ライブ実況ルームを選択">
+		<div class="anime-search-modal live-room-picker-modal">
 			<div class="anime-search-header">
 				<span class="anime-search-title">ライブ実況ルームを選択</span>
 				<button type="button" class="anime-search-close" onclick={onclose} aria-label="閉じる">
@@ -65,23 +42,10 @@ $effect(() => {
 				{/if}
 			</div>
 		</div>
-	</div>
+	</Modal>
 {/if}
 
 <style>
-.anime-search-overlay.live-room-picker-overlay {
-	position: fixed;
-	inset: 0;
-	z-index: 10000;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	padding: 24px;
-	background: rgba(0, 0, 0, 0.58);
-	pointer-events: auto;
-	isolation: isolate;
-}
-
 .live-room-picker-modal {
 	width: min(480px, calc(100vw - 32px));
 	max-height: min(76vh, 620px);
@@ -96,10 +60,6 @@ $effect(() => {
 }
 
 @media (max-width: 640px) {
-	.anime-search-overlay.live-room-picker-overlay {
-		padding: 16px;
-	}
-
 	.live-room-picker-modal {
 		max-height: min(82vh, 620px);
 	}

@@ -1,6 +1,5 @@
 <script lang="ts">
 import { untrack } from "svelte";
-import { trapFocus } from "#lib/actions/trapFocus.ts";
 import {
 	COLLECTION_KINDS,
 	type CollectionKind,
@@ -12,6 +11,7 @@ import {
 } from "#lib/collections.ts";
 import type { SubmitFunction } from "$app/forms";
 import { applyAction, enhance } from "$app/forms";
+import Modal from "./Modal.svelte";
 
 /**
  * コレクションを作る・題名などを直す画面（#515）。送り先はページのフォームアクション。
@@ -115,26 +115,8 @@ const handleDelete: SubmitFunction = ({ cancel }) => {
 };
 </script>
 
-<div class="collection-form-overlay">
-	<button
-		type="button"
-		class="modal-click-target modal-click-layer"
-		tabindex="-1"
-		aria-label="閉じる"
-		onclick={close}
-	></button>
-	<div
-		use:trapFocus
-		class="collection-form-card modal-content-layer"
-		role="dialog"
-		aria-modal="true"
-		aria-labelledby="collection-form-title"
-		tabindex="-1"
-		onkeydown={(event) => {
-			event.stopPropagation();
-			if (event.key === "Escape") close();
-		}}
-	>
+<Modal {onclose} dismissible={!submitting} labelledby="collection-form-title">
+	<div class="collection-form-card">
 		<div class="collection-form-header">
 			<span id="collection-form-title" class="collection-form-heading">
 				{mode === "create" ? "コレクションを作る" : "コレクションを編集"}
@@ -295,19 +277,9 @@ const handleDelete: SubmitFunction = ({ cancel }) => {
 			<form bind:this={deleteForm} method="POST" action={deleteAction} use:enhance={handleDelete} hidden></form>
 		{/if}
 	</div>
-</div>
+</Modal>
 
 <style>
-.collection-form-overlay {
-	position: fixed;
-	inset: 0;
-	z-index: 1000;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	padding: 16px;
-	background: rgb(15 23 42 / 0.68);
-}
 .collection-form-card {
 	display: flex;
 	flex-direction: column;
@@ -318,7 +290,6 @@ const handleDelete: SubmitFunction = ({ cancel }) => {
 	border-radius: var(--radius-sm);
 	background: var(--color-surface);
 	box-shadow: 0 24px 60px rgb(0 0 0 / 0.36);
-	outline: none;
 }
 .collection-form-header,
 .collection-form-footer {

@@ -1,8 +1,8 @@
 <script lang="ts">
 import { untrack } from "svelte";
-import { trapFocus } from "#lib/actions/trapFocus.ts";
 import { type AnimePick, animePickMeta } from "#lib/anime-picker.ts";
 import AnimeRow from "./AnimeRow.svelte";
+import Modal from "./Modal.svelte";
 
 /**
  * 作品を検索して選び、並べ替えて保存する画面（ベスト作品・コレクションで共用）。
@@ -35,7 +35,6 @@ let errorMessage = $state("");
 // 一覧に戻ったとき、足したばかりの作品を軽く光らせる
 let lastAddedId = $state<number | null>(null);
 let searchInput = $state<HTMLInputElement | null>(null);
-let card = $state<HTMLDivElement | null>(null);
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
 let searchController: AbortController | null = null;
 
@@ -48,10 +47,9 @@ const changed = $derived(
 const pickedIds = $derived(new Set(picks.map((pick) => pick.id)));
 const showingResults = $derived(query.trim().length > 0);
 
-// 開いたら検索欄へ。上限までそろっていて検索欄が使えないときは、Esc や Tab が効くようダイアログ自体へ
+// 開いたら検索欄へ。上限までそろっていて検索欄が使えないときは、<dialog> が最初のボタンに当てたフォーカスのまま
 $effect(() => {
 	if (searchInput && !searchInput.disabled) searchInput.focus();
-	else card?.focus();
 });
 
 $effect(() => () => cancelSearch());
@@ -154,32 +152,15 @@ async function save() {
 }
 </script>
 
-<div class="picker-overlay">
-	<button
-		type="button"
-		class="modal-click-target modal-click-layer"
-		tabindex="-1"
-		aria-label="閉じる"
-		onclick={close}
-	></button>
+<Modal onclose={close} dismissible={!saving} labelledby="anime-picker-title">
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<!-- biome-ignore lint/a11y/noStaticElementInteractions: 検索中の Esc は検索をやめて一覧に戻るだけにする（keydown を止めると <dialog> は閉じない） -->
 	<div
-		bind:this={card}
-		use:trapFocus
-		class="picker-card modal-content-layer"
-		role="dialog"
-		aria-modal="true"
-		aria-labelledby="anime-picker-title"
-		tabindex="-1"
+		class="picker-card"
 		onkeydown={(event) => {
-			event.stopPropagation();
-			if (event.key !== "Escape") return;
-			// 検索中の Esc は検索をやめて一覧に戻るだけにする
-			if (showingResults) {
-				event.preventDefault();
-				clearQuery();
-				return;
-			}
-			close();
+			if (event.key !== "Escape" || !showingResults) return;
+			event.preventDefault();
+			clearQuery();
 		}}
 	>
 		<div class="picker-header">
@@ -316,22 +297,11 @@ async function save() {
 			</button>
 		</div>
 	</div>
-</div>
+</Modal>
 
 <style>
-.picker-overlay {
-	position: fixed;
-	inset: 0;
-	z-index: 1000;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	padding: 16px;
-	background: rgb(15 23 42 / 0.68);
-}
 /* 中身が切り替わっても大きさが変わらないよう、高さを決めておく */
 .picker-card {
-	outline: none;
 	display: flex;
 	flex-direction: column;
 	width: min(100%, 520px);
