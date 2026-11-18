@@ -2,9 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
 	type AuditAnime,
 	findMappingIssues,
+	issuesToNotify,
 	mappingIssueKey,
+	markNotified,
 	newerTidCandidates,
+	nextMappingAuditState,
 	parseTitleSearch,
+	readMappingAuditState,
 	titleSearchBase,
 } from "./syobocal-mapping-audit";
 
@@ -93,5 +97,45 @@ describe("TitleSearch の候補", () => {
 			8002,
 		]);
 		expect(newerTidCandidates(parseTitleSearch(json), "ルルットリリィ", [8002])).toEqual([]);
+	});
+});
+
+describe("知らせ済みの扱い（送信に成功してから確定する）", () => {
+	const issue = (kind: "rerun_only" | "no_sessions" | "missing_episode_total", animeId: number) => ({
+		kind,
+		animeId,
+		malId: animeId * 10,
+		title: `作品${animeId}`,
+		tids: [1],
+		sessions: { first: 0, rerun: 1 },
+	});
+
+	it("知らせるのは本放送が入らない2種類で、まだ送れていないものだけ", () => {
+		const issues = [issue("rerun_only", 1), issue("no_sessions", 2), issue("missing_episode_total", 3)];
+		expect(issuesToNotify(issues, new Set(["no_sessions:2"])).map(mappingIssueKey)).toEqual(["rerun_only:1"]);
+	});
+
+	it("点検のたびに状態を作り直しても、新しく知らせる分は知らせ済みに足さない（送信に失敗したら翌日また知らせる）", () => {
+		const state = nextMappingAuditState([issue("rerun_only", 1)], new Set(), "2026-fall", "2026-11-18");
+		expect(state.notified).toEqual([]);
+		expect(issuesToNotify([issue("rerun_only", 1)], readMappingAuditState(state).notified)).toHaveLength(1);
+	});
+
+	it("送信に成功した鍵だけを知らせ済みにし、次の点検では知らせない", () => {
+		const before = nextMappingAuditState([issue("rerun_only", 1)], new Set(), "2026-fall", "2026-11-18");
+		const after = markNotified(before, ["rerun_only:1"]);
+		expect(after.notified).toEqual(["rerun_only:1"]);
+		expect(issuesToNotify([issue("rerun_only", 1)], readMappingAuditState(after).notified)).toEqual([]);
+	});
+
+	it("直った問題は知らせ済みから外す（また起きたらもう一度知らせる）", () => {
+		const state = nextMappingAuditState([], new Set(["rerun_only:1"]), "2026-fall", "2026-11-19");
+		expect(state.notified).toEqual([]);
+	});
+
+	it("壊れた・古い状態ファイルでも読める", () => {
+		expect([...readMappingAuditState(null).notified]).toEqual([]);
+		expect([...readMappingAuditState({ keys: ["rerun_only:1"] }).notified]).toEqual([]);
+		expect(markNotified(null, ["no_sessions:2"]).notified).toEqual(["no_sessions:2"]);
 	});
 });

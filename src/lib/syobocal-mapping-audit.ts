@@ -139,3 +139,46 @@ export function newerTidCandidates(
 		.filter((hit) => hit.tid > newestCurrent && hit.title.normalize("NFKC").toLowerCase().includes(normalizedBase))
 		.sort((a, b) => b.tid - a.tid);
 }
+
+/**
+ * 点検の状態ファイル。notified は Discord への送信に成功した問題の鍵だけを持つ。
+ * 送信の前に知らせ済みにすると、送信に失敗した問題が二度と知らされなくなるため（Codex レビュー）
+ */
+export type MappingAuditState = { season: string; checkedAt: string; keys: string[]; notified: string[] };
+
+export function readMappingAuditState(json: unknown): { notified: Set<string> } {
+	const notified = (json as { notified?: unknown } | null)?.notified;
+	return { notified: new Set(Array.isArray(notified) ? notified.filter((key) => typeof key === "string") : []) };
+}
+
+/** 知らせる問題（本放送が入らない2種類で、まだ送れていないもの） */
+export function issuesToNotify(issues: readonly MappingIssue[], notified: ReadonlySet<string>): MappingIssue[] {
+	return issues.filter((issue) => issue.kind !== "missing_episode_total" && !notified.has(mappingIssueKey(issue)));
+}
+
+/**
+ * 今回の点検の結果で状態を作り直す。知らせ済みは、今も続いている問題の分だけ残す
+ * （直ったあとにまた同じ問題が起きたら、もう一度知らせる）。新しく知らせる分はここでは足さない
+ */
+export function nextMappingAuditState(
+	issues: readonly MappingIssue[],
+	notified: ReadonlySet<string>,
+	season: string,
+	checkedAt: string,
+): MappingAuditState {
+	const keys = issues.map(mappingIssueKey);
+	return { season, checkedAt, keys, notified: keys.filter((key) => notified.has(key)) };
+}
+
+/** 送信に成功した鍵を、知らせ済みに足す */
+export function markNotified(state: unknown, sentKeys: readonly string[]): MappingAuditState {
+	const base = (state ?? {}) as Partial<MappingAuditState>;
+	const { notified } = readMappingAuditState(state);
+	for (const key of sentKeys) notified.add(key);
+	return {
+		season: typeof base.season === "string" ? base.season : "",
+		checkedAt: typeof base.checkedAt === "string" ? base.checkedAt : "",
+		keys: Array.isArray(base.keys) ? base.keys : [],
+		notified: [...notified],
+	};
+}

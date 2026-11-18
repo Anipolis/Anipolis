@@ -184,8 +184,13 @@ function Get-DaysSince {
     } catch { return $null }
 }
 
+# 直前の Send-SyncAlert が送れたか。送れたときだけ「知らせ済み」にしたい呼び出し側が見る
+# （戻り値にすると、結果を受け取らない既存の呼び出しで True が出力に混ざるため、変数にする）
+$script:LastAlertSent = $false
+
 function Send-SyncAlert {
     param([string]$Message)
+    $script:LastAlertSent = $false
     $url = Get-EnvFileValue -Name "SYNC_ALERT_WEBHOOK_URL"
     if (-not $url) {
         Write-Host "SYNC_ALERT_WEBHOOK_URL is not set; alert not sent"
@@ -198,6 +203,7 @@ function Send-SyncAlert {
         # PowerShell 5.1 は既定で本文を UTF-8 にしないため、バイト列で送る
         Invoke-RestMethod -Uri $url -Method Post -ContentType "application/json; charset=utf-8" `
             -Body ([System.Text.Encoding]::UTF8.GetBytes($body)) -TimeoutSec 20 | Out-Null
+        $script:LastAlertSent = $true
     } catch {
         Write-Host ("warning: could not send sync alert: " + $_.Exception.Message)
     }

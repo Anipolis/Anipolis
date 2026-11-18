@@ -10,7 +10,9 @@
  *   pnpm audit:syobocal-mappings -- --year 2026 --season fall
  *   pnpm audit:syobocal-mappings -- --no-title-search    # しょぼいへの問い合わせをしない
  *   pnpm audit:syobocal-mappings -- --state .sync-logs/state-syobocal-audit.json --alert-out .sync-logs/syobocal-audit-alert.txt
- *     # 前回の結果と比べ、新しく見つかったものがあるときだけ知らせの本文を書く（日次の同期が Discord へ送る）
+ *     # まだ知らせていない問題があるときだけ、知らせの本文と鍵（<alert-out>.keys.json）を書く（日次の同期が Discord へ送る）
+ *   pnpm audit:syobocal-mappings -- --state <file> --mark-notified <alert-out>.keys.json
+ *     # 送信に成功したあとに呼び、その鍵を知らせ済みにする（送信に失敗したら呼ばないので、翌日また知らせる）
  */
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
@@ -19,11 +21,15 @@ import {
 	type AuditAnime,
 	type AuditSessionCounts,
 	findMappingIssues,
+	issuesToNotify,
 	MAPPING_ISSUE_LABELS,
 	type MappingIssue,
 	mappingIssueKey,
+	markNotified,
 	newerTidCandidates,
+	nextMappingAuditState,
 	parseTitleSearch,
+	readMappingAuditState,
 	type TitleSearchHit,
 	titleSearchBase,
 } from "../src/lib/syobocal-mapping-audit.ts";
@@ -53,6 +59,7 @@ function parseArgs(argv: string[]) {
 		titleSearch: true,
 		state: null as string | null,
 		alertOut: null as string | null,
+		markNotified: null as string | null,
 	};
 	for (let index = 0; index < argv.length; index += 1) {
 		const arg = argv[index];
@@ -70,6 +77,9 @@ function parseArgs(argv: string[]) {
 			index += 1;
 		} else if (arg === "--alert-out" && next) {
 			options.alertOut = next;
+			index += 1;
+		} else if (arg === "--mark-notified" && next) {
+			options.markNotified = next;
 			index += 1;
 		} else throw new Error(`Unknown argument: ${arg}`);
 	}
@@ -192,8 +202,26 @@ function formatIssue(issue: MappingIssue, candidates: TitleSearchHit[] | undefin
 	return lines.join("\n");
 }
 
+function readJson(path: string): unknown {
+	return existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : null;
+}
+
+function writeJson(path: string, value: unknown) {
+	mkdirSync(dirname(path), { recursive: true });
+	writeFileSync(path, JSON.stringify(value, null, 2));
+}
+
 async function main() {
 	const options = parseArgs(process.argv.slice(2));
+	// 送信に成功したあと、日次の同期から呼ぶ。DB にもしょぼいにも問い合わせない
+	if (options.markNotified) {
+		if (!options.state) throw new Error("--mark-notified には --state も指定してください");
+		const sent = readJson(options.markNotified);
+		writeJson(options.state, markNotified(readJson(options.state), Array.isArray(sent) ? sent : []));
+		rmSync(options.markNotified, { force: true });
+		console.log("Marked as notified.");
+		return;
+	}
 	const today = jstToday();
 	const { year, season } =
 		options.year && options.season ? { year: options.year, season: options.season } : currentSeason(today);
@@ -240,22 +268,13 @@ async function main() {
 
 	// 前回と比べて新しく見つかったものだけを知らせる（毎日同じ知らせを送らない）
 	if (options.state) {
-		const previous = new Set<string>(
-			existsSync(options.state)
-				? ((JSON.parse(readFileSync(options.state, "utf8")) as { keys?: string[] }).keys ?? [])
-				: [],
-		);
+		const { notified } = readMappingAuditState(readJson(options.state));
 		// 知らせるのは本放送が入らない2種類だけ。話数が空のものは一覧（ログ）にだけ出す
 		// （#597 の修正で、放送開始の週の話数から範囲を出せるようになったため、急ぎではない）
-		const fresh = issues.filter(
-			(issue) => issue.kind !== "missing_episode_total" && !previous.has(mappingIssueKey(issue)),
-		);
-		mkdirSync(dirname(options.state), { recursive: true });
-		writeFileSync(
-			options.state,
-			JSON.stringify({ season: seasonTag, checkedAt: today, keys: issues.map(mappingIssueKey) }, null, 2),
-		);
+		const fresh = issuesToNotify(issues, notified);
+		writeJson(options.state, nextMappingAuditState(issues, notified, seasonTag, today));
 		if (options.alertOut) {
+			const keysPath = `${options.alertOut}.keys.json`;
 			if (fresh.length > 0) {
 				const message = [
 					`[Anipolis] しょぼいカレンダーの対応の点検（${seasonTag}）で、新しく ${fresh.length} 件見つかりました`,
@@ -267,9 +286,11 @@ async function main() {
 				].join("\n");
 				mkdirSync(dirname(options.alertOut), { recursive: true });
 				writeFileSync(options.alertOut, message);
+				// 知らせ済みにするのは送信に成功してから（日次の同期が --mark-notified で足す）
+				writeJson(keysPath, fresh.map(mappingIssueKey));
 				console.log(`Alert written: ${fresh.length} new issues.`);
-			} else if (existsSync(options.alertOut)) {
-				rmSync(options.alertOut);
+			} else {
+				for (const path of [options.alertOut, keysPath]) if (existsSync(path)) rmSync(path);
 			}
 		}
 	}

@@ -17,11 +17,17 @@ try {
     # 失敗は終了コードに含めない（3 回続けて失敗したら知らせが来る）
     Invoke-Step -Label "generate:anime-og-cards" -PnpmArgs @("generate:anime-og-cards") | Out-Null
     # しょぼいの対応の点検（#593）。分割2クールの第2クールで新しい TID ができ、本放送の枠が入らない作品を洗い出す。
-    # 前回と比べて新しく見つかったときだけ Discord へ知らせる。点検の失敗は終了コードに含めない
+    # まだ知らせていない問題があるときだけ Discord へ知らせる。知らせ済みにするのは送信に成功してから
+    # （送信に失敗したら翌日もう一度知らせる）。点検の失敗は終了コードに含めない
+    $auditState = Join-Path $script:LogDir "state-syobocal-audit.json"
     $auditAlert = Join-Path $script:LogDir "syobocal-audit-alert.txt"
-    Invoke-Step -Label "audit:syobocal-mappings" -PnpmArgs @("audit:syobocal-mappings", "--", "--state", (Join-Path $script:LogDir "state-syobocal-audit.json"), "--alert-out", $auditAlert) | Out-Null
+    $auditKeys = $auditAlert + ".keys.json"
+    Invoke-Step -Label "audit:syobocal-mappings" -PnpmArgs @("audit:syobocal-mappings", "--", "--state", $auditState, "--alert-out", $auditAlert) | Out-Null
     if (Test-Path $auditAlert) {
         Send-SyncAlert -Message ([System.IO.File]::ReadAllText($auditAlert, [System.Text.Encoding]::UTF8))
+        if ($script:LastAlertSent -and (Test-Path $auditKeys)) {
+            Invoke-Step -Label "audit:syobocal-mappings (mark notified)" -PnpmArgs @("audit:syobocal-mappings", "--", "--state", $auditState, "--mark-notified", $auditKeys) | Out-Null
+        }
         Remove-Item -Path $auditAlert -Force
     }
     # 週次（月曜）が動いていない・失敗し続けている場合に気づけるよう、最終成功から 8 日を超えたら知らせる
