@@ -1,6 +1,5 @@
 <script lang="ts">
 import { onDestroy, onMount, untrack } from "svelte";
-import { trapFocus } from "#lib/actions/trapFocus.ts";
 import {
 	AVATAR_CROP,
 	type CropState,
@@ -13,6 +12,7 @@ import {
 	sourceRect,
 	zoomTo,
 } from "#lib/image-crop.ts";
+import Modal from "./Modal.svelte";
 
 /**
  * 画像の使う範囲を選ぶ画面。アイコン（初期設定・プロフィールの編集）とヘッダー画像（プロフィールの編集）で共用。
@@ -153,10 +153,6 @@ function handleStageKeydown(event: KeyboardEvent): void {
 	}
 }
 
-function handleWindowKeydown(event: KeyboardEvent): void {
-	if (event.key === "Escape") cancel();
-}
-
 /** 枠に見えている範囲を画像にする。WebP にできないブラウザ（古い Safari など）では JPEG にする */
 async function confirmCrop(): Promise<void> {
 	if (!image || saving) return;
@@ -183,24 +179,9 @@ async function confirmCrop(): Promise<void> {
 }
 </script>
 
-<svelte:window onkeydown={handleWindowKeydown} />
-
-<div class="cropper-backdrop">
-	<button
-		type="button"
-		class="modal-click-target modal-click-layer"
-		tabindex="-1"
-		aria-label="閉じる"
-		onclick={cancel}
-	></button>
-	<div
-		class="cropper modal-content-layer"
-		class:cropper--wide={isHeader}
-		use:trapFocus
-		role="dialog"
-		aria-modal="true"
-		aria-labelledby="cropper-title"
-	>
+<!-- Esc・背景のクリックは Modal が受けて、キャンセルと同じく閉じる -->
+<Modal onclose={cancel} labelledby="cropper-title">
+	<div class="cropper" class:cropper--wide={isHeader}>
 		<div class="cropper-header">
 			<h2 id="cropper-title">{title}</h2>
 			<button type="button" class="cropper-close" onclick={cancel} aria-label="閉じる">
@@ -265,19 +246,9 @@ async function confirmCrop(): Promise<void> {
 			</button>
 		</div>
 	</div>
-</div>
+</Modal>
 
 <style>
-.cropper-backdrop {
-	position: fixed;
-	inset: 0;
-	z-index: 1000;
-	display: grid;
-	place-items: center;
-	padding: 16px;
-	background: rgb(0 0 0 / 0.54);
-}
-
 .cropper {
 	display: flex;
 	flex-direction: column;

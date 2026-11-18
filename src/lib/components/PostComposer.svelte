@@ -1,7 +1,6 @@
 <script lang="ts">
 import { onDestroy, onMount } from "svelte";
 import { autosize } from "#lib/actions/autosize.ts";
-import { trapFocus } from "#lib/actions/trapFocus.ts";
 import { animePickMeta } from "#lib/anime-picker.ts";
 import type { CollectionShare } from "#lib/collections.ts";
 import {
@@ -30,6 +29,7 @@ import AnimeExchangeResult from "./AnimeExchangeResult.svelte";
 import AnimeRow from "./AnimeRow.svelte";
 import CollectionShareCard from "./CollectionShareCard.svelte";
 import ComposerRoomPicker from "./ComposerRoomPicker.svelte";
+import Modal from "./Modal.svelte";
 import { classifyComposerSubmitResult } from "./post-composer-submit";
 import UserAvatar from "./UserAvatar.svelte";
 
@@ -612,14 +612,6 @@ function selectMention(user: UserResult) {
 	}, 0);
 }
 
-/** ネストしたダイアログの Escape。外側の投稿モーダルまで伝播させずに自分だけ閉じる。 */
-function handleOverlayEscape(e: KeyboardEvent, close: () => void) {
-	if (e.key !== "Escape") return;
-	e.preventDefault();
-	e.stopPropagation();
-	close();
-}
-
 const handleSubmit: SubmitFunction = ({ cancel }) => {
 	if (!canSubmit) {
 		cancel();
@@ -936,25 +928,12 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 	</div>
 </div>
 
-<!-- アニメ検索モーダル -->
+<!-- アニメ検索モーダル。Esc は Modal がこのモーダルだけを閉じ、外側の投稿モーダルまで届かせない -->
 {#if animeSearchOpen}
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
-	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<div
-		class="anime-search-overlay"
-		onclick={(e) => {
-			if (e.target === e.currentTarget) closeAnimeSearch();
-		}}
-		onkeydown={(e) => handleOverlayEscape(e, closeAnimeSearch)}
-		role="dialog"
-		aria-modal="true"
-		aria-label="アニメ検索"
-		tabindex="-1"
-		use:trapFocus
-	>
+	<Modal onclose={closeAnimeSearch} labelledby="composer-anime-search-title">
 		<div class="anime-search-modal">
 			<div class="anime-search-header">
-				<span class="anime-search-title">アニメを選択</span>
+				<span class="anime-search-title" id="composer-anime-search-title">アニメを選択</span>
 				<button type="button" class="anime-search-close" onclick={closeAnimeSearch} aria-label="閉じる">
 					✕
 				</button>
@@ -984,28 +963,15 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 				{/if}
 			</div>
 		</div>
-	</div>
+	</Modal>
 {/if}
 
 <!-- CW（ネタバレ）作品検索モーダル -->
 {#if cwSearchOpen}
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
-	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<div
-		class="anime-search-overlay"
-		onclick={(e) => {
-			if (e.target === e.currentTarget) closeCwSearch();
-		}}
-		onkeydown={(e) => handleOverlayEscape(e, closeCwSearch)}
-		role="dialog"
-		aria-modal="true"
-		aria-label="ネタバレ作品を選択"
-		tabindex="-1"
-		use:trapFocus
-	>
+	<Modal onclose={closeCwSearch} labelledby="composer-cw-search-title">
 		<div class="anime-search-modal">
 			<div class="anime-search-header">
-				<span class="anime-search-title">ネタバレ作品を選択</span>
+				<span class="anime-search-title" id="composer-cw-search-title">ネタバレ作品を選択</span>
 				<button type="button" class="anime-search-close" onclick={closeCwSearch} aria-label="閉じる">✕</button>
 			</div>
 			<input
@@ -1033,7 +999,7 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 				{/if}
 			</div>
 		</div>
-	</div>
+	</Modal>
 {/if}
 
 <!-- ルーム選択（放送中の話・作品を探して話数・特番・作品ルーム） -->

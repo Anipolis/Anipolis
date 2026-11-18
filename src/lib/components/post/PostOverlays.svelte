@@ -1,6 +1,6 @@
 <script lang="ts">
-import { trapFocus } from "#lib/actions/trapFocus.ts";
 import AnimeExchangeResult from "#lib/components/AnimeExchangeResult.svelte";
+import Modal from "#lib/components/Modal.svelte";
 import UserAvatar from "#lib/components/UserAvatar.svelte";
 import { contentWarningLabel, hasContentWarning } from "#lib/content-warning.ts";
 import { enhance } from "$app/forms";
@@ -17,8 +17,17 @@ let { controller, content }: Props = $props();
 const post = $derived(controller.post);
 let deleteFormEl = $state<HTMLFormElement | null>(null);
 
+// モーダル（<Modal>）の Esc は Modal が受けて、いちばん上のものだけを閉じる。
+// ここではモーダルではないリアクションの一覧（ポップアップ）だけを Esc で閉じる
 function handleKeydown(event: KeyboardEvent) {
-	if (event.key === "Escape") controller.closeOverlays();
+	if (event.key === "Escape") controller.closeReactionPopover();
+}
+
+// <dialog> は DOM の上では投稿の行（article）の中にあるので、モーダルの中や背景のクリックが行の onclick
+// （投稿を開く・操作を出す）まで届いてしまう。ここで止める。リンクだけは SvelteKit のルーターに届くよう通す
+function stopRowClick(event: MouseEvent) {
+	if ((event.target as Element | null)?.closest("a[href]")) return;
+	event.stopPropagation();
 }
 </script>
 
@@ -36,263 +45,218 @@ function handleKeydown(event: KeyboardEvent) {
 	</form>
 {/if}
 
-{#if controller.quoteModalOpen}
-	<div class="quote-modal-overlay">
-		<button
-			type="button"
-			class="modal-click-target modal-click-layer"
-			tabindex="-1"
-			aria-label="閉じる"
-			onclick={() => controller.closeQuoteModal()}
-		></button>
-		<div
-			class="quote-modal-card modal-content-layer"
-			role="dialog"
-			aria-modal="true"
-			aria-labelledby="quote-modal-title"
-			tabindex="-1"
-			use:trapFocus
-			onkeydown={(e) => e.stopPropagation()}
+<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -- クリックを行へ伝えないためだけの入れ物（操作はしない） -->
+<!-- biome-ignore lint/a11y/useKeyWithClickEvents: クリックを行へ伝えないためだけの入れ物 -->
+<!-- biome-ignore lint/a11y/noStaticElementInteractions: クリックを行へ伝えないためだけの入れ物 -->
+<div class="post-overlays" onclick={stopRowClick}>
+	{#if controller.quoteModalOpen}
+		<Modal
+			onclose={() => controller.closeQuoteModal()}
+			dismissible={!controller.quoteSubmitting}
+			labelledby="quote-modal-title"
 		>
-			<div class="quote-modal-header">
-				<span id="quote-modal-title" class="quote-modal-title">引用リポスト</span>
-				<button
-					type="button"
-					class="quote-modal-close"
-					aria-label="閉じる"
-					onclick={() => controller.closeQuoteModal()}
-				>
-					✕
-				</button>
-			</div>
-			<div class="quote-modal-body">
-				<textarea
-					class="quote-modal-textarea"
-					placeholder="コメントを追加..."
-					rows="3"
-					bind:value={controller.quoteText}
-					disabled={controller.quoteSubmitting}
-				></textarea>
-				<div class="quote-preview">
-					<div class="quote-preview-header">
-						<UserAvatar src={post.avatar_url} username={post.username} size="sm" />
-						<span class="quote-preview-name">{post.display_name || post.username}</span>
-						<span class="quote-preview-at">@{post.username}</span>
+			<div class="quote-modal-card">
+				<div class="quote-modal-header">
+					<span id="quote-modal-title" class="quote-modal-title">引用リポスト</span>
+					<button
+						type="button"
+						class="quote-modal-close"
+						aria-label="閉じる"
+						onclick={() => controller.closeQuoteModal()}
+					>
+						✕
+					</button>
+				</div>
+				<div class="quote-modal-body">
+					<textarea
+						class="quote-modal-textarea"
+						placeholder="コメントを追加..."
+						rows="3"
+						bind:value={controller.quoteText}
+						disabled={controller.quoteSubmitting}
+					></textarea>
+					<div class="quote-preview">
+						<div class="quote-preview-header">
+							<UserAvatar src={post.avatar_url} username={post.username} size="sm" />
+							<span class="quote-preview-name">{post.display_name || post.username}</span>
+							<span class="quote-preview-at">@{post.username}</span>
+						</div>
+						{#if hasContentWarning(post)}
+							<!-- 引用元の CW は作成画面のプレビューでも守る（展開済みでも本文は出さない） -->
+							<p class="quote-preview-content quote-preview-cw">
+								<span class="i-lucide-triangle-alert" aria-hidden="true"></span>
+								{contentWarningLabel(post)}
+							</p>
+						{:else}
+							<p class="quote-preview-content">{content}</p>
+						{/if}
 					</div>
-					{#if hasContentWarning(post)}
-						<!-- 引用元の CW は作成画面のプレビューでも守る（展開済みでも本文は出さない） -->
-						<p class="quote-preview-content quote-preview-cw">
-							<span class="i-lucide-triangle-alert" aria-hidden="true"></span>
-							{contentWarningLabel(post)}
-						</p>
-					{:else}
-						<p class="quote-preview-content">{content}</p>
+					{#if controller.quoteError}
+						<p class="flash-error" role="alert" style="margin-top:8px;">{controller.quoteError}</p>
 					{/if}
 				</div>
-				{#if controller.quoteError}
-					<p class="flash-error" role="alert" style="margin-top:8px;">{controller.quoteError}</p>
-				{/if}
+				<div class="quote-modal-footer">
+					<button
+						type="button"
+						class="btn btn-primary"
+						disabled={!controller.quoteText.trim() || controller.quoteSubmitting}
+						onclick={() => controller.submitQuoteRepost()}
+					>
+						{controller.quoteSubmitting ? "投稿中…" : "リポスト"}
+					</button>
+				</div>
 			</div>
-			<div class="quote-modal-footer">
-				<button
-					type="button"
-					class="btn btn-primary"
-					disabled={!controller.quoteText.trim() || controller.quoteSubmitting}
-					onclick={() => controller.submitQuoteRepost()}
-				>
-					{controller.quoteSubmitting ? "投稿中…" : "リポスト"}
-				</button>
-			</div>
-		</div>
-	</div>
-{/if}
+		</Modal>
+	{/if}
 
-{#if controller.exchangeModalOpen && post.exchange_share}
-	<div class="exchange-result-modal-overlay">
-		<button
-			type="button"
-			class="modal-click-target modal-click-layer"
-			tabindex="-1"
-			aria-label="閉じる"
-			onclick={() => (controller.exchangeModalOpen = false)}
-		></button>
-		<div
-			class="exchange-result-modal-card modal-content-layer"
-			role="dialog"
-			aria-modal="true"
-			aria-labelledby="exchange-result-modal-title"
-			tabindex="-1"
-			use:trapFocus
-		>
-			<div class="exchange-result-modal-header">
-				<span id="exchange-result-modal-title" class="exchange-result-modal-title">トレード結果</span>
-				<button
-					type="button"
-					class="exchange-result-modal-close"
-					aria-label="閉じる"
-					onclick={() => (controller.exchangeModalOpen = false)}
-				>
-					✕
-				</button>
+	{#if controller.exchangeModalOpen && post.exchange_share}
+		<Modal onclose={() => (controller.exchangeModalOpen = false)} labelledby="exchange-result-modal-title">
+			<div class="exchange-result-modal-card">
+				<div class="exchange-result-modal-header">
+					<span id="exchange-result-modal-title" class="exchange-result-modal-title">トレード結果</span>
+					<button
+						type="button"
+						class="exchange-result-modal-close"
+						aria-label="閉じる"
+						onclick={() => (controller.exchangeModalOpen = false)}
+					>
+						✕
+					</button>
+				</div>
+				<div class="exchange-result-modal-body">
+					<AnimeExchangeResult
+						offeredAnime={post.exchange_share.offered_anime}
+						receivedAnime={post.exchange_share.received_anime}
+						offeredComment={post.exchange_share.offered_comment}
+						receivedComment={post.exchange_share.received_comment}
+						offeredSubjectiveTags={post.exchange_share.offered_subjective_tags}
+						receivedSubjectiveTags={post.exchange_share.received_subjective_tags}
+						framed={false}
+					/>
+				</div>
+				<div class="exchange-result-modal-footer">
+					<a href="/exchange" class="exchange-result-modal-link">トレードタブへ</a>
+				</div>
 			</div>
-			<div class="exchange-result-modal-body">
-				<AnimeExchangeResult
-					offeredAnime={post.exchange_share.offered_anime}
-					receivedAnime={post.exchange_share.received_anime}
-					offeredComment={post.exchange_share.offered_comment}
-					receivedComment={post.exchange_share.received_comment}
-					offeredSubjectiveTags={post.exchange_share.offered_subjective_tags}
-					receivedSubjectiveTags={post.exchange_share.received_subjective_tags}
-					framed={false}
-				/>
-			</div>
-			<div class="exchange-result-modal-footer">
-				<a href="/exchange" class="exchange-result-modal-link">トレードタブへ</a>
-			</div>
-		</div>
-	</div>
-{/if}
+		</Modal>
+	{/if}
 
-{#if controller.lightboxUrl}
-	<div class="lightbox-overlay" role="dialog" aria-modal="true" aria-label="画像拡大表示" tabindex="-1" use:trapFocus>
-		<button
-			type="button"
-			class="modal-click-target modal-click-layer"
-			tabindex="-1"
-			aria-label="閉じる"
-			onclick={() => (controller.lightboxUrl = null)}
-		></button>
-		<button type="button" class="lightbox-content modal-content-layer" aria-label="拡大画像">
-			<img src={controller.lightboxUrl} alt="拡大画像" class="lightbox-image">
-		</button>
-		<button
-			type="button"
-			class="lightbox-close modal-content-layer"
-			onclick={() => (controller.lightboxUrl = null)}
-			aria-label="閉じる"
-		>
-			✕
-		</button>
-	</div>
-{/if}
+	{#if controller.lightboxUrl}
+		<!-- 画像の外（暗い背景）を押すと閉じる。閉じるボタンは画面の右上に固定 -->
+		<Modal onclose={() => (controller.lightboxUrl = null)} label="画像拡大表示">
+			<button type="button" class="lightbox-content" aria-label="拡大画像">
+				<img src={controller.lightboxUrl} alt="拡大画像" class="lightbox-image">
+			</button>
+			<button
+				type="button"
+				class="lightbox-close"
+				onclick={() => (controller.lightboxUrl = null)}
+				aria-label="閉じる"
+			>
+				✕
+			</button>
+		</Modal>
+	{/if}
 
-{#if controller.reportModalOpen}
-	<div class="report-modal-overlay">
-		<button
-			type="button"
-			class="modal-click-target modal-click-layer"
-			tabindex="-1"
-			aria-label="閉じる"
-			onclick={() => (controller.reportModalOpen = false)}
-		></button>
-		<div
-			class="report-modal-card modal-content-layer"
-			role="dialog"
-			aria-modal="true"
-			aria-labelledby="report-modal-title"
-			tabindex="-1"
-			use:trapFocus
+	{#if controller.reportModalOpen}
+		<Modal
+			onclose={() => (controller.reportModalOpen = false)}
+			dismissible={!controller.reportSubmitting}
+			labelledby="report-modal-title"
 		>
-			<div class="report-modal-header">
-				<span id="report-modal-title" class="report-modal-title">投稿を通報</span>
-				<button
-					type="button"
-					class="report-modal-close"
-					aria-label="閉じる"
-					onclick={() => (controller.reportModalOpen = false)}
-				>
-					✕
-				</button>
+			<div class="report-modal-card">
+				<div class="report-modal-header">
+					<span id="report-modal-title" class="report-modal-title">投稿を通報</span>
+					<button
+						type="button"
+						class="report-modal-close"
+						aria-label="閉じる"
+						onclick={() => (controller.reportModalOpen = false)}
+					>
+						✕
+					</button>
+				</div>
+				<div class="report-modal-body">
+					<label class="report-field">
+						<span>理由</span>
+						<select bind:value={controller.reportReason}>
+							<option value="spam">スパム</option>
+							<option value="harassment">嫌がらせ</option>
+							<option value="sexual">性的コンテンツ</option>
+							<option value="violence">暴力的コンテンツ</option>
+							<option value="illegal">違法・危険行為</option>
+							<option value="other">その他</option>
+						</select>
+					</label>
+					<label class="report-field">
+						<span>補足</span>
+						<textarea rows="3" maxlength="500" bind:value={controller.reportDetails}></textarea>
+					</label>
+					{#if controller.reportMessage}
+						<p class="report-message" role="status" aria-live="polite">{controller.reportMessage}</p>
+					{/if}
+				</div>
+				<div class="report-modal-footer">
+					<button
+						type="button"
+						class="btn btn-primary"
+						disabled={controller.reportSubmitting}
+						onclick={() => controller.submitReport()}
+					>
+						{controller.reportSubmitting ? "送信中..." : "送信"}
+					</button>
+				</div>
 			</div>
-			<div class="report-modal-body">
-				<label class="report-field">
-					<span>理由</span>
-					<select bind:value={controller.reportReason}>
-						<option value="spam">スパム</option>
-						<option value="harassment">嫌がらせ</option>
-						<option value="sexual">性的コンテンツ</option>
-						<option value="violence">暴力的コンテンツ</option>
-						<option value="illegal">違法・危険行為</option>
-						<option value="other">その他</option>
-					</select>
-				</label>
-				<label class="report-field">
-					<span>補足</span>
-					<textarea rows="3" maxlength="500" bind:value={controller.reportDetails}></textarea>
-				</label>
-				{#if controller.reportMessage}
-					<p class="report-message" role="status" aria-live="polite">{controller.reportMessage}</p>
-				{/if}
-			</div>
-			<div class="report-modal-footer">
-				<button
-					type="button"
-					class="btn btn-primary"
-					disabled={controller.reportSubmitting}
-					onclick={() => controller.submitReport()}
-				>
-					{controller.reportSubmitting ? "送信中..." : "送信"}
-				</button>
-			</div>
-		</div>
-	</div>
-{/if}
+		</Modal>
+	{/if}
 
-{#if controller.deleteModalOpen}
-	<div class="delete-modal-overlay">
-		<button
-			type="button"
-			class="modal-click-target modal-click-layer"
-			tabindex="-1"
-			aria-label="閉じる"
-			onclick={() => (controller.deleteModalOpen = false)}
-		></button>
-		<div
-			class="delete-modal-card modal-content-layer"
-			role="dialog"
-			aria-modal="true"
-			aria-labelledby="delete-modal-title"
-			tabindex="-1"
-			use:trapFocus
+	{#if controller.deleteModalOpen}
+		<Modal
+			onclose={() => (controller.deleteModalOpen = false)}
+			dismissible={!controller.deleting}
+			labelledby="delete-modal-title"
 		>
-			<div class="delete-modal-header">
-				<span id="delete-modal-title" class="delete-modal-title">投稿を削除</span>
+			<div class="delete-modal-card">
+				<div class="delete-modal-header">
+					<span id="delete-modal-title" class="delete-modal-title">投稿を削除</span>
+				</div>
+				<div class="delete-modal-body">
+					{#if controller.deleteError}
+						<p class="flash-error" role="alert">{controller.deleteError}</p>
+					{/if}
+					<p>この投稿を削除しますか？この操作は取り消せません。</p>
+				</div>
+				<div class="delete-modal-footer">
+					<button type="button" class="btn btn-ghost" onclick={() => (controller.deleteModalOpen = false)}>
+						キャンセル
+					</button>
+					<button
+						type="button"
+						class="btn btn-danger"
+						disabled={controller.deleting}
+						onclick={() => deleteFormEl?.requestSubmit()}
+					>
+						削除する
+					</button>
+				</div>
 			</div>
-			<div class="delete-modal-body">
-				{#if controller.deleteError}
-					<p class="flash-error" role="alert">{controller.deleteError}</p>
-				{/if}
-				<p>この投稿を削除しますか？この操作は取り消せません。</p>
-			</div>
-			<div class="delete-modal-footer">
-				<button type="button" class="btn btn-ghost" onclick={() => (controller.deleteModalOpen = false)}>
-					キャンセル
-				</button>
-				<button
-					type="button"
-					class="btn btn-danger"
-					disabled={controller.deleting}
-					onclick={() => deleteFormEl?.requestSubmit()}
-				>
-					削除する
-				</button>
-			</div>
-		</div>
-	</div>
-{/if}
+		</Modal>
+	{/if}
+</div>
 
 <style>
-.delete-modal-overlay,
-.report-modal-overlay {
-	position: fixed;
-	inset: 0;
-	z-index: 1000;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	padding: 16px;
-	background: rgba(0, 0, 0, 0.58);
-	backdrop-filter: blur(3px);
+.post-overlays {
+	display: contents;
+}
+
+/* 画像の拡大表示は、Modal の背景より暗くし、どこを押しても閉じることをカーソルで示す */
+:global(dialog.modal):has(> .lightbox-content) {
+	cursor: zoom-out;
+}
+
+:global(dialog.modal):has(> .lightbox-content)::backdrop {
+	background: rgb(0 0 0 / 85%);
+	backdrop-filter: none;
 }
 
 .delete-modal-card,

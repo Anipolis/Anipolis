@@ -1,5 +1,5 @@
 <script lang="ts">
-import { trapFocus } from "#lib/actions/trapFocus.ts";
+import Modal from "#lib/components/Modal.svelte";
 import MyListRemoveConfirm from "#lib/components/MyListRemoveConfirm.svelte";
 import { MYLIST_NOTE_MAX_LENGTH } from "#lib/mylist/entry-details.ts";
 import { savedEntryFromResult } from "#lib/mylist/entry-from-form.ts";
@@ -199,37 +199,12 @@ $effect(() => {
 	if (open && initializedFor === key) return;
 	resetFromEntry(key);
 });
-
-$effect(() => {
-	if (!open) return;
-	const handleKeydown = (event: KeyboardEvent) => {
-		if (event.key !== "Escape" || submitting) return;
-		if (removeConfirming) removeConfirming = false;
-		else onclose();
-	};
-	window.addEventListener("keydown", handleKeydown);
-	return () => window.removeEventListener("keydown", handleKeydown);
-});
 </script>
 
 {#if open}
-	<div class="modal-backdrop">
-		<button
-			type="button"
-			class="modal-click-target modal-click-layer"
-			tabindex="-1"
-			aria-label="閉じる"
-			onclick={() => !submitting && onclose()}
-		></button>
-		<div
-			class="modal-card modal-content-layer"
-			class:modal-card--compact={statusOnly}
-			role="dialog"
-			aria-modal="true"
-			aria-labelledby="mylist-modal-title"
-			tabindex="-1"
-			use:trapFocus
-		>
+	<!-- Esc・背景のクリックは Modal が受ける。確認を出しているときの Esc は確認（内側の Modal）だけを閉じる -->
+	<Modal {onclose} dismissible={!submitting} labelledby="mylist-modal-title">
+		<div class="modal-card" class:modal-card--compact={statusOnly}>
 			<header class="modal-header" class:modal-header--removable={Boolean(entry && removeAction)}>
 				<h2 id="mylist-modal-title">{statusOnly ? "マイリストに追加" : "マイリスト登録・編集"}</h2>
 				<p>{animeTitle}</p>
@@ -413,7 +388,7 @@ $effect(() => {
 				</button>
 			{/if}
 		</div>
-	</div>
+	</Modal>
 {/if}
 
 <style>
@@ -421,16 +396,6 @@ $effect(() => {
 	margin: 14px 0 0;
 	color: var(--color-text-muted);
 	font-size: 0.82rem;
-}
-.modal-backdrop {
-	position: fixed;
-	inset: 0;
-	z-index: 1000;
-	display: grid;
-	place-items: center;
-	padding: 16px;
-	background: rgb(0 0 0 / 72%);
-	backdrop-filter: blur(6px);
 }
 .modal-card {
 	position: relative;
@@ -723,7 +688,8 @@ form {
 	border: 0;
 }
 @media (max-width: 520px) {
-	.modal-backdrop {
+	/* スマホでは下から出るシートにする（Modal の入れ物の余白を外し、下に寄せる） */
+	:global(dialog.modal):has(> .modal-card) {
 		align-items: end;
 		padding: 0;
 	}
