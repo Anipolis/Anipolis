@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { canonicalUrl, metaText, postMetaDescription, shareText, toAbsoluteUrl, xIntentUrl } from "./seo";
+import {
+	canonicalUrl,
+	isNoindexPath,
+	metaText,
+	postMetaDescription,
+	shareText,
+	toAbsoluteUrl,
+	xIntentUrl,
+} from "./seo";
 
 describe("seo helpers", () => {
 	it("makes og:image absolute", () => {
@@ -52,5 +60,43 @@ describe("crawlerSafeImage", () => {
 		expect(crawlerSafeImage("https://x.supabase.co/anime-covers/a.AVIF?v=2")).toBeNull();
 		expect(crawlerSafeImage("https://x.supabase.co/avatars/a.webp")).toBe("https://x.supabase.co/avatars/a.webp");
 		expect(crawlerSafeImage(null)).toBeNull();
+	});
+});
+
+describe("isNoindexPath（#270）", () => {
+	it("本人だけの画面・管理画面・入口・検索結果は検索に載せない", () => {
+		for (const path of [
+			"/admin",
+			"/admin/reports",
+			"/auth",
+			"/auth/reset-password",
+			"/onboarding",
+			"/settings",
+			"/settings/mutes",
+			"/notifications",
+			"/bookmarks",
+			"/mylist",
+			"/exchange/history",
+			"/search",
+			"/__preview/timeline",
+		]) {
+			expect(isNoindexPath(path), path).toBe(true);
+		}
+	});
+
+	it("公開ページは検索に載せる（前方一致で別のページを巻き込まない）", () => {
+		for (const path of [
+			"/",
+			"/anime/1",
+			"/posts/abc",
+			"/profile/alice",
+			"/hashtag/test",
+			"/exchange",
+			"/searchx",
+			"/settingsfoo",
+			"/schedule",
+		]) {
+			expect(isNoindexPath(path), path).toBe(false);
+		}
 	});
 });

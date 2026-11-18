@@ -2,9 +2,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
 import type { Database } from "#lib/supabase/database.types.ts";
 import type { RawPost } from "#lib/types.ts";
+import { chainableRpc } from "../../test/chainable-rpc.ts";
 import { enrichPostsWithCounts, getVisiblePostReplyCounts } from "./queries";
 
-const CHAIN_METHODS = ["select", "eq", "in", "is", "or", "order", "limit", "gt", "gte", "lt", "not"] as const;
+const CHAIN_METHODS = ["select", "eq", "in", "is", "or", "order", "limit", "gt", "gte", "lt", "not", "range"] as const;
 
 /** どのテーブルも空で返す（ミュート・ブロック・マイリスト等の付随取得用） */
 function emptyChain() {
@@ -36,27 +37,29 @@ function rawPost(index: number): RawPost {
 /** 本番の get_post_counts と同じく、200件を超える配列は例外にする */
 function fakeSupabase(failFirstCall = false, alwaysFail = false) {
 	let calls = 0;
-	const rpc = vi.fn(async (name: string, args: { p_post_ids?: string[] }) => {
-		if (name === "get_blocked_user_ids") return { data: [], error: null };
-		if (name !== "get_post_counts") throw new Error(`unexpected rpc: ${name}`);
-		calls++;
-		const ids = args.p_post_ids ?? [];
-		if (ids.length > 200) return { data: null, error: { message: "too many post ids (max 200)" } };
-		if (failFirstCall && calls === 1) return { data: null, error: { message: "temporary failure" } };
-		if (alwaysFail) return { data: null, error: { message: "unavailable" } };
-		return {
-			data: ids.map((post_id) => ({
-				post_id,
-				like_count: 3,
-				repost_count: 1,
-				reply_count: 2,
-				liked_by_me: true,
-				reposted_by_me: false,
-				bookmarked_by_me: true,
-			})),
-			error: null,
-		};
-	});
+	const rpc = vi.fn(
+		chainableRpc(async (name: string, args: { p_post_ids?: string[] } = {}) => {
+			if (name === "get_blocked_user_ids") return { data: [], error: null };
+			if (name !== "get_post_counts") throw new Error(`unexpected rpc: ${name}`);
+			calls++;
+			const ids = args.p_post_ids ?? [];
+			if (ids.length > 200) return { data: null, error: { message: "too many post ids (max 200)" } };
+			if (failFirstCall && calls === 1) return { data: null, error: { message: "temporary failure" } };
+			if (alwaysFail) return { data: null, error: { message: "unavailable" } };
+			return {
+				data: ids.map((post_id) => ({
+					post_id,
+					like_count: 3,
+					repost_count: 1,
+					reply_count: 2,
+					liked_by_me: true,
+					reposted_by_me: false,
+					bookmarked_by_me: true,
+				})),
+				error: null,
+			};
+		}),
+	);
 	return { client: { from: () => emptyChain(), rpc } as unknown as SupabaseClient<Database>, rpc };
 }
 

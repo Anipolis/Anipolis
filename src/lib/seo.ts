@@ -66,3 +66,24 @@ export function crawlerSafeImage(url: string | null | undefined): string | null 
 	const path = url.split(/[?#]/)[0]?.toLowerCase() ?? "";
 	return path.endsWith(".avif") ? null : url;
 }
+
+/**
+ * 検索に載せないページ（#270）。本人だけの画面・管理画面・入口の画面・検索結果。
+ * robots.txt で Disallow にすると noindex が読まれなくなるので、メタタグだけで伝える
+ */
+const NOINDEX_PATH_PREFIXES = [
+	"/admin",
+	"/auth",
+	"/onboarding",
+	"/settings",
+	"/notifications",
+	"/bookmarks",
+	"/mylist",
+	"/exchange/history",
+	"/search",
+	"/__preview",
+] as const;
+
+export function isNoindexPath(pathname: string): boolean {
+	return NOINDEX_PATH_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}

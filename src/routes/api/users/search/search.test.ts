@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { chainableRpc } from "../../../../test/chainable-rpc.ts";
 import { GET } from "./+server";
 
 function makeEvent(q: string | null, blockedUserIds: string[] = []) {
@@ -22,7 +23,9 @@ function makeEvent(q: string | null, blockedUserIds: string[] = []) {
 			supabase: {
 				from: vi.fn(() => chain),
 				// ブロック相手の除外用（141 の get_blocked_user_ids）
-				rpc: vi.fn(async () => ({ data: blockedUserIds.map((id) => ({ user_id: id })), error: null })),
+				rpc: vi.fn(
+					chainableRpc(async () => ({ data: blockedUserIds.map((id) => ({ user_id: id })), error: null })),
+				),
 			},
 			safeGetSession: vi.fn(async () => ({ user: { id: "me" }, session: null })),
 		},
