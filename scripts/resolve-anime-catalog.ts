@@ -12,6 +12,7 @@ import {
 	type AnimeCatalogSeasonSource,
 	collectAnimeCatalogSeasonMalIds,
 } from "../src/lib/anime-catalog-season.ts";
+import { planStatusUpdates } from "../src/lib/anime-catalog-status-updates.ts";
 import { buildAnimeDataAttributions } from "../src/lib/anime-data-attributions.ts";
 import { parseEpisodeCount } from "../src/lib/syobocal-episodes.ts";
 import type { AnimeDataAttribution } from "../src/lib/types.ts";
@@ -108,6 +109,8 @@ type Options = {
 	year: number;
 	season: SeasonName;
 	dryRun: boolean;
+	/** 既にある行の status だけを書き換える（#594） */
+	onlyStatus: boolean;
 };
 
 const VALID_SEASONS = new Set<SeasonName>(["winter", "spring", "summer", "fall"]);
@@ -147,13 +150,17 @@ const LEGACY_COLUMNS = [
 ].join(",");
 
 function parseArgs(argv: string[]): Options {
-	const options: Partial<Options> & Pick<Options, "dryRun"> = { dryRun: false };
+	const options: Partial<Options> & Pick<Options, "dryRun" | "onlyStatus"> = { dryRun: false, onlyStatus: false };
 	for (let index = 0; index < argv.length; index += 1) {
 		const arg = argv[index];
 		const next = argv[index + 1];
 		if (arg === "--") continue;
 		if (arg === "--dry-run") {
 			options.dryRun = true;
+			continue;
+		}
+		if (arg === "--only-status") {
+			options.onlyStatus = true;
 			continue;
 		}
 		if (arg === "--year" && next) {
@@ -170,9 +177,9 @@ function parseArgs(argv: string[]): Options {
 		throw new Error(`Unknown argument: ${arg}`);
 	}
 	if (!Number.isInteger(options.year) || !options.year || options.year < 1900 || !options.season) {
-		throw new Error("Usage: pnpm resolve:anime-catalog -- --year 2023 --season winter [--dry-run]");
+		throw new Error("Usage: pnpm resolve:anime-catalog -- --year 2023 --season winter [--dry-run] [--only-status]");
 	}
-	return { year: options.year, season: options.season, dryRun: options.dryRun };
+	return { year: options.year, season: options.season, dryRun: options.dryRun, onlyStatus: options.onlyStatus };
 }
 
 function getSupabaseClient() {
@@ -532,6 +539,41 @@ async function applyShortAnimeLobbyRule(
 	if (applied > 0) console.log(`Short-anime lobby rule reclassified ${applied} rows.`);
 }
 
+/**
+ * --only-status: 既にある行の status だけを書き換える（#594）。行の追加・ほかの項目・出典・関連作品は触らない。
+ * 過去シーズンの古い放送状態を直すためのもので、スタジオ名など判断待ちの項目を巻き込まない
+ */
+async function applyStatusOnly(
+	supabase: ReturnType<typeof getSupabaseClient>,
+	season: string,
+	resolutions: AnimeCatalogResolution[],
+	legacyRows: LegacyAnimeCatalogRow[],
+	dryRun: boolean,
+) {
+	const plan = planStatusUpdates(
+		resolutions.map(({ canonical }) => ({ mal_id: canonical.mal_id, status: canonical.status ?? null })),
+		new Map(legacyRows.map((row) => [row.mal_id, row.status ?? null])),
+	);
+	const total = [...plan.byStatus.values()].reduce((sum, ids) => sum + ids.length, 0);
+	console.log(
+		`STATUS ${season}: ${total} rows change; ${plan.skippedMissing} not in catalog (skipped). ${JSON.stringify(Object.fromEntries(plan.transitions))}`,
+	);
+	if (dryRun) {
+		console.log("Dry run complete. No database writes were made.");
+		return;
+	}
+	for (const [status, malIds] of plan.byStatus) {
+		for (let start = 0; start < malIds.length; start += BATCH_SIZE) {
+			const { error } = await supabase
+				.from("anime")
+				.update({ status })
+				.in("mal_id", malIds.slice(start, start + BATCH_SIZE));
+			if (error) throw new Error(`Could not update anime status: ${error.message}`);
+		}
+	}
+	console.log(`Status-only update complete for ${season}.`);
+}
+
 async function main() {
 	const options = parseArgs(process.argv.slice(2));
 	const season = `${options.year}-${options.season}`;
@@ -584,6 +626,10 @@ async function main() {
 			2,
 		),
 	);
+	if (options.onlyStatus) {
+		await applyStatusOnly(supabase, season, resolutions, legacyRows, options.dryRun);
+		return;
+	}
 	if (options.dryRun) {
 		console.log("Dry run complete. No database writes were made.");
 		return;
