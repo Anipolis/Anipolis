@@ -10,6 +10,7 @@ import RouteNavigationSkeleton from "#lib/components/RouteNavigationSkeleton.sve
 import Sidebar from "#lib/components/Sidebar.svelte";
 import { navigationSkeletonPath } from "#lib/navigation-skeleton.ts";
 import { type RoomReminder, unreadRoomReminderCount } from "#lib/room-reminders.ts";
+import { isNoindexPath } from "#lib/seo.ts";
 import { composeOpen } from "#lib/stores/compose.ts";
 import { notificationCountsRefresh, roomReminders } from "#lib/stores/notifications.ts";
 import { afterNavigate, invalidate } from "$app/navigation";
@@ -171,6 +172,9 @@ function handleFabClick() {
 	<!-- ページごとの説明・カードは SeoMeta（共有用のメタ、#271）で出す -->
 	<meta property="og:site_name" content="Anipolis">
 	<meta property="og:locale" content="ja_JP">
+	{#if isNoindexPath(page.url.pathname)}
+		<meta name="robots" content="noindex">
+	{/if}
 </svelte:head>
 
 <div class="app-layout">
