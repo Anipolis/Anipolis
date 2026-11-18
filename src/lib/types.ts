@@ -886,3 +886,15 @@ export interface StoredAccount {
  * トークンは httpOnly の Cookie の中だけに置き、切り替えはサーバー（/api/account-switch）が Cookie から読む。
  */
 export type LinkedAccountSummary = Pick<StoredAccount, "userId" | "profile">;
+
+/** フォローのおすすめ（203 の get_follow_suggestions）。共通の作品が無い人は、最近よく投稿している人 */
+export interface FollowSuggestion {
+	id: string;
+	username: string;
+	displayName: string | null;
+	avatarUrl: string | null;
+	/** マイリストで共通の作品の数。0 なら「最近よく投稿している人」 */
+	sharedCount: number;
+	/** 共通の作品名（自分が最近更新した作品から 2 件まで） */
+	sharedTitles: string[];
+}
