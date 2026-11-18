@@ -261,6 +261,44 @@ textarea {
 	background: transparent;
 }
 
+/* キーボードで最初に Tab を押したときだけ出る「メインコンテンツへスキップ」（app.html）。
+   普段は画面の上に隠し、フォーカス中だけ下ろす。青地に白い文字はダークテーマで読みにくい（#500）ので、面の色に本文の色で描き、青い枠で目立たせる */
+.skip-to-main {
+	position: fixed;
+	top: 8px;
+	left: 8px;
+	z-index: 10000;
+	padding: 8px 16px;
+	background: var(--color-surface);
+	color: var(--color-text);
+	border: 2px solid var(--color-accent);
+	border-radius: var(--radius-sm);
+	font-size: 14px;
+	font-weight: 700;
+	text-decoration: none;
+	transform: translateY(calc(-100% - 16px));
+}
+
+.skip-to-main:focus,
+.skip-to-main:focus-visible {
+	transform: none;
+	outline: 2px solid var(--color-accent);
+	outline-offset: 2px;
+	color: var(--color-text);
+	text-decoration: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.skip-to-main {
+		transition: transform 0.15s ease;
+	}
+}
+
+/* 飛び先の main（tabindex="-1"）はプログラムでフォーカスされるだけなので、枠は出さない */
+#main-content:focus {
+	outline: none;
+}
+
 /* --- Layout --- */
 
 .app-layout {
