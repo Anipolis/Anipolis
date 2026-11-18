@@ -1088,6 +1088,9 @@ export async function approveFollowRequestAction(request: Request, supabase: Sup
 	const { error: followError } = existingFollow
 		? { error: null }
 		: await supabase.from("follows").insert({ follower_id: requesterId, following_id: userId });
+	// 申請者が停止中・期限内の利用制限中だと RLS で弾かれる（205、#379）。理由は相手の非公開情報なので出さない。
+	// 申請は残し、制限が明ければ承認できる
+	if (followError?.code === "42501") return fail(403, { message: "この申請は今は承認できません" });
 	if (followError) return fail(500, { message: "フォロー申請の承認に失敗しました" });
 
 	await supabase.from("follow_requests").delete().eq("requester_id", requesterId).eq("target_id", userId);
