@@ -17,10 +17,14 @@ type Props = {
 	dismissible?: boolean;
 	labelledby?: string;
 	label?: string;
+	/** 本文の説明（取り消せない操作の確認などで、読み上げに見出しと一緒に伝える） */
+	describedby?: string;
+	/** 取り消せない操作の確認は alertdialog にする */
+	role?: "dialog" | "alertdialog";
 	children: Snippet;
 };
 
-let { onclose, dismissible = true, labelledby, label, children }: Props = $props();
+let { onclose, dismissible = true, labelledby, label, describedby, role = "dialog", children }: Props = $props();
 
 // 外す途中で自分から close() したときの close イベントは、親へ知らせない（親はもう閉じている）
 let unmounting = false;
@@ -45,8 +49,15 @@ function handleCancel(event: Event) {
 	if (!dismissible) event.preventDefault();
 }
 
-function handleClose() {
-	if (!unmounting) onclose();
+function handleClose(event: Event) {
+	if (unmounting) return;
+	// 閉じない間（送信中など）でも、Chrome は操作を挟まずに Esc が続くと cancel を止めさせずに閉じる。
+	// 親はまだ開いているつもりなので、表示と食い違わないよう開き直す（#600）
+	if (!dismissible) {
+		(event.currentTarget as HTMLDialogElement).showModal();
+		return;
+	}
+	onclose();
 }
 
 // Esc はこのダイアログを閉じるだけにする。投稿画面などのモーダルの中で開いたとき、外側の
@@ -61,6 +72,9 @@ function handlePointerdown(event: PointerEvent) {
 
 function handleClick(event: MouseEvent) {
 	const dialog = event.currentTarget as HTMLDialogElement;
+	// <dialog> は画面の上に出ても DOM では置いた場所にあるので、背景のクリックは親の要素（投稿の行など）へ伝わる。
+	// 背景のクリックはモーダルのための操作なので、ここで止める（中身のクリックは止めない。リンクの移動に要る）
+	if (event.target === dialog) event.stopPropagation();
 	if (dismissible && pressedOnDialog && event.target === dialog) dialog.close();
 	pressedOnDialog = false;
 }
@@ -70,8 +84,10 @@ function handleClick(event: MouseEvent) {
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <dialog
 	class="modal"
+	{role}
 	aria-labelledby={labelledby}
 	aria-label={label}
+	aria-describedby={describedby}
 	oncancel={handleCancel}
 	onclose={handleClose}
 	onkeydown={handleKeydown}

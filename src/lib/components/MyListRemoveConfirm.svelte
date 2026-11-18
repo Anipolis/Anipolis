@@ -18,7 +18,13 @@ type Props = {
 let { animeTitle, removeAction, submitting, oncancel }: Props = $props();
 </script>
 
-<Modal onclose={oncancel} dismissible={!submitting} labelledby="mylist-remove-title">
+<Modal
+	onclose={oncancel}
+	dismissible={!submitting}
+	role="alertdialog"
+	labelledby="mylist-remove-title"
+	describedby="mylist-remove-description"
+>
 	<div class="confirm-dialog">
 		<h3 id="mylist-remove-title">マイリストから外しますか？</h3>
 		<p id="mylist-remove-description">
