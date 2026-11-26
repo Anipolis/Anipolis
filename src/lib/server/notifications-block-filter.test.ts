@@ -2,9 +2,9 @@ import { readFileSync } from "node:fs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
 import type { Database } from "#lib/supabase/database.types.ts";
-import { getNotifications, getUnreadNotificationCount } from "./queries";
+import { getNotificationPage, getUnreadNotificationCount } from "./queries";
 
-const CHAIN_METHODS = ["select", "eq", "order", "limit", "in", "not", "or"] as const;
+const CHAIN_METHODS = ["select", "eq", "order", "limit", "in", "not", "or", "lte"] as const;
 
 /** notifications へのクエリで呼ばれたフィルターを記録しつつ、await で空の結果を返す */
 function recordingSupabase() {
@@ -29,7 +29,7 @@ const migration = readFileSync(
 describe("通知のミュート・ブロック除外（#558）", () => {
 	it("一覧はミュート・ブロック相手の ID を読まず、URL に並べない（RLS の 206 に任せる）", async () => {
 		const { client, calls, from, rpc } = recordingSupabase();
-		await getNotifications(client, "me");
+		await getNotificationPage(client, "me");
 		expect(calls.some((call) => call.method === "or")).toBe(false);
 		expect(from.mock.calls.map(([table]) => table)).toEqual(["notifications"]);
 		expect(rpc).not.toHaveBeenCalled();
