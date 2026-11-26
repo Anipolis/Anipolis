@@ -1,4 +1,5 @@
 <script lang="ts">
+import { untrack } from "svelte";
 import { contentWarningLabel, hasContentWarning } from "#lib/content-warning.ts";
 import { fetchRoomPostPages, mergeReplies, type RoomPostCursor, type RoomPostPage } from "#lib/room-live-sync.ts";
 import type { Post } from "#lib/types.ts";
@@ -13,6 +14,10 @@ interface Props {
 	timelineTimeMode?: boolean;
 	joinPrevious?: boolean;
 	joinNext?: boolean;
+	/** ルームの再確認で見えなくなった投稿・返信の ID。返信欄からも外す（#559） */
+	hiddenPostIds?: ReadonlySet<string>;
+	/** 返信欄で表示中の返信の ID（新しい順）を知らせる。閉じたら空。ルームが再確認に含める（#559） */
+	onOpenRepliesChange?: (postId: string, replyIds: string[]) => void;
 }
 let {
 	post,
@@ -21,6 +26,8 @@ let {
 	timelineTimeMode = false,
 	joinPrevious = false,
 	joinNext = false,
+	hiddenPostIds,
+	onOpenRepliesChange,
 }: Props = $props();
 let expanded = $state(false);
 let replies = $state<Post[]>([]);
@@ -35,7 +42,11 @@ let exhaustedAtReplyCount = $state<number | null>(null);
 let syncedReplyCount = $state(0);
 // 新しい返信の取り足し中。一覧は出したまま裏で取るので、repliesLoading とは分ける
 let refreshingReplies = false;
-const remainingReplyCount = $derived(Math.max(post.reply_count - replies.length, 0));
+// 取得後に削除・非表示・ミュート・ブロックで見えなくなった返信は外して出す（#559）
+const visibleReplies = $derived(
+	hiddenPostIds && hiddenPostIds.size > 0 ? replies.filter((reply) => !hiddenPostIds.has(reply.id)) : replies,
+);
+const remainingReplyCount = $derived(Math.max(post.reply_count - visibleReplies.length, 0));
 // ミュート等で除外された返信があると件数が合わないので、取り切った後は返信数が増えたときだけ出す
 const canLoadMoreReplies = $derived(
 	remainingReplyCount > 0 && (exhaustedAtReplyCount === null || post.reply_count > exhaustedAtReplyCount),
@@ -108,6 +119,25 @@ $effect(() => {
 	if (post.reply_count > syncedReplyCount) void loadNewReplies();
 });
 
+// 返信が削除・非表示になって返信数が減ったら、取り込み済みの件数も合わせる（#559）。
+// 合わせないと、減った後に付いた新しい返信が「増えた」と判定されず取り込まれない
+$effect(() => {
+	const count = post.reply_count;
+	untrack(() => {
+		if (syncedReplyCount > count) syncedReplyCount = count;
+		if (exhaustedAtReplyCount !== null && exhaustedAtReplyCount > count) exhaustedAtReplyCount = count;
+	});
+});
+
+// 開いている返信欄の返信を、ルームの再確認の対象として知らせる（#559）
+$effect(() => {
+	if (!onOpenRepliesChange) return;
+	const report = onOpenRepliesChange;
+	const postId = post.id;
+	report(postId, expanded ? visibleReplies.map((reply) => reply.id).reverse() : []);
+	return () => report(postId, []);
+});
+
 /** 返信を古い順に1ページ取る。失敗したら null（メッセージは repliesError に入れる） */
 async function fetchReplyPage(cursor: RoomPostCursor | null): Promise<RoomPostPage | null> {
 	const params = new URLSearchParams({ mode: "all", limit: "100" });
@@ -174,7 +204,7 @@ async function loadMoreReplies(event: MouseEvent) {
 			<p class="live-reply-status live-reply-error">{repliesError}</p>
 		{:else}
 			<!-- 最新の返信がミュートなどで全部隠れても、続きがあれば古い返信へ進めるようにする -->
-			{#each replies as reply (reply.id)}
+			{#each visibleReplies as reply (reply.id)}
 				<a href="/posts/{reply.id}" class="live-reply" onclick={stop}>
 					<UserAvatar src={reply.avatar_url} username={reply.username} size="xs" />
 					<span class="live-reply-name">{reply.display_name || reply.username}</span>
@@ -191,7 +221,7 @@ async function loadMoreReplies(event: MouseEvent) {
 				<button type="button" class="live-more-replies" onclick={loadMoreReplies}>
 					💬 さらに表示する（残り{remainingReplyCount}件）
 				</button>
-			{:else if replies.length === 0 && post.reply_count > 0}
+			{:else if visibleReplies.length === 0 && post.reply_count > 0}
 				<p class="live-reply-status">返信を表示できませんでした</p>
 			{/if}
 		{/if}

@@ -19,6 +19,7 @@ import {
 	mergeRoomPosts,
 	type RoomPostCursor,
 	type RoomPostPage,
+	selectStateCheckIds,
 } from "#lib/room-live-sync.ts";
 import type { LiveRoomActionData, LiveRoomData, RoomProgressAdvance } from "#lib/types/live-room.ts";
 import type { Post, RoomAiring, RoomExitSurveyComparisonWithX, RoomExitSurveyNextParticipation } from "#lib/types.ts";
@@ -33,6 +34,7 @@ import {
 	ROOM_LIVE_MAX_PAGES,
 	ROOM_LIVE_POLL_INTERVAL_MS,
 	ROOM_STATE_MAX_IDS,
+	ROOM_STATE_MAX_REPLY_IDS,
 	type RoomConnectionEvent,
 	reduceRoomConnection,
 	shouldOfferManualReconnect,
@@ -129,11 +131,17 @@ const surveyPostCount = $derived(data.roomExitSurvey.postCount + localSurveyPost
 let extraPosts = $state<Post[]>([]);
 // 新着取得の境界。表示中の投稿ではなく、取得した行の境界で進める（#320）
 let liveCursor: RoomPostCursor | null = null;
-// 再確認で見えなくなった投稿（削除・管理者非表示・ブロック）と、更新された返信数（#324）
+// 再確認で見えなくなった投稿・返信（削除・管理者非表示・ブロック・ミュート）と、更新された返信数（#324 #559）
 let hiddenPostIds = $state<Set<string>>(new Set());
 let replyCountOverrides = $state<Map<string, number>>(new Map());
 // load のやり直しで引き継いだ古い投稿の ID。次の状態の再確認で、件数の上限に関係なく確かめる（#390）
 const pendingStateCheckIds = new Set<string>();
+// 返信欄を開いている投稿 → 表示中の返信の ID（新しい順）。状態の再確認で返信も確かめる（#559）
+const openReplyIds = new Map<string, string[]>();
+function handleOpenRepliesChange(postId: string, replyIds: string[]) {
+	if (replyIds.length > 0) openReplyIds.set(postId, replyIds);
+	else openReplyIds.delete(postId);
+}
 let roomExperimentVisitId: string | null = null;
 let roomExperimentHeartbeatTimer: ReturnType<typeof setInterval> | undefined;
 let roomExperimentExitSent = false;
@@ -544,13 +552,17 @@ async function resyncPostStates() {
 	resyncingStates = true;
 	try {
 		// 新しい側から上限件数まで（古い投稿の変化は見落としても影響が小さい）。
-		// ただし load のやり直しで引き継いだ古い投稿は、削除済みかもしれないので必ず確かめる（#390 / #396 Codex）
+		// ただし load のやり直しで引き継いだ古い投稿は、削除済みかもしれないので必ず確かめる（#390 / #396 Codex）。
+		// 開いている返信欄の返信も確かめ、見えなくなった返信を返信欄から外す（#559）
 		const visibleIds = new Set(allPosts.map((p) => p.id));
 		const pending = [...pendingStateCheckIds].filter((id) => visibleIds.has(id));
-		const ids = [...new Set([...pending, ...allPosts.slice(-ROOM_STATE_MAX_IDS).map((p) => p.id)])].slice(
-			0,
-			ROOM_STATE_MAX_IDS,
-		);
+		const ids = selectStateCheckIds({
+			pending,
+			replyLists: [...openReplyIds.values()],
+			posts: allPosts.map((p) => p.id),
+			max: ROOM_STATE_MAX_IDS,
+			maxReplies: ROOM_STATE_MAX_REPLY_IDS,
+		});
 		const res = await fetch("/api/rooms/posts/state", {
 			method: "POST",
 			headers: { "content-type": "application/json" },
@@ -1227,6 +1239,8 @@ function formatCompactDate(iso: string) {
 									currentUserId={data.user?.id ?? null}
 									broadcastStartAt={postAiring?.scheduled_at ?? data.room.scheduled_at}
 									timelineTimeMode={isGlobalLobby || (isEpisodeRoom && !postAiring)}
+									{hiddenPostIds}
+									onOpenRepliesChange={handleOpenRepliesChange}
 								/>
 							</div>
 						{/each}
