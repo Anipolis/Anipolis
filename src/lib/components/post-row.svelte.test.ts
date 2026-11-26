@@ -355,4 +355,72 @@ describe("実況ルームの返信の続き（#325）", () => {
 		target.querySelector<HTMLButtonElement>(".live-more-replies")?.click();
 		await vi.waitFor(() => expect(target.querySelectorAll(".live-reply")).toHaveLength(2));
 	});
+	it("ルームの再確認で見えなくなった返信は、開いている返信欄から外す（#559）", async () => {
+		const all = [reply(0), reply(1), reply(2)];
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => Response.json({ replies: all })),
+		);
+		const reported: [string, string[]][] = [];
+		const props = $state({
+			post: { ...fixturePost(18), reply_count: 3 },
+			currentUserId: "preview-user-0",
+			hiddenPostIds: new Set<string>() as ReadonlySet<string>,
+			onOpenRepliesChange: (postId: string, ids: string[]) => reported.push([postId, ids]),
+		});
+		const target = document.body.appendChild(document.createElement("div"));
+		const component = mount(LiveRoomPostCard, { target, props });
+		cleanup.push(() => unmount(component));
+		await tick();
+		const toggle = target.querySelector<HTMLButtonElement>('[aria-label="投稿の返信を表示"]');
+		toggle?.click();
+		await vi.waitFor(() => expect(target.querySelectorAll(".live-reply")).toHaveLength(3));
+		// 表示中の返信を新しい順に知らせ、ルームが再確認に含められるようにする
+		expect(reported.at(-1)).toEqual([props.post.id, [all[2]?.id, all[1]?.id, all[0]?.id]]);
+
+		// 返信者をミュートした・返信が削除されたなどで、再確認の結果に返信1が無かった
+		props.hiddenPostIds = new Set([all[1]?.id ?? ""]);
+		await vi.waitFor(() => expect(target.querySelectorAll(".live-reply")).toHaveLength(2));
+		expect(target.querySelector(".live-replies")?.textContent).not.toContain("返信1");
+		expect(reported.at(-1)).toEqual([props.post.id, [all[2]?.id, all[0]?.id]]);
+
+		// 閉じたら再確認の対象から外す
+		toggle?.click();
+		await tick();
+		expect(reported.at(-1)).toEqual([props.post.id, []]);
+	});
+
+	it("返信が消えて返信数が減った後に付いた返信も取り込む（#559）", async () => {
+		const all = [reply(0), reply(1)];
+		const fetchMock = vi.fn(async (input: string) => {
+			const url = new URL(input, "http://localhost");
+			const limit = Number(url.searchParams.get("limit") ?? "3");
+			return Response.json({ replies: all.slice(-limit) });
+		});
+		vi.stubGlobal("fetch", fetchMock);
+		const props = $state({
+			post: { ...fixturePost(18), reply_count: 2 },
+			currentUserId: "preview-user-0",
+			hiddenPostIds: new Set<string>() as ReadonlySet<string>,
+		});
+		const target = document.body.appendChild(document.createElement("div"));
+		const component = mount(LiveRoomPostCard, { target, props });
+		cleanup.push(() => unmount(component));
+		await tick();
+		target.querySelector<HTMLButtonElement>('[aria-label="投稿の返信を表示"]')?.click();
+		await vi.waitFor(() => expect(target.querySelectorAll(".live-reply")).toHaveLength(2));
+
+		// 返信0が削除され、再確認で見えなくなり返信数も 1 に減る
+		all.shift();
+		props.hiddenPostIds = new Set([reply(0).id]);
+		props.post = { ...props.post, reply_count: 1 };
+		await vi.waitFor(() => expect(target.querySelectorAll(".live-reply")).toHaveLength(1));
+
+		// その後に新しい返信が付いて、返信数が 2 に戻る
+		all.push(reply(2));
+		props.post = { ...props.post, reply_count: 2 };
+		await vi.waitFor(() => expect(target.querySelectorAll(".live-reply")).toHaveLength(2));
+		expect(target.querySelector(".live-reply:last-of-type")?.textContent).toContain("返信2");
+		expect(target.querySelector(".live-replies")?.textContent).not.toContain("返信0");
+	});
 });

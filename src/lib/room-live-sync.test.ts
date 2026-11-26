@@ -9,6 +9,7 @@ import {
 	mergeRoomPosts,
 	type RoomPostCursor,
 	type RoomPostPage,
+	selectStateCheckIds,
 } from "./room-live-sync";
 import type { Post } from "./types";
 
@@ -138,5 +139,45 @@ describe("mergeReplies（#325）", () => {
 		const recent = [post("r-198", T(58)), post("r-199", T(59))];
 		const older = [post("r-000", T(0)), post("r-198", T(58))];
 		expect(mergeReplies(recent, older).map((p) => p.id)).toEqual(["r-000", "r-198", "r-199"]);
+	});
+});
+
+describe("selectStateCheckIds（#559）", () => {
+	const ids = (prefix: string, count: number) => Array.from({ length: count }, (_, i) => `${prefix}${i}`);
+
+	it("引き継いだ投稿、開いている返信欄の返信、新しい側の投稿の順に上限まで選ぶ", () => {
+		const result = selectStateCheckIds({
+			pending: ["old-1"],
+			replyLists: [["r-new", "r-old"]],
+			posts: ids("p", 10),
+			max: 6,
+			maxReplies: 10,
+		});
+		expect(result).toEqual(["old-1", "r-new", "r-old", "p9", "p8", "p7"]);
+	});
+
+	it("返信は maxReplies 件までで、複数の返信欄から新しい順に交互に選ぶ", () => {
+		const result = selectStateCheckIds({
+			pending: [],
+			replyLists: [ids("a", 5), ids("b", 1)],
+			posts: ids("p", 3),
+			max: 400,
+			maxReplies: 3,
+		});
+		expect(result).toEqual(["a0", "b0", "a1", "p2", "p1", "p0"]);
+	});
+
+	it("同じ ID は1回だけ数え、上限を超えない", () => {
+		const result = selectStateCheckIds({
+			pending: ["p2"],
+			replyLists: [["p2", "r0"]],
+			posts: ids("p", 3),
+			max: 3,
+			maxReplies: 10,
+		});
+		expect(result).toEqual(["p2", "r0", "p1"]);
+		expect(
+			selectStateCheckIds({ pending: ids("x", 5), replyLists: [["r0"]], posts: ["p0"], max: 3, maxReplies: 1 }),
+		).toEqual(["x0", "x1", "x2"]);
 	});
 });

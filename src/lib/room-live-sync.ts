@@ -79,6 +79,43 @@ export async function fetchRoomPostPages(
 }
 
 /**
+ * 状態の再確認で確かめる ID を、合わせて max 件までに選ぶ（#559）。
+ * 1. pending（load のやり直しで引き継いだ投稿。件数に関係なく先に確かめる）
+ * 2. 開いている返信欄の返信（各欄から新しい順に1件ずつ交互に、maxReplies 件まで）
+ * 3. 表示中の投稿を新しい側から（posts は古い順）
+ */
+export function selectStateCheckIds(options: {
+	pending: readonly string[];
+	replyLists: readonly (readonly string[])[];
+	posts: readonly string[];
+	max: number;
+	maxReplies: number;
+}): string[] {
+	const { pending, replyLists, posts, max, maxReplies } = options;
+	const ids = new Set<string>();
+	for (const id of pending) {
+		if (ids.size >= max) return [...ids];
+		ids.add(id);
+	}
+	let replyBudget = maxReplies;
+	const longest = Math.max(0, ...replyLists.map((list) => list.length));
+	for (let index = 0; index < longest && replyBudget > 0 && ids.size < max; index++) {
+		for (const list of replyLists) {
+			const id = list[index];
+			if (id === undefined || ids.has(id)) continue;
+			if (replyBudget <= 0 || ids.size >= max) break;
+			ids.add(id);
+			replyBudget--;
+		}
+	}
+	for (let index = posts.length - 1; index >= 0 && ids.size < max; index--) {
+		const id = posts[index];
+		if (id !== undefined) ids.add(id);
+	}
+	return [...ids];
+}
+
+/**
  * 再確認の結果を反映する（#324）。visible は「今も閲覧できる投稿 → 返信数」。
  * 確かめた ID のうち visible に無いものは、削除・管理者非表示・ブロックで見えなくなった投稿。
  */
