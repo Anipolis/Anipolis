@@ -236,6 +236,44 @@ describe("CW（ネタバレ注意）の保護（#317〜#319）", () => {
 		});
 	}
 
+	it("引用リポストの作成画面で、画像だけの投稿は縮小画像を出し、押すと拡大できる", async () => {
+		const post = {
+			...fixturePost(0),
+			content: "",
+			image_urls: ["https://signed.example/a.png", "https://signed.example/b.png"],
+			anime_quote: null,
+			quoted_post_id: null,
+			quoted_post: null,
+		};
+		const target = document.body.appendChild(document.createElement("div"));
+		const instance = mount(PostRow, { target, props: { post, currentUserId: "preview-user-0" } });
+		cleanup.push(() => unmount(instance));
+		await tick();
+		target.querySelector<HTMLButtonElement>('[aria-label="投稿の操作"]')?.click();
+		await tick();
+		target.querySelector<HTMLButtonElement>('[aria-label="リポスト"]')?.click();
+		await tick();
+		target.querySelector<HTMLButtonElement>(".repost-menu-item-quote")?.click();
+		await tick();
+
+		const preview = target.querySelector(".quote-preview");
+		// 本文が無ければ空の段落は出さず、画像を出す
+		expect(preview?.querySelector(".quote-preview-content")).toBeNull();
+		const images = preview?.querySelectorAll<HTMLImageElement>("img.quoted-post-image") ?? [];
+		expect([...images].map((img) => img.getAttribute("src"))).toEqual([
+			"https://signed.example/a.png",
+			"https://signed.example/b.png",
+		]);
+		preview?.querySelector<HTMLButtonElement>('[aria-label="引用元の画像 2 を拡大"]')?.click();
+		await tick();
+		expect(target.querySelector("img.lightbox-image")?.getAttribute("src")).toBe("https://signed.example/b.png");
+		// 拡大を閉じても、作成画面は開いたまま
+		target.querySelector<HTMLButtonElement>(".lightbox-close")?.click();
+		await tick();
+		expect(target.querySelector("img.lightbox-image")).toBeNull();
+		expect(target.querySelector(".quote-preview")).not.toBeNull();
+	});
+
 	it("引用元に CW が無ければ、引用枠は本文を出す", async () => {
 		const post = {
 			...fixturePost(0),
@@ -289,7 +327,7 @@ describe("引用枠の画像・作品名（#290）", () => {
 		["投稿詳細", PostDetail],
 		["実況ルーム", LiveRoomPostCard],
 	] as const) {
-		it(`${name}: 画像だけの投稿の引用は、縮小した画像とラベルを出し、押すと元の投稿へ`, async () => {
+		it(`${name}: 画像だけの投稿の引用は、縮小した画像を出し（ラベルは出さない）、押すと元の投稿へ`, async () => {
 			const { quote } = await renderQuote(
 				component,
 				quotedPost({ image_urls: ["https://signed.example/a.png", "https://signed.example/b.png"] }),
@@ -299,7 +337,7 @@ describe("引用枠の画像・作品名（#290）", () => {
 				"https://signed.example/a.png",
 				"https://signed.example/b.png",
 			]);
-			expect(quote.querySelector(".quoted-post-placeholder")?.textContent).toBe("画像2枚の投稿");
+			expect(quote.querySelector(".quoted-post-placeholder")).toBeNull();
 			// 画像は拡大のボタンにせず、引用枠ごと元の投稿へのリンクにする
 			expect(quote.querySelector("button")).toBeNull();
 			expect(quote.getAttribute("href")).toBe("/posts/quoted-290");
@@ -312,7 +350,7 @@ describe("引用枠の画像・作品名（#290）", () => {
 			quotedPost({ anime_id: "7", anime: { id: "7", title: "夜空のレコード" } }),
 		);
 		expect(quote.querySelector(".quoted-post-anime-title")?.textContent).toBe("夜空のレコード");
-		expect(quote.querySelector(".quoted-post-placeholder")?.textContent).toBe("作品引用の投稿");
+		expect(quote.querySelector(".quoted-post-placeholder")).toBeNull();
 	});
 
 	it("本文がある引用は、本文と画像・作品名を並べて出す（ラベルは出さない）", async () => {

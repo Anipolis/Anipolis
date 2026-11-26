@@ -3568,6 +3568,22 @@ form + .repost-menu-item {
 	object-fit: cover;
 }
 
+/* 引用リポストの作成画面では、縮小画像を押すと拡大して元の画像を見られる */
+.quote-preview-image-button {
+	display: block;
+	min-width: 0;
+	padding: 0;
+	border: 0;
+	border-radius: var(--radius-sm);
+	background: none;
+	cursor: zoom-in;
+}
+
+.quote-preview-image-button:focus-visible {
+	outline: 2px solid var(--color-accent, #89b4fa);
+	outline-offset: 2px;
+}
+
 /* 引用元に CW があるときの警告ラベル（本文の代わりに出す。引用枠と引用リポスト作成画面） */
 .quoted-post-cw,
 .quote-preview-cw {

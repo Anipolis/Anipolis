@@ -8,18 +8,14 @@ describe("quotedPostPlaceholder（#290）", () => {
 		expect(quotedPostPlaceholder({ ...base, content: "こんにちは", image_urls: ["a"] })).toBeNull();
 	});
 
-	it("画像だけの投稿は枚数を添える（通知 #279 と同じ言い方）", () => {
-		expect(quotedPostPlaceholder({ ...base, image_urls: ["a"] })).toBe("画像の投稿");
-		expect(quotedPostPlaceholder({ ...base, content: "  \n", image_urls: ["a", "b", "c"] })).toBe("画像3枚の投稿");
+	it("縮小画像か作品名が見えていればラベルは出さない", () => {
+		expect(quotedPostPlaceholder({ ...base, image_urls: ["a"] })).toBeNull();
+		expect(quotedPostPlaceholder({ ...base, content: "  \n", image_urls: ["a", "b", "c"] })).toBeNull();
+		expect(quotedPostPlaceholder({ ...base, anime_id: "7", anime: { id: "7", title: "x" } })).toBeNull();
 	});
 
-	it("作品引用・画像の組み合わせと、引用リポストだけの投稿", () => {
-		expect(quotedPostPlaceholder({ ...base, anime_id: "7", anime: { id: "7", title: "x" } })).toBe(
-			"作品引用の投稿",
-		);
-		expect(quotedPostPlaceholder({ ...base, image_urls: ["a", "b"], anime_id: "7", anime: null })).toBe(
-			"画像2枚・作品引用の投稿",
-		);
+	it("作品名が取れなかった作品引用と、引用リポストだけの投稿", () => {
+		expect(quotedPostPlaceholder({ ...base, anime_id: "7", anime: null })).toBe("作品引用の投稿");
 		expect(quotedPostPlaceholder({ ...base, quoted_post_id: "p" })).toBe("引用リポスト");
 	});
 

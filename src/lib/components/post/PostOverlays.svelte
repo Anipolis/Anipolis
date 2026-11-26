@@ -1,5 +1,6 @@
 <script lang="ts">
 import AnimeExchangeResult from "#lib/components/AnimeExchangeResult.svelte";
+import AnimeIcon from "#lib/components/AnimeIcon.svelte";
 import Modal from "#lib/components/Modal.svelte";
 import UserAvatar from "#lib/components/UserAvatar.svelte";
 import { contentWarningLabel, hasContentWarning } from "#lib/content-warning.ts";
@@ -88,7 +89,36 @@ function stopRowClick(event: MouseEvent) {
 								{contentWarningLabel(post)}
 							</p>
 						{:else}
-							<p class="quote-preview-content">{content}</p>
+							{#if content.trim()}
+								<p class="quote-preview-content">{content}</p>
+							{/if}
+							{#if post.anime_quote}
+								<p class="quoted-post-anime">
+									<AnimeIcon size={13} />
+									<span class="quoted-post-anime-title">{post.anime_quote.title}</span>
+								</p>
+							{/if}
+							{#if post.image_urls.length > 0}
+								<!-- 引用元の画像も縮小して出し、押すと拡大して元の画像を見られる。画像だけの投稿でも何を引用するか分かるように -->
+								<div class="quoted-post-images">
+									{#each post.image_urls.slice(0, 4) as url, i}
+										<button
+											type="button"
+											class="quote-preview-image-button"
+											aria-label="引用元の画像 {i + 1} を拡大"
+											onclick={() => (controller.lightboxUrl = url)}
+										>
+											<img
+												src={url}
+												alt="引用元の画像 {i + 1}"
+												class="quoted-post-image"
+												width="72"
+												height="72"
+											>
+										</button>
+									{/each}
+								</div>
+							{/if}
 						{/if}
 					</div>
 					{#if controller.quoteError}
