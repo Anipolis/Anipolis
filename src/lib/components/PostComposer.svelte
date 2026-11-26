@@ -700,67 +700,6 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 				{/if}
 			</div>
 
-			<!-- 追加機能（画像・アニメ引用・CW・実況ルーム）のタイル -->
-			<fieldset class="composer-tools fieldset-reset" aria-label="投稿の追加機能">
-				<button
-					type="button"
-					class="composer-tool-tile"
-					disabled={imageUrls.length >= MAX_IMAGES || uploading}
-					onclick={() => fileInput?.click()}
-					aria-label="画像を添付"
-					title="画像を添付（最大{MAX_IMAGES}枚）"
-				>
-					<span class={uploading ? "i-lucide-loader-circle" : "i-lucide-image"} aria-hidden="true"></span>
-					<span class="composer-tool-label">画像</span>
-				</button>
-
-				<input
-					bind:this={fileInput}
-					type="file"
-					accept="image/jpeg,image/png,image/gif,image/webp"
-					multiple
-					style="display:none"
-					onchange={handleFileChange}
-				>
-
-				<button
-					type="button"
-					class="composer-tool-tile"
-					class:active={selectedAnime !== null}
-					disabled={selectedAnime !== null}
-					onclick={openAnimeSearch}
-					aria-label="アニメを引用"
-					title="アニメを引用"
-				>
-					<span class="i-lucide-clapperboard" aria-hidden="true"></span>
-					<span class="composer-tool-label">アニメ</span>
-				</button>
-
-				<button
-					type="button"
-					class="composer-tool-tile"
-					class:active={selectedCwAnime !== null}
-					onclick={openCwSearch}
-					aria-label="ネタバレCWを設定"
-					title="ネタバレCW（コンテンツ警告）を設定"
-				>
-					<span class="i-lucide-eye-off" aria-hidden="true"></span>
-					<span class="composer-tool-label">ネタバレ</span>
-				</button>
-
-				<button
-					type="button"
-					class="composer-tool-tile"
-					class:active={selectedRoom !== null}
-					onclick={openRoomSearch}
-					aria-label="ルームにリンク"
-					title="ルームにリンク"
-				>
-					<span class="i-lucide-door-open" aria-hidden="true"></span>
-					<span class="composer-tool-label">ルーム</span>
-				</button>
-			</fieldset>
-
 			{#if selectedAnime || selectedCwAnime || selectedRoom}
 				<div class="flex flex-wrap gap-2 mt-2 mb-0.5">
 					{#if selectedAnime}
@@ -904,6 +843,67 @@ const handleSubmit: SubmitFunction = ({ cancel }) => {
 					{/each}
 				</div>
 			{/if}
+
+			<!-- 追加機能（画像・アニメ引用・CW・実況ルーム）のタイル。添付した画像・作品の後ろ（投稿欄のいちばん下）に置き、本文と添付の間に挟まらないようにする -->
+			<fieldset class="composer-tools fieldset-reset" aria-label="投稿の追加機能">
+				<button
+					type="button"
+					class="composer-tool-tile"
+					disabled={imageUrls.length >= MAX_IMAGES || uploading}
+					onclick={() => fileInput?.click()}
+					aria-label="画像を添付"
+					title="画像を添付（最大{MAX_IMAGES}枚）"
+				>
+					<span class={uploading ? "i-lucide-loader-circle" : "i-lucide-image"} aria-hidden="true"></span>
+					<span class="composer-tool-label">画像</span>
+				</button>
+
+				<input
+					bind:this={fileInput}
+					type="file"
+					accept="image/jpeg,image/png,image/gif,image/webp"
+					multiple
+					style="display:none"
+					onchange={handleFileChange}
+				>
+
+				<button
+					type="button"
+					class="composer-tool-tile"
+					class:active={selectedAnime !== null}
+					disabled={selectedAnime !== null}
+					onclick={openAnimeSearch}
+					aria-label="アニメを引用"
+					title="アニメを引用"
+				>
+					<span class="i-lucide-clapperboard" aria-hidden="true"></span>
+					<span class="composer-tool-label">アニメ</span>
+				</button>
+
+				<button
+					type="button"
+					class="composer-tool-tile"
+					class:active={selectedCwAnime !== null}
+					onclick={openCwSearch}
+					aria-label="ネタバレCWを設定"
+					title="ネタバレCW（コンテンツ警告）を設定"
+				>
+					<span class="i-lucide-eye-off" aria-hidden="true"></span>
+					<span class="composer-tool-label">ネタバレ</span>
+				</button>
+
+				<button
+					type="button"
+					class="composer-tool-tile"
+					class:active={selectedRoom !== null}
+					onclick={openRoomSearch}
+					aria-label="ルームにリンク"
+					title="ルームにリンク"
+				>
+					<span class="i-lucide-door-open" aria-hidden="true"></span>
+					<span class="composer-tool-label">ルーム</span>
+				</button>
+			</fieldset>
 
 			<!-- 画像URLをフォームに含める -->
 			<input type="hidden" name="image_urls" value={JSON.stringify(imageUrls)}>
