@@ -762,17 +762,29 @@ function normalizeMutedWord(word: string): string {
 	return word.trim().toLocaleLowerCase();
 }
 
+/** 通知一覧の1ページの件数（#249） */
+export const NOTIFICATION_PAGE_SIZE = 50;
+
+export type NotificationPage = { notifications: Notification[]; nextCursor: TimelineCursor | null };
+
 /**
- * 通知一覧を取得する（actor プロフィールと投稿内容を JOIN して返す）
+ * 通知一覧を、新しい順に1ページずつ返す（actor プロフィールと投稿内容を JOIN して返す）。
+ * 並びは（created_at, id）の降順に固定し、続きは cursor（その行より前）で読む（#249）。
+ * types は通知の種類の組（＝カテゴリ）。カーソルは同じ types の一覧の中でだけ意味を持つ。
+ *
+ * ページの件数がぶれないように、間引きはすべて DB の側で LIMIT より前に効かせる:
+ *   * ミュート・ブロック相手からの通知（ブロック前に作られた行も含む）は RLS（206）で読めない（#558）
+ *   * 削除された投稿への通知は FK の ON DELETE CASCADE で消える
+ *   * 非表示・非公開で読めない投稿への通知は、行は残して「削除された投稿」として出す（post_available）
+ * アプリでは行を捨てないので、取り足しのループは要らない。続きの有無は limit + 1 件目があるかで決め、
+ * ちょうど limit 件で終わるときに空の「続き」を出さない。
  */
-export async function getNotifications(
+export async function getNotificationPage(
 	supabase: SupabaseClient<Database>,
 	userId: string,
-	limit = 50,
-	types?: readonly string[],
-): Promise<Notification[]> {
-	// ミュート・ブロック相手からの通知（ブロック前に作られた行も含む）は、
-	// notifications の RLS（206）で読めないので、ここでは絞らない（#558）
+	options: { types?: readonly string[]; cursor?: TimelineCursor | undefined; limit?: number } = {},
+): Promise<NotificationPage> {
+	const { types, cursor, limit = NOTIFICATION_PAGE_SIZE } = options;
 	let query = supabase
 		.from("notifications")
 		.select(`
@@ -834,65 +846,76 @@ export async function getNotifications(
         `)
 		.eq("recipient_id", userId)
 		.order("created_at", { ascending: false })
-		.limit(limit);
+		.order("id", { ascending: false })
+		.limit(limit + 1);
 
 	if (types && types.length > 0) {
 		query = query.in("type", types as string[]);
+	}
+	if (cursor) {
+		// lte で (recipient_id, created_at DESC) のインデックス（054）を目印の時刻までの範囲に絞り、
+		// 同じ時刻の行は or の id.lt で区切る（同じ時刻の行は少ないので、id での並べ替えは軽い）
+		query = query.lte("created_at", cursor.createdAt).or(timelineCursorFilter(cursor, "id"));
 	}
 
 	const { data, error } = await query;
 
 	// 取得の失敗を「通知はありません」と見せない（#262）
-	if (error) failQuery("getNotifications", error);
-	if (!data) return [];
+	if (error) failQuery("getNotificationPage", error);
+	const rows = (data ?? []) as unknown as NotificationRow[];
+	const pageRows = rows.slice(0, limit);
+	const last = pageRows[pageRows.length - 1];
+	const nextCursor = rows.length > limit && last ? { createdAt: last.created_at, id: last.id } : null;
 
-	return (data as unknown as NotificationRow[]).map((row) => {
-		const actor = Array.isArray(row.actor) ? row.actor[0] : row.actor;
-		const post = Array.isArray(row.post) ? row.post[0] : row.post;
-		const recommendation = Array.isArray(row.recommendation) ? row.recommendation[0] : row.recommendation;
-		const broadcastAnime = Array.isArray(row.broadcast_anime) ? row.broadcast_anime[0] : row.broadcast_anime;
-		const event = Array.isArray(row.event) ? row.event[0] : row.event;
-		const activity = Array.isArray(row.activity) ? row.activity[0] : row.activity;
-		const exchangeAnime = Array.isArray(row.exchange_anime) ? row.exchange_anime[0] : row.exchange_anime;
-		return {
-			id: row["id"],
-			type: row.type as Notification["type"],
-			post_id: row.post_id,
-			anime_recommendation_id: row.anime_recommendation_id,
-			broadcast_anime_id: row.broadcast_anime_id != null ? String(row.broadcast_anime_id) : null,
-			broadcast_scheduled_at: row.broadcast_scheduled_at,
-			broadcast_room_date: row.broadcast_room_date,
-			read: row.read,
-			created_at: row.created_at,
-			actor_username: actor?.username ?? "unknown",
-			actor_display_name: actor?.display_name ?? null,
-			actor_avatar_url: actor?.avatar_url ?? null,
-			post_content: post?.content ?? "",
-			// post_id があるのに JOIN 結果が無い = 削除済み（または RLS で見えない）投稿
-			post_available: post != null,
-			post_image_count: post?.image_urls?.length ?? 0,
-			post_has_anime_quote: post?.anime_id != null,
-			post_has_quoted_post: post?.quoted_post_id != null,
-			post_has_exchange_share: post?.exchange_share != null,
-			post_cw_anime_id: post?.cw_anime_id != null ? String(post.cw_anime_id) : null,
-			post_cw_anime_title: (Array.isArray(post?.cw_anime) ? post.cw_anime[0] : post?.cw_anime)?.title ?? null,
-			recommendation_anime_id: recommendation?.anime_id != null ? String(recommendation.anime_id) : null,
-			recommendation_anime_title: recommendation?.anime?.title ?? null,
-			recommendation_anime_cover_url: recommendation?.anime?.cover_url ?? null,
-			broadcast_anime_title: broadcastAnime?.title ?? null,
-			broadcast_anime_cover_url: broadcastAnime?.cover_url ?? null,
-			event_id: row.event_id,
-			event_title: event?.title ?? null,
-			activity_id: row.activity_id,
-			activity_status: isActivityStatus(activity?.status) ? activity.status : null,
-			activity_anime_id: activity?.anime ? String(activity.anime.id) : null,
-			activity_anime_title: activity?.anime?.title ?? null,
-			activity_anime_cover_url: activity?.anime?.cover_url ?? null,
-			exchange_anime_id: row.exchange_anime_id != null ? String(row.exchange_anime_id) : null,
-			exchange_anime_title: exchangeAnime?.title ?? null,
-			exchange_anime_cover_url: exchangeAnime?.cover_url ?? null,
-		};
-	});
+	return { notifications: pageRows.map(toNotification), nextCursor };
+}
+
+function toNotification(row: NotificationRow): Notification {
+	const actor = Array.isArray(row.actor) ? row.actor[0] : row.actor;
+	const post = Array.isArray(row.post) ? row.post[0] : row.post;
+	const recommendation = Array.isArray(row.recommendation) ? row.recommendation[0] : row.recommendation;
+	const broadcastAnime = Array.isArray(row.broadcast_anime) ? row.broadcast_anime[0] : row.broadcast_anime;
+	const event = Array.isArray(row.event) ? row.event[0] : row.event;
+	const activity = Array.isArray(row.activity) ? row.activity[0] : row.activity;
+	const exchangeAnime = Array.isArray(row.exchange_anime) ? row.exchange_anime[0] : row.exchange_anime;
+	return {
+		id: row["id"],
+		type: row.type as Notification["type"],
+		post_id: row.post_id,
+		anime_recommendation_id: row.anime_recommendation_id,
+		broadcast_anime_id: row.broadcast_anime_id != null ? String(row.broadcast_anime_id) : null,
+		broadcast_scheduled_at: row.broadcast_scheduled_at,
+		broadcast_room_date: row.broadcast_room_date,
+		read: row.read,
+		created_at: row.created_at,
+		actor_username: actor?.username ?? "unknown",
+		actor_display_name: actor?.display_name ?? null,
+		actor_avatar_url: actor?.avatar_url ?? null,
+		post_content: post?.content ?? "",
+		// post_id があるのに JOIN 結果が無い = 削除済み（または RLS で見えない）投稿
+		post_available: post != null,
+		post_image_count: post?.image_urls?.length ?? 0,
+		post_has_anime_quote: post?.anime_id != null,
+		post_has_quoted_post: post?.quoted_post_id != null,
+		post_has_exchange_share: post?.exchange_share != null,
+		post_cw_anime_id: post?.cw_anime_id != null ? String(post.cw_anime_id) : null,
+		post_cw_anime_title: (Array.isArray(post?.cw_anime) ? post.cw_anime[0] : post?.cw_anime)?.title ?? null,
+		recommendation_anime_id: recommendation?.anime_id != null ? String(recommendation.anime_id) : null,
+		recommendation_anime_title: recommendation?.anime?.title ?? null,
+		recommendation_anime_cover_url: recommendation?.anime?.cover_url ?? null,
+		broadcast_anime_title: broadcastAnime?.title ?? null,
+		broadcast_anime_cover_url: broadcastAnime?.cover_url ?? null,
+		event_id: row.event_id,
+		event_title: event?.title ?? null,
+		activity_id: row.activity_id,
+		activity_status: isActivityStatus(activity?.status) ? activity.status : null,
+		activity_anime_id: activity?.anime ? String(activity.anime.id) : null,
+		activity_anime_title: activity?.anime?.title ?? null,
+		activity_anime_cover_url: activity?.anime?.cover_url ?? null,
+		exchange_anime_id: row.exchange_anime_id != null ? String(row.exchange_anime_id) : null,
+		exchange_anime_title: exchangeAnime?.title ?? null,
+		exchange_anime_cover_url: exchangeAnime?.cover_url ?? null,
+	};
 }
 
 /**

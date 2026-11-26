@@ -8,13 +8,15 @@ import { coverThumbFallback, coverThumbSrc } from "#lib/cover-image.ts";
 import { groupActivityLikes } from "#lib/notification-groups.ts";
 import { notificationPostPreview } from "#lib/notification-post-preview.ts";
 import { requestNotificationCountsRefresh } from "#lib/stores/notifications.ts";
+import { timelineCursorHref } from "#lib/timeline-cursor.ts";
 import type { Notification } from "#lib/types.ts";
 import { formatRelativeTime } from "#lib/utils/format.ts";
+import { page } from "$app/state";
 import type { PageProps } from "./$types";
 
 let { data }: PageProps = $props();
 
-// アクティビティへのいいねは、同じ記録への分を1件にまとめて出す
+// アクティビティへのいいねは、同じ記録への分を1件にまとめて出す（まとめるのは読んだページの中だけ）
 const entries = $derived(groupActivityLikes(data.notifications as Notification[]));
 
 // 既読化はページが実際に描画された後にだけ行う。server load で既読化すると、
@@ -64,7 +66,7 @@ function notificationLabel(type: string): string {
 
 		{#if entries.length === 0}
 			<div class="notifications-empty">
-				<p>通知はまだありません</p>
+				<p>{data.isContinuation ? "これより前の通知はありません" : "通知はまだありません"}</p>
 			</div>
 		{:else}
 			<ul class="notification-list">
@@ -171,6 +173,10 @@ function notificationLabel(type: string): string {
 					</li>
 				{/each}
 			</ul>
+			{#if data.nextCursor}
+				<!-- 50件ずつ（#249）。ほかの一覧と同じ「さらに読み込む」で、より前の通知のページへ進む -->
+				<a href={timelineCursorHref(page.url, data.nextCursor)} class="load-more-btn">さらに読み込む</a>
+			{/if}
 		{/if}
 	</main>
 
@@ -200,6 +206,22 @@ function notificationLabel(type: string): string {
 	text-align: center;
 	color: var(--color-text-muted, #94a3b8);
 	font-size: 0.9rem;
+}
+
+/* プロフィールの一覧の「さらに読み込む」と同じ見た目 */
+.load-more-btn {
+	display: block;
+	padding: 14px 16px;
+	text-align: center;
+	font-size: 0.9rem;
+	font-weight: 500;
+	color: var(--color-accent);
+	text-decoration: none;
+	transition: background 0.12s;
+}
+
+.load-more-btn:hover {
+	background: color-mix(in srgb, var(--color-accent) 6%, transparent);
 }
 
 .notification-list {

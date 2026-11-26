@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { isHttpError } from "@sveltejs/kit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "#lib/supabase/database.types.ts";
-import { getEvent, getNotifications, getOwnAnimeList, getUserAnimeList } from "./queries";
+import { getEvent, getNotificationPage, getOwnAnimeList, getUserAnimeList } from "./queries";
 import { failQuery, QUERY_FAILED_MESSAGE } from "./query-failure";
 
 type Result = { data: unknown; error: { code?: string; message: string } | null };
@@ -55,8 +55,11 @@ describe("failQuery（#262）", () => {
 
 describe("主要な中身の取得の失敗を、空・見つからないと区別する（#262）", () => {
 	it("通知: 失敗は 503、0 件は空の配列", async () => {
-		await expectQueryFailed(getNotifications(fakeSupabase({ data: null, error: DB_ERROR }), "me", 50));
-		expect(await getNotifications(fakeSupabase({ data: [], error: null }), "me", 50)).toEqual([]);
+		await expectQueryFailed(getNotificationPage(fakeSupabase({ data: null, error: DB_ERROR }), "me"));
+		expect(await getNotificationPage(fakeSupabase({ data: [], error: null }), "me")).toEqual({
+			notifications: [],
+			nextCursor: null,
+		});
 	});
 
 	it("イベント: 失敗は 503、見つからなければ null（404 にするのは呼び出し側）", async () => {
