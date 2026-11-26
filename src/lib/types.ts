@@ -98,6 +98,16 @@ export interface QuotedPost {
 	/** 引用元の CW。引用枠では本文の代わりに警告を出す（#319） */
 	cw_anime_id: string | null;
 	cw_anime: { title: string } | null;
+	/**
+	 * 引用元の画像（#290）。期限付きの URL に差し替え済みで、引用枠に縮小して出す。
+	 * 引用元に CW があるときはサーバーで空にする（引用枠では CW を開けないため）
+	 */
+	image_urls: string[];
+	/** 引用元の作品引用（#290）。作品名だけを引用枠に出す */
+	anime_id: string | null;
+	anime: { id: string; title: string } | null;
+	/** 引用元がさらに引用リポストか。本文の無い引用のラベル（「引用リポスト」）に使う */
+	quoted_post_id: string | null;
 }
 
 export interface RepostContext {
@@ -454,6 +464,10 @@ export interface RawPost {
 				created_at: string;
 				cw_anime_id?: string | number | null;
 				cw_anime?: { title: string } | { title: string }[] | null;
+				image_urls?: string[] | null;
+				anime_id?: string | number | null;
+				anime?: { id: string | number; title: string } | { id: string | number; title: string }[] | null;
+				quoted_post_id?: string | null;
 				profiles: {
 					username: string;
 					display_name: string | null;
@@ -493,6 +507,13 @@ export function toPost(
 				avatar_url: qp.profiles?.avatar_url ?? null,
 				cw_anime_id: qp.cw_anime_id != null ? String(qp.cw_anime_id) : null,
 				cw_anime: (Array.isArray(qp.cw_anime) ? qp.cw_anime[0] : qp.cw_anime) ?? null,
+				image_urls: qp.image_urls ?? [],
+				anime_id: qp.anime_id != null ? String(qp.anime_id) : null,
+				anime: (() => {
+					const anime = Array.isArray(qp.anime) ? qp.anime[0] : qp.anime;
+					return anime ? { id: String(anime.id), title: anime.title } : null;
+				})(),
+				quoted_post_id: qp.quoted_post_id ?? null,
 			};
 		})(),
 		content: raw.content,
