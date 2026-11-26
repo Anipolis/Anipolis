@@ -3549,15 +3549,20 @@ form + .repost-menu-item {
 
 /* 引用元の画像は縮小して横に並べる（最大4枚。押すと引用枠ごと元の投稿へ。#290） */
 .quoted-post-images {
-	display: flex;
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 72px));
 	gap: 4px;
+	min-width: 0;
+	max-width: 100%;
 	margin-top: 8px;
 }
 
+/* 狭い引用枠では4枚がそろって縮む（72px が上限、はみ出さない） */
 .quoted-post-image {
-	width: 72px;
-	height: 72px;
-	flex-shrink: 0;
+	display: block;
+	width: 100%;
+	height: auto;
+	aspect-ratio: 1;
 	border-radius: var(--radius-sm);
 	background: var(--color-border);
 	object-fit: cover;
