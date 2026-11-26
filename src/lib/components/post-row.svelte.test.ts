@@ -1,5 +1,6 @@
 import { mount, tick, unmount } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { Post } from "#lib/types.ts";
 import { makeTimelinePosts } from "./fixtures/timeline";
 import LiveRoomPostCard from "./LiveRoomPostCard.svelte";
 import PostComposer from "./PostComposer.svelte";
@@ -144,6 +145,10 @@ describe("CW（ネタバレ注意）の保護（#317〜#319）", () => {
 		avatar_url: null,
 		cw_anime_id: "42",
 		cw_anime: { title: "星をめぐる旅" },
+		image_urls: ["https://signed.example/spoiler.png"],
+		anime_id: null,
+		anime: null,
+		quoted_post_id: null,
 	};
 
 	async function render(component: typeof PostRow | typeof PostDetail, post: ReturnType<typeof fixturePost>) {
@@ -198,6 +203,8 @@ describe("CW（ネタバレ注意）の保護（#317〜#319）", () => {
 		const quote = target.querySelector(".quoted-post");
 		expect(quote?.textContent).toContain("『星をめぐる旅』のネタバレを含む投稿");
 		expect(quote?.textContent).not.toContain("最終回");
+		// 引用元の画像も出さない（#290）
+		expect(quote?.querySelector("img.quoted-post-image")).toBeNull();
 		// 本文を読むには元の投稿（CW で折り畳まれる）を開く
 		expect(quote?.getAttribute("href")).toBe("/posts/quoted-1");
 	});
@@ -237,6 +244,122 @@ describe("CW（ネタバレ注意）の保護（#317〜#319）", () => {
 		};
 		const target = await render(PostRow, post);
 		expect(target.querySelector(".quoted-post")?.textContent).toContain("最終回で主人公が旅を終える");
+	});
+});
+
+describe("引用枠の画像・作品名（#290）", () => {
+	function quotedPost(overrides: Partial<NonNullable<Post["quoted_post"]>> = {}): NonNullable<Post["quoted_post"]> {
+		return {
+			id: "quoted-290",
+			content: "",
+			user_id: "preview-user-8",
+			created_at: "2026-09-08T11:00:00.000Z",
+			username: "image_author",
+			display_name: null,
+			avatar_url: null,
+			cw_anime_id: null,
+			cw_anime: null,
+			image_urls: [],
+			anime_id: null,
+			anime: null,
+			quoted_post_id: null,
+			...overrides,
+		};
+	}
+
+	async function renderQuote(
+		component: typeof PostRow | typeof PostDetail | typeof LiveRoomPostCard,
+		quoted: NonNullable<Post["quoted_post"]>,
+		base: Post = fixturePost(0),
+	) {
+		const target = document.body.appendChild(document.createElement("div"));
+		const instance = mount(component, {
+			target,
+			props: { post: { ...base, quoted_post_id: quoted.id, quoted_post: quoted } },
+		});
+		cleanup.push(() => unmount(instance));
+		await tick();
+		const quote = target.querySelector<HTMLAnchorElement>(".quoted-post");
+		if (!quote) throw new Error("引用枠が出ていない");
+		return { target, quote };
+	}
+
+	for (const [name, component] of [
+		["タイムライン", PostRow],
+		["投稿詳細", PostDetail],
+		["実況ルーム", LiveRoomPostCard],
+	] as const) {
+		it(`${name}: 画像だけの投稿の引用は、縮小した画像とラベルを出し、押すと元の投稿へ`, async () => {
+			const { quote } = await renderQuote(
+				component,
+				quotedPost({ image_urls: ["https://signed.example/a.png", "https://signed.example/b.png"] }),
+			);
+			const images = quote.querySelectorAll<HTMLImageElement>("img.quoted-post-image");
+			expect([...images].map((img) => img.getAttribute("src"))).toEqual([
+				"https://signed.example/a.png",
+				"https://signed.example/b.png",
+			]);
+			expect(quote.querySelector(".quoted-post-placeholder")?.textContent).toBe("画像2枚の投稿");
+			// 画像は拡大のボタンにせず、引用枠ごと元の投稿へのリンクにする
+			expect(quote.querySelector("button")).toBeNull();
+			expect(quote.getAttribute("href")).toBe("/posts/quoted-290");
+		});
+	}
+
+	it("作品引用だけの投稿の引用は、作品名を出す", async () => {
+		const { quote } = await renderQuote(
+			PostRow,
+			quotedPost({ anime_id: "7", anime: { id: "7", title: "夜空のレコード" } }),
+		);
+		expect(quote.querySelector(".quoted-post-anime-title")?.textContent).toBe("夜空のレコード");
+		expect(quote.querySelector(".quoted-post-placeholder")?.textContent).toBe("作品引用の投稿");
+	});
+
+	it("本文がある引用は、本文と画像・作品名を並べて出す（ラベルは出さない）", async () => {
+		const { quote } = await renderQuote(
+			PostRow,
+			quotedPost({
+				content: "このカット最高",
+				image_urls: ["https://signed.example/a.png"],
+				anime_id: "7",
+				anime: { id: "7", title: "夜空のレコード" },
+			}),
+		);
+		expect(quote.querySelector(".quoted-post-content")?.textContent).toBe("このカット最高");
+		expect(quote.querySelector(".quoted-post-placeholder")).toBeNull();
+		expect(quote.querySelectorAll("img.quoted-post-image")).toHaveLength(1);
+		expect(quote.querySelector(".quoted-post-anime-title")?.textContent).toBe("夜空のレコード");
+	});
+
+	it("何も添付の無い空の引用でも、空の枠にしない", async () => {
+		const { quote } = await renderQuote(PostRow, quotedPost());
+		expect(quote.querySelector(".quoted-post-placeholder")?.textContent).toBe("投稿を表示");
+	});
+
+	it("引用元に CW があれば、画像・作品名を出さずに警告だけを出す", async () => {
+		const { quote } = await renderQuote(
+			PostRow,
+			quotedPost({
+				cw_anime_id: "42",
+				cw_anime: { title: "星をめぐる旅" },
+				image_urls: ["https://signed.example/spoiler.png"],
+				anime_id: "42",
+				anime: { id: "42", title: "星をめぐる旅" },
+			}),
+		);
+		expect(quote.textContent).toContain("『星をめぐる旅』のネタバレを含む投稿");
+		expect(quote.querySelector("img")).toBeNull();
+		expect(quote.querySelector(".quoted-post-anime")).toBeNull();
+	});
+
+	it("引用した側の投稿に CW があれば、引用枠の画像も折り畳みの中に入る", async () => {
+		const { target } = await renderQuote(
+			PostRow,
+			quotedPost({ image_urls: ["https://signed.example/a.png"] }),
+			fixturePost(22),
+		);
+		expect(target.querySelector(".post-cw-content")?.getAttribute("aria-hidden")).toBe("true");
+		expect(target.querySelector(".post-cw-content .quoted-post-image")).not.toBeNull();
 	});
 });
 

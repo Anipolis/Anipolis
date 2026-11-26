@@ -1,9 +1,11 @@
 <script lang="ts">
 import AnimeExchangeResult from "#lib/components/AnimeExchangeResult.svelte";
+import AnimeIcon from "#lib/components/AnimeIcon.svelte";
 import CollectionShareCard from "#lib/components/CollectionShareCard.svelte";
 import UserAvatar from "#lib/components/UserAvatar.svelte";
 import { contentWarningLabel, hasContentWarning } from "#lib/content-warning.ts";
 import { coverThumbFallback, coverThumbSrc } from "#lib/cover-image.ts";
+import { quotedPostPlaceholder } from "#lib/quoted-post.ts";
 import type { PostController } from "./post-controller.svelte";
 
 interface Props {
@@ -30,20 +32,48 @@ function openLightbox(event: MouseEvent, url: string) {
 </script>
 
 {#if post.quoted_post}
-	<a href="/posts/{post.quoted_post.id}" class="quoted-post" onclick={(e) => e.stopPropagation()}>
+	{@const quoted = post.quoted_post}
+	{@const placeholder = quotedPostPlaceholder(quoted)}
+	<!-- 引用枠は全体で元の投稿へのリンク。画像も拡大せず、押すと元の投稿を開く（X の引用と同じ） -->
+	<a href="/posts/{quoted.id}" class="quoted-post" onclick={(e) => e.stopPropagation()}>
 		<div class="quoted-post-header">
-			<UserAvatar src={post.quoted_post.avatar_url} username={post.quoted_post.username} size="sm" />
-			<span class="quoted-post-name">{post.quoted_post.display_name || post.quoted_post.username}</span>
-			<span class="quoted-post-at">@{post.quoted_post.username}</span>
+			<UserAvatar src={quoted.avatar_url} username={quoted.username} size="sm" />
+			<span class="quoted-post-name">{quoted.display_name || quoted.username}</span>
+			<span class="quoted-post-at">@{quoted.username}</span>
 		</div>
-		{#if hasContentWarning(post.quoted_post)}
-			<!-- 引用元の CW は引用枠でも守る。本文は元の投稿を開いて展開したときだけ見せる（#319） -->
+		{#if hasContentWarning(quoted)}
+			<!-- 引用元の CW は引用枠でも守る。本文・画像・作品は元の投稿を開いて展開したときだけ見せる（#319, #290） -->
 			<p class="quoted-post-content quoted-post-cw">
 				<span class="i-lucide-triangle-alert" aria-hidden="true"></span>
-				{contentWarningLabel(post.quoted_post)}
+				{contentWarningLabel(quoted)}
 			</p>
 		{:else}
-			<p class="quoted-post-content">{post.quoted_post.content}</p>
+			{#if placeholder}
+				<!-- 本文の無い引用元は、空の枠にせず何の投稿かを出す（#290） -->
+				<p class="quoted-post-content quoted-post-placeholder">{placeholder}</p>
+			{:else}
+				<p class="quoted-post-content">{quoted.content}</p>
+			{/if}
+			{#if quoted.anime}
+				<p class="quoted-post-anime">
+					<AnimeIcon size={13} />
+					<span class="quoted-post-anime-title">{quoted.anime.title}</span>
+				</p>
+			{/if}
+			{#if quoted.image_urls.length > 0}
+				<div class="quoted-post-images">
+					{#each quoted.image_urls as url, i}
+						<img
+							src={url}
+							alt="引用元の画像 {i + 1}"
+							class="quoted-post-image"
+							loading="lazy"
+							width="72"
+							height="72"
+						>
+					{/each}
+				</div>
+			{/if}
 		{/if}
 	</a>
 {/if}

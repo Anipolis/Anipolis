@@ -4,6 +4,7 @@ import { isRepeatMuteActive } from "#lib/anime-mute-schedule.ts";
 import { groupGenreFilters, translateAnimeGenres } from "#lib/anime-vocabulary.ts";
 import { computeBroadcastStatus } from "#lib/broadcast-status.ts";
 import { type CollectionKind, type CollectionMembership, isCollectionKind } from "#lib/collections.ts";
+import { hasContentWarning } from "#lib/content-warning.ts";
 import type { EpisodeRoomBounds } from "#lib/episode-room.ts";
 import { toValidExchangeSubjectiveTags } from "#lib/exchange-tags.ts";
 import { isOwnPostImage, postImageMediaUrl } from "#lib/post-image-url.ts";
@@ -16,7 +17,7 @@ import {
 } from "#lib/room-reminders.ts";
 import { getAssuranceLevel, isAdminMfaRequired } from "#lib/server/mfa.ts";
 import { signPostImageUrls } from "#lib/server/post-image-signing.ts";
-import { buildPostCardSelect, POST_CW_ANIME_SELECT } from "#lib/server/post-selects.ts";
+import { buildPostCardSelect, QUOTED_POST_SELECT } from "#lib/server/post-selects.ts";
 import { failQuery, logQueryFailure } from "#lib/server/query-failure.ts";
 import type { Database } from "#lib/supabase/database.types.ts";
 import { isEpisodeSuppressedSnapshot } from "#lib/syobocal-episodes.ts";
@@ -518,27 +519,12 @@ export async function enrichPostsWithCounts(
 		? Promise.resolve(new Set<string>())
 		: getMutedUserIdsCached(supabase, userId);
 
-	type QuotedPostRow = {
-		id: string;
-		content: string;
-		created_at: string;
-		user_id: string;
-		cw_anime_id: number | null;
-		cw_anime: { title: string } | null;
-		profiles: { username: string; display_name: string | null; avatar_url: string | null } | null;
-	};
 	const quotedPostIds = [...new Set(rawPosts.map((p) => p.quoted_post_id).filter(Boolean))] as string[];
-	const quotedPostMap = new Map<string, QuotedPostRow>();
+	const quotedPostMap = new Map<string, QuotedPostRawFields>();
 	if (quotedPostIds.length > 0) {
-		const { data: quotedRaw } = await supabase
-			.from("posts")
-			.select(
-				// 引用元の CW も引き継ぐ。引用枠で本文がそのまま出ないようにする（#319）
-				`id, content, created_at, user_id, cw_anime_id, ${POST_CW_ANIME_SELECT}, profiles!posts_user_id_fkey ( username, display_name, avatar_url )`,
-			)
-			.in("id", quotedPostIds);
-		for (const qp of quotedRaw ?? []) {
-			quotedPostMap.set(qp.id, qp as QuotedPostRow);
+		const { data: quotedRaw } = await supabase.from("posts").select(QUOTED_POST_SELECT).in("id", quotedPostIds);
+		for (const qp of (quotedRaw ?? []) as unknown as QuotedPostRawFields[]) {
+			quotedPostMap.set(qp.id, { ...qp, image_urls: quotedPostImageUrls(qp) });
 		}
 	}
 
@@ -614,9 +600,11 @@ export async function enrichPostsWithCounts(
 
 	// 投稿画像は非公開（166）。ここに来るのは RLS で読めた投稿だけなので、その投稿者自身の画像にだけ
 	// 期限付きの URL を発行して差し替える（#316）。他人の画像を参照している投稿からは出さない
-	const imageUrls = visibleRawPosts.flatMap((raw) =>
-		(raw.image_urls ?? []).filter((url) => isOwnPostImage(url, raw.user_id)),
-	);
+	// 引用枠の画像（#290）も同じく発行する。引用元も RLS で読めたものだけで、投稿者自身の画像に絞ってある
+	const imageUrls = visibleRawPosts.flatMap((raw) => [
+		...(raw.image_urls ?? []).filter((url) => isOwnPostImage(url, raw.user_id)),
+		...(firstQuotedPost(raw)?.image_urls ?? []),
+	]);
 	const signedImageUrls = imageUrls.length > 0 ? await signPostImageUrls(imageUrls) : new Map<string, string>();
 
 	return visibleRawPosts.map((raw) => {
@@ -635,6 +623,11 @@ export async function enrichPostsWithCounts(
 			post.image_urls = post.image_urls
 				.filter((url) => isOwnPostImage(url, raw.user_id))
 				.map((url) => signedImageUrls.get(url) ?? postImageMediaUrl(url));
+		}
+		if (post.quoted_post && post.quoted_post.image_urls.length > 0) {
+			post.quoted_post.image_urls = post.quoted_post.image_urls.map(
+				(url) => signedImageUrls.get(url) ?? postImageMediaUrl(url),
+			);
 		}
 		return post;
 	});
@@ -744,11 +737,38 @@ export async function getActiveBroadcastRoomMuteAnimeIds(
 	);
 }
 
+/** 引用枠に出せる画像の上限（投稿に付けられる枚数と同じ） */
+const MAX_QUOTED_POST_IMAGES = 4;
+
+function firstQuotedPost(post: RawPost) {
+	return (Array.isArray(post.quoted_post) ? post.quoted_post[0] : post.quoted_post) ?? null;
+}
+
+/**
+ * 引用枠に出す引用元の画像（#290）。
+ * - 引用元に CW があれば出さない。引用枠では CW を開けない（元の投稿を開いて展開する）ので、URL もページに渡さない
+ * - 引用元の投稿者自身の画像だけにする（本体の投稿と同じ。他人の画像を経由して取得させない、PR #380）
+ */
+export function quotedPostImageUrls(
+	quoted: Pick<QuotedPostRawFields, "user_id" | "image_urls" | "cw_anime_id" | "cw_anime">,
+): string[] {
+	const cwAnime = Array.isArray(quoted.cw_anime) ? (quoted.cw_anime[0] ?? null) : (quoted.cw_anime ?? null);
+	if (hasContentWarning({ cw_anime_id: quoted.cw_anime_id ?? null, cw_anime: cwAnime })) return [];
+	return (quoted.image_urls ?? [])
+		.filter((url) => isOwnPostImage(url, quoted.user_id))
+		.slice(0, MAX_QUOTED_POST_IMAGES);
+}
+
+type QuotedPostRawFields = NonNullable<RawPost["quoted_post"]>[number];
+
 function containsMutedWord(post: RawPost, mutedWords: string[]): boolean {
-	const quotedPost = Array.isArray(post.quoted_post) ? post.quoted_post[0] : post.quoted_post;
+	const quotedPost = firstQuotedPost(post);
+	const quotedAnime = Array.isArray(quotedPost?.anime) ? quotedPost.anime[0] : quotedPost?.anime;
 	const searchableText = [
 		post.content,
 		quotedPost?.content ?? "",
+		// 引用枠に出す引用元の作品名も、本体の作品名と同じく見る（#290）
+		quotedAnime?.title ?? "",
 		post.anime?.title ?? "",
 		...(post.post_hashtags ?? []).map((ph) => ph.hashtags?.name ?? ""),
 	]

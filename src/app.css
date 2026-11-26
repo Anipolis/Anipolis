@@ -3521,6 +3521,53 @@ form + .repost-menu-item {
 	overflow: hidden;
 }
 
+/* 本文の無い引用元のラベル（「画像2枚の投稿」など。#290） */
+.quoted-post-placeholder {
+	color: var(--color-text-muted);
+}
+
+/* 引用元の作品引用は作品名だけを1行で出す（#290） */
+.quoted-post-anime {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	min-width: 0;
+	margin: 4px 0 0;
+	font-size: 12px;
+	color: var(--color-text-muted);
+}
+
+.quoted-post-anime > svg {
+	flex-shrink: 0;
+}
+
+.quoted-post-anime-title {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* 引用元の画像は縮小して横に並べる（最大4枚。押すと引用枠ごと元の投稿へ。#290） */
+.quoted-post-images {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 72px));
+	gap: 4px;
+	min-width: 0;
+	max-width: 100%;
+	margin-top: 8px;
+}
+
+/* 狭い引用枠では4枚がそろって縮む（72px が上限、はみ出さない） */
+.quoted-post-image {
+	display: block;
+	width: 100%;
+	height: auto;
+	aspect-ratio: 1;
+	border-radius: var(--radius-sm);
+	background: var(--color-border);
+	object-fit: cover;
+}
+
 /* 引用元に CW があるときの警告ラベル（本文の代わりに出す。引用枠と引用リポスト作成画面） */
 .quoted-post-cw,
 .quote-preview-cw {
